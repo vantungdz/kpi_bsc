@@ -10,6 +10,7 @@ export default {
     allKpis: (state) => state.kpis,
     getKpiById: (state) => (id) => state.kpis.find(kpi => kpi.id === id),
     currentKpi: (state) => state.kpis.currentKpi,
+    getUpdatedKpi: (state) => state.kpis.currentKpi,
   },
   actions: {
     async fetchKpis({ commit }) {
@@ -24,9 +25,8 @@ export default {
     async fetchKpiById({ commit }, kpiId) {
       try {
         const response = await apiClient.get(`/kpis/${kpiId}`);
-        console.log('Response from API:', response.data); // Log dữ liệu nhận được từ API
         if (response.data) {
-          commit('setCurrentKpi', response.data); // Cập nhật store với dữ liệu nhận được
+          commit('setCurrentKpi', response.data);
         } else {
           console.error('No data received from API');
         }
@@ -57,26 +57,25 @@ export default {
       }
     },
 
-    async updateKpi({ commit },id, updatedKpi) {
+    async updateKpi({ commit }, { id, updatedKpi }) {
       try {
         const response = await apiClient.patch(`/kpis/${id}`, updatedKpi);
         commit('updateKpi', response.data);
-        return true;
+        return true;  
       } catch (error) {
         console.error('Failed to update KPI:', error);
-        return false;
+        return false;  
       }
     },
-
-    
   },
+
   mutations: {
     setKpis(state, kpis) {
       state.kpis = kpis;
     },
     
     setCurrentKpi(state, kpi) {
-      state.kpis.currentKpi = kpi;  // Đảm bảo rằng bạn đang cập nhật đúng state
+      state.kpis.currentKpi = kpi;
     },
 
     addKpi(state, newKpi) {

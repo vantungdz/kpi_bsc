@@ -101,7 +101,9 @@
 
     <!-- KPI Evaluations -->
     <a-card title="KPI Evaluations" style="margin-top: 20px;">
-      <a-button type="primary" style="margin-bottom: 10px;">Evaluate this KPI</a-button>
+      <a-button type="primary" style="margin-bottom: 10px;" @click="openEvaluationModal">
+        Evaluate this KPI
+      </a-button>
       <a-table :data-source="kpiEvaluations" :columns="evaluationColumns" row-key="id">
         <template #bodyCell="{ column, record }">
           <template v-if="column.dataIndex === 'evaluator'">
@@ -165,6 +167,48 @@
           </a-descriptions-item>
         </a-descriptions>
       </a-modal>
+
+      <a-modal 
+        v-model:visible="isEvaluationModalVisible" 
+        title="Create KPI Evaluation" 
+        :width="600"
+        @ok="submitEvaluation"
+        @cancel="closeEvaluationModal"
+      >
+        <a-form layout="vertical">
+          <a-form-item label="Evaluator">
+            <a-select v-model:value="newEvaluation.evaluatorId" placeholder="Select Evaluator">
+              <!-- Thêm các tùy chọn cho Evaluator -->
+              <a-select-option v-for="user in users" :key="user.id" :value="user.id">
+                {{ user.first_name }} {{ user.last_name }}
+              </a-select-option>
+            </a-select>
+          </a-form-item>
+
+          <a-form-item label="Evaluatee">
+            <a-select v-model:value="newEvaluation.evaluateeId" placeholder="Select Evaluatee">
+              <!-- Thêm các tùy chọn cho Evaluatee -->
+              <a-select-option v-for="user in users" :key="user.id" :value="user.id">
+                {{ user.first_name }} {{ user.last_name }}
+              </a-select-option>
+            </a-select>
+          </a-form-item>
+
+          <a-form-item label="Rating">
+            <a-rate v-model:value="newEvaluation.rating" />
+          </a-form-item>
+
+          <a-form-item label="Period">
+            <a-range-picker v-model:value="newEvaluation.period" style="width: 100%" />
+          </a-form-item>
+
+          <a-form-item label="Comments">
+            <a-textarea v-model:value="newEvaluation.comments" rows="4" />
+          </a-form-item>
+        </a-form>
+      </a-modal>
+
+
     </a-card>
   </a-card>
 </template>
@@ -186,6 +230,13 @@ const isModalVisible = ref(false);
 const loading = ref(true);
 const selectedEvaluation = ref({});
 const progressData = ref([]);
+const newEvaluation = ref({
+  evaluatorId: null,
+  evaluateeId: null,
+  rating: 0,
+  period: [], 
+  comments: ''
+});
 
 const historyColumns = [
   { title: 'Date', dataIndex: 'date', key: 'date' },
@@ -204,7 +255,9 @@ const evaluationColumns = [
   { title: 'Actions', dataIndex: 'actions', key: 'actions' }
 ];
 
+const isEvaluationModalVisible = ref(false); 
 const kpiEvaluations = computed(() => store.getters.allEvaluations);
+const users = computed(() => store.getters['users/userList']);
 
 const getStatusColor = (status) => {
   return status === 'Met' ? 'success' : 'red';
@@ -238,10 +291,18 @@ const saveKpi = async () => {
     }
 
     if (Object.keys(updatedFields).length > 0) {
-      await axios.patch(`http://localhost:3000/kpis/${route.params.id}`, updatedFields);
-      notification.success({ message: 'KPI updated successfully!' });
-      loadKpiDetail(); 
-      isEditing.value = false; 
+      const updateSuccess = await store.dispatch('updateKpi', { 
+        id: route.params.id, 
+        updatedKpi: updatedFields 
+      });
+
+      if (updateSuccess) {
+        notification.success({ message: 'KPI updated successfully!' });
+        await loadKpiDetail(); // Đảm bảo dữ liệu được tải lại
+        isEditing.value = false; // Tắt chế độ chỉnh sửa
+      } else {
+        notification.error({ message: 'Failed to update KPI' });
+      }
     } else {
       notification.info({ message: 'No changes detected!' });
     }
@@ -259,6 +320,7 @@ const cancelEdit = () => {
 const loadKpiDetail = async () => {
   try {
     const response = await axios.get(`http://localhost:3000/kpis/${route.params.id}`);
+    
     kpiDetail.value = response.data;
     loading.value = false;
     processProgressData();
@@ -310,7 +372,29 @@ const submitUpdate = async () => {
   }
 };
 
+// Mở Modal khi click nút "Evaluate this KPI"
+const openEvaluationModal = () => {
+  isEvaluationModalVisible.value = true;
+};
+
+// Đóng Modal
+const closeEvaluationModal = () => {
+  isEvaluationModalVisible.value = false;
+  newEvaluation.value = { evaluatorId: null, evaluateeId: null, rating: 0, period: [], comments: '' }; // Reset form
+};
+
+const submitEvaluation = async () => {
+  try {
+    await store.dispatch('ADD_EVALUATIONS', newEvaluation.value);
+    notification.success({ message: 'KPI Evaluation created successfully!' });
+    closeEvaluationModal();  // Đóng modal sau khi tạo thành công
+  } catch (error) {
+    notification.error({ message: 'Error creating KPI Evaluation.' });
+  }
+};
+
 onMounted(() => {
+  store.dispatch('users/fetchUsers')
   store.dispatch('fetchEvaluations');
   loadKpiDetail();
 });
