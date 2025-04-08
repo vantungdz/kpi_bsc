@@ -1,15 +1,16 @@
-// store/modules/kpi.js
+// store/modules/kpiEvaluations.js
 import apiClient from '../../services/api';
 
 export default {
+  namespaced: true,
   state: {
     evaluations: [],
     currentKpi: null,
   },
   getters: {
     allEvaluations: (state) => state.evaluations,
-    getEvaluationsById: (state) => (id) => state.evaluations.find(kpi => kpi.id === id),
-    currentEvaluations: (state) => state.evaluations.currentKpi,
+    getEvaluationsByKpiId: (state) => (id) => state.evaluations.filter(ev => ev.kpi_id === id),
+    currentEvaluations: (state) => state.currentKpi,
   },
   actions: {
     async fetchEvaluations({ commit }) {
@@ -17,17 +18,17 @@ export default {
         const response = await apiClient.get('/kpi-evaluations');
         commit('SETKPIS_EVALUATIONS', response.data);
       } catch (error) {
-        console.error("Failed to fetch KPIs:", error);
+        console.error("Failed to fetch evaluations:", error);
       }
     },
 
-    async createKpi({ commit }, newEvaluations) {
+    async createEvaluations({ commit }, newEvaluations) {
       try {
         const response = await apiClient.post('/kpi-evaluations', newEvaluations);
         commit('ADD_EVALUATIONS', response.data);
         return response.data;
       } catch (error) {
-        console.error('Failed to create KPI:', error);
+        console.error('Failed to create evaluation:', error);
         throw error;
       }
     },
@@ -35,11 +36,10 @@ export default {
   },
   mutations: {
     SETKPIS_EVALUATIONS(state, evaluations) {
-      state.evaluationsList = evaluations;
+      state.evaluations = evaluations;
     },
-
-    ADD_EVALUATIONS(state, newKpi) {
-      state.kpis.push(newKpi);
+    ADD_EVALUATIONS(state, newEvaluation) {
+      state.evaluations.push(newEvaluation);
     },
   },
 };

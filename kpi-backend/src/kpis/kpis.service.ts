@@ -8,15 +8,17 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   Repository,
-  FindManyOptions,
   FindOptionsWhere,
-  Like,
   IsNull,
-} from 'typeorm';
+  ILike,
+  LessThanOrEqual,
+  MoreThanOrEqual,
+} from 'typeorm'; 
 import { Kpi } from '../entities/kpi.entity';
 import { KpiFilterDto } from './dto/filter-kpi.dto';
 import { User } from 'src/entities/user.entity';
 import { Perspective } from 'src/entities/perspective.entity';
+import { Department } from 'src/entities/department.entity';
 
 @Injectable()
 export class KpisService {
@@ -27,6 +29,8 @@ export class KpisService {
     private usersRepository: Repository<User>,
     @InjectRepository(Perspective)
     private perspectivesRepository: Repository<Perspective>,
+    @InjectRepository(Perspective)
+    private departmentsRepository: Repository<Department>,
   ) {}
 
   async getAllSortedByAssignName(
@@ -42,17 +46,27 @@ export class KpisService {
 
     return query.getMany();
   }
-  
 
-  async findAll(filterDto: KpiFilterDto): Promise<Kpi[]> {
+  async findAll(filterDto: KpiFilterDto): Promise<{
+    data: Kpi[];
+    pagination: {
+      currentPage: number;
+      totalPages: number;
+      totalItems: number;
+      itemsPerPage: number;
+    };
+  }> {
     const where: FindOptionsWhere<Kpi> = {
       deletedAt: IsNull(),
     };
 
-    const order: any = {};
+    const { page = 1, limit = 15 } = filterDto;
+
+    let order: any = {};
 
     if (filterDto.name) {
-      where.name = filterDto.name;
+      // where.name = filterDto.name;
+      where.name = ILike(`%${filterDto.name}%`);
     }
 
     if (filterDto.perspectiveId) {
@@ -63,20 +77,38 @@ export class KpisService {
       where.department_id = filterDto.departmentId;
     }
 
-    if (filterDto.assignedToId) {
-      where.assigned_to_id = filterDto.assignedToId;
+    if (filterDto.assignedToName) {
+      where['assignedTo'] = [
+        { first_name: ILike(`%${filterDto.assignedToName}%`) },
+        { last_name: ILike(`%${filterDto.assignedToName}%`) },
+      ];
     }
 
     if (filterDto.status) {
       where.status = filterDto.status;
     }
 
-    // Add sorting
-    if (filterDto.sortBy) {
-      order[filterDto.sortBy] = filterDto.sortOrder || 'ASC'; // Default to ASC
+    if (filterDto.startDate) {
+      where.start_date = MoreThanOrEqual(filterDto.startDate);
+    }
+    if (filterDto.endDate) {
+      where.end_date = LessThanOrEqual(filterDto.endDate);
     }
 
-    return await this.kpisRepository.find({
+    // Add sorting
+    const validSortColumns = ['name'];
+
+    if (filterDto.sortBy) {
+      if (validSortColumns.includes(filterDto.sortBy)) {
+        order[filterDto.sortBy] = filterDto.sortOrder || 'ASC';
+      } else if (filterDto.sortBy === 'assignedToName') {
+        order['assignedTo'] = {
+          username: filterDto.sortOrder || 'ASC', // Or 'DESC' for descending order
+        };
+      }
+    }
+
+    const [data, totalItems] = await this.kpisRepository.findAndCount({
       where,
       order,
       relations: [
@@ -89,7 +121,7 @@ export class KpisService {
         'children.evaluations.evaluatee',
         'children.values',
         'children.values.user',
-        'perspective', // Thêm quan hệ mới
+        'perspective',
         'department',
         'section',
         'team',
@@ -99,7 +131,20 @@ export class KpisService {
         'values',
         'values.user',
       ],
+      skip: (page - 1) * limit, // Bỏ qua các bản ghi đã có trong các trang trước
+      take: limit, // Lấy số lượng bản ghi cho mỗi trang
     });
+
+    const totalPages = Math.ceil(totalItems / limit);
+
+    const pagination = {
+      currentPage: page,
+      totalPages: totalPages,
+      totalItems: totalItems,
+      itemsPerPage: limit,
+    };
+
+    return { data, pagination };
   }
 
   async findOne(id: number): Promise<Kpi> {
@@ -182,6 +227,18 @@ export class KpisService {
       );
     }
 
+    const departmentId =
+      kpi.department_id ||
+      (kpi.department ? Number(kpi.department) : undefined);
+    const departmentEntity = departmentId
+      ? await this.departmentsRepository.findOneBy({ id: departmentId })
+      : null;
+    if (departmentId && !departmentEntity) {
+      throw new NotFoundException(
+        `Department with ID ${departmentId} not found`,
+      );
+    }
+
     const newKpiData: Partial<Kpi> = {
       name: kpi.name,
       unit: kpi.unit,
@@ -205,7 +262,7 @@ export class KpisService {
 
     const fullKpi = await this.kpisRepository.findOne({
       where: { id: savedKpi.id },
-      relations: ['perspective', 'parent', 'assignedTo'],
+      relations: ['perspective', 'parent', 'assignedTo', 'department'],
     });
 
     if (!fullKpi) {

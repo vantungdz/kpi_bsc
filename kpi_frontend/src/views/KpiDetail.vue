@@ -122,7 +122,7 @@
           </template>
           <template v-if="column.dataIndex === 'status'">
             <a-tag :bordered="false" :color="getStatusColor(record.status)">
-              {{ getStatusText(record.status) }}
+              {{ record.status }}
             </a-tag>
           </template>
           <template v-else-if="column.dataIndex === 'actions'">
@@ -159,7 +159,7 @@
           </a-descriptions-item>
           <a-descriptions-item label="Status">
             <a-tag :bordered="false" :color="getStatusColor(selectedEvaluation.status)">
-              {{ getStatusText(selectedEvaluation.status) }}
+              {{ selectedEvaluation.status }}
             </a-tag>
           </a-descriptions-item>
           <a-descriptions-item label="Comment" :span="2">
@@ -177,7 +177,7 @@
       >
         <a-form layout="vertical">
           <a-form-item label="Evaluator">
-            <a-select v-model:value="newEvaluation.evaluatorId" placeholder="Select Evaluator">
+            <a-select v-model:value="newEvaluation.evaluator_id" placeholder="Select Evaluator">
               <!-- Thêm các tùy chọn cho Evaluator -->
               <a-select-option v-for="user in users" :key="user.id" :value="user.id">
                 {{ user.first_name }} {{ user.last_name }}
@@ -186,7 +186,7 @@
           </a-form-item>
 
           <a-form-item label="Evaluatee">
-            <a-select v-model:value="newEvaluation.evaluateeId" placeholder="Select Evaluatee">
+            <a-select v-model:value="newEvaluation.evaluatee_id" placeholder="Select Evaluatee">
               <!-- Thêm các tùy chọn cho Evaluatee -->
               <a-select-option v-for="user in users" :key="user.id" :value="user.id">
                 {{ user.first_name }} {{ user.last_name }}
@@ -194,12 +194,23 @@
             </a-select>
           </a-form-item>
 
-          <a-form-item label="Rating">
-            <a-rate v-model:value="newEvaluation.rating" />
+          <a-form-item label="Status">
+            <a-select v-model:value="newEvaluation.status" placeholder="Status">">
+              <a-select-option value="Met">Met</a-select-option>
+              <a-select-option value="Not Met">Not Met</a-select-option>
+              <a-select-option value="In Progress">In Progress</a-select-option>
+              <a-select-option value="Not Started">Not Started</a-select-option>
+              <a-select-option value="Exceeded">Exceeded</a-select-option>
+            </a-select>
           </a-form-item>
 
           <a-form-item label="Period">
-            <a-range-picker v-model:value="newEvaluation.period" style="width: 100%" />
+            <a-date-picker  v-model:value="newEvaluation.period_start_date" style="width: 50%" />
+            <a-date-picker  v-model:value="newEvaluation.period_end_date" style="width: 50%" />
+          </a-form-item>
+
+          <a-form-item label="Rating">
+            <a-input v-model:value="newEvaluation.rating" placeholder="Rating" />
           </a-form-item>
 
           <a-form-item label="Comments">
@@ -231,11 +242,15 @@ const loading = ref(true);
 const selectedEvaluation = ref({});
 const progressData = ref([]);
 const newEvaluation = ref({
-  evaluatorId: null,
-  evaluateeId: null,
-  rating: 0,
-  period: [], 
-  comments: ''
+  kpi_id: parseInt(route.params.id),
+  evaluator_id: null,
+  evaluatee_id: null,
+  evaluation_date: new Date().toISOString(),
+  period_start_date: '', 
+  period_end_date: '',
+  rating: '',
+  comments: '',
+  status: ''
 });
 
 const historyColumns = [
@@ -256,15 +271,24 @@ const evaluationColumns = [
 ];
 
 const isEvaluationModalVisible = ref(false); 
-const kpiEvaluations = computed(() => store.getters.allEvaluations);
+const kpiEvaluations = computed(() => store.getters['kpiEvaluations/allEvaluations']);
 const users = computed(() => store.getters['users/userList']);
 
 const getStatusColor = (status) => {
-  return status === 'Met' ? 'success' : 'red';
-};
-
-const getStatusText = (status) => {
-  return status === 'Met' ? 'Met' : 'Nháp';
+  switch (status) {
+    case 'Met':
+      return 'green';
+    case 'Not Met':
+      return 'red';
+    case 'In Progress':
+      return 'blue';
+    case 'Not Started':
+      return 'default';
+    case 'Exceeded':
+      return 'gold';
+    default:
+      return 'gray';
+  }
 };
 
 const formatPercent = (value) => {
@@ -291,9 +315,9 @@ const saveKpi = async () => {
     }
 
     if (Object.keys(updatedFields).length > 0) {
-      const updateSuccess = await store.dispatch('updateKpi', { 
+      const updateSuccess = await store.dispatch('kpis/updateKpi', { 
         id: route.params.id, 
-        updatedKpi: updatedFields 
+        kpiData: updatedFields 
       });
 
       if (updateSuccess) {
@@ -320,7 +344,6 @@ const cancelEdit = () => {
 const loadKpiDetail = async () => {
   try {
     const response = await axios.get(`http://localhost:3000/kpis/${route.params.id}`);
-    
     kpiDetail.value = response.data;
     loading.value = false;
     processProgressData();
@@ -364,11 +387,21 @@ const closeModal = () => {
 
 const submitUpdate = async () => {
   try {
-    await axios.patch(`http://localhost:3000/kpi-values/${route.params.id}`, updateData.value);
+    const result = await store.dispatch('kpiValues/updateKpiValue', { 
+      id: route.params.id, 
+      updatedKpi: updateData.value 
+    });
+
+    if (result) { 
     notification.success({ message: 'Progress update successful!' });
+      updateData.value = { value: '', timestamp: null, notes: '' };
     loadKpiDetail();
+    } else {
+      notification.error({ message: 'Progress update failed!' });
+    }
   } catch (error) {
-    notification.error({ message: 'Update failed!' });
+    console.error('Update error:', error);
+    notification.error({ message: 'Update failed due to server error!' });
   }
 };
 
@@ -385,17 +418,23 @@ const closeEvaluationModal = () => {
 
 const submitEvaluation = async () => {
   try {
-    await store.dispatch('ADD_EVALUATIONS', newEvaluation.value);
-    notification.success({ message: 'KPI Evaluation created successfully!' });
-    closeEvaluationModal();  // Đóng modal sau khi tạo thành công
+    const result = await store.dispatch('kpiEvaluations/createEvaluations', newEvaluation.value);
+    if (result) { 
+      notification.success({ message: 'KPI Evaluation created successfully!' });
+      closeEvaluationModal(); 
+    }else {
+      notification.error({ message: 'KPI Evaluation created failed!' });
+    }
   } catch (error) {
+    console.error('creating error:', error);
     notification.error({ message: 'Error creating KPI Evaluation.' });
   }
 };
 
-onMounted(() => {
+onMounted(async () => {
   store.dispatch('users/fetchUsers')
-  store.dispatch('fetchEvaluations');
+  await store.dispatch('kpiEvaluations/fetchEvaluations');
+  
   loadKpiDetail();
 });
 </script>

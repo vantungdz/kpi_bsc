@@ -44,7 +44,17 @@ export class KpisController {
   @ApiQuery({ name: 'sortBy', required: false, type: String })
   @ApiQuery({ name: 'sortOrder', required: false, enum: ['ASC', 'DESC'] })
   @ApiResponse({ status: 200, description: 'Danh sách KPI', type: [Kpi] })
-  findAll(@Query() filterDto: KpiFilterDto): Promise<Kpi[]> {
+  findAll(
+    @Query() filterDto: KpiFilterDto,
+  ): Promise<{
+    data: Kpi[];
+    pagination: {
+      currentPage: number;
+      totalPages: number;
+      totalItems: number;
+      itemsPerPage: number;
+    };
+  }> {
     return this.kpisService.findAll(filterDto);
   }
 
@@ -58,8 +68,7 @@ export class KpisController {
   }
 
   @Post()
-  create(@Body() body: any, kpi: Partial<Kpi>): Promise<Kpi> {
-    console.log(body);
+  create(@Body() body: any, kpi: Partial<Kpi>): Promise<Kpi> { 
     return this.kpisService.create(body);
   }
 

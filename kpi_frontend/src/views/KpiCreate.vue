@@ -7,6 +7,16 @@
     layout="vertical"
   >
     <a-row :gutter="16">
+      <a-col :span="24">
+        <a-form-item class="textLabel" label="Scope" name="scope" :rules="[{ required: true, message: 'Please select Scope!' }]">
+          <a-radio-group v-model:value="form.scope">
+            <a-radio value="company">Company</a-radio>
+            <a-radio value="department">Department</a-radio>
+            <a-radio value="section">Section</a-radio>
+          </a-radio-group>
+        </a-form-item>
+      </a-col>
+
       <a-col :span="14">
         <a-form-item
           class="textLabel"
@@ -58,7 +68,7 @@
         </a-form-item>
       </a-col>
 
-      <a-col :span="12">
+      <a-col :span="6">
         <a-form-item
           class="textLabel"
           label="Weight (%)"
@@ -75,6 +85,49 @@
           />
         </a-form-item>
       </a-col>
+
+      <!-- Các trường input phụ thuộc vào lựa chọn -->
+      <a-col v-if="form.scope !== 'company'" :span="6">
+        <a-form-item
+          class="textLabel"
+          label="Department"
+          name="department_id"
+          :rules="[{ required: true, message: 'Please select Department!' }]">
+          <a-select v-model:value="form.department_id" placeholder="Department">
+            <a-select-option v-for="department in departments" :key="department.id" :value="department.id">
+              {{ department.name }}
+            </a-select-option>
+          </a-select>
+        </a-form-item>
+      </a-col>
+
+      <a-col v-if="form.scope === 'section'" :span="6">
+        <a-form-item
+          class="textLabel"
+          label="Section"
+          name="section_id"
+          :rules="[{ required: true, message: 'Please select Section!' }]">
+          <a-select v-model:value="form.section_id" placeholder="Section">
+            <a-select-option v-for="section in sections" :key="section.id" :value="section.id">
+              {{ section.name }}
+            </a-select-option>
+          </a-select>
+        </a-form-item>
+      </a-col>
+
+      <!-- <a-col :span="6">
+        <a-form-item
+          class="textLabel"
+          label="Department"
+          name="department_id"
+          :rules="[{ required: true, message: 'Please select Department!' }]">
+          <a-select v-model:value="form.department_id" placeholder="Department">
+            <a-select-option v-for="department in departments" :key="department.id" :value="department.id">
+              {{ department.name }}
+            </a-select-option>
+          </a-select>
+        </a-form-item>
+      </a-col> -->
 
       <a-col :span="8">
         <a-form-item
@@ -96,14 +149,12 @@
         <a-form-item
           class="textLabel"
           label="Perspective"
-          name="perspective"
+          name="perspective_id"
           :rules="[{ required: true, message: 'Please select Perspective!' }]">
-          <a-select v-model:value="form.perspective" placeholder="Perspective">
-            <a-select-option value="1">Financial</a-select-option>
-            <a-select-option value="2">Customer</a-select-option>
-            <a-select-option value="3">Internal Processes</a-select-option>
-            <a-select-option value="4">Learning & Growth</a-select-option>
-
+          <a-select v-model:value="form.perspective_id" placeholder="Perspective">
+            <a-select-option v-for="perspective in perspectiveList" :key="perspective.id" :value="perspective.id">
+              {{ perspective.name }}
+            </a-select-option>
           </a-select>
         </a-form-item>
       </a-col>
@@ -154,14 +205,19 @@ const form = ref({
   target: '',
   weight: '',
   frequency: '',
-  perspective: '',
+  perspective_id: '',
   parent: '',
   assigned_to_id: '',
-  description: ''
+  department_id: '',
+  description: '',
+  scope: 'company', 
+  section_id: '' 
 });
 
-// Lấy danh sách users từ Vuex Store
+
 const users = computed(() => store.getters['users/userList']);
+const departments = computed(() => store.getters['departments/departmentList']);
+const perspectiveList = computed(() => store.getters['perspectives/perspectiveList'] || []);
 
 const handleWeightInput = (event) => {
   let value = event.target.value;
@@ -195,7 +251,7 @@ const validateWeight = async (_rule, value) => {
 const handleChangeCreate = async () => {
   loading.value = true;
   try {
-    await store.dispatch('createKpi', form.value);
+    await store.dispatch('kpis/createKpi', form.value);
     notification.success({ message: 'KPI created successfully' });
     router.push('/kpi-list');
   } catch (error) {
@@ -212,6 +268,8 @@ const onFinishFailed = () => {
 // Gọi fetchUsers từ Vuex khi component mounted
 onMounted(() => {
   store.dispatch('users/fetchUsers')
+  store.dispatch('departments/fetchDepartments')
+  store.dispatch('perspectives/fetchPerspectives');
 });
 
 </script>

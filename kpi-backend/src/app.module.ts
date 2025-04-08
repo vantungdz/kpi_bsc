@@ -18,7 +18,7 @@ import { PerspectiveModule } from './perspective/perspective.module';
       port: 5432,
       username: 'postgres',
       password: 'tomcat',
-      database: 'db_kpi',
+      database: 'kpi_management',
       entities: [__dirname + '/**/*.entity{.ts,.js}'],
       synchronize: false,
       logging: true,

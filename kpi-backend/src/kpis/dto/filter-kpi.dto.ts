@@ -54,9 +54,17 @@ export class KpiFilterDto {
   @IsOptional()
   assignedToId?: number;
 
-  @IsInt()
+  @IsString()
   @IsOptional()
-  assignedToName?: User;
+  assignedToName?: string;
+
+  @IsString()
+  @IsOptional()
+  startDate?: string;
+
+  @IsString()
+  @IsOptional()
+  endDate?: string;
 
   @ApiProperty({ example: 1, description: 'Trang hiện tại', required: false })
   @IsInt()

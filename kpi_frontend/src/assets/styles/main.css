@@ -1,0 +1,312 @@
+/* src/assets/styles/main.css */
+
+/* --- Reset & Base Styles --- */
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+    background-color: #f8f9fa; /* Light grey background */
+    color: #212529; /* Default text color */
+    line-height: 1.5;
+    font-size: 16px; /* Base font size */
+  }
+  
+  a {
+    text-decoration: none;
+    color: #0d6efd; /* Bootstrap primary blue */
+    transition: color 0.15s ease-in-out, text-decoration 0.15s ease-in-out;
+  }
+  
+  a:hover {
+    text-decoration: underline;
+    color: #0a58ca;
+  }
+  
+  h1, h2, h3, h4, h5, h6 {
+    color: #343a40;
+    margin-top: 0;
+    margin-bottom: 0.5rem;
+    font-weight: 500;
+  }
+  
+  h2 { font-size: 1.75rem; }
+  h3 { font-size: 1.5rem; }
+  h4 { font-size: 1.25rem; }
+  
+  button {
+    display: inline-block;
+    font-weight: 400;
+    line-height: 1.5;
+    color: #212529;
+    text-align: center;
+    text-decoration: none;
+    vertical-align: middle;
+    cursor: pointer;
+    user-select: none;
+    background-color: #e9ecef;
+    border: 1px solid #ced4da;
+    padding: 0.375rem 0.75rem; /* ~ 6px 12px */
+    font-size: 1rem;
+    border-radius: 0.25rem; /* ~ 4px */
+    transition: color 0.15s ease-in-out, background-color 0.15s ease-in-out, border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+    margin-right: 0.25rem; /* ~ 4px */
+    margin-bottom: 0.25rem; /* Add margin bottom */
+  }
+  
+  button:hover {
+    background-color: #dee2e6;
+    border-color: #adb5bd;
+  }
+  
+  button:focus {
+    outline: 0;
+    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25); /* Focus ring */
+  }
+  
+  /* Primary Button Style */
+  button.btn-primary, button[type="submit"] {
+    color: #fff;
+    background-color: #0d6efd;
+    border-color: #0d6efd;
+  }
+  button.btn-primary:hover {
+    background-color: #0b5ed7;
+    border-color: #0a58ca;
+  }
+  
+  /* Secondary Button Style */
+  button.btn-secondary {
+    color: #fff;
+    background-color: #6c757d;
+    border-color: #6c757d;
+  }
+  button.btn-secondary:hover {
+      background-color: #5c636a;
+      border-color: #565e64;
+  }
+  
+  /* Edit Button Style */
+  button.edit-btn {
+      color: #000;
+      background-color: #ffc107;
+      border-color: #ffc107;
+  }
+  button.edit-btn:hover {
+      background-color: #ffca2c;
+      border-color: #ffc720;
+  }
+  
+  /* Delete Button Style */
+  button.delete-btn {
+      color: #fff;
+      background-color: #dc3545;
+      border-color: #dc3545;
+  }
+  button.delete-btn:hover {
+      background-color: #bb2d3b;
+      border-color: #b02a37;
+  }
+  
+  
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    background-color: #fff;
+    margin-bottom: 1rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    border-radius: 0.25rem;
+    overflow: hidden; /* Giúp bo góc table hoạt động */
+  }
+  
+  th, td {
+    border: 1px solid #dee2e6;
+    padding: 0.75rem; /* ~ 12px */
+    text-align: left;
+    vertical-align: top;
+  }
+  
+  th {
+    background-color: #f8f9fa;
+    font-weight: 500;
+    color: #495057;
+  }
+  
+  tbody tr:nth-of-type(odd) {
+    /* background-color: rgba(0, 0, 0, 0.02); */ /* Có thể thêm màu xen kẽ nếu muốn */
+  }
+  
+  tbody tr:hover {
+    background-color: rgba(0, 0, 0, 0.04);
+  }
+  
+  label {
+    display: inline-block; /* Hoặc block tùy ngữ cảnh */
+    margin-bottom: 0.5rem;
+    font-weight: 500;
+    color: #495057;
+  }
+  
+  input[type="text"],
+  input[type="number"],
+  input[type="date"],
+  input[type="email"],
+  input[type="password"],
+  select,
+  textarea {
+    display: block;
+    width: 100%; /* Chiếm toàn bộ chiều rộng container */
+    padding: 0.375rem 0.75rem;
+    font-size: 1rem;
+    font-weight: 400;
+    line-height: 1.5;
+    color: #212529;
+    background-color: #fff;
+    background-clip: padding-box;
+    border: 1px solid #ced4da;
+    appearance: none; /* Tắt giao diện mặc định của trình duyệt */
+    border-radius: 0.25rem;
+    transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+    box-sizing: border-box; /* Quan trọng để padding không làm tăng kích thước */
+  }
+  
+  input[type="date"]{
+      width: auto; /* Date input thường không cần full width */
+  }
+  
+  select {
+     /* Thêm mũi tên cho select box nếu cần */
+     background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23343a40' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e");
+     background-repeat: no-repeat;
+     background-position: right 0.75rem center;
+     background-size: 16px 12px;
+  }
+  
+  input:focus,
+  select:focus,
+  textarea:focus {
+    border-color: #86b7fe;
+    outline: 0;
+    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+  }
+  
+  textarea {
+    min-height: calc(1.5em + 0.75rem + 2px); /* Chiều cao tối thiểu */
+    resize: vertical; /* Cho phép thay đổi chiều cao dọc */
+  }
+  
+  /* --- Layout Chính --- */
+  .container {
+    display: flex;
+  }
+  
+  main, .content-area {
+    flex-grow: 1;
+    padding: 20px;
+    background-color: #f8f9fa;
+    /* Đã có height và overflow trong DefaultLayout.vue */
+  }
+  
+  /* --- Header (Style cho component AppHeader.vue) --- */
+  .app-header {
+    background-color: #fff;
+    padding: 10px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #dee2e6;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    height: 60px;
+    position: sticky; /* Giữ header cố định khi cuộn */
+    top: 0;
+    z-index: 1020; /* Đảm bảo header nằm trên */
+  }
+  .logo { display: flex; align-items: center; }
+  .logo img { height: 40px; margin-right: 10px; }
+  .logo h1 { font-size: 1.5em; margin: 0; color: #495057; font-weight: 600;}
+  header nav ul { list-style: none; padding: 0; margin: 0; display: flex; }
+  header nav ul li { margin-left: 25px; }
+  header nav ul li a { color: #495057; font-weight: 500; padding-bottom: 5px;}
+  header nav ul li a:hover { color: #0d6efd; text-decoration: none;}
+  header nav ul li a.router-link-exact-active { color: #0d6efd; border-bottom: 2px solid #0d6efd; }
+  .user-info { display: flex; align-items: center; color: #495057; }
+  .user-info i.fa-bell { margin-right: 15px; font-size: 1.1em; color: #6c757d; cursor: pointer; }
+  .user-info .avatar { width: 35px; height: 35px; border-radius: 50%; margin-left: 10px; margin-right: 5px; object-fit: cover; }
+  .user-info span { font-weight: 500; margin-right: 15px; }
+  .logout-btn { background: none; border: none; color: #dc3545; cursor: pointer; font-weight: bold; padding: 5px; margin-left: 5px;}
+  .logout-btn:hover { text-decoration: underline; }
+  
+  /* --- Sidebar (Style cho component AppSidebar.vue) --- */
+  .app-sidebar {
+    width: 250px;
+    background-color: #343a40;
+    padding: 20px 0;
+    color: #adb5bd;
+    height: calc(100vh - 61px); /* Chiều cao trừ header */
+    overflow-y: auto;
+    flex-shrink: 0;
+    transition: width 0.3s ease; /* Nếu muốn có hiệu ứng ẩn/hiện */
+  }
+  .app-sidebar ul { list-style: none; padding: 0; margin: 0; }
+  .app-sidebar ul li { margin-bottom: 2px; }
+  .app-sidebar ul li > span,
+  .app-sidebar ul li > a { display: flex; align-items: center; padding: 10px 20px; transition: background-color 0.2s, color 0.2s; color: #adb5bd; text-decoration: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .app-sidebar ul li > span { cursor: pointer; }
+  .app-sidebar ul li > span:hover,
+  .app-sidebar ul li > a:hover { background-color: #495057; color: #fff; }
+  .app-sidebar ul li > a.router-link-exact-active { background-color: #0d6efd; color: #fff; }
+  .app-sidebar ul ul { margin-left: 0; display: none; padding: 5px 0 5px 20px; background-color: rgba(255, 255, 255, 0.05); } /* Nền mờ cho cấp con */
+  .app-sidebar ul ul ul { padding-left: 15px; background-color: rgba(255, 255, 255, 0.08); }
+  .app-sidebar ul ul ul ul { padding-left: 10px; background-color: rgba(255, 255, 255, 0.1); }
+  .app-sidebar ul li.has-children.open > ul { display: block; }
+  .app-sidebar i.fas { margin-right: 12px; width: 18px; text-align: center; flex-shrink: 0; }
+  .app-sidebar .toggle-icon { margin-left: auto; /* Đẩy icon sang phải */ padding-left: 10px; transition: transform 0.2s; }
+  .app-sidebar .has-children.open .toggle-icon i { transform: rotate(90deg); }
+  .app-sidebar .divider { height: 1px; background-color: #495057; margin: 15px 20px; font-size: 0.8em; text-transform: uppercase; color: #6c757d; padding-top: 10px; line-height: 0; text-align: left; }
+  
+  /* --- Các Section Chung --- */
+  .detail-section, .form-container, .report-container, .filters {
+      background-color: #fff;
+      padding: 20px;
+      border-radius: 0.3rem; /* ~ 5px */
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+      margin-bottom: 1.5rem; /* ~ 24px */
+  }
+  .filters { display: flex; flex-wrap: wrap; align-items: center; padding-bottom: 5px;} /* Giảm padding bottom của filter */
+  .filters label, .filters select, .filters input, .filters button { margin-bottom: 10px; margin-right: 10px;}
+  
+  /* --- Status Indicators --- */
+  .status-good { color: #198754; font-weight: bold; }
+  .status-warning { color: #ffc107; font-weight: bold; }
+  .status-bad { color: #dc3545; font-weight: bold; }
+  
+  /* --- KPI Detail Specific --- */
+  .kpi-info p { margin: 8px 0; color: #495057; }
+  .kpi-info strong { color: #212529; margin-right: 5px;}
+  .team-kpis { display: flex; flex-wrap: wrap; gap: 15px; margin-top: 15px; padding-top: 15px; border-top: 1px solid #eee;}
+  .team-kpi-card { border: 1px solid #e9ecef; padding: 10px 15px; border-radius: 4px; background-color: #f8f9fa; min-width: 150px;}
+  .team-kpi-card h4 { margin: 0 0 5px 0; font-size: 0.95em; color: #0d6efd;}
+  
+  /* --- KPI Evaluation Specific --- */
+  .kpi-evaluations { border-top: 1px solid #dee2e6; padding-top: 20px;}
+  .kpi-evaluations h3, .kpi-evaluations h4 { margin-bottom: 15px;}
+  .evaluation-list table { margin-bottom: 20px; font-size: 0.9em;}
+  .evaluation-form { border: 1px solid #e9ecef; padding: 15px; margin-top: 20px; background-color: #fdfdfd; border-radius: 5px;}
+  .evaluation-actions button { padding: 5px 8px; font-size: 0.85em; }
+  .evaluation-detail { border: 1px solid #dee2e6; background-color: #fff; padding: 15px; margin-top: 15px; border-radius: 5px;}
+  .evaluation-detail p { margin: 5px 0;}
+  .evaluation-detail .comments-box { background-color: #f8f9fa; border-left: 3px solid #ced4da; padding: 10px; margin-top: 5px; font-style: italic; color: #495057; border-radius: 0 4px 4px 0;}
+  .acknowledge-btn { background-color: #0d6efd; color: white; border: none;}
+  
+  /* --- Chart Placeholders --- */
+  .chart-container img {
+      width: 100%;
+      height: 250px; /* Hoặc chiều cao mong muốn */
+      background: #eee;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #aaa;
+      border: 1px dashed #ccc;
+      border-radius: 4px;
+      font-style: italic;
+  }

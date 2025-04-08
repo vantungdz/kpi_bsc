@@ -1,15 +1,19 @@
-import { createStore } from 'vuex';
-import kpis from './modules/kpis';
-import users from './modules/users';
-import perspectives from './modules/perspectives';
-import kpiEvaluations from './modules/kpiEvaluations';
+import { createStore } from "vuex";
+import kpis from "./modules/kpis";
+import departments from "./modules/departments";
+import perspectives from "./modules/perspectives";
+import users from "./modules/users";
+import kpiEvaluations from "./modules/kpiEvaluations";
+import kpiValues from "./modules/kpiValues";
 
 const store = createStore({
   modules: {
     kpis,
-    users,
+    departments,
     perspectives,
-    kpiEvaluations
+    users,
+    kpiEvaluations,
+    kpiValues
   },
 });
 
