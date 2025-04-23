@@ -1,3 +1,4 @@
+// src/store/modules/departments.js
 import apiClient from "../../services/api";
 
 const state = {
@@ -35,7 +36,7 @@ const actions = {
     try {
       // Gọi API lấy danh sách department (có thể chỉ cần id, departmentname, first_name, last_name)
       // API cần hỗ trợ lọc theo role, department,... nếu component UserSelect yêu cầu
-      const response = await apiClient.get("/departments", { params });
+      const response = await apiClient.get("/departments", { params }); // API Lấy danh sách Departments
       commit("SET_DEPARTMENTS", response.data); // Giả sử API trả về { data: [...] } hoặc [...]
     } catch (error) {
       commit("SET_ERROR", error);
@@ -44,7 +45,6 @@ const actions = {
       commit("SET_LOADING", false);
     }
   },
-  // Thêm các actions CRUD department nếu cần (thường cho Admin)
 };
 
 export default {

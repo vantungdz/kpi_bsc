@@ -11,20 +11,12 @@ export class TeamsService {
   ) {}
 
   async findAll(): Promise<Team[]> {
-    return await this.teamsRepository.find({
-      relations: [
-        'section', // Section chứa team
-        'kpis', // KPI thuộc team
-        'kpis.assignedTo', // Người được giao KPI
-        'kpis.evaluations', // Đánh giá của KPI
-      ],
-    });
+    return await this.teamsRepository.find();
   }
 
   async findOne(id: number): Promise<Team> {
     const relationsDta = await this.teamsRepository.findOne({
       where: { id },
-      relations: ['section', 'kpis', 'kpis.assignedTo', 'kpis.evaluations'],
     });
 
     if (!relationsDta) {

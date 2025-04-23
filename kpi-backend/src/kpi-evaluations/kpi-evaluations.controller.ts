@@ -10,8 +10,11 @@ import {
 } from '@nestjs/common';
 import { KpiEvaluationsService } from './kpi-evaluations.service';
 import { KpiEvaluation } from '../entities/kpi-evaluation.entity';
+import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
+import { UseGuards } from '@nestjs/common';
 
 @Controller('kpi-evaluations')
+@UseGuards(JwtAuthGuard)
 export class KpiEvaluationsController {
   constructor(private readonly kpiEvaluationsService: KpiEvaluationsService) {}
 

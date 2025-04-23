@@ -1,45 +1,48 @@
-// store/modules/kpiEvaluations.js
-import apiClient from '../../services/api';
+import apiClient from "../../services/api";
 
-export default {
-  namespaced: true,
-  state: {
-    evaluations: [],
-    currentKpi: null,
-  },
-  getters: {
-    allEvaluations: (state) => state.evaluations,
-    getEvaluationsByKpiId: (state) => (id) => state.evaluations.filter(ev => ev.kpi_id === id),
-    currentEvaluations: (state) => state.currentKpi,
-  },
-  actions: {
-    async fetchEvaluations({ commit }) {
-      try {
-        const response = await apiClient.get('/kpi-evaluations');
-        commit('SETKPIS_EVALUATIONS', response.data);
-      } catch (error) {
-        console.error("Failed to fetch evaluations:", error);
-      }
-    },
+    const state = {
+      evaluations: [],
+      loading: false,
+      error: null,
+    };
 
-    async createEvaluations({ commit }, newEvaluations) {
-      try {
-        const response = await apiClient.post('/kpi-evaluations', newEvaluations);
-        commit('ADD_EVALUATIONS', response.data);
-        return response.data;
-      } catch (error) {
-        console.error('Failed to create evaluation:', error);
-        throw error;
-      }
-    },
-    
-  },
-  mutations: {
-    SETKPIS_EVALUATIONS(state, evaluations) {
-      state.evaluations = evaluations;
-    },
-    ADD_EVALUATIONS(state, newEvaluation) {
-      state.evaluations.push(newEvaluation);
-    },
-  },
-};
+    const getters = {
+      allEvaluations: (state) => state.evaluations,
+      isLoading: (state) => state.loading,
+      error: (state) => state.error,
+    };
+
+    const mutations = {
+      SET_LOADING(state, isLoading) {
+        state.loading = isLoading;
+      },
+      SET_ERROR(state, error) {
+        state.error = error;
+      },
+      SET_EVALUATIONS(state, evaluations) {
+        state.evaluations = evaluations;
+      },
+    };
+
+    const actions = {
+      async fetchEvaluations({ commit }) {
+        commit("SET_LOADING", true);
+        try {
+          const response = await apiClient.get("/kpi-evaluations"); // Ví dụ endpoint
+          commit("SET_EVALUATIONS", response.data);
+        } catch (error) {
+          commit("SET_ERROR", error);
+        } finally {
+          commit("SET_LOADING", false);
+        }
+      },
+      // Các actions khác cho tạo, cập nhật, xóa đánh giá
+    };
+
+    export default {
+      namespaced: true,
+      state,
+      getters,
+      mutations,
+      actions,
+    };

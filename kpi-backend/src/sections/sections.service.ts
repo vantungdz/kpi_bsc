@@ -1,63 +1,89 @@
+// src/sections/section.service.ts
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { Section } from '../entities/section.entity';
+import { KPIAssignment } from 'src/entities/kpi-assignment.entity';
+import { Section } from 'src/entities/section.entity';
+import { IsNull, Not, Repository } from 'typeorm';
 
 @Injectable()
 export class SectionsService {
   constructor(
     @InjectRepository(Section)
-    private sectionsRepository: Repository<Section>,
+    private readonly sectionRepository: Repository<Section>,
+    @InjectRepository(KPIAssignment)
+    private readonly kpiAssignmentRepository: Repository<KPIAssignment>,
   ) {}
 
-  async findAll(): Promise<Section[]> {
-    return await this.sectionsRepository.find({
-      relations: [
-        'department', // Phòng ban chứa section
-        'teams', // Các team trong section
-        'teams.kpis', // KPI của các team
-        'kpis', // KPI trực tiếp thuộc section
-        'kpis.assignedTo', // Người được giao KPI
-        'kpis.evaluations', // Đánh giá của KPI
-        'userUnits', // Người dùng thuộc section
-        'userUnits.user',
-      ],
-    });
-  }
+  async create(createSectionDto: Section): Promise<Section> {
+    const section = this.sectionRepository.create(createSectionDto);
 
-  async findOne(id: number): Promise<Section> {
-    const relationsDtaa = await this.sectionsRepository.findOne({
-      where: { id },
-      relations: [
-        'department', // Phòng ban chứa section
-        'teams', // Các team trong section
-        'teams.kpis', // KPI của các team
-        'kpis', // KPI trực tiếp thuộc section
-        'kpis.assignedTo', // Người được giao KPI
-        'kpis.evaluations', // Đánh giá của KPI
-        'userUnits', // Người dùng thuộc section
-        'userUnits.user',
-      ],
-    });
-
-    if (!relationsDtaa) {
+    if (!section) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    return relationsDtaa;
+    return section;
   }
 
-  async create(section: Partial<Section>): Promise<Section> {
-    const newSection = this.sectionsRepository.create(section);
-    return this.sectionsRepository.save(newSection);
+  async findAll(): Promise<Section[]> {
+    return this.sectionRepository.find();
   }
 
-  async update(id: number, update: Partial<Section>): Promise<Section> {
-    await this.sectionsRepository.update(id, update);
-    return this.findOne(id);
+  async findOne(id: number): Promise<Section> {
+    const user = await this.sectionRepository.findOne({
+      where: { id },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    return user;
   }
 
-  async delete(id: number): Promise<void> {
-    await this.sectionsRepository.delete(id);
+  async getFilteredSections(
+    kpiId?: number,
+    departmentId?: number,
+  ): Promise<Section[]> {
+    let sections: Section[] = [];
+
+    if (kpiId) {
+      // Fetch sections assigned to the KPI
+      const assignments = await this.kpiAssignmentRepository.find({
+        where: {
+          kpi: { id: kpiId },
+          assigned_to_section: Not(IsNull()),
+        },
+        relations: ['section', 'section.department'], // include department for filtering
+      });
+
+      const rawSections = assignments
+        .map((a) => a.section)
+        .filter((section) => section !== null);
+
+      // Deduplicate sections
+      const uniqueSections = Array.from(
+        new Map(rawSections.map((s) => [s.id, s])).values(),
+      );
+
+      // If departmentId is also provided, filter further
+      if (departmentId) {
+        sections = uniqueSections.filter(
+          (section) => section.department?.id === departmentId,
+        );
+      } else {
+        sections = uniqueSections;
+      }
+    } else if (departmentId) {
+      // Only department filter
+      sections = await this.sectionRepository.find({
+        where: { department: { id: departmentId } },
+        relations: ['department'],
+      });
+    } else {
+      // No filters
+      sections = await this.sectionRepository.find();
+    }
+
+    return sections;
   }
 }

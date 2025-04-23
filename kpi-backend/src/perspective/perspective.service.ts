@@ -12,21 +12,18 @@ export class PerspectiveService {
   ) {}
 
   async findAll(): Promise<Perspective[]> {
-    return await this.perspectivesRepository.find({
-      relations: ['kpis', 'kpis.assignedTo'],
-    });
+    return await this.perspectivesRepository.find();
   }
 
   async findOne(id: number): Promise<Perspective> {
     const dataRes = await this.perspectivesRepository.findOne({
       where: { id },
-      relations: ['kpis', 'kpis.assignedTo'],
     });
 
     if (!dataRes) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    return dataRes
+    return dataRes;
   }
 }

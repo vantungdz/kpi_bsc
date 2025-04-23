@@ -6,32 +6,26 @@ import {
   Unique,
   JoinColumn,
 } from 'typeorm';
-import { Kpi } from './kpi.entity';
-import { User } from './user.entity';
+import { KPIAssignment } from './kpi-assignment.entity';
 
 @Entity('kpi_evaluations')
-@Unique(['kpi_id', 'evaluatee_id', 'period_end_date'])
+@Unique(['evaluatee_id', 'period_end_date'])
 export class KpiEvaluation {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @ManyToOne(() => Kpi, (kpi) => kpi.evaluations, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'id' })
-  kpi: Kpi;
+  @ManyToOne(() => KPIAssignment, (kpiAssignment) => kpiAssignment.id, {
+    nullable: true,
+    onDelete: 'SET NULL',
+  })
+  @JoinColumn({ name: 'kpi_assigment_id' })
+  kpiAssignment: KPIAssignment;
 
   @Column()
-  kpi_id: number;
-
-  @ManyToOne(() => User, (user) => user.evaluationsAsEvaluator)
-  @JoinColumn({ name: 'evaluator_id' })
-  evaluator: User;
+  kpi_assigment_id: number;
 
   @Column()
   evaluator_id: number;
-
-  @ManyToOne(() => User, (user) => user.evaluationsAsEvaluatee)
-  @JoinColumn({ name: 'evaluatee_id' })
-  evaluatee: User;
 
   @Column()
   evaluatee_id: number;
@@ -50,14 +44,6 @@ export class KpiEvaluation {
 
   @Column({ type: 'text', nullable: true })
   comments: string;
-
-  @Column({
-    type: 'varchar',
-    length: 20,
-    default: 'Met',
-    enum: ['Met', 'Not Met', 'In Progress', 'Not Started', 'Exceeded'],
-  })
-  status: string;
 
   @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
   created_at: Date;

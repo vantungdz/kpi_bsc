@@ -1,38 +1,726 @@
 /* src/assets/styles/main.css */
 
+/* --- Global Box Sizing (Recommended) --- */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+/* Định nghĩa biến màu Global */
+:root {
+  --brand-primary: #0056b3; /* <<< THAY BẰNG MÃ MÀU CHÍNH CỦA BẠN */
+  --brand-primary-hover: #004494; /* <<< THAY BẰNG MÀU HOVER CỦA BẠN */
+  --brand-link: var(--brand-primary);
+  /* Thêm các biến màu khác nếu cần */
+}
+
 /* --- Reset & Base Styles --- */
 body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-    margin: 0;
-    padding: 0;
-    background-color: #f8f9fa; /* Light grey background */
-    color: #212529; /* Default text color */
-    line-height: 1.5;
-    font-size: 16px; /* Base font size */
-  }
-  
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  margin: 0;
+  padding: 0;
+  background-color: #f8f9fa;
+  /* Light grey background */
+  color: #212529;
+  /* Default text color */
+  line-height: 1.5;
+  font-size: 16px;
+  /* Base font size */
+}
+
+a {
+  text-decoration: none;
+  color: #0d6efd;
+  /* Bootstrap primary blue */
+  transition: color 0.15s ease-in-out, text-decoration 0.15s ease-in-out;
+}
+
+a:hover {
+  text-decoration: underline;
+  color: #0a58ca;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  color: #343a40;
+  margin-top: 0;
+  margin-bottom: 0.5rem;
+  font-weight: 500;
+}
+
+h2 {
+  font-size: 1.75rem;
+}
+
+h3 {
+  font-size: 1.5rem;
+}
+
+h4 {
+  font-size: 1.25rem;
+}
+
+button {
+  display: inline-block;
+  font-weight: 400;
+  line-height: 1.5;
+  color: #212529;
+  text-align: center;
+  text-decoration: none;
+  vertical-align: middle;
+  cursor: pointer;
+  user-select: none;
+  background-color: #e9ecef;
+  border: 1px solid #ced4da;
+  padding: 0.375rem 0.75rem;
+  /* ~ 6px 12px */
+  font-size: 1rem;
+  border-radius: 0.25rem;
+  /* ~ 4px */
+  transition: color 0.15s ease-in-out, background-color 0.15s ease-in-out, border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+  margin-right: 0.25rem;
+  /* ~ 4px */
+  margin-bottom: 0.25rem;
+  /* Add margin bottom */
+}
+
+button:hover {
+  background-color: #dee2e6;
+  border-color: #adb5bd;
+}
+
+button:focus {
+  outline: 0;
+  box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+  /* Focus ring */
+}
+
+/* Primary Button Style */
+button.btn-primary,
+button[type="submit"] {
+  color: #fff;
+  background-color: #0d6efd;
+  border-color: #0d6efd;
+}
+
+button.btn-primary:hover {
+  background-color: #0b5ed7;
+  border-color: #0a58ca;
+}
+
+/* Secondary Button Style */
+button.btn-secondary {
+  color: #fff;
+  background-color: #6c757d;
+  border-color: #6c757d;
+}
+
+button.btn-secondary:hover {
+  background-color: #5c636a;
+  border-color: #565e64;
+}
+
+/* Edit Button Style */
+button.edit-btn {
+  color: #000;
+  background-color: #ffc107;
+  border-color: #ffc107;
+}
+
+button.edit-btn:hover {
+  background-color: #ffca2c;
+  border-color: #ffc720;
+}
+
+/* Delete Button Style */
+button.delete-btn {
+  color: #fff;
+  background-color: #dc3545;
+  border-color: #dc3545;
+}
+
+button.delete-btn:hover {
+  background-color: #bb2d3b;
+  border-color: #b02a37;
+}
+
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background-color: #fff;
+  margin-bottom: 1rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  border-radius: 0.25rem;
+  overflow: hidden;
+  /* Giúp bo góc table hoạt động */
+}
+
+th,
+td {
+  border: 1px solid #dee2e6;
+  padding: 0.75rem;
+  /* ~ 12px */
+  text-align: left;
+  vertical-align: top;
+}
+
+th {
+  background-color: #f8f9fa;
+  font-weight: 500;
+  color: #495057;
+}
+
+tbody tr:hover {
+  background-color: rgba(0, 0, 0, 0.04);
+}
+
+label {
+  display: inline-block;
+  /* Hoặc block tùy ngữ cảnh */
+  margin-bottom: 0.5rem;
+  font-weight: 500;
+  color: #495057;
+}
+
+input[type="text"],
+input[type="number"],
+input[type="date"],
+input[type="email"],
+input[type="password"],
+select,
+textarea {
+  display: block;
+  width: 100%;
+  /* Chiếm toàn bộ chiều rộng container */
+  padding: 0.375rem 0.75rem;
+  font-size: 1rem;
+  font-weight: 400;
+  line-height: 1.5;
+  color: #212529;
+  background-color: #fff;
+  background-clip: padding-box;
+  border: 1px solid #ced4da;
+  appearance: none;
+  /* Tắt giao diện mặc định của trình duyệt */
+  border-radius: 0.25rem;
+  transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+  box-sizing: border-box;
+  /* Quan trọng để padding không làm tăng kích thước */
+}
+
+input[type="date"] {
+  width: auto;
+  /* Date input thường không cần full width */
+}
+
+select {
+  /* Thêm mũi tên cho select box nếu cần */
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23343a40' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  background-size: 16px 12px;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: #86b7fe;
+  outline: 0;
+  box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+}
+
+textarea {
+  min-height: calc(1.5em + 0.75rem + 2px);
+  /* Chiều cao tối thiểu */
+  resize: vertical;
+  /* Cho phép thay đổi chiều cao dọc */
+}
+
+/* --- Layout Chính --- */
+.container {
+  display: flex;
+}
+
+main,
+.content-area {
+  flex-grow: 1;
+  padding: 20px;
+  background-color: #f8f9fa;
+  /* Đã có height và overflow trong DefaultLayout.vue */
+}
+
+/* --- Header (Style cho component AppHeader.vue) --- */
+.app-header {
+  background-color: #fff;
+  padding: 10px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #dee2e6;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  height: 60px;
+  position: sticky;
+  /* Giữ header cố định khi cuộn */
+  top: 0;
+  z-index: 1020;
+  /* Đảm bảo header nằm trên */
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+}
+
+.logo img {
+  height: 40px;
+  margin-right: 10px;
+}
+
+.logo h1 {
+  font-size: 1.5em;
+  margin: 0;
+  color: #495057;
+  font-weight: 600;
+}
+
+header nav ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+}
+
+header nav ul li {
+  margin-left: 25px;
+}
+
+header nav ul li a {
+  color: #495057;
+  font-weight: 500;
+  padding-bottom: 5px;
+}
+
+header nav ul li a:hover {
+  color: #0d6efd;
+  text-decoration: none;
+}
+
+header nav ul li a.router-link-exact-active {
+  color: #0d6efd;
+  border-bottom: 2px solid #0d6efd;
+}
+
+.user-info {
+  display: flex;
+  align-items: center;
+  color: #495057;
+}
+
+.user-info i.fa-bell {
+  margin-right: 15px;
+  font-size: 1.1em;
+  color: #6c757d;
+  cursor: pointer;
+}
+
+.user-info .avatar {
+  width: 35px;
+  height: 35px;
+  border-radius: 50%;
+  margin-left: 10px;
+  margin-right: 5px;
+  object-fit: cover;
+}
+
+.user-info span {
+  font-weight: 500;
+  margin-right: 15px;
+}
+
+.logout-btn {
+  background: none;
+  border: none;
+  color: #dc3545;
+  cursor: pointer;
+  font-weight: bold;
+  padding: 5px;
+  margin-left: 5px;
+}
+
+.logout-btn:hover {
+  text-decoration: underline;
+}
+
+/* --- Sidebar (Style cho component AppSidebar.vue) --- */
+.app-sidebar {
+  width: 250px;
+  background-color: #343a40;
+  padding: 20px 0;
+  color: #adb5bd;
+  height: calc(100vh - 61px);
+  /* Chiều cao trừ header */
+  overflow-y: auto;
+  flex-shrink: 0;
+  transition: width 0.3s ease;
+  /* Nếu muốn có hiệu ứng ẩn/hiện */
+}
+
+.app-sidebar ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.app-sidebar ul li {
+  margin-bottom: 2px;
+}
+
+.app-sidebar ul li>span,
+.app-sidebar ul li>a {
+  display: flex;
+  align-items: center;
+  padding: 10px 20px;
+  transition: background-color 0.2s, color 0.2s;
+  color: #adb5bd;
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.app-sidebar ul li>span {
+  cursor: pointer;
+}
+
+.app-sidebar ul li>span:hover,
+.app-sidebar ul li>a:hover {
+  background-color: #495057;
+  color: #fff;
+}
+
+.app-sidebar ul li>a.router-link-exact-active {
+  background-color: #0d6efd;
+  color: #fff;
+}
+
+.app-sidebar ul ul {
+  margin-left: 0;
+  display: none;
+  padding: 5px 0 5px 20px;
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+/* Nền mờ cho cấp con */
+.app-sidebar ul ul ul {
+  padding-left: 15px;
+  background-color: rgba(255, 255, 255, 0.08);
+}
+
+.app-sidebar ul ul ul ul {
+  padding-left: 10px;
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.app-sidebar ul li.has-children.open>ul {
+  display: block;
+}
+
+.app-sidebar i.fas {
+  margin-right: 12px;
+  width: 18px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.app-sidebar .toggle-icon {
+  margin-left: auto;
+  /* Đẩy icon sang phải */
+  padding-left: 10px;
+  transition: transform 0.2s;
+}
+
+.app-sidebar .has-children.open .toggle-icon i {
+  transform: rotate(90deg);
+}
+
+.app-sidebar .divider {
+  height: 1px;
+  background-color: #495057;
+  margin: 15px 20px;
+  font-size: 0.8em;
+  text-transform: uppercase;
+  color: #6c757d;
+  padding-top: 10px;
+  line-height: 0;
+  text-align: left;
+}
+
+/* --- Các Section Chung --- */
+.detail-section,
+.form-container,
+.report-container,
+.filters {
+  background-color: #fff;
+  padding: 20px;
+  border-radius: 0.3rem;
+  /* ~ 5px */
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  margin-bottom: 1.5rem;
+  /* ~ 24px */
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  padding-bottom: 5px;
+}
+
+/* Giảm padding bottom của filter */
+.filters label,
+.filters select,
+.filters input,
+.filters button {
+  margin-bottom: 10px;
+  margin-right: 10px;
+}
+
+.filter-controls {
+  /* position: fixed; */
+  /* top: 50px;
+  left: 200px; */
+  /* width: 100%; */
+  background-color: #ececec;
+  /* Hoặc màu nền phù hợp */
+  /* z-index: 1000; */
+  padding: 25px;
+  padding-bottom: 0px;
+}
+
+.data-container {
+  margin-top: 10px;
+  overflow-y: auto;
+  height: 600px;
+}
+
+/* --- Status Indicators --- */
+.status-good {
+  color: #198754;
+  font-weight: bold;
+}
+
+.status-warning {
+  color: #ffc107;
+  font-weight: bold;
+}
+
+.status-bad {
+  color: #dc3545;
+  font-weight: bold;
+}
+
+/* --- KPI Detail Specific --- */
+.kpi-info p {
+  margin: 8px 0;
+  color: #495057;
+}
+
+.kpi-info strong {
+  color: #212529;
+  margin-right: 5px;
+}
+
+.team-kpis {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 15px;
+  margin-top: 15px;
+  padding-top: 15px;
+  border-top: 1px solid #eee;
+}
+
+.team-kpi-card {
+  border: 1px solid #e9ecef;
+  padding: 10px 15px;
+  border-radius: 4px;
+  background-color: #f8f9fa;
+  min-width: 150px;
+}
+
+.team-kpi-card h4 {
+  margin: 0 0 5px 0;
+  font-size: 0.95em;
+  color: #0d6efd;
+}
+
+/* --- KPI Evaluation Specific --- */
+.kpi-evaluations {
+  border-top: 1px solid #dee2e6;
+  padding-top: 20px;
+}
+
+.kpi-evaluations h3,
+.kpi-evaluations h4 {
+  margin-bottom: 15px;
+}
+
+.evaluation-list table {
+  margin-bottom: 20px;
+  font-size: 0.9em;
+}
+
+.evaluation-form {
+  border: 1px solid #e9ecef;
+  padding: 15px;
+  margin-top: 20px;
+  background-color: #fdfdfd;
+  border-radius: 5px;
+}
+
+.evaluation-actions button {
+  padding: 5px 8px;
+  font-size: 0.85em;
+}
+
+.evaluation-detail {
+  border: 1px solid #dee2e6;
+  background-color: #fff;
+  padding: 15px;
+  margin-top: 15px;
+  border-radius: 5px;
+}
+
+.evaluation-detail p {
+  margin: 5px 0;
+}
+
+.evaluation-detail .comments-box {
+  background-color: #f8f9fa;
+  border-left: 3px solid #ced4da;
+  padding: 10px;
+  margin-top: 5px;
+  font-style: italic;
+  color: #495057;
+  border-radius: 0 4px 4px 0;
+}
+
+.acknowledge-btn {
+  background-color: #0d6efd;
+  color: white;
+  border: none;
+}
+
+/* --- Chart Placeholders --- */
+.chart-container img {
+  width: 100%;
+  height: 250px;
+  /* Hoặc chiều cao mong muốn */
+  background: #eee;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #aaa;
+  border: 1px dashed #ccc;
+  border-radius: 4px;
+  font-style: italic;
+}
+
+.list-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.row-parent {
+  font-weight: bold;
+}
+
+:deep(.action-column-cell) {
+  display: flex;
+  justify-content: center;
+  /* Horizontally center */
+  align-items: center;
+  /* Vertically center (optional) */
+  gap: 6px;
+  /* Optional: Adds space between the buttons */
+}
+
+.kpi-actions-button {
+  font-size: 0.8em;
+  padding: 3px 6px;
+  margin-right: 6px;
+}
+
+.ant-collapse-header {
+  font-weight: bold;
+  font-size: 16px !important;
+  color: rgb(49, 130, 252) !important;
+}
+
+/* Target the cells with the specific className */
+:deep(.action-column-cell) {
+  display: flex;
+  justify-content: center;
+  /* Horizontally center */
+  align-items: center;
+  /* Vertically center (optional) */
+  gap: 6px;
+  /* Optional: Adds space between the buttons */
+}
+
+:global(.ant-table-row.row-parent td) {
+  font-weight: bold;
+  /* background-color: #e6f7ff; */
+}
+
+:global(.ant-collapse-header-text) {
+  font-weight: bold;
+  font-size: 16px !important;
+  color: rgb(49, 130, 252) !important;
+}
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  margin: 0;
+  padding: 0;
+  background-color: #f8f9fa;
+  /* Light grey background */
+  color: #212529;
+  /* Default text color */
+  line-height: 1.5;
+  font-size: 16px;
+  /* Base font size */
+}
+
   a {
     text-decoration: none;
-    color: #0d6efd; /* Bootstrap primary blue */
+    color: var(--brand-link); /* Sử dụng biến màu link */
     transition: color 0.15s ease-in-out, text-decoration 0.15s ease-in-out;
   }
-  
+
   a:hover {
     text-decoration: underline;
-    color: #0a58ca;
+    color: var(--brand-primary-hover); /* Sử dụng biến màu hover */
   }
-  
+
   h1, h2, h3, h4, h5, h6 {
     color: #343a40;
     margin-top: 0;
     margin-bottom: 0.5rem;
     font-weight: 500;
   }
-  
+
   h2 { font-size: 1.75rem; }
   h3 { font-size: 1.5rem; }
   h4 { font-size: 1.25rem; }
-  
+
+/* --- Base Button Style --- */
   button {
     display: inline-block;
     font-weight: 400;
@@ -43,38 +731,46 @@ body {
     vertical-align: middle;
     cursor: pointer;
     user-select: none;
-    background-color: #e9ecef;
+    background-color: #e9ecef; /* Màu nền mặc định */
     border: 1px solid #ced4da;
-    padding: 0.375rem 0.75rem; /* ~ 6px 12px */
+    padding: 0.375rem 0.75rem;
     font-size: 1rem;
-    border-radius: 0.25rem; /* ~ 4px */
+    border-radius: 0.25rem;
     transition: color 0.15s ease-in-out, background-color 0.15s ease-in-out, border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
-    margin-right: 0.25rem; /* ~ 4px */
-    margin-bottom: 0.25rem; /* Add margin bottom */
+    margin-right: 0.25rem;
+    margin-bottom: 0.25rem;
   }
-  
+
   button:hover {
     background-color: #dee2e6;
     border-color: #adb5bd;
   }
-  
+
   button:focus {
     outline: 0;
-    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25); /* Focus ring */
+    /* Có thể dùng màu brand cho focus ring */
+    box-shadow: 0 0 0 0.25rem color-mix(in srgb, var(--brand-primary) 25%, transparent);
+    /* Hoặc dùng rgba: box-shadow: 0 0 0 0.25rem rgba(0, 86, 179, 0.25); */
   }
-  
-  /* Primary Button Style */
-  button.btn-primary, button[type="submit"] {
-    color: #fff;
-    background-color: #0d6efd;
-    border-color: #0d6efd;
+
+/* --- Primary Button Style (Dùng biến CSS) --- */
+  button.btn-primary,
+  button[type="submit"].ant-btn-primary, /* Tăng độ ưu tiên cho Ant Button */
+  button[type="submit"]:not(.ant-btn) /* Áp dụng cho nút submit thường */
+   {
+    color: #fff; /* Đảm bảo chữ trắng */
+    background-color: var(--brand-primary); /* <<< Sử dụng biến */
+    border-color: var(--brand-primary);    /* <<< Sử dụng biến */
   }
-  button.btn-primary:hover {
-    background-color: #0b5ed7;
-    border-color: #0a58ca;
+  button.btn-primary:hover,
+  button[type="submit"].ant-btn-primary:hover,
+  button[type="submit"]:not(.ant-btn):hover
+  {
+    background-color: var(--brand-primary-hover); /* <<< Sử dụng biến */
+    border-color: var(--brand-primary-hover);    /* <<< Sử dụng biến */
   }
-  
-  /* Secondary Button Style */
+
+/* --- Secondary Button Style --- */
   button.btn-secondary {
     color: #fff;
     background-color: #6c757d;
@@ -84,8 +780,8 @@ body {
       background-color: #5c636a;
       border-color: #565e64;
   }
-  
-  /* Edit Button Style */
+
+/* --- Edit Button Style --- */
   button.edit-btn {
       color: #000;
       background-color: #ffc107;
@@ -95,8 +791,8 @@ body {
       background-color: #ffca2c;
       border-color: #ffc720;
   }
-  
-  /* Delete Button Style */
+
+/* --- Delete Button Style --- */
   button.delete-btn {
       color: #fff;
       background-color: #dc3545;
@@ -106,8 +802,9 @@ body {
       background-color: #bb2d3b;
       border-color: #b02a37;
   }
-  
-  
+
+
+/* --- Table Style --- */
   table {
     width: 100%;
     border-collapse: collapse;
@@ -117,35 +814,32 @@ body {
     border-radius: 0.25rem;
     overflow: hidden; /* Giúp bo góc table hoạt động */
   }
-  
+
   th, td {
     border: 1px solid #dee2e6;
     padding: 0.75rem; /* ~ 12px */
     text-align: left;
     vertical-align: top;
   }
-  
+
   th {
     background-color: #f8f9fa;
     font-weight: 500;
     color: #495057;
   }
-  
-  tbody tr:nth-of-type(odd) {
-    /* background-color: rgba(0, 0, 0, 0.02); */ /* Có thể thêm màu xen kẽ nếu muốn */
-  }
-  
+
   tbody tr:hover {
     background-color: rgba(0, 0, 0, 0.04);
   }
-  
+
+/* --- Form Element Styles --- */
   label {
     display: inline-block; /* Hoặc block tùy ngữ cảnh */
     margin-bottom: 0.5rem;
     font-weight: 500;
     color: #495057;
   }
-  
+
   input[type="text"],
   input[type="number"],
   input[type="date"],
@@ -166,48 +860,52 @@ body {
     appearance: none; /* Tắt giao diện mặc định của trình duyệt */
     border-radius: 0.25rem;
     transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
-    box-sizing: border-box; /* Quan trọng để padding không làm tăng kích thước */
+    /* box-sizing: border-box; Đã thêm global */
   }
-  
+
   input[type="date"]{
       width: auto; /* Date input thường không cần full width */
   }
-  
+
   select {
-     /* Thêm mũi tên cho select box nếu cần */
-     background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23343a40' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e");
-     background-repeat: no-repeat;
-     background-position: right 0.75rem center;
-     background-size: 16px 12px;
+      /* Thêm mũi tên cho select box nếu cần */
+      background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23343a40' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e");
+      background-repeat: no-repeat;
+      background-position: right 0.75rem center;
+      background-size: 16px 12px;
   }
-  
+
   input:focus,
   select:focus,
   textarea:focus {
-    border-color: #86b7fe;
+    border-color: #86b7fe; /* Có thể đổi thành var(--brand-primary) nếu muốn */
     outline: 0;
-    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+    box-shadow: 0 0 0 0.25rem color-mix(in srgb, var(--brand-primary) 25%, transparent); /* Dùng biến màu */
   }
-  
+
   textarea {
     min-height: calc(1.5em + 0.75rem + 2px); /* Chiều cao tối thiểu */
     resize: vertical; /* Cho phép thay đổi chiều cao dọc */
   }
-  
-  /* --- Layout Chính --- */
+
+/* --- Layout Chính --- */
   .container {
     display: flex;
   }
-  
-  main, .content-area {
-    flex-grow: 1;
-    padding: 20px;
-    background-color: #f8f9fa;
-    /* Đã có height và overflow trong DefaultLayout.vue */
+
+/* --- Sửa lỗi thanh cuộn dọc --- */
+/* Target thẻ main hoặc class content-area (nếu bạn dùng) VÀ .ant-layout-content */
+  main, .content-area, .ant-layout-content {
+    flex-grow: 1; /* Đảm bảo nó chiếm hết không gian còn lại */
+    padding: 20px; /* Giữ padding của bạn */
+    background-color: #f8f9fa; /* Giữ màu nền của bạn */
+    min-width: 0; /* Cho phép co lại theo chiều ngang */
+    overflow-x: auto; /* Xử lý tràn ngang bên trong nó */
+    overflow-y: auto; /* <<< THÊM VÀO: Xử lý tràn dọc bên trong nó */
   }
-  
-  /* --- Header (Style cho component AppHeader.vue) --- */
-  .app-header {
+
+/* --- Header --- */
+  .app-header { /* Style cho <AppHeader/> nếu cần */
     background-color: #fff;
     padding: 10px 20px;
     display: flex;
@@ -215,7 +913,7 @@ body {
     align-items: center;
     border-bottom: 1px solid #dee2e6;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-    height: 60px;
+    height: 61px; /* Điều chỉnh nếu header của bạn khác 61px */
     position: sticky; /* Giữ header cố định khi cuộn */
     top: 0;
     z-index: 1020; /* Đảm bảo header nằm trên */
@@ -226,25 +924,30 @@ body {
   header nav ul { list-style: none; padding: 0; margin: 0; display: flex; }
   header nav ul li { margin-left: 25px; }
   header nav ul li a { color: #495057; font-weight: 500; padding-bottom: 5px;}
-  header nav ul li a:hover { color: #0d6efd; text-decoration: none;}
-  header nav ul li a.router-link-exact-active { color: #0d6efd; border-bottom: 2px solid #0d6efd; }
+  header nav ul li a:hover { color: var(--brand-link); text-decoration: none;}
+  header nav ul li a.router-link-exact-active { color: var(--brand-link); border-bottom: 2px solid var(--brand-primary); }
   .user-info { display: flex; align-items: center; color: #495057; }
-  .user-info i.fa-bell { margin-right: 15px; font-size: 1.1em; color: #6c757d; cursor: pointer; }
+  .user-info i.fas { margin-right: 15px; font-size: 1.1em; color: #6c757d; cursor: pointer; } /* FontAwesome icon */
   .user-info .avatar { width: 35px; height: 35px; border-radius: 50%; margin-left: 10px; margin-right: 5px; object-fit: cover; }
   .user-info span { font-weight: 500; margin-right: 15px; }
   .logout-btn { background: none; border: none; color: #dc3545; cursor: pointer; font-weight: bold; padding: 5px; margin-left: 5px;}
   .logout-btn:hover { text-decoration: underline; }
-  
-  /* --- Sidebar (Style cho component AppSidebar.vue) --- */
+
+
+/* --- Sidebar --- */
+  /* Các style này có thể không áp dụng vì bạn dùng <a-layout-sider> */
+  /* Nếu muốn tùy chỉnh Sider của Ant Design, hãy dùng :deep() trong AppSidebar.vue
+     hoặc target trực tiếp class .ant-layout-sider, .ant-layout-sider-children */
+  /*
   .app-sidebar {
     width: 250px;
     background-color: #343a40;
     padding: 20px 0;
     color: #adb5bd;
-    height: calc(100vh - 61px); /* Chiều cao trừ header */
-    overflow-y: auto;
+    height: calc(100vh - 61px); // Chiều cao trừ header
+    overflow-y: auto; // Cho phép cuộn bên trong sidebar nếu menu dài
     flex-shrink: 0;
-    transition: width 0.3s ease; /* Nếu muốn có hiệu ứng ẩn/hiện */
+    transition: width 0.3s ease;
   }
   .app-sidebar ul { list-style: none; padding: 0; margin: 0; }
   .app-sidebar ul li { margin-bottom: 2px; }
@@ -253,40 +956,41 @@ body {
   .app-sidebar ul li > span { cursor: pointer; }
   .app-sidebar ul li > span:hover,
   .app-sidebar ul li > a:hover { background-color: #495057; color: #fff; }
-  .app-sidebar ul li > a.router-link-exact-active { background-color: #0d6efd; color: #fff; }
-  .app-sidebar ul ul { margin-left: 0; display: none; padding: 5px 0 5px 20px; background-color: rgba(255, 255, 255, 0.05); } /* Nền mờ cho cấp con */
+  .app-sidebar ul li > a.router-link-exact-active { background-color: var(--brand-primary); color: #fff; }
+  .app-sidebar ul ul { margin-left: 0; display: none; padding: 5px 0 5px 20px; background-color: rgba(255, 255, 255, 0.05); }
   .app-sidebar ul ul ul { padding-left: 15px; background-color: rgba(255, 255, 255, 0.08); }
   .app-sidebar ul ul ul ul { padding-left: 10px; background-color: rgba(255, 255, 255, 0.1); }
   .app-sidebar ul li.has-children.open > ul { display: block; }
   .app-sidebar i.fas { margin-right: 12px; width: 18px; text-align: center; flex-shrink: 0; }
-  .app-sidebar .toggle-icon { margin-left: auto; /* Đẩy icon sang phải */ padding-left: 10px; transition: transform 0.2s; }
+  .app-sidebar .toggle-icon { margin-left: auto; padding-left: 10px; transition: transform 0.2s; }
   .app-sidebar .has-children.open .toggle-icon i { transform: rotate(90deg); }
   .app-sidebar .divider { height: 1px; background-color: #495057; margin: 15px 20px; font-size: 0.8em; text-transform: uppercase; color: #6c757d; padding-top: 10px; line-height: 0; text-align: left; }
-  
-  /* --- Các Section Chung --- */
+  */
+
+/* --- Các Section Chung --- */
   .detail-section, .form-container, .report-container, .filters {
       background-color: #fff;
       padding: 20px;
-      border-radius: 0.3rem; /* ~ 5px */
+      border-radius: 0.3rem;
       box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-      margin-bottom: 1.5rem; /* ~ 24px */
+      margin-bottom: 1.5rem;
   }
-  .filters { display: flex; flex-wrap: wrap; align-items: center; padding-bottom: 5px;} /* Giảm padding bottom của filter */
+  .filters { display: flex; flex-wrap: wrap; align-items: center; padding-bottom: 5px;}
   .filters label, .filters select, .filters input, .filters button { margin-bottom: 10px; margin-right: 10px;}
-  
-  /* --- Status Indicators --- */
+
+/* --- Status Indicators --- */
   .status-good { color: #198754; font-weight: bold; }
   .status-warning { color: #ffc107; font-weight: bold; }
   .status-bad { color: #dc3545; font-weight: bold; }
-  
-  /* --- KPI Detail Specific --- */
+
+/* --- KPI Detail Specific --- */
   .kpi-info p { margin: 8px 0; color: #495057; }
   .kpi-info strong { color: #212529; margin-right: 5px;}
   .team-kpis { display: flex; flex-wrap: wrap; gap: 15px; margin-top: 15px; padding-top: 15px; border-top: 1px solid #eee;}
   .team-kpi-card { border: 1px solid #e9ecef; padding: 10px 15px; border-radius: 4px; background-color: #f8f9fa; min-width: 150px;}
-  .team-kpi-card h4 { margin: 0 0 5px 0; font-size: 0.95em; color: #0d6efd;}
-  
-  /* --- KPI Evaluation Specific --- */
+  .team-kpi-card h4 { margin: 0 0 5px 0; font-size: 0.95em; color: var(--brand-link);} /* Dùng màu link */
+
+/* --- KPI Evaluation Specific --- */
   .kpi-evaluations { border-top: 1px solid #dee2e6; padding-top: 20px;}
   .kpi-evaluations h3, .kpi-evaluations h4 { margin-bottom: 15px;}
   .evaluation-list table { margin-bottom: 20px; font-size: 0.9em;}
@@ -295,18 +999,11 @@ body {
   .evaluation-detail { border: 1px solid #dee2e6; background-color: #fff; padding: 15px; margin-top: 15px; border-radius: 5px;}
   .evaluation-detail p { margin: 5px 0;}
   .evaluation-detail .comments-box { background-color: #f8f9fa; border-left: 3px solid #ced4da; padding: 10px; margin-top: 5px; font-style: italic; color: #495057; border-radius: 0 4px 4px 0;}
-  .acknowledge-btn { background-color: #0d6efd; color: white; border: none;}
-  
-  /* --- Chart Placeholders --- */
+  .acknowledge-btn { background-color: var(--brand-primary); color: white; border: none;} /* Dùng màu brand */
+
+/* --- Chart Placeholders --- */
   .chart-container img {
-      width: 100%;
-      height: 250px; /* Hoặc chiều cao mong muốn */
-      background: #eee;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: #aaa;
-      border: 1px dashed #ccc;
-      border-radius: 4px;
-      font-style: italic;
+      width: 100%; height: 250px; background: #eee; display: flex; align-items: center;
+      justify-content: center; color: #aaa; border: 1px dashed #ccc;
+      border-radius: 4px; font-style: italic;
   }

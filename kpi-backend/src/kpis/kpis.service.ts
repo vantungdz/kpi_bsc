@@ -1,50 +1,28 @@
-import {
-  HttpException,
-  HttpStatus,
-  Injectable,
-  NotFoundException,
-  UnauthorizedException,
-} from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import {
-  Repository,
-  FindOptionsWhere,
-  IsNull,
-  ILike,
-  LessThanOrEqual,
-  MoreThanOrEqual,
-} from 'typeorm'; 
-import { Kpi } from '../entities/kpi.entity';
-import { KpiFilterDto } from './dto/filter-kpi.dto';
-import { User } from 'src/entities/user.entity';
-import { Perspective } from 'src/entities/perspective.entity';
+import { plainToInstance } from 'class-transformer';
 import { Department } from 'src/entities/department.entity';
+import { KPIAssignment } from 'src/entities/kpi-assignment.entity';
+import { Kpi } from 'src/entities/kpi.entity';
+import { Section } from 'src/entities/section.entity';
+import { Brackets, Repository } from 'typeorm';
+import { Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { CreateKpiDto } from './dto/create_kpi_dto';
+import { KpiFilterDto } from './dto/filter-kpi.dto';
 
 @Injectable()
 export class KpisService {
   constructor(
     @InjectRepository(Kpi)
-    private kpisRepository: Repository<Kpi>,
-    @InjectRepository(User)
-    private usersRepository: Repository<User>,
-    @InjectRepository(Perspective)
-    private perspectivesRepository: Repository<Perspective>,
-    @InjectRepository(Perspective)
-    private departmentsRepository: Repository<Department>,
+    private readonly kpisRepository: Repository<Kpi>,
+    @InjectRepository(KPIAssignment)
+    private readonly kpiAssignmentRepository: Repository<KPIAssignment>,
   ) {}
 
-  async getAllSortedByAssignName(
-    sortOrder: 'ASC' | 'DESC' = 'ASC',
-  ): Promise<Kpi[]> {
-    const query = this.kpisRepository
+  async getKpisByEmployeeId(employeeId: number): Promise<Kpi[]> {
+    return this.kpisRepository
       .createQueryBuilder('kpi')
-      .leftJoinAndSelect('kpi.assignedTo', 'assignedTo') // Join với bảng users
-      .leftJoinAndSelect('kpi.perspective', 'perspective')
-      .leftJoinAndSelect('kpi.parent', 'parent')
-      .where('kpi.deletedAt IS NULL') // Loại bỏ KPI bị xóa mềm
-      .orderBy('assignedTo.username', sortOrder); // Sắp xếp theo username
-
-    return query.getMany();
+      .where('kpi.assignments.assigned_to_employee = :id', { id: employeeId })
+      .getMany();
   }
 
   async findAll(filterDto: KpiFilterDto): Promise<{
@@ -56,91 +34,430 @@ export class KpisService {
       itemsPerPage: number;
     };
   }> {
-    const where: FindOptionsWhere<Kpi> = {
-      deletedAt: IsNull(),
-    };
-
     const { page = 1, limit = 15 } = filterDto;
 
-    let order: any = {};
+    const query = this.kpisRepository
+      .createQueryBuilder('kpi')
+      .leftJoinAndSelect('kpi.assignments', 'assignment')
+      .leftJoinAndSelect('assignment.deparment', 'department') // typo fixed from "deparment"
+      .leftJoinAndSelect('assignment.section', 'section')
+      .leftJoinAndSelect('assignment.team', 'team')
+      .leftJoinAndSelect('assignment.employee', 'employee')
+      .leftJoinAndSelect('kpi.perspective', 'perspective')
+      .leftJoinAndSelect('assignment.kpiValues', 'kpiValue') // <--- Join KPI values
+      .where('kpi.deleted_at IS NULL');
 
     if (filterDto.name) {
-      // where.name = filterDto.name;
-      where.name = ILike(`%${filterDto.name}%`);
+      query.andWhere('kpi.name ILIKE :name', {
+        name: `%${filterDto.name}%`,
+      });
     }
 
     if (filterDto.perspectiveId) {
-      where.perspective_id = filterDto.perspectiveId;
+      query.andWhere('kpi.perspective_id = :perspectiveId', {
+        perspectiveId: filterDto.perspectiveId,
+      });
     }
 
     if (filterDto.departmentId) {
-      where.department_id = filterDto.departmentId;
+      query.andWhere('assignment.assigned_to_department = :departmentId', {
+        departmentId: filterDto.departmentId,
+      });
     }
 
-    if (filterDto.assignedToName) {
-      where['assignedTo'] = [
-        { first_name: ILike(`%${filterDto.assignedToName}%`) },
-        { last_name: ILike(`%${filterDto.assignedToName}%`) },
-      ];
+    if (filterDto.sectionId) {
+      query.andWhere('assignment.assigned_to_section = :sectionId', {
+        sectionId: filterDto.sectionId,
+      });
+    }
+
+    if (filterDto.teamId) {
+      query.andWhere('assignment.assigned_to_team = :teamId', {
+        teamId: filterDto.teamId,
+      });
     }
 
     if (filterDto.status) {
-      where.status = filterDto.status;
+      query.andWhere('kpi.status = :status', {
+        status: filterDto.status,
+      });
     }
 
     if (filterDto.startDate) {
-      where.start_date = MoreThanOrEqual(filterDto.startDate);
+      query.andWhere('kpi.start_date >= :startDate', {
+        startDate: filterDto.startDate,
+      });
     }
+
     if (filterDto.endDate) {
-      where.end_date = LessThanOrEqual(filterDto.endDate);
+      query.andWhere('kpi.end_date <= :endDate', {
+        endDate: filterDto.endDate,
+      });
     }
 
-    // Add sorting
-    const validSortColumns = ['name'];
+    const validSortColumns = ['name', 'created_at'];
+    const sortBy = validSortColumns.includes(filterDto.sortBy ?? '')
+      ? filterDto.sortBy!
+      : 'created_at';
+    const sortOrder = filterDto.sortOrder === 'ASC' ? 'ASC' : 'DESC';
 
-    if (filterDto.sortBy) {
-      if (validSortColumns.includes(filterDto.sortBy)) {
-        order[filterDto.sortBy] = filterDto.sortOrder || 'ASC';
-      } else if (filterDto.sortBy === 'assignedToName') {
-        order['assignedTo'] = {
-          username: filterDto.sortOrder || 'ASC', // Or 'DESC' for descending order
-        };
-      }
-    }
+    query.orderBy(`kpi.${sortBy}`, sortOrder);
 
-    const [data, totalItems] = await this.kpisRepository.findAndCount({
-      where,
-      order,
-      relations: [
-        'assignedTo',
-        'parent',
-        'children',
-        'children.assignedTo',
-        'children.evaluations',
-        'children.evaluations.evaluator',
-        'children.evaluations.evaluatee',
-        'children.values',
-        'children.values.user',
-        'perspective',
-        'department',
-        'section',
-        'team',
-        'evaluations',
-        'evaluations.evaluator',
-        'evaluations.evaluatee',
-        'values',
-        'values.user',
-      ],
-      skip: (page - 1) * limit, // Bỏ qua các bản ghi đã có trong các trang trước
-      take: limit, // Lấy số lượng bản ghi cho mỗi trang
+    const [data, totalItems] = await query
+      .skip((page - 1) * limit)
+      .take(limit)
+      .getManyAndCount();
+
+    // TODO: temp, will check later
+    // Calculate actual_value for each KPI directly from kpiValues
+    const dataWithActualValue = data.map((kpi) => {
+      const allValues = kpi.assignments
+        .flatMap((assignment) => assignment.kpiValues)
+        .map((value) => Number(value.value) || 0);
+
+      const actual_value =
+        kpi.calculation_type === 'sum'
+          ? allValues.reduce((sum, val) => sum + val, 0) // Sum of all values
+          : allValues.length > 0
+            ? allValues.reduce((sum, val) => sum + val, 0) / allValues.length // Average of all values
+            : 0;
+
+      return { ...kpi, actual_value };
     });
-
-    const totalPages = Math.ceil(totalItems / limit);
 
     const pagination = {
       currentPage: page,
-      totalPages: totalPages,
-      totalItems: totalItems,
+      totalPages: Math.ceil(totalItems / limit),
+      totalItems,
+      itemsPerPage: limit,
+    };
+
+    return { data: dataWithActualValue, pagination };
+  }
+
+  async getDepartmentKpis(
+    departmentId: number,
+    filterDto: KpiFilterDto,
+  ): Promise<{
+    data: Kpi[];
+    pagination: {
+      currentPage: number;
+      totalPages: number;
+      totalItems: number;
+      itemsPerPage: number;
+    };
+  }> {
+    const { page = 1, limit = 15 } = filterDto;
+
+    const query = this.kpisRepository
+      .createQueryBuilder('kpi')
+      .leftJoinAndSelect('kpi.assignments', 'assignment')
+      .leftJoinAndSelect('assignment.section', 'section')
+      .leftJoinAndSelect('assignment.team', 'team')
+      .leftJoinAndSelect('assignment.employee', 'employee')
+      .leftJoinAndSelect('kpi.perspective', 'perspective')
+      .leftJoinAndSelect('assignment.kpiValues', 'kpiValue') // Include KPI values
+      .where(
+        new Brackets((qb) => {
+          qb.where(
+            'kpi.created_by_type = :createdType AND kpi.created_by = :departmentId',
+            {
+              createdType: 'department',
+              departmentId,
+            },
+          ).orWhere('assignment.assigned_to_department = :departmentId', {
+            departmentId,
+          });
+        }),
+      );
+
+    if (filterDto.name) {
+      query.andWhere('kpi.name ILIKE :name', {
+        name: `%${filterDto.name}%`,
+      });
+    }
+
+    if (filterDto.perspectiveId) {
+      query.andWhere('kpi.perspective_id = :perspectiveId', {
+        perspectiveId: filterDto.perspectiveId,
+      });
+    }
+
+    if (filterDto.sectionId) {
+      query.andWhere('assignment.assigned_to_section = :sectionId', {
+        sectionId: filterDto.sectionId,
+      });
+    }
+
+    if (filterDto.teamId) {
+      query.andWhere('assignment.assigned_to_team = :teamId', {
+        teamId: filterDto.teamId,
+      });
+    }
+
+    if (filterDto.status) {
+      query.andWhere('kpi.status = :status', {
+        status: filterDto.status,
+      });
+    }
+
+    if (filterDto.startDate) {
+      query.andWhere('kpi.start_date >= :startDate', {
+        startDate: filterDto.startDate,
+      });
+    }
+
+    if (filterDto.endDate) {
+      query.andWhere('kpi.end_date <= :endDate', {
+        endDate: filterDto.endDate,
+      });
+    }
+
+    const validSortColumns = ['name', 'created_at'];
+    const sortBy = validSortColumns.includes(filterDto.sortBy ?? '')
+      ? filterDto.sortBy!
+      : 'created_at';
+    const sortOrder = filterDto.sortOrder === 'ASC' ? 'ASC' : 'DESC';
+
+    query.orderBy(`kpi.${sortBy}`, sortOrder);
+
+    const [data, totalItems] = await query
+      .skip((page - 1) * limit)
+      .take(limit)
+      .getManyAndCount();
+
+    // TODO: temp, will check later
+    // Calculate actual_value for each KPI directly from kpiValues
+    const dataWithActualValue = data.map((kpi) => {
+      const allValues = kpi.assignments
+        .flatMap((assignment) => assignment.kpiValues)
+        .map((value) => Number(value.value) || 0);
+
+      const actual_value =
+        kpi.calculation_type === 'sum'
+          ? allValues.reduce((sum, val) => sum + val, 0) // Sum of all values
+          : allValues.length > 0
+            ? allValues.reduce((sum, val) => sum + val, 0) / allValues.length // Average of all values
+            : 0;
+
+      return { ...kpi, actual_value };
+    });
+
+    const pagination = {
+      currentPage: page,
+      totalPages: Math.ceil(totalItems / limit),
+      totalItems,
+      itemsPerPage: limit,
+    };
+
+    return { data: dataWithActualValue, pagination };
+  }
+
+  async getAllKpiAssignedToDepartments(): Promise<Kpi[]> {
+    return this.kpisRepository
+      .createQueryBuilder('kpi')
+      .leftJoinAndSelect('kpi.perspective', 'perspective')
+      .leftJoinAndSelect('kpi.assignments', 'assignment')
+      .leftJoinAndSelect('assignment.deparment', 'department')
+      .leftJoinAndSelect('assignment.employee', 'employee')
+      .leftJoinAndSelect('assignment.kpiValues', 'kpiValues')
+      .where('assignment.assigned_to_department IS NOT NULL')
+      .getMany();
+  }
+
+  async getAllKpiAssignedToSections(): Promise<Kpi[]> {
+    return this.kpisRepository
+      .createQueryBuilder('kpi')
+      .leftJoinAndSelect('kpi.perspective', 'perspective')
+      .leftJoinAndSelect('kpi.assignments', 'assignment')
+      .leftJoinAndSelect('assignment.section', 'section')
+      .leftJoinAndSelect('assignment.employee', 'employee')
+      .leftJoinAndSelect('assignment.kpiValues', 'kpiValues')
+      .where('assignment.assigned_to_section IS NOT NULL')
+      .getMany();
+  }
+
+  async getSectionKpis(
+    sectionId: number,
+    filterDto: KpiFilterDto,
+  ): Promise<{
+    data: (Kpi & { actual_value: number })[];
+    pagination: {
+      currentPage: number;
+      totalPages: number;
+      totalItems: number;
+      itemsPerPage: number;
+    };
+  }> {
+    const { page = 1, limit = 15 } = filterDto;
+
+    const query = this.kpisRepository
+      .createQueryBuilder('kpi')
+      .leftJoinAndSelect('kpi.assignments', 'assignment')
+      .leftJoinAndSelect('assignment.team', 'team')
+      .leftJoinAndSelect('assignment.employee', 'employee')
+      .leftJoinAndSelect('kpi.perspective', 'perspective')
+      .leftJoinAndSelect('assignment.kpiValues', 'kpiValue') // Include KPI values
+      .where(
+        new Brackets((qb) => {
+          qb.where(
+            'kpi.created_by_type = :createdType AND kpi.created_by = :sectionId',
+            {
+              createdType: 'section',
+              sectionId,
+            },
+          ).orWhere('assignment.assigned_to_section = :sectionId', {
+            sectionId,
+          });
+        }),
+      );
+
+    if (filterDto.name) {
+      query.andWhere('kpi.name ILIKE :name', {
+        name: `%${filterDto.name}%`,
+      });
+    }
+
+    if (filterDto.perspectiveId) {
+      query.andWhere('kpi.perspective_id = :perspectiveId', {
+        perspectiveId: filterDto.perspectiveId,
+      });
+    }
+
+    if (filterDto.teamId) {
+      query.andWhere('assignment.assigned_to_team = :teamId', {
+        teamId: filterDto.teamId,
+      });
+    }
+
+    if (filterDto.status) {
+      query.andWhere('kpi.status = :status', {
+        status: filterDto.status,
+      });
+    }
+
+    if (filterDto.startDate) {
+      query.andWhere('kpi.start_date >= :startDate', {
+        startDate: filterDto.startDate,
+      });
+    }
+
+    if (filterDto.endDate) {
+      query.andWhere('kpi.end_date <= :endDate', {
+        endDate: filterDto.endDate,
+      });
+    }
+
+    const validSortColumns = ['name', 'created_at'];
+    const sortBy = validSortColumns.includes(filterDto.sortBy ?? '')
+      ? filterDto.sortBy!
+      : 'created_at';
+    const sortOrder = filterDto.sortOrder === 'ASC' ? 'ASC' : 'DESC';
+
+    query.orderBy(`kpi.${sortBy}`, sortOrder);
+
+    const [data, totalItems] = await query
+      .skip((page - 1) * limit)
+      .take(limit)
+      .getManyAndCount();
+
+    // Calculate actual_value for each KPI directly from kpiValues
+    const dataWithActualValue = data.map((kpi) => {
+      const allValues = kpi.assignments
+        .flatMap((assignment) => assignment.kpiValues)
+        .map((value) => Number(value.value) || 0);
+
+      const actual_value =
+        kpi.calculation_type === 'sum'
+          ? allValues.reduce((sum, val) => sum + val, 0) // Sum of all values
+          : allValues.length > 0
+            ? allValues.reduce((sum, val) => sum + val, 0) / allValues.length // Average of all values
+            : 0;
+
+      return { ...kpi, actual_value };
+    });
+
+    const pagination = {
+      currentPage: page,
+      totalPages: Math.ceil(totalItems / limit),
+      totalItems,
+      itemsPerPage: limit,
+    };
+
+    return { data: dataWithActualValue, pagination };
+  }
+
+  async getEmployeeKpis(
+    employeeId: number,
+    filterDto: KpiFilterDto,
+  ): Promise<{
+    data: Kpi[];
+    pagination: {
+      currentPage: number;
+      totalPages: number;
+      totalItems: number;
+      itemsPerPage: number;
+    };
+  }> {
+    const { page = 1, limit = 15 } = filterDto;
+
+    const query = this.kpisRepository
+      .createQueryBuilder('kpi')
+      .leftJoinAndSelect('kpi.assignments', 'assignment')
+      .leftJoinAndSelect('assignment.employee', 'employee')
+      .leftJoinAndSelect('kpi.perspective', 'perspective')
+      .leftJoinAndSelect('assignment.kpiValues', 'kpiValue') // <--- Join KPI values
+      .andWhere('assignment.assigned_to_employee = :employeeId', {
+        employeeId,
+      });
+
+    if (filterDto.name) {
+      query.andWhere('kpi.name ILIKE :name', {
+        name: `%${filterDto.name}%`,
+      });
+    }
+
+    if (filterDto.perspectiveId) {
+      query.andWhere('kpi.perspective_id = :perspectiveId', {
+        perspectiveId: filterDto.perspectiveId,
+      });
+    }
+
+    if (filterDto.status) {
+      query.andWhere('kpi.status = :status', {
+        status: filterDto.status,
+      });
+    }
+
+    if (filterDto.startDate) {
+      query.andWhere('kpi.start_date >= :startDate', {
+        startDate: filterDto.startDate,
+      });
+    }
+
+    if (filterDto.endDate) {
+      query.andWhere('kpi.end_date <= :endDate', {
+        endDate: filterDto.endDate,
+      });
+    }
+
+    const validSortColumns = ['name', 'created_at'];
+    const sortBy = validSortColumns.includes(filterDto.sortBy ?? '')
+      ? filterDto.sortBy!
+      : 'created_at';
+    const sortOrder = filterDto.sortOrder === 'ASC' ? 'ASC' : 'DESC';
+
+    query.orderBy(`kpi.${sortBy}`, sortOrder);
+
+    const [data, totalItems] = await query
+      .skip((page - 1) * limit)
+      .take(limit)
+      .getManyAndCount();
+
+    const pagination = {
+      currentPage: page,
+      totalPages: Math.ceil(totalItems / limit),
+      totalItems,
       itemsPerPage: limit,
     };
 
@@ -150,26 +467,6 @@ export class KpisService {
   async findOne(id: number): Promise<Kpi> {
     const value = await this.kpisRepository.findOne({
       where: { id },
-      relations: [
-        'assignedTo',
-        'parent',
-        'children',
-        'children.assignedTo',
-        'children.evaluations',
-        'children.evaluations.evaluator',
-        'children.evaluations.evaluatee',
-        'children.values',
-        'children.values.user',
-        'perspective', // Thêm quan hệ mới
-        'department',
-        'section',
-        'team',
-        'evaluations',
-        'evaluations.evaluator',
-        'evaluations.evaluatee',
-        'values',
-        'values.user',
-      ],
     });
 
     if (!value) {
@@ -178,100 +475,102 @@ export class KpisService {
     return value;
   }
 
-  async create(
-    kpi: Partial<Kpi> & { parent?: string; perspective?: string },
-  ): Promise<Kpi> {
-    if (!kpi.name || !kpi.unit || !kpi.target || !kpi.frequency) {
-      throw new NotFoundException(
-        'Missing required fields: name, unit, target, frequency',
-      );
-    }
-
-    const targetNum = Number(kpi.target);
-    const weightNum = Number(kpi.weight) || 0;
-
-    // Lấy parent_id từ parent hoặc parent_id
-    const parentId =
-      kpi.parent_id || (kpi.parent ? Number(kpi.parent) : undefined);
-
-    const parentKpi = parentId
-      ? await this.kpisRepository.findOne({
-          where: { id: parentId },
-          relations: ['parent'],
-        })
-      : null;
-
-    if (parentId && !parentKpi) {
-      throw new NotFoundException(`Parent KPI with ID ${parentId} not found`);
-    }
-
-    // Lấy perspective_id từ perspective hoặc perspective_id
-    const perspectiveId =
-      kpi.perspective_id ||
-      (kpi.perspective ? Number(kpi.perspective) : undefined);
-    const perspectiveEntity = perspectiveId
-      ? await this.perspectivesRepository.findOneBy({ id: perspectiveId })
-      : null;
-    if (perspectiveId && !perspectiveEntity) {
-      throw new NotFoundException(
-        `Perspective with ID ${perspectiveId} not found`,
-      );
-    }
-
-    const assignedTo = kpi.assigned_to_id
-      ? await this.usersRepository.findOneBy({ id: Number(kpi.assigned_to_id) })
-      : null;
-    if (kpi.assigned_to_id && !assignedTo) {
-      throw new NotFoundException(
-        `User with ID ${kpi.assigned_to_id} not found`,
-      );
-    }
-
-    const departmentId =
-      kpi.department_id ||
-      (kpi.department ? Number(kpi.department) : undefined);
-    const departmentEntity = departmentId
-      ? await this.departmentsRepository.findOneBy({ id: departmentId })
-      : null;
-    if (departmentId && !departmentEntity) {
-      throw new NotFoundException(
-        `Department with ID ${departmentId} not found`,
-      );
-    }
-
-    const newKpiData: Partial<Kpi> = {
-      name: kpi.name,
-      unit: kpi.unit,
-      target: targetNum,
-      weight: weightNum,
-      frequency: kpi.frequency,
-      description: kpi.description || '',
-      parent: parentKpi || undefined,
-      perspective: perspectiveEntity || undefined,
-      assignedTo: assignedTo || undefined,
-    };
-
-    const newKpi = this.kpisRepository.create(newKpiData);
-    const savedKpi = await this.kpisRepository.save(newKpi);
-
-    // Tạo path thủ công nếu cần
-    if (parentKpi && !savedKpi.path) {
-      savedKpi.path = `${parentKpi.path}.${savedKpi.id}` as any;
-      await this.kpisRepository.save(savedKpi);
-    }
-
-    const fullKpi = await this.kpisRepository.findOne({
-      where: { id: savedKpi.id },
-      relations: ['perspective', 'parent', 'assignedTo', 'department'],
+  async getKpiAssignments(kpiId: number): Promise<KPIAssignment[]> {
+    return this.kpiAssignmentRepository.find({
+      where: { kpi_id: kpiId },
+      relations: ['employee'], // Include related employee details if needed
     });
+  }
 
-    if (!fullKpi) {
-      throw new NotFoundException(
-        `Failed to load saved KPI with ID ${savedKpi.id}`,
-      );
-    }
+  async create(createKpiDto: CreateKpiDto): Promise<Kpi> {
+    return await this.kpisRepository.manager.transaction(
+      async (manager): Promise<Kpi> => {
+        try {
+          const dto = plainToInstance(CreateKpiDto, createKpiDto); // Destructure incoming data, EXCLUDE id if it exists
+          const { assignments, id, ...kpiData } = dto as any; // Create the KPI object
 
-    return fullKpi;
+          const kpi = manager.getRepository(Kpi).create({
+            ...kpiData, // Ánh xạ các trường DTO sang entity
+            min_target: kpiData.minimum,
+            mid_target: kpiData.middle,
+            max_target: kpiData.maximum,
+            calculation_type: kpiData.calculationType,
+            perspective_id: kpiData.perspectiveId,
+            start_date: kpiData.startDate,
+            end_date: kpiData.endDate,
+            memo: kpiData.description,
+            created_by: 1, // TODO: userID will obtain from JWT (cần lấy từ request user)
+            // Set created_by_type dựa trên assignments.from
+            created_by_type: assignments?.from || 'unknown', // <-- Lấy từ assignments.from
+          }); // Save the KPI object.
+
+          const savedKpi = (await manager
+            .getRepository(Kpi)
+            .save(kpi)) as unknown as Kpi; // ... phần xử lý và lưu assignments ...
+
+          const assignmentEntities: KPIAssignment[] = []; // Handle department assignments
+
+          if (assignments?.toDepartments) {
+            for (const targetDepartment of assignments.toDepartments) {
+              const assignment = new KPIAssignment();
+              assignment.kpi = savedKpi;
+              assignment.assignedFrom = assignments.from; // <-- Lấy từ assignments.from
+              assignment.assigned_to_department = targetDepartment.id;
+
+              if (targetDepartment.target !== undefined) {
+                assignment.targetValue = Number(targetDepartment.target);
+              }
+
+              assignment.assignedBy = 1; // TODO: userID will obtain from JWT
+
+              assignmentEntities.push(assignment);
+            }
+          } // Handle section assignments
+
+          if (assignments?.toSections) {
+            for (const targetSection of assignments.toSections) {
+              const assignment = new KPIAssignment();
+              assignment.kpi = savedKpi;
+              assignment.assignedFrom = assignments.from; // <-- Lấy từ assignments.from
+              assignment.assigned_to_section = targetSection.id;
+
+              if (targetSection.target !== undefined) {
+                assignment.targetValue = Number(targetSection.target);
+              }
+
+              assignment.assignedBy = 1; // TODO: userID will obtain from JWT
+
+              assignmentEntities.push(assignment);
+            }
+          }
+
+          // Handle employee assignment
+          if (assignments?.employeeId) {
+            const targetEmployeeId = assignments.employeeId;
+
+            const employeeAssignment = new KPIAssignment();
+            employeeAssignment.kpi = savedKpi;
+            employeeAssignment.assignedFrom = assignments.from; // <-- Lấy từ assignments.from
+            employeeAssignment.assigned_to_employee = targetEmployeeId;
+            employeeAssignment.employee_id = targetEmployeeId;
+
+            employeeAssignment.targetValue = kpiData.target;
+
+            employeeAssignment.assignedBy = 1; // TODO: userID will obtain from JWT
+            employeeAssignment.status = 'draft';
+
+            assignmentEntities.push(employeeAssignment);
+          } // Save all assignments
+
+          await manager.getRepository(KPIAssignment).save(assignmentEntities);
+
+          return savedKpi; // Trả về KPI đã lưu
+        } catch (error) {
+          console.error('Transaction failed:', error);
+          throw error;
+        }
+      },
+    );
   }
 
   async update(id: number, update: Partial<Kpi>): Promise<Kpi> {
@@ -283,20 +582,69 @@ export class KpisService {
     await this.kpisRepository.softDelete(id);
   }
 
-  async reassign(id: number, assignedToId: number): Promise<Kpi> {
-    const kpi = await this.kpisRepository.findOne({ where: { id } });
-    console.log('kpi', kpi);
+  async remove(id: number): Promise<void> {
+    await this.kpisRepository.delete(id);
+  }
 
-    if (!kpi) {
-      throw new HttpException('KPI not found', HttpStatus.NOT_FOUND);
+  async saveUserAssignments(
+    kpiId: number,
+    assignments: { user_id: number; target: number }[],
+  ): Promise<KPIAssignment[]> {
+    // Xóa các assignment cũ liên quan đến KPI
+    await this.kpiAssignmentRepository.delete({ kpi_id: kpiId });
+
+    // Tạo mới các assignment
+    const newAssignments = assignments.map((assignment) =>
+      this.kpiAssignmentRepository.create({
+        kpi_id: kpiId,
+        employee_id: assignment.user_id,
+        targetValue: assignment.target,
+        created_at: new Date(),
+        updated_at: new Date(),
+        assignedBy: 1, // TODO: userID will obtain from JWT
+        status: 'draft',
+      }),
+    );
+
+    // Lưu vào database
+    return this.kpiAssignmentRepository.save(newAssignments);
+  }
+
+  async deleteSectionAssignment(
+    kpiId: number,
+    sectionId: number,
+  ): Promise<void> {
+    const result = await this.kpiAssignmentRepository.update(
+      { kpi_id: kpiId, assigned_to_section: sectionId },
+      { deleted_at: new Date() }, // ✅ Soft delete bằng cách gán timestamp
+    );
+
+    if (result.affected === 0) {
+      throw new NotFoundException(
+        `Section Assignment with KPI ID ${kpiId} and Section ID ${sectionId} not found`,
+      );
     }
-    const user = await this.usersRepository.findOne({
-      where: { id: assignedToId },
-    });
-    if (!user) {
-      throw new HttpException('User not found', HttpStatus.NOT_FOUND);
-    }
-    kpi.assigned_to_id = assignedToId;
-    return await this.kpisRepository.save(kpi);
+  }
+
+  async saveSectionAssignments(
+    kpiId: number,
+    assignments: { section_id: number; target: number; weight: number }[],
+  ): Promise<void> {
+    // Xóa các Section Assignments cũ liên quan đến KPI
+    await this.kpiAssignmentRepository.delete({ kpi_id: kpiId });
+
+    // Tạo mới các Section Assignments
+    const newAssignments = assignments.map((assignment) =>
+      this.kpiAssignmentRepository.create({
+        kpi_id: kpiId,
+        assigned_to_section: assignment.section_id,
+        targetValue: assignment.target,
+        created_at: new Date(),
+        updated_at: new Date(),
+      }),
+    );
+
+    // Lưu vào database
+    await this.kpiAssignmentRepository.save(newAssignments);
   }
 }

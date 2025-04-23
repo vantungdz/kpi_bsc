@@ -5,15 +5,19 @@ import perspectives from "./modules/perspectives";
 import users from "./modules/users";
 import kpiEvaluations from "./modules/kpiEvaluations";
 import kpiValues from "./modules/kpiValues";
+import sections from "./modules/sections";
+import auth from "./modules/auth";
 
 const store = createStore({
   modules: {
+    auth,
     kpis,
     departments,
+    sections,
     perspectives,
     users,
     kpiEvaluations,
-    kpiValues
+    'kpi-values': kpiValues
   },
 });
 

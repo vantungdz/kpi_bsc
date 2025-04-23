@@ -11,20 +11,12 @@ export class KpiEvaluationsService {
   ) {}
 
   async findAll(): Promise<KpiEvaluation[]> {
-    return await this.kpiEvaluationsRepository.find({
-      relations: [
-        'kpi', // KPI được đánh giá
-        'kpi.assignedTo', // Người được giao KPI
-        'evaluator', // Người đánh giá
-        'evaluatee', // Người được đánh giá
-      ],
-    });
+    return await this.kpiEvaluationsRepository.find({});
   }
 
   async findOne(id: number): Promise<KpiEvaluation> {
     const relationsDta = await this.kpiEvaluationsRepository.findOne({
       where: { id },
-      relations: ['kpi', 'kpi.assignedTo', 'evaluator', 'evaluatee'],
     });
 
     if (!relationsDta) {
@@ -50,4 +42,6 @@ export class KpiEvaluationsService {
   async delete(id: number): Promise<void> {
     await this.kpiEvaluationsRepository.delete(id);
   }
+
+  
 }

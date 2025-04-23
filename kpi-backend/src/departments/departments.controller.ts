@@ -1,24 +1,32 @@
-// departments.controller.ts
-import { Body, Controller, Get, Param, ParseIntPipe, Post } from '@nestjs/common';
-import { DepartmentsService } from './departments.service'; 
+// src/departments/department.controller.ts
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Param,
+  Delete,
+  Put,
+} from '@nestjs/common';
+import { DepartmentsService } from './departments.service';
 import { Department } from 'src/entities/department.entity';
 
 @Controller('departments')
 export class DepartmentsController {
-  constructor(private readonly departmentsService: DepartmentsService) {}
+  constructor(private readonly departmentService: DepartmentsService) {}
+
+  @Post()
+  async create(@Body() createDepartmentDto: any): Promise<Department> {
+    return this.departmentService.create(createDepartmentDto);
+  }
 
   @Get()
   async findAll(): Promise<Department[]> {
-    return await this.departmentsService.findAll();
+    return this.departmentService.findAll();
   }
 
   @Get(':id')
-  async findOne(@Param('id', ParseIntPipe) id: number): Promise<Department> {
-    return await this.departmentsService.findOne(id);
-  }
-
-  @Post()
-  create(@Body() department: Partial<Department>): Promise<Department> {
-    return this.departmentsService.create(department);
+  async findOne(@Param('id') id: number): Promise<Department> {
+    return this.departmentService.findOne(id);
   }
 }

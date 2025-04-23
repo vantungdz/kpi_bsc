@@ -6,13 +6,15 @@ import {
   Delete,
   Param,
   Body,
-  Query,
   ParseIntPipe,
+  UseGuards,
 } from '@nestjs/common';
 import { TeamsService } from './teams.service';
 import { Team } from '../entities/team.entity';
+import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
 
 @Controller('teams')
+@UseGuards(JwtAuthGuard)
 export class TeamsController {
   constructor(private readonly teamsService: TeamsService) {}
 

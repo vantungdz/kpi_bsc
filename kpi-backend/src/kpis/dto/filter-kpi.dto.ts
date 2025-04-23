@@ -1,6 +1,5 @@
 import { IsOptional, IsString, IsInt, IsEnum } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
-import { User } from 'src/entities/user.entity';
 
 export enum KpiStatus {
   ACTIVE = 'Active',

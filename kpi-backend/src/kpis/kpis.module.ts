@@ -5,9 +5,11 @@ import { KpisController } from './kpis.controller';
 import { Kpi } from '../entities/kpi.entity';
 import { KpiValue } from '../entities/kpi-value.entity';
 import { KpiEvaluation } from '../entities/kpi-evaluation.entity';
-import { User } from 'src/entities/user.entity';
+import { Employee } from 'src/entities/employee.entity';
 import { Perspective } from 'src/entities/perspective.entity';
 import { Department } from 'src/entities/department.entity';
+import { Section } from 'src/entities/section.entity';
+import { KPIAssignment } from 'src/entities/kpi-assignment.entity';
 
 @Module({
   imports: [
@@ -15,9 +17,12 @@ import { Department } from 'src/entities/department.entity';
       Kpi,
       KpiValue,
       KpiEvaluation,
-      User,
+      Employee,
       Perspective,
       Department,
+      KpiValue,
+      Section,
+      KPIAssignment,
     ]),
   ],
   providers: [KpisService],
