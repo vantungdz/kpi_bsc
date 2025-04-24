@@ -2,7 +2,7 @@ import { createStore } from "vuex";
 import kpis from "./modules/kpis";
 import departments from "./modules/departments";
 import perspectives from "./modules/perspectives";
-import users from "./modules/users";
+import employees from "./modules/employees";
 import kpiEvaluations from "./modules/kpiEvaluations";
 import kpiValues from "./modules/kpiValues";
 import sections from "./modules/sections";
@@ -15,9 +15,9 @@ const store = createStore({
     departments,
     sections,
     perspectives,
-    users,
+    employees,
     kpiEvaluations,
-    'kpi-values': kpiValues
+    "kpi-values": kpiValues,
   },
 });
 

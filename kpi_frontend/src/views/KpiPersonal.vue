@@ -182,14 +182,6 @@ const myPersonalKpiColumns = [{
   align: 'right',
   width: '9%'
 },
-// Giảm width chút
-{
-  title: 'Unit',
-  dataIndex: 'unit',
-  key: 'unit',
-  align: 'center',
-  width: '8%'
-},
 {
   title: 'Approved Value',
   dataIndex: 'last_approved_value',

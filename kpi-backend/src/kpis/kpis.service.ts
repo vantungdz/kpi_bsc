@@ -39,7 +39,7 @@ export class KpisService {
     const query = this.kpisRepository
       .createQueryBuilder('kpi')
       .leftJoinAndSelect('kpi.assignments', 'assignment')
-      .leftJoinAndSelect('assignment.deparment', 'department') // typo fixed from "deparment"
+      .leftJoinAndSelect('assignment.department', 'department') // typo fixed from "department"
       .leftJoinAndSelect('assignment.section', 'section')
       .leftJoinAndSelect('assignment.team', 'team')
       .leftJoinAndSelect('assignment.employee', 'employee')
@@ -258,7 +258,7 @@ export class KpisService {
       .createQueryBuilder('kpi')
       .leftJoinAndSelect('kpi.perspective', 'perspective')
       .leftJoinAndSelect('kpi.assignments', 'assignment')
-      .leftJoinAndSelect('assignment.deparment', 'department')
+      .leftJoinAndSelect('assignment.department', 'department')
       .leftJoinAndSelect('assignment.employee', 'employee')
       .leftJoinAndSelect('assignment.kpiValues', 'kpiValues')
       .where('assignment.assigned_to_department IS NOT NULL')
@@ -467,18 +467,30 @@ export class KpisService {
   async findOne(id: number): Promise<Kpi> {
     const value = await this.kpisRepository.findOne({
       where: { id },
+      relations: ['assignments', 'perspective'], // <-- Load assignments và perspective
     });
 
     if (!value) {
-      throw new UnauthorizedException('Invalid credentials');
+      throw new NotFoundException(`KPI with ID "${id}" not found`);
     }
     return value;
   }
 
   async getKpiAssignments(kpiId: number): Promise<KPIAssignment[]> {
+    // Load tất cả KPIAssignments cho KPI này
+    // Chỉ định tường minh tất cả các quan hệ @ManyToOne cần load
+    // Điều này ghi đè eager: true nhưng làm rõ ý định
     return this.kpiAssignmentRepository.find({
       where: { kpi_id: kpiId },
-      relations: ['employee'], // Include related employee details if needed
+      // Load tất cả các quan hệ @ManyToOne trên KPIAssignment
+      relations: [
+        'kpi',
+        'department',
+        'section',
+        'team',
+        'employee',
+        'kpiValues',
+      ],
     });
   }
 
@@ -488,6 +500,18 @@ export class KpisService {
         try {
           const dto = plainToInstance(CreateKpiDto, createKpiDto); // Destructure incoming data, EXCLUDE id if it exists
           const { assignments, id, ...kpiData } = dto as any; // Create the KPI object
+
+          let createdByType = 'company'; // Default
+          if (assignments?.toSections && assignments.toSections.length > 0) {
+            // <== Check Section trước
+            createdByType = 'section';
+          } else if (
+            assignments?.toDepartments &&
+            assignments.toDepartments.length > 0
+          ) {
+            // <== Check Department sau
+            createdByType = 'department';
+          }
 
           const kpi = manager.getRepository(Kpi).create({
             ...kpiData, // Ánh xạ các trường DTO sang entity
@@ -501,7 +525,7 @@ export class KpisService {
             memo: kpiData.description,
             created_by: 1, // TODO: userID will obtain from JWT (cần lấy từ request user)
             // Set created_by_type dựa trên assignments.from
-            created_by_type: assignments?.from || 'unknown', // <-- Lấy từ assignments.from
+            created_by_type: createdByType, // <-- Lấy từ assignments.from
           }); // Save the KPI object.
 
           const savedKpi = (await manager

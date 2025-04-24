@@ -55,7 +55,7 @@
     <div style="margin-top: 20px; margin-bottom: 20px">
       <h3 v-if="isDisplayResult" class="text-lg font-bold mb-2" style="border-bottom: 1px solid #ccc">
         {{
-          `Department:
+        `Department:
         ${selectedDepartmentName}`
         }}
       </h3>
@@ -129,6 +129,8 @@
                 <!-- Target -->
                 <template v-else-if="column.dataIndex === 'target'">
                   <span>{{ `${record.target} ${record.unit}` }}</span>
+                  <a-progress v-if="record.target && record.isParent" :percent="record.targetPercent" size="small"
+                  style="display: block; margin-top: 4px;" />
                 </template>
 
                 <!-- Actual -->
@@ -411,6 +413,11 @@ const sectionGroups = computed(() => {
     }
 
     assignToCount = sectionItem.assignments ? sectionItem.assignments.length : 0;
+    const totalTarget = getTotalTarget(sectionItem.assignments || []);
+    const percentageAssigned = sectionItem.target && Number(sectionItem.target) !== 0
+      ? (totalTarget / Number(sectionItem.target)) * 100
+      : 0; // Tránh chia cho 0
+    const finalTargetPercent = Math.min(percentageAssigned, 100);
 
     map[perspectiveKey][kpiName].push({
       key: `parent-${perspectiveKey}-${kpiName}`,
@@ -420,12 +427,14 @@ const sectionGroups = computed(() => {
       assignTo: `Total: ${assignToCount}`,
       startDate: sectionItem.start_date,
       endDate: sectionItem.end_date,
+      weight: sectionItem.weight,
       target: sectionItem.target,
       actual: totalActual,
       unit: sectionItem.unit || "",
       status: sectionItem.status,
       isParent: true,
       childCount: assignToCount,
+      targetPercent: finalTargetPercent,
     });
 
     sectionItem.assignments?.forEach((kpiItem) => {
@@ -436,7 +445,7 @@ const sectionGroups = computed(() => {
         assignTo: kpiItem.section ? kpiItem.section.name : "",
         startDate: sectionItem.start_date,
         endDate: sectionItem.end_date,
-        target: kpiItem.target || "0",
+        target: kpiItem.targetValue || "0",
         actual:
           kpiItem.values && kpiItem.values.length > 0 ? kpiItem.values[0].value : "0",
         unit: sectionItem.unit || "",
@@ -449,6 +458,18 @@ const sectionGroups = computed(() => {
 
   return [{ section: sectionName, data: map }];
 });
+
+const getTotalTarget = (data) => {
+  let result = 0;
+  if (!data || data.length === 0) return 0;
+  data.forEach((item) => {
+    const target = Number(item.targetValue); // Lấy targetValue từ mỗi assignment con
+    if (!isNaN(target)) {
+      result = result + target;
+    }
+  });
+  return result || 0;
+};
 
 const rowClassName = (record) => {
   return record.isParent ? "row-parent" : "";

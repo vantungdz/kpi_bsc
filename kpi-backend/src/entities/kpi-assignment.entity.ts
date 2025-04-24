@@ -7,6 +7,7 @@ import {
   CreateDateColumn,
   JoinColumn,
   OneToMany,
+  DeleteDateColumn,
 } from 'typeorm';
 import { Kpi } from './kpi.entity';
 import { Employee } from './employee.entity';
@@ -37,7 +38,7 @@ export class KPIAssignment {
 
   @ManyToOne(() => Department, { onDelete: 'CASCADE', eager: true })
   @JoinColumn({ name: 'assigned_to_department' })
-  deparment: Department;
+  department: Department;
 
   @Column({ type: 'numeric', nullable: true })
   assigned_to_section: number;
@@ -99,6 +100,7 @@ export class KPIAssignment {
   assignedBy: number;
 
   @Column({ type: 'timestamp', nullable: true })
+  @DeleteDateColumn()
   deleted_at: Date;
 
   @OneToMany(() => KpiValue, (value) => value.kpiAssignment)

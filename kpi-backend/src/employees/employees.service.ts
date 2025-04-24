@@ -2,9 +2,15 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Employee } from 'src/entities/employee.entity';
-import { Repository } from 'typeorm';
+import { Repository, FindManyOptions } from 'typeorm';
 
 import * as bcrypt from 'bcrypt';
+
+interface EmployeeFilterOptions {
+  departmentId?: number;
+  sectionId?: number;
+  teamId?: number;
+}
 
 @Injectable()
 export class EmployeesService {
@@ -18,8 +24,35 @@ export class EmployeesService {
     return this.employeeRepository.save(employee);
   }
 
-  async findAll(): Promise<Employee[]> {
-    return this.employeeRepository.find();
+  async findAll(filterOptions: EmployeeFilterOptions = {},): Promise<Employee[]> {
+    console.log(
+      'EmployeesService findAll: received filterOptions:',
+      filterOptions,
+    ); // <== THÊM LOG NÀY
+
+    const findOptions: FindManyOptions<Employee> = {
+      where: {}, // Khởi tạo where clause
+    };
+
+    // Áp dụng filter departmentId
+    if (
+      filterOptions.departmentId !== undefined &&
+      filterOptions.departmentId !== null
+    ) {
+      // Lọc theo cột departmentId
+      (findOptions.where as any).departmentId = filterOptions.departmentId;
+    }
+
+    // Áp dụng filter sectionId
+    if (
+      filterOptions.sectionId !== undefined &&
+      filterOptions.sectionId !== null
+    ) {
+      // Lọc theo cột sectionId
+      (findOptions.where as any).sectionId = filterOptions.sectionId;
+    }
+
+    return this.employeeRepository.find(findOptions); // Thực hiện query với where clause
   }
 
   async findOne(id: number): Promise<Employee> {
