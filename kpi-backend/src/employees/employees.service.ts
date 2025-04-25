@@ -1,4 +1,4 @@
-// src/employees/employee.service.ts
+
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Employee } from 'src/entities/employee.entity';
@@ -28,31 +28,29 @@ export class EmployeesService {
     console.log(
       'EmployeesService findAll: received filterOptions:',
       filterOptions,
-    ); // <== THÊM LOG NÀY
+    ); 
 
     const findOptions: FindManyOptions<Employee> = {
-      where: {}, // Khởi tạo where clause
+      where: {}, 
     };
-
-    // Áp dụng filter departmentId
+    
     if (
       filterOptions.departmentId !== undefined &&
       filterOptions.departmentId !== null
     ) {
-      // Lọc theo cột departmentId
+      
       (findOptions.where as any).departmentId = filterOptions.departmentId;
     }
-
-    // Áp dụng filter sectionId
+ 
     if (
       filterOptions.sectionId !== undefined &&
       filterOptions.sectionId !== null
     ) {
-      // Lọc theo cột sectionId
+      
       (findOptions.where as any).sectionId = filterOptions.sectionId;
     }
 
-    return this.employeeRepository.find(findOptions); // Thực hiện query với where clause
+    return this.employeeRepository.find(findOptions); 
   }
 
   async findOne(id: number): Promise<Employee> {
@@ -79,7 +77,6 @@ export class EmployeesService {
       return undefined;
     }
 
-    // Compare the password
     let isPasswordValid: boolean;
     try {
       isPasswordValid = await bcrypt.compare(password, foundUser.password);

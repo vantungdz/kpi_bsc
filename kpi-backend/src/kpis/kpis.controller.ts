@@ -27,8 +27,7 @@ import { error } from 'console';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('kpis')
 export class KpisController {
-  constructor(private readonly kpisService: KpisService) { }
-
+  constructor(private readonly kpisService: KpisService) {}
 
   @Get('my-kpis')
   async getMyKpis(@Req() req: CreateKpiDto) {
@@ -214,16 +213,24 @@ export class KpisController {
     return this.kpisService.softDelete(+id);
   }
 
-  @Post(':id/sections/assignments')
+  @Post(':id/sections/assignments') 
   @Roles('admin', 'manager')
-  async saveSectionAssignments(
-    @Param('id') kpiId: number,
-    @Body()
+  async saveDepartmentAndSectionAssignments(
+    @Param('id') kpiId: number, 
+    @Body() 
     body: {
-      assignments: { section_id: number; target: number; weight: number }[];
+      assignments: {
+        assigned_to_department?: number; 
+        assigned_to_section?: number; 
+        targetValue: number;
+        assignmentId?: number; 
+      }[];
     },
   ): Promise<void> {
-    return this.kpisService.saveSectionAssignments(kpiId, body.assignments);
+    return this.kpisService.saveDepartmentAndSectionAssignments(
+      kpiId,
+      body.assignments,
+    );
   }
 
   @Post(':id/assignments')

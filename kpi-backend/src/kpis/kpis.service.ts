@@ -3,7 +3,7 @@ import { Department } from 'src/entities/department.entity';
 import { KPIAssignment } from 'src/entities/kpi-assignment.entity';
 import { Kpi } from 'src/entities/kpi.entity';
 import { Section } from 'src/entities/section.entity';
-import { Brackets, Repository } from 'typeorm';
+import { Brackets, IsNull, Not, Repository } from 'typeorm';
 import { Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { CreateKpiDto } from './dto/create_kpi_dto';
@@ -39,12 +39,12 @@ export class KpisService {
     const query = this.kpisRepository
       .createQueryBuilder('kpi')
       .leftJoinAndSelect('kpi.assignments', 'assignment')
-      .leftJoinAndSelect('assignment.department', 'department') // typo fixed from "department"
+      .leftJoinAndSelect('assignment.department', 'department') 
       .leftJoinAndSelect('assignment.section', 'section')
       .leftJoinAndSelect('assignment.team', 'team')
       .leftJoinAndSelect('assignment.employee', 'employee')
       .leftJoinAndSelect('kpi.perspective', 'perspective')
-      .leftJoinAndSelect('assignment.kpiValues', 'kpiValue') // <--- Join KPI values
+      .leftJoinAndSelect('assignment.kpiValues', 'kpiValue') 
       .where('kpi.deleted_at IS NULL');
 
     if (filterDto.name) {
@@ -108,8 +108,8 @@ export class KpisService {
       .take(limit)
       .getManyAndCount();
 
-    // TODO: temp, will check later
-    // Calculate actual_value for each KPI directly from kpiValues
+    
+    
     const dataWithActualValue = data.map((kpi) => {
       const allValues = kpi.assignments
         .flatMap((assignment) => assignment.kpiValues)
@@ -117,9 +117,9 @@ export class KpisService {
 
       const actual_value =
         kpi.calculation_type === 'sum'
-          ? allValues.reduce((sum, val) => sum + val, 0) // Sum of all values
+          ? allValues.reduce((sum, val) => sum + val, 0) 
           : allValues.length > 0
-            ? allValues.reduce((sum, val) => sum + val, 0) / allValues.length // Average of all values
+            ? allValues.reduce((sum, val) => sum + val, 0) / allValues.length 
             : 0;
 
       return { ...kpi, actual_value };
@@ -156,7 +156,7 @@ export class KpisService {
       .leftJoinAndSelect('assignment.team', 'team')
       .leftJoinAndSelect('assignment.employee', 'employee')
       .leftJoinAndSelect('kpi.perspective', 'perspective')
-      .leftJoinAndSelect('assignment.kpiValues', 'kpiValue') // Include KPI values
+      .leftJoinAndSelect('assignment.kpiValues', 'kpiValue') 
       .where(
         new Brackets((qb) => {
           qb.where(
@@ -226,8 +226,8 @@ export class KpisService {
       .take(limit)
       .getManyAndCount();
 
-    // TODO: temp, will check later
-    // Calculate actual_value for each KPI directly from kpiValues
+    
+    
     const dataWithActualValue = data.map((kpi) => {
       const allValues = kpi.assignments
         .flatMap((assignment) => assignment.kpiValues)
@@ -235,9 +235,9 @@ export class KpisService {
 
       const actual_value =
         kpi.calculation_type === 'sum'
-          ? allValues.reduce((sum, val) => sum + val, 0) // Sum of all values
+          ? allValues.reduce((sum, val) => sum + val, 0) 
           : allValues.length > 0
-            ? allValues.reduce((sum, val) => sum + val, 0) / allValues.length // Average of all values
+            ? allValues.reduce((sum, val) => sum + val, 0) / allValues.length 
             : 0;
 
       return { ...kpi, actual_value };
@@ -297,7 +297,7 @@ export class KpisService {
       .leftJoinAndSelect('assignment.team', 'team')
       .leftJoinAndSelect('assignment.employee', 'employee')
       .leftJoinAndSelect('kpi.perspective', 'perspective')
-      .leftJoinAndSelect('assignment.kpiValues', 'kpiValue') // Include KPI values
+      .leftJoinAndSelect('assignment.kpiValues', 'kpiValue') 
       .where(
         new Brackets((qb) => {
           qb.where(
@@ -361,7 +361,7 @@ export class KpisService {
       .take(limit)
       .getManyAndCount();
 
-    // Calculate actual_value for each KPI directly from kpiValues
+    
     const dataWithActualValue = data.map((kpi) => {
       const allValues = kpi.assignments
         .flatMap((assignment) => assignment.kpiValues)
@@ -369,9 +369,9 @@ export class KpisService {
 
       const actual_value =
         kpi.calculation_type === 'sum'
-          ? allValues.reduce((sum, val) => sum + val, 0) // Sum of all values
+          ? allValues.reduce((sum, val) => sum + val, 0) 
           : allValues.length > 0
-            ? allValues.reduce((sum, val) => sum + val, 0) / allValues.length // Average of all values
+            ? allValues.reduce((sum, val) => sum + val, 0) / allValues.length 
             : 0;
 
       return { ...kpi, actual_value };
@@ -406,7 +406,7 @@ export class KpisService {
       .leftJoinAndSelect('kpi.assignments', 'assignment')
       .leftJoinAndSelect('assignment.employee', 'employee')
       .leftJoinAndSelect('kpi.perspective', 'perspective')
-      .leftJoinAndSelect('assignment.kpiValues', 'kpiValue') // <--- Join KPI values
+      .leftJoinAndSelect('assignment.kpiValues', 'kpiValue') 
       .andWhere('assignment.assigned_to_employee = :employeeId', {
         employeeId,
       });
@@ -467,7 +467,7 @@ export class KpisService {
   async findOne(id: number): Promise<Kpi> {
     const value = await this.kpisRepository.findOne({
       where: { id },
-      relations: ['assignments', 'perspective'], // <-- Load assignments và perspective
+      relations: ['assignments', 'perspective'], 
     });
 
     if (!value) {
@@ -477,12 +477,9 @@ export class KpisService {
   }
 
   async getKpiAssignments(kpiId: number): Promise<KPIAssignment[]> {
-    // Load tất cả KPIAssignments cho KPI này
-    // Chỉ định tường minh tất cả các quan hệ @ManyToOne cần load
-    // Điều này ghi đè eager: true nhưng làm rõ ý định
+    
     return this.kpiAssignmentRepository.find({
       where: { kpi_id: kpiId },
-      // Load tất cả các quan hệ @ManyToOne trên KPIAssignment
       relations: [
         'kpi',
         'department',
@@ -498,23 +495,27 @@ export class KpisService {
     return await this.kpisRepository.manager.transaction(
       async (manager): Promise<Kpi> => {
         try {
-          const dto = plainToInstance(CreateKpiDto, createKpiDto); // Destructure incoming data, EXCLUDE id if it exists
-          const { assignments, id, ...kpiData } = dto as any; // Create the KPI object
+          const dto = plainToInstance(CreateKpiDto, createKpiDto); 
+          const { assignments, id, ...kpiData } = dto as any; 
 
-          let createdByType = 'company'; // Default
-          if (assignments?.toSections && assignments.toSections.length > 0) {
-            // <== Check Section trước
+          let createdByType = 'company'; 
+          console.log('assignmentsassignmentsassignments', assignments);
+          if (assignments.from && assignments.from === 'employee') {
+            createdByType = 'employee';
+          } else if (
+            assignments?.toSections &&
+            assignments.toSections.length > 0
+          ) {
             createdByType = 'section';
           } else if (
             assignments?.toDepartments &&
             assignments.toDepartments.length > 0
           ) {
-            // <== Check Department sau
             createdByType = 'department';
           }
 
           const kpi = manager.getRepository(Kpi).create({
-            ...kpiData, // Ánh xạ các trường DTO sang entity
+            ...kpiData, 
             min_target: kpiData.minimum,
             mid_target: kpiData.middle,
             max_target: kpiData.maximum,
@@ -523,72 +524,71 @@ export class KpisService {
             start_date: kpiData.startDate,
             end_date: kpiData.endDate,
             memo: kpiData.description,
-            created_by: 1, // TODO: userID will obtain from JWT (cần lấy từ request user)
-            // Set created_by_type dựa trên assignments.from
-            created_by_type: createdByType, // <-- Lấy từ assignments.from
-          }); // Save the KPI object.
+            created_by: 1, 
+            
+            created_by_type: createdByType, 
+          }); 
 
           const savedKpi = (await manager
             .getRepository(Kpi)
-            .save(kpi)) as unknown as Kpi; // ... phần xử lý và lưu assignments ...
+            .save(kpi)) as unknown as Kpi; 
 
-          const assignmentEntities: KPIAssignment[] = []; // Handle department assignments
+          const assignmentEntities: KPIAssignment[] = []; 
 
           if (assignments?.toDepartments) {
             for (const targetDepartment of assignments.toDepartments) {
               const assignment = new KPIAssignment();
               assignment.kpi = savedKpi;
-              assignment.assignedFrom = assignments.from; // <-- Lấy từ assignments.from
+              assignment.assignedFrom = assignments.from; 
               assignment.assigned_to_department = targetDepartment.id;
 
               if (targetDepartment.target !== undefined) {
                 assignment.targetValue = Number(targetDepartment.target);
               }
 
-              assignment.assignedBy = 1; // TODO: userID will obtain from JWT
+              assignment.assignedBy = 1; 
 
               assignmentEntities.push(assignment);
             }
-          } // Handle section assignments
+          } 
 
           if (assignments?.toSections) {
             for (const targetSection of assignments.toSections) {
               const assignment = new KPIAssignment();
               assignment.kpi = savedKpi;
-              assignment.assignedFrom = assignments.from; // <-- Lấy từ assignments.from
+              assignment.assignedFrom = assignments.from; 
               assignment.assigned_to_section = targetSection.id;
 
               if (targetSection.target !== undefined) {
                 assignment.targetValue = Number(targetSection.target);
               }
 
-              assignment.assignedBy = 1; // TODO: userID will obtain from JWT
+              assignment.assignedBy = 1; 
 
               assignmentEntities.push(assignment);
             }
           }
 
-          // Handle employee assignment
           if (assignments?.employeeId) {
             const targetEmployeeId = assignments.employeeId;
 
             const employeeAssignment = new KPIAssignment();
             employeeAssignment.kpi = savedKpi;
-            employeeAssignment.assignedFrom = assignments.from; // <-- Lấy từ assignments.from
+            employeeAssignment.assignedFrom = assignments.from; 
             employeeAssignment.assigned_to_employee = targetEmployeeId;
             employeeAssignment.employee_id = targetEmployeeId;
 
             employeeAssignment.targetValue = kpiData.target;
 
-            employeeAssignment.assignedBy = 1; // TODO: userID will obtain from JWT
+            employeeAssignment.assignedBy = 1; 
             employeeAssignment.status = 'draft';
 
             assignmentEntities.push(employeeAssignment);
-          } // Save all assignments
+          } 
 
           await manager.getRepository(KPIAssignment).save(assignmentEntities);
 
-          return savedKpi; // Trả về KPI đã lưu
+          return savedKpi; 
         } catch (error) {
           console.error('Transaction failed:', error);
           throw error;
@@ -612,26 +612,114 @@ export class KpisService {
 
   async saveUserAssignments(
     kpiId: number,
-    assignments: { user_id: number; target: number }[],
+    assignments: { user_id: number; target: number }[], 
   ): Promise<KPIAssignment[]> {
-    // Xóa các assignment cũ liên quan đến KPI
-    await this.kpiAssignmentRepository.delete({ kpi_id: kpiId });
 
-    // Tạo mới các assignment
-    const newAssignments = assignments.map((assignment) =>
-      this.kpiAssignmentRepository.create({
+    const kpi = await this.kpisRepository.findOne({ where: { id: kpiId } });
+    if (!kpi) {
+      throw new NotFoundException(`KPI with ID ${kpiId} not found`);
+    } 
+    const assignedFromType = kpi.created_by_type; 
+    const assignedById = 1; 
+    const kpiWeight = kpi.weight; 
+
+    const existingUserAssignments = await this.kpiAssignmentRepository.find({
+      where: {
         kpi_id: kpiId,
-        employee_id: assignment.user_id,
-        targetValue: assignment.target,
-        created_at: new Date(),
-        updated_at: new Date(),
-        assignedBy: 1, // TODO: userID will obtain from JWT
-        status: 'draft',
-      }),
+        assigned_to_employee: Not(IsNull()), 
+        deleted_at: IsNull(), 
+      },
+      relations: ['employee'], 
+    }); 
+
+    const existingAssignmentsMap = new Map<number, KPIAssignment>();
+    existingUserAssignments.forEach((assignment) => {
+      if (assignment.assigned_to_employee !== null) {
+        existingAssignmentsMap.set(assignment.assigned_to_employee, assignment);
+      }
+    });
+
+    const incomingUserIds = new Set<number>(
+      assignments.map((assign) => assign.user_id),
     );
 
-    // Lưu vào database
-    return this.kpiAssignmentRepository.save(newAssignments);
+    const assignmentsToInsert: KPIAssignment[] = [];
+    const assignmentsToUpdate: KPIAssignment[] = []; 
+    for (const incomingAssignment of assignments) {
+      const existingAssignment = existingAssignmentsMap.get(
+        incomingAssignment.user_id,
+      );
+
+      if (existingAssignment) {
+        if (
+          existingAssignment.targetValue !==
+          incomingAssignment.target /* Add other fields if editable */
+        ) {
+          existingAssignment.targetValue = incomingAssignment.target;
+          existingAssignment.updated_at = new Date();
+          assignmentsToUpdate.push(existingAssignment);
+        }
+      } else {
+        
+        const newAssignment = this.kpiAssignmentRepository.create(
+          {
+            
+            kpi: { id: kpiId }, 
+            
+            assigned_to_employee: incomingAssignment.user_id,
+            employee_id: incomingAssignment.user_id, 
+            targetValue: incomingAssignment.target,
+            weight: kpiWeight, 
+            status: 'draft', 
+            assignedFrom: assignedFromType,
+            assignedBy: assignedById,
+            created_at: new Date(),
+            updated_at: new Date(), 
+            assigned_to_department: null,
+            assigned_to_section: null,
+            assigned_to_team: null,
+          } as unknown as import('typeorm').DeepPartial<KPIAssignment>, 
+        );
+        assignmentsToInsert.push(newAssignment);
+      }
+    } 
+
+    const assignmentsToDelete = existingUserAssignments.filter(
+      (assignment) =>
+        assignment.assigned_to_employee !== null &&
+        !incomingUserIds.has(assignment.assigned_to_employee),
+    ); 
+
+    await this.kpiAssignmentRepository.manager.transaction(async (manager) => {
+      
+      if (assignmentsToDelete.length > 0) {
+        await manager.softRemove(assignmentsToDelete); 
+      } 
+      if (assignmentsToInsert.length > 0) {
+        
+        await manager.save(
+          KPIAssignment,
+          assignmentsToInsert as unknown as KPIAssignment[],
+        );
+      } 
+
+      if (assignmentsToUpdate.length > 0) {
+        
+        await manager.save(
+          KPIAssignment,
+          assignmentsToUpdate as unknown as KPIAssignment[],
+        );
+      }
+    }); 
+ 
+    return this.kpiAssignmentRepository.find({
+      where: {
+        kpi_id: kpiId,
+        assigned_to_employee: Not(IsNull()),
+        deleted_at: IsNull(),
+      },
+      relations: ['employee', 'kpiValues'], 
+    });
   }
 
   async deleteSectionAssignment(
@@ -640,7 +728,7 @@ export class KpisService {
   ): Promise<void> {
     const result = await this.kpiAssignmentRepository.update(
       { kpi_id: kpiId, assigned_to_section: sectionId },
-      { deleted_at: new Date() }, // ✅ Soft delete bằng cách gán timestamp
+      { deleted_at: new Date() }, 
     );
 
     if (result.affected === 0) {
@@ -650,25 +738,44 @@ export class KpisService {
     }
   }
 
-  async saveSectionAssignments(
+  async saveDepartmentAndSectionAssignments(
     kpiId: number,
-    assignments: { section_id: number; target: number; weight: number }[],
+    assignments: {
+      assigned_to_department?: number;
+      assigned_to_section?: number;
+      targetValue: number;
+      assignmentId?: number;
+    }[],
   ): Promise<void> {
-    // Xóa các Section Assignments cũ liên quan đến KPI
-    await this.kpiAssignmentRepository.delete({ kpi_id: kpiId });
+    
+    const kpi = await this.kpisRepository.findOne({ where: { id: kpiId } });
+    if (!kpi) {
+      throw new NotFoundException(`KPI with ID ${kpiId} not found`);
+    }
+    const assignedFromType = kpi.created_by_type; 
+    const assignedById = 1; 
 
-    // Tạo mới các Section Assignments
-    const newAssignments = assignments.map((assignment) =>
-      this.kpiAssignmentRepository.create({
-        kpi_id: kpiId,
-        assigned_to_section: assignment.section_id,
-        targetValue: assignment.target,
-        created_at: new Date(),
-        updated_at: new Date(),
-      }),
-    );
+    const newAssignments = assignments.map((assignment) => {
+      const initialStatus = 'draft';
 
-    // Lưu vào database
+      return this.kpiAssignmentRepository.create(
+        
+        {
+          kpi: { id: kpiId },
+          assignedFrom: assignedFromType,
+          assignedBy: assignedById,
+          targetValue: assignment.targetValue,
+          status: initialStatus,
+          assigned_to_department: assignment.assigned_to_department || null,
+          assigned_to_section: assignment.assigned_to_section || null,
+          assigned_to_team: null, 
+          assigned_to_employee: null, 
+          employee_id: null, 
+          created_at: new Date(),
+          updated_at: new Date(),
+        } as unknown as import('typeorm').DeepPartial<KPIAssignment>, 
+      );
+    }); 
     await this.kpiAssignmentRepository.save(newAssignments);
   }
 }

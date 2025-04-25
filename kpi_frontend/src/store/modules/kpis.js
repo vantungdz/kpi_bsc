@@ -1,6 +1,3 @@
-// store/modules/kpis.js
-// Đã refactor, tích hợp API User Assignment, My Assignment, Submit Update, Save/Delete Assignments
-
 import apiClient from "../../services/api";
 import { notification } from "ant-design-vue"; // Assuming you're using Ant Design Vue for notifications
 // import router from "../../router"; // Import nếu cần
@@ -131,7 +128,12 @@ const mutations = {
       : null;
   },
   SET_KPI_USER_ASSIGNMENTS(state, assignments) {
-    state.currentKpiUserAssignments = assignments || []; // <== Sửa tên state
+    console.log("MUTATION SET_KPI_USER_ASSIGNMENTS called with:", assignments); // <-- LOG MUTATION 1
+    state.currentKpiUserAssignments = [...(assignments || [])];
+    console.log(
+      "MUTATION SET_KPI_USER_ASSIGNMENTS state after update:",
+      state.currentKpiUserAssignments
+    ); // <-- LOG MUTATION 2
   },
 
   // Mutations cho My Assignments (/kpis/employees/:userId)
@@ -285,8 +287,8 @@ const actions = {
     commit("SET_ERROR", null);
     try {
       const response = await apiClient.get("/kpis", { params });
-      commit("SET_KPIS", response.data); // Assuming response.data is { data: [...], pagination: {...} }
-      return response.data; // Return full response data for pagination
+      commit("SET_KPIS", response); // Assuming response.data is { data: [...], pagination: {...} }
+      return response; // Return full response data for pagination
     } catch (error) {
       commit("SET_ERROR", error);
       commit("SET_KPIS", null); // Clear list state on error
@@ -445,49 +447,68 @@ const actions = {
   // === ACTIONS QUẢN LÝ USER ASSIGNMENT (Fetch từ /kpis/:id/assignments) ===
   // This fetches all assignments for a KPI, frontend filters them into user/dept/section/team
   async fetchKpiUserAssignments({ commit }, kpiId) {
+    console.log("ACTION fetchKpiUserAssignments called for KPI ID:", kpiId); // <-- LOG ACTION 1
     if (!kpiId) {
       console.warn("fetchKpiUserAssignments: kpiId is required.");
-      commit("SET_KPI_USER_ASSIGNMENTS", []); // Clear list if no ID
+      commit("SET_KPI_USER_ASSIGNMENTS", []);
       return [];
     }
-    commit("SET_USER_ASSIGNMENT_LOADING", true); // Use specific loading
-    commit("SET_USER_ASSIGNMENT_ERROR", null); // Clear specific error
-    // commit("SET_KPI_USER_ASSIGNMENTS", []); // Optionally clear list before fetch
+    commit("SET_USER_ASSIGNMENT_LOADING", true);
+    commit("SET_USER_ASSIGNMENT_ERROR", null);
 
     try {
-      // API: GET /kpis/:id/assignments - Should return array of KPIAssignment objects with eager loaded relations
+      console.log(
+        `ACTION fetchKpiUserAssignments: Calling API GET /kpis/${kpiId}/assignments`
+      ); // <-- LOG ACTION 2
       const response = await apiClient.get(`/kpis/${kpiId}/assignments`);
-      const assignments = response.data?.data || response.data || []; // Assuming array is direct or in .data
-      commit("SET_KPI_USER_ASSIGNMENTS", assignments); // Set list
-      return assignments; // Return fetched data
+      console.log(
+        "ACTION fetchKpiUserAssignments: API response received:",
+        response
+      ); // <-- LOG ACTION 3
+      // Trích xuất dữ liệu mảng assignment từ response
+
+      const assignments = response.data?.data || response.data || [];
+      console.log(
+        "ACTION fetchKpiUserAssignments: Extracted assignments data:",
+        assignments
+      ); // <-- LOG ACTION 4
+
+      commit("SET_KPI_USER_ASSIGNMENTS", assignments); // <-- Mutation called here
+      console.log(
+        "ACTION fetchKpiUserAssignments: SET_KPI_USER_ASSIGNMENTS mutation committed."
+      ); // <-- LOG ACTION 5
+
+      return assignments;
     } catch (error) {
-      commit("SET_USER_ASSIGNMENT_ERROR", error); // Set specific error state
-      commit("SET_KPI_USER_ASSIGNMENTS", []); // Clear list state on error
-      console.error(
-        "Error fetching user assignments:",
-        error.response || error
-      );
-      throw error; // Re-throw
+      // ... (error handling) ...
+      console.error("ACTION fetchKpiUserAssignments: Error:", error); // <-- LOG ACTION ERROR
+      throw error;
     } finally {
-      commit("SET_USER_ASSIGNMENT_LOADING", false); // Clear specific loading
+      commit("SET_USER_ASSIGNMENT_LOADING", false);
     }
   },
 
   // === ACTIONS QUẢN LÝ SAVE ASSIGNMENT (POST lên /kpis/:kpiId/assignments hoặc /kpis/:kpiId/sections/assignments) ===
   // This action seems to save mixed assignment types (user, dept, section) based on frontend payload structure
   // Need to verify backend endpoint that accepts this payload
-  async saveDepartmentSectionAssignment( // Frontend calls this for Dept/Section modal save
+  async saveDepartmentSectionAssignment(
     { commit, dispatch },
-    { kpiId, assignmentsPayload } // Payload likely contains { assignments: [ { assigned_to_department, assigned_to_section, targetValue, weight } ] }
+    { kpiId, assignmentsArray } // <== SỬA SIGNATURE: Mong đợi object có key kpiId và key assignmentsArray
   ) {
-    commit("SET_SUBMITTING_DEPARTMENT_SECTION_ASSIGNMENT", true); // Use specific loading
-    commit("SET_DEPARTMENT_SECTION_ASSIGNMENT_SAVE_ERROR", null); // Clear specific error
+    commit("SET_SUBMITTING_DEPARTMENT_SECTION_ASSIGNMENT", true);
+    commit("SET_DEPARTMENT_SECTION_ASSIGNMENT_SAVE_ERROR", null);
+
     try {
-      // Sửa endpoint API call để gọi đúng endpoint lưu Section/Department assignments
-      // Endpoint backend là POST /kpis/:id/sections/assignments
+      // API: POST /kpis/:id/sections/assignments
+      // Body cần có cấu trúc { assignments: [...] } để khớp @Body() ở controller
+      // Gửi mảng assignmentsArray BAO BỌC trong key 'assignments'
+      console.log(
+        "saveDepartmentSectionAssignment action: Payload being sent (structured):",
+        { assignments: assignmentsArray }
+      ); // Log payload đúng cấu trúc
       const response = await apiClient.post(
-        `/kpis/${kpiId}/sections/assignments`, // <== SỬA Ở ĐÂY
-        assignmentsPayload // <== Payload { assignments: [{ assigned_to_department, assigned_to_section, targetValue, weight }] }
+        `/kpis/${kpiId}/sections/assignments`,
+        { assignments: assignmentsArray } // <== SỬA Ở ĐÂY: Gửi object { assignments: mảng } làm body
       );
       notification.success({ message: "Assignment saved successfully!" });
 

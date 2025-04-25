@@ -1,4 +1,4 @@
-// src/employees/employee.controller.ts
+
 import {
   Controller,
   Get,
@@ -6,10 +6,10 @@ import {
   Body,
   Param,
   Delete,
-  Query, // <== Import Query
+  Query, 
   UseGuards,
   Req,
-  NotFoundException, // <== Import NotFoundException
+  NotFoundException, 
 } from '@nestjs/common';
 import { EmployeesService } from './employees.service';
 import { Employee } from 'src/entities/employee.entity';
@@ -33,7 +33,7 @@ export class EmployeesController {
     required: false,
     type: Number,
     description: 'Filter employees by Department ID',
-  }) // <== Swagger Docs
+  }) 
   @ApiQuery({
     name: 'sectionId',
     required: false,
@@ -41,19 +41,19 @@ export class EmployeesController {
     description: 'Filter employees by Section ID',
   })
   async findAll(
-    @Query('departmentId') departmentId?: number, // <== Lấy departmentId từ query params
-    @Query('sectionId') sectionId?: number, // <== Lấy sectionId từ query params
+    @Query('departmentId') departmentId?: number, 
+    @Query('sectionId') sectionId?: number, 
   ): Promise<Employee[]> {
-    // Pass the filter parameters to the service method
+    
     const filterOptions = { departmentId, sectionId };
-    // Nếu filterOptions rỗng, service.findAll sẽ trả về tất cả như cũ
+    
     return this.employeeService.findAll(filterOptions);
   }
 
   @Get(':id')
-  @ApiOperation({ summary: 'Get employee details by ID' }) // Thêm lại Swagger nếu cần
-  @ApiResponse({ status: 200, description: 'Employee found', type: Employee }) // Thêm lại Swagger nếu cần
-  @ApiResponse({ status: 404, description: 'Employee not found' }) // Thêm lại Swagger nếu cần
+  @ApiOperation({ summary: 'Get employee details by ID' }) 
+  @ApiResponse({ status: 200, description: 'Employee found', type: Employee }) 
+  @ApiResponse({ status: 404, description: 'Employee not found' }) 
   async findOne(@Param('id') id: number): Promise<Employee> {
     const user = await this.employeeService.findOne(id);
     return user;

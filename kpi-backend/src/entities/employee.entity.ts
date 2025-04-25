@@ -1,11 +1,11 @@
-// src/entities/employee.entity.ts
+
 import {
   Entity,
   PrimaryGeneratedColumn,
   Column,
   OneToMany,
   ManyToOne,
-  JoinColumn, // <== Import JoinColumn
+  JoinColumn, 
 } from 'typeorm';
 import { KpiValue } from './kpi-value.entity';
 import { KpiEvaluation } from './kpi-evaluation.entity';
@@ -46,31 +46,24 @@ export class Employee {
   @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
   updated_at: Date;
 
-  // === ĐỊNH NGHĨA TƯỜNG MINH CỘT departmentId (CHÍNH XÁC NHƯ TRONG DB) ===
-  @Column({ nullable: true, name: 'departmentId' }) // name: 'departmentId' là tường minh tên cột
-  departmentId: number; // <== Property name
+  @Column({ nullable: true, name: 'departmentId' }) 
+  departmentId: number; 
 
   @ManyToOne(() => Department, (department) => department.employees)
-  @JoinColumn({ name: 'departmentId' }) // <== Liên kết với cột 'departmentId'
-  department: Department; // <== Property name cho object quan hệ
-  // === KẾT THÚC ĐỊNH NGHĨA TƯỜNG MINH ===
-
-  // === ĐỊNH NGHĨA TƯỜNG MINH CỘT sectionId (CHÍNH XÁC NHƯ TRONG DB) ===
-  @Column({ nullable: true, name: 'sectionId' }) // name: 'sectionId' là tường minh tên cột
-  sectionId: number; // <== Property name
+  @JoinColumn({ name: 'departmentId' }) 
+  department: Department; 
+  
+  @Column({ nullable: true, name: 'sectionId' }) 
+  sectionId: number; 
 
   @ManyToOne(() => Section, (section) => section.employees, { nullable: true })
-  @JoinColumn({ name: 'sectionId' }) // <== Liên kết với cột 'sectionId'
-  section?: Section; // <== Property name cho object quan hệ
-  // === KẾT THÚC ĐỊNH NGHĨA TƯỜNG MINH ===
-
-  // === ĐỊNH NGHĨA TƯỜNG MINH CỘT teamId (CHÍNH XÁC NHƯ TRONG DB) ===
-  @Column({ nullable: true, name: 'teamId' }) // name: 'teamId' là tường minh tên cột
-  teamId: number; // <== Property name
+  @JoinColumn({ name: 'sectionId' }) 
+  section?: Section; 
+  
+  @Column({ nullable: true, name: 'teamId' }) 
+  teamId: number; 
 
   @ManyToOne(() => Team, (team) => team.employees, { nullable: true })
-  @JoinColumn({ name: 'teamId' }) // <== Liên kết với cột 'teamId'
-  team?: Team; // <== Property name cho object quan hệ
-  // === KẾT THÚC ĐỊNH NGHĨA TƯỜNG MINH ===
-
+  @JoinColumn({ name: 'teamId' }) 
+  team?: Team; 
 }

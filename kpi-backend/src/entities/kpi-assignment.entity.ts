@@ -31,7 +31,7 @@ export class KPIAssignment {
   kpi: Kpi;
 
   @Column()
-  assignedFrom: string; // e.g., "company", "department"
+  assignedFrom: string; 
 
   @Column({ type: 'numeric', nullable: true })
   assigned_to_department: number;
@@ -69,7 +69,7 @@ export class KPIAssignment {
     enum: ['draft', 'submitted', 'approved'],
     default: 'draft',
   })
-  status: string; //
+  status: string; 
 
   @Column({
     type: 'timestamp',

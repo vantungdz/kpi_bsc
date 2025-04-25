@@ -382,10 +382,6 @@
               <a-input-number v-model:value="userAssignmentDetails[record.userId].target" placeholder="Target"
                 style="width: 100%" :min="0" :step="1" />
             </template>
-            <template v-if="column.key === 'weight'">
-              <a-input-number v-model:value="userAssignmentDetails[record.userId].weight" placeholder="Weight"
-                style="width: 100%" :min="0" :max="100" :step="1" addon-after="%" />
-            </template>
           </template>
         </a-table>
         <div v-if="userAssignmentSubmitError" style="color: red; margin-top: 10px;">
@@ -505,7 +501,12 @@ const router = useRouter();
   // Lấy state từ store
   const loadingKpi = computed(() =>store.getters['kpis/isLoading']);
   const kpiDetailData = computed(() =>store.getters['kpis/currentKpi']);
-  const allUserAssignmentsForKpi = computed(() =>store.getters['kpis/currentKpiUserAssignments']);
+  const allUserAssignmentsForKpi = computed(() => {
+    const assignments = store.getters['kpis/currentKpiUserAssignments'];
+    console.log('allUserAssignmentsForKpi computed (raw state data):', assignments); // <-- LOG NÀY
+    return assignments;
+  });
+  
   const loadingUserAssignments = computed(() =>store.getters['kpis/isLoadingUserAssignments']);
   const userAssignmentError = computed(() =>store.getters['kpis/userAssignmentError']); // <<< Đổi tên getter cho đúng
   const actualUser = computed(() =>store.getters['auth/user']);
@@ -552,8 +553,12 @@ const departmentSectionAssignmentForm = reactive({
   assigned_to_department: null,
   assigned_to_section: null,
   targetValue: null,
-  assignmentId: null, // Để biết đang sửa assignment nào
+  assignmentId: null, 
 })
+
+console.log('KPI Detail Data for Filtering Context:', kpiDetailData.value); // <-- LOG 1: Kiểm tra toàn bộ object KPI
+console.log('departmentHasSections.value (for filtering context):', departmentHasSections.value); // <-- LOG 2: Kiểm tra biến departmentHasSections
+
 
 const currentDepartmentSectionAssignments = computed(() => {
   // Lọc mảng kpiDetailData.assignments chỉ lấy các assignment có assigned_to_department HOẶC assigned_to_section khác null
@@ -730,53 +735,75 @@ const isMySection = (sectId) => {
 
   // === LỌC USER ASSIGNMENTS PHÍA CLIENT ===
 const filteredDirectUserAssignments = computed(() => {
+  console.log('--- Evaluating filteredDirectUserAssignments ---');
   const kpi = kpiDetailData.value;
-  // ... điều kiện kiểm tra kpi, departmentHasSections, departmentId ...
-  if (!kpi || kpi.created_by_type !== 'department' || departmentHasSections.value !== false || !kpi.department?.id) return []; // <== Có trả về [] ở đây
-  const currentDeptId = kpi.department.id;
-  // Lọc dựa trên allUserAssignmentsForKpi.value
-  return allUserAssignmentsForKpi.value.filter(assign => assign.employee?.department_id === currentDeptId && !assign.employee?.section_id);
+  // Lấy Department ID của KPI (nếu là loại department)
+  const currentDeptId = kpi?.created_by_type === 'department' ? kpi?.created_by : null;
+
+  const userAssignments = allUserAssignmentsForKpi.value; // Danh sách assignments thô từ state
+
+  console.log('filteredDirectUserAssignments: kpiDetailData.value (for filter logic):', kpi); // <-- LOG NÀY
+  console.log('filteredDirectUserAssignments: userAssignments (input to filter):', userAssignments); // <-- LOG NÀY
+  console.log('filteredDirectUserAssignments: departmentHasSections.value (for filter):', departmentHasSections.value); // <-- LOG NÀY
+  console.log('filteredDirectUserAssignments: currentDeptId (from kpi.created_by):', currentDeptId); // <-- LOG NÀY
+
+
+  // Check 1: Chỉ lọc nếu KPI data load, là loại 'department', và department đó KHÔNG có sections
+  if (!kpi || kpi.created_by_type !== 'department' || departmentHasSections.value !== false || !currentDeptId) {
+    console.log('filteredDirectUserAssignments: Skipping filter, KPI type not department without sections, or data missing.');
+    return [];
+  }
+
+  // KPI đã load, là loại "department" KHÔNG có sections, và có departmentId
+  // Check if userAssignments is an array before filtering
+  if (!Array.isArray(userAssignments)) {
+    console.error('filteredDirectUserAssignments: userAssignments is NOT an array!', userAssignments);
+    return [];
+  }
+
+  // Thực hiện lọc: Giữ lại assignment nếu user thuộc department của KPI VÀ user KHÔNG thuộc section nào
+  const result = userAssignments.filter(assign =>
+    assign.assigned_to_employee !== null && // Chỉ lấy các assignment GÁN CHO EMPLOYEE
+    assign.employee?.department_id === currentDeptId && // Kiểm tra employee thuộc department của KPI
+    !assign.employee?.section_id // Đảm bảo employee KHÔNG thuộc section nào
+  );
+  console.log('filteredDirectUserAssignments: Filtered result:', result); // <-- LOG NÀY
+
+  return result;
 });
 
 const filteredSectionUserAssignments = computed(() => {
-  const kpi = kpiDetailData.value;
   console.log('--- Evaluating filteredSectionUserAssignments ---');
-  console.log('kpiDetailData.value:', kpi);
-  const userAssignments = allUserAssignmentsForKpi.value; // Danh sách user assignments từ API riêng
+  const kpi = kpiDetailData.value;
+  const userAssignments = allUserAssignmentsForKpi.value; // Danh sách assignments thô từ state
 
-  // Check 1 (Đã điều chỉnh): Chỉ lọc nếu KPI data load và là loại 'section'
+  console.log('filteredSectionUserAssignments: kpiDetailData.value (for filter logic):', kpi); // <-- LOG NÀY
+  console.log('filteredSectionUserAssignments: userAssignments (input to filter):', userAssignments); // <-- LOG NÀY
+
+  // Check 1: Chỉ lọc nếu KPI data load và là loại 'section'
   if (!kpi || kpi.created_by_type !== 'section') {
-    console.log('Check 1 Failed (filtered Section): KPI data is null or not type "section".', kpi?.created_by_type);
-    console.log('--- End Evaluating filteredSectionUserAssignments ---');
+    console.log('filteredSectionUserAssignments: Skipping filter, KPI type not section or data missing.');
     return [];
   }
 
   // KPI đã load và là loại "section"
   const sectionId = kpi.created_by; // Giả định created_by là ID của Section
-  // const allSectionsList = allSections.value; // Cần cho isMySection, và để đảm bảo ID hợp lệ?
 
-  // Optional: Thêm kiểm tra để đảm bảo sectionId từ created_by là ID của một Section thật trong danh sách frontend
-  // const kpiSection = Array.isArray(allSectionsList) ? allSectionsList.find(s => s.id == sectionId) : undefined;
-  // if (!kpiSection) {
-  //     return []; // Return empty if section ID is not valid/found
-  // }
+  console.log('filteredSectionUserAssignments: Filtering for employee.section_id ==', sectionId); // <-- LOG NÀY
 
-
-  console.log('Filtering user assignments for Section ID (from created_by):', sectionId);
-  console.log('allUserAssignmentsForKpi.value:', userAssignments);
-
-  // Check if userAssignments is an array before filtering (phòng lỗi)
+  // Check if userAssignments is an array before filtering
   if (!Array.isArray(userAssignments)) {
-    console.error('filteredSectionUserAssignments: allUserAssignmentsForKpi.value is NOT an array!', userAssignments);
-    console.log('--- End Evaluating filteredSectionUserAssignments ---');
-    return []; // Trả về mảng rỗng nếu dependency không phải mảng
+    console.error('filteredSectionUserAssignments: userAssignments is NOT an array!', userAssignments);
+    return [];
   }
 
   // Thực hiện lọc: Giữ lại assignment nếu user thuộc section có ID khớp với sectionId (created_by)
-  const result = userAssignments.filter(assign => assign.employee?.section_id == sectionId); // Dùng == để so sánh number/string ID
+  const result = userAssignments.filter(assign =>
+    assign.assigned_to_employee !== null && // Chỉ lấy các assignment GÁN CHO EMPLOYEE
+    assign.employee?.section_id == sectionId // Kiểm tra employee thuộc section của KPI không
+  );
 
-  console.log('filteredSectionUserAssignments: Filtered result:', result);
-  console.log('--- End Evaluating filteredSectionUserAssignments ---');
+  console.log('filteredSectionUserAssignments: Filtered result:', result); // <-- LOG NÀY
 
   return result;
 });
@@ -881,10 +908,9 @@ const shouldShowSectionUserAssignmentCard = computed(() => {
   // const allUserList = computed(() => store.getters['employees/userList'] || []);
   // const evaluationUserOptions = computed(() => allUserList.value.map(u => ({ value: u.id, label: `${u.first_name || ''} ${u.last_name || ''} (${u.username})` })));
 const assignableUserOptions = computed(() => {
-  console.log('assignableUserOptions: Evaluating...'); // <== THÊM LOG NÀY
-  console.log('assignableUserOptions: Input assignableUsers.value:', assignableUsers.value); // <== THÊM LOG NÀY
+  console.log('assignableUserOptions: Evaluating...');
+  console.log('assignableUserOptions: Input assignableUsers.value:', assignableUsers.value); // <-- LOG 5
 
-  // Ensure assignableUsers.value is an array before mapping
   if (!Array.isArray(assignableUsers.value)) {
     console.error('assignableUserOptions: assignableUsers.value is not an array!', assignableUsers.value);
     return [];
@@ -894,10 +920,10 @@ const assignableUserOptions = computed(() => {
     value: user.id,
     label: `${user.first_name || ''} ${user.last_name || ''} (${user.username})`,
     name: `${user.first_name || ''} ${user.last_name || ''}`,
-    avatar_url: user?.avatar_url, // Check if avatar_url exists on user object
+    avatar_url: user?.avatar_url,
   }));
 
-  console.log('assignableUserOptions: Output result:', result); // <== THÊM LOG NÀY
+  console.log('assignableUserOptions: Output result:', result); // <-- LOG 6
   return result;
 });
   const modalUserDataSource = computed(() =>{
@@ -1014,12 +1040,7 @@ const departmentSectionAssignmentColumns = [
     title: 'Target',
     key: 'target',
     width: '30%'
-  },
-  {
-    title: 'Weight (%)',
-    key: 'weight',
-    width: '30%'
-  },
+  }
   ];
   const evaluationColumns = [{
     title: 'Evaluator',
@@ -1185,51 +1206,46 @@ const handleSaveDepartmentSectionAssignment = async () => {
   departmentSectionAssignmentError.value = null;
 
   try {
-    // Validate form
     await departmentSectionAssignmentFormRef.value?.validate();
 
-    // Check if at least Department or Section is selected
     if (!departmentSectionAssignmentForm.assigned_to_department && !departmentSectionAssignmentForm.assigned_to_section) {
       departmentSectionAssignmentError.value = 'Please select either a Department or a Section for assignment.';
       submittingDepartmentSectionAssignment.value = false;
       return;
     }
 
-    // Build payload
-    const payload = {
-      kpiId: kpiId.value, // KPI ID từ route params
-      assignmentId: departmentSectionAssignmentForm.assignmentId, // null nếu thêm mới, ID nếu sửa
+    // === CHỈNH SỬA: Xây dựng mảng các assignment data ===
+    // Tạo mảng chứa dữ liệu assignment (chỉ có 1 item trong trường hợp modal này)
+    const assignmentsArray = [{
+      assignmentId: departmentSectionAssignmentForm.assignmentId, // Include ID for update case
       assigned_to_department: departmentSectionAssignmentForm.assigned_to_department || null,
       assigned_to_section: departmentSectionAssignmentForm.assigned_to_section || null,
       targetValue: Number(departmentSectionAssignmentForm.targetValue),
-      // Các trường khác cho assignment (assignedFrom, assignedBy, status) sẽ được set ở backend service
-      // Dựa trên DTO của backend, có thể cần gửi cấu trúc { assignments: [...] }
-      assignments: [{
-        id: departmentSectionAssignmentForm.assignmentId || undefined, // Gửi ID nếu đang sửa, undefined nếu thêm mới
-        assigned_to_department: departmentSectionAssignmentForm.assigned_to_department || undefined,
-        assigned_to_section: departmentSectionAssignmentForm.assigned_to_section || undefined,
-        targetValue: Number(departmentSectionAssignmentForm.targetValue),
-        weight: Number(departmentSectionAssignmentForm.weight),
-        // Các trường khác như kpiId, assignedFrom, assignedBy sẽ được set ở backend service
-      }]
-    };
+      // weight property removed previously - ADD BACK IF NEEDED BY BACKEND
+      // weight: Number(departmentSectionAssignmentForm.weight), // Nếu backend save cần weight
+      // assignedFrom, assignedBy, status, kpiId nên được set bởi backend service
+    }];
+    // ==================================================
 
-    // Dispatch store action để lưu (cần tạo action này trong kpis store)
-    await store.dispatch('kpis/saveDepartmentSectionAssignment', payload); // Assuming this action handles both create/update
+
+    // === CHỈNH SỬA: Dispatch store action với payload khớp signature action ===
+    // Pass kpiId và mảng assignment data dưới key 'assignmentsArray'
+    await store.dispatch('kpis/saveDepartmentSectionAssignment', {
+      kpiId: kpiId.value, // Truyền kpiId riêng
+      assignmentsArray: assignmentsArray, // <== Pass mảng assignment data dưới key 'assignmentsArray'
+    });
+    // ==================================================================
 
     notification.success({ message: editingDepartmentSectionAssignment.value ? 'Assignment updated successfully!' : 'Assignment added successfully!' });
 
-    // Đóng modal và reset form
     closeManageDepartmentSectionAssignments();
-
-    // Refresh dữ liệu KPI Detail để bảng assignment cập nhật
-    await loadInitialData(); // Re-fetch KPI detail which includes assignments
+    await loadInitialData();
 
   } catch (error) {
     console.error('Failed to save Department/Section assignment:', error);
-    const errorMessage = store.getters['kpis/departmentSectionAssignmentError'] || error.message || 'Failed to save assignment.';
-    departmentSectionAssignmentError.value = errorMessage; // Hiển thị lỗi trong modal
-    notification.error({ message: 'Save Failed', description: errorMessage });
+    await store.dispatch('kpis/SET_DEPARTMENT_SECTION_ASSIGNMENT_SAVE_ERROR', error); // Sử dụng mutation error riêng
+    // notification error có thể dùng error message từ getter
+    notification.error({ message: 'Save Failed', description: store.getters['kpis/departmentSectionAssignmentSaveError'] }); // Lấy message từ getter lỗi riêng
   } finally {
     submittingDepartmentSectionAssignment.value = false;
   }
@@ -1333,11 +1349,9 @@ const handleDepartmentSelectInModal = (departmentId) => {
     }
   };
 const fetchAssignableUsersData = async () => {
-  console.log('>>> fetchAssignableUsersData function started <<<'); // <== THÊM LOG NÀY
+  console.log('>>> fetchAssignableUsersData function started <<<');
   const kpi = kpiDetailData.value;
-  console.log('  Initial kpiDetailData.value:', kpi); // <== THÊM LOG NÀY
-  console.log('  Initial departmentHasSections.value:', departmentHasSections.value); // <== THÊM LOG NÀY
-  
+
   let fetchedUsersList = [];
 
   assignableUsers.value = [];
@@ -1348,49 +1362,52 @@ const fetchAssignableUsersData = async () => {
     // Case 1: KPI loại Section
     if (kpi?.created_by_type === 'section' && kpi.created_by) {
       const sectionId = kpi.created_by;
-      console.log(`WorkspaceAssignableUsersData: Preparing to dispatch fetchUsersBySection for section ${sectionId}...`); // <== THÊM LOG NÀY
+      console.log(`WorkspaceAssignableUsersData: Dispatching fetchUsersBySection for section ${sectionId}...`);
+      // Đợi action hoàn thành, action này sẽ commit dữ liệu vào state
       await store.dispatch('employees/fetchUsersBySection', sectionId);
-      console.log(`WorkspaceAssignableUsersData: Dispatch fetchUsersBySection finished for section ${sectionId}.`); // <== THÊM LOG NÀY
+      console.log(`WorkspaceAssignableUsersData: Dispatch fetchUsersBySection finished.`);
+      // Lấy dữ liệu từ getter sau khi action đã commit
       fetchedUsersList = store.getters['employees/usersBySection'](sectionId);
-
+      console.log(`WorkspaceAssignableUsersData: Data fetched from getter 'usersBySection':`, fetchedUsersList); // <-- LOG 1
     }
     // Case 2: KPI loại Department VÀ Department đó KHÔNG có sections
     else if (kpi?.created_by_type === 'department' && kpi.created_by && departmentHasSections.value === false) {
       const departmentId = kpi.created_by;
-      console.log(`WorkspaceAssignableUsersData: Preparing to dispatch fetchUsersByDepartment for department ${departmentId}...`); // <== THÊM LOG NÀY
+      console.log(`WorkspaceAssignableUsersData: Dispatching fetchUsersByDepartment for department ${departmentId}...`);
       await store.dispatch('employees/fetchUsersByDepartment', departmentId);
-      console.log(`WorkspaceAssignableUsersData: Dispatch fetchUsersByDepartment finished for department ${departmentId}.`); // <== THÊM LOG NÀY
+      console.log(`WorkspaceAssignableUsersData: Dispatch fetchUsersByDepartment finished.`);
       fetchedUsersList = store.getters['employees/usersByDepartment'](departmentId);
-
+      console.log(`WorkspaceAssignableUsersData: Data fetched from getter 'usersByDepartment':`, fetchedUsersList); // <-- LOG 2
     }
-    // Case 3: Các loại KPI khác
-    else {
-      console.log(`WorkspaceAssignableUsersData: Skipping user fetch for KPI type ${kpi?.created_by_type} or missing created_by/department structure.`);
-      fetchedUsersList = [];
-    }
+    // Case 3: KPI loại Company (hoặc các loại khác cần fetch tất cả users?)
+    // Dựa trên code bạn, trường hợp này có vẻ đang không được xử lý để fetch user cụ thể?
+    // Cần xem xét logic này dựa trên yêu cầu nghiệp vụ của bạn.
+    // Tạm thời, nếu kpi.created_by_type === 'company', có thể bạn muốn fetch TẤT CẢ users hoặc user có thể gán?
+    // if (kpi?.created_by_type === 'company') {
+    //   await store.dispatch('employees/fetchUsers'); // Fetch tất cả users
+    //   fetchedUsersList = store.getters['employees/userList'];
+    //   console.log('fetchAssignableUsersData: Data fetched from getter userList:', fetchedUsersList);
+    // }
 
-    // === Kết thúc chỉnh sửa ===
 
-    console.log('fetchAssignableUsersData: Data fetched from getter:', fetchedUsersList);
+    console.log('fetchAssignableUsersData: Final fetchedUsersList before assignment:', fetchedUsersList); // <-- LOG 3
     if (Array.isArray(fetchedUsersList)) {
       assignableUsers.value = fetchedUsersList;
-      console.log('fetchAssignableUsersData: assignableUsers after assignment:', assignableUsers.value);
+      console.log('fetchAssignableUsersData: assignableUsers.value AFTER assignment:', assignableUsers.value); // <-- LOG 4
     } else {
-      console.error("fetchAssignableUsersData: Fetched users list is not an array.", fetchedUsersList);
+      console.error("fetchAssignableUsersData: Fetched users list is NOT an array.", fetchedUsersList);
       assignableUsers.value = [];
       userAssignmentSubmitError.value = 'Failed to process user list.';
     }
 
 
   } catch (err) {
-    // Log từ catch block trong fetchAssignableUsersData
-    console.error("fetchAssignableUsersData: Error during dispatch or getter access:", err); // <== THÊM LOG NÀY
-    // Lấy error từ employees store (Sửa users/ thành employees/)
+    console.error("fetchAssignableUsersData: Error during dispatch or getter access:", err);
     userAssignmentSubmitError.value = store.getters['employees/error'] || err.message || 'Failed to load assignable users.';
     assignableUsers.value = [];
   } finally {
     loadingAssignableUsers.value = false;
-    console.log("fetchAssignableUsersData: Finally block executed."); // <== THÊM LOG NÀY
+    console.log("fetchAssignableUsersData: Finally block executed.");
   }
 };
 
@@ -1443,12 +1460,12 @@ const openAssignUserModal = () => {
     const usersToValidate = isEditingUserAssignment.value ? [editingUserAssignmentRecord.value.employee.id] : selectedUserIds.value;
     usersToValidate.forEach(userId =>{
       const details = userAssignmentDetails[String(userId)];
-      if (!details || details.target === null || details.target < 0 || details.weight === null || details.weight < 0 || details.weight > 100) {
+      if (!details || details.target === null || details.target < 0) {
         invalidDetail = true;
       }
     });
     if (invalidDetail) {
-      userAssignmentSubmitError.value = "Invalid Target/Weight.";
+      userAssignmentSubmitError.value = "Invalid Target.";
       return;
     }
     submittingUserAssignment.value = true;
@@ -1463,14 +1480,15 @@ const openAssignUserModal = () => {
         const userId = editingUserAssignmentRecord.value.employee.id;
         const assignmentData = {
           target: userAssignmentDetails[String(userId)] ?.target,
-          weight: userAssignmentDetails[String(userId)] ?.weight
         };
         console.warn("Need specific 'updateUserAssignment' action/API.");
+        const weightForUpdate = editingUserAssignmentRecord.value?.weight ?? kpiDetailData.value?.weight;
+
         const assignmentsPayload = {
           assignments: [{
             user_id: userId,
             target: assignmentData.target,
-            weight: assignmentData.weight
+            weight: weightForUpdate
           }]
         };
         await store.dispatch('kpis/saveUserAssignments', {
@@ -1485,7 +1503,7 @@ const openAssignUserModal = () => {
           assignments: selectedUserIds.value.map(userId =>({
             user_id: userId,
             target: userAssignmentDetails[String(userId)] ?.target,
-            weight: userAssignmentDetails[String(userId)] ?.weight
+            weight: kpiDetailData.value?.weight
           }))
         };
         await store.dispatch('kpis/saveUserAssignments', {
