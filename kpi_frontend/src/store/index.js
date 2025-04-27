@@ -17,7 +17,7 @@ const store = createStore({
     perspectives,
     employees,
     kpiEvaluations,
-    "kpi-values": kpiValues,
+    kpiValues,
   },
 });
 

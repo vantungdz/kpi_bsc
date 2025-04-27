@@ -1,26 +1,31 @@
-import { Injectable } from '@nestjs/common';
+// jwt.strategy.ts
+
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { Strategy } from 'passport-jwt';
 import { ExtractJwt } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
-import { LoginDto } from './dto/login.dto';
+import { EmployeesService } from 'src/employees/employees.service';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(
-    configService: ConfigService
+    configService: ConfigService,
+    private employeesService: EmployeesService,
   ) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
-      secretOrKey: configService.get<string>('JWT_SECRET_KEY') as '',
+      secretOrKey: configService.get<string>('JWT_SECRET_KEY') as string,
     });
   }
 
-  validate(payload: any) {
-    return {
-      id: payload.id,
-      username: payload.username,
-      role: payload.role,
-    };
+  async validate(payload: { id: number; username: string; role: string }) {
+    const user = await this.employeesService.findOne(payload.id);
+
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    return user;
   }
 }

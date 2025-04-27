@@ -1,4 +1,3 @@
-
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Employee } from 'src/entities/employee.entity';
@@ -24,45 +23,48 @@ export class EmployeesService {
     return this.employeeRepository.save(employee);
   }
 
-  async findAll(filterOptions: EmployeeFilterOptions = {},): Promise<Employee[]> {
+  async findAll(
+    filterOptions: EmployeeFilterOptions = {},
+  ): Promise<Employee[]> {
     console.log(
       'EmployeesService findAll: received filterOptions:',
       filterOptions,
-    ); 
+    );
 
     const findOptions: FindManyOptions<Employee> = {
-      where: {}, 
+      where: {},
     };
-    
+
     if (
       filterOptions.departmentId !== undefined &&
       filterOptions.departmentId !== null
     ) {
-      
       (findOptions.where as any).departmentId = filterOptions.departmentId;
     }
- 
+
     if (
       filterOptions.sectionId !== undefined &&
       filterOptions.sectionId !== null
     ) {
-      
       (findOptions.where as any).sectionId = filterOptions.sectionId;
     }
 
-    return this.employeeRepository.find(findOptions); 
+    return this.employeeRepository.find(findOptions);
   }
 
   async findOne(id: number): Promise<Employee> {
     const user = await this.employeeRepository.findOne({
-      where: { id },
-    });
+      where: { id }, // <<< THÊM relations để tải thông tin Department và Section >>>
+      relations: ['department', 'section'],
+    }); // Lưu ý: Trong chiến lược JWT validate, nếu user không tìm thấy, validate nên trả về undefined.
+    // Ném UnauthorizedException ở đây có thể không phải lúc nào cũng là hành vi mong muốn trong service.
+    // Tuy nhiên, giữ lại theo code gốc cho hiện tại.
 
     if (!user) {
-      throw new UnauthorizedException('Invalid credentials');
+      throw new UnauthorizedException('User not found'); // Đổi message cho rõ ràng
     }
 
-    return user;
+    return user; // Trả về object Employee với relations Department và Section đã tải
   }
 
   async findOneBy(
@@ -70,11 +72,13 @@ export class EmployeesService {
     password: string,
   ): Promise<Employee | undefined> {
     const foundUser = await this.employeeRepository.findOne({
-      where: [{ email: usernameOrEmail }, { username: usernameOrEmail }],
+      where: [{ email: usernameOrEmail }, { username: usernameOrEmail }], // <<< THÊM relations để tải thông tin Department và Section >>>
+      // Cần thiết nếu frontend muốn hiển thị thông tin Department/Section ngay sau login
+      relations: ['department', 'section'],
     });
 
     if (!foundUser) {
-      return undefined;
+      return undefined; // Trả về undefined nếu không tìm thấy user
     }
 
     let isPasswordValid: boolean;
@@ -86,10 +90,11 @@ export class EmployeesService {
     }
 
     if (!isPasswordValid) {
+      // Ném UnauthorizedException nếu mật khẩu sai
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    return foundUser;
+    return foundUser; // Trả về object Employee với relations Department và Section đã tải
   }
 
   async remove(id: number): Promise<void> {

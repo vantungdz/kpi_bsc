@@ -23,7 +23,7 @@ export class KpiValuesService {
 
   async findOne(id: number): Promise<KpiValue> {
     const data = await this.kpiValuesRepository.findOne({
-      where: { id }, 
+      where: { id },
     });
 
     if (!data) {
@@ -108,6 +108,47 @@ export class KpiValuesService {
 
     await this.kpiValuesRepository.delete(id);
     return true;
+  }
+
+  async submitProgressUpdate(
+    assignmentId: number,
+    notes: string,
+    projectDetails: any[],
+    userId: number,
+  ): Promise<KpiValue> {
+    // Tính toán giá trị từ projectDetails (ví dụ: tổng các projectValue)
+    let calculatedValue = 0;
+    if (projectDetails && Array.isArray(projectDetails)) {
+      calculatedValue = projectDetails.reduce(
+        (sum, project) => sum + Number(project.projectValue || 0),
+        0,
+      );
+    }
+
+    const newKpiValue = this.kpiValuesRepository.create({
+      kpi_assigment_id: assignmentId,
+      value: calculatedValue, // Sử dụng giá trị đã tính toán
+      timestamp: new Date(),
+      notes: notes,
+      status: 'submitted',
+      project_details: JSON.stringify(projectDetails),
+      updated_by: userId,
+    });
+
+    const savedKpiValue = await this.kpiValuesRepository.save(newKpiValue);
+
+    const historyEntry = this.kpiValueHistoryRepository.create({
+      kpi_value_id: savedKpiValue.id,
+      kpi_assigment_id: assignmentId,
+      value: savedKpiValue.value,
+      timestamp: savedKpiValue.timestamp,
+      notes: savedKpiValue.notes,
+      action: 'SUBMIT',
+      changed_by: userId,
+    });
+    await this.kpiValueHistoryRepository.save(historyEntry);
+
+    return savedKpiValue;
   }
 
   // Lấy lịch sử của KPI Value

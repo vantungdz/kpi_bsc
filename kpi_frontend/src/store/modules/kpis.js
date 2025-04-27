@@ -223,7 +223,8 @@ const mutations = {
     state.kpisAllForSelect = kpis?.data || kpis || [];
   },
   SET_CURRENT_KPI(state, kpi) {
-    state.currentKpi = kpi; // Assuming kpi is the direct KPI object with relations
+    console.log("MUTATION SET_CURRENT_KPI called with:", kpi); // <-- LOG MUTATION DETAIL 1 (Kiểm tra dữ liệu nhận bởi mutation)
+    state.currentKpi = kpi;
     // Reset user assignments khi đổi KPI
     state.currentKpiUserAssignments = []; // <== Sửa tên state
     // Bỏ reset section assignments
@@ -298,20 +299,71 @@ const actions = {
     }
   },
   // Need to verify return structure of these endpoints and mutations
-  async fetchSectionKpis({ commit }, id) {
+  async fetchSectionKpis({ commit }, filterParams) {
     commit("SET_LOADING", true);
-    commit("SET_ERROR", null);
+    commit("SET_ERROR", null); // Xóa state cũ của danh sách section KPIs trước khi fetch mới
     commit("SET_SECTION_KPIS", null);
+
     try {
-      const response = await apiClient.get(`/kpis/sections/${id}`);
-      commit("SET_SECTION_KPIS", response.data);
-      return response.data;
+      // Trích xuất sectionId từ đối tượng filterParams cho đường dẫn URL
+      // Sử dụng giá trị 0 cho "All" section filter (nếu backend route chấp nhận)
+      // Hoặc bạn có thể cần xử lý riêng cho trường hợp sectionId = 0 nếu backend yêu cầu URL khác
+      // Dựa trên backend route @Get('/sections/:sectionId'), chúng ta cần một giá trị ở đây.
+      // Giả định backend chấp nhận 0 là một ID hợp lệ trên đường dẫn cho "All".
+      const sectionIdInPath = filterParams.sectionId; // Chuẩn bị các query parameters từ đối tượng filterParams
+
+      const queryParams = { ...filterParams }; // Loại bỏ sectionId khỏi query params vì nó đã ở trên đường dẫn
+      delete queryParams.sectionId; // Xây dựng URL gọi API: /kpis/sections/:sectionId?query=...
+      // Kiểm tra và loại bỏ departmentId khỏi query params nếu backend endpoint /sections/:sectionId không sử dụng nó làm query param.
+      // Dựa trên controller, hàm getSectionKpis ở service CÓ nhận filterDto (bao gồm departmentId), nên departmentId NÊN được gửi qua query param.
+
+      // *** THÊM CÁC DÒNG DEBUG LOG NÀY ***
+      console.log(
+        "DEBUG ACTION fetchSectionKpis: filterParams nhận được:",
+        filterParams
+      );
+      console.log(
+        "DEBUG ACTION fetchSectionKpis: Giá trị sectionIdInPath:",
+        sectionIdInPath,
+        typeof sectionIdInPath
+      ); // Xây dựng URL API
+      const url = `/kpis/sections/${sectionIdInPath}`;
+      console.log("DEBUG ACTION fetchSectionKpis: URL được xây dựng:", url);
+      console.log(
+        "DEBUG ACTION fetchSectionKpis: Query Parameters sẽ gửi:",
+        queryParams
+      );
+      // ***********************************
+
+      console.log(
+        "ACTION fetchSectionKpis: Gọi API GET",
+        url,
+        "với params:",
+        queryParams
+      ); // Log thông tin gọi API
+      // Thực hiện gọi API với apiClient (ví dụ: axios)
+
+      const response = await apiClient.get(url, {
+        params: queryParams, // Truyền các filter còn lại làm query parameters
+      }); // Commit dữ liệu nhận được vào state sectionKpiList
+
+      commit("SET_SECTION_KPIS", response.data); // Giả định response.data là { data: [...], pagination: {...} }
+      console.log(
+        "ACTION fetchSectionKpis: Dữ liệu nhận được và commit:",
+        response.data
+      );
+
+      return response.data; // Trả về dữ liệu
     } catch (error) {
-      commit("SET_ERROR", error);
-      commit("SET_SECTION_KPIS", null); // Clear state on error
-      throw error;
+      console.error(
+        "ACTION fetchSectionKpis: Lỗi khi fetch section KPIs:",
+        error.response || error
+      );
+      commit("SET_ERROR", error); // Đặt lỗi chung
+      commit("SET_SECTION_KPIS", null); // Xóa state khi có lỗi
+      throw error; // Re-throw lỗi
     } finally {
-      commit("SET_LOADING", false);
+      commit("SET_LOADING", false); // Xóa trạng thái loading
     }
   },
   // Need to verify return structure of these endpoints and mutations
@@ -358,29 +410,43 @@ const actions = {
   },
 
   async fetchKpiDetail({ commit }, id) {
-    commit("SET_LOADING", true); // Set main loading
-    commit("SET_ERROR", null); // Clear general error
-    // Clear assignment errors/loading states that belong to the old KPI
+    commit("SET_LOADING", true);
+    commit("SET_ERROR", null);
     commit("SET_USER_ASSIGNMENT_LOADING", false);
     commit("SET_USER_ASSIGNMENT_ERROR", null);
-    commit("SET_SUBMITTING_DEPARTMENT_SECTION_DELETION", false); // Clear delete state
-    commit("SET_DEPARTMENT_SECTION_DELETION_ERROR", null); // Clear delete error state
-    commit("SET_SUBMITTING_USER_DELETION", false); // Clear user delete state
-    commit("SET_USER_DELETION_ERROR", null); // Clear user delete error state
+    // ... (clear states) ...
 
-    commit("SET_CURRENT_KPI", null); // Clear current KPI data immediately
+    commit("SET_CURRENT_KPI", null);
     try {
-      // API: GET /kpis/:id - Should return KPI object with eager loaded relations (perspective, assignments)
+      console.log(`ACTION fetchKpiDetail: Calling API GET /kpis/${id}`);
       const response = await apiClient.get(`/kpis/${id}`);
-      commit("SET_CURRENT_KPI", response.data); // Assuming response.data is the direct KPI object
-      return response.data; // Return the fetched KPI object
+      console.log("ACTION fetchKpiDetail: API response received:", response); // <-- Log response backend
+
+      // <<< HOÀN TÁC TRÍCH XUẤT - Commit response.data trực tiếp >>>
+      // Giả định response.data là đối tượng KPI chính
+      const kpi = response.data; // <-- Commit response.data trực tiếp
+      if (!kpi) {
+        // Vẫn kiểm tra nếu data tồn tại
+        console.error(
+          "ACTION fetchKpiDetail: response.data is null or undefined",
+          response
+        );
+        throw new Error("Invalid KPI detail response format");
+      }
+      console.log(
+        "ACTION fetchKpiDetail: Committing response.data (assuming it's the KPI object):",
+        kpi
+      ); // <-- Log đối tượng commit
+
+      commit("SET_CURRENT_KPI", kpi); // <-- Commit response.data
+      return kpi;
     } catch (error) {
-      commit("SET_ERROR", error); // Set general error state
-      commit("SET_CURRENT_KPI", null); // Clear state on error
       console.error("Error fetching KPI detail:", error.response || error);
-      throw error; // Re-throw
+      commit("SET_ERROR", error);
+      commit("SET_CURRENT_KPI", null); // Đảm bảo state bị xóa khi có lỗi
+      throw error;
     } finally {
-      commit("SET_LOADING", false); // Clear main loading
+      commit("SET_LOADING", false);
     }
   },
 
@@ -447,41 +513,73 @@ const actions = {
   // === ACTIONS QUẢN LÝ USER ASSIGNMENT (Fetch từ /kpis/:id/assignments) ===
   // This fetches all assignments for a KPI, frontend filters them into user/dept/section/team
   async fetchKpiUserAssignments({ commit }, kpiId) {
-    console.log("ACTION fetchKpiUserAssignments called for KPI ID:", kpiId); // <-- LOG ACTION 1
-    if (!kpiId) {
-      console.warn("fetchKpiUserAssignments: kpiId is required.");
-      commit("SET_KPI_USER_ASSIGNMENTS", []);
-      return [];
-    }
-    commit("SET_USER_ASSIGNMENT_LOADING", true);
-    commit("SET_USER_ASSIGNMENT_ERROR", null);
+    console.log("ACTION fetchKpiUserAssignments called for KPI ID:", kpiId);
+    // ... (kpiId check, loading/error commits) ...
 
     try {
       console.log(
         `ACTION fetchKpiUserAssignments: Calling API GET /kpis/${kpiId}/assignments`
-      ); // <-- LOG ACTION 2
+      );
       const response = await apiClient.get(`/kpis/${kpiId}/assignments`);
       console.log(
         "ACTION fetchKpiUserAssignments: API response received:",
         response
-      ); // <-- LOG ACTION 3
-      // Trích xuất dữ liệu mảng assignment từ response
+      );
 
-      const assignments = response.data?.data || response.data || [];
+      // <<< LOGIC TRÍCH XUẤT DỮ LIỆU CHI TIẾT HƠN >>>
+      let assignments = [];
+      if (response.data) {
+        console.log("ACTION fetchKpiUserAssignments: Examining response.data"); // Log để biết response.data có gì
+        console.log(
+          "ACTION fetchKpiUserAssignments: Is response.data an array?",
+          Array.isArray(response.data)
+        ); // Kiểm tra response.data có phải mảng không
+        console.log(
+          "ACTION fetchKpiUserAssignments: Is response.data.data an array?",
+          Array.isArray(response.data.data)
+        ); // Kiểm tra response.data.data có phải mảng không
+
+        if (Array.isArray(response.data.data)) {
+          // Trường hợp 1: Dữ liệu nằm trong response.data.data (cấu trúc { data: [...] })
+          console.log(
+            "ACTION fetchKpiUserAssignments: Extracting from response.data.data"
+          );
+          assignments = response.data.data;
+        } else if (Array.isArray(response.data)) {
+          // Trường hợp 2: Dữ liệu là mảng trực tiếp trong response.data (cấu trúc [...] )
+          console.log(
+            "ACTION fetchKpiUserAssignments: Extracting from response.data directly"
+          );
+          assignments = response.data;
+        } else {
+          // Trường hợp 3: Cấu trúc không mong muốn
+          console.warn(
+            "ACTION fetchKpiUserAssignments: Unexpected response data structure.",
+            response.data
+          );
+        }
+      } else {
+        console.warn(
+          "ACTION fetchKpiUserAssignments: response.data is null or undefined."
+        );
+      }
+
       console.log(
         "ACTION fetchKpiUserAssignments: Extracted assignments data:",
         assignments
-      ); // <-- LOG ACTION 4
+      );
 
-      commit("SET_KPI_USER_ASSIGNMENTS", assignments); // <-- Mutation called here
+      commit("SET_KPI_USER_ASSIGNMENTS", assignments);
       console.log(
         "ACTION fetchKpiUserAssignments: SET_KPI_USER_ASSIGNMENTS mutation committed."
-      ); // <-- LOG ACTION 5
+      );
 
       return assignments;
     } catch (error) {
       // ... (error handling) ...
-      console.error("ACTION fetchKpiUserAssignments: Error:", error); // <-- LOG ACTION ERROR
+      console.error("ACTION fetchKpiUserAssignments: Error:", error);
+      commit("SET_USER_ASSIGNMENT_ERROR", error);
+      commit("SET_KPI_USER_ASSIGNMENTS", []); // Clear list state on error
       throw error;
     } finally {
       commit("SET_USER_ASSIGNMENT_LOADING", false);
@@ -547,6 +645,11 @@ const actions = {
         assignmentsPayload // <== Payload { assignments: [{ user_id, target, weight }] }
       );
       notification.success({ message: "User Assignment saved successfully!" }); // Success notification
+
+      console.log(
+        "ACTION saveUserAssignments: Backend save response received:",
+        response
+      ); // <-- LOG FRONTEND SAVE RESPONSE
 
       // Refresh assignments list after save
       await dispatch("fetchKpiUserAssignments", kpiId); // Refresh the list displayed in tables

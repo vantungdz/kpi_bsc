@@ -45,7 +45,7 @@ class AssignmentsDTO {
   toDepartments: DepartmentDTO[];
 
   @IsOptional()
-  @IsNumber({}, { each: true })
+  @IsNumber({})
   @Expose({ name: 'assigned_to_employee' })
   employeeId?: number;
 }

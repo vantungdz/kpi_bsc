@@ -7,10 +7,13 @@ import {
   Param,
   Body,
   NotFoundException,
+  Req,
 } from '@nestjs/common';
 import { KpiValuesService } from './kpi-values.service';
 import { KpiValue } from '../entities/kpi-value.entity';
 import { KpiValueHistory } from '../entities/kpi-value-history.entity';
+import { Request } from 'express';
+import { Employee } from '../entities/employee.entity';
 
 @Controller('kpi-values')
 export class KpiValuesController {
@@ -64,6 +67,26 @@ export class KpiValuesController {
     if (!result) {
       throw new NotFoundException(`KPI Value with ID ${id} not found`);
     }
+  }
+
+  @Post('assignments/:assignmentId/updates')
+  async submitProgressUpdate(
+    @Param('assignmentId') assignmentId: string,
+    @Body()
+    updateData: {
+      notes: string;
+      project_details: any[];
+      overallValue?: number;
+    }, // overallValue là tùy chọn
+    @Req() req: Request & { user?: Employee },
+  ): Promise<KpiValue> {
+    const userId = req.user?.id || 1;
+    return this.kpiValuesService.submitProgressUpdate(
+      Number(assignmentId),
+      updateData.notes,
+      updateData.project_details,
+      userId,
+    );
   }
 
   @Get(':id/history')

@@ -21,58 +21,64 @@
         <router-link to="/kpis/section">Section KPI List</router-link>
       </a-menu-item>
 
-      <a-menu-item key="5" v-if="canViewIndividualList">
+      <!-- <a-menu-item key="5" v-if="canViewIndividualList">
         <router-link to="/kpis/individual">Individual KPI List</router-link>
-      </a-menu-item>
+      </a-menu-item> -->
 
-       <a-menu-item key="6" v-if="effectiveRole">
+      <a-menu-item key="6" v-if="effectiveRole">
         <router-link to="/personal">My Personal KPIs</router-link>
       </a-menu-item>
 
-       <a-sub-menu key="admin" v-if="isAdmin">
-          <template #title>
-            <span><setting-outlined /><span>Administration</span></span>
-          </template>
-          <a-menu-item key="admin-users">
-             <router-link to="/admin/users">User Management</router-link>
-           </a-menu-item>
-           <a-menu-item key="admin-roles">
-             <router-link to="/admin/roles">Role Management</router-link>
-           </a-menu-item>
-       </a-sub-menu>
-
+      <a-sub-menu key="admin" v-if="isAdmin">
+        <template #title>
+          <span><setting-outlined /><span>Administration</span></span>
+        </template>
+        <a-menu-item key="admin-users">
+          <router-link to="/admin/users">User Management</router-link>
+        </a-menu-item>
+        <a-menu-item key="admin-roles">
+          <router-link to="/admin/roles">Role Management</router-link>
+        </a-menu-item>
+      </a-sub-menu>
     </a-menu>
-     </a-layout-sider>
+  </a-layout-sider>
 </template>
 
 <script setup>
-import { computed } from 'vue';
-import { useStore } from 'vuex';
+import { computed } from "vue";
+import { useStore } from "vuex";
 // Import Ant Design components và icons
-import { LayoutSider as ALayoutSider, Menu as AMenu, MenuItem as AMenuItem, SubMenu as ASubMenu } from 'ant-design-vue';
-import { SettingOutlined } from '@ant-design/icons-vue';
+import {
+  LayoutSider as ALayoutSider,
+  Menu as AMenu,
+  MenuItem as AMenuItem,
+  SubMenu as ASubMenu,
+} from "ant-design-vue";
+import { SettingOutlined } from "@ant-design/icons-vue";
 
 const store = useStore();
 
 // Chỉ cần lấy effectiveRole từ store
-const effectiveRole = computed(() => store.getters['auth/effectiveRole']);
+const effectiveRole = computed(() => store.getters["auth/effectiveRole"]);
 // const isAuthenticated = computed(() => store.getters['auth/isAuthenticated']); // <<< Bỏ qua getter này
 
 // === Computed Properties để kiểm tra quyền (Vẫn dựa trên effectiveRole) ===
-const isAdmin = computed(() => effectiveRole.value === 'admin');
+const isAdmin = computed(() => effectiveRole.value === "admin");
 // const isCompany = computed(() => effectiveRole.value === 'company');
 // const isDepartment = computed(() => effectiveRole.value === 'department');
 // const isSection = computed(() => effectiveRole.value === 'section');
 // const isEmployee = computed(() => effectiveRole.value === 'employee');
 
 // Quyền xem các mục menu (Chỉ dựa vào effectiveRole)
-const canViewCompanyLevel = computed(() => ['admin', 'manager', 'department', 'section'].includes(effectiveRole.value));
-const canViewDepartmentLevel = computed(() => ['admin', 'manager', 'department', 'section'].includes(effectiveRole.value));
-const canViewSectionLevel = computed(() => ['admin', 'manager', 'department', 'section'].includes(effectiveRole.value));
-const canViewIndividualList = computed(() => ['admin', 'manager', 'department', 'section'].includes(effectiveRole.value));
-
-// =========================================
-
+const canViewCompanyLevel = computed(() =>
+  ["admin", "manager", "department", "section"].includes(effectiveRole.value)
+);
+const canViewDepartmentLevel = computed(() =>
+  ["admin", "manager", "department", "section"].includes(effectiveRole.value)
+);
+const canViewSectionLevel = computed(() =>
+  ["admin", "manager", "department", "section"].includes(effectiveRole.value)
+);
 </script>
 
 <style scoped>
@@ -108,17 +114,21 @@ const canViewIndividualList = computed(() => ['admin', 'manager', 'department', 
 }
 
 :deep(.ant-menu-light .ant-menu-item a) {
-    color: rgba(0, 0, 0, 0.85);
+  color: rgba(0, 0, 0, 0.85);
 }
 :deep(.ant-menu-light .ant-menu-item-selected a),
 :deep(.ant-menu-light .ant-menu-item a:hover) {
-    color: var(--brand-primary);
+  color: var(--brand-primary);
 }
 :deep(.ant-menu-light .ant-menu-item-selected) {
-    background-color: color-mix(in srgb, var(--brand-primary) 10%, transparent) !important;
+  background-color: color-mix(
+    in srgb,
+    var(--brand-primary) 10%,
+    transparent
+  ) !important;
 }
 :deep(.ant-menu-light .ant-menu-submenu-title:hover) {
-    color: var(--brand-primary);
+  color: var(--brand-primary);
 }
 
 /* .logged-out-message {
@@ -126,5 +136,4 @@ const canViewIndividualList = computed(() => ['admin', 'manager', 'department', 
     text-align: center;
     color: #888;
 } */
-
 </style>

@@ -1,21 +1,44 @@
 <template>
   <div v-if="canAccessCreatePage">
-    <a-form ref="formRef" :model="form" :rules="formRules" layout="vertical" @finish="handleChangeCreate"
-      @finishFailed="onFinishFailed">
+    <a-form
+      ref="formRef"
+      :model="form"
+      :rules="formRules"
+      layout="vertical"
+      @finish="handleChangeCreate"
+      @finishFailed="onFinishFailed"
+    >
       <a-row :gutter="12">
         <a-col :span="12">
-          <a-form-item label="Use Existing KPI as Template (Optional)" name="templateKpi">
-            <a-select v-model:value="selectedTemplateKpiId" placeholder="Select a KPI to use as template..." show-search
-              allow-clear :options="kpiTemplateOptions" :filter-option="(input, option) =>
+          <a-form-item
+            label="Use Existing KPI as Template (Optional)"
+            name="templateKpi"
+          >
+            <a-select
+              v-model:value="selectedTemplateKpiId"
+              placeholder="Select a KPI to use as template..."
+              show-search
+              allow-clear
+              :options="kpiTemplateOptions"
+              :filter-option="
+                (input, option) =>
                   option.label.toLowerCase().includes(input.toLowerCase())
-                " :loading="loadingKpiTemplates" style="width: 100%; margin-bottom: 15px" @change="loadKpiTemplate" />
+              "
+              :loading="loadingKpiTemplates"
+              style="width: 100%; margin-bottom: 15px"
+              @change="loadKpiTemplate"
+            />
           </a-form-item>
         </a-col>
       </a-row>
       <a-form-item class="textLabel" label="Perspective" name="perspective_id">
         <a-select v-model:value="form.perspective_id" placeholder="Perspective">
-          <a-select-option v-for="perspective in perspectiveList" :key="perspective.id" :value="perspective.id">{{
-            perspective.name }}</a-select-option>
+          <a-select-option
+            v-for="perspective in perspectiveList"
+            :key="perspective.id"
+            :value="perspective.id"
+            >{{ perspective.name }}</a-select-option
+          >
         </a-select>
       </a-form-item>
       <a-row :gutter="12">
@@ -25,54 +48,82 @@
           </a-form-item>
         </a-col>
         <a-col :span="12">
-          <a-form-item class="textLabel" label="Calculation Formula" name="calculation_type">
-            <a-select v-model:value="form.calculation_type" placeholder="Chọn Calculation Formula">
-              <a-select-option v-for="formula in formulaList" :key="formula.id" :value="formula.id">
+          <a-form-item
+            class="textLabel"
+            label="Calculation Formula"
+            name="calculation_type"
+          >
+            <a-select
+              v-model:value="form.calculation_type"
+              placeholder="Chọn Calculation Formula"
+            >
+              <a-select-option
+                v-for="formula in formulaList"
+                :key="formula.id"
+                :value="formula.id"
+              >
                 {{ formula.name }}
               </a-select-option>
             </a-select>
           </a-form-item>
         </a-col>
       </a-row>
+
       <a-row :gutter="12">
         <a-col :span="12">
           <a-form-item class="textLabel" label="Type" name="type">
             <a-select v-model:value="form.type" placeholder="Type KPI">
               <a-select-option value="efficiency"> Hiệu suất </a-select-option>
+
               <a-select-option value="qualitative"> Định Tính </a-select-option>
             </a-select>
           </a-form-item>
         </a-col>
+
         <a-col :span="12">
           <a-form-item class="textLabel" label="Unit" name="unit">
             <a-select v-model:value="form.unit" placeholder="Unit">
               <a-select-option value="MM"> MM </a-select-option>
+
               <a-select-option value="Point"> Point </a-select-option>
               <a-select-option value="Product"> Product </a-select-option>
+
               <a-select-option value="Project"> Project </a-select-option>
+
               <a-select-option value="Certification">
                 Certification
               </a-select-option>
+
               <a-select-option value="Article"> Article </a-select-option>
+
               <a-select-option value="Person"> Person </a-select-option>
             </a-select>
           </a-form-item>
         </a-col>
       </a-row>
+
       <a-row :gutter="12">
         <a-col :span="12">
           <a-form-item class="textLabel" label="Target" name="target">
-            <a-input v-model:value="form.target" placeholder="Target"
-              @input="(event) => handleNumericInput('target', event)" />
+            <a-input
+              v-model:value="form.target"
+              placeholder="Target"
+              @input="(event) => handleNumericInput('target', event)"
+            />
           </a-form-item>
         </a-col>
+
         <a-col :span="12">
           <a-form-item class="textLabel" label="Weight (%)" name="weight">
-            <a-input v-model:value="form.weight" placeholder="Weight"
-              @input="(event) => handleNumericInput('weight', event)" />
+            <a-input
+              v-model:value="form.weight"
+              placeholder="Weight"
+              @input="(event) => handleNumericInput('weight', event)"
+            />
           </a-form-item>
         </a-col>
       </a-row>
+
       <a-form-item class="textLabel" label="Frequency" name="frequency">
         <a-select v-model:value="form.frequency" placeholder="Frequency">
           <a-select-option value="daily"> Daily </a-select-option>
@@ -82,54 +133,150 @@
           <a-select-option value="yearly"> Yearly </a-select-option>
         </a-select>
       </a-form-item>
+
       <a-row :gutter="12">
         <a-col :span="6">
           <a-form-item class="textLabel" label="Date Start" name="start_date">
-            <a-date-picker v-model:value="form.start_date" style="width: 100%" value-format="YYYY-MM-DD" />
+            <a-date-picker
+              v-model:value="form.start_date"
+              style="width: 100%"
+              value-format="YYYY-MM-DD"
+            />
           </a-form-item>
         </a-col>
+
         <a-col :span="6">
-          <a-form-item class="textLabel" label="Date End" name="end_date" :rules="[{ validator: validateEndDate }]">
-            <a-date-picker v-model:value="form.end_date" style="width: 100%" value-format="YYYY-MM-DD" />
+          <a-form-item
+            class="textLabel"
+            label="Date End"
+            name="end_date"
+            :rules="[{ validator: validateEndDate }]"
+          >
+            <a-date-picker
+              v-model:value="form.end_date"
+              style="width: 100%"
+              value-format="YYYY-MM-DD"
+            />
           </a-form-item>
         </a-col>
       </a-row>
+
       <a-form-item class="textLabel" label="Description" name="description">
-        <a-textarea v-model:value="form.description" placeholder="Description" allow-clear />
+        <a-textarea
+          v-model:value="form.description"
+          placeholder="Description"
+          allow-clear
+        />
       </a-form-item>
-      <a-row :gutter="12" style="
+
+      <a-row
+        :gutter="12"
+        style="
           margin-top: -10px;
           margin-bottom: 16px;
           background: #f0f2f5;
           padding: 8px;
           border-radius: 4px;
-        ">
+        "
+      >
         <a-col :span="8">
-          <a-statistic title="Overall Target" :value="overallTargetValue" :precision="2" />
+          <a-statistic
+            title="Overall Target"
+            :value="overallTargetValue"
+            :precision="2"
+          />
         </a-col>
+
         <a-col :span="8">
-          <a-statistic title="Total Assigned" :value="totalAssignedTarget" :precision="2" />
+          <a-statistic
+            title="Total Assigned"
+            :value="totalAssignedTarget"
+            :precision="2"
+          />
         </a-col>
+
         <a-col :span="8">
-          <a-statistic title="Remaining" :value="remainingTarget" :precision="2"
-            :value-style="isOverAssigned ? { color: '#cf1322' } : {}" />
+          <a-statistic
+            title="Remaining"
+            :value="remainingTarget"
+            :precision="2"
+            :value-style="isOverAssigned ? { color: '#cf1322' } : {}"
+          />
         </a-col>
       </a-row>
-      <a-form-item v-if="canAssignToUnits" class="textLabel" label="Assign To Department/Section & Set Targets"
-        name="section_id_table" help="Use this table to assign the KPI down and set targets." :extra="form.assigned_user_id ? 'Direct user assignment will be cleared.' : ''
-          ">
-        <a-alert v-if="assignmentError" :message="assignmentError" type="error" show-icon style="margin-bottom: 10px" />
-        <a-table :columns="columns" :data-source="departmentTreeData" :pagination="false"
-          :row-key="(record) => record.key" :expandable="{ childrenColumnName: 'children' }"
-          :row-selection="rowSelection" :class="{ 'table-disabled': !!form.assigned_user_id }" size="small" bordered>
+
+      <a-form-item
+        v-if="canAssignToUnits"
+        class="textLabel"
+        label="Assign To Department/Section & Set Targets"
+        name="section_id_table"
+        help="Use this table to assign the KPI down and set targets."
+        :extra="
+          form.assigned_user_id ? 'Direct user assignment will be cleared.' : ''
+        "
+      >
+        <a-alert
+          v-if="assignmentError"
+          :message="assignmentError"
+          type="error"
+          show-icon
+          style="margin-bottom: 10px"
+        />
+
+        <a-table
+          :columns="columns"
+          :data-source="departmentTreeData"
+          :pagination="false"
+          :row-key="(record) => record.key"
+          :expandable="{ childrenColumnName: 'children' }"
+          :row-selection="rowSelection"
+          :class="{ 'table-disabled': !!form.assigned_user_id }"
+          size="small"
+          bordered
+        >
           <template #target="{ record }">
-            <a-input-number :value="targetValues[record.key] || null" placeholder="Target" :min="0" style="width: 100%"
-              :disabled="!!form.assigned_user_id ||
-                !selectedRowKeys.includes(record.key)
-                " :formatter="(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
-                " :parser="(value) => String(value).replace(/\$\s?|(,*)/g, '')"
-              @change="(value) => handleTargetChange(record.key, value)" />
+            <template v-if="record.type === 'department'">
+              <a-input-number
+                v-if="!hasSelectedSections(record.key)"
+                :value="form.targets[record.key]"
+                placeholder="Target"
+                :min="0"
+                style="width: 100%"
+                :disabled="
+                  !!form.assigned_user_id ||
+                  !selectedRowKeys.includes(record.key)
+                "
+                :formatter="
+                  (value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+                "
+                :parser="(value) => String(value).replace(/\$\s?|(,*)/g, '')"
+                @change="(value) => handleTargetChange(record.key, value)"
+              />
+
+              <span v-else>
+                {{ formatNumber(calculatedDepartmentTargets[record.key] || 0) }}
+              </span>
+            </template>
+
+            <template v-else-if="record.type === 'section'">
+              <a-input-number
+                :value="form.targets[record.key]"
+                placeholder="Target"
+                :min="0"
+                style="width: 100%"
+                :disabled="
+                  !!form.assigned_user_id ||
+                  !selectedRowKeys.includes(record.key)
+                "
+                :formatter="
+                  (value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+                "
+                :parser="(value) => String(value).replace(/\$\s?|(,*)/g, '')"
+                @change="(value) => handleTargetChange(record.key, value)"
+              />
+            </template>
           </template>
+
           <template #bodyCell="{ column, record }">
             <template v-if="column.key === 'name'">
               <span :style="{ opacity: form.assigned_user_id ? 0.5 : 1 }">
@@ -139,12 +286,19 @@
           </template>
         </a-table>
       </a-form-item>
+
       <a-form-item>
         <a-row justify="end" style="margin-top: 10px">
           <a-button style="margin-right: 10px" @click="resetForm(true)">
             Clear Form
           </a-button>
-          <a-button style="margin-right: 10px" type="primary" html-type="submit" :loading="loading">
+
+          <a-button
+            style="margin-right: 10px"
+            type="primary"
+            html-type="submit"
+            :loading="loading"
+          >
             Save KPI
           </a-button>
           <a-button type="default" @click="goBack"> Back </a-button>
@@ -152,9 +306,15 @@
       </a-form-item>
     </a-form>
   </div>
+
   <div v-else>
-    <a-alert message="Access Denied"
-      description="You do not have permission to create KPIs with the current role/scope." type="error" show-icon />
+    <a-alert
+      message="Access Denied"
+      description="You do not have permission to create KPIs with the current role/scope."
+      type="error"
+      show-icon
+    />
+
     <a-button type="default" style="margin-top: 15px" @click="goBack">
       Back
     </a-button>
@@ -201,6 +361,7 @@ const assignmentError = ref(null);
 const formRef = ref();
 const selectedTemplateKpiId = ref(null);
 const loadingKpiTemplate = ref(false);
+const departmentTreeData = ref([]);
 
 // Form state - Thêm key 'targets'
 const form = ref({
@@ -245,32 +406,88 @@ const rawSections = computed(() => store.getters["sections/sectionList"] || []);
 const perspectiveList = computed(
   () => store.getters["perspectives/perspectiveList"] || []
 );
-const kpiTemplateList = computed(
-  () => store.getters["kpis/kpiListAll"] || []
-);
+const kpiTemplateList = computed(() => store.getters["kpis/kpiListAll"] || []);
 const loadingKpiTemplates = computed(() => store.getters["kpis/loadingAll"]);
 
-const departmentTreeData = ref([]);
+const calculatedDepartmentTargets = computed(() => {
+  const sums = {};
+  departmentTreeData.value.forEach((department) => {
+    let departmentSum = 0;
+    let hasSelectedChildrenWithTargets = false;
+
+    // Chỉ tính tổng nếu department này có section con
+    if (department.children && department.children.length > 0) {
+      department.children.forEach((section) => {
+        const sectionKey = `section - ${section.id}`;
+        // Kiểm tra nếu section được chọn VÀ có target hợp lệ
+        if (selectedRowKeys.value.includes(sectionKey)) {
+          const sectionTarget = form.value.targets[sectionKey];
+          if (
+            sectionTarget !== undefined &&
+            sectionTarget !== null &&
+            !isNaN(sectionTarget) &&
+            parseFloat(sectionTarget) >= 0
+          ) {
+            departmentSum += parseFloat(sectionTarget);
+            hasSelectedChildrenWithTargets = true;
+          }
+        }
+      });
+    }
+
+    const departmentKey = `department - ${department.id}`;
+    // Lưu tổng tính toán nếu có section con được chọn và có target
+    if (hasSelectedChildrenWithTargets) {
+      sums[departmentKey] = departmentSum;
+    }
+    // Nếu không có section con được chọn, không lưu tổng tính toán ở đây.
+    // Giá trị target của department sẽ lấy từ form.value.targets (nếu được nhập thủ công)
+  });
+  return sums;
+});
+
+const hasSelectedSections = computed(() => (departmentKey) => {
+  const department = departmentTreeData.value.find(
+    (d) => d.key === departmentKey
+  );
+  if (!department || !department.children) return false;
+  return department.children.some((section) =>
+    selectedRowKeys.value.includes(`section - ${section.id}`)
+  );
+});
+
+const formatNumber = (value) => {
+  if (value === null || value === undefined || isNaN(value)) return "";
+  // Sử dụng toLocaleString để format với dấu phẩy
+  // Bạn có thể điều chỉnh 'en-US' sang locale phù hợp nếu cần
+  return parseFloat(value).toLocaleString("en-US", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  });
+};
 
 const loadDepartmentTreeData = async () => {
   const departmentsList = departments.value || [];
   const result = [];
 
   for (const dept of departmentsList) {
-    const sections = await store.dispatch('sections/fetchSectionsByDepartment', dept.id);
+    const sections = await store.dispatch(
+      "sections/fetchSectionsByDepartment",
+      dept.id
+    );
 
     const node = {
       key: `department - ${dept.id}`,
       id: dept.id,
       name: dept.name,
-      type: 'department',
-      children: (sections || []).map(section => ({
+      type: "department",
+      children: (sections || []).map((section) => ({
         key: `section - ${section.id}`,
         id: section.id,
         name: section.name,
-        type: 'section',
-        parentId: dept.id
-      }))
+        type: "section",
+        parentId: dept.id,
+      })),
     };
 
     result.push(node);
@@ -304,9 +521,9 @@ const canAssignToUnits = computed(() => {
     creationScope.value === "company"
   );
 });
-const isAssigningToUnits = computed(
-  () => canAssignToUnits.value && selectedRowKeys.value.length > 0
-);
+// const isAssigningToUnits = computed(
+//   () => canAssignToUnits.value && selectedRowKeys.value.length > 0
+// );
 // ====================================
 
 // Cấu hình cột bảng Assign
@@ -459,7 +676,9 @@ const totalAssignedTarget = computed(() => {
 
 const remainingTarget = computed(() => {
   // Làm tròn để tránh lỗi dấu phẩy động nhỏ
-  return parseFloat((overallTargetValue.value - totalAssignedTarget.value).toFixed(5));
+  return parseFloat(
+    (overallTargetValue.value - totalAssignedTarget.value).toFixed(5)
+  );
 });
 
 const isOverAssigned = computed(() => {
@@ -545,19 +764,20 @@ const loadKpiTemplate = async (selectedId) => {
 const handleTargetChange = (key, value) => {
   const targetKey = String(key);
   if (form.value.assigned_user_id) return;
+
   if (value === null || value === "" || isNaN(value)) {
-    delete targetValues.value[targetKey];
-    delete form.value.targets[targetKey];
+    delete targetValues.value[targetKey]; // Có thể giữ lại targetValues để hiển thị nếu cần
+    delete form.value.targets[targetKey]; // Quan trọng: xóa giá trị khỏi form model
   } else {
     const numValue = parseFloat(value);
-    targetValues.value[targetKey] = numValue;
-    form.value.targets[targetKey] = numValue;
+    targetValues.value[targetKey] = numValue; // Cập nhật giá trị hiển thị
+    form.value.targets[targetKey] = numValue; // Cập nhật giá trị trong form model
   }
-  formRef.value?.validateFields([["targets", targetKey]]);
-  if (!isAssigningToUnits.value && form.value.assigned_user_id === null) {
-    formRef.value?.validateFields(["assigned_user_id"]).catch(() => { });
-  }
-}; // Validate để xóa lỗi nếu có } };
+
+  formRef.value?.validateFields([["targets", targetKey]]); // Trigger validation cho toàn bộ form assignment để kiểm tra tổng/còn lại và các lỗi khác
+  formRef.value?.validateFields(["section_id_table"]).catch(() => {});
+};
+
 const handleNumericInput = (field, event) => {
   let value = event.target.value;
   value = value.replace(/[^0-9.]/g, "");
@@ -587,7 +807,7 @@ const handleChangeCreate = async () => {
   assignmentError.value = null;
 
   try {
-    await formRef.value?.validate(); // Validate form trước
+    await formRef.value?.validate(); // Validate form trước (các trường cơ bản)
 
     const assignmentsPayload = {
       from: creationScope.value,
@@ -595,112 +815,152 @@ const handleChangeCreate = async () => {
       to_departments: [],
       to_user: null,
     };
-    const departmentTargets = new Map();
     let hasValidAssignment = false;
     let missingTargetError = false;
+    const assignedDepartmentIds = new Set(); // Theo dõi các department thực sự được gán (có target)
 
     if (form.value.assigned_user_id && canAssignDirectlyToUser.value) {
       assignmentsPayload.to_user = { id: form.value.assigned_user_id };
       hasValidAssignment = true;
     } else if (selectedRowKeys.value?.length > 0 && canAssignToUnits.value) {
+      // Xử lý các Section trước: Kiểm tra target và thêm vào payload
       selectedRowKeys.value.forEach((key) => {
-        const targetValue = form.value.targets[key];
-        const isTargetEnteredAndValid =
-          targetValue !== undefined &&
-          targetValue !== null &&
-          !isNaN(targetValue) &&
-          targetValue >= 0;
-        const numericTarget = isTargetEnteredAndValid
-          ? Number(targetValue)
-          : null;
-
         if (key.startsWith("section - ")) {
           const sectionId = parseInt(key.split(" - ")[1], 10);
+          const targetValue = form.value.targets[key]; // Lấy target từ form model
+
+          const isTargetEnteredAndValid =
+            targetValue !== undefined &&
+            targetValue !== null &&
+            !isNaN(targetValue) &&
+            parseFloat(targetValue) >= 0; // Dùng parseFloat để so sánh
+
           if (!isNaN(sectionId)) {
             if (isTargetEnteredAndValid) {
-              const sectionData = rawSections.value.find((s) => s.id === sectionId);
-              const departmentId = sectionData?.department_id;
-
               assignmentsPayload.to_sections.push({
                 id: sectionId,
-                target: numericTarget,
+                target: parseFloat(targetValue), // Gửi số
               });
-              if (departmentId && !departmentTargets.has(departmentId)) {
-                departmentTargets.set(departmentId, numericTarget);
-              }
               hasValidAssignment = true;
-              if (
-                sectionData?.department_id &&
-                !departmentTargets.has(sectionData.department_id)
-              ) {
-                departmentTargets.set(sectionData.department_id, null);
+              // Đánh dấu department cha là được gán (để xử lý sau)
+              const sectionData = rawSections.value.find(
+                (s) => s.id === sectionId
+              );
+              if (sectionData?.department_id) {
+                assignedDepartmentIds.add(sectionData.department_id);
               }
             } else {
-              missingTargetError = true;
-            }
-          }
-        } else if (key.startsWith("department - ")) {
-          // <<< Thêm dấu cách
-          const departmentId = parseInt(key.split(" - ")[1], 10); // <<< Split bằng ' - '
-          if (!isNaN(departmentId)) {
-            if (isTargetEnteredAndValid) {
-              departmentTargets.set(departmentId, numericTarget);
-              hasValidAssignment = true;
-            } else if (
-              selectedRowKeys.value.includes(key) &&
-              !departmentTargets.has(departmentId)
-            ) {
-              departmentTargets.set(departmentId, null);
-            }
-            // Logic kiểm tra lỗi thiếu target cho department cha (nếu cần)
-            const childSections =
-              departmentTreeData.value.find((d) => d.id === departmentId)
-                ?.children;
-            const selectedChildKeys = childSections
-              .map((s) => `section - ${s.id}`)
-              .filter((k) => selectedRowKeys.value.includes(k));
-            const hasValidChildTarget = selectedChildKeys.some((k) => {
-              const childTarget = form.value.targets[k]; // Đọc từ form model
-              return (
-                childTarget !== undefined &&
-                childTarget !== null &&
-                !isNaN(childTarget) &&
-                childTarget >= 0
-              );
-            });
-            if (
-              selectedRowKeys.value.includes(key) &&
-              !isTargetEnteredAndValid &&
-              (!selectedChildKeys.length || !hasValidChildTarget)
-            ) {
+              // Section được chọn nhưng thiếu target
               missingTargetError = true;
             }
           }
         }
-        // =================================
       });
 
-      // Tạo mảng to_departments từ map
-      departmentTargets.forEach((target, id) => {
-        assignmentsPayload.to_departments.push({ id: id, target: target });
+      // Xử lý các Department: Kiểm tra target DỰA TRÊN việc có section con được chọn hay không
+      departmentTreeData.value.forEach((department) => {
+        const departmentKey = `department - ${department.id}`;
+        const departmentId = department.id;
+
+        // Kiểm tra xem department này có được chọn hay không
+        const isDepartmentExplicitlySelected =
+          selectedRowKeys.value.includes(departmentKey);
+
+        // Kiểm tra xem department này có section con nào được chọn hay không
+        const hasAnySelectedChildSection =
+          hasSelectedSections.value(departmentKey); // Sử dụng helper đã tạo
+
+        if (
+          isDepartmentExplicitlySelected ||
+          assignedDepartmentIds.has(departmentId)
+        ) {
+          // Department này được chọn (trực tiếp hoặc gián tiếp qua section con)
+          if (hasAnySelectedChildSection) {
+            // Nếu có section con được chọn, target của department là tổng target của các section con
+            const calculatedSum =
+              calculatedDepartmentTargets.value[departmentKey] || 0;
+            // Chỉ thêm department vào payload nếu nó có section con được gán target
+            if (
+              assignmentsPayload.to_sections.some((s) => {
+                const sectionData = rawSections.value.find(
+                  (rs) => rs.id === s.id
+                );
+                return sectionData?.department_id === departmentId;
+              })
+            ) {
+              assignmentsPayload.to_departments.push({
+                id: departmentId,
+                target: calculatedSum, // Gửi tổng tính toán
+              });
+              hasValidAssignment = true; // Đã có ít nhất 1 section hoặc department được gán target
+            } else {
+              // Department được chọn nhưng không có section con nào được gán target hợp lệ
+              // Điều này có thể xảy ra nếu user chọn department và các section con nhưng không nhập target cho section
+              // Lỗi này đã được bắt ở vòng lặp section, nhưng cần đảm bảo department không bị bỏ qua nếu nó tự đứng một mình
+              if (
+                isDepartmentExplicitlySelected &&
+                !hasAnySelectedChildSection
+              ) {
+                // Nếu department được chọn RÕ RÀNG và KHÔNG có section con nào được chọn/có target,
+                // thì nó cần target riêng của nó
+                const targetValue = form.value.targets[departmentKey];
+                const isTargetEnteredAndValid =
+                  targetValue !== undefined &&
+                  targetValue !== null &&
+                  !isNaN(targetValue) &&
+                  parseFloat(targetValue) >= 0;
+
+                if (isTargetEnteredAndValid) {
+                  assignmentsPayload.to_departments.push({
+                    id: departmentId,
+                    target: parseFloat(targetValue),
+                  });
+                  hasValidAssignment = true;
+                } else {
+                  missingTargetError = true; // Department được chọn một mình mà thiếu target
+                }
+              }
+            }
+          } else {
+            // Nếu KHÔNG có section con được chọn, department này cần target riêng (nếu nó được chọn)
+            if (isDepartmentExplicitlySelected) {
+              const targetValue = form.value.targets[departmentKey];
+              const isTargetEnteredAndValid =
+                targetValue !== undefined &&
+                targetValue !== null &&
+                !isNaN(targetValue) &&
+                parseFloat(targetValue) >= 0;
+
+              if (isTargetEnteredAndValid) {
+                assignmentsPayload.to_departments.push({
+                  id: departmentId,
+                  target: parseFloat(targetValue),
+                });
+                hasValidAssignment = true;
+              } else {
+                missingTargetError = true; // Department được chọn một mình mà thiếu target
+              }
+            }
+          }
+        }
       });
 
-      // Kiểm tra lỗi thiếu target cuối cùng
       if (missingTargetError) {
         assignmentError.value =
-          "Please enter a valid Target (>= 0) for all selected items.";
+          "Vui lòng nhập Target hợp lệ (>= 0) cho tất cả các mục đã chọn (các bộ phận hoặc các phòng ban không có bộ phận con được gán target).";
         throw new Error(assignmentError.value);
       }
-    }
+    } // Kiểm tra cuối cùng (dùng hasValidAssignment)
+    // Bỏ kiểm tra assignmentsPayload.to_user vì assigned_user_id đã được check riêng
 
-    // Kiểm tra cuối cùng (dùng hasValidAssignment)
-    if (!assignmentsPayload.to_user && !hasValidAssignment) {
+    // Chúng ta chỉ cần check xem có ít nhất một assignment hợp lệ được tạo hay không
+    if (!hasValidAssignment && !form.value.assigned_user_id) {
+      // Kiểm tra thêm form.value.assigned_user_id
       assignmentError.value =
-        "Assignment Required: Please assign to a user OR select at least one unit and enter its target.";
+        "Yêu cầu gán: Vui lòng gán cho một người dùng HOẶC chọn ít nhất một đơn vị (phòng ban hoặc bộ phận) và nhập target của nó.";
       throw new Error(assignmentError.value);
-    }
+    } // ----- Format và Tạo Payload Cuối Cùng -----
 
-    // ----- Format và Tạo Payload Cuối Cùng -----
     const formattedStartDate = form.value.start_date
       ? dayjs(form.value.start_date).toISOString()
       : null;
@@ -708,15 +968,18 @@ const handleChangeCreate = async () => {
       ? dayjs(form.value.end_date).toISOString()
       : null;
     const numericMainTarget =
-      form.value.target !== null && !isNaN(form.value.target)
-        ? Number(form.value.target)
+      form.value.target !== null &&
+      form.value.target !== "" &&
+      !isNaN(form.value.target)
+        ? Number(form.value.target) // Sử dụng Number để đảm bảo kiểu số
         : null;
     const numericMainWeight =
-      form.value.weight !== null && !isNaN(form.value.weight)
-        ? Number(form.value.weight)
-        : null;
+      form.value.weight !== null &&
+      form.value.weight !== "" &&
+      !isNaN(form.value.weight)
+        ? Number(form.value.weight) // Sử dụng Number để đảm bảo kiểu số
+        : null; // ---- Tạo dữ liệu KPI cuối cùng ----
 
-    // ---- Tạo dữ liệu KPI cuối cùng ----
     const kpiData = {
       name: form.value.name,
       calculation_type: form.value.calculation_type,
@@ -746,8 +1009,7 @@ const handleChangeCreate = async () => {
     console.log("Submitting KPI Data (Final Structure):", kpiData);
     await store.dispatch("kpis/createKpi", kpiData);
     notification.success({ message: "KPI created successfully" });
-    resetForm(true);
-    // Điều hướng...
+    resetForm(true); // Điều hướng...
     if (creationScope.value === "company") router.push("/kpis/company");
     else if (creationScope.value === "department")
       router.push("/kpis/department");
