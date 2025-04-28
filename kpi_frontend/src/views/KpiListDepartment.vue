@@ -14,28 +14,16 @@
       <a-row :gutter="[22]">
         <a-col :span="6">
           <a-form-item label="Search:">
-            <a-input
-              v-model:value="localFilters.name"
-              placeholder="KPI name..."
-              @pressEnter="applyFilters"
-            />
+            <a-input v-model:value="localFilters.name" placeholder="KPI name..." @pressEnter="applyFilters" />
           </a-form-item>
         </a-col>
 
         <a-col :span="5">
           <a-form-item label="Department:">
-            <a-select
-              v-model:value="localFilters.departmentId"
-              style="width: 100%"
-              @change="applyFilters"
-            >
+            <a-select v-model:value="localFilters.departmentId" style="width: 100%" @change="applyFilters">
               <a-select-option value="">All</a-select-option>
 
-              <a-select-option
-                v-for="department in departmentList"
-                :key="department.id"
-                :value="department.id"
-              >
+              <a-select-option v-for="department in departmentList" :key="department.id" :value="department.id">
                 {{ department.name }}
               </a-select-option>
             </a-select>
@@ -44,21 +32,13 @@
 
         <a-col :span="4">
           <a-form-item label="Start Date:">
-            <a-date-picker
-              v-model:value="localFilters.startDate"
-              style="width: 100%"
-              @change="applyFilters"
-            />
+            <a-date-picker v-model:value="localFilters.startDate" style="width: 100%" @change="applyFilters" />
           </a-form-item>
         </a-col>
 
         <a-col :span="4">
           <a-form-item label="End Date:">
-            <a-date-picker
-              v-model:value="localFilters.endDate"
-              style="width: 100%"
-              @change="applyFilters"
-            />
+            <a-date-picker v-model:value="localFilters.endDate" style="width: 100%" @change="applyFilters" />
           </a-form-item>
         </a-col>
 
@@ -68,11 +48,7 @@
             Apply
           </a-button>
 
-          <a-button
-            style="margin-left: 8px"
-            :loading="loading"
-            @click="resetFilters"
-          >
+          <a-button style="margin-left: 8px" :loading="loading" @click="resetFilters">
             <template #icon><reload-outlined /></template>
             Reset
           </a-button>
@@ -85,93 +61,53 @@
         <template #icon> <a-spin /> </template>
       </a-alert>
 
-      <a-alert
-        v-else-if="error"
-        type="error"
-        :message="error"
-        show-icon
-        closable
-      />
+      <a-alert v-else-if="error" type="error" :message="error" show-icon closable />
 
-      <a-alert
-        v-else-if="isDisplayResult && departmentGroups.length === 0"
-        type="warning"
-        message="No KPIs found matching your criteria."
-        show-icon
-        closable
-      />
+      <a-alert v-else-if="isDisplayResult && departmentGroups.length === 0" type="warning"
+        message="No KPIs found matching your criteria." show-icon closable />
 
-      <a-alert
-        v-if="deletedKpiName"
-        type="success"
-        :message="`KPI '${deletedKpiName}' was deleted successfully!`"
-        show-icon
-        closable
-        @close="deletedKpiName = null"
-      />
+      <a-alert v-if="deletedKpiName" type="success" :message="`KPI '${deletedKpiName}' was deleted successfully!`"
+        show-icon closable @close="deletedKpiName = null" />
     </div>
 
     <div class="data-container">
-      <div
-        v-for="(departmentItem, departmentIndex) in departmentGroups"
-        :key="'dept-' + departmentIndex"
-        class="mb-8"
-      >
+      <div v-for="(departmentItem, departmentIndex) in departmentGroups" :key="'dept-' + departmentIndex" class="mb-8">
         <h4 style="margin-top: 10px" class="text-lg font-bold mb-2">
           {{ `Department: ${departmentItem.department}` }}
         </h4>
 
-        <a-collapse
-          v-model:activeKey="activePanelKeys"
-          expandIconPosition="end"
-        >
-          <a-collapse-panel
-            v-for="(
-              perspectiveGroupRows, perspectiveKey
-            ) in departmentItem.data"
-            :key="'pers-' + departmentIndex + '-' + perspectiveKey"
-            :header="perspectiveKey.split('. ')[1] || perspectiveKey"
-          >
-            <a-table
-              :columns="columns"
-              :dataSource="tableData(perspectiveGroupRows)"
-              :pagination="false"
-              rowKey="key"
-              :rowClassName="rowClassName"
-              size="small"
-              bordered
-            >
+        <a-collapse v-model:activeKey="activePanelKeys" expandIconPosition="end">
+          <a-collapse-panel v-for="(
+perspectiveGroupRows, perspectiveKey
+            ) in departmentItem.data" :key="'pers-' + departmentIndex + '-' + perspectiveKey"
+            :header="perspectiveKey.split('. ')[1] || perspectiveKey">
+            <a-table :columns="columns" :dataSource="tableData(perspectiveGroupRows)" :pagination="false" rowKey="key"
+              :rowClassName="rowClassName" size="small" bordered>
               <template #bodyCell="{ column, record }">
                 <template v-if="column.dataIndex === 'kpiName'">
                   <span>{{ record.kpiName }}</span>
                 </template>
 
                 <template v-else-if="column.dataIndex === 'chart'">
-                  <apexchart
-                    type="donut"
-                    width="120px"
-                    height="100"
-                    :options="{
-                      chart: { height: 100, type: 'donut' },
-                      labels: ['Actual', 'Remaining'],
-                      colors: ['#008FFB', '#B9E5FF'],
-                      dataLabels: {
-                        enabled: true,
-                        style: {
-                          fontSize: '12px',
-                          colors: ['black'],
-                        },
+                  <apexchart type="donut" width="120px" height="100" :options="{
+                    chart: { height: 100, type: 'donut' },
+                    labels: ['Actual', 'Remaining'],
+                    colors: ['#008FFB', '#B9E5FF'],
+                    dataLabels: {
+                      enabled: true,
+                      style: {
+                        fontSize: '12px',
+                        colors: ['black'],
                       },
-                      legend: { show: false },
-                    }"
-                    :series="[
-                      parseFloat(record.actual) || 0,
-                      Math.max(
-                        parseFloat(record.target) - parseFloat(record.actual),
-                        0
-                      ),
-                    ]"
-                  />
+                    },
+                    legend: { show: false },
+                  }" :series="[
+                    parseFloat(record.actual) || 0,
+                    Math.max(
+                      parseFloat(record.target) - parseFloat(record.actual),
+                      0
+                    ),
+                  ]" />
                 </template>
 
                 <template v-else-if="column.dataIndex === 'assignTo'">
@@ -199,50 +135,42 @@
                 </template>
 
                 <template v-else-if="column.dataIndex === 'status'">
-                  <a-tag
-                    :bordered="false"
-                    :color="getStatusColor(record.status)"
-                  >
+                  <a-tag :bordered="false" :color="getStatusColor(record.status)">
                     {{ record.status }}
                   </a-tag>
                 </template>
 
                 <template v-else-if="column.dataIndex === 'action'">
-                  <a-button
-                    type="default"
-                    class="kpi-actions-button"
-                    @click="
+                  <a-tooltip title="View Details">
+                    <a-button type="default" class="kpi-actions-button" @click="
                       $router.push({
                         name: 'KpiDetail', // Sử dụng tên route chi tiết KPI gốc
                         params: { id: record.kpiId }, // Truyền ID của KPI gốc
                       })
-                    "
-                  >
-                    <schedule-outlined /> Details
-                  </a-button>
-
-                  <a-button
-                    danger
-                    class="kpi-actions-button"
-                    @click="
+                      ">
+                      <schedule-outlined /> Details
+                    </a-button>
+                  </a-tooltip>
+                  <a-tooltip title="Copy KPI">
+                    <a-button type="dashed" size="small" @click="handleCopyKpi(record)">
+                      <copy-outlined /> Copy
+                    </a-button>
+                  </a-tooltip>
+                  <a-tooltip title="Delete KPI">
+                    <a-button danger class="kpi-actions-button" @click="
                       showConfirmDeleteDialog(record.key, record.kpiName) // Truyền key (assignment ID) và tên KPI
-                    "
-                  >
-                    <delete-outlined /> Delete
-                  </a-button>
+                      ">
+                      <delete-outlined /> Delete
+                    </a-button>
+                  </a-tooltip>
                 </template>
               </template>
             </a-table>
           </a-collapse-panel>
         </a-collapse>
 
-        <a-modal
-          danger
-          v-model:open="isDeleteModalVisible"
-          title="Confirm Dialog"
-          @ok="handleDeleteKpi"
-          @cancel="isDeleteModalVisible = false"
-        >
+        <a-modal danger v-model:open="isDeleteModalVisible" title="Confirm Dialog" @ok="handleDeleteKpi"
+          @cancel="isDeleteModalVisible = false">
           <p>Are you sure to delete assignment for "{{ selectedKpiName }}"?</p>
         </a-modal>
       </div>
@@ -261,6 +189,7 @@ import {
   ReloadOutlined,
   ScheduleOutlined,
   DeleteOutlined,
+  CopyOutlined
 } from "@ant-design/icons-vue";
 import { notification } from "ant-design-vue";
 
@@ -298,14 +227,12 @@ const columns = [
     title: "KPI Name",
     dataIndex: "kpiName",
     key: "kpiName",
-    // Xóa customCell: (record) => { ... }
     width: "15%",
   },
   {
     title: "Current Progress",
     dataIndex: "chart",
     key: "chart",
-    // Xóa customCell: (record) => { ... }
     width: "10%",
   },
   {
@@ -321,30 +248,30 @@ const columns = [
     width: "7%",
   },
   { title: "End Date", dataIndex: "endDate", key: "endDate", width: "7%" },
-  { title: "Weight", dataIndex: "weight", key: "weight", width: "7%" }, // Trọng số của KPI gốc
+  { title: "Weight", dataIndex: "weight", key: "weight", width: "6%" }, // Trọng số của KPI gốc
   {
     title: "Target",
     dataIndex: "target", // Đây là target của assignment
     key: "target",
-    width: "7%",
+    width: "6%",
   },
   {
     title: "Actual",
     dataIndex: "actual", // Đây là actual của assignment
     key: "actual",
-    width: "7%",
+    width: "6%",
   },
   {
     title: "Status",
     dataIndex: "status", // Đây là status của assignment
     key: "status",
-    width: "7%",
+    width: "6%",
   },
   {
     title: "Action",
     dataIndex: "action",
     key: "action",
-    width: "10%",
+    width: "13%",
     rowClassName: "action-column-cell",
   },
 ];
@@ -394,6 +321,19 @@ const applyFilters = async () => {
     // Giữ isDisplayResult là false hoặc xử lý hiển thị lỗi
   } finally {
     loading.value = false; // Kết thúc trạng thái loading
+  }
+};
+
+const handleCopyKpi = (record) => {
+  if (record && record.kpiId) {
+    router.push({
+      path: "/kpis/create",
+      query: {
+        templateKpiId: record.kpiId,
+      },
+    });
+  } else {
+    notification.warning({ message: "Không thể sao chép do thiếu thông tin KPI." });
   }
 };
 

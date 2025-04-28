@@ -213,17 +213,17 @@ export class KpisController {
     return this.kpisService.softDelete(+id);
   }
 
-  @Post(':id/sections/assignments') 
+  @Post(':id/sections/assignments')
   @Roles('admin', 'manager')
   async saveDepartmentAndSectionAssignments(
-    @Param('id') kpiId: number, 
-    @Body() 
+    @Param('id') kpiId: number,
+    @Body()
     body: {
       assignments: {
-        assigned_to_department?: number; 
-        assigned_to_section?: number; 
+        assigned_to_department?: number;
+        assigned_to_section?: number;
         targetValue: number;
-        assignmentId?: number; 
+        assignmentId?: number;
       }[];
     },
   ): Promise<void> {

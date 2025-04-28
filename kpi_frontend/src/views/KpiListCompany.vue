@@ -8,7 +8,6 @@
         </a-button>
       </div>
     </div>
-
     <div class="filter-controls">
       <a-row :gutter="[22]">
         <a-col :span="6">
@@ -74,10 +73,22 @@
                 <template v-else-if="column.dataIndex === 'status'"> <a-tag :bordered="false"
                     :color="getStatusColor(record.status)"> {{ record.status }} </a-tag> </template>
                 <template v-else-if="column.dataIndex === 'action'">
-                  <a-space> <a-button type="default" size="small" class="kpi-actions-button"
-                      @click="goToDetail(record)"> <schedule-outlined /> Details </a-button>
-                    <a-button danger size="small" class="kpi-actions-button" v-if="canDeleteCompanyKpi"
-                      @click="showConfirmDeleteDialog(record.id, record.name)"> <delete-outlined /> Delete </a-button>
+                  <a-space>
+                    <a-tooltip title="View Details">
+                      <a-button type="default" size="small" class="kpi-actions-button" @click="goToDetail(record)">
+                        <schedule-outlined /> Details
+                      </a-button>
+                    </a-tooltip>
+                    <a-tooltip title="Copy KPI">
+                      <a-button type="dashed" size="small" @click="handleCopyKpi(record)">
+                        <copy-outlined /> Copy
+                      </a-button>
+                    </a-tooltip>
+                    <a-tooltip title="Delete KPI">
+                      <a-button danger size="small" class="kpi-actions-button" v-if="canDeleteCompanyKpi"
+                        @click="showConfirmDeleteDialog(record.id, record.name)"><delete-outlined /> Delete
+                      </a-button>
+                    </a-tooltip>
                   </a-space>
                 </template>
               </template>
@@ -101,7 +112,7 @@ import { useStore } from 'vuex';
 import { useRouter } from 'vue-router';
 // Import Ant Design và Icons
 import { Button as AButton, Input as AInput, Select as ASelect, SelectOption as ASelectOption, DatePicker as ADatePicker, Row as ARow, Col as ACol, FormItem as AFormItem, Alert as AAlert, Spin as ASpin, Collapse as ACollapse, CollapsePanel as ACollapsePanel, Table as ATable, Tag as ATag, Space as ASpace, Modal as AModal, Empty as AEmpty } from 'ant-design-vue';
-import { PlusOutlined, FilterOutlined, ReloadOutlined, ScheduleOutlined, DeleteOutlined, notification } from '@ant-design/icons-vue';
+import { PlusOutlined, FilterOutlined, ReloadOutlined, ScheduleOutlined, CopyOutlined, DeleteOutlined, notification } from '@ant-design/icons-vue';
 import dayjs from 'dayjs'; // Import dayjs nếu dùng formatValue
 
 // --- Store & Router ---
@@ -152,11 +163,9 @@ const columns = [
   { title: 'Assigned To', dataIndex: 'assignedTo', key: 'assignedTo', width: '12%', ellipsis: true },
   { title: 'Target', dataIndex: 'target', key: 'target', width: '8%', align: 'right' },
   { title: 'Weight', dataIndex: 'weight', key: 'weight', width: '7%', align: 'right' },
-  // { title: 'Start Date', dataIndex: 'start_date', key: 'start_date', width: '8%' }, // Có thể ẩn bớt cột
-  // { title: 'End Date', dataIndex: 'end_date', key: 'end_date', width: '8%' },
   { title: 'Frequency', dataIndex: 'frequency', key: 'frequency', width: '8%' },
   { title: 'Status', dataIndex: 'status', key: 'status', width: '8%', align: 'center' },
-  { title: 'Action', dataIndex: 'action', key: 'action', width: '120px', align: 'center' } // Width cố định cho action
+  { title: 'Action', dataIndex: 'action', key: 'action', width: '300px', align: 'center' } // Width cố định cho action
 ];
 
 // --- Methods ---
@@ -182,7 +191,19 @@ const loadKpis = (page = 1) => { // Thêm tham số page nếu API hỗ trợ ph
 const applyFilters = () => { loadKpis(1); };
 const resetFilters = () => { localFilters.name = ''; localFilters.departmentId = ''; localFilters.status = ''; localFilters.startDate = null; localFilters.endDate = null; loadKpis(1); };
 
-// Xử lý xóa KPI
+const handleCopyKpi = (record) => {
+  if (record && record.id) {
+    router.push({
+      path: "/kpis/create",
+      query: {
+        templateKpiId: record.id,
+      },
+    });
+  } else {
+    notification.warning({ message: "Không thể sao chép do thiếu thông tin KPI." });
+  }
+};
+
 const showConfirmDeleteDialog = (id, name) => { isDeleteModalVisible.value = true; selectedKpiId.value = id; selectedKpiName.value = name; };
 const handleDeleteKpi = async () => { // Dùng async/await
   if (!selectedKpiId.value) return;

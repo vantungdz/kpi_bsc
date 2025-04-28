@@ -34,9 +34,7 @@ export class KpiValuesController {
 
   @Post()
   async create(@Body() kpiValueData: Partial<KpiValue>): Promise<KpiValue> {
-    // Giả sử user_id của người tạo được gửi trong body (thực tế nên lấy từ token JWT)
-    // const createdBy = kpiValueData.user_id || 1; // Mặc định user_id = 1 (admin)
-    const createdBy = 1; // TODO
+    const createdBy = 1;
     return this.kpiValuesService.create(kpiValueData, createdBy);
   }
 
@@ -45,9 +43,7 @@ export class KpiValuesController {
     @Param('id') id: string,
     @Body() updateData: Partial<KpiValue>,
   ): Promise<KpiValue> {
-    // Giả sử user_id của người cập nhật được gửi trong body (thực tế nên lấy từ token JWT)
-    // const updatedBy = updateData.user_id || 1; // Mặc định user_id = 1 (admin)
-    const updatedBy = 1; // TODO
+    const updatedBy = 1;
     const kpiValue = await this.kpiValuesService.update(
       Number(id),
       updateData,
@@ -61,8 +57,7 @@ export class KpiValuesController {
 
   @Delete(':id')
   async delete(@Param('id') id: string): Promise<void> {
-    // Giả sử user_id của người xóa được gửi trong request (thực tế nên lấy từ token JWT)
-    const deletedBy = 1; // Mặc định user_id = 1 (admin)
+    const deletedBy = 1;
     const result = await this.kpiValuesService.delete(Number(id), deletedBy);
     if (!result) {
       throw new NotFoundException(`KPI Value with ID ${id} not found`);
@@ -77,7 +72,7 @@ export class KpiValuesController {
       notes: string;
       project_details: any[];
       overallValue?: number;
-    }, // overallValue là tùy chọn
+    },
     @Req() req: Request & { user?: Employee },
   ): Promise<KpiValue> {
     const userId = req.user?.id || 1;

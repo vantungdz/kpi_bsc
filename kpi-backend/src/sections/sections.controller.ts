@@ -15,17 +15,24 @@ export class SectionsController {
   @Get()
   async findSections(
     @Query('department_id') departmentId?: number,
-    @Query('kpi_id') kpiId?: number,
-  ): Promise<any[]> {
+    // @Query('kpi_id') kpiId?: number, // Có thể bỏ nếu service không dùng
+  ): Promise<Section[]> {
+    // <-- Thay any[] bằng Section[] để chặt chẽ hơn về kiểu
+    console.log(
+      `[SectionsController] findSections called with departmentId: ${departmentId}`,
+    );
+
+    // Chỉ cần gọi service, service đã đảm bảo có thông tin department
     const sections = await this.sectionService.getFilteredSections(
-      kpiId ? Number(kpiId) : undefined,
       departmentId ? Number(departmentId) : undefined,
     );
 
-    if (departmentId != undefined) {
-      return sections.map(({ department, ...rest }) => rest); // strip department
-    }
-    return sections; // strip department
+    console.log(
+      `[SectionsController] Returning sections received from service.`,
+    );
+
+    // Trả về trực tiếp kết quả từ service mà không cần map hay loại bỏ gì cả
+    return sections;
   }
 
   @Get(':id')

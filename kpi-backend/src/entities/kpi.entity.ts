@@ -65,15 +65,6 @@ export class Kpi {
   @Column({ type: 'date', nullable: true })
   end_date: string;
 
-  @Column({ type: 'numeric', nullable: true })
-  min_target: number;
-
-  @Column({ type: 'numeric', nullable: true })
-  max_target: number;
-
-  @Column({ type: 'numeric', nullable: true })
-  mid_target: number;
-
   @Column({ type: 'varchar', length: 255, nullable: true })
   memo: string;
 

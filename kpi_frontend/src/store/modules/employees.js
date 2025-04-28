@@ -68,14 +68,6 @@ const actions = {
       typeof departmentIdParam !== "undefined" &&
       departmentIdParam !== null &&
       departmentIdParam !== "";
-
-    console.log("fetchUsers action: Condition variables check:");
-    console.log("  params:", params);
-    console.log("  sectionIdParam:", sectionIdParam);
-    console.log("  departmentIdParam:", departmentIdParam);
-    console.log("  hasSectionIdParam:", hasSectionIdParam);
-    console.log("  hasDepartmentIdParam:", hasDepartmentIdParam); // Kiểm tra cache - cải thiện để tránh cache mảng rỗng như dữ liệu tìm thấy
-
     if (
       hasSectionIdParam &&
       state.usersBySection[String(sectionIdParam)]?.length > 0
@@ -116,7 +108,7 @@ const actions = {
         params
       ); // Truyền object params trực tiếp cho apiClient.get
       // Giả định apiClient (Axios) sẽ tự động thêm ?key=value
-      const response = await apiClient.get("/employees", { params }); // <-- Truyền params dưới key 'params' cho Axios
+      const response = await apiClient.get("/employees", { params }); //
       // Trích xuất dữ liệu mảng user từ response
 
       const fetchedUsers = response.data?.data || response.data || [];

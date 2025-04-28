@@ -1,44 +1,21 @@
 <template>
   <div v-if="canAccessCreatePage">
-    <a-form
-      ref="formRef"
-      :model="form"
-      :rules="formRules"
-      layout="vertical"
-      @finish="handleChangeCreate"
-      @finishFailed="onFinishFailed"
-    >
+    <a-form ref="formRef" :model="form" :rules="formRules" layout="vertical" @finish="handleChangeCreate"
+      @finishFailed="onFinishFailed">
       <a-row :gutter="12">
         <a-col :span="12">
-          <a-form-item
-            label="Use Existing KPI as Template (Optional)"
-            name="templateKpi"
-          >
-            <a-select
-              v-model:value="selectedTemplateKpiId"
-              placeholder="Select a KPI to use as template..."
-              show-search
-              allow-clear
-              :options="kpiTemplateOptions"
-              :filter-option="
-                (input, option) =>
+          <a-form-item label="Use Existing KPI as Template (Optional)" name="templateKpi">
+            <a-select v-model:value="selectedTemplateKpiId" placeholder="Select a KPI to use as template..." show-search
+              allow-clear :options="kpiTemplateOptions" :filter-option="(input, option) =>
                   option.label.toLowerCase().includes(input.toLowerCase())
-              "
-              :loading="loadingKpiTemplates"
-              style="width: 100%; margin-bottom: 15px"
-              @change="loadKpiTemplate"
-            />
+                " :loading="loadingKpiTemplates" style="width: 100%; margin-bottom: 15px" @change="loadKpiTemplate" />
           </a-form-item>
         </a-col>
       </a-row>
       <a-form-item class="textLabel" label="Perspective" name="perspective_id">
         <a-select v-model:value="form.perspective_id" placeholder="Perspective">
-          <a-select-option
-            v-for="perspective in perspectiveList"
-            :key="perspective.id"
-            :value="perspective.id"
-            >{{ perspective.name }}</a-select-option
-          >
+          <a-select-option v-for="perspective in perspectiveList" :key="perspective.id" :value="perspective.id">{{
+            perspective.name }}</a-select-option>
         </a-select>
       </a-form-item>
       <a-row :gutter="12">
@@ -48,20 +25,9 @@
           </a-form-item>
         </a-col>
         <a-col :span="12">
-          <a-form-item
-            class="textLabel"
-            label="Calculation Formula"
-            name="calculation_type"
-          >
-            <a-select
-              v-model:value="form.calculation_type"
-              placeholder="Chọn Calculation Formula"
-            >
-              <a-select-option
-                v-for="formula in formulaList"
-                :key="formula.id"
-                :value="formula.id"
-              >
+          <a-form-item class="textLabel" label="Calculation Formula" name="calculation_type">
+            <a-select v-model:value="form.calculation_type" placeholder="Chọn Calculation Formula">
+              <a-select-option v-for="formula in formulaList" :key="formula.id" :value="formula.id">
                 {{ formula.name }}
               </a-select-option>
             </a-select>
@@ -105,21 +71,15 @@
       <a-row :gutter="12">
         <a-col :span="12">
           <a-form-item class="textLabel" label="Target" name="target">
-            <a-input
-              v-model:value="form.target"
-              placeholder="Target"
-              @input="(event) => handleNumericInput('target', event)"
-            />
+            <a-input v-model:value="form.target" placeholder="Target"
+              @input="(event) => handleNumericInput('target', event)" />
           </a-form-item>
         </a-col>
 
         <a-col :span="12">
           <a-form-item class="textLabel" label="Weight (%)" name="weight">
-            <a-input
-              v-model:value="form.weight"
-              placeholder="Weight"
-              @input="(event) => handleNumericInput('weight', event)"
-            />
+            <a-input v-model:value="form.weight" placeholder="Weight"
+              @input="(event) => handleNumericInput('weight', event)" />
           </a-form-item>
         </a-col>
       </a-row>
@@ -137,121 +97,58 @@
       <a-row :gutter="12">
         <a-col :span="6">
           <a-form-item class="textLabel" label="Date Start" name="start_date">
-            <a-date-picker
-              v-model:value="form.start_date"
-              style="width: 100%"
-              value-format="YYYY-MM-DD"
-            />
+            <a-date-picker v-model:value="form.start_date" style="width: 100%" value-format="YYYY-MM-DD" />
           </a-form-item>
         </a-col>
 
         <a-col :span="6">
-          <a-form-item
-            class="textLabel"
-            label="Date End"
-            name="end_date"
-            :rules="[{ validator: validateEndDate }]"
-          >
-            <a-date-picker
-              v-model:value="form.end_date"
-              style="width: 100%"
-              value-format="YYYY-MM-DD"
-            />
+          <a-form-item class="textLabel" label="Date End" name="end_date" :rules="[{ validator: validateEndDate }]">
+            <a-date-picker v-model:value="form.end_date" style="width: 100%" value-format="YYYY-MM-DD" />
           </a-form-item>
         </a-col>
       </a-row>
 
       <a-form-item class="textLabel" label="Description" name="description">
-        <a-textarea
-          v-model:value="form.description"
-          placeholder="Description"
-          allow-clear
-        />
+        <a-textarea v-model:value="form.description" placeholder="Description" allow-clear />
       </a-form-item>
 
-      <a-row
-        :gutter="12"
-        style="
+      <a-row :gutter="12" style="
           margin-top: -10px;
           margin-bottom: 16px;
           background: #f0f2f5;
           padding: 8px;
           border-radius: 4px;
-        "
-      >
+        ">
         <a-col :span="8">
-          <a-statistic
-            title="Overall Target"
-            :value="overallTargetValue"
-            :precision="2"
-          />
+          <a-statistic title="Overall Target" :value="overallTargetValue" :precision="2" />
         </a-col>
 
         <a-col :span="8">
-          <a-statistic
-            title="Total Assigned"
-            :value="totalAssignedTarget"
-            :precision="2"
-          />
+          <a-statistic title="Total Assigned" :value="totalAssignedTarget" :precision="2" />
         </a-col>
 
         <a-col :span="8">
-          <a-statistic
-            title="Remaining"
-            :value="remainingTarget"
-            :precision="2"
-            :value-style="isOverAssigned ? { color: '#cf1322' } : {}"
-          />
+          <a-statistic title="Remaining" :value="remainingTarget" :precision="2"
+            :value-style="isOverAssigned ? { color: '#cf1322' } : {}" />
         </a-col>
       </a-row>
 
-      <a-form-item
-        v-if="canAssignToUnits"
-        class="textLabel"
-        label="Assign To Department/Section & Set Targets"
-        name="section_id_table"
-        help="Use this table to assign the KPI down and set targets."
-        :extra="
-          form.assigned_user_id ? 'Direct user assignment will be cleared.' : ''
-        "
-      >
-        <a-alert
-          v-if="assignmentError"
-          :message="assignmentError"
-          type="error"
-          show-icon
-          style="margin-bottom: 10px"
-        />
+      <a-form-item v-if="canAssignToUnits" class="textLabel" label="Assign To Department/Section & Set Targets"
+        name="section_id_table" help="Use this table to assign the KPI down and set targets." :extra="form.assigned_user_id ? 'Direct user assignment will be cleared.' : ''
+          ">
+        <a-alert v-if="assignmentError" :message="assignmentError" type="error" show-icon style="margin-bottom: 10px" />
 
-        <a-table
-          :columns="columns"
-          :data-source="departmentTreeData"
-          :pagination="false"
-          :row-key="(record) => record.key"
-          :expandable="{ childrenColumnName: 'children' }"
-          :row-selection="rowSelection"
-          :class="{ 'table-disabled': !!form.assigned_user_id }"
-          size="small"
-          bordered
-        >
+        <a-table :columns="columns" :data-source="departmentTreeData" :pagination="false"
+          :row-key="(record) => record.key" :expandable="{ childrenColumnName: 'children' }"
+          :row-selection="rowSelection" :class="{ 'table-disabled': !!form.assigned_user_id }" size="small" bordered>
           <template #target="{ record }">
             <template v-if="record.type === 'department'">
-              <a-input-number
-                v-if="!hasSelectedSections(record.key)"
-                :value="form.targets[record.key]"
-                placeholder="Target"
-                :min="0"
-                style="width: 100%"
-                :disabled="
-                  !!form.assigned_user_id ||
+              <a-input-number v-if="!hasSelectedSections(record.key)" :value="form.targets[record.key]"
+                placeholder="Target" :min="0" style="width: 100%" :disabled="!!form.assigned_user_id ||
                   !selectedRowKeys.includes(record.key)
-                "
-                :formatter="
-                  (value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
-                "
-                :parser="(value) => String(value).replace(/\$\s?|(,*)/g, '')"
-                @change="(value) => handleTargetChange(record.key, value)"
-              />
+                  " :formatter="(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+                  " :parser="(value) => String(value).replace(/\$\s?|(,*)/g, '')"
+                @change="(value) => handleTargetChange(record.key, value)" />
 
               <span v-else>
                 {{ formatNumber(calculatedDepartmentTargets[record.key] || 0) }}
@@ -259,21 +156,12 @@
             </template>
 
             <template v-else-if="record.type === 'section'">
-              <a-input-number
-                :value="form.targets[record.key]"
-                placeholder="Target"
-                :min="0"
-                style="width: 100%"
-                :disabled="
-                  !!form.assigned_user_id ||
+              <a-input-number :value="form.targets[record.key]" placeholder="Target" :min="0" style="width: 100%"
+                :disabled="!!form.assigned_user_id ||
                   !selectedRowKeys.includes(record.key)
-                "
-                :formatter="
-                  (value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
-                "
-                :parser="(value) => String(value).replace(/\$\s?|(,*)/g, '')"
-                @change="(value) => handleTargetChange(record.key, value)"
-              />
+                  " :formatter="(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+                  " :parser="(value) => String(value).replace(/\$\s?|(,*)/g, '')"
+                @change="(value) => handleTargetChange(record.key, value)" />
             </template>
           </template>
 
@@ -293,12 +181,7 @@
             Clear Form
           </a-button>
 
-          <a-button
-            style="margin-right: 10px"
-            type="primary"
-            html-type="submit"
-            :loading="loading"
-          >
+          <a-button style="margin-right: 10px" type="primary" html-type="submit" :loading="loading">
             Save KPI
           </a-button>
           <a-button type="default" @click="goBack"> Back </a-button>
@@ -308,12 +191,8 @@
   </div>
 
   <div v-else>
-    <a-alert
-      message="Access Denied"
-      description="You do not have permission to create KPIs with the current role/scope."
-      type="error"
-      show-icon
-    />
+    <a-alert message="Access Denied"
+      description="You do not have permission to create KPIs with the current role/scope." type="error" show-icon />
 
     <a-button type="default" style="margin-top: 15px" @click="goBack">
       Back
@@ -713,7 +592,6 @@ const resetForm = (clearTemplateSelection = false) => {
   if (clearTemplateSelection) {
     selectedTemplateKpiId.value = null;
   }
-  console.log("Form Reset");
 };
 // Load template
 const loadKpiTemplate = async (selectedId) => {
@@ -723,7 +601,6 @@ const loadKpiTemplate = async (selectedId) => {
   }
   loadingKpiTemplate.value = true;
   assignmentError.value = null;
-  console.log(`Loading template KPI ID: ${selectedId}`);
   try {
     await store.dispatch("kpis/fetchKpiDetail", selectedId);
     const kpiDetail = store.getters["kpis/currentKpi"];
@@ -775,7 +652,7 @@ const handleTargetChange = (key, value) => {
   }
 
   formRef.value?.validateFields([["targets", targetKey]]); // Trigger validation cho toàn bộ form assignment để kiểm tra tổng/còn lại và các lỗi khác
-  formRef.value?.validateFields(["section_id_table"]).catch(() => {});
+  formRef.value?.validateFields(["section_id_table"]).catch(() => { });
 };
 
 const handleNumericInput = (field, event) => {
@@ -969,14 +846,14 @@ const handleChangeCreate = async () => {
       : null;
     const numericMainTarget =
       form.value.target !== null &&
-      form.value.target !== "" &&
-      !isNaN(form.value.target)
+        form.value.target !== "" &&
+        !isNaN(form.value.target)
         ? Number(form.value.target) // Sử dụng Number để đảm bảo kiểu số
         : null;
     const numericMainWeight =
       form.value.weight !== null &&
-      form.value.weight !== "" &&
-      !isNaN(form.value.weight)
+        form.value.weight !== "" &&
+        !isNaN(form.value.weight)
         ? Number(form.value.weight) // Sử dụng Number để đảm bảo kiểu số
         : null; // ---- Tạo dữ liệu KPI cuối cùng ----
 

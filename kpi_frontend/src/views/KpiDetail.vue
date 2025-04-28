@@ -1,26 +1,17 @@
 <template>
   <div>
-    <a-card
-      :title="`KPI Detail: ${kpiDetailData?.name || 'Loading...'}`"
-      style="margin-bottom: 20px"
-    >
+    <a-card :title="`KPI Detail: ${kpiDetailData?.name || 'Loading...'}`" style="margin-bottom: 20px">
       <a-skeleton :loading="loadingKpi" active :paragraph="{ rows: 6 }">
         <a-descriptions v-if="kpiDetailData" :column="2" bordered size="small">
           <template #title>
-            <div
-              style="
+            <div style="
                 display: flex;
                 justify-content: space-between;
                 align-items: center;
                 width: 100%;
-              "
-            >
+              ">
               <span> KPI Information </span>
-              <a-button
-                v-if="kpiDetailData?.id"
-                @click="copyKpiAsTemplate"
-                :disabled="loadingKpi"
-              >
+              <a-button v-if="kpiDetailData?.id" @click="copyKpiAsTemplate" :disabled="loadingKpi">
                 Copy as Template
               </a-button>
             </div>
@@ -29,194 +20,99 @@
             {{ kpiDetailData.id }}
           </a-descriptions-item>
           <a-descriptions-item label="Created By Type">
-            {{ kpiDetailData.created_by_type || "N/A" }}
+            {{ kpiDetailData.created_by_type || "" }}
           </a-descriptions-item>
           <a-descriptions-item label="Frequency">
             {{ kpiDetailData.frequency }}
           </a-descriptions-item>
           <a-descriptions-item label="Perspective">
-            {{ kpiDetailData.perspective?.name || "N/A" }}
+            {{ kpiDetailData.perspective?.name || "" }}
           </a-descriptions-item>
           <a-descriptions-item label="Department">
-            {{ kpiDetailData.department?.name || "N/A" }}
+            {{ departmentNameFromSectionContext }}
           </a-descriptions-item>
           <a-descriptions-item label="Section">
-            {{ kpiDetailData.section?.name || "N/A" }}
-          </a-descriptions-item>
-          <a-descriptions-item label="Assigned To (Direct)">
-            <span v-if="kpiDetailData.assignedTo">
-              {{ kpiDetailData.assignedTo.first_name }}
-              {{ kpiDetailData.assignedTo.last_name }}
-            </span>
-            <span v-else> N/A </span>
+            {{ sectionNameFromContext }}
           </a-descriptions-item>
           <a-descriptions-item label="Unit">
-            {{ kpiDetailData.unit || "N/A" }}
+            {{ kpiDetailData.unit || "" }}
           </a-descriptions-item>
           <a-descriptions-item label="Target">
-            {{ kpiDetailData.target?.toLocaleString() ?? "N/A" }}
+            {{ kpiDetailData.target?.toLocaleString() ?? "" }}
           </a-descriptions-item>
           <a-descriptions-item label="Weight (%)">
-            {{ kpiDetailData.weight ?? "N/A" }}
+            {{ kpiDetailData.weight ?? "" }}
           </a-descriptions-item>
           <a-descriptions-item label="Status">
             <a-tag :color="getStatusColor(kpiDetailData.status)">
-              {{ kpiDetailData.status || "N/A" }}
+              {{ kpiDetailData.status || "" }}
             </a-tag>
           </a-descriptions-item>
           <a-descriptions-item label="Description" :span="2">
-            {{ kpiDetailData.description || "N/A" }}
-          </a-descriptions-item>
-          <a-descriptions-item label="Memo" :span="2">
-            {{ kpiDetailData.memo || "N/A" }}
-          </a-descriptions-item>
-          <a-descriptions-item
-            v-if="
-              kpiDetailData.assignments && kpiDetailData.assignments.length > 0
-            "
-            label="Assigned Down To"
-            :span="2"
-          >
-            <ul style="margin: 0; padding-left: 20px">
-              <li v-for="assign in kpiDetailData.assignments" :key="assign.id">
-                <span v-if="assign.department">
-                  Dept: {{ assign.department.name }} (Target:
-                  {{ assign.targetValue?.toLocaleString() ?? "N/A" }}) - Status:
-                  {{ assign.status }}
-                </span>
-                <span v-else-if="assign.section">
-                  Section: {{ assign.section.name }} (Target:
-                  {{ assign.targetValue?.toLocaleString() ?? "N/A" }}) - Status:
-                  {{ assign.status }}
-                </span>
-                <span v-else-if="assign.employee">
-                  User: {{ assign.employee.first_name }} (Target:
-                  {{ assign.targetValue?.toLocaleString() ?? "N/A" }}) - Status:
-                  {{ assign.status }}
-                </span>
-                <span v-else-if="assign.team">
-                  Team: {{ assign.team.name }} (Target:
-                  {{ assign.targetValue?.toLocaleString() ?? "N/A" }}) - Status:
-                  {{ assign.status }}
-                </span>
-                <span v-else>
-                  Unassigned Type (Target:
-                  {{ assign.targetValue?.toLocaleString() ?? "N/A" }}) - Status:
-                  {{ assign.status }}
-                </span>
-              </li>
-            </ul>
+            {{ kpiDetailData.description || "" }}
           </a-descriptions-item>
         </a-descriptions>
-        <a-empty
-          v-else-if="!loadingKpi"
-          description="Could not load KPI Details."
-        />
+        <a-empty v-else-if="!loadingKpi" description="Could not load KPI Details." />
       </a-skeleton>
 
-      <a-row
-        v-if="shouldShowAssignmentStats"
-        :gutter="12"
-        style="
+      <a-row v-if="shouldShowAssignmentStats" :gutter="12" style="
           margin-top: 16px;
           margin-bottom: 16px;
           background: #f0f2f5;
           padding: 8px;
           border-radius: 4px;
-        "
-      >
+        ">
         <a-col :span="8">
-          <a-statistic
-            title="Overall Target"
-            :value="overallTargetValueDetail"
-            :precision="2"
-          />
+          <a-statistic title="Overall Target" :value="overallTargetValueDetail" :precision="2" />
         </a-col>
         <a-col :span="8">
-          <a-statistic
-            title="Total Assigned"
-            :value="totalAssignedTargetDetail"
-            :precision="2"
-          />
+          <a-statistic title="Total Assigned" :value="totalAssignedTargetDetail" :precision="2" />
         </a-col>
         <a-col :span="8">
-          <a-statistic
-            title="Remaining"
-            :value="remainingTargetDetail"
-            :precision="2"
-            :value-style="isOverAssignedDetail ? { color: '#cf1322' } : {}"
-          />
+          <a-statistic title="Remaining" :value="remainingTargetDetail" :precision="2"
+            :value-style="isOverAssignedDetail ? { color: '#cf1322' } : {}" />
         </a-col>
       </a-row>
     </a-card>
 
-    <a-card
-      title="Manage Department/Section Assignments"
-      style="margin-top: 20px"
-      v-if="shouldShowDepartmentSectionAssignmentCard && canManageAssignments"
-    >
+    <a-card title="Manage Department/Section Assignments" style="margin-top: 20px"
+      v-if="shouldShowDepartmentSectionAssignmentCard && canManageAssignments">
       <template #extra>
-        <a-button
-          type="primary"
-          @click="openManageDepartmentSectionAssignments"
-        >
+        <a-button type="primary" @click="openManageDepartmentSectionAssignments">
           <template #icon>
             <plus-outlined />
           </template>
           Add Assignment
         </a-button>
       </template>
-      <a-skeleton
-        :loading="loadingDepartmentSectionAssignments"
-        active
-        :paragraph="{ rows: 4 }"
-      >
-        <a-table
-          :columns="departmentSectionAssignmentColumns"
-          :data-source="currentDepartmentSectionAssignments"
-          row-key="id"
-          size="small"
-          bordered
-          :pagination="false"
-        >
+      <a-skeleton :loading="loadingDepartmentSectionAssignments" active :paragraph="{ rows: 4 }">
+        <a-table :columns="departmentSectionAssignmentColumns" :data-source="currentDepartmentSectionAssignments"
+          row-key="id" size="small" bordered :pagination="false">
           <template #bodyCell="{ column, record }">
             <template v-if="column.key === 'assignedUnit'">
-              <span v-if="record.department"
-                >{{ record.department.name }} (Department)</span
-              >
-              <span v-else-if="record.section"
-                >{{ record.section.name }} (Section)</span
-              >
+              <span v-if="record.department">{{ record.department.name }} (Department)</span>
+              <span v-else-if="record.section">{{ record.section.name }} (Section)</span>
               <span v-else-if="record.team">{{ record.team.name }} (Team)</span>
-              <span v-else>N/A</span>
+              <span v-else></span>
             </template>
             <template v-else-if="column.key === 'targetValue'">
-              {{ record.targetValue?.toLocaleString() ?? "N/A" }}
+              {{ record.targetValue?.toLocaleString() ?? "" }}
               {{ kpiDetailData?.unit || "" }}
             </template>
             <template v-else-if="column.key === 'weight'">
-              {{ record.weight ?? "N/A" }} %
+              {{ record.weight ?? "" }} %
             </template>
             <template v-else-if="column.key === 'actions'">
               <a-space>
                 <a-tooltip title="Edit Assignment">
-                  <a-button
-                    type="primary"
-                    ghost
-                    shape="circle"
-                    size="small"
-                    @click="openEditDepartmentSectionAssignment(record)"
-                  >
+                  <a-button type="primary" ghost shape="circle" size="small"
+                    @click="openEditDepartmentSectionAssignment(record)">
                     <edit-outlined />
                   </a-button>
                 </a-tooltip>
                 <a-tooltip title="Delete Assignment">
-                  <a-button
-                    danger
-                    shape="circle"
-                    size="small"
-                    @click="confirmDeleteDepartmentSectionAssignment(record)"
-                  >
+                  <a-button danger shape="circle" size="small"
+                    @click="confirmDeleteDepartmentSectionAssignment(record)">
                     <delete-outlined />
                   </a-button>
                 </a-tooltip>
@@ -224,102 +120,58 @@
             </template>
           </template>
         </a-table>
-        <a-empty
-          v-show="
-            currentDepartmentSectionAssignments.length === 0 &&
-            !loadingDepartmentSectionAssignments
-          "
-          description="No department or section assignments yet."
-        />
+        <a-empty v-show="currentDepartmentSectionAssignments.length === 0 &&
+          !loadingDepartmentSectionAssignments
+          " description="No department or section assignments yet." />
       </a-skeleton>
     </a-card>
-    <a-card
-      title="Manage Direct User Assignments"
-      style="margin-top: 20px"
-      v-if="shouldShowDirectUserAssignmentCard && canManageAssignments"
-    >
+    <a-card title="Manage Direct User Assignments" style="margin-top: 20px"
+      v-if="shouldShowDirectUserAssignmentCard && canManageAssignments">
       <template #extra>
-        <a-button
-          type="primary"
-          @click="openAssignUserModal"
-          :disabled="loadingUserAssignments || !kpiDetailData?.id"
-        >
+        <a-button type="primary" @click="openAssignUserModal" :disabled="loadingUserAssignments || !kpiDetailData?.id">
           <template #icon>
             <user-add-outlined />
           </template>
           Add/Edit User Assignment
         </a-button>
       </template>
-      <a-skeleton
-        :loading="loadingUserAssignments"
-        active
-        :paragraph="{ rows: 4 }"
-      >
-        <a-alert
-          v-if="userAssignmentError"
-          :message="userAssignmentError"
-          type="error"
-          show-icon
-          closable
-          @close="clearAssignmentError"
-          style="margin-bottom: 16px"
-        />
-        <a-table
-          v-show="filteredDirectUserAssignments.length > 0"
-          :columns="userAssignmentColumns"
-          :data-source="filteredDirectUserAssignments"
-          row-key="id"
-          size="small"
-          bordered
-          :pagination="false"
-        >
+      <a-skeleton :loading="loadingUserAssignments" active :paragraph="{ rows: 4 }">
+        <a-alert v-if="userAssignmentError" :message="userAssignmentError" type="error" show-icon closable
+          @close="clearAssignmentError" style="margin-bottom: 16px" />
+        <a-table v-show="filteredDirectUserAssignments.length > 0" :columns="userAssignmentColumns"
+          :data-source="filteredDirectUserAssignments" row-key="id" size="small" bordered :pagination="false">
           <template #bodyCell="{ column, record }">
             <template v-if="column.key === 'user'">
-              <a-avatar
-                :src="record.employee?.avatar_url"
-                size="small"
-                style="margin-right: 8px"
-              >
+              <a-avatar :src="record.employee?.avatar_url" size="small" style="margin-right: 8px">
                 {{ record.employee?.first_name?.charAt(0) }}
               </a-avatar>
               {{ record.employee?.first_name }}
               {{ record.employee?.last_name }} ({{ record.employee?.username }})
             </template>
             <template v-else-if="column.key === 'target'">
-              {{ record.target?.toLocaleString() ?? "N/A" }}
+              {{ record.target?.toLocaleString() ?? "" }}
               {{ kpiDetailData?.unit || "" }}
             </template>
             <template v-else-if="column.key === 'weight'">
-              {{ record.weight ?? "N/A" }} %
+              {{ record.weight ?? "" }} %
             </template>
             <template v-else-if="column.key === 'actual'">
-              {{ record.latest_actual_value?.toLocaleString() ?? "N/A" }}
+              {{ record.latest_actual_value?.toLocaleString() ?? "" }}
             </template>
             <template v-else-if="column.key === 'status'">
               <a-tag :color="getStatusColor(record.status)">
-                {{ record.status || "N/A" }}
+                {{ record.status || "" }}
               </a-tag>
             </template>
             <template v-else-if="column.key === 'actions'">
               <a-space>
                 <a-tooltip title="Edit Assignment">
-                  <a-button
-                    type="primary"
-                    ghost
-                    shape="circle"
-                    size="small"
-                    @click="openEditUserModal(record)"
-                  >
+                  <a-button type="primary" ghost shape="circle" size="small" @click="openEditUserModal(record)">
                     <edit-outlined />
                   </a-button>
                 </a-tooltip>
                 <a-tooltip title="Delete Assignment">
-                  <a-button
-                    danger
-                    shape="circle"
-                    size="small"
-                    @click="confirmDeleteUserAssignment(record)"
-                  >
+                  <a-button danger shape="circle" size="small" @click="confirmDeleteUserAssignment(record)">
                     <delete-outlined />
                   </a-button>
                 </a-tooltip>
@@ -327,71 +179,38 @@
             </template>
           </template>
         </a-table>
-        <a-empty
-          v-show="
-            filteredDirectUserAssignments.length === 0 &&
-            !loadingUserAssignments &&
-            !userAssignmentError
-          "
-          description="No users have been directly assigned this KPI yet."
-        />
+        <a-empty v-show="filteredDirectUserAssignments.length === 0 &&
+          !loadingUserAssignments &&
+          !userAssignmentError
+          " description="No users have been directly assigned this KPI yet." />
       </a-skeleton>
     </a-card>
 
-    <a-card
-      title="Manage User Assignments"
-      style="margin-top: 20px"
-      v-if="shouldShowSectionUserAssignmentCard && canManageAssignments"
-    >
+    <a-card title="Manage User Assignments" style="margin-top: 20px"
+      v-if="shouldShowSectionUserAssignmentCard && canManageAssignments">
       <template #extra>
-        <a-button
-          type="primary"
-          @click="openAssignUserModal"
-          :disabled="loadingUserAssignments || !kpiDetailData?.id"
-        >
+        <a-button type="primary" @click="openAssignUserModal" :disabled="loadingUserAssignments || !kpiDetailData?.id">
           <template #icon>
             <user-add-outlined />
           </template>
           Add/Edit User Assignment
         </a-button>
       </template>
-      <a-skeleton
-        :loading="loadingUserAssignments"
-        active
-        :paragraph="{ rows: 4 }"
-      >
-        <a-alert
-          v-if="userAssignmentError"
-          :message="userAssignmentError"
-          type="error"
-          show-icon
-          closable
-          @close="clearAssignmentError"
-          style="margin-bottom: 16px"
-        />
-        <a-table
-          v-show="filteredSectionUserAssignments.length > 0"
-          :columns="userAssignmentColumns"
-          :data-source="filteredSectionUserAssignments"
-          row-key="id"
-          size="small"
-          bordered
-          :pagination="false"
-        >
+      <a-skeleton :loading="loadingUserAssignments" active :paragraph="{ rows: 4 }">
+        <a-alert v-if="userAssignmentError" :message="userAssignmentError" type="error" show-icon closable
+          @close="clearAssignmentError" style="margin-bottom: 16px" />
+        <a-table v-show="filteredSectionUserAssignments.length > 0" :columns="userAssignmentColumns"
+          :data-source="filteredSectionUserAssignments" row-key="id" size="small" bordered :pagination="false">
           <template #bodyCell="{ column, record }">
             <template v-if="column.key === 'user'">
-              <a-avatar
-                :src="record.employee?.avatar_url"
-                size="small"
-                style="margin-right: 8px"
-              >
+              <a-avatar :src="record.employee?.avatar_url" size="small" style="margin-right: 8px">
                 {{ record.employee?.first_name?.charAt(0) }}
               </a-avatar>
               {{ record.employee?.first_name }}
               {{ record.employee?.last_name }} ({{ record.employee?.username }})
             </template>
             <template v-else-if="column.key === 'target'">
-              {{ record.targetValue?.toLocaleString() ?? "N/A" }}
+              {{ record.targetValue?.toLocaleString() ?? "" }}
               {{ kpiDetailData?.unit || "" }}
             </template>
             <template v-else-if="column.key === 'actual'">
@@ -405,23 +224,12 @@
             <template v-else-if="column.key === 'actions'">
               <a-space>
                 <a-tooltip title="Edit Assignment">
-                  <a-button
-                    type="primary"
-                    ghost
-                    shape="circle"
-                    size="small"
-                    @click="openEditUserModal(record)"
-                  >
+                  <a-button type="primary" ghost shape="circle" size="small" @click="openEditUserModal(record)">
                     <edit-outlined />
                   </a-button>
                 </a-tooltip>
                 <a-tooltip title="Delete Assignment">
-                  <a-button
-                    danger
-                    shape="circle"
-                    size="small"
-                    @click="confirmDeleteUserAssignment(record)"
-                  >
+                  <a-button danger shape="circle" size="small" @click="confirmDeleteUserAssignment(record)">
                     <delete-outlined />
                   </a-button>
                 </a-tooltip>
@@ -429,65 +237,43 @@
             </template>
           </template>
         </a-table>
-        <a-empty
-          v-show="
-            filteredSectionUserAssignments.length === 0 &&
-            !loadingUserAssignments &&
-            !userAssignmentError
-          "
-          description="No users have been assigned this KPI in this section yet."
-        />
+        <a-empty v-show="filteredSectionUserAssignments.length === 0 &&
+          !loadingUserAssignments &&
+          !userAssignmentError
+          " description="No users have been assigned this KPI in this section yet." />
       </a-skeleton>
     </a-card>
 
     <a-card title="KPI Evaluations" style="margin-top: 20px">
-      <a-button
-        type="primary"
-        style="margin-bottom: 10px"
-        @click="openEvaluationModal"
-        :loading="loadingUsersForEval"
-        v-if="canEvaluateKpi"
-      >
+      <a-button type="primary" style="margin-bottom: 10px" @click="openEvaluationModal" :loading="loadingUsersForEval"
+        v-if="canEvaluateKpi">
         Evaluate this KPI
       </a-button>
       <a-skeleton :loading="loadingEvaluations" active>
-        <a-table
-          v-show="!loadingEvaluations && kpiEvaluations.length > 0"
-          :data-source="kpiEvaluations"
-          :columns="evaluationColumns"
-          row-key="id"
-          size="small"
-        >
+        <a-table v-show="!loadingEvaluations && kpiEvaluations.length > 0" :data-source="kpiEvaluations"
+          :columns="evaluationColumns" row-key="id" size="small">
           <template #bodyCell="{ column, record }">
             <template v-if="column.dataIndex === 'evaluator'">
               <span v-if="record.evaluator">
-                <a-avatar
-                  :src="record.evaluator.avatar_url"
-                  size="small"
-                  style="margin-right: 8px"
-                />
+                <a-avatar :src="record.evaluator.avatar_url" size="small" style="margin-right: 8px" />
                 {{ record.evaluator.first_name }}
                 {{ record.evaluator.last_name }}
               </span>
-              <span v-else> N/A </span>
+              <span v-else> </span>
             </template>
             <template v-else-if="column.dataIndex === 'evaluatee'">
               <span v-if="record.evaluatee">
-                <a-avatar
-                  :src="record.evaluatee.avatar_url"
-                  size="small"
-                  style="margin-right: 8px"
-                />
+                <a-avatar :src="record.evaluatee.avatar_url" size="small" style="margin-right: 8px" />
                 {{ record.evaluatee.first_name }}
                 {{ record.evaluatee.last_name }}
               </span>
-              <span v-else> N/A </span>
+              <span v-else> </span>
             </template>
             <template v-else-if="column.dataIndex === 'evaluation_date'">
               {{
                 record.evaluation_date
                   ? dayjs(record.evaluation_date).format("L")
-                  : "N/A"
+                  : ""
               }}
             </template>
             <template v-else-if="column.dataIndex === 'period'">
@@ -504,11 +290,8 @@
               }}
             </template>
             <template v-else-if="column.dataIndex === 'status'">
-              <a-tag
-                :bordered="false"
-                :color="getEvaluationStatusColor(record.status)"
-              >
-                {{ record.status || "N/A" }}
+              <a-tag :bordered="false" :color="getEvaluationStatusColor(record.status)">
+                {{ record.status || "" }}
               </a-tag>
             </template>
             <template v-else-if="column.dataIndex === 'actions'">
@@ -521,27 +304,14 @@
             </template>
           </template>
         </a-table>
-        <a-empty
-          v-show="!loadingEvaluations && kpiEvaluations.length === 0"
-          description="No evaluations found for this KPI."
-        />
+        <a-empty v-show="!loadingEvaluations && kpiEvaluations.length === 0"
+          description="No evaluations found for this KPI." />
       </a-skeleton>
     </a-card>
 
-    <a-modal
-      :open="isViewEvaluationModalVisible"
-      @update:open="isViewEvaluationModalVisible = $event"
-      title="KPI Evaluation Details"
-      :width="1000"
-      :footer="null"
-      @cancel="closeViewEvaluationModal"
-    >
-      <a-descriptions
-        bordered
-        :column="2"
-        v-if="selectedEvaluation.id"
-        size="small"
-      >
+    <a-modal :open="isViewEvaluationModalVisible" @update:open="isViewEvaluationModalVisible = $event"
+      title="KPI Evaluation Details" :width="1000" :footer="null" @cancel="closeViewEvaluationModal">
+      <a-descriptions bordered :column="2" v-if="selectedEvaluation.id" size="small">
       </a-descriptions>
       <a-empty v-else description="Could not load evaluation details." />
       <template #footer>
@@ -551,46 +321,22 @@
       </template>
     </a-modal>
 
-    <a-modal
-      :open="isCreateEvaluationModalVisible"
-      @update:open="isCreateEvaluationModalVisible = $event"
-      title="Create KPI Evaluation"
-      :width="600"
-      @ok="submitEvaluation"
-      @cancel="closeCreateEvaluationModal"
-      :confirm-loading="submittingEvaluation"
-    >
+    <a-modal :open="isCreateEvaluationModalVisible" @update:open="isCreateEvaluationModalVisible = $event"
+      title="Create KPI Evaluation" :width="600" @ok="submitEvaluation" @cancel="closeCreateEvaluationModal"
+      :confirm-loading="submittingEvaluation">
       <a-form layout="vertical" :model="newEvaluation"> </a-form>
     </a-modal>
 
-    <a-modal
-      :open="isAssignUserModalVisible"
-      @update:open="isAssignUserModalVisible = $event"
-      :title="assignUserModalTitle"
-      @ok="handleSaveUserAssignment"
-      @cancel="closeAssignUserModal"
-      :confirm-loading="submittingUserAssignment"
-      :width="800"
-      :mask-closable="false"
-      :keyboard="false"
-      ok-text="Save"
-      cancel-text="Cancel"
-    >
+    <a-modal :open="isAssignUserModalVisible" @update:open="isAssignUserModalVisible = $event"
+      :title="assignUserModalTitle" @ok="handleSaveUserAssignment" @cancel="closeAssignUserModal"
+      :confirm-loading="submittingUserAssignment" :width="800" :mask-closable="false" :keyboard="false" ok-text="Save"
+      cancel-text="Cancel">
       <a-spin :spinning="loadingAssignableUsers || submittingUserAssignment">
-        <a-descriptions
-          v-if="
-            isEditingUserAssignment && editingUserAssignmentRecord?.employee
-          "
-          :column="1"
-          size="small"
-          style="margin-bottom: 15px"
-        >
+        <a-descriptions v-if="
+          isEditingUserAssignment && editingUserAssignmentRecord?.employee
+        " :column="1" size="small" style="margin-bottom: 15px">
           <a-descriptions-item label="User">
-            <a-avatar
-              :src="editingUserAssignmentRecord.employee?.avatar_url"
-              size="small"
-              style="margin-right: 8px"
-            >
+            <a-avatar :src="editingUserAssignmentRecord.employee?.avatar_url" size="small" style="margin-right: 8px">
               {{ editingUserAssignmentRecord.employee?.first_name?.charAt(0) }}
             </a-avatar>
             {{ editingUserAssignmentRecord.employee?.first_name }}
@@ -599,78 +345,38 @@
             }})
           </a-descriptions-item>
         </a-descriptions>
-        <a-form-item
-          v-if="!isEditingUserAssignment"
-          label="Select Users"
-          required
-        >
-          <a-select
-            v-model:value="selectedUserIds"
-            mode="multiple"
-            placeholder="Search and select users..."
-            style="width: 100%; margin-bottom: 15px"
-            show-search
-            allow-clear
-            :filter-option="
-              (inputValue, option) =>
-                option.label.toLowerCase().indexOf(inputValue.toLowerCase()) >=
-                0
-            "
-            :options="assignableUserOptions"
-            :loading="loadingAssignableUsers"
-          />
+        <a-form-item v-if="!isEditingUserAssignment" label="Select Users" required>
+          <a-select v-model:value="selectedUserIds" mode="multiple" placeholder="Search and select users..."
+            style="width: 100%; margin-bottom: 15px" show-search allow-clear :filter-option="(inputValue, option) =>
+              option.label.toLowerCase().indexOf(inputValue.toLowerCase()) >=
+              0
+              " :options="assignableUserOptions" :loading="loadingAssignableUsers" />
         </a-form-item>
         <h4 style="margin-bottom: 10px">Set Target & Weight:</h4>
-        <a-table
-          :columns="modalUserAssignmentInputColumns"
-          :data-source="modalUserDataSource"
-          row-key="userId"
-          size="small"
-          bordered
-          :pagination="false"
-        >
+        <a-table :columns="modalUserAssignmentInputColumns" :data-source="modalUserDataSource" row-key="userId"
+          size="small" bordered :pagination="false">
           <template #bodyCell="{ column, record }">
             <template v-if="column.key === 'user'">
-              <a-avatar
-                :src="record.avatar_url"
-                size="small"
-                style="margin-right: 8px"
-              >
+              <a-avatar :src="record.avatar_url" size="small" style="margin-right: 8px">
                 {{ record.name?.charAt(0) }}
               </a-avatar>
               {{ record.name }}
             </template>
             <template v-if="column.key === 'target'">
-              <a-input-number
-                v-model:value="userAssignmentDetails[record.userId].target"
-                placeholder="Target"
-                style="width: 100%"
-                :min="0"
-                :step="1"
-              />
+              <a-input-number v-model:value="userAssignmentDetails[record.userId].target" placeholder="Target"
+                style="width: 100%" :min="0" :step="1" />
             </template>
           </template>
         </a-table>
-        <div
-          v-if="userAssignmentSubmitError"
-          style="color: red; margin-top: 10px"
-        >
+        <div v-if="userAssignmentSubmitError" style="color: red; margin-top: 10px">
           {{ userAssignmentSubmitError }}
         </div>
       </a-spin>
     </a-modal>
 
-    <a-modal
-      :open="isDeleteUserAssignModalVisible"
-      @update:open="isDeleteUserAssignModalVisible = $event"
-      title="Confirm Deletion"
-      @ok="handleDeleteUserAssignment"
-      @cancel="isDeleteUserAssignModalVisible = false"
-      :confirm-loading="submittingUserDeletion"
-      ok-text="Delete"
-      cancel-text="Cancel"
-      ok-type="danger"
-    >
+    <a-modal :open="isDeleteUserAssignModalVisible" @update:open="isDeleteUserAssignModalVisible = $event"
+      title="Confirm Deletion" @ok="handleDeleteUserAssignment" @cancel="isDeleteUserAssignModalVisible = false"
+      :confirm-loading="submittingUserDeletion" ok-text="Delete" cancel-text="Cancel" ok-type="danger">
       <p v-if="userAssignmentToDelete?.employee">
         Are you sure you want to remove the assignment for user
         <strong>
@@ -682,75 +388,33 @@
       <p v-else>Are you sure you want to delete this assignment?</p>
     </a-modal>
 
-    <a-modal
-      :open="isDepartmentSectionAssignmentModalVisible"
-      @update:open="isDepartmentSectionAssignmentModalVisible = $event"
-      :title="
-        editingDepartmentSectionAssignment
-          ? 'Edit Assignment'
-          : 'Add Department/Section Assignment'
-      "
-      @ok="handleSaveDepartmentSectionAssignment"
-      @cancel="closeManageDepartmentSectionAssignments"
-      :confirm-loading="submittingDepartmentSectionAssignment"
-      :width="600"
-      :mask-closable="false"
-      :keyboard="false"
-      ok-text="Save"
-      cancel-text="Cancel"
-    >
-      <a-spin
-        :spinning="
-          loadingDepartmentSectionAssignments ||
-          submittingDepartmentSectionAssignment
-        "
-      >
-        <a-form
-          layout="vertical"
-          :model="departmentSectionAssignmentForm"
-          ref="departmentSectionAssignmentFormRef"
-        >
+    <a-modal :open="isDepartmentSectionAssignmentModalVisible"
+      @update:open="isDepartmentSectionAssignmentModalVisible = $event" :title="editingDepartmentSectionAssignment
+        ? 'Edit Assignment'
+        : 'Add Department/Section Assignment'
+        " @ok="handleSaveDepartmentSectionAssignment" @cancel="closeManageDepartmentSectionAssignments"
+      :confirm-loading="submittingDepartmentSectionAssignment" :width="600" :mask-closable="false" :keyboard="false"
+      ok-text="Save" cancel-text="Cancel">
+      <a-spin :spinning="loadingDepartmentSectionAssignments ||
+        submittingDepartmentSectionAssignment
+        ">
+        <a-form layout="vertical" :model="departmentSectionAssignmentForm" ref="departmentSectionAssignmentFormRef">
           <a-form-item label="Assign To" required>
-            <a-select
-              v-model:value="
-                departmentSectionAssignmentForm.assigned_to_department
-              "
-              placeholder="Select Department"
-              style="width: 100%; margin-bottom: 10px"
-              @change="handleDepartmentSelectInModal"
-              :disabled="editingDepartmentSectionAssignment !== null"
-            >
-              <a-select-option value="" disabled
-                >Select Department</a-select-option
-              >
-              <a-select-option
-                v-for="dept in allDepartments"
-                :key="dept.id"
-                :value="dept.id"
-              >
+            <a-select v-model:value="departmentSectionAssignmentForm.assigned_to_department
+              " placeholder="Select Department" style="width: 100%; margin-bottom: 10px"
+              @change="handleDepartmentSelectInModal" :disabled="editingDepartmentSectionAssignment !== null">
+              <a-select-option value="" disabled>Select Department</a-select-option>
+              <a-select-option v-for="dept in allDepartments" :key="dept.id" :value="dept.id">
                 {{ dept.name }}
               </a-select-option>
             </a-select>
             <a-form-item name="assigned_to_section">
-              <a-select
-                v-model:value="
-                  departmentSectionAssignmentForm.assigned_to_section
-                "
-                placeholder="Select Section (Optional)"
-                style="width: 100%"
-                :disabled="
-                  !departmentSectionAssignmentForm.assigned_to_department ||
+              <a-select v-model:value="departmentSectionAssignmentForm.assigned_to_section
+                " placeholder="Select Section (Optional)" style="width: 100%" :disabled="!departmentSectionAssignmentForm.assigned_to_department ||
                   editingDepartmentSectionAssignment !== null
-                "
-              >
-                <a-select-option value="" disabled
-                  >Select Section</a-select-option
-                >
-                <a-select-option
-                  v-for="section in assignableSections"
-                  :key="section.id"
-                  :value="section.id"
-                >
+                  ">
+                <a-select-option value="" disabled>Select Section</a-select-option>
+                <a-select-option v-for="section in assignableSections" :key="section.id" :value="section.id">
                   {{ section.name }}
                 </a-select-option>
               </a-select>
@@ -758,35 +422,20 @@
           </a-form-item>
 
           <a-form-item label="Target" required name="targetValue">
-            <a-input-number
-              v-model:value="departmentSectionAssignmentForm.targetValue"
-              placeholder="Target"
-              style="width: 100%"
-              :min="0"
-              :step="1"
-            />
+            <a-input-number v-model:value="departmentSectionAssignmentForm.targetValue" placeholder="Target"
+              style="width: 100%" :min="0" :step="1" />
           </a-form-item>
 
-          <div
-            v-if="departmentSectionAssignmentError"
-            style="color: red; margin-top: 10px"
-          >
+          <div v-if="departmentSectionAssignmentError" style="color: red; margin-top: 10px">
             {{ departmentSectionAssignmentError }}
           </div>
         </a-form>
       </a-spin>
     </a-modal>
-    <a-modal
-      :open="isDeleteDepartmentSectionAssignmentModalVisible"
-      @update:open="isDeleteDepartmentSectionAssignmentModalVisible = $event"
-      title="Confirm Deletion"
-      @ok="handleDeleteDepartmentSectionAssignment"
-      @cancel="isDeleteDepartmentSectionAssignmentModalVisible = false"
-      :confirm-loading="submittingDepartmentSectionDeletion"
-      ok-text="Delete"
-      cancel-text="Cancel"
-      ok-type="danger"
-    >
+    <a-modal :open="isDeleteDepartmentSectionAssignmentModalVisible"
+      @update:open="isDeleteDepartmentSectionAssignmentModalVisible = $event" title="Confirm Deletion"
+      @ok="handleDeleteDepartmentSectionAssignment" @cancel="isDeleteDepartmentSectionAssignmentModalVisible = false"
+      :confirm-loading="submittingDepartmentSectionDeletion" ok-text="Delete" cancel-text="Cancel" ok-type="danger">
       <p v-if="departmentSectionAssignmentToDelete">
         Are you sure you want to remove the assignment for
         <strong>
@@ -810,11 +459,11 @@
 </template>
 
 <script setup>
-// --- IMPORTS ---
+
 import { ref, computed, watch, onMounted, reactive } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useStore } from "vuex";
-// Import các component AntD cần thiết
+
 import {
   notification,
   Descriptions as ADescriptions,
@@ -845,7 +494,7 @@ import dayjs from "dayjs";
 import LocalizedFormat from "dayjs/plugin/localizedFormat";
 dayjs.extend(LocalizedFormat);
 
-// --- STORE, ROUTER, ROUTE INIT ---
+
 const router = useRouter();
 const store = useStore();
 const route = useRoute();
@@ -855,51 +504,68 @@ const kpiId = computed(() => {
   return !isNaN(parsedId) ? parsedId : null;
 });
 
-// --- STATE ---
-// Lấy state từ store
+const contextSectionId = computed(() => {
+  const id = route.query.contextSectionId;
+  return id ? parseInt(id, 10) : null;
+});
 const loadingKpi = computed(() => store.getters["kpis/isLoading"]);
-const kpiDetailData = computed(() => {
-  const kpi = store.getters["kpis/currentKpi"];
-  console.log(">>> kpiDetailData computed evaluated. Value from getter:", kpi); // <-- LOG NÀY
-  console.log(
-    ">>> kpiDetailData computed evaluated. created_by_type:",
-    kpi?.created_by_type
-  ); // <-- LOG NÀY
-  console.log(
-    ">>> kpiDetailData computed evaluated. created_by:",
-    kpi?.created_by
-  ); // <-- LOG NÀY
-  return kpi;
-});
-const allUserAssignmentsForKpi = computed(() => {
-  const assignments = store.getters["kpis/currentKpiUserAssignments"];
-
-  return assignments;
-});
-
+const kpiDetailData = computed(() => store.getters["kpis/currentKpi"]);
+const allUserAssignmentsForKpi = computed(() => store.getters["kpis/currentKpiUserAssignments"]);
 const loadingUserAssignments = computed(
   () => store.getters["kpis/isLoadingUserAssignments"]
 );
 const userAssignmentError = computed(
   () => store.getters["kpis/userAssignmentError"]
-); // <<< Đổi tên getter cho đúng
+);
 const actualUser = computed(() => store.getters["auth/user"]);
 const effectiveRole = computed(() => store.getters["auth/effectiveRole"]);
 const loadingDepartmentSectionAssignments = computed(
   () => store.getters["kpis/isLoadingDepartmentSectionAssignments"] || false
-); // Loading riêng cho fetch assignments loại này
+);
 const departmentSectionAssignmentError = computed(
   () => store.getters["kpis/departmentSectionAssignmentError"] || null
-); // Lỗi riêng cho assignments loại này
+);
 const allDepartments = computed(
   () => store.getters["departments/departmentList"] || []
 );
 const allSections = computed(() => store.getters["sections/sectionList"] || []);
 
-// State cục bộ
+const sectionNameFromContext = computed(() => {
+  const currentSectionId = contextSectionId.value;
+  if (currentSectionId === null || !Array.isArray(allSections.value) || allSections.value.length === 0) {
+    return "";
+  }
+  const foundSection = allSections.value.find(s => String(s.id) === String(currentSectionId));
+  return foundSection?.name || "";
+});
+
+const departmentNameFromSectionContext = computed(() => {
+  const currentSectionId = contextSectionId.value;
+
+  if (currentSectionId === null ||
+    !Array.isArray(allSections.value) || allSections.value.length === 0 ||
+    !Array.isArray(allDepartments.value) || allDepartments.value.length === 0) {
+    return "";
+  }
+  const section = allSections.value.find(s => String(s.id) === String(currentSectionId));
+  if (!section) {
+    console.warn(`Department Lookup: Không tìm thấy Section với ID ${currentSectionId}.`);
+    return "";
+  }
+
+  const departmentId = section.department.id;
+  if (departmentId === null || typeof departmentId === 'undefined') {
+    return "";
+  }
+  const department = allDepartments.value.find(d => String(d.id) === String(departmentId));
+  if (!department) {
+    console.warn(`Department Lookup: Không tìm thấy Department với ID ${departmentId}.`);
+    return "";
+  }
+  return department.name || "";
+});
 
 const departmentHasSections = ref(null);
-// User Assignment Modal State
 const isAssignUserModalVisible = ref(false);
 const isEditingUserAssignment = ref(false);
 const editingUserAssignmentRecord = ref(null);
@@ -912,7 +578,6 @@ const userAssignmentSubmitError = ref(null);
 const isDeleteUserAssignModalVisible = ref(false);
 const userAssignmentToDelete = ref(null);
 const submittingUserDeletion = ref(false);
-// Evaluations State
 const loadingEvaluations = ref(false);
 const loadingUsersForEval = ref(false);
 const kpiEvaluations = ref([]);
@@ -924,8 +589,8 @@ const submittingEvaluation = ref(false);
 const isDepartmentSectionAssignmentModalVisible = ref(false);
 const editingDepartmentSectionAssignment = ref(null);
 const submittingDepartmentSectionAssignment = ref(false);
-const isDeleteDepartmentSectionAssignmentModalVisible = ref(false); // State quản lý hiển thị modal xác nhận xóa
-const departmentSectionAssignmentToDelete = ref(null); // Lưu bản ghi assignment cần xóa
+const isDeleteDepartmentSectionAssignmentModalVisible = ref(false);
+const departmentSectionAssignmentToDelete = ref(null);
 const submittingDepartmentSectionDeletion = ref(false);
 const departmentSectionAssignmentFormRef = ref(null);
 
@@ -936,14 +601,9 @@ const departmentSectionAssignmentForm = reactive({
   assignmentId: null,
 });
 
-console.log("KPI Detail Data for Filtering Context:", kpiDetailData.value); // <-- LOG 1: Kiểm tra toàn bộ object KPI
-console.log(
-  "departmentHasSections.value (for filtering context):",
-  departmentHasSections.value
-); // <-- LOG 2: Kiểm tra biến departmentHasSections
 
 const currentDepartmentSectionAssignments = computed(() => {
-  // Lọc mảng kpiDetailData.assignments chỉ lấy các assignment có assigned_to_department HOẶC assigned_to_section khác null
+
   return (
     kpiDetailData.value?.assignments?.filter(
       (assign) =>
@@ -962,17 +622,12 @@ const assignableSections = computed(() => {
   const sectionsForSelectedDept = store.getters[
     "sections/sectionsByDepartment"
   ](selectedDepartmentIdInModal);
-  console.log(
-    "assignableSections computed for dept:",
-    selectedDepartmentIdInModal,
-    "found sections:",
-    sectionsForSelectedDept
-  );
+
   return sectionsForSelectedDept;
 });
 
 const openManageDepartmentSectionAssignments = () => {
-  // Reset form và state
+
   editingDepartmentSectionAssignment.value = null;
   departmentSectionAssignmentForm.assigned_to_department = null;
   departmentSectionAssignmentForm.assigned_to_section = null;
@@ -983,9 +638,9 @@ const openManageDepartmentSectionAssignments = () => {
   isDepartmentSectionAssignmentModalVisible.value = true;
 };
 
-// Phương thức mở modal để sửa một assignment Department/Section hiện có
+
 const openEditDepartmentSectionAssignment = (assignmentRecord) => {
-  // Set state cho chế độ sửa
+
   editingDepartmentSectionAssignment.value = assignmentRecord;
   departmentSectionAssignmentForm.assigned_to_department =
     assignmentRecord.assigned_to_department;
@@ -994,18 +649,12 @@ const openEditDepartmentSectionAssignment = (assignmentRecord) => {
   departmentSectionAssignmentForm.targetValue = assignmentRecord.targetValue;
   departmentSectionAssignmentForm.assignmentId = assignmentRecord.id;
   departmentSectionAssignmentError.value = null;
-
-  // Mở modal
   isDepartmentSectionAssignmentModalVisible.value = true;
 
-  // Có thể cần fetch danh sách departments và sections nếu chưa có
-  // store.dispatch('departments/fetchDepartments');
-  // store.dispatch('sections/fetchSections'); // Consider fetching all sections or only relevant ones
 };
 
 const closeManageDepartmentSectionAssignments = () => {
   isDepartmentSectionAssignmentModalVisible.value = false;
-  // Reset state sau khi đóng modal (có thể dùng setTimeout nếu cần animation)
   setTimeout(() => {
     editingDepartmentSectionAssignment.value = null;
     departmentSectionAssignmentForm.assigned_to_department = null;
@@ -1014,12 +663,12 @@ const closeManageDepartmentSectionAssignments = () => {
     departmentSectionAssignmentForm.weight = null;
     departmentSectionAssignmentForm.assignmentId = null;
     departmentSectionAssignmentError.value = null;
-  }, 300); // Giả định animation 300ms
+  }, 300);
 };
 
 const confirmDeleteDepartmentSectionAssignment = (assignmentRecord) => {
-  departmentSectionAssignmentToDelete.value = assignmentRecord; // Lưu lại bản ghi cần xóa
-  isDeleteDepartmentSectionAssignmentModalVisible.value = true; // Mở modal xác nhận
+  departmentSectionAssignmentToDelete.value = assignmentRecord;
+  isDeleteDepartmentSectionAssignmentModalVisible.value = true;
 };
 
 const copyKpiAsTemplate = () => {
@@ -1037,9 +686,8 @@ const copyKpiAsTemplate = () => {
   }
 };
 
-// --- COMPUTED PROPERTIES ---
 const overallTargetValueDetail = computed(() => {
-  // Lấy target tổng từ dữ liệu chi tiết KPI
+
   const target = parseFloat(kpiDetailData.value?.target);
   return isNaN(target) ? 0 : target;
 });
@@ -1049,8 +697,6 @@ const totalAssignedTargetDetail = computed(() => {
   const assignments = kpiDetailData.value?.assignments;
   if (assignments && assignments.length > 0) {
     assignments.forEach((assign) => {
-      // Cộng dồn targetValue từ các assignment trực tiếp của KPI này
-      // Giả định assignments ở đây là các phân bổ trực tiếp từ cấp của KPI này xuống cấp dưới.
       const targetValue = assign.targetValue;
       if (
         targetValue !== undefined &&
@@ -1066,7 +712,7 @@ const totalAssignedTargetDetail = computed(() => {
 });
 
 const remainingTargetDetail = computed(() => {
-  // Tính toán mục tiêu còn lại
+
   return parseFloat(
     (overallTargetValueDetail.value - totalAssignedTargetDetail.value).toFixed(
       5
@@ -1075,25 +721,25 @@ const remainingTargetDetail = computed(() => {
 });
 
 const isOverAssignedDetail = computed(() => {
-  // Kiểm tra xem có bị phân bổ vượt quá mục tiêu tổng không
-  return remainingTargetDetail.value < -1e-9; // Sử dụng ngưỡng nhỏ để xử lý sai số dấu phẩy động
+
+  return remainingTargetDetail.value < -1e-9;
 });
 
-// Kiểm tra xem có nên hiển thị phần thống kê này không
-// Thường chỉ hiển thị khi KPI được tạo ở cấp Company hoặc Department
+
+
 const shouldShowAssignmentStats = computed(() => {
   const kpi = kpiDetailData.value;
   if (!kpi) return false;
-  // Hiển thị nếu KPI được tạo ở cấp Company hoặc Department VÀ có assignments
+
   return (
     (kpi.created_by_type === "company" ||
       kpi.created_by_type === "department") &&
     (kpi.assignments?.length > 0 || overallTargetValueDetail.value > 0)
   );
 });
-// Quyền truy cập và quản lý
+
 const canManageAssignments = computed(() => {
-  // Thêm kiểm tra kpiDetailData có tồn tại không
+
   if (!kpiDetailData.value) return false;
   const result = ["admin", "manager", "department", "section"].includes(
     effectiveRole.value
@@ -1101,56 +747,56 @@ const canManageAssignments = computed(() => {
   return result;
 });
 const canEvaluateKpi = computed(() => {
-  // Thêm kiểm tra kpiDetailData có tồn tại không
+
   if (!kpiDetailData.value) return false;
   return ["admin", "manager", "department", "section"].includes(
     effectiveRole.value
   );
 });
-// Helper kiểm tra quyền sở hữu/quản lý
+
 const isMyDepartment = (deptId) => {
   if (!deptId || !actualUser.value) return false;
-  // Admin/Manager có thể quản lý mọi department
+
   if (["admin", "manager"].includes(actualUser.value?.role)) return true;
-  // Department Lead chỉ quản lý department của mình
+
   if (
     actualUser.value?.role === "department" &&
     actualUser.value?.department_id === deptId
   )
     return true;
-  // Các vai trò khác không được quản lý department khác department của mình (hoặc không quản lý department nào)
+
   return false;
 };
 
 const isMySection = (sectId) => {
   if (!sectId || !actualUser.value) return false;
-  // Admin/Manager có thể quản lý mọi section
+
   if (["admin", "manager"].includes(actualUser.value?.role)) return true;
-  // Section Lead chỉ quản lý section của mình
+
   if (
     actualUser.value?.role === "section" &&
     actualUser.value?.section_id === sectId
   )
     return true;
-  // Department Lead có thể quản lý các section TRONG department của mình
+
   if (
     actualUser.value?.role === "department" &&
     actualUser.value?.department_id
   ) {
-    const allSectionsList = allSections.value; // Lấy danh sách sections
-    // Tìm section với sectId và kiểm tra department_id của nó
+    const allSectionsList = allSections.value;
+
     return Array.isArray(allSectionsList)
       ? allSectionsList.some(
-          (s) =>
-            s.id == sectId && s.department_id === actualUser.value.department_id
-        )
+        (s) =>
+          s.id == sectId && s.department_id === actualUser.value.department_id
+      )
       : false;
   }
-  // Các vai trò khác không được quản lý section khác section/department của mình
+
   return false;
 };
 
-// === LỌC USER ASSIGNMENTS PHÍA CLIENT ===
+
 const filteredDirectUserAssignments = computed(() => {
   const kpi = kpiDetailData.value;
   const currentDeptId =
@@ -1176,127 +822,111 @@ const filteredDirectUserAssignments = computed(() => {
   }
 
   const result = userAssignments.filter((assign) => {
-    // <<< LẶP QUA TỪNG ASSIGNMENT >>>
-    // Kiểm tra đây có phải assignment gán cho employee không
+
+
     const isUserAssignment = assign.assigned_to_employee !== null;
 
-    // <<< THAY ĐỔI CÁCH TRUY CẬP employeeDepartmentId và employeeHasSection >>>
+
     let employeeDepartmentId = undefined;
     let employeeHasSection = false;
-    // Chỉ cố gắng lấy thông tin department/section nếu assignment là user assignment VÀ có object employee được load
+
     if (isUserAssignment && assign.employee) {
-      employeeDepartmentId = assign.employee.department_id; // Truy cập trực tiếp department_id
-      // Kiểm tra xem employee có thuộc section nào không
+      employeeDepartmentId = assign.employee.department_id;
+
       employeeHasSection =
         assign.employee.sectionId !== null &&
         assign.employee.sectionId !== undefined;
-      // console.log(`Debug: Found employee object. employee.department_id = ${assign.employee.department_id}, employee.sectionId = ${assign.employee.sectionId}`); // Debug thêm
-    } else {
-      // console.log(`Debug: Not a user assignment or employee object is null.`); // Debug thêm
-    }
-    // <<< KẾT THÚC THAY ĐỔI >>>
 
-    const matchesDepartment = employeeDepartmentId === currentDeptId; // So sánh với Department ID của KPI (nên dùng === cho số)
-    return isUserAssignment && matchesDepartment && !employeeHasSection; // Điều kiện lọc cuối cùng
+    }
+    const matchesDepartment = employeeDepartmentId === currentDeptId;
+    return isUserAssignment && matchesDepartment && !employeeHasSection;
   });
 
-  console.log("filteredDirectUserAssignments: Filtered result:", result);
+
 
   return result;
 });
 
 const filteredSectionUserAssignments = computed(() => {
-  console.log("--- Evaluating filteredSectionUserAssignments ---");
-  const kpi = kpiDetailData.value;
   const userAssignments = allUserAssignmentsForKpi.value;
-  if (!kpi || kpi.created_by_type !== "section") {
+  const sectionIdToFilterBy = contextSectionId.value;
+
+  if (!sectionIdToFilterBy) {
     return [];
   }
-  const sectionId = kpi.created_by;
+
   if (!Array.isArray(userAssignments)) {
-    console.error(
-      "filteredSectionUserAssignments: userAssignments is NOT an array!",
-      userAssignments
-    );
     return [];
   }
 
   const result = userAssignments.filter((assign) => {
-    // <<< LẶP QUA TỪNG ASSIGNMENT >>>
-
-    // Kiểm tra đây có phải assignment gán cho employee không
     const isUserAssignment = assign.assigned_to_employee !== null;
-
-    // <<< THAY ĐỔI CÁCH TRUY CẬP employeeSectionId >>>
-    let employeeSectionId = undefined;
-    // Chỉ cố gắng lấy employeeSectionId nếu assignment là user assignment VÀ có object employee được load
-    if (isUserAssignment && assign.employee) {
-      employeeSectionId = assign.employee.sectionId; // Truy cập trực tiếp sectionId
-      // console.log(`Debug: Found employee object. employee.sectionId = ${assign.employee.sectionId}`); // Debug thêm
-    } else {
-      // console.log(`Debug: Not a user assignment or employee object is null.`); // Debug thêm
+    if (!isUserAssignment || !assign.employee) {
+      return false;
     }
-    // <<< KẾT THÚC THAY ĐỔI >>>
+    const employeeSectionId = assign.employee.sectionId;
 
-    const matchesSection = employeeSectionId == sectionId; // So sánh với Section ID của KPI (vẫn dùng == cho linh hoạt)
 
-    return isUserAssignment && matchesSection; // Trả về true nếu thỏa mãn điều kiện lọc
+    const matchesSection = String(employeeSectionId) === String(sectionIdToFilterBy);
+
+    return matchesSection;
   });
+
 
   return result;
 });
 
 const shouldShowDirectUserAssignmentCard = computed(() => {
   const kpi = kpiDetailData.value;
-  // Logs cũ (tùy chọn, giữ lại nếu muốn debug)
 
-  // Check 1 (Đã điều chỉnh): KPI data phải load và phải là loại 'department'
+
+
   if (!kpi || kpi.created_by_type !== "department") {
     return false;
   }
 
-  // KPI đã load và là loại "department"
-  const departmentId = kpi.created_by; // Giả định created_by là ID của Department
+
+  const departmentId = kpi.created_by;
   const allDepartmentsList = allDepartments.value;
 
-  // Check 2 (Đã điều chỉnh): Tìm Department object tương ứng trong danh sách Departments của frontend
-  // Nếu không tìm thấy department object cho ID từ created_by, coi như dữ liệu thiếu hoặc sai
+
+
   const kpiDepartment = Array.isArray(allDepartmentsList)
     ? allDepartmentsList.find((d) => d.id == departmentId)
-    : undefined; // Dùng == để so sánh number/string
+    : undefined;
 
   if (!kpiDepartment) {
     return false;
   }
 
-  // Check 3 (Giữ nguyên logic departmentHasSections)
-  // Logic này phụ thuộc vào việc loadAssignmentsAndCheckStructure set departmentHasSections
-  // (Code trong watcher đã được chỉnh để dùng created_by, nên phần này có thể hoạt động đúng)
+
+
+
   const deptHasSections = departmentHasSections.value;
-  // Thêm kiểm tra nếu departmentHasSections đang null (chưa tính toán xong)
+
   if (deptHasSections === null) {
-    return false; // Hoặc có thể hiện loading indicator
+    return false;
   }
   if (deptHasSections === true) {
-    return false; // Card này chỉ cho department KHÔNG CÓ sections
+    return false;
   }
 
-  // Check 4 (Giữ nguyên logic quyền)
+
   const isAllowedRole = ["admin", "manager", "department", "section"].includes(
     effectiveRole.value
   );
   if (!isAllowedRole) {
-    // Fail fast
+
     return false;
   }
 
-  // Check 5 (Điều chỉnh logic quyền quản lý KPI cụ thể này)
-  // Sử dụng thông tin department_id từ object kpiDepartment tìm được
+
+
   const canManageThis =
     ["admin", "manager"].includes(effectiveRole.value) ||
-    (effectiveRole.value === "department" && isMyDepartment(departmentId)); // Dùng departmentId (created_by)
+    (effectiveRole.value === "department" && isMyDepartment(departmentId));
 
-  // Final combination: KPI loại department, không có sections, user có quyền chung, user có quyền quản lý department này
+
   const finalResult =
     isAllowedRole && canManageThis && deptHasSections === false;
 
@@ -1306,54 +936,46 @@ const shouldShowDirectUserAssignmentCard = computed(() => {
 const shouldShowSectionUserAssignmentCard = computed(() => {
   const kpi = kpiDetailData.value;
 
-  // Check 1 (Đã điều chỉnh): KPI data phải load và phải là loại 'section'
-  // (Kết hợp check loại KPI vào đây luôn)
-  if (!kpi || kpi.created_by_type !== "section") {
+  const hasSectionContext = !!contextSectionId.value;
+  const isCorrectTypeOrContext = (kpi?.created_by_type === 'section') || hasSectionContext;
+
+  if (!kpi || !isCorrectTypeOrContext) {
+
     return false;
   }
+  const isAllowedRole = ["admin", "manager", "department", "section"].includes(effectiveRole.value);
+  if (!isAllowedRole) {
 
-  // KPI đã load và là loại "section"
-  const sectionId = kpi.created_by; // Giả định created_by là ID của Section
-  const allSectionsList = allSections.value;
-
-  // Check 2 (Đã điều chỉnh): Tìm Section object tương ứng trong danh sách Sections của frontend
-  // Nếu không tìm thấy section object cho ID từ created_by, coi như dữ liệu thiếu hoặc sai
-  const kpiSection = Array.isArray(allSectionsList)
-    ? allSectionsList.find((s) => s.id == sectionId)
-    : undefined; // Dùng == để so sánh number/string
-
-  if (!kpiSection) {
     return false;
   }
+  const sectionIdToCheck = contextSectionId.value || kpi.created_by;
+  if (!sectionIdToCheck) {
 
-  // Check 3 (Giữ nguyên logic quyền, nhưng dùng thông tin từ kpiSection tìm được)
-  const isAllowedRole = ["admin", "manager", "department", "section"].includes(
-    effectiveRole.value
-  );
+    return false;
+  }
+  const allSectionsList = Array.isArray(allSections.value) ? allSections.value : [];
+  const sectionInfo = allSectionsList.find(s => s.id == sectionIdToCheck);
+  if (!sectionInfo) {
 
-  // Check 4 (Điều chỉnh logic quyền quản lý KPI cụ thể này)
-  // Sử dụng thông tin department_id từ object kpiSection tìm được
-  const canManageThis =
-    ["admin", "manager"].includes(effectiveRole.value) ||
-    (effectiveRole.value === "department" &&
-      isMyDepartment(kpiSection.department_id)) || // Dùng department_id TỪ SECTION tìm được
-    (effectiveRole.value === "section" && isMySection(sectionId)); // Dùng sectionId (created_by)
+    return false;
+  }
+  let canManageThis = false;
+  if (["admin", "manager"].includes(effectiveRole.value)) {
+    canManageThis = true;
+  } else if (effectiveRole.value === 'department' && isMyDepartment(sectionInfo.department_id)) {
 
-  const finalResult = isAllowedRole && canManageThis; // isSectionType check đã kết hợp vào Check 1
+    canManageThis = true;
+  } else if (effectiveRole.value === 'section' && isMySection(sectionIdToCheck)) {
 
-  return finalResult;
+    canManageThis = true;
+  }
+
+  return canManageThis;
 });
 
-// Quyền Approve/Reject (Placeholder)
-// const isPendingForMyApproval = (assignmentRecord) => { console.warn("isPendingForMyApproval needs real data & logic"); return false; };
-// const canApproveRejectAsDeptHead = computed(() => effectiveRole.value === 'department' && isMyDepartment(kpiDetailData.value?.department?.id));
-// const canApproveRejectAsSectionLead = computed(() => effectiveRole.value === 'section' && isMySection(kpiDetailData.value?.section?.id));
-
-// Options cho các select box
-// const allUserList = computed(() => store.getters['employees/userList'] || []);
-// const evaluationUserOptions = computed(() => allUserList.value.map(u => ({ value: u.id, label: `${u.first_name || ''} ${u.last_name || ''} (${u.username})` })));
 const assignableUserOptions = computed(() => {
   const allFetchableUsers = assignableUsers.value;
+
 
   if (!Array.isArray(allFetchableUsers)) {
     return [];
@@ -1371,16 +993,16 @@ const assignableUserOptions = computed(() => {
       typeof user.id !== "undefined" &&
       !alreadyAssignedUserIdsSet.has(user.id)
     );
-  }); // Map danh sách user đã lọc sang format options cho select box
+  });
 
   const result = filteredAssignableUsers.map((user) => ({
-    value: user.id, // Giá trị option là ID user
-    label: `${user.first_name || ""} ${user.last_name || ""} (${user.username})`, // Text hiển thị
-    name: `${user.first_name || ""} ${user.last_name || ""}`, // Tên đầy đủ
-    avatar_url: user?.avatar_url, // URL avatar
+    value: user.id,
+    label: `${user.first_name || ""} ${user.last_name || ""} (${user.username})`,
+    name: `${user.first_name || ""} ${user.last_name || ""}`,
+    avatar_url: user?.avatar_url,
   }));
 
-  console.log("assignableUserOptions: Output result (filtered):", result); // Log kết quả sau khi lọc
+
   return result;
 });
 
@@ -1428,28 +1050,34 @@ const modalUserDataSource = computed(() => {
 });
 
 const assignUserModalTitle = computed(() => {
+
+  if (contextSectionId.value) {
+    const contextSection = allSections.value.find(s => s.id == contextSectionId.value);
+    const sectionName = contextSection?.name || `ID ${contextSectionId.value}`;
+    return `Assign KPI to Users Section ${sectionName}`;
+  }
+
   if (isEditingUserAssignment.value) {
     return "Edit User Assignment";
   }
   if (kpiDetailData.value?.created_by_type === "section") {
-    // Lấy ID của section tạo ra KPI
-    const creatingSectionId = kpiDetailData.value.created_by; // Tìm đối tượng section trong danh sách tất cả sections
+
+    const creatingSectionId = kpiDetailData.value.created_by;
     const creatingSection = allSections.value.find(
       (section) => section.id == creatingSectionId
-    ); // Sử dụng == để so sánh ID (number/string)
-    // Lấy tên section, mặc định là 'N/A' nếu không tìm thấy
-    const sectionName = creatingSection?.name || "N/A"; // Trả về tiêu đề với tên section
+    );
+
+    const sectionName = creatingSection?.name || "";
     return `Assign KPI to Users(Section: ${sectionName})`;
   }
   if (kpiDetailData.value?.created_by_type === "department") {
-    // Tương tự, lấy tên department. Có thể bạn đã có thuộc tính department trên KPI detail
-    // hoặc cần tìm department bằng kpiDetailData.value.created_by từ danh sách allDepartments
-    // Dựa trên code hiện tại, giả định kpiDetailData.value.department?.name hoạt động
-    return `Assign KPI Directly to Users(Dept: ${
-      kpiDetailData.value.department?.name || "N/A"
-    })`;
+
+
+
+    return `Assign KPI Directly to Users(Dept: ${kpiDetailData.value.department?.name || ""
+      })`;
   }
-  return "Assign KPI to Users"; // Tiêu đề mặc định cho các trường hợp khác
+  return "Assign KPI to Users";
 });
 
 const departmentSectionAssignmentColumns = [
@@ -1472,11 +1100,11 @@ const departmentSectionAssignmentColumns = [
     title: "Actions",
     key: "actions",
     align: "center",
-    width: "100px", // Adjusted width
+    width: "100px",
   },
 ];
 
-// --- TABLE COLUMNS ---
+
 const userAssignmentColumns = [
   {
     title: "User",
@@ -1559,13 +1187,13 @@ const evaluationColumns = [
   },
 ];
 
-// --- METHODS ---
+
 
 const shouldShowDepartmentSectionAssignmentCard = computed(() => {
   const kpi = kpiDetailData.value;
-  // Logs cũ (tùy chọn, giữ lại nếu muốn debug)
 
-  // Check 1 (Đã điều chỉnh): KPI data phải load và phải là loại 'company' HOẶC 'department'
+
+
   if (
     !kpi ||
     (kpi.created_by_type !== "company" && kpi.created_by_type !== "department")
@@ -1573,64 +1201,64 @@ const shouldShowDepartmentSectionAssignmentCard = computed(() => {
     return false;
   }
 
-  // KPI đã load và là loại "company" hoặc "department"
+
   const createdByType = kpi.created_by_type;
 
-  // Check 2 (Điều chỉnh): Xác định đơn vị (Department) mà KPI này cho phép gán xuống
+
   let departmentId = null;
   let kpiDepartment = undefined;
 
   if (createdByType === "department") {
-    // Nếu KPI loại department, đơn vị gốc để gán xuống là chính department đó
-    departmentId = kpi.created_by; // Giả định created_by là ID của Department
+
+    departmentId = kpi.created_by;
     const allDepartmentsList = allDepartments.value;
     kpiDepartment = Array.isArray(allDepartmentsList)
       ? allDepartmentsList.find((d) => d.id == departmentId)
       : undefined;
 
-    // Nếu là loại department nhưng không tìm thấy department object, coi như lỗi dữ liệu
+
     if (!kpiDepartment) {
       return false;
     }
 
-    // Check 3 (Điều chỉnh cho KPI loại Department):
-    // Card này chỉ hiện cho KPI loại Department NẾU Department đó CÓ sections
+
+
     const deptHasSections = departmentHasSections.value;
     if (deptHasSections === null) {
-      return false; // Hoặc loading
+      return false;
     }
     if (deptHasSections === false) {
-      return false; // Card này chỉ cho department CÓ sections
+      return false;
     }
   }
-  // else if createdByType === 'company':
-  // KPI loại Company có thể gán xuống bất kỳ Department/Section nào.
-  // Check 3 không áp dụng cho loại Company.
 
-  // Check 4 (Giữ nguyên logic quyền)
+
+
+
+
   const isAllowedRole = ["admin", "manager", "department", "section"].includes(
     effectiveRole.value
   );
   if (!isAllowedRole) {
-    // Fail fast
+
     return false;
   }
 
-  // Check 5 (Điều chỉnh logic quyền quản lý KPI cụ thể này)
-  // Quyền dựa vào loại KPI:
+
+
   let canManageThis = false;
   if (createdByType === "company") {
     canManageThis = ["admin", "manager"].includes(effectiveRole.value);
   } else if (createdByType === "department" && kpiDepartment) {
-    // KPI loại Department CÓ Sections: Quyền dựa vào department của KPIDepartment tìm được
+
     canManageThis =
       ["admin", "manager"].includes(effectiveRole.value) ||
-      (effectiveRole.value === "department" && isMyDepartment(departmentId)); // Dùng departmentId (created_by)
+      (effectiveRole.value === "department" && isMyDepartment(departmentId));
   } else {
     return false;
   }
 
-  const finalResult = isAllowedRole && canManageThis; // Check createdByType & deptHasSections đã làm ở trên
+  const finalResult = isAllowedRole && canManageThis;
 
   return finalResult;
 });
@@ -1651,7 +1279,7 @@ const handleDeleteDepartmentSectionAssignment = async () => {
   departmentSectionAssignmentError.value = null;
 
   const assignmentIdToDelete = departmentSectionAssignmentToDelete.value.id;
-  const kpiIdForRefresh = kpiId.value; // Lấy KPI ID để refresh dữ liệu sau khi xóa
+  const kpiIdForRefresh = kpiId.value;
 
   try {
     await store.dispatch("kpis/deleteDepartmentSectionAssignment", {
@@ -1661,19 +1289,19 @@ const handleDeleteDepartmentSectionAssignment = async () => {
 
     notification.success({ message: "Assignment deleted successfully!" });
 
-    // Đóng modal xác nhận
-    isDeleteDepartmentSectionAssignmentModalVisible.value = false;
-    departmentSectionAssignmentToDelete.value = null; // Clear state
 
-    // Refresh dữ liệu KPI Detail để bảng assignment cập nhật
-    await loadInitialData(); // <== BỎ COMMENT DÒNG NÀY
+    isDeleteDepartmentSectionAssignmentModalVisible.value = false;
+    departmentSectionAssignmentToDelete.value = null;
+
+
+    await loadInitialData();
   } catch (error) {
     console.error("Failed to delete Department/Section assignment:", error);
     const errorMessage =
       store.getters["kpis/error"] ||
       error.message ||
-      "Failed to delete assignment."; // Lấy error chung hoặc specific error nếu có
-    departmentSectionAssignmentError.value = errorMessage; // Hiển thị lỗi
+      "Failed to delete assignment.";
+    departmentSectionAssignmentError.value = errorMessage;
     notification.error({
       message: "Deletion Failed",
       description: errorMessage,
@@ -1700,30 +1328,24 @@ const handleSaveDepartmentSectionAssignment = async () => {
       return;
     }
 
-    // === CHỈNH SỬA: Xây dựng mảng các assignment data ===
-    // Tạo mảng chứa dữ liệu assignment (chỉ có 1 item trong trường hợp modal này)
+
+
     const assignmentsArray = [
       {
-        assignmentId: departmentSectionAssignmentForm.assignmentId, // Include ID for update case
+        assignmentId: departmentSectionAssignmentForm.assignmentId,
         assigned_to_department:
           departmentSectionAssignmentForm.assigned_to_department || null,
         assigned_to_section:
           departmentSectionAssignmentForm.assigned_to_section || null,
         targetValue: Number(departmentSectionAssignmentForm.targetValue),
-        // weight property removed previously - ADD BACK IF NEEDED BY BACKEND
-        // weight: Number(departmentSectionAssignmentForm.weight), // Nếu backend save cần weight
-        // assignedFrom, assignedBy, status, kpiId nên được set bởi backend service
+
       },
     ];
-    // ==================================================
 
-    // === CHỈNH SỬA: Dispatch store action với payload khớp signature action ===
-    // Pass kpiId và mảng assignment data dưới key 'assignmentsArray'
     await store.dispatch("kpis/saveDepartmentSectionAssignment", {
-      kpiId: kpiId.value, // Truyền kpiId riêng
-      assignmentsArray: assignmentsArray, // <== Pass mảng assignment data dưới key 'assignmentsArray'
+      kpiId: kpiId.value,
+      assignmentsArray: assignmentsArray,
     });
-    // ==================================================================
 
     notification.success({
       message: editingDepartmentSectionAssignment.value
@@ -1738,12 +1360,12 @@ const handleSaveDepartmentSectionAssignment = async () => {
     await store.dispatch(
       "kpis/SET_DEPARTMENT_SECTION_ASSIGNMENT_SAVE_ERROR",
       error
-    ); // Sử dụng mutation error riêng
-    // notification error có thể dùng error message từ getter
+    );
+
     notification.error({
       message: "Save Failed",
       description: store.getters["kpis/departmentSectionAssignmentSaveError"],
-    }); // Lấy message từ getter lỗi riêng
+    });
   } finally {
     submittingDepartmentSectionAssignment.value = false;
   }
@@ -1775,7 +1397,7 @@ const getStatusColor = (status) => {
     default:
       return "default";
   }
-}; // Thêm draft vào warning
+};
 const getEvaluationStatusColor = (status) => {
   switch (status?.toLowerCase()) {
     case "met":
@@ -1791,9 +1413,9 @@ const getEvaluationStatusColor = (status) => {
       return "default";
   }
 };
-// Hàm getAssignmentUnitName bị báo unused -> Xóa nếu không dùng ở đâu khác
-// const getAssignmentUnitName = (kpi) => { if (!kpi) return 'N/A'; if (kpi.section) return `Section: ${kpi.section.name}`; if (kpi.department) return `Department: ${kpi.department.name}`; return 'KPI not assigned to specific unit'; };
-// const calculateProgress = (current, target) => { const currentValue = parseFloat(current); const targetValue = parseFloat(target); if (isNaN(currentValue) || isNaN(targetValue) || targetValue === 0) return 0; const percent = (currentValue / targetValue) * 100; return parseFloat(Math.min(percent, 100).toFixed(2)); };
+
+
+
 const ensureUserAssignmentDetail = (
   userId,
   initialTarget = null,
@@ -1808,7 +1430,7 @@ const ensureUserAssignmentDetail = (
   }
 };
 
-// Fetch data methods
+
 const loadInitialData = async () => {
   const currentKpiId = kpiId.value;
   if (!currentKpiId) {
@@ -1818,17 +1440,16 @@ const loadInitialData = async () => {
     return;
   }
   try {
-    await store.dispatch("kpis/fetchKpiDetail", currentKpiId); // Action này đã set loadingKpi
-    // Watcher sẽ lo việc gọi loadAssignmentsAndCheckStructure
+    await store.dispatch("kpis/fetchKpiDetail", currentKpiId);
+
     loadingUsersForEval.value = true;
     await store.dispatch("employees/fetchUsers", {
       params: {},
     });
   } catch (error) {
     notification.error({
-      message: `Failed to load initial KPI data: ${
-        error.message || "Unknown error"
-      }`,
+      message: `Failed to load initial KPI data: ${error.message || "Unknown error"
+        }`,
     });
     console.error("Error loading initial data:", error);
   } finally {
@@ -1850,7 +1471,6 @@ const fetchKpiUserAssignmentsData = async (id) => {
   }
 };
 const fetchAssignableUsersData = async () => {
-  console.log(">>> fetchAssignableUsersData function started <<<");
   const kpi = kpiDetailData.value;
 
   let fetchedUsersList = [];
@@ -1860,65 +1480,32 @@ const fetchAssignableUsersData = async () => {
   userAssignmentSubmitError.value = null;
 
   try {
-    // Case 1: KPI loại Section
-    if (kpi?.created_by_type === "section" && kpi.created_by) {
-      const sectionId = kpi.created_by;
-      console.log(
-        `WorkspaceAssignableUsersData: Dispatching fetchUsersBySection for section ${sectionId}...`
-      );
-      // Đợi action hoàn thành, action này sẽ commit dữ liệu vào state
-      await store.dispatch("employees/fetchUsersBySection", sectionId);
-      console.log(
-        `WorkspaceAssignableUsersData: Dispatch fetchUsersBySection finished.`
-      );
-      // Lấy dữ liệu từ getter sau khi action đã commit
-      fetchedUsersList = store.getters["employees/usersBySection"](sectionId);
-      console.log(
-        `WorkspaceAssignableUsersData: Data fetched from getter 'usersBySection':`,
-        fetchedUsersList
-      ); // <-- LOG 1
+    if (contextSectionId.value) {
+
+
+      await store.dispatch("employees/fetchUsersBySection", contextSectionId.value);
+
+      fetchedUsersList = store.getters["employees/usersBySection"](contextSectionId.value);
+
     }
-    // Case 2: KPI loại Department VÀ Department đó KHÔNG có sections
     else if (
       kpi?.created_by_type === "department" &&
       kpi.created_by &&
       departmentHasSections.value === false
     ) {
       const departmentId = kpi.created_by;
-      console.log(
-        `WorkspaceAssignableUsersData: Dispatching fetchUsersByDepartment for department ${departmentId}...`
-      );
+
       await store.dispatch("employees/fetchUsersByDepartment", departmentId);
-      console.log(
-        `WorkspaceAssignableUsersData: Dispatch fetchUsersByDepartment finished.`
-      );
+
       fetchedUsersList =
         store.getters["employees/usersByDepartment"](departmentId);
-      console.log(
-        `WorkspaceAssignableUsersData: Data fetched from getter 'usersByDepartment':`,
-        fetchedUsersList
-      ); // <-- LOG 2
-    }
-    // Case 3: KPI loại Company (hoặc các loại khác cần fetch tất cả users?)
-    // Dựa trên code bạn, trường hợp này có vẻ đang không được xử lý để fetch user cụ thể?
-    // Cần xem xét logic này dựa trên yêu cầu nghiệp vụ của bạn.
-    // Tạm thời, nếu kpi.created_by_type === 'company', có thể bạn muốn fetch TẤT CẢ users hoặc user có thể gán?
-    // if (kpi?.created_by_type === 'company') {
-    //   await store.dispatch('employees/fetchUsers'); // Fetch tất cả users
-    //   fetchedUsersList = store.getters['employees/userList'];
-    //   console.log('fetchAssignableUsersData: Data fetched from getter userList:', fetchedUsersList);
-    // }
 
-    console.log(
-      "fetchAssignableUsersData: Final fetchedUsersList before assignment:",
-      fetchedUsersList
-    ); // <-- LOG 3
+    }
+
+
     if (Array.isArray(fetchedUsersList)) {
       assignableUsers.value = fetchedUsersList;
-      console.log(
-        "fetchAssignableUsersData: assignableUsers.value AFTER assignment:",
-        assignableUsers.value
-      ); // <-- LOG 4
+
     } else {
       console.error(
         "fetchAssignableUsersData: Fetched users list is NOT an array.",
@@ -1939,25 +1526,19 @@ const fetchAssignableUsersData = async () => {
     assignableUsers.value = [];
   } finally {
     loadingAssignableUsers.value = false;
-    console.log("fetchAssignableUsersData: Finally block executed.");
+
   }
 };
 
-// User Assignment Methods (GỌI ACTION THẬT)
 const openAssignUserModal = () => {
-  isEditingUserAssignment.value = false; // Chế độ thêm mới
-  editingUserAssignmentRecord.value = null; // <<< Khởi tạo selectedUserIds.value là mảng rỗng để input select trống >>>
-
-  selectedUserIds.value = []; // Reset userAssignmentDetails (dữ liệu target/weight cho từng user được chọn)
-
-  Object.keys(userAssignmentDetails).forEach(
-    (key) => delete userAssignmentDetails[key]
-  ); // Bạn có thể muốn pre-fill target/weight mặc định cho user mới ở đây nếu cần
+  isEditingUserAssignment.value = false;
+  editingUserAssignmentRecord.value = null;
+  selectedUserIds.value = [];
+  Object.keys(userAssignmentDetails).forEach(key => delete userAssignmentDetails[key]);
   userAssignmentSubmitError.value = null;
-  isAssignUserModalVisible.value = true; // Fetch danh sách các user có thể gán (để hiển thị trong dropdown select)
-
-  fetchAssignableUsersData();
-};
+  fetchAssignableUsersData('openAssignUserModal');
+  isAssignUserModalVisible.value = true;
+}
 
 const openEditUserModal = (record) => {
   isEditingUserAssignment.value = true;
@@ -2017,7 +1598,7 @@ const handleSaveUserAssignment = async () => {
       const assignmentData = {
         target: userAssignmentDetails[String(userId)]?.target,
       };
-      console.warn("Need specific 'updateUserAssignment' action/API.");
+
       const weightForUpdate =
         editingUserAssignmentRecord.value?.weight ??
         kpiDetailData.value?.weight;
@@ -2107,11 +1688,6 @@ const handleDeleteUserAssignment = async () => {
   }
 };
 
-// === Approval Methods (Placeholder) ===
-// const handleApprove = async (record) => { console.warn("Approve action needs real API call & logic", record); notification.info({ message: "Approve action not implemented." }) };
-// const handleReject = async (record) => { console.warn("Reject action needs real API call & logic", record); notification.info({ message: "Reject action not implemented." }) };
-
-// --- Evaluations Methods ---
 const viewEvaluation = (record) => {
   selectedEvaluation.value = record;
   isViewEvaluationModalVisible.value = true;
@@ -2140,9 +1716,7 @@ const submitEvaluation = async () => {
       period_end_date: endDate?.toISOString(),
     };
     delete payload.period_dates;
-    console.warn(
-      "Store action 'evaluations/createEvaluation' needs implementation."
-    );
+
     await store.dispatch("evaluations/createEvaluation", payload);
     notification.success({
       message: "Evaluation created! (Placeholder)",
@@ -2158,28 +1732,23 @@ const submitEvaluation = async () => {
   }
 };
 
-// --- WATCHERS ---
-// Watcher chính để load assignment khi kpiDetailData thay đổi
+
+
+
 watch(
   kpiDetailData,
   async (newDetail, oldDetail) => {
     const newKpiId = newDetail?.id;
     const oldKpiId = oldDetail?.id;
     if (newKpiId && typeof newKpiId === "number" && newKpiId !== oldKpiId) {
-      store.commit("kpis/SET_KPI_USER_ASSIGNMENTS", []); // Reset assignments trước
-      kpiEvaluations.value = newDetail.evaluations || []; // Cập nhật evaluations từ detail mới
-
-      // === Cần đảm bảo fetch all sections và all departments ở đây hoặc global ===
-      // Logic adjusted computed properties relies on these lists
+      store.commit("kpis/SET_KPI_USER_ASSIGNMENTS", []);
+      kpiEvaluations.value = newDetail.evaluations || [];
       try {
-        // Cần action trong sections store để fetch ALL sections
-        // Cần action trong departments store để fetch ALL ALL departments
-        // Sử dụng Promise.all để chạy song song nếu API cho phép
         await Promise.all([
-          store.dispatch("sections/fetchSections", { forceRefresh: true }), // Giả định action này fetch ALL sections khi KHÔNG có params
+          store.dispatch("sections/fetchSections", { forceRefresh: true }),
           store.dispatch("departments/fetchDepartments", {
             forceRefresh: true,
-          }), // Giả định action này fetch ALL departments
+          }),
         ]);
       } catch (fetchError) {
         console.error("Error fetching all sections/departments:", fetchError);
@@ -2189,32 +1758,24 @@ watch(
         });
       }
 
-      // === Logic kiểm tra departmentHasSections (CẦN ĐIỀU CHỈNH logic tính toán) ===
-      // Logic này được dùng bởi shouldShowDirectUserAssignmentCard và shouldShowDepartmentSectionAssignmentCard (loại department)
-      // Nó cần xác định Department object của KPI trước (dùng created_by)
-      // Và sau đó fetch section con DỰA TRÊN Department object đó.
-      departmentHasSections.value = null; // Reset
+      departmentHasSections.value = null;
       if (newDetail.created_by_type === "department" && newDetail.created_by) {
-        const departmentId = newDetail.created_by; // Giả định created_by là Department ID
+        const departmentId = newDetail.created_by;
         const allDepartmentsList = allDepartments.value;
-        // Tìm Department object TỪ allDepartments list
+
         const kpiDepartment = Array.isArray(allDepartmentsList)
           ? allDepartmentsList.find((d) => d.id == departmentId)
           : undefined;
 
         if (kpiDepartment) {
-          // Chỉ fetch sections nếu tìm thấy Department object
           try {
-            // Gọi action fetchSections VỚI params department_id
-            // Payload params cần là { params: { department_id: departmentId } }
             const sections = await store.dispatch("sections/fetchSections", {
-              params: { department_id: departmentId }, // Filter theo departmentId
-              limit: 1, // Chỉ cần check có tồn tại section nào không
-              forceRefresh: true, // Luôn fetch mới khi check cấu trúc
+              params: { department_id: departmentId },
+              limit: 1,
+              forceRefresh: true,
             });
-            // Check response structure - assuming action returns array or data.data array
             const sectionData =
-              sections?.data?.data || sections?.data || sections; // Handle potential nested data
+              sections?.data?.data || sections?.data || sections;
             departmentHasSections.value =
               Array.isArray(sectionData) && sectionData.length > 0;
           } catch (e) {
@@ -2224,23 +1785,22 @@ watch(
               departmentId,
               e
             );
-            // notification.error({ message: "Could not determine department structure." }); // Tránh spam noti nếu lỗi
+
           }
         } else {
           departmentHasSections.value = null;
         }
       } else {
-        // Không áp dụng cho các level khác hoặc created_by thiếu
+
         departmentHasSections.value = null;
       }
 
-      // === Fetch user assignments SAU khi data chính load ===
       await fetchKpiUserAssignmentsData(newKpiId);
     } else if (!newKpiId && oldKpiId) {
       store.commit("kpis/SET_KPI_USER_ASSIGNMENTS", []);
       kpiEvaluations.value = [];
       departmentHasSections.value = null;
-      // Có thể cần reset allSections / allDepartments nếu chỉ fetch cho trang này
+
     }
   },
   {
@@ -2248,23 +1808,6 @@ watch(
   }
 );
 
-watch(
-  kpiDetailData,
-  (newValue) => {
-    console.log("kpiDetailData watcher: New value:", newValue); // <-- LOG WATCHER 1
-    console.log(
-      "kpiDetailData watcher: New value created_by_type:",
-      newValue?.created_by_type
-    ); // <-- LOG WATCHER 2
-    console.log(
-      "kpiDetailData watcher: New value created_by:",
-      newValue?.created_by
-    ); // <-- LOG WATCHER 3
-  },
-  { deep: true }
-);
-
-// Watcher cho modal user assignment
 watch(
   selectedUserIds,
   (newUserIds, oldUserIds = []) => {
@@ -2285,24 +1828,15 @@ watch(
   }
 );
 
-// --- LIFECYCLE HOOK ---
 onMounted(async () => {
-  await loadInitialData(); // Gọi hàm load data tổng hợp
-  console.log("onMounted: Initial kpiDetailData.value:", kpiDetailData.value); // <-- LOG ONMOUNTED 1
-  console.log(
-    "onMounted: Initial kpiDetailData.value.created_by_type:",
-    kpiDetailData.value?.created_by_type
-  ); // <-- LOG ONMOUNTED 2
-  console.log(
-    "onMounted: Initial kpiDetailData.value.created_by:",
-    kpiDetailData.value?.created_by
-  ); // <-- LOG ONMOUNTED 3
+  await loadInitialData();
 });
 </script>
 <style scoped>
 .ant-descriptions-item-label {
   font-weight: bold;
 }
+
 p {
   margin-bottom: 0.5em;
 }

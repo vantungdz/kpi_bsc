@@ -109,23 +109,6 @@ export class CreateKpiDto {
   parent?: string;
 
   @IsOptional()
-  @IsNumber()
-  @Expose({ name: 'data_provider_id' })
-  dataProviderId?: number;
-
-  @IsOptional()
-  @IsNumber()
-  minimum?: number;
-
-  @IsOptional()
-  @IsNumber()
-  middle?: number;
-
-  @IsOptional()
-  @IsNumber()
-  maximum?: number;
-
-  @IsOptional()
   @ValidateNested()
   @Type(() => AssignmentsDTO)
   assignments?: AssignmentsDTO; // Here we include the assignments object with sections and departments

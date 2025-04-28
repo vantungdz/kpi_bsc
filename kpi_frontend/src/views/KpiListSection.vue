@@ -13,16 +13,8 @@
       <a-row :gutter="[20]">
         <a-col :span="5">
           <a-form-item label="Department:">
-            <a-select
-              v-model:value="localFilters.departmentId"
-              style="width: 100%"
-              @change="handleDepartmentChange"
-            >
-              <a-select-option
-                v-for="department in departmentList"
-                :key="department.id"
-                :value="department.id"
-              >
+            <a-select v-model:value="localFilters.departmentId" style="width: 100%" @change="handleDepartmentChange">
+              <a-select-option v-for="department in departmentList" :key="department.id" :value="department.id">
                 {{ department.name }}
               </a-select-option>
             </a-select>
@@ -31,22 +23,11 @@
 
         <a-col :span="4">
           <a-form-item label="Section:">
-            <a-select
-              v-model:value="localFilters.sectionId"
-              style="width: 100%"
-            >
-              <a-select-option
-                v-if="
-                  selectSectionList.length > 1 || localFilters.sectionId === 0
-                "
-                :value="0"
-                >All</a-select-option
-              >
-              <a-select-option
-                v-for="section in selectSectionList"
-                :key="section.id"
-                :value="section.id"
-              >
+            <a-select v-model:value="localFilters.sectionId" style="width: 100%">
+              <a-select-option v-if="
+                selectSectionList.length > 1 || localFilters.sectionId === 0
+              " :value="0">All</a-select-option>
+              <a-select-option v-for="section in selectSectionList" :key="section.id" :value="section.id">
                 {{ section.name }}
               </a-select-option>
             </a-select>
@@ -54,18 +35,12 @@
         </a-col>
         <a-col :span="4">
           <a-form-item label="Start Date:">
-            <a-date-picker
-              v-model:value="localFilters.startDate"
-              style="width: 100%"
-            />
+            <a-date-picker v-model:value="localFilters.startDate" style="width: 100%" />
           </a-form-item>
         </a-col>
         <a-col :span="4">
           <a-form-item label="End Date:">
-            <a-date-picker
-              v-model:value="localFilters.endDate"
-              style="width: 100%"
-            />
+            <a-date-picker v-model:value="localFilters.endDate" style="width: 100%" />
           </a-form-item>
         </a-col>
         <a-col :span="7" style="text-align: right">
@@ -73,11 +48,7 @@
             <template #icon><filter-outlined /></template>
             Apply
           </a-button>
-          <a-button
-            @click="resetFilters"
-            :loading="loading"
-            style="margin-left: 8px"
-          >
+          <a-button @click="resetFilters" :loading="loading" style="margin-left: 8px">
             <template #icon><reload-outlined /></template>
             Reset
           </a-button>
@@ -90,160 +61,106 @@
         <template #icon> <a-spin /> </template>
       </a-alert>
 
-      <a-alert
-        v-else-if="error"
-        :message="error"
-        type="error"
-        show-icon
-        closable
-      />
+      <a-alert v-else-if="error" :message="error" type="error" show-icon closable />
 
-      <a-alert
-        v-else-if="isDisplayResult && sectionGroups.length === 0"
-        message="No KPIs found matching your criteria."
-        type="warning"
-        show-icon
-        closable
-      />
+      <a-alert v-else-if="isDisplayResult && sectionGroups.length === 0" message="No KPIs found matching your criteria."
+        type="warning" show-icon closable />
 
-      <a-alert
-        v-if="deletedKpiName"
-        :message="`KPI '${deletedKpiName}' was deleted successfully!`"
-        type="success"
-        closable
-        @close="deletedKpiName = null"
-        show-icon
-      />
+      <a-alert v-if="deletedKpiName" :message="`KPI '${deletedKpiName}' was deleted successfully!`" type="success"
+        closable @close="deletedKpiName = null" show-icon />
     </div>
 
     <div v-if="isDisplayResult" class="data-container">
-      <div
-        v-for="(sectionGroup, sectionIndex) in sectionGroups"
-        :key="'sec-' + sectionIndex"
-        class="mb-8"
-      >
-        <h4
-          class="text-lg font-bold mb-2"
-          style="margin-top: 10px; margin-bottom: 10px"
-        >
+      <div v-for="(sectionGroup, sectionIndex) in sectionGroups" :key="'sec-' + sectionIndex" class="mb-8">
+        <h4 class="text-lg font-bold mb-2" style="margin-top: 10px; margin-bottom: 10px">
           {{ sectionGroup.section }}
         </h4>
 
-        <a-collapse
-          v-model:activeKey="activePanelKeys"
-          expandIconPosition="end"
-        >
-          <a-collapse-panel
-            v-for="(perspectiveGroupRows, perspectiveKey) in sectionGroup.data"
+        <a-collapse v-model:activeKey="activePanelKeys" expandIconPosition="end">
+          <a-collapse-panel v-for="(perspectiveGroupRows, perspectiveKey) in sectionGroup.data"
             :key="'pers-' + sectionIndex + '-' + perspectiveKey"
-            :header="perspectiveKey.split('. ')[1] || perspectiveKey"
-          >
-            <a-table
-              :columns="columns"
-              :dataSource="tableData(perspectiveGroupRows)"
-              :pagination="false"
-              rowKey="key"
-              :rowClassName="rowClassName"
-              size="small"
-              bordered
-            >
+            :header="perspectiveKey.split('. ')[1] || perspectiveKey">
+            <a-table :columns="columns" :dataSource="tableData(perspectiveGroupRows)" :pagination="false" rowKey="key"
+              :rowClassName="rowClassName" size="small" bordered>
               <template #bodyCell="{ column, record }">
                 <template v-if="column.dataIndex === 'kpiName'">
                   <span>{{ record.kpiName }}</span>
                 </template>
 
                 <template v-else-if="column.dataIndex === 'chart'">
-                  <apexchart
-                    type="donut"
-                    width="80%"
-                    height="80"
-                    :options="{
-                      chart: { height: 80, type: 'donut' },
-                      labels: ['Actual', 'Remaining'],
-                      plotOptions: {
-                        pie: { donut: { thickness: '40px' } },
+                  <apexchart type="donut" width="80%" height="80" :options="{
+                    chart: { height: 80, type: 'donut' },
+                    labels: ['Actual', 'Remaining'],
+                    plotOptions: {
+                      pie: { donut: { thickness: '40px' } },
+                    },
+                    colors: ['#008FFB', '#B9E5FF'],
+                    dataLabels: {
+                      enabled: true,
+                      style: {
+                        fontSize: '10px',
+                        fontWeight: 'bold',
+                        colors: ['black'],
                       },
-                      colors: ['#008FFB', '#B9E5FF'],
-                      dataLabels: {
-                        enabled: true,
-                        style: {
-                          fontSize: '10px',
-                          fontWeight: 'bold',
-                          colors: ['black'],
-                        },
-                      },
-                      legend: { show: false },
-                    }"
-                    :series="[
-                      parseFloat(record.actual) || 0,
-                      Math.max(
-                        parseFloat(record.target) - parseFloat(record.actual),
-                        0
-                      ),
-                    ]"
-                  />
+                    },
+                    legend: { show: false },
+                  }" :series="[
+                    parseFloat(record.actual) || 0,
+                    Math.max(
+                      parseFloat(record.target) - parseFloat(record.actual),
+                      0
+                    ),
+                  ]" />
                 </template>
 
                 <template v-else-if="column.dataIndex === 'assignTo'">
                   <span>{{ record.assignTo }}</span>
                 </template>
 
-                <template v-else-if="column.dataIndex === 'startDate'"
-                  ><span>{{ record.startDate }}</span></template
-                >
+                <template v-else-if="column.dataIndex === 'startDate'"><span>{{ record.startDate }}</span></template>
 
-                <template v-else-if="column.dataIndex === 'endDate'"
-                  ><span>{{ record.endDate }}</span></template
-                >
+                <template v-else-if="column.dataIndex === 'endDate'"><span>{{ record.endDate }}</span></template>
 
-                <template v-else-if="column.dataIndex === 'weight'"
-                  ><span>{{ record.weight }}</span></template
-                >
+                <template v-else-if="column.dataIndex === 'weight'"><span>{{ record.weight }}</span></template>
 
-                <template v-else-if="column.dataIndex === 'target'"
-                  ><span>{{
-                    `${record.target} ${record.unit}`
-                  }}</span></template
-                >
+                <template v-else-if="column.dataIndex === 'target'"><span>{{
+                  `${record.target} ${record.unit}`
+                }}</span></template>
 
-                <template v-else-if="column.dataIndex === 'actual'"
-                  ><span>{{
-                    `${record.actual} ${record.unit}`
-                  }}</span></template
-                >
+                <template v-else-if="column.dataIndex === 'actual'"><span>{{
+                  `${record.actual} ${record.unit}`
+                }}</span></template>
 
                 <template v-else-if="column.dataIndex === 'status'">
-                  <a-tag
-                    :bordered="false"
-                    :color="getStatusColor(record.status)"
-                  >
+                  <a-tag :bordered="false" :color="getStatusColor(record.status)">
                     {{ record.status }}
                   </a-tag>
                 </template>
 
                 <template v-else-if="column.dataIndex === 'action'">
-                  <a-button
-                    type="default"
-                    class="kpi-actions-button"
-                    @click="
+                  <a-tooltip title="View Details">
+                    <a-button type="default" class="kpi-actions-button" @click="
                       $router.push({
-                        name: 'KpiDetail', // Sử dụng tên route chi tiết KPI gốc
-                        params: { id: record.kpiId }, // Truyền ID của KPI gốc
+                        name: 'KpiDetail',
+                        params: { id: record.kpiId },
+                        query: { contextSectionId: sectionGroup.sectionId }
                       })
-                    "
-                  >
-                    <schedule-outlined /> Details
-                  </a-button>
-
-                  <a-button
-                    danger
-                    class="kpi-actions-button"
-                    @click="
+                      ">
+                      <schedule-outlined /> Details
+                    </a-button>
+                  </a-tooltip>
+                  <a-tooltip title="Copy KPI">
+                    <a-button type="dashed" class="kpi-actions-button" size="small" @click="handleCopyKpi(record)">
+                      <copy-outlined /> Copy
+                    </a-button>
+                  </a-tooltip>
+                  <a-tooltip title="Delete KPI">
+                    <a-button danger class="kpi-actions-button" @click="
                       showConfirmDeleteDialog(record.kpiId, record.kpiName)
-                    "
-                  >
-                    <delete-outlined /> Delete
-                  </a-button>
+                      ">
+                      <delete-outlined /> Delete
+                    </a-button>
+                  </a-tooltip>
                 </template>
               </template>
             </a-table>
@@ -252,13 +169,8 @@
       </div>
     </div>
 
-    <a-modal
-      danger
-      v-model:open="isDeleteModalVisible"
-      title="Confirm Dialog"
-      @ok="handleDeleteKpi"
-      @cancel="isDeleteModalVisible = false"
-    >
+    <a-modal danger v-model:open="isDeleteModalVisible" title="Confirm Dialog" @ok="handleDeleteKpi"
+      @cancel="isDeleteModalVisible = false">
       <p>Are you sure to delete "{{ selectedKpiName }}"?</p>
     </a-modal>
   </div>
@@ -274,15 +186,14 @@ import {
   ReloadOutlined,
   ScheduleOutlined,
   DeleteOutlined,
+  CopyOutlined
 } from "@ant-design/icons-vue";
 import { notification } from "ant-design-vue";
 
-// --- Store  ---
 const store = useStore();
 const router = useRouter();
 const route = useRoute();
 
-// 2. Reactive state declarations
 const loading = computed(() => store.getters["kpis/isLoading"]);
 const error = computed(() => store.getters["kpis/error"]);
 const departmentList = computed(
@@ -294,7 +205,7 @@ const sectionKpiList = computed(
 );
 
 const creationScope = computed(() => route.query.scope || "section");
-const selectSectionList = ref([]); // Assuming this holds sections filtered by department
+const selectSectionList = ref([]);
 
 const isDeleteModalVisible = ref(false);
 const selectedKpiId = ref(null);
@@ -302,7 +213,7 @@ const selectedKpiName = ref(null);
 const deletedKpiName = ref(null);
 
 const isDisplayResult = ref(false);
-const activePanelKeys = ref([]); // For collapse panels
+const activePanelKeys = ref([]);
 
 const sectionGroups = computed(() => {
   const groupedData = {};
@@ -319,18 +230,17 @@ const sectionGroups = computed(() => {
     !Array.isArray(displayData) ||
     displayData.length === 0
   ) {
-    return []; // Trả về mảng rỗng nếu dữ liệu không hợp lệ
+    return [];
   }
 
-  // Duyệt qua từng KPI trong danh sách nhận được từ backend
   displayData.forEach((kpi) => {
-    // Bỏ qua nếu KPI không hợp lệ hoặc không có assignments
+
     if (!kpi || !kpi.assignments || kpi.assignments.length === 0) {
-      return; // Bỏ qua KPI này
+      return;
     }
 
     const kpiDetails = {
-      // Lấy các thông tin cần thiết từ đối tượng KPI gốc
+
       kpiId: kpi.id,
       kpiName: kpi.name,
       kpiUnit: kpi.unit || "",
@@ -343,7 +253,6 @@ const sectionGroups = computed(() => {
       perspectiveName: kpi.perspective ? kpi.perspective.name : "Uncategorized",
     };
 
-    // Duyệt qua từng assignment của KPI này
     kpi.assignments.forEach((assignment) => {
       let assignedDepartmentId = undefined;
       if (
@@ -355,7 +264,7 @@ const sectionGroups = computed(() => {
         assignment?.assigned_to_section !== null &&
         assignment?.assigned_to_section !== undefined
       ) {
-        // Kiểm tra xem mối quan hệ section có được load không
+
         if (assignment.section) {
           if (
             assignment.section.department?.id !== null &&
@@ -383,14 +292,14 @@ const sectionGroups = computed(() => {
             assignment.employee.section.department_id !== null &&
             assignment.employee.section.department_id !== undefined
           ) {
-            // Kiểm tra trường department_id trực tiếp trên section của employee
+
             assignedDepartmentId = assignment.employee.section.department_id;
           }
         }
       }
 
       const assignedSectionId =
-        assignment?.assigned_to_section || assignment?.employee?.section_id; // Giữ nguyên logic xác định assignedSectionId
+        assignment?.assigned_to_section || assignment?.employee?.section_id;
       if (!assignedSectionId) {
         return;
       }
@@ -414,7 +323,7 @@ const sectionGroups = computed(() => {
           return;
         }
       }
-      // Tìm thông tin Section từ danh sách tổng dựa trên assignedSectionId
+
       const assignedSection = allSections.find(
         (s) => Number(s.id) === Number(assignedSectionId)
       );
@@ -426,34 +335,38 @@ const sectionGroups = computed(() => {
       const sectionName = assignedSection.name;
       const perspectiveKey = `${kpiDetails.perspectiveId}. ${kpiDetails.perspectiveName}`;
       if (!groupedData[assignedSectionId]) {
-        groupedData[assignedSectionId] = { section: sectionName, data: {} };
+        groupedData[assignedSectionId] = {
+          section: sectionName,
+          sectionId: assignedSectionId,
+          data: {}
+        };
       }
       if (!groupedData[assignedSectionId].data[perspectiveKey]) {
         groupedData[assignedSectionId].data[perspectiveKey] = [];
       }
 
-      let assignToDisplay = sectionName; // Mặc định là tên section
+      let assignToDisplay = sectionName;
       if (assignment?.assigned_to_employee && assignment?.employee) {
-        assignToDisplay = assignment.employee.name; // Hiển thị tên employee
+        assignToDisplay = assignment.employee.name;
       } else if (assignment?.assigned_to_team && assignment?.team) {
-        assignToDisplay = assignment.team.name; // Hiển thị tên team
+        assignToDisplay = assignment.team.name;
       }
       const rowData = {
-        key: `assignment-${assignment?.id}`, // Sử dụng ID của assignment làm key duy nhất cho dòng
-        kpiId: kpiDetails.kpiId, // ID của KPI gốc (để xem chi tiết)
-        kpiName: kpiDetails.kpiName, // Tên KPI gốc
-        perspectiveName: kpiDetails.perspectiveName, // Tên Perspective
-        assignTo: assignToDisplay, // Chuỗi hiển thị "Assigned To"
-        startDate: kpiDetails.kpiStartDate, // Ngày bắt đầu KPI gốc
-        endDate: kpiDetails.kpiEndDate, // Ngày kết thúc KPI gốc
-        weight: kpiDetails.kpiWeight, // Trọng số KPI gốc
-        target: assignment?.targetValue || "0", // Target của assignment cụ thể này
+        key: `assignment-${assignment?.id}`,
+        kpiId: kpiDetails.kpiId,
+        kpiName: kpiDetails.kpiName,
+        perspectiveName: kpiDetails.perspectiveName,
+        assignTo: assignToDisplay,
+        startDate: kpiDetails.kpiStartDate,
+        endDate: kpiDetails.kpiEndDate,
+        weight: kpiDetails.kpiWeight,
+        target: assignment?.targetValue || "0",
         actual:
-          assignment?.kpiValues && assignment.kpiValues.length > 0 // Lấy giá trị Actual từ kpiValues trong assignment
+          assignment?.kpiValues && assignment.kpiValues.length > 0
             ? assignment.kpiValues[0].value || "0"
-            : "0", // Mặc định là "0"
-        unit: kpiDetails.kpiUnit, // Đơn vị của KPI gốc
-        status: assignment?.status || "Unknown", // Trạng thái của assignment
+            : "0",
+        unit: kpiDetails.kpiUnit,
+        status: assignment?.status || "Unknown",
       };
       groupedData[assignedSectionId].data[perspectiveKey].push(rowData);
     });
@@ -468,12 +381,13 @@ const sectionGroups = computed(() => {
       }, {});
 
     return {
-      section: sectionGroup.section, // Tên Section
-      data: sortedPerspectives, // Dữ liệu đã gom nhóm theo perspective
+      section: sectionGroup.section,
+      sectionId: sectionGroup.sectionId,
+      data: sortedPerspectives,
     };
   });
 
-  // Sắp xếp các section theo tên Section
+
   finalGroupedArray.sort((a, b) => a.section.localeCompare(b.section));
   return finalGroupedArray;
 });
@@ -484,29 +398,28 @@ const applyFilters = async () => {
   isDisplayResult.value = false;
 
   try {
-    // *** Đảm bảo đối tượng được gửi đi có trường sectionId ***
     const filtersToSend = {
-      departmentId: localFilters.departmentId || "", // Truyền departmentId (số hoặc "")
-      sectionId: localFilters.sectionId, // <-- Truyền sectionId (0 hoặc số)
+      departmentId: localFilters.departmentId || "",
+      sectionId: localFilters.sectionId,
       name: localFilters.name,
       startDate: localFilters.startDate,
       endDate: localFilters.endDate,
     };
 
-    await store.dispatch("kpis/fetchSectionKpis", filtersToSend); // Truyền đối tượng bộ lọc
+    await store.dispatch("kpis/fetchSectionKpis", filtersToSend);
 
     isDisplayResult.value = true;
   } catch (err) {
     error.value = err.message || "Failed to fetch KPIs.";
   } finally {
     loading.value = false;
-    // resultKpiList assignment should be removed
+
   }
 };
 
 const handleDepartmentChange = async () => {
-  loading.value = true; // Bắt đầu loading
-  error.value = null; // Xóa lỗi
+  loading.value = true;
+  error.value = null;
 
   try {
     if (localFilters.departmentId) {
@@ -514,23 +427,22 @@ const handleDepartmentChange = async () => {
         department_id: localFilters.departmentId,
       });
     } else {
-      // Xử lý nếu department filter có thể là "All" (nếu bạn thêm option "All" cho Department)
       console.warn(
         "Department filter is not selected in handleDepartmentChange."
       );
-      await store.dispatch("sections/fetchSections"); // Lấy tất cả sections nếu không chọn department cụ thể
+      await store.dispatch("sections/fetchSections");
     }
   } catch (err) {
     error.value = err.message || "Failed to fetch sections.";
   } finally {
     selectSectionList.value = sectionList.value;
-    // Thiết lập giá trị mặc định cho bộ lọc Section: 0 cho "All" nếu có nhiều sections, ngược lại là ID của section duy nhất
+
     localFilters.sectionId =
       selectSectionList.value.length > 1
         ? 0
         : selectSectionList.value[0]?.id || "";
 
-    loading.value = false; // Kết thúc loading cho fetch sections
+    loading.value = false;
   }
 };
 
@@ -539,30 +451,39 @@ const tableData = (perspectiveGroupRowsArray) => {
 };
 
 const goToCreateKpi = () => {
-  // Lấy ID của section đang được chọn trong filter
-  // Hoặc lấy ID section của người dùng hiện tại nếu trang này là trang cá nhân của Section đó
-  const targetSectionId = localFilters.value; // Giả định bạn lấy từ filter
 
+  const targetSectionId = localFilters.value;
   if (!targetSectionId && creationScope.value === "section") {
-    // Thêm kiểm tra nếu ID không có khi scope là section
     console.warn("Cannot navigate to create KPI: Section ID is not selected.");
     notification.warning({
       message: "Please select a Section to create a KPI for.",
     });
     return;
   }
-
   router.push({
-    name: "KpiCreate", // Đảm bảo tên route 'KpiCreate' là đúng
+    name: "KpiCreate",
     query: {
-      scope: "section", // Đặt scope là 'section'
-      sectionId: targetSectionId, // Truyền sectionId được chọn
+      scope: "section",
+      sectionId: targetSectionId,
     },
   });
 };
 
 const getStatusColor = (status) => {
   return status === "Active" ? "success" : "red";
+};
+
+const handleCopyKpi = (record) => {
+  if (record && record.kpiId) {
+    router.push({
+      path: "/kpis/create", // Đường dẫn đến trang tạo KPI
+      query: {
+        templateKpiId: record.kpiId, // Truyền ID của KPI cần sao chép
+      },
+    });
+  } else {
+    notification.warning({ message: "Không thể sao chép do thiếu thông tin KPI." });
+  }
 };
 
 const showConfirmDeleteDialog = (id, name) => {
@@ -575,7 +496,7 @@ const handleDeleteKpi = () => {
   store
     .dispatch("kpis/deleteKpi", selectedKpiId.value)
     .then(() => {
-      applyFilters(); // Tải lại trang hiện tại sau khi xóa
+      applyFilters();
       deletedKpiName.value = selectedKpiName.value;
       isDeleteModalVisible.value = false;
       selectedKpiId.value = "";
@@ -634,13 +555,13 @@ const columns = [
     title: "Status",
     dataIndex: "status",
     key: "status",
-    width: "11%",
+    width: "8%",
   },
   {
     title: "Action",
     dataIndex: "action",
     key: "action",
-    width: "12%",
+    width: "15%",
     rowClassName: "action-column-cell",
   },
 ];
@@ -667,20 +588,19 @@ const rowClassName = (record) => {
   return record.isParent ? "row-parent" : "";
 };
 
-// --- Watcher to set all keys active ---
+
 watch(
   sectionGroups,
   (newGroups) => {
     if (newGroups && typeof newGroups === "object") {
       const allKeys = Object.keys(newGroups);
-      // Update the activePanelKeys ref with ALL the keys from the data
       activePanelKeys.value = allKeys;
     } else {
-      activePanelKeys.value = []; // Clear if no groups
+      activePanelKeys.value = [];
     }
   },
   {
-    immediate: true, // Run once immediately on component setup
+    immediate: true,
   }
 );
 

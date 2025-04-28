@@ -54,17 +54,15 @@ export class EmployeesService {
 
   async findOne(id: number): Promise<Employee> {
     const user = await this.employeeRepository.findOne({
-      where: { id }, // <<< THÊM relations để tải thông tin Department và Section >>>
+      where: { id },
       relations: ['department', 'section'],
-    }); // Lưu ý: Trong chiến lược JWT validate, nếu user không tìm thấy, validate nên trả về undefined.
-    // Ném UnauthorizedException ở đây có thể không phải lúc nào cũng là hành vi mong muốn trong service.
-    // Tuy nhiên, giữ lại theo code gốc cho hiện tại.
+    });
 
     if (!user) {
-      throw new UnauthorizedException('User not found'); // Đổi message cho rõ ràng
+      throw new UnauthorizedException('User not found');
     }
 
-    return user; // Trả về object Employee với relations Department và Section đã tải
+    return user;
   }
 
   async findOneBy(
@@ -72,13 +70,13 @@ export class EmployeesService {
     password: string,
   ): Promise<Employee | undefined> {
     const foundUser = await this.employeeRepository.findOne({
-      where: [{ email: usernameOrEmail }, { username: usernameOrEmail }], // <<< THÊM relations để tải thông tin Department và Section >>>
-      // Cần thiết nếu frontend muốn hiển thị thông tin Department/Section ngay sau login
+      where: [{ email: usernameOrEmail }, { username: usernameOrEmail }],
+
       relations: ['department', 'section'],
     });
 
     if (!foundUser) {
-      return undefined; // Trả về undefined nếu không tìm thấy user
+      return undefined;
     }
 
     let isPasswordValid: boolean;
@@ -90,11 +88,10 @@ export class EmployeesService {
     }
 
     if (!isPasswordValid) {
-      // Ném UnauthorizedException nếu mật khẩu sai
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    return foundUser; // Trả về object Employee với relations Department và Section đã tải
+    return foundUser;
   }
 
   async remove(id: number): Promise<void> {

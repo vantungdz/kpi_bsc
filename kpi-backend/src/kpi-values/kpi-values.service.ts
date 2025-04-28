@@ -4,13 +4,15 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, DataSource } from 'typeorm';
 import { KpiValue } from '../entities/kpi-value.entity';
 import { KpiValueHistory } from 'src/entities/kpi-value-history.entity';
+import { KPIAssignment } from 'src/entities/kpi-assignment.entity';
 
 @Injectable()
 export class KpiValuesService {
   constructor(
+    private dataSource: DataSource,
     @InjectRepository(KpiValue)
     private kpiValuesRepository: Repository<KpiValue>,
     @InjectRepository(KpiValueHistory)
@@ -39,10 +41,9 @@ export class KpiValuesService {
     const newKpiValue = this.kpiValuesRepository.create(kpiValueData);
     const savedKpiValue = await this.kpiValuesRepository.save(newKpiValue);
 
-    // Lưu lịch sử: Hành động CREATE
     const historyEntry = this.kpiValueHistoryRepository.create({
       kpi_value_id: savedKpiValue.id,
-      // kpi_id: savedKpiValue.kpi.id,
+
       value: savedKpiValue.value,
       timestamp: savedKpiValue.timestamp,
       notes: savedKpiValue.notes,
@@ -66,10 +67,9 @@ export class KpiValuesService {
       throw new NotFoundException(`KPI Value with ID ${id} not found`);
     }
 
-    // Lưu lịch sử: Hành động UPDATE (lưu giá trị cũ trước khi cập nhật)
     const historyEntry = this.kpiValueHistoryRepository.create({
       kpi_value_id: kpiValue.id,
-      // kpi_id: kpiValue.kpi.id,
+
       value: kpiValue.value,
       timestamp: kpiValue.timestamp,
       notes: kpiValue.notes,
@@ -78,14 +78,12 @@ export class KpiValuesService {
     });
     await this.kpiValueHistoryRepository.save(historyEntry);
 
-    // Cập nhật giá trị mới
     Object.assign(kpiValue, updateData);
     kpiValue.updated_at = new Date();
     kpiValue.updated_by = updatedBy;
     return this.kpiValuesRepository.save(kpiValue);
   }
 
-  // Xóa KPI Value
   async delete(id: number, deletedBy: number): Promise<boolean> {
     const kpiValue = await this.kpiValuesRepository.findOne({
       where: { id },
@@ -94,10 +92,9 @@ export class KpiValuesService {
       throw new NotFoundException(`KPI Value with ID ${id} not found`);
     }
 
-    // Lưu lịch sử: Hành động DELETE
     const historyEntry = this.kpiValueHistoryRepository.create({
       kpi_value_id: kpiValue.id,
-      // kpi_id: kpiValue.kpi.id,
+
       value: kpiValue.value,
       timestamp: kpiValue.timestamp,
       notes: kpiValue.notes,
@@ -116,42 +113,87 @@ export class KpiValuesService {
     projectDetails: any[],
     userId: number,
   ): Promise<KpiValue> {
-    // Tính toán giá trị từ projectDetails (ví dụ: tổng các projectValue)
-    let calculatedValue = 0;
-    if (projectDetails && Array.isArray(projectDetails)) {
-      calculatedValue = projectDetails.reduce(
-        (sum, project) => sum + Number(project.projectValue || 0),
-        0,
-      );
-    }
+    return await this.dataSource.transaction(
+      async (transactionalEntityManager) => {
+        const kpiValueRepo = transactionalEntityManager.getRepository(KpiValue);
+        const historyRepo =
+          transactionalEntityManager.getRepository(KpiValueHistory);
+        const assignmentRepo =
+          transactionalEntityManager.getRepository(KPIAssignment);
 
-    const newKpiValue = this.kpiValuesRepository.create({
-      kpi_assigment_id: assignmentId,
-      value: calculatedValue, // Sử dụng giá trị đã tính toán
-      timestamp: new Date(),
-      notes: notes,
-      status: 'submitted',
-      project_details: JSON.stringify(projectDetails),
-      updated_by: userId,
-    });
+        const assignmentExists = await assignmentRepo.findOneBy({
+          id: assignmentId,
+        });
+        if (!assignmentExists) {
+          throw new NotFoundException(
+            `KPI Assignment with ID ${assignmentId} not found. Cannot submit progress.`,
+          );
+        }
 
-    const savedKpiValue = await this.kpiValuesRepository.save(newKpiValue);
+        let calculatedValue = 0;
+        if (projectDetails && Array.isArray(projectDetails)) {
+          calculatedValue = projectDetails.reduce(
+            (sum, project) => sum + Number(project.value || 0),
+            0,
+          );
+        }
 
-    const historyEntry = this.kpiValueHistoryRepository.create({
-      kpi_value_id: savedKpiValue.id,
-      kpi_assigment_id: assignmentId,
-      value: savedKpiValue.value,
-      timestamp: savedKpiValue.timestamp,
-      notes: savedKpiValue.notes,
-      action: 'SUBMIT',
-      changed_by: userId,
-    });
-    await this.kpiValueHistoryRepository.save(historyEntry);
+        let existingRecord = await kpiValueRepo.findOneBy({
+          kpi_assigment_id: assignmentId,
+        });
 
-    return savedKpiValue;
+        let savedKpiValue: KpiValue;
+        let historyAction: string;
+        const currentTimestamp = new Date();
+
+        const projectDetailsString = JSON.stringify(projectDetails);
+
+        if (existingRecord) {
+          historyAction = 'SUBMIT_UPDATE';
+
+          existingRecord.value = calculatedValue;
+          existingRecord.notes = notes;
+          existingRecord.project_details = projectDetailsString;
+          existingRecord.status = 'submitted';
+          existingRecord.timestamp = currentTimestamp;
+          existingRecord.updated_by = userId;
+
+          savedKpiValue = await kpiValueRepo.save(existingRecord);
+        } else {
+          historyAction = 'SUBMIT_CREATE';
+
+          const newKpiValueData: Partial<KpiValue> = {
+            kpi_assigment_id: assignmentId,
+            value: calculatedValue,
+            timestamp: currentTimestamp,
+            notes: notes,
+            status: 'submitted',
+            project_details: projectDetailsString,
+            updated_by: userId,
+          };
+
+          const newKpiValue = kpiValueRepo.create(newKpiValueData);
+          savedKpiValue = await kpiValueRepo.save(newKpiValue);
+        }
+
+        const historyEntry = historyRepo.create({
+          kpi_value_id: savedKpiValue.id,
+          kpi_assigment_id: assignmentId,
+          kpi_id: assignmentExists.kpi_id,
+          value: savedKpiValue.value,
+          timestamp: savedKpiValue.timestamp,
+          notes: savedKpiValue.notes,
+
+          action: historyAction,
+          changed_by: userId,
+        });
+        await historyRepo.save(historyEntry);
+
+        return savedKpiValue;
+      },
+    );
   }
 
-  // Lấy lịch sử của KPI Value
   async getHistory(kpiValueId: number): Promise<KpiValueHistory[]> {
     return this.kpiValueHistoryRepository.find({
       where: { kpi_value_id: kpiValueId },

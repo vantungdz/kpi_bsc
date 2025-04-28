@@ -1,11 +1,10 @@
-
 import {
   Entity,
   PrimaryGeneratedColumn,
   Column,
   OneToMany,
   ManyToOne,
-  JoinColumn, 
+  JoinColumn,
 } from 'typeorm';
 import { KpiValue } from './kpi-value.entity';
 import { KpiEvaluation } from './kpi-evaluation.entity';
@@ -46,24 +45,24 @@ export class Employee {
   @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
   updated_at: Date;
 
-  @Column({ nullable: true, name: 'departmentId' }) 
-  departmentId: number; 
+  @Column({ nullable: true, name: 'departmentId' })
+  departmentId: number;
 
   @ManyToOne(() => Department, (department) => department.employees)
-  @JoinColumn({ name: 'departmentId' }) 
-  department: Department; 
-  
-  @Column({ nullable: true, name: 'sectionId' }) 
-  sectionId: number; 
+  @JoinColumn({ name: 'departmentId' })
+  department: Department;
+
+  @Column({ nullable: true, name: 'sectionId' })
+  sectionId: number;
 
   @ManyToOne(() => Section, (section) => section.employees, { nullable: true })
-  @JoinColumn({ name: 'sectionId' }) 
-  section?: Section; 
-  
-  @Column({ nullable: true, name: 'teamId' }) 
-  teamId: number; 
+  @JoinColumn({ name: 'sectionId' })
+  section?: Section;
+
+  @Column({ nullable: true, name: 'teamId' })
+  teamId: number;
 
   @ManyToOne(() => Team, (team) => team.employees, { nullable: true })
-  @JoinColumn({ name: 'teamId' }) 
-  team?: Team; 
+  @JoinColumn({ name: 'teamId' })
+  team?: Team;
 }
