@@ -579,67 +579,60 @@ export class KpisService {
           const dto = plainToInstance(CreateKpiDto, createKpiDto);
           const { assignments, id, ...kpiData } = dto as any;
 
-          let createdByType = 'company';
-          const assignedToEmployeeId = assignments?.employeeId;
-
-          if (assignedToEmployeeId) {
-            createdByType = 'employee';
-          } else if (
-            assignments?.toSections &&
-            assignments.toSections.length > 0
-          ) {
-            createdByType = 'section';
-          } else if (
-            assignments?.toDepartments &&
-            assignments.toDepartments.length > 0
-          ) {
-            createdByType = 'department';
+          const createdByType = assignments?.from || 'company';
+          const authenticatedUserId = 1;
+          let creatorEntityId: number | null = authenticatedUserId;
+          if (createdByType === 'company') {
           }
 
-          const assignedByUserId = 1;
-
-          const kpi = manager.getRepository(Kpi).create({
+          const kpiEntityToSave = manager.getRepository(Kpi).create({
             ...kpiData,
-            calculation_type: kpiData.calculationType,
-            perspective_id: kpiData.perspectiveId,
-            start_date: kpiData.startDate,
-            end_date: kpiData.endDate,
-            memo: kpiData.description,
-
-            created_by:
-              createdByType === 'employee'
-                ? assignedToEmployeeId
-                : createdByType === 'section' &&
-                    assignments?.toSections?.[0]?.id
-                  ? assignments.toSections[0].id
-                  : createdByType === 'department' &&
-                      assignments?.toDepartments?.[0]?.id
-                    ? assignments.toDepartments[0].id
-                    : assignedByUserId || 1,
+            calculation_type:
+              kpiData.calculationType || kpiData.calculation_type,
+            perspective_id: kpiData.perspectiveId || kpiData.perspective_id,
+            start_date: kpiData.startDate || kpiData.start_date,
+            end_date: kpiData.endDate || kpiData.end_date,
+            memo: kpiData.description || kpiData.memo,
+            created_by: creatorEntityId,
             created_by_type: createdByType,
             created_at: new Date(),
             updated_at: new Date(),
           });
 
-          const savedKpi = (await manager
+          const saveResult = await manager
             .getRepository(Kpi)
-            .save(kpi)) as unknown as Kpi;
+            .save(kpiEntityToSave);
+
+          let savedKpiObject: Kpi;
+
+          if (Array.isArray(saveResult) && saveResult.length > 0) {
+            savedKpiObject = saveResult[0];
+          } else if (!Array.isArray(saveResult) && saveResult) {
+            savedKpiObject = saveResult as Kpi;
+          } else {
+            console.error(
+              'Lưu KPI thất bại hoặc trả về dữ liệu không mong đợi:',
+              saveResult,
+            );
+            throw new Error(
+              'Failed to save KPI or received unexpected result.',
+            );
+          }
 
           const assignmentEntities: KPIAssignment[] = [];
+          const assignedByUserId = authenticatedUserId;
 
           if (assignments?.toDepartments) {
             for (const targetDepartment of assignments.toDepartments) {
               const assignment = new KPIAssignment();
-              assignment.kpi = savedKpi;
+
+              assignment.kpi = { id: savedKpiObject.id } as Kpi;
               assignment.assignedFrom = assignments?.from || createdByType;
               assignment.assigned_to_department = targetDepartment.id;
-
               assignment.targetValue =
                 Number(targetDepartment.target) ?? Number(kpiData.target);
-
               assignment.assignedBy = assignedByUserId;
               assignment.status = 'draft';
-
               assignmentEntities.push(assignment);
             }
           }
@@ -647,33 +640,30 @@ export class KpisService {
           if (assignments?.toSections) {
             for (const targetSection of assignments.toSections) {
               const assignment = new KPIAssignment();
-              assignment.kpi = savedKpi;
+
+              assignment.kpi = { id: savedKpiObject.id } as Kpi;
               assignment.assignedFrom = assignments?.from || createdByType;
               assignment.assigned_to_section = targetSection.id;
-
               assignment.targetValue =
                 Number(targetSection.target) ?? Number(kpiData.target);
-
               assignment.assignedBy = assignedByUserId;
               assignment.status = 'draft';
-
               assignmentEntities.push(assignment);
             }
           }
 
-          if (assignedToEmployeeId) {
+          if (assignments?.employeeId) {
+            const assignedToEmployeeId = assignments.employeeId;
             const employeeAssignment = new KPIAssignment();
-            employeeAssignment.kpi = savedKpi;
+
+            employeeAssignment.kpi = { id: savedKpiObject.id } as Kpi;
             employeeAssignment.assignedFrom =
               assignments?.from || createdByType;
             employeeAssignment.assigned_to_employee = assignedToEmployeeId;
             employeeAssignment.employee_id = assignedToEmployeeId;
-
             employeeAssignment.targetValue = Number(kpiData.target);
-
             employeeAssignment.assignedBy = assignedByUserId;
             employeeAssignment.status = 'draft';
-
             assignmentEntities.push(employeeAssignment);
           }
 
@@ -681,7 +671,7 @@ export class KpisService {
             await manager.getRepository(KPIAssignment).save(assignmentEntities);
           }
 
-          return savedKpi;
+          return savedKpiObject;
         } catch (error) {
           console.error('Transaction failed:', error);
           throw error;

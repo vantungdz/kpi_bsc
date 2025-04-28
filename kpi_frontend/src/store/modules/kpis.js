@@ -102,12 +102,7 @@ const mutations = {
       : null;
   },
   SET_KPI_USER_ASSIGNMENTS(state, assignments) {
-    console.log("MUTATION SET_KPI_USER_ASSIGNMENTS called with:", assignments);
     state.currentKpiUserAssignments = [...(assignments || [])];
-    console.log(
-      "MUTATION SET_KPI_USER_ASSIGNMENTS state after update:",
-      state.currentKpiUserAssignments
-    );
   },
 
   SET_MY_ASSIGNMENTS_LOADING(state, isLoading) {
@@ -185,7 +180,6 @@ const mutations = {
     state.kpisAllForSelect = kpis?.data || kpis || [];
   },
   SET_CURRENT_KPI(state, kpi) {
-    console.log("MUTATION SET_CURRENT_KPI called with:", kpi);
     state.currentKpi = kpi;
 
     state.currentKpiUserAssignments = [];
@@ -264,38 +258,13 @@ const actions = {
       const queryParams = { ...filterParams };
       delete queryParams.sectionId;
 
-      console.log(
-        "DEBUG ACTION fetchSectionKpis: filterParams nhận được:",
-        filterParams
-      );
-      console.log(
-        "DEBUG ACTION fetchSectionKpis: Giá trị sectionIdInPath:",
-        sectionIdInPath,
-        typeof sectionIdInPath
-      );
       const url = `/kpis/sections/${sectionIdInPath}`;
-      console.log("DEBUG ACTION fetchSectionKpis: URL được xây dựng:", url);
-      console.log(
-        "DEBUG ACTION fetchSectionKpis: Query Parameters sẽ gửi:",
-        queryParams
-      );
-
-      console.log(
-        "ACTION fetchSectionKpis: Gọi API GET",
-        url,
-        "với params:",
-        queryParams
-      );
 
       const response = await apiClient.get(url, {
         params: queryParams,
       });
 
       commit("SET_SECTION_KPIS", response.data);
-      console.log(
-        "ACTION fetchSectionKpis: Dữ liệu nhận được và commit:",
-        response.data
-      );
 
       return response.data;
     } catch (error) {
@@ -357,9 +326,7 @@ const actions = {
 
     commit("SET_CURRENT_KPI", null);
     try {
-      console.log(`ACTION fetchKpiDetail: Calling API GET /kpis/${id}`);
       const response = await apiClient.get(`/kpis/${id}`);
-      console.log("ACTION fetchKpiDetail: API response received:", response);
 
       const kpi = response.data;
       if (!kpi) {
@@ -369,10 +336,6 @@ const actions = {
         );
         throw new Error("Invalid KPI detail response format");
       }
-      console.log(
-        "ACTION fetchKpiDetail: Committing response.data (assuming it's the KPI object):",
-        kpi
-      );
 
       commit("SET_CURRENT_KPI", kpi);
       return kpi;
@@ -442,61 +405,19 @@ const actions = {
   },
 
   async fetchKpiUserAssignments({ commit }, kpiId) {
-    console.log("ACTION fetchKpiUserAssignments called for KPI ID:", kpiId);
-
     try {
-      console.log(
-        `ACTION fetchKpiUserAssignments: Calling API GET /kpis/${kpiId}/assignments`
-      );
       const response = await apiClient.get(`/kpis/${kpiId}/assignments`);
-      console.log(
-        "ACTION fetchKpiUserAssignments: API response received:",
-        response
-      );
 
       let assignments = [];
       if (response.data) {
-        console.log("ACTION fetchKpiUserAssignments: Examining response.data");
-        console.log(
-          "ACTION fetchKpiUserAssignments: Is response.data an array?",
-          Array.isArray(response.data)
-        );
-        console.log(
-          "ACTION fetchKpiUserAssignments: Is response.data.data an array?",
-          Array.isArray(response.data.data)
-        );
-
         if (Array.isArray(response.data.data)) {
-          console.log(
-            "ACTION fetchKpiUserAssignments: Extracting from response.data.data"
-          );
           assignments = response.data.data;
         } else if (Array.isArray(response.data)) {
-          console.log(
-            "ACTION fetchKpiUserAssignments: Extracting from response.data directly"
-          );
           assignments = response.data;
-        } else {
-          console.warn(
-            "ACTION fetchKpiUserAssignments: Unexpected response data structure.",
-            response.data
-          );
         }
-      } else {
-        console.warn(
-          "ACTION fetchKpiUserAssignments: response.data is null or undefined."
-        );
       }
 
-      console.log(
-        "ACTION fetchKpiUserAssignments: Extracted assignments data:",
-        assignments
-      );
-
       commit("SET_KPI_USER_ASSIGNMENTS", assignments);
-      console.log(
-        "ACTION fetchKpiUserAssignments: SET_KPI_USER_ASSIGNMENTS mutation committed."
-      );
 
       return assignments;
     } catch (error) {
@@ -517,10 +438,6 @@ const actions = {
     commit("SET_DEPARTMENT_SECTION_ASSIGNMENT_SAVE_ERROR", null);
 
     try {
-      console.log(
-        "saveDepartmentSectionAssignment action: Payload being sent (structured):",
-        { assignments: assignmentsArray }
-      );
       const response = await apiClient.post(
         `/kpis/${kpiId}/sections/assignments`,
         { assignments: assignmentsArray }
@@ -556,11 +473,6 @@ const actions = {
         assignmentsPayload
       );
       notification.success({ message: "User Assignment saved successfully!" });
-
-      console.log(
-        "ACTION saveUserAssignments: Backend save response received:",
-        response
-      );
 
       await dispatch("fetchKpiUserAssignments", kpiId);
 

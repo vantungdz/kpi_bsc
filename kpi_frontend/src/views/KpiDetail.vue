@@ -126,7 +126,7 @@
       >
         <a-table
           :columns="departmentSectionAssignmentColumns"
-          :data-source="currentDepartmentSectionAssignments"
+          :data-source="filteredAssignmentsForContextDepartment"
           row-key="id"
           size="small"
           bordered
@@ -654,7 +654,8 @@
     >
       <a-spin
         :spinning="
-          loadingDepartmentSectionAssignments ||
+          /* Cân nhắc thêm state loading riêng khi fetch sections cho modal nếu cần */
+          /* loadingDepartmentSectionAssignments || */
           submittingDepartmentSectionAssignment
         "
       >
@@ -663,7 +664,7 @@
           :model="departmentSectionAssignmentForm"
           ref="departmentSectionAssignmentFormRef"
         >
-          <a-form-item label="Assign To" required>
+          <a-form-item label="Assign To" name="assignToTarget">
             <a-select
               v-model:value="
                 departmentSectionAssignmentForm.assigned_to_department
@@ -671,11 +672,11 @@
               placeholder="Select Department"
               style="width: 100%; margin-bottom: 10px"
               @change="handleDepartmentSelectInModal"
-              :disabled="editingDepartmentSectionAssignment !== null"
+              :disabled="
+                !!contextDepartmentId ||
+                editingDepartmentSectionAssignment !== null
+              "
             >
-              <a-select-option value="" disabled
-                >Select Department</a-select-option
-              >
               <a-select-option
                 v-for="dept in allDepartments"
                 :key="dept.id"
@@ -684,7 +685,8 @@
                 {{ dept.name }}
               </a-select-option>
             </a-select>
-            <a-form-item name="assigned_to_section">
+
+            <a-form-item name="assigned_to_section" no-style>
               <a-select
                 v-model:value="
                   departmentSectionAssignmentForm.assigned_to_section
@@ -695,10 +697,8 @@
                   !departmentSectionAssignmentForm.assigned_to_department ||
                   editingDepartmentSectionAssignment !== null
                 "
+                allow-clear
               >
-                <a-select-option value="" disabled
-                  >Select Section</a-select-option
-                >
                 <a-select-option
                   v-for="section in assignableSections"
                   :key="section.id"
@@ -729,6 +729,7 @@
         </a-form>
       </a-spin>
     </a-modal>
+
     <a-modal
       :open="isDeleteDepartmentSectionAssignmentModalVisible"
       @update:open="isDeleteDepartmentSectionAssignmentModalVisible = $event"
@@ -803,6 +804,12 @@ const route = useRoute();
 const kpiId = computed(() => {
   const id = route.params.id;
   const parsedId = id ? parseInt(id, 10) : null;
+  return !isNaN(parsedId) ? parsedId : null;
+});
+
+const contextDepartmentId = computed(() => {
+  const id = route.query.contextDepartmentId;
+  const parsedId = id ? parseInt(String(id), 10) : null;
   return !isNaN(parsedId) ? parsedId : null;
 });
 
@@ -936,25 +943,87 @@ const currentDepartmentSectionAssignments = computed(() => {
 const assignableSections = computed(() => {
   const selectedDepartmentIdInModal =
     departmentSectionAssignmentForm.assigned_to_department;
-  if (!selectedDepartmentIdInModal) {
+
+  if (
+    selectedDepartmentIdInModal === null ||
+    selectedDepartmentIdInModal === undefined ||
+    selectedDepartmentIdInModal === ""
+  ) {
     return [];
   }
+
   const sectionsForSelectedDept = store.getters[
     "sections/sectionsByDepartment"
   ](selectedDepartmentIdInModal);
 
-  return sectionsForSelectedDept;
+  if (!Array.isArray(sectionsForSelectedDept)) {
+    console.warn(
+      "assignableSections: sectionsForSelectedDept is not an array",
+      sectionsForSelectedDept
+    );
+    return [];
+  }
+
+  if (!editingDepartmentSectionAssignment.value) {
+    const allCurrentAssignments = kpiDetailData.value?.assignments;
+    if (!Array.isArray(allCurrentAssignments)) {
+      console.warn(
+        "assignableSections: Cannot get current assignments to filter."
+      );
+      return sectionsForSelectedDept;
+    }
+
+    const assignedSectionIds = new Set();
+    allCurrentAssignments.forEach((assign) => {
+      if (
+        assign.assigned_to_section !== null &&
+        assign.assigned_to_section !== undefined
+      ) {
+        const id = Number(assign.assigned_to_section);
+        if (!isNaN(id)) {
+          assignedSectionIds.add(id);
+        }
+      }
+    });
+
+    const filteredSections = sectionsForSelectedDept.filter((section) => {
+      const sectionId = Number(section?.id);
+      return !isNaN(sectionId) && !assignedSectionIds.has(sectionId);
+    });
+
+    console.log(
+      "[AssignableSections] Filtered list (excluding already assigned):",
+      filteredSections
+    );
+    return filteredSections;
+  } else {
+    console.log(
+      "[AssignableSections] Editing mode - returning all sections for dept:",
+      sectionsForSelectedDept
+    );
+    return sectionsForSelectedDept;
+  }
 });
 
 const openManageDepartmentSectionAssignments = () => {
-  editingDepartmentSectionAssignment.value = null;
-  departmentSectionAssignmentForm.assigned_to_department = null;
-  departmentSectionAssignmentForm.assigned_to_section = null;
-  departmentSectionAssignmentForm.targetValue = null;
-  departmentSectionAssignmentForm.assignmentId = null;
-  departmentSectionAssignmentError.value = null;
+  const currentContextDeptId = contextDepartmentId.value; // Lấy context ID
 
+  editingDepartmentSectionAssignment.value = null;
+  departmentSectionAssignmentError.value = null;
+  departmentSectionAssignmentForm.assignmentId = null;
+  departmentSectionAssignmentForm.assigned_to_section = null; // Reset section
+  departmentSectionAssignmentForm.targetValue = null; // Reset target
+
+  if (currentContextDeptId !== null) {
+    departmentSectionAssignmentForm.assigned_to_department =
+      currentContextDeptId;
+    store.dispatch("sections/fetchSectionsByDepartment", currentContextDeptId);
+  } else {
+    departmentSectionAssignmentForm.assigned_to_department = null;
+  }
   isDepartmentSectionAssignmentModalVisible.value = true;
+
+  departmentSectionAssignmentFormRef.value?.resetFields();
 };
 
 const openEditDepartmentSectionAssignment = (assignmentRecord) => {
@@ -1010,19 +1079,88 @@ const overallTargetValueDetail = computed(() => {
 const totalAssignedTargetDetail = computed(() => {
   let total = 0;
   const assignments = kpiDetailData.value?.assignments;
-  if (assignments && assignments.length > 0) {
+  const deptIdContext = contextDepartmentId.value;
+  const sectionsData = allSections.value;
+
+  if (deptIdContext === null || !assignments || assignments.length === 0) {
+    return [];
+  }
+
+  if (
+    assignments &&
+    assignments.length > 0 &&
+    sectionsData &&
+    sectionsData.length > 0
+  ) {
+    const sectionToDeptMap = new Map();
+    sectionsData.forEach((section) => {
+      if (
+        section &&
+        typeof section.id === "number" &&
+        section.department?.id &&
+        typeof section.department.id === "number"
+      ) {
+        sectionToDeptMap.set(section.id, section.department.id);
+      } else if (
+        section &&
+        typeof section.id === "number" &&
+        typeof section.department_id === "number"
+      ) {
+        sectionToDeptMap.set(section.id, section.department_id);
+      }
+    });
+
+    const assignedSectionIds = new Set(
+      assignments
+        .filter(
+          (a) =>
+            a.assigned_to_section !== null &&
+            a.assigned_to_section !== undefined
+        )
+        .map((a) => Number(a.assigned_to_section))
+        .filter((id) => !isNaN(id))
+    );
     assignments.forEach((assign) => {
       const targetValue = assign.targetValue;
+      let shouldIncludeTarget = false;
+
       if (
         targetValue !== undefined &&
         targetValue !== null &&
         !isNaN(targetValue) &&
-        targetValue >= 0
+        Number(targetValue) >= 0
       ) {
+        if (
+          assign.assigned_to_section !== null &&
+          assign.assigned_to_section !== undefined
+        ) {
+          shouldIncludeTarget = true;
+        } else if (
+          assign.assigned_to_department !== null &&
+          assign.assigned_to_department !== undefined
+        ) {
+          const departmentId = Number(assign.assigned_to_department);
+          if (!isNaN(departmentId)) {
+            let hasAssignedChildSection = false;
+            for (const sectionId of assignedSectionIds) {
+              if (sectionToDeptMap.get(sectionId) === departmentId) {
+                hasAssignedChildSection = true;
+                break;
+              }
+            }
+            if (!hasAssignedChildSection) {
+              shouldIncludeTarget = true;
+            }
+          }
+        }
+      }
+
+      if (shouldIncludeTarget) {
         total += Number(targetValue);
       }
     });
   }
+  console.log("[Debug] Calculated totalAssignedTargetDetail:", total);
   return total;
 });
 
@@ -1475,62 +1613,93 @@ const evaluationColumns = [
   },
 ];
 
-const shouldShowDepartmentSectionAssignmentCard = computed(() => {
-  const kpi = kpiDetailData.value;
+const filteredAssignmentsForContextDepartment = computed(() => {
+  const assignments = kpiDetailData.value?.assignments;
+  const deptIdContext = contextDepartmentId.value;
 
   if (
-    !kpi ||
-    (kpi.created_by_type !== "company" && kpi.created_by_type !== "department")
+    deptIdContext === null ||
+    !assignments ||
+    assignments.length === 0 ||
+    !allSections.value ||
+    allSections.value.length === 0
   ) {
+    return [];
+  }
+
+  const sectionToDeptMap = new Map();
+  allSections.value.forEach((section) => {
+    const sectionId = section?.id;
+    const deptId = section?.department?.id;
+    if (typeof sectionId === "number" && typeof deptId === "number") {
+      sectionToDeptMap.set(sectionId, deptId);
+    }
+  });
+
+  const filteredList = assignments.filter((assign) => {
+    if (
+      assign.assigned_to_section !== null &&
+      assign.assigned_to_section !== undefined
+    ) {
+      const sectionId = Number(assign.assigned_to_section);
+      if (
+        !isNaN(sectionId) &&
+        sectionToDeptMap.get(sectionId) === deptIdContext
+      ) {
+        return true;
+      }
+    }
+    return false;
+  });
+
+  return filteredList;
+});
+
+const shouldShowDepartmentSectionAssignmentCard = computed(() => {
+  const kpi = kpiDetailData.value;
+  const hasDeptContext = !!contextDepartmentId.value;
+
+  if (!kpi) {
     return false;
   }
 
-  const createdByType = kpi.created_by_type;
+  if (hasDeptContext) {
+    return true;
+  }
 
-  let departmentId = null;
-  let kpiDepartment = undefined;
+  console.log(
+    "[Debug] Show Card Check: No context department, checking old logic..."
+  );
+  if (
+    kpi.created_by_type !== "company" &&
+    kpi.created_by_type !== "department"
+  ) {
+    console.log(
+      "[Debug] Show Card Check: Old logic - Invalid created_by_type."
+    );
+    return false;
+  }
 
-  if (createdByType === "department") {
-    departmentId = kpi.created_by;
-    const allDepartmentsList = allDepartments.value;
-    kpiDepartment = Array.isArray(allDepartmentsList)
-      ? allDepartmentsList.find((d) => d.id == departmentId)
-      : undefined;
-
-    if (!kpiDepartment) {
-      return false;
-    }
-
+  if (kpi.created_by_type === "department") {
     const deptHasSections = departmentHasSections.value;
     if (deptHasSections === null) {
+      console.log(
+        "[Debug] Show Card Check: Old logic - deptHasSections is null."
+      );
       return false;
     }
     if (deptHasSections === false) {
+      console.log(
+        "[Debug] Show Card Check: Old logic - Department has no sections."
+      );
       return false;
     }
   }
 
-  const isAllowedRole = ["admin", "manager", "department", "section"].includes(
-    effectiveRole.value
+  console.log(
+    "[Debug] Show Card Check: Old logic - Conditions passed, returning true."
   );
-  if (!isAllowedRole) {
-    return false;
-  }
-
-  let canManageThis = false;
-  if (createdByType === "company") {
-    canManageThis = ["admin", "manager"].includes(effectiveRole.value);
-  } else if (createdByType === "department" && kpiDepartment) {
-    canManageThis =
-      ["admin", "manager"].includes(effectiveRole.value) ||
-      (effectiveRole.value === "department" && isMyDepartment(departmentId));
-  } else {
-    return false;
-  }
-
-  const finalResult = isAllowedRole && canManageThis;
-
-  return finalResult;
+  return true;
 });
 
 const handleDeleteDepartmentSectionAssignment = async () => {
@@ -1580,6 +1749,19 @@ const handleDeleteDepartmentSectionAssignment = async () => {
 };
 
 const handleSaveDepartmentSectionAssignment = async () => {
+  const isEditing = !!editingDepartmentSectionAssignment.value;
+  const hasContext = !!contextDepartmentId.value;
+
+  if (
+    hasContext &&
+    !isEditing &&
+    !departmentSectionAssignmentForm.assigned_to_section
+  ) {
+    departmentSectionAssignmentError.value =
+      "Please select a Section to assign within this Department.";
+    return;
+  }
+
   submittingDepartmentSectionAssignment.value = true;
   departmentSectionAssignmentError.value = null;
 
@@ -1587,25 +1769,50 @@ const handleSaveDepartmentSectionAssignment = async () => {
     await departmentSectionAssignmentFormRef.value?.validate();
 
     if (
-      !departmentSectionAssignmentForm.assigned_to_department &&
-      !departmentSectionAssignmentForm.assigned_to_section
+      departmentSectionAssignmentForm.targetValue === null ||
+      typeof departmentSectionAssignmentForm.targetValue === "undefined"
     ) {
-      departmentSectionAssignmentError.value =
-        "Please select either a Department or a Section for assignment.";
+      departmentSectionAssignmentError.value = "Target value is required.";
       submittingDepartmentSectionAssignment.value = false;
       return;
     }
 
-    const assignmentsArray = [
-      {
-        assignmentId: departmentSectionAssignmentForm.assignmentId,
-        assigned_to_department:
-          departmentSectionAssignmentForm.assigned_to_department || null,
-        assigned_to_section:
-          departmentSectionAssignmentForm.assigned_to_section || null,
-        targetValue: Number(departmentSectionAssignmentForm.targetValue),
-      },
-    ];
+    let assignmentPayload = {
+      assignmentId: departmentSectionAssignmentForm.assignmentId,
+      assigned_to_department: null,
+      assigned_to_section: null,
+      targetValue: Number(departmentSectionAssignmentForm.targetValue),
+    };
+
+    if (isEditing) {
+      assignmentPayload.assigned_to_department =
+        editingDepartmentSectionAssignment.value.assigned_to_department;
+      assignmentPayload.assigned_to_section =
+        editingDepartmentSectionAssignment.value.assigned_to_section;
+    } else if (hasContext) {
+      assignmentPayload.assigned_to_department = null; // Explicitly null when assigning section in context
+      assignmentPayload.assigned_to_section =
+        departmentSectionAssignmentForm.assigned_to_section;
+    } else {
+      // Assigning without context - allow direct dept or section assign based on form
+      assignmentPayload.assigned_to_department =
+        departmentSectionAssignmentForm.assigned_to_department || null;
+      assignmentPayload.assigned_to_section =
+        departmentSectionAssignmentForm.assigned_to_section || null;
+    }
+
+    // Basic validation: ensure at least one target unit is assigned
+    if (
+      !assignmentPayload.assigned_to_department &&
+      !assignmentPayload.assigned_to_section
+    ) {
+      departmentSectionAssignmentError.value =
+        "An assignment target (Department or Section) is required.";
+      submittingDepartmentSectionAssignment.value = false;
+      return;
+    }
+
+    const assignmentsArray = [assignmentPayload];
 
     await store.dispatch("kpis/saveDepartmentSectionAssignment", {
       kpiId: kpiId.value,
@@ -1613,7 +1820,7 @@ const handleSaveDepartmentSectionAssignment = async () => {
     });
 
     notification.success({
-      message: editingDepartmentSectionAssignment.value
+      message: isEditing
         ? "Assignment updated successfully!"
         : "Assignment added successfully!",
     });
@@ -1622,14 +1829,15 @@ const handleSaveDepartmentSectionAssignment = async () => {
     await loadInitialData();
   } catch (error) {
     console.error("Failed to save Department/Section assignment:", error);
-    await store.dispatch(
-      "kpis/SET_DEPARTMENT_SECTION_ASSIGNMENT_SAVE_ERROR",
-      error
-    );
-
+    const errMsg =
+      store.getters["kpis/departmentSectionAssignmentSaveError"] ||
+      error?.response?.data?.message ||
+      error?.message ||
+      "Save Failed";
+    departmentSectionAssignmentError.value = errMsg;
     notification.error({
       message: "Save Failed",
-      description: store.getters["kpis/departmentSectionAssignmentSaveError"],
+      description: errMsg,
     });
   } finally {
     submittingDepartmentSectionAssignment.value = false;

@@ -216,6 +216,7 @@
                         $router.push({
                           name: 'KpiDetail',
                           params: { id: record.kpiId },
+                          query: { contextDepartmentId: record.departmentId },
                         })
                       "
                     >
@@ -264,7 +265,7 @@
   </div>
 </template>
 <script setup>
-import { reactive, computed, onMounted, ref } from "vue";
+import { reactive, computed, onMounted, ref, watch } from "vue";
 import { useStore } from "vuex";
 import { useRouter } from "vue-router";
 import {
@@ -289,6 +290,7 @@ const departmentKpiList = computed(
   () => store.getters["kpis/departmentKpiList"] || []
 );
 
+const activePanelKeys = ref([]);
 const isDeleteModalVisible = ref(false);
 const selectedKpiId = ref(null);
 const selectedKpiName = ref(null);
@@ -421,8 +423,6 @@ const handleDeleteKpi = async () => {
   loading.value = true;
 
   try {
-    console.log("Deleting assignment with key:", selectedKpiId.value);
-
     notification.success({
       message: `Gán KPI '${selectedKpiName.value}' đã được xóa thành công!`,
     });
@@ -430,7 +430,6 @@ const handleDeleteKpi = async () => {
 
     applyFilters();
   } catch (error) {
-    console.error("Xóa gán KPI thất bại:", error);
     const errorMessage =
       error?.response?.data?.message ||
       error?.message ||
@@ -457,14 +456,7 @@ const departmentGroups = computed(() => {
 
   const currentFilterDepartmentId = localFilters.departmentId;
 
-  console.log(
-    "LOG 1: Dữ liệu gốc từ store (departmentKpiList.value):",
-    departmentKpiList.value
-  );
-  console.log("LOG 2: Mảng dữ liệu KPI (displayData):", displayData);
-
   if (!displayData || displayData.length === 0) {
-    console.log("LOG 3: displayData rỗng, trả về mảng gom nhóm rỗng");
     return [];
   }
 
@@ -502,9 +494,6 @@ const departmentGroups = computed(() => {
           !isNaN(filterIdNumber) &&
           assignmentDepartmentId !== filterIdNumber
         ) {
-          console.log(
-            `Đã bỏ qua assignment ${assignment.id} của KPI ${kpi.id}: Được gán tới Department ${assignmentDepartmentId}, Bộ lọc: ${currentFilterDepartmentId}`
-          );
           return;
         }
       }
@@ -544,6 +533,7 @@ const departmentGroups = computed(() => {
 
       const rowData = {
         key: `assignment-${assignment.id}`,
+        departmentId: assignmentDepartmentId,
         kpiId: kpiDetails.kpiId,
         kpiName: kpiDetails.kpiName,
         perspectiveName: kpiDetails.perspectiveName,
@@ -564,8 +554,6 @@ const departmentGroups = computed(() => {
     });
   });
 
-  console.log("LOG 4: Dữ liệu đã gom nhóm (groupedData):", groupedData);
-
   const finalGroupedArray = Object.values(groupedData).map((deptGroup) => {
     const sortedPerspectives = Object.keys(deptGroup.data)
       .sort()
@@ -582,11 +570,6 @@ const departmentGroups = computed(() => {
 
   finalGroupedArray.sort((a, b) => a.department.localeCompare(b.department));
 
-  console.log(
-    "LOG 5: Mảng dữ liệu đã gom nhóm cuối cùng (finalGroupedArray):",
-    finalGroupedArray
-  );
-
   return finalGroupedArray;
 });
 
@@ -597,6 +580,32 @@ const rowClassName = (record) => {
 const getStatusColor = (status) => {
   return status === "Active" ? "success" : "red";
 };
+
+watch(
+  departmentGroups,
+  (newGroups) => {
+    const keys = [];
+    if (Array.isArray(newGroups)) {
+      newGroups.forEach((departmentItem, departmentIndex) => {
+        if (
+          departmentItem &&
+          typeof departmentItem.data === "object" &&
+          departmentItem.data !== null
+        ) {
+          Object.keys(departmentItem.data).forEach((perspectiveKey) => {
+            const panelKey = `pers-${departmentIndex}-${perspectiveKey}`;
+            keys.push(panelKey);
+          });
+        }
+      });
+    }
+    activePanelKeys.value = keys;
+  },
+  {
+    immediate: true,
+    deep: true,
+  }
+);
 
 onMounted(async () => {
   try {

@@ -816,8 +816,9 @@ const handleChangeCreate = async () => {
               const sectionData = rawSections.value.find(
                 (s) => s.id === sectionId
               );
-              if (sectionData?.department_id) {
-                assignedDepartmentIds.add(sectionData.department_id);
+              const deptId = sectionData?.department?.id;
+              if (deptId) {
+                assignedDepartmentIds.add(deptId);
               }
             } else {
               missingTargetError = true;
@@ -826,93 +827,77 @@ const handleChangeCreate = async () => {
         }
       });
 
+      assignmentsPayload.to_departments = [];
+      const addedDepartmentIdsForPayload = new Set();
+
       departmentTreeData.value.forEach((department) => {
         const departmentKey = `department - ${department.id}`;
         const departmentId = department.id;
 
         const isDepartmentExplicitlySelected =
           selectedRowKeys.value.includes(departmentKey);
+        const hasAssignedChildSections =
+          assignedDepartmentIds.has(departmentId);
 
-        const hasAnySelectedChildSection =
-          hasSelectedSections.value(departmentKey);
+        if (hasAssignedChildSections) {
+          const calculatedSum =
+            calculatedDepartmentTargets.value[departmentKey] || 0;
 
-        if (
-          isDepartmentExplicitlySelected ||
-          assignedDepartmentIds.has(departmentId)
+          const sectionsAddedForThisDept =
+            assignmentsPayload.to_sections.filter((s) => {
+              const sectionData = rawSections.value.find(
+                (rs) => rs.id === s.id
+              );
+              // --- SỬA ĐỔI Ở ĐÂY (TRONG FILTER) ---
+              return sectionData?.department?.id === departmentId;
+              // --- KẾT THÚC SỬA ĐỔI ---
+            });
+
+          if (
+            sectionsAddedForThisDept.length > 0 &&
+            !addedDepartmentIdsForPayload.has(departmentId)
+          ) {
+            assignmentsPayload.to_departments.push({
+              id: departmentId,
+              target: calculatedSum,
+            });
+            addedDepartmentIdsForPayload.add(departmentId);
+            hasValidAssignment = true;
+          }
+        } else if (
+          isDepartmentExplicitlySelected &&
+          !addedDepartmentIdsForPayload.has(departmentId)
         ) {
-          if (hasAnySelectedChildSection) {
-            const calculatedSum =
-              calculatedDepartmentTargets.value[departmentKey] || 0;
+          const targetValue = form.value.targets[departmentKey];
+          const isTargetEnteredAndValid =
+            targetValue !== undefined &&
+            targetValue !== null &&
+            !isNaN(targetValue) &&
+            parseFloat(targetValue) >= 0;
 
-            if (
-              assignmentsPayload.to_sections.some((s) => {
-                const sectionData = rawSections.value.find(
-                  (rs) => rs.id === s.id
-                );
-                return sectionData?.department_id === departmentId;
-              })
-            ) {
-              assignmentsPayload.to_departments.push({
-                id: departmentId,
-                target: calculatedSum,
-              });
-              hasValidAssignment = true;
-            } else {
-              if (
-                isDepartmentExplicitlySelected &&
-                !hasAnySelectedChildSection
-              ) {
-                const targetValue = form.value.targets[departmentKey];
-                const isTargetEnteredAndValid =
-                  targetValue !== undefined &&
-                  targetValue !== null &&
-                  !isNaN(targetValue) &&
-                  parseFloat(targetValue) >= 0;
-
-                if (isTargetEnteredAndValid) {
-                  assignmentsPayload.to_departments.push({
-                    id: departmentId,
-                    target: parseFloat(targetValue),
-                  });
-                  hasValidAssignment = true;
-                } else {
-                  missingTargetError = true;
-                }
-              }
-            }
+          if (isTargetEnteredAndValid) {
+            assignmentsPayload.to_departments.push({
+              id: departmentId,
+              target: parseFloat(targetValue),
+            });
+            addedDepartmentIdsForPayload.add(departmentId);
+            hasValidAssignment = true;
           } else {
-            if (isDepartmentExplicitlySelected) {
-              const targetValue = form.value.targets[departmentKey];
-              const isTargetEnteredAndValid =
-                targetValue !== undefined &&
-                targetValue !== null &&
-                !isNaN(targetValue) &&
-                parseFloat(targetValue) >= 0;
-
-              if (isTargetEnteredAndValid) {
-                assignmentsPayload.to_departments.push({
-                  id: departmentId,
-                  target: parseFloat(targetValue),
-                });
-                hasValidAssignment = true;
-              } else {
-                missingTargetError = true;
-              }
-            }
+            missingTargetError = true;
           }
         }
       });
 
       if (missingTargetError) {
         assignmentError.value =
-          "Vui lòng nhập Target hợp lệ (>= 0) cho tất cả các mục đã chọn (các bộ phận hoặc các phòng ban không có bộ phận con được gán target).";
+          "Vui lòng nhập Target hợp lệ (>= 0) cho tất cả các mục đã chọn (các phòng ban được chọn trực tiếp không có bộ phận con được chọn HOẶC các bộ phận được chọn).";
         throw new Error(assignmentError.value);
       }
     }
 
     if (!hasValidAssignment && !form.value.assigned_user_id) {
       assignmentError.value =
-        "Yêu cầu gán: Vui lòng gán cho một người dùng HOẶC chọn ít nhất một đơn vị (phòng ban hoặc bộ phận) và nhập target của nó.";
+        "Yêu cầu gán: Vui lòng gán cho một người dùng HOẶC chọn ít nhất một đơn vị (phòng ban hoặc bộ phận) và nhập target hợp lệ của nó.";
       throw new Error(assignmentError.value);
     }
 
@@ -961,7 +946,6 @@ const handleChangeCreate = async () => {
       delete kpiData.assignments.to_user;
     }
 
-    console.log("Submitting KPI Data (Final Structure):", kpiData);
     await store.dispatch("kpis/createKpi", kpiData);
     notification.success({ message: "KPI created successfully" });
     resetForm(true);
@@ -973,10 +957,11 @@ const handleChangeCreate = async () => {
       router.push("/kpis/individual");
     else router.push("/");
   } catch (error) {
-    if (error instanceof Error && error.message === assignmentError.value) {
-      /* Lỗi đã hiển thị */
-    } else {
-      console.error("KPI creation failed:", error);
+    // --- SỬA ĐỔI KHỐI CATCH (Đảo ngược logic) ---
+    const isHandledAssignmentError =
+      error instanceof Error && error.message === assignmentError.value;
+
+    if (!isHandledAssignmentError) {
       const errorMessage =
         error?.response?.data?.message ||
         error?.message ||
@@ -987,13 +972,13 @@ const handleChangeCreate = async () => {
         duration: 5,
       });
     }
+    // --- KẾT THÚC SỬA ĐỔI KHỐI CATCH ---
   } finally {
     loading.value = false;
   }
 };
 
 const onFinishFailed = (errorInfo) => {
-  console.log("Form validation failed:", errorInfo);
   let errorMessages = "Please check required fields and input formats.";
   if (errorInfo?.errorFields?.length > 0) {
     const firstErrorField = errorInfo.errorFields[0];

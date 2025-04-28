@@ -313,7 +313,6 @@ const isDeleteModalVisible = ref(false);
 const selectedKpiId = ref(null);
 const selectedKpiName = ref(null);
 const deletedKpiName = ref(null);
-
 const isDisplayResult = ref(false);
 const activePanelKeys = ref([]);
 
@@ -688,15 +687,27 @@ const rowClassName = (record) => {
 watch(
   sectionGroups,
   (newGroups) => {
-    if (newGroups && typeof newGroups === "object") {
-      const allKeys = Object.keys(newGroups);
-      activePanelKeys.value = allKeys;
-    } else {
-      activePanelKeys.value = [];
+    const keys = [];
+    if (Array.isArray(newGroups)) {
+      newGroups.forEach((sectionGroup, sectionIndex) => {
+        if (
+          sectionGroup &&
+          typeof sectionGroup.data === "object" &&
+          sectionGroup.data !== null
+        ) {
+          Object.keys(sectionGroup.data).forEach((perspectiveKey) => {
+            const panelKey = `pers-${sectionIndex}-${perspectiveKey}`;
+            keys.push(panelKey);
+          });
+        }
+      });
     }
+    console.log("Generated activePanelKeys for Sections (JS):", keys);
+    activePanelKeys.value = keys;
   },
   {
     immediate: true,
+    deep: true,
   }
 );
 
