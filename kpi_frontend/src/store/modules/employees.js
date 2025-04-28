@@ -1,4 +1,3 @@
-// src/store/modules/users.js
 import apiClient from "../../services/api";
 
 const state = {
@@ -36,7 +35,7 @@ const mutations = {
     );
     const key = String(sectionId);
     state.usersBySection = {
-      ...state.usersBySection, // Lưu trực tiếp mảng users đã được xử lý ở action
+      ...state.usersBySection,
       [key]: users,
     };
   },
@@ -47,16 +46,14 @@ const mutations = {
     );
     const key = String(departmentId);
     state.usersByDepartment = {
-      ...state.usersByDepartment, // Lưu trực tiếp mảng users đã được xử lý ở action
+      ...state.usersByDepartment,
       [key]: users,
     };
   },
 };
 
 const actions = {
-  // params bây giờ sẽ là object chứa query params, ví dụ: { sectionId: 1 } hoặc { departmentId: 2 }
   async fetchUsers({ commit, state }, params = {}) {
-    // Truy cập tham số trực tiếp từ object params
     const sectionIdParam = params.sectionId;
     const departmentIdParam = params.departmentId;
 
@@ -88,7 +85,6 @@ const actions = {
       return state.usersByDepartment[String(departmentIdParam)];
     }
 
-    // Kiểm tra nếu params là rỗng để fetch danh sách chung
     const isGeneralFetch =
       !hasSectionIdParam &&
       !hasDepartmentIdParam &&
@@ -106,13 +102,12 @@ const actions = {
       console.log(
         "fetchUsers action: Calling API: GET /employees with params:",
         params
-      ); // Truyền object params trực tiếp cho apiClient.get
-      // Giả định apiClient (Axios) sẽ tự động thêm ?key=value
-      const response = await apiClient.get("/employees", { params }); //
-      // Trích xuất dữ liệu mảng user từ response
+      );
+
+      const response = await apiClient.get("/employees", { params });
 
       const fetchedUsers = response.data?.data || response.data || [];
-      console.log("fetchUsers action: Data received from API:", fetchedUsers); // Commit dữ liệu dựa trên tham số nào được cung cấp
+      console.log("fetchUsers action: Data received from API:", fetchedUsers);
 
       if (isGeneralFetch) {
         console.log("fetchUsers action: Committing SET_USERS (general list).");
@@ -122,16 +117,16 @@ const actions = {
           `WorkspaceUsers action: Committing SET_USERS_BY_SECTION for section ${sectionIdParam}.`
         );
         commit("SET_USERS_BY_SECTION", {
-          sectionId: sectionIdParam, // Sử dụng giá trị tham số
-          users: fetchedUsers, // Commit mảng user
+          sectionId: sectionIdParam,
+          users: fetchedUsers,
         });
       } else if (hasDepartmentIdParam) {
         console.log(
           `WorkspaceUsers action: Committing SET_USERS_BY_DEPARTMENT for department ${departmentIdParam}.`
         );
         commit("SET_USERS_BY_DEPARTMENT", {
-          departmentId: departmentIdParam, // Sử dụng giá trị tham số
-          users: fetchedUsers, // Commit mảng user
+          departmentId: departmentIdParam,
+          users: fetchedUsers,
         });
       } else {
         console.warn(
@@ -141,10 +136,10 @@ const actions = {
       }
       console.log("fetchUsers action: Commit logic executed.");
 
-      return fetchedUsers; // Trả về dữ liệu fetch được
+      return fetchedUsers;
     } catch (error) {
       console.error("Error fetching users:", error.response || error);
-      commit("SET_ERROR", error); // Xóa state tương ứng khi có lỗi fetch
+      commit("SET_ERROR", error);
       if (isGeneralFetch) {
         commit("SET_USERS", []);
       } else if (hasSectionIdParam) {
@@ -158,18 +153,18 @@ const actions = {
           users: [],
         });
       }
-      throw error; // Rethrow error
+      throw error;
     } finally {
       commit("SET_LOADING", false);
       console.log("fetchUsers action: Finally block executed.");
     }
-  }, // Action helper gọi fetchUsers với sectionId
+  },
 
   async fetchUsersBySection({ dispatch, state }, sectionId) {
     if (!sectionId) {
       console.warn("fetchUsersBySection: sectionId is required.");
       return [];
-    } // Kiểm tra cache - cải thiện
+    }
     if (state.usersBySection[String(sectionId)]?.length > 0) {
       console.log(
         `WorkspaceUsersBySection: Users for section ${sectionId} already in state.`
@@ -179,15 +174,15 @@ const actions = {
 
     console.log(
       `WorkspaceUsersBySection: Fetching users for section ${sectionId}.`
-    ); // Truyền object { sectionId: sectionId } trực tiếp làm params cho fetchUsers
+    );
     return dispatch("fetchUsers", { sectionId: sectionId });
-  }, // Action helper gọi fetchUsers với departmentId
+  },
 
   async fetchUsersByDepartment({ dispatch, state }, departmentId) {
     if (!departmentId) {
       console.warn("fetchUsersByDepartment: departmentId is required.");
       return [];
-    } // Kiểm tra cache - cải thiện
+    }
     if (state.usersByDepartment[String(departmentId)]?.length > 0) {
       console.log(
         `WorkspaceUsersByDepartment: Users for department ${departmentId} already in state.`
@@ -197,7 +192,7 @@ const actions = {
 
     console.log(
       `WorkspaceUsersByDepartment: Fetching users for department ${departmentId}.`
-    ); // Truyền object { departmentId: departmentId } trực tiếp làm params cho fetchUsers
+    );
     return dispatch("fetchUsers", { departmentId: departmentId });
   },
 };

@@ -1,8 +1,7 @@
-// src/store/modules/departments.js
 import apiClient from "../../services/api";
 
 const state = {
-  departments: [], // Danh sách department cho select/dropdown
+  departments: [],
   loading: false,
   error: null,
 };
@@ -27,20 +26,14 @@ const mutations = {
 
 const actions = {
   async fetchDepartments({ commit }, params = {}) {
-    // Nhận params để lọc nếu cần
-    // Tránh fetch lại nếu đã có dữ liệu và không có filter đặc biệt
-    // if (state.departments.length > 0 && !Object.keys(params).length) return;
-
     commit("SET_LOADING", true);
     commit("SET_ERROR", null);
     try {
-      // Gọi API lấy danh sách department (có thể chỉ cần id, departmentname, first_name, last_name)
-      // API cần hỗ trợ lọc theo role, department,... nếu component UserSelect yêu cầu
-      const response = await apiClient.get("/departments", { params }); // API Lấy danh sách Departments
-      commit("SET_DEPARTMENTS", response.data); // Giả sử API trả về { data: [...] } hoặc [...]
+      const response = await apiClient.get("/departments", { params });
+      commit("SET_DEPARTMENTS", response.data);
     } catch (error) {
       commit("SET_ERROR", error);
-      commit("SET_DEPARTMENTS", []); // Set rỗng nếu lỗi
+      commit("SET_DEPARTMENTS", []);
     } finally {
       commit("SET_LOADING", false);
     }

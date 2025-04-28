@@ -117,7 +117,6 @@ const mutations = {
 };
 
 const actions = {
-
   async login({ commit, dispatch }, credentials) {
     commit("AUTH_REQUEST");
     try {
@@ -129,11 +128,9 @@ const actions = {
       const token = response.data.access_token;
       if (!token) throw new Error("Token not received.");
 
-      // Lưu token vào localStorage hoặc sessionStorage
       localStorage.setItem("authToken", token);
       apiClient.defaults.headers.common["Authorization"] = `Bearer ${token}`;
 
-      // Lấy thông tin người dùng từ API /profile
       let user = null;
       try {
         user = await dispatch("fetchUserProfileInternal");
@@ -144,7 +141,6 @@ const actions = {
         return false;
       }
 
-      // Cập nhật thành công
       commit("AUTH_SUCCESS", { token, user, remember: credentials.remember });
       return true;
     } catch (error) {
@@ -181,9 +177,8 @@ const actions = {
     }
   },
   changeEffectiveRole({ commit }, role) {
-    commit("SET_EFFECTIVE_ROLE", role); 
+    commit("SET_EFFECTIVE_ROLE", role);
   },
-
 };
 
 const initialToken =

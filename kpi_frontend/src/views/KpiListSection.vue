@@ -13,8 +13,16 @@
       <a-row :gutter="[20]">
         <a-col :span="5">
           <a-form-item label="Department:">
-            <a-select v-model:value="localFilters.departmentId" style="width: 100%" @change="handleDepartmentChange">
-              <a-select-option v-for="department in departmentList" :key="department.id" :value="department.id">
+            <a-select
+              v-model:value="localFilters.departmentId"
+              style="width: 100%"
+              @change="handleDepartmentChange"
+            >
+              <a-select-option
+                v-for="department in departmentList"
+                :key="department.id"
+                :value="department.id"
+              >
                 {{ department.name }}
               </a-select-option>
             </a-select>
@@ -23,11 +31,22 @@
 
         <a-col :span="4">
           <a-form-item label="Section:">
-            <a-select v-model:value="localFilters.sectionId" style="width: 100%">
-              <a-select-option v-if="
-                selectSectionList.length > 1 || localFilters.sectionId === 0
-              " :value="0">All</a-select-option>
-              <a-select-option v-for="section in selectSectionList" :key="section.id" :value="section.id">
+            <a-select
+              v-model:value="localFilters.sectionId"
+              style="width: 100%"
+            >
+              <a-select-option
+                v-if="
+                  selectSectionList.length > 1 || localFilters.sectionId === 0
+                "
+                :value="0"
+                >All</a-select-option
+              >
+              <a-select-option
+                v-for="section in selectSectionList"
+                :key="section.id"
+                :value="section.id"
+              >
                 {{ section.name }}
               </a-select-option>
             </a-select>
@@ -35,12 +54,18 @@
         </a-col>
         <a-col :span="4">
           <a-form-item label="Start Date:">
-            <a-date-picker v-model:value="localFilters.startDate" style="width: 100%" />
+            <a-date-picker
+              v-model:value="localFilters.startDate"
+              style="width: 100%"
+            />
           </a-form-item>
         </a-col>
         <a-col :span="4">
           <a-form-item label="End Date:">
-            <a-date-picker v-model:value="localFilters.endDate" style="width: 100%" />
+            <a-date-picker
+              v-model:value="localFilters.endDate"
+              style="width: 100%"
+            />
           </a-form-item>
         </a-col>
         <a-col :span="7" style="text-align: right">
@@ -48,7 +73,11 @@
             <template #icon><filter-outlined /></template>
             Apply
           </a-button>
-          <a-button @click="resetFilters" :loading="loading" style="margin-left: 8px">
+          <a-button
+            @click="resetFilters"
+            :loading="loading"
+            style="margin-left: 8px"
+          >
             <template #icon><reload-outlined /></template>
             Reset
           </a-button>
@@ -61,103 +90,171 @@
         <template #icon> <a-spin /> </template>
       </a-alert>
 
-      <a-alert v-else-if="error" :message="error" type="error" show-icon closable />
+      <a-alert
+        v-else-if="error"
+        :message="error"
+        type="error"
+        show-icon
+        closable
+      />
 
-      <a-alert v-else-if="isDisplayResult && sectionGroups.length === 0" message="No KPIs found matching your criteria."
-        type="warning" show-icon closable />
+      <a-alert
+        v-else-if="isDisplayResult && sectionGroups.length === 0"
+        message="No KPIs found matching your criteria."
+        type="warning"
+        show-icon
+        closable
+      />
 
-      <a-alert v-if="deletedKpiName" :message="`KPI '${deletedKpiName}' was deleted successfully!`" type="success"
-        closable @close="deletedKpiName = null" show-icon />
+      <a-alert
+        v-if="deletedKpiName"
+        :message="`KPI '${deletedKpiName}' was deleted successfully!`"
+        type="success"
+        closable
+        @close="deletedKpiName = null"
+        show-icon
+      />
     </div>
 
     <div v-if="isDisplayResult" class="data-container">
-      <div v-for="(sectionGroup, sectionIndex) in sectionGroups" :key="'sec-' + sectionIndex" class="mb-8">
-        <h4 class="text-lg font-bold mb-2" style="margin-top: 10px; margin-bottom: 10px">
+      <div
+        v-for="(sectionGroup, sectionIndex) in sectionGroups"
+        :key="'sec-' + sectionIndex"
+        class="mb-8"
+      >
+        <h4
+          class="text-lg font-bold mb-2"
+          style="margin-top: 10px; margin-bottom: 10px"
+        >
           {{ sectionGroup.section }}
         </h4>
 
-        <a-collapse v-model:activeKey="activePanelKeys" expandIconPosition="end">
-          <a-collapse-panel v-for="(perspectiveGroupRows, perspectiveKey) in sectionGroup.data"
+        <a-collapse
+          v-model:activeKey="activePanelKeys"
+          expandIconPosition="end"
+        >
+          <a-collapse-panel
+            v-for="(perspectiveGroupRows, perspectiveKey) in sectionGroup.data"
             :key="'pers-' + sectionIndex + '-' + perspectiveKey"
-            :header="perspectiveKey.split('. ')[1] || perspectiveKey">
-            <a-table :columns="columns" :dataSource="tableData(perspectiveGroupRows)" :pagination="false" rowKey="key"
-              :rowClassName="rowClassName" size="small" bordered>
+            :header="perspectiveKey.split('. ')[1] || perspectiveKey"
+          >
+            <a-table
+              :columns="columns"
+              :dataSource="tableData(perspectiveGroupRows)"
+              :pagination="false"
+              rowKey="key"
+              :rowClassName="rowClassName"
+              size="small"
+              bordered
+            >
               <template #bodyCell="{ column, record }">
                 <template v-if="column.dataIndex === 'kpiName'">
                   <span>{{ record.kpiName }}</span>
                 </template>
 
                 <template v-else-if="column.dataIndex === 'chart'">
-                  <apexchart type="donut" width="80%" height="80" :options="{
-                    chart: { height: 80, type: 'donut' },
-                    labels: ['Actual', 'Remaining'],
-                    plotOptions: {
-                      pie: { donut: { thickness: '40px' } },
-                    },
-                    colors: ['#008FFB', '#B9E5FF'],
-                    dataLabels: {
-                      enabled: true,
-                      style: {
-                        fontSize: '10px',
-                        fontWeight: 'bold',
-                        colors: ['black'],
+                  <apexchart
+                    type="donut"
+                    width="80%"
+                    height="80"
+                    :options="{
+                      chart: { height: 80, type: 'donut' },
+                      labels: ['Actual', 'Remaining'],
+                      plotOptions: {
+                        pie: { donut: { thickness: '40px' } },
                       },
-                    },
-                    legend: { show: false },
-                  }" :series="[
-                    parseFloat(record.actual) || 0,
-                    Math.max(
-                      parseFloat(record.target) - parseFloat(record.actual),
-                      0
-                    ),
-                  ]" />
+                      colors: ['#008FFB', '#B9E5FF'],
+                      dataLabels: {
+                        enabled: true,
+                        style: {
+                          fontSize: '10px',
+                          fontWeight: 'bold',
+                          colors: ['black'],
+                        },
+                      },
+                      legend: { show: false },
+                    }"
+                    :series="[
+                      parseFloat(record.actual) || 0,
+                      Math.max(
+                        parseFloat(record.target) - parseFloat(record.actual),
+                        0
+                      ),
+                    ]"
+                  />
                 </template>
 
                 <template v-else-if="column.dataIndex === 'assignTo'">
                   <span>{{ record.assignTo }}</span>
                 </template>
 
-                <template v-else-if="column.dataIndex === 'startDate'"><span>{{ record.startDate }}</span></template>
+                <template v-else-if="column.dataIndex === 'startDate'"
+                  ><span>{{ record.startDate }}</span></template
+                >
 
-                <template v-else-if="column.dataIndex === 'endDate'"><span>{{ record.endDate }}</span></template>
+                <template v-else-if="column.dataIndex === 'endDate'"
+                  ><span>{{ record.endDate }}</span></template
+                >
 
-                <template v-else-if="column.dataIndex === 'weight'"><span>{{ record.weight }}</span></template>
+                <template v-else-if="column.dataIndex === 'weight'"
+                  ><span>{{ record.weight }}</span></template
+                >
 
-                <template v-else-if="column.dataIndex === 'target'"><span>{{
-                  `${record.target} ${record.unit}`
-                }}</span></template>
+                <template v-else-if="column.dataIndex === 'target'"
+                  ><span>{{
+                    `${record.target} ${record.unit}`
+                  }}</span></template
+                >
 
-                <template v-else-if="column.dataIndex === 'actual'"><span>{{
-                  `${record.actual} ${record.unit}`
-                }}</span></template>
+                <template v-else-if="column.dataIndex === 'actual'"
+                  ><span>{{
+                    `${record.actual} ${record.unit}`
+                  }}</span></template
+                >
 
                 <template v-else-if="column.dataIndex === 'status'">
-                  <a-tag :bordered="false" :color="getStatusColor(record.status)">
+                  <a-tag
+                    :bordered="false"
+                    :color="getStatusColor(record.status)"
+                  >
                     {{ record.status }}
                   </a-tag>
                 </template>
 
                 <template v-else-if="column.dataIndex === 'action'">
                   <a-tooltip title="View Details">
-                    <a-button type="default" class="kpi-actions-button" @click="
-                      $router.push({
-                        name: 'KpiDetail',
-                        params: { id: record.kpiId },
-                        query: { contextSectionId: sectionGroup.sectionId }
-                      })
-                      ">
+                    <a-button
+                      type="default"
+                      class="kpi-actions-button"
+                      @click="
+                        $router.push({
+                          name: 'KpiDetail',
+                          params: { id: record.kpiId },
+                          query: { contextSectionId: sectionGroup.sectionId },
+                        })
+                      "
+                    >
                       <schedule-outlined /> Details
                     </a-button>
                   </a-tooltip>
                   <a-tooltip title="Copy KPI">
-                    <a-button type="dashed" class="kpi-actions-button" size="small" @click="handleCopyKpi(record)">
+                    <a-button
+                      type="dashed"
+                      class="kpi-actions-button"
+                      size="small"
+                      @click="handleCopyKpi(record)"
+                    >
                       <copy-outlined /> Copy
                     </a-button>
                   </a-tooltip>
                   <a-tooltip title="Delete KPI">
-                    <a-button danger class="kpi-actions-button" @click="
-                      showConfirmDeleteDialog(record.kpiId, record.kpiName)
-                      ">
+                    <a-button
+                      danger
+                      class="kpi-actions-button"
+                      @click="
+                        showConfirmDeleteDialog(record.kpiId, record.kpiName)
+                      "
+                    >
                       <delete-outlined /> Delete
                     </a-button>
                   </a-tooltip>
@@ -169,8 +266,13 @@
       </div>
     </div>
 
-    <a-modal danger v-model:open="isDeleteModalVisible" title="Confirm Dialog" @ok="handleDeleteKpi"
-      @cancel="isDeleteModalVisible = false">
+    <a-modal
+      danger
+      v-model:open="isDeleteModalVisible"
+      title="Confirm Dialog"
+      @ok="handleDeleteKpi"
+      @cancel="isDeleteModalVisible = false"
+    >
       <p>Are you sure to delete "{{ selectedKpiName }}"?</p>
     </a-modal>
   </div>
@@ -186,7 +288,7 @@ import {
   ReloadOutlined,
   ScheduleOutlined,
   DeleteOutlined,
-  CopyOutlined
+  CopyOutlined,
 } from "@ant-design/icons-vue";
 import { notification } from "ant-design-vue";
 
@@ -234,13 +336,11 @@ const sectionGroups = computed(() => {
   }
 
   displayData.forEach((kpi) => {
-
     if (!kpi || !kpi.assignments || kpi.assignments.length === 0) {
       return;
     }
 
     const kpiDetails = {
-
       kpiId: kpi.id,
       kpiName: kpi.name,
       kpiUnit: kpi.unit || "",
@@ -264,7 +364,6 @@ const sectionGroups = computed(() => {
         assignment?.assigned_to_section !== null &&
         assignment?.assigned_to_section !== undefined
       ) {
-
         if (assignment.section) {
           if (
             assignment.section.department?.id !== null &&
@@ -292,7 +391,6 @@ const sectionGroups = computed(() => {
             assignment.employee.section.department_id !== null &&
             assignment.employee.section.department_id !== undefined
           ) {
-
             assignedDepartmentId = assignment.employee.section.department_id;
           }
         }
@@ -338,7 +436,7 @@ const sectionGroups = computed(() => {
         groupedData[assignedSectionId] = {
           section: sectionName,
           sectionId: assignedSectionId,
-          data: {}
+          data: {},
         };
       }
       if (!groupedData[assignedSectionId].data[perspectiveKey]) {
@@ -387,7 +485,6 @@ const sectionGroups = computed(() => {
     };
   });
 
-
   finalGroupedArray.sort((a, b) => a.section.localeCompare(b.section));
   return finalGroupedArray;
 });
@@ -413,7 +510,6 @@ const applyFilters = async () => {
     error.value = err.message || "Failed to fetch KPIs.";
   } finally {
     loading.value = false;
-
   }
 };
 
@@ -451,7 +547,6 @@ const tableData = (perspectiveGroupRowsArray) => {
 };
 
 const goToCreateKpi = () => {
-
   const targetSectionId = localFilters.value;
   if (!targetSectionId && creationScope.value === "section") {
     console.warn("Cannot navigate to create KPI: Section ID is not selected.");
@@ -476,13 +571,15 @@ const getStatusColor = (status) => {
 const handleCopyKpi = (record) => {
   if (record && record.kpiId) {
     router.push({
-      path: "/kpis/create", // Đường dẫn đến trang tạo KPI
+      path: "/kpis/create",
       query: {
-        templateKpiId: record.kpiId, // Truyền ID của KPI cần sao chép
+        templateKpiId: record.kpiId,
       },
     });
   } else {
-    notification.warning({ message: "Không thể sao chép do thiếu thông tin KPI." });
+    notification.warning({
+      message: "Không thể sao chép do thiếu thông tin KPI.",
+    });
   }
 };
 
@@ -587,7 +684,6 @@ const resetFilters = () => {
 const rowClassName = (record) => {
   return record.isParent ? "row-parent" : "";
 };
-
 
 watch(
   sectionGroups,

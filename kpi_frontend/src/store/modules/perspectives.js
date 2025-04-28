@@ -1,4 +1,3 @@
-// src/store/modules/perspectives.js
 import apiClient from "../../services/api";
 
 const state = {
@@ -20,7 +19,7 @@ const mutations = {
   SET_ERROR(state, error) {
     state.error = error ? error.response?.data?.message || error.message : null;
   },
-  SET_PERSPECTIVES(state, perspectives) { // Đổi tên biến cho rõ ràng
+  SET_PERSPECTIVES(state, perspectives) {
     state.perspectives = perspectives;
   },
 };
@@ -30,8 +29,8 @@ const actions = {
     commit("SET_LOADING", true);
     commit("SET_ERROR", null);
     try {
-      const response = await apiClient.get("/perspectives", { params }); // API Lấy danh sách Perspectives
-      commit("SET_PERSPECTIVES", response.data); // Cập nhật state với dữ liệu từ API
+      const response = await apiClient.get("/perspectives", { params });
+      commit("SET_PERSPECTIVES", response.data);
     } catch (error) {
       commit("SET_ERROR", error);
       commit("SET_PERSPECTIVES", []);

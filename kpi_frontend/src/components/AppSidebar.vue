@@ -47,7 +47,7 @@
 <script setup>
 import { computed } from "vue";
 import { useStore } from "vuex";
-// Import Ant Design components và icons
+
 import {
   LayoutSider as ALayoutSider,
   Menu as AMenu,
@@ -58,18 +58,10 @@ import { SettingOutlined } from "@ant-design/icons-vue";
 
 const store = useStore();
 
-// Chỉ cần lấy effectiveRole từ store
 const effectiveRole = computed(() => store.getters["auth/effectiveRole"]);
-// const isAuthenticated = computed(() => store.getters['auth/isAuthenticated']); // <<< Bỏ qua getter này
 
-// === Computed Properties để kiểm tra quyền (Vẫn dựa trên effectiveRole) ===
 const isAdmin = computed(() => effectiveRole.value === "admin");
-// const isCompany = computed(() => effectiveRole.value === 'company');
-// const isDepartment = computed(() => effectiveRole.value === 'department');
-// const isSection = computed(() => effectiveRole.value === 'section');
-// const isEmployee = computed(() => effectiveRole.value === 'employee');
 
-// Quyền xem các mục menu (Chỉ dựa vào effectiveRole)
 const canViewCompanyLevel = computed(() =>
   ["admin", "manager", "department", "section"].includes(effectiveRole.value)
 );
