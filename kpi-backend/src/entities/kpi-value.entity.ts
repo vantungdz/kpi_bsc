@@ -7,6 +7,18 @@ import {
 } from 'typeorm';
 import { KPIAssignment } from './kpi-assignment.entity';
 
+export enum KpiValueStatus {
+  DRAFT = 'DRAFT',
+  SUBMITTED = 'SUBMITTED',
+  PENDING_SECTION_APPROVAL = 'PENDING_SECTION_APPROVAL',
+  PENDING_DEPT_APPROVAL = 'PENDING_DEPT_APPROVAL',
+  PENDING_MANAGER_APPROVAL = 'PENDING_MANAGER_APPROVAL',
+  APPROVED = 'APPROVED',
+  REJECTED_BY_SECTION = 'REJECTED_BY_SECTION',
+  REJECTED_BY_DEPT = 'REJECTED_BY_DEPT',
+  REJECTED_BY_MANAGER = 'REJECTED_BY_MANAGER',
+}
+
 @Entity('kpi_values')
 export class KpiValue {
   @PrimaryGeneratedColumn()
@@ -14,7 +26,7 @@ export class KpiValue {
 
   @ManyToOne(() => KPIAssignment, (kpiAssignment) => kpiAssignment.id, {
     nullable: true,
-    onDelete: 'SET NULL',
+    onDelete: 'CASCADE',
   })
   @JoinColumn({ name: 'kpi_assigment_id' })
   kpiAssignment: KPIAssignment;
@@ -32,12 +44,29 @@ export class KpiValue {
   notes: string;
 
   @Column({
-    type: 'varchar',
-    enum: ['draft', 'submitted', 'approved'],
-    default: 'draft',
+    type: 'enum',
+    enum: KpiValueStatus,
+    default: KpiValueStatus.SUBMITTED,
+    nullable: false,
   })
-  status: string; //
+  status: KpiValueStatus;
 
+  @Column({
+    type: 'enum',
+    enum: KpiValueStatus,
+    nullable: true,
+  })
+  status_before: KpiValueStatus;
+
+  @Column({
+    type: 'enum',
+    enum: KpiValueStatus,
+    nullable: true,
+  })
+  status_after: KpiValueStatus;
+
+  @Column({ type: 'text', nullable: true })
+  rejection_reason: string | null;
   @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
   created_at: Date;
 
@@ -47,6 +76,6 @@ export class KpiValue {
   @Column({ nullable: true })
   updated_by: number;
 
-  @Column({ nullable: true })
-  project_details: string;
+  @Column({ type: 'jsonb', nullable: true })
+  project_details: object;
 }

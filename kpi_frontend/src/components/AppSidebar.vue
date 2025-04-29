@@ -21,9 +21,9 @@
         <router-link to="/kpis/section">Section KPI List</router-link>
       </a-menu-item>
 
-      <!-- <a-menu-item key="5" v-if="canViewIndividualList">
-        <router-link to="/kpis/individual">Individual KPI List</router-link>
-      </a-menu-item> -->
+      <a-menu-item key="5" v-if="canViewApprovals">
+        <router-link to="/approvals">Duyệt Kết quả KPI</router-link>
+      </a-menu-item>
 
       <a-menu-item key="6" v-if="effectiveRole">
         <router-link to="/personal">My Personal KPIs</router-link>
@@ -71,6 +71,17 @@ const canViewDepartmentLevel = computed(() =>
 const canViewSectionLevel = computed(() =>
   ["admin", "manager", "department", "section"].includes(effectiveRole.value)
 );
+
+const canViewApprovals = computed(() => {
+  if (!effectiveRole.value) return false;
+  return ['leader', 'manager', 'admin'].includes(effectiveRole.value);
+});
+
+// // Example computed for other conditional links
+// const isManagerOrAdmin = computed(() => {
+//    if (!userRole.value) return false;
+//    return ['manager', 'admin'].includes(userRole.value);
+// });
 </script>
 
 <style scoped>

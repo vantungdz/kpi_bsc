@@ -10,6 +10,14 @@ import {
 import { Perspective } from './perspective.entity';
 import { KPIAssignment } from './kpi-assignment.entity';
 
+export enum KpiStatus {
+  DRAFT = 'DRAFT',
+  PENDING_APPROVAL = 'PENDING_APPROVAL',
+  APPROVED = 'APPROVED',
+  REJECTED = 'REJECTED',
+  NEEDS_REVISION = 'NEEDS_REVISION',
+}
+
 @Entity('kpis')
 export class Kpi {
   @PrimaryGeneratedColumn()
@@ -22,7 +30,7 @@ export class Kpi {
     type: 'varchar',
     length: 20,
     default: 'sum',
-    enum: ['sum', 'average', 'percent'],
+    enum: ['sum', 'average', 'percentage'],
   })
   calculation_type: string;
 
@@ -45,7 +53,7 @@ export class Kpi {
   })
   frequency: string;
 
-  @Column('numeric', { precision: 5, scale: 2, default: 0 })
+  @Column({ type: 'numeric', precision: 5, scale: 2, default: 0 })
   weight: number;
 
   @Column({ nullable: true })
@@ -69,12 +77,12 @@ export class Kpi {
   memo: string;
 
   @Column({
-    type: 'varchar',
-    length: 20,
-    default: 'Active',
-    enum: ['Active', 'Inactive'],
+    type: 'enum',
+    enum: KpiStatus,
+    default: KpiStatus.DRAFT,
+    nullable: false,
   })
-  status: string;
+  status: KpiStatus;
 
   @Column({ type: 'varchar', length: 20, nullable: true })
   created_by_type: 'company' | 'department' | 'section' | 'employee';

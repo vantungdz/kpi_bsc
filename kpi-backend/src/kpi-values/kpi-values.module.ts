@@ -4,9 +4,18 @@ import { KpiValue } from '../entities/kpi-value.entity';
 import { KpiValuesService } from './kpi-values.service';
 import { KpiValuesController } from './kpi-values.controller';
 import { KpiValueHistory } from 'src/entities/kpi-value-history.entity';
+import { KPIAssignment } from 'src/entities/kpi-assignment.entity';
+import { Employee } from 'src/entities/employee.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([KpiValue, KpiValueHistory])],
+  imports: [
+    TypeOrmModule.forFeature([
+      KpiValue,
+      KpiValueHistory,
+      KPIAssignment,
+      Employee,
+    ]),
+  ],
   providers: [KpiValuesService],
   controllers: [KpiValuesController],
 })

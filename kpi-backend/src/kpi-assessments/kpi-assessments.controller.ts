@@ -25,20 +25,6 @@ export class KpiAssignmentsController {
     return this.kpiAssignmentsService.getUserAssignedKpis(Number(employeeId));
   }
 
-  @Post(':assignmentId/updates')
-  async updateKpiProgress(
-    @Param('assignmentId') assignmentId: number,
-    @Body()
-    body: { notes: string; project_details: { name: string; value: number }[] },
-  ) {
-    const { notes, project_details } = body;
-    return this.kpiAssignmentsService.updateKpiProgress(
-      assignmentId,
-      notes,
-      project_details,
-    );
-  }
-
   @Post('submit-target/:assignmentId')
   async submitTarget(
     @Param('assignmentId') assignmentId: string,
@@ -48,32 +34,6 @@ export class KpiAssignmentsController {
     return this.kpiAssignmentsService.submitTarget(
       Number(assignmentId),
       target,
-      userId,
-    );
-  }
-
-  @Post('confirm-and-submit/:assignmentId')
-  async confirmAndSubmit(
-    @Param('assignmentId') assignmentId: string,
-    @Body('result') result: number,
-    @Body('notes') notes: string,
-    @Body('userId') userId: number,
-  ): Promise<KpiValue> {
-    return this.kpiAssignmentsService.confirmAndSubmit(
-      Number(assignmentId),
-      result,
-      notes,
-      userId,
-    );
-  }
-
-  @Post('approve/:kpiValueId')
-  async approveKpiValue(
-    @Param('kpiValueId') kpiValueId: string,
-    @Body('userId') userId: number,
-  ): Promise<KpiValue> {
-    return this.kpiAssignmentsService.approveKpiValue(
-      Number(kpiValueId),
       userId,
     );
   }
