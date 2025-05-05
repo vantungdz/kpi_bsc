@@ -5,7 +5,7 @@ import { KpiValuesService } from './kpi-values.service';
 import { KpiValuesController } from './kpi-values.controller';
 import { KpiValueHistory } from 'src/entities/kpi-value-history.entity';
 import { KPIAssignment } from 'src/entities/kpi-assignment.entity';
-import { Employee } from 'src/entities/employee.entity';
+import { Employee } from '../entities/employee.entity';
 
 @Module({
   imports: [

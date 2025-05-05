@@ -10,6 +10,8 @@ import {
   UseGuards,
   Req,
   NotFoundException,
+  ParseIntPipe,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { KpisService } from './kpis.service';
 import { Kpi } from '../entities/kpi.entity';
@@ -23,6 +25,7 @@ import { RolesGuard } from 'src/auth/guards/roles.guard';
 import { Roles } from 'src/auth/guards/roles.decorator';
 import { CreateKpiDto } from './dto/create_kpi_dto';
 import { error } from 'console';
+import { Employee } from 'src/entities/employee.entity';
 
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('kpis')
@@ -184,6 +187,29 @@ export class KpisController {
   @ApiResponse({ status: 403, description: 'Không có quyền xem KPI' })
   findOne(@Param('id') id: string): Promise<Kpi> {
     return this.kpisService.findOne(+id);
+  }
+
+  @Patch(':id/toggle-status') // Dùng PATCH và ID của KPI
+  @Roles('manager', 'admin') // Chỉ manager, admin được phép
+  @ApiOperation({
+    summary: 'Chuyển đổi trạng thái DRAFT/APPROVED cho định nghĩa KPI',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Trạng thái KPI đã được cập nhật',
+    type: Kpi,
+  })
+  @ApiResponse({ status: 403, description: 'Không có quyền.' })
+  @ApiResponse({ status: 404, description: 'KPI không tồn tại.' })
+  async toggleKpiStatus(
+    @Param('id', ParseIntPipe) id: number,
+    @Req() req: Request & { user?: Employee },
+  ): Promise<Kpi> {
+    if (!req.user || !req.user.id) {
+      throw new UnauthorizedException('User not authenticated.');
+    }
+    const userId = req.user.id;
+    return this.kpisService.toggleKpiStatus(id, userId);
   }
 
   @Post('/createKpi')

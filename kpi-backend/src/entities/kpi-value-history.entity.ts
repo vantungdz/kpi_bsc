@@ -43,11 +43,18 @@ export class KpiValueHistory {
   @Column({ type: 'text', nullable: true })
   notes: string;
 
+  @Column({ type: 'text', nullable: true })
+  reason: string;
+
   @Column()
   action: string; // 'CREATE', 'UPDATE', 'DELETE'
 
   @Column()
   changed_by: number;
+
+  @ManyToOne(() => Employee, { nullable: true, eager: false })
+  @JoinColumn({ name: 'changed_by' })
+  changedByUser: Employee;
 
   @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
   changed_at: Date;

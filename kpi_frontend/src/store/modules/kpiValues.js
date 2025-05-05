@@ -294,6 +294,26 @@ export default {
         commit("SET_LOADING_PENDING", false);
       }
     },
+
+    async fetchValueHistory(_, { valueId }) {
+      try {
+        const response = await apiClient.get(`/kpi-values/${valueId}/history`);
+        return response.data || []; // Trả về mảng lịch sử
+      } catch (error) {
+        console.error(
+          `Error fetching history for KpiValue ID ${valueId}:`,
+          error
+        );
+        notification.error({
+          message: "Lỗi tải lịch sử",
+          description:
+            error.response?.data?.message ||
+            error.message ||
+            "Không thể tải lịch sử cho mục này.",
+        });
+        throw error; // Ném lỗi để component biết
+      }
+    },
   },
 
   mutations: {

@@ -1,5 +1,6 @@
 import apiClient from "../../services/api";
 import { notification } from "ant-design-vue";
+import { KpiDefinitionStatus } from "@/constants/kpiStatus";
 
 const state = {
   kpis: [],
@@ -227,6 +228,55 @@ const mutations = {
     if (state.currentKpi && state.currentKpi.id === kpiId) {
       state.currentKpi = null;
     }
+  },
+  SET_TOGGLING_KPI_STATUS(state, isLoading) {
+    state.isTogglingKpiStatus = isLoading;
+  },
+  SET_TOGGLE_KPI_STATUS_ERROR(state, error) {
+    state.toggleKpiStatusError = error;
+  },
+
+  UPDATE_SINGLE_KPI_STATUS(state, { kpiId, newStatus }) {
+    console.log(
+      `Mutation UPDATE_SINGLE_KPI_STATUS: kpiId=${kpiId}, newStatus=${newStatus}`
+    );
+    if (state.currentKpi && state.currentKpi.id === kpiId) {
+      console.log(`Updating currentKpi status`);
+      
+      state.currentKpi = {
+        ...state.currentKpi,
+        status: newStatus,
+        
+        assignments:
+          state.currentKpi.assignments?.map((a) => ({
+            ...a,
+            status:
+              newStatus === KpiDefinitionStatus.APPROVED ? "approved" : "draft",
+          })) || [],
+      };
+    }
+
+    
+    const kpiIndex = state.kpis.findIndex((kpi) => kpi.id === kpiId);
+    if (kpiIndex !== -1) {
+      console.log(`Updating kpi status in kpis list at index ${kpiIndex}`);
+      
+      
+      const oldKpi = state.kpis[kpiIndex];
+      state.kpis.splice(kpiIndex, 1, {
+        ...oldKpi,
+        status: newStatus,
+        assignments:
+          oldKpi.assignments?.map((a) => ({
+            ...a,
+            status:
+              newStatus === KpiDefinitionStatus.APPROVED ? "approved" : "draft",
+          })) || [],
+      });
+    } else {
+      console.log(`KPI ID ${kpiId} not found in kpis list state.`);
+    }
+
   },
 };
 
@@ -597,6 +647,40 @@ const actions = {
       throw error;
     } finally {
       commit("SET_SUBMIT_UPDATE_LOADING", false);
+    }
+  },
+
+  async toggleKpiStatus({ commit }, { kpiId }) {
+    // Bỏ dispatch nếu không fetch lại detail
+    commit("SET_TOGGLING_KPI_STATUS", true);
+    commit("SET_TOGGLE_KPI_STATUS_ERROR", null);
+    try {
+      const response = await apiClient.patch(`/kpis/${kpiId}/toggle-status`);
+      const updatedKpi = response.data; // API trả về KPI đã cập nhật
+
+      if (updatedKpi && updatedKpi.status) {
+        // --- GỌI MUTATION ĐÃ CẬP NHẬT ---
+        // Mutation này sẽ cập nhật cả currentKpi và item trong kpis list
+        commit("UPDATE_SINGLE_KPI_STATUS", {
+          kpiId: kpiId,
+          newStatus: updatedKpi.status,
+        });
+        // --- KẾT THÚC GỌI MUTATION ---
+        notification.success({ message: "KPI status updated successfully!" });
+        return updatedKpi;
+      } else {
+        throw new Error("Invalid response received after toggling status.");
+      }
+    } catch (error) {
+      const errorMsg =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to toggle KPI status.";
+      commit("SET_TOGGLE_KPI_STATUS_ERROR", errorMsg);
+      notification.error({ message: "Update Failed", description: errorMsg });
+      throw error;
+    } finally {
+      commit("SET_TOGGLING_KPI_STATUS", false);
     }
   },
 };

@@ -10,7 +10,7 @@ import {
 import { Perspective } from './perspective.entity';
 import { KPIAssignment } from './kpi-assignment.entity';
 
-export enum KpiStatus {
+export enum KpiDefinitionStatus {
   DRAFT = 'DRAFT',
   PENDING_APPROVAL = 'PENDING_APPROVAL',
   APPROVED = 'APPROVED',
@@ -78,11 +78,18 @@ export class Kpi {
 
   @Column({
     type: 'enum',
-    enum: KpiStatus,
-    default: KpiStatus.DRAFT,
+    enum: KpiDefinitionStatus,
+    default: KpiDefinitionStatus.DRAFT,
     nullable: false,
   })
-  status: KpiStatus;
+  status: KpiDefinitionStatus;
+
+  @Column({
+    type: 'numeric', 
+    nullable: true, 
+    default: null, 
+  })
+  actual_value: number | null;
 
   @Column({ type: 'varchar', length: 20, nullable: true })
   created_by_type: 'company' | 'department' | 'section' | 'employee';

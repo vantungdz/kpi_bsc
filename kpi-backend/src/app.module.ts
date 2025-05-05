@@ -14,12 +14,13 @@ import { PerformanceEvaluationModule } from './performance-evaluation/performanc
 import { KpiAssignmentsModule } from './kpi-assessments/kpi-assessments.module';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { RolesGuard } from './auth/guards/roles.guard';
-
+import { EventEmitterModule } from '@nestjs/event-emitter';
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
     }),
+    EventEmitterModule.forRoot(),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService): TypeOrmModuleOptions => {
@@ -50,6 +51,6 @@ import { RolesGuard } from './auth/guards/roles.guard';
     KpiAssignmentsModule,
   ],
   controllers: [],
-  providers: [JwtAuthGuard, RolesGuard],
+  // providers: [JwtAuthGuard, RolesGuard],
 })
-export class AppModule { }
+export class AppModule {}

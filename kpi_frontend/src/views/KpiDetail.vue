@@ -43,11 +43,20 @@
           <a-descriptions-item label="Weight (%)">
             {{ kpiDetailData.weight ?? "" }}
           </a-descriptions-item>
-          <a-descriptions-item label="Status">
-            <a-tag :color="getStatusColor(kpiDetailData.status)">
-              {{ kpiDetailData.status || "" }}
-            </a-tag>
+
+          <a-descriptions-item label="Status" :span="2">
+            <a-tag :color="getKpiDefinitionStatusColor(kpiDetailData.status)" style="margin-right: 10px;"> {{
+              getKpiDefinitionStatusText(kpiDetailData.status) }}</a-tag>
+            <a-switch v-if="isManagerOrAdmin && kpiDetailData?.id"
+              :checked="kpiDetailData.status === KpiDefinitionStatus.APPROVED" :loading="isToggling"
+              :disabled="isToggling || loadingKpi" checked-children="ON" un-checked-children="OFF" size="small"
+              @change="() => handleToggleStatus(kpiDetailData.id)" title="Toggle DRAFT/APPROVED status" />
+            <div v-if="toggleStatusError" style="color: red; font-size: 0.9em; margin-top: 5px;">
+              Lỗi: {{ toggleStatusError }}
+              <a @click="clearToggleError" style="margin-left: 5px;">(Xóa)</a>
+            </div>
           </a-descriptions-item>
+
           <a-descriptions-item label="Description" :span="2">
             {{ kpiDetailData.description || "" }}
           </a-descriptions-item>
@@ -90,17 +99,22 @@
           row-key="id" size="small" bordered :pagination="false">
           <template #bodyCell="{ column, record }">
             <template v-if="column.key === 'assignedUnit'">
-              <span v-if="record.department">{{ record.department.name }} (Department)</span>
-              <span v-else-if="record.section">{{ record.section.name }} (Section)</span>
-              <span v-else-if="record.team">{{ record.team.name }} (Team)</span>
-              <span v-else></span>
+              <span v-if="record.section">{{ record.section.name }} (Section)</span>
+              <span v-else-if="record.department">{{ record.department.name }} (Department)</span>
+              <span v-else>N/A</span>
             </template>
             <template v-else-if="column.key === 'targetValue'">
-              {{ record.targetValue?.toLocaleString() ?? "" }}
-              {{ kpiDetailData?.unit || "" }}
+              {{ record.targetValue?.toLocaleString() ?? "-" }}
+              <span v-if="kpiDetailData?.unit"> {{ kpiDetailData.unit }}</span>
             </template>
-            <template v-else-if="column.key === 'weight'">
-              {{ record.weight ?? "" }} %
+
+            <template v-else-if="column.key === 'actual'">
+              {{ record.latest_actual_value?.toLocaleString() ?? '-' }}
+            </template>
+            <template v-else-if="column.key === 'status'">
+              <a-tag :color="getAssignmentStatusColor(record.status)">
+                {{ getAssignmentStatusText(record.status) }}
+              </a-tag>
             </template>
             <template v-else-if="column.key === 'actions'">
               <a-space>
@@ -119,6 +133,7 @@
               </a-space>
             </template>
           </template>
+
         </a-table>
         <a-empty v-show="currentDepartmentSectionAssignments.length === 0 &&
           !loadingDepartmentSectionAssignments
@@ -271,22 +286,22 @@
             </template>
             <template v-else-if="column.dataIndex === 'evaluation_date'">
               {{
-                record.evaluation_date
-                  ? dayjs(record.evaluation_date).format("L")
-                  : ""
+              record.evaluation_date
+              ? dayjs(record.evaluation_date).format("L")
+              : ""
               }}
             </template>
             <template v-else-if="column.dataIndex === 'period'">
               {{
-                record.period_start_date
-                  ? dayjs(record.period_start_date).format("YYYY-MM-DD")
-                  : "?"
+              record.period_start_date
+              ? dayjs(record.period_start_date).format("YYYY-MM-DD")
+              : "?"
               }}
               -
               {{
-                record.period_end_date
-                  ? dayjs(record.period_end_date).format("YYYY-MM-DD")
-                  : "?"
+              record.period_end_date
+              ? dayjs(record.period_end_date).format("YYYY-MM-DD")
+              : "?"
               }}
             </template>
             <template v-else-if="column.dataIndex === 'status'">
@@ -341,7 +356,7 @@
             </a-avatar>
             {{ editingUserAssignmentRecord.employee?.first_name }}
             {{ editingUserAssignmentRecord.employee?.last_name }} ({{
-              editingUserAssignmentRecord.employee?.username
+            editingUserAssignmentRecord.employee?.username
             }})
           </a-descriptions-item>
         </a-descriptions>
@@ -496,6 +511,7 @@ import {
 import dayjs from "dayjs";
 import LocalizedFormat from "dayjs/plugin/localizedFormat";
 dayjs.extend(LocalizedFormat);
+import { KpiDefinitionStatus, KpiDefinitionStatusText, KpiDefinitionStatusColor } from '../constants/kpiStatus';
 
 const router = useRouter();
 const store = useStore();
@@ -527,6 +543,8 @@ const loadingUserAssignments = computed(
 const userAssignmentError = computed(
   () => store.getters["kpis/userAssignmentError"]
 );
+const isToggling = computed(() => store.getters['kpis/isTogglingKpiStatus']);
+const toggleStatusError = computed(() => store.getters['kpis/toggleKpiStatusError']); 
 const actualUser = computed(() => store.getters["auth/user"]);
 const effectiveRole = computed(() => store.getters["auth/effectiveRole"]);
 const loadingDepartmentSectionAssignments = computed(
@@ -539,6 +557,10 @@ const allDepartments = computed(
   () => store.getters["departments/departmentList"] || []
 );
 const allSections = computed(() => store.getters["sections/sectionList"] || []);
+
+const isManagerOrAdmin = computed(() => {
+  return ['manager', 'admin'].includes(effectiveRole.value);
+});
 
 const sectionNameFromContext = computed(() => {
   const currentSectionId = contextSectionId.value;
@@ -941,6 +963,27 @@ const canEvaluateKpi = computed(() => {
   );
 });
 
+const handleToggleStatus = async (kpiId) => {
+  if (!kpiId || isToggling.value) return;
+  store.commit('kpis/SET_TOGGLE_KPI_STATUS_ERROR', null);
+  try {
+    await store.dispatch('kpis/toggleKpiStatus', { kpiId });
+  } catch (error) {
+    console.error("Failed to toggle KPI status from detail component:", error);
+  }
+};
+
+const getKpiDefinitionStatusText = (status) => {
+  return KpiDefinitionStatusText[status] || status || 'N/A';
+};
+const getKpiDefinitionStatusColor = (status) => {
+  return KpiDefinitionStatusColor[status] || 'default';
+};
+
+const clearToggleError = () => {
+  store.commit('kpis/SET_TOGGLE_KPI_STATUS_ERROR', null);
+}
+
 const isMyDepartment = (deptId) => {
   if (!deptId || !actualUser.value) return false;
 
@@ -1247,29 +1290,13 @@ const assignUserModalTitle = computed(() => {
   return "Assign KPI to Users";
 });
 
-const departmentSectionAssignmentColumns = [
-  {
-    title: "Assigned Unit",
-    key: "assignedUnit",
-    width: "30%",
-  },
-  {
-    title: "Target Value",
-    key: "targetValue",
-    width: "20%",
-  },
-  {
-    title: "Status",
-    key: "status",
-    width: "15%",
-  },
-  {
-    title: "Actions",
-    key: "actions",
-    align: "center",
-    width: "100px",
-  },
-];
+const departmentSectionAssignmentColumns = ref([
+  { title: "Assigned Unit", key: "assignedUnit", width: "30%" },
+  { title: "Target Value", key: "targetValue", dataIndex: 'targetValue', width: "15%", align: 'right' },
+  { title: "Latest Actual", key: "actual", dataIndex: 'latest_actual_value', width: "15%", align: 'right' },
+  { title: "Status", key: "status", dataIndex: 'status', width: "15%", align: 'center' },
+  { title: "Actions", key: "actions", align: "center", width: "100px" },
+]);
 
 const userAssignmentColumns = [
   {
@@ -1352,6 +1379,18 @@ const evaluationColumns = [
     key: "actions",
   },
 ];
+
+const getAssignmentStatusText = (status) => {
+  if (status === 'approved') return 'Active';
+  if (status === 'draft') return 'Draft';
+  return status || 'N/A';
+};
+const getAssignmentStatusColor = (status) => {
+  if (status === 'approved') return 'success';
+  if (status === 'draft') return 'default';
+  return 'default';
+};
+
 
 const filteredAssignmentsForContextDepartment = computed(() => {
   const assignments = kpiDetailData.value?.assignments;

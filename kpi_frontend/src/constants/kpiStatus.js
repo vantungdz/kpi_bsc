@@ -36,3 +36,18 @@ export const KpiValueStatusColor = {
   [KpiValueStatus.REJECTED_BY_DEPT]: "error",
   [KpiValueStatus.REJECTED_BY_MANAGER]: "error",
 };
+
+export const KpiDefinitionStatus = Object.freeze({
+  DRAFT: "DRAFT",
+  APPROVED: "APPROVED",
+});
+
+export const KpiDefinitionStatusText = {
+  [KpiDefinitionStatus.DRAFT]: "Bản nháp",
+  [KpiDefinitionStatus.APPROVED]: "Đã duyệt",
+};
+
+export const KpiDefinitionStatusColor = {
+  [KpiDefinitionStatus.DRAFT]: "default", // Màu xám hoặc vàng
+  [KpiDefinitionStatus.APPROVED]: "success", // Màu xanh lá
+};

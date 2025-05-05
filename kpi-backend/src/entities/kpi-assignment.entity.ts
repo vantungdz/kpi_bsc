@@ -1,10 +1,11 @@
-// kpi-assignment.entity.ts
+
 import {
   Entity,
   PrimaryGeneratedColumn,
   Column,
   ManyToOne,
   CreateDateColumn,
+  UpdateDateColumn, 
   JoinColumn,
   OneToMany,
   DeleteDateColumn,
@@ -16,9 +17,7 @@ import { Section } from './section.entity';
 import { Team } from './team.entity';
 import { KpiValue } from './kpi-value.entity';
 
-export type AssignmentType = 'department' | 'section' | 'team' | 'employee';
-
-@Entity('kpi_assignment')
+@Entity('kpi_assignment') 
 export class KPIAssignment {
   @PrimaryGeneratedColumn()
   id: number;
@@ -26,83 +25,93 @@ export class KPIAssignment {
   @Column()
   kpi_id: number;
 
-  @ManyToOne(() => Kpi, (kpi) => kpi.assignments)
+  @ManyToOne(() => Kpi, (kpi) => kpi.assignments, { nullable: false })
   @JoinColumn({ name: 'kpi_id' })
   kpi: Kpi;
 
-  @Column()
+  @Column({ nullable: true })
   assignedFrom: string;
 
   @Column({ type: 'numeric', nullable: true })
-  assigned_to_department: number;
+  assigned_to_department: number | null;
 
-  @ManyToOne(() => Department, { onDelete: 'CASCADE', eager: true })
+  @ManyToOne(() => Department, {
+    onDelete: 'SET NULL',
+    nullable: true,
+    eager: false,
+  }) 
   @JoinColumn({ name: 'assigned_to_department' })
-  department: Department;
+  department: Department | null;
 
   @Column({ type: 'numeric', nullable: true })
-  assigned_to_section: number;
+  assigned_to_section: number | null;
 
-  @ManyToOne(() => Section, { onDelete: 'CASCADE', eager: true })
+  @ManyToOne(() => Section, {
+    onDelete: 'SET NULL',
+    nullable: true,
+    eager: false,
+  }) 
   @JoinColumn({ name: 'assigned_to_section' })
-  section: Section;
+  section: Section | null;
 
   @Column({ type: 'numeric', nullable: true })
-  assigned_to_team: number;
+  assigned_to_team: number | null;
 
-  @ManyToOne(() => Team, { onDelete: 'CASCADE', eager: true })
+  @ManyToOne(() => Team, { onDelete: 'SET NULL', nullable: true, eager: false }) 
   @JoinColumn({ name: 'assigned_to_team' })
-  team: Team;
+  team: Team | null;
 
   @Column({ type: 'numeric', nullable: true })
-  assigned_to_employee: number;
+  assigned_to_employee: number | null;
 
-  @ManyToOne(() => Employee, { onDelete: 'CASCADE', eager: true })
+  @ManyToOne(() => Employee, {
+    onDelete: 'SET NULL',
+    nullable: true,
+    eager: false,
+  }) 
   @JoinColumn({ name: 'assigned_to_employee' })
-  employee: Employee;
+  employee: Employee | null;
 
+  
   @Column({ type: 'numeric', nullable: true })
-  employee_id: number;
+  employee_id: number | null;
 
   @Column({
     type: 'varchar',
-    enum: ['draft', 'submitted', 'approved'],
+    length: 50,
+    enum: ['draft', 'approved'],
     default: 'draft',
   })
   status: string;
 
-  @Column({
-    type: 'timestamp',
-
-    default: () => 'CURRENT_TIMESTAMP',
-  })
-  submitted_at: Date;
+  @Column({ type: 'timestamp', nullable: true })
+  submitted_at: Date | null;
 
   @Column({ type: 'timestamp', nullable: true })
-  reviewed_at: Date;
+  reviewed_at: Date | null;
 
   @Column({ type: 'timestamp', nullable: true })
   created_at: Date;
 
-  @Column({ type: 'timestamp', nullable: true })
-  updated_at: Date;
+  @UpdateDateColumn({ type: 'timestamp', nullable: true }) 
+  updated_at: Date | null;
 
   @Column({ type: 'timestamp', nullable: true })
-  approved_at: Date;
+  approved_at: Date | null;
 
-  @Column()
-  targetValue: number;
+  
+  @Column({ type: 'numeric', nullable: true }) 
+  targetValue: number | null; 
 
-  @CreateDateColumn()
+  @CreateDateColumn() 
   assignedAt: Date;
 
-  @Column()
-  assignedBy: number;
+  @Column({ nullable: true })
+  assignedBy: number; 
 
-  @Column({ type: 'timestamp', nullable: true })
-  @DeleteDateColumn()
-  deleted_at: Date;
+  @DeleteDateColumn({ type: 'timestamp', nullable: true })
+  deleted_at?: Date;
 
-  @OneToMany(() => KpiValue, (value) => value.kpiAssignment)
+  @OneToMany(() => KpiValue, (kpiValue) => kpiValue.kpiAssignment)
   kpiValues: KpiValue[];
 }
