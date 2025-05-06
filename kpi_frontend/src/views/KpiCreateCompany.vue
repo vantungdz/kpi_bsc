@@ -83,20 +83,13 @@
         <a-col :span="12">
           <a-form-item class="textLabel" label="Unit" name="unit">
             <a-select v-model:value="form.unit" placeholder="Unit">
-              <a-select-option value="MM"> MM </a-select-option>
-
-              <a-select-option value="Point"> Point </a-select-option>
-              <a-select-option value="Product"> Product </a-select-option>
-
-              <a-select-option value="Project"> Project </a-select-option>
-
-              <a-select-option value="Certification">
-                Certification
+              <a-select-option
+                v-for="(unitValue, unitKey) in KpiUnits"
+                :key="unitKey"
+                :value="unitValue"
+              >
+                {{ unitKey }}
               </a-select-option>
-
-              <a-select-option value="Article"> Article </a-select-option>
-
-              <a-select-option value="Person"> Person </a-select-option>
             </a-select>
           </a-form-item>
         </a-col>
@@ -344,6 +337,7 @@ import {
   Statistic as AStatistic,
 } from "ant-design-vue";
 import dayjs from "dayjs";
+import { KpiUnits } from "../constants/kpiConstants.js";
 
 const router = useRouter();
 const route = useRoute();

@@ -1,11 +1,7 @@
-// filter-kpi.dto.ts
 import { IsOptional, IsString, IsInt, IsEnum } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
-import { Transform } from 'class-transformer'; // Import Transform if needed for Int conversion
+import { Transform } from 'class-transformer';
 
-// --- CẬP NHẬT ENUM ---
-// Đảm bảo enum này đồng bộ với enum trong kpi.entity.ts
-// (Có thể import từ entity nếu bạn đặt enum ở đó)
 export enum KpiStatus {
   DRAFT = 'DRAFT',
   PENDING_APPROVAL = 'PENDING_APPROVAL',
@@ -13,12 +9,11 @@ export enum KpiStatus {
   REJECTED = 'REJECTED',
   NEEDS_REVISION = 'NEEDS_REVISION',
 }
-// --- KẾT THÚC CẬP NHẬT ---
 
 export class KpiFilterDto {
   @ApiProperty({
     example: 'Productivity',
-    description: 'Tìm kiếm theo tên KPI', // Sửa mô tả
+    description: 'Tìm kiếm theo tên KPI',
     required: false,
   })
   @IsString()
@@ -27,68 +22,68 @@ export class KpiFilterDto {
 
   @ApiProperty({
     example: 1,
-    description: 'Lọc theo ID phòng ban được gán', // Sửa mô tả
+    description: 'Lọc theo ID phòng ban được gán',
     required: false,
   })
-  @Transform(({ value }) => parseInt(value, 10)) // Đảm bảo chuyển đổi thành số
+  @Transform(({ value }) => parseInt(value, 10))
   @IsInt()
   @IsOptional()
   departmentId?: number;
 
   @ApiProperty({
     example: 1,
-    description: 'Lọc theo ID bộ phận được gán', // Sửa mô tả
+    description: 'Lọc theo ID bộ phận được gán',
     required: false,
   })
-  @Transform(({ value }) => parseInt(value, 10)) // Đảm bảo chuyển đổi thành số
+  @Transform(({ value }) => parseInt(value, 10))
   @IsInt()
   @IsOptional()
   sectionId?: number;
 
   @ApiProperty({
     example: 1,
-    description: 'Lọc theo ID nhóm được gán', // Sửa mô tả
+    description: 'Lọc theo ID nhóm được gán',
     required: false,
   })
-  @Transform(({ value }) => parseInt(value, 10)) // Đảm bảo chuyển đổi thành số
+  @Transform(({ value }) => parseInt(value, 10))
   @IsInt()
   @IsOptional()
   teamId?: number;
 
   @ApiProperty({
     example: 2,
-    description: 'Lọc theo ID khía cạnh BSC', // Sửa mô tả
+    description: 'Lọc theo ID khía cạnh BSC',
     required: false,
   })
-  @Transform(({ value }) => parseInt(value, 10)) // Đảm bảo chuyển đổi thành số
+  @Transform(({ value }) => parseInt(value, 10))
   @IsInt()
   @IsOptional()
   perspectiveId?: number;
 
   @ApiProperty({
     example: 4,
-    description: 'Lọc theo ID nhân viên được gán', // Sửa mô tả
+    description: 'Lọc theo ID nhân viên được gán',
     required: false,
   })
-  @Transform(({ value }) => parseInt(value, 10)) // Đảm bảo chuyển đổi thành số
+  @Transform(({ value }) => parseInt(value, 10))
   @IsInt()
   @IsOptional()
   assignedToId?: number;
 
   @IsString()
   @IsOptional()
-  assignedToName?: string; // Giữ lại nếu có logic lọc theo tên người được gán
+  assignedToName?: string;
 
-  @IsString() // Nên dùng IsDateString nếu bạn muốn validate định dạng ngày cụ thể
+  @IsString()
   @IsOptional()
   startDate?: string;
 
-  @IsString() // Nên dùng IsDateString
+  @IsString()
   @IsOptional()
   endDate?: string;
 
   @ApiProperty({ example: 1, description: 'Trang hiện tại', required: false })
-  @Transform(({ value }) => parseInt(value, 10)) // Đảm bảo chuyển đổi thành số
+  @Transform(({ value }) => parseInt(value, 10))
   @IsInt()
   @IsOptional()
   page?: number = 1;
@@ -98,37 +93,37 @@ export class KpiFilterDto {
     description: 'Số mục mỗi trang',
     required: false,
   })
-  @Transform(({ value }) => parseInt(value, 10)) // Đảm bảo chuyển đổi thành số
+  @Transform(({ value }) => parseInt(value, 10))
   @IsInt()
   @IsOptional()
   limit?: number = 15;
 
   @ApiProperty({
     example: 'name',
-    description: 'Sắp xếp theo trường (vd: name, created_at)', // Sửa mô tả
+    description: 'Sắp xếp theo trường (vd: name, created_at)',
     required: false,
   })
   @IsString()
   @IsOptional()
-  sortBy?: string; // --- CẬP NHẬT TRƯỜNG STATUS ---
+  sortBy?: string;
 
   @ApiProperty({
-    enum: KpiStatus, // Tham chiếu enum đã cập nhật
-    example: KpiStatus.APPROVED, // Cập nhật ví dụ
-    description: 'Lọc theo trạng thái quy trình KPI', // Cập nhật mô tả
+    enum: KpiStatus,
+    example: KpiStatus.APPROVED,
+    description: 'Lọc theo trạng thái quy trình KPI',
     required: false,
   })
-  @IsEnum(KpiStatus) // Xác thực với enum đã cập nhật
+  @IsEnum(KpiStatus)
   @IsOptional()
-  status?: KpiStatus; // Sử dụng kiểu enum đã cập nhật
-  // --- KẾT THÚC CẬP NHẬT ---
+  status?: KpiStatus;
+
   @ApiProperty({
-    enum: ['ASC', 'DESC'], // Chỉ định rõ các giá trị hợp lệ
-    example: 'DESC', // Cập nhật ví dụ
-    description: 'Thứ tự sắp xếp (ASC hoặc DESC)', // Sửa mô tả
+    enum: ['ASC', 'DESC'],
+    example: 'DESC',
+    description: 'Thứ tự sắp xếp (ASC hoặc DESC)',
     required: false,
   })
-  @IsEnum(['ASC', 'DESC']) // Xác thực với giá trị cho phép
+  @IsEnum(['ASC', 'DESC'])
   @IsOptional()
   sortOrder?: 'ASC' | 'DESC';
 }

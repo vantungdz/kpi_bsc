@@ -32,8 +32,16 @@
         </a-col>
       </a-row>
 
-      <a-form-item class="textLabel" label="Department" name="department_id" required>
-        <a-select v-model:value="form.department_id" placeholder="Select Department">
+      <a-form-item
+        class="textLabel"
+        label="Department"
+        name="department_id"
+        required
+      >
+        <a-select
+          v-model:value="form.department_id"
+          placeholder="Select Department"
+        >
           <a-select-option
             v-for="department in departmentList"
             :key="department.id"
@@ -92,15 +100,13 @@
         <a-col :span="12">
           <a-form-item class="textLabel" label="Unit" name="unit">
             <a-select v-model:value="form.unit" placeholder="Unit">
-              <a-select-option value="MM"> MM </a-select-option>
-              <a-select-option value="Point"> Point </a-select-option>
-              <a-select-option value="Product"> Product </a-select-option>
-              <a-select-option value="Project"> Project </a-select-option>
-              <a-select-option value="Certification">
-                Certification
+              <a-select-option
+                v-for="(unitValue, unitKey) in KpiUnits"
+                :key="unitKey"
+                :value="unitValue"
+              >
+                {{ unitKey }}
               </a-select-option>
-              <a-select-option value="Article"> Article </a-select-option>
-              <a-select-option value="Person"> Person </a-select-option>
             </a-select>
           </a-form-item>
         </a-col>
@@ -307,6 +313,7 @@ import {
   Statistic as AStatistic,
 } from "ant-design-vue";
 import dayjs from "dayjs";
+import { KpiUnits } from "../constants/kpiConstants.js";
 
 const router = useRouter();
 const store = useStore();
@@ -357,7 +364,9 @@ const formulaList = ref([
 ]);
 
 const rawSectionsForCurrentDepartment = computed(
-  () => store.getters["sections/sectionsByDepartment"](form.value.department_id) || []
+  () =>
+    store.getters["sections/sectionsByDepartment"](form.value.department_id) ||
+    []
 );
 
 const sectionsForAssignmentTable = computed(() => {
@@ -380,7 +389,9 @@ const sectionsForAssignmentTable = computed(() => {
 const perspectiveList = computed(
   () => store.getters["perspectives/perspectiveList"] || []
 );
-const departmentList = computed(() => store.getters["departments/departmentList"] || []);
+const departmentList = computed(
+  () => store.getters["departments/departmentList"] || []
+);
 const kpiTemplateList = computed(() => store.getters["kpis/kpiListAll"] || []);
 const loadingKpiTemplates = computed(() => store.getters["kpis/loadingAll"]);
 
@@ -1095,7 +1106,10 @@ watch(
     }
     loadingInitialData.value = true;
     try {
-      await store.dispatch("sections/fetchSectionsByDepartment", newDepartmentId);
+      await store.dispatch(
+        "sections/fetchSectionsByDepartment",
+        newDepartmentId
+      );
       selectedRowKeys.value = [];
       form.value.section_id = [];
       targetValues.value = {};

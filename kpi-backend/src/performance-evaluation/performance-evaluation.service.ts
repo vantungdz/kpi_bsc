@@ -11,9 +11,8 @@ export class PerformanceEvaluationService {
   ) {}
 
   private calculateScores(performanceEvaluation: PerformanceEvaluation): void {
-    const totalWeight = 160; // Tổng trọng số
+    const totalWeight = 160;
 
-    // Tính total_score dựa trên supervisor_evaluation_score
     performanceEvaluation.total_score =
       (performanceEvaluation.a1_supervisor_evaluation_score || 0) *
         performanceEvaluation.a1_weight +
@@ -38,7 +37,6 @@ export class PerformanceEvaluationService {
       (performanceEvaluation.b3_supervisor_evaluation_score || 0) *
         performanceEvaluation.b3_weight;
 
-    // Tính average_score
     performanceEvaluation.average_score =
       totalWeight > 0
         ? Number((performanceEvaluation.total_score / totalWeight).toFixed(2))
@@ -51,7 +49,7 @@ export class PerformanceEvaluationService {
     const newEvaluation = this.performanceEvaluationRepository.create(
       performanceEvaluation,
     );
-    this.calculateScores(newEvaluation); // Tính toán trước khi lưu
+    this.calculateScores(newEvaluation);
     return this.performanceEvaluationRepository.save(newEvaluation);
   }
 
@@ -76,7 +74,7 @@ export class PerformanceEvaluationService {
       throw new Error('Performance evaluation not found');
     }
     Object.assign(evaluation, updateData);
-    this.calculateScores(evaluation); // Tính toán lại sau khi cập nhật
+    this.calculateScores(evaluation);
     return this.performanceEvaluationRepository.save(evaluation);
   }
 

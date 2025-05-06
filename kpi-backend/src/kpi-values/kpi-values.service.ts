@@ -274,7 +274,7 @@ export class KpiValuesService {
       'APPROVE_SECTION',
       userId,
     );
-    const savedValue = await this.kpiValuesRepository.save(kpiValue); // Lưu trước
+    const savedValue = await this.kpiValuesRepository.save(kpiValue);
     this.logger.log(
       `[approveValueBySection] Saved KpiValue ID ${savedValue.id} with status ${savedValue.status}`,
     );
@@ -284,9 +284,8 @@ export class KpiValuesService {
       statusBefore,
       'APPROVE_SECTION',
       userId,
-    ); // Log sau khi có ID và status mới
+    );
 
-    // --- PHÁT SỰ KIỆN NẾU ĐÃ APPROVED ---
     if (savedValue.status === KpiValueStatus.APPROVED) {
       const assignment =
         savedValue.kpiAssignment ??
@@ -297,7 +296,7 @@ export class KpiValuesService {
         this.logger.log(
           `Emitting kpi_value.approved event for KPI ID: ${assignment.kpi_id}`,
         );
-        // Phát sự kiện với tên 'kpi_value.approved' và payload chứa kpiId
+
         this.eventEmitter.emit('kpi_value.approved', {
           kpiId: assignment.kpi_id,
         });
@@ -426,7 +425,7 @@ export class KpiValuesService {
       'APPROVE_DEPT',
       userId,
     );
-    const savedValue = await this.kpiValuesRepository.save(kpiValue); // Lưu trước
+    const savedValue = await this.kpiValuesRepository.save(kpiValue);
     this.logger.log(
       `[approveValueByDepartment] Saved KpiValue ID ${savedValue.id} with status ${savedValue.status}`,
     );
@@ -436,9 +435,8 @@ export class KpiValuesService {
       statusBefore,
       'APPROVE_DEPT',
       userId,
-    ); // Log sau
+    );
 
-    // --- PHÁT SỰ KIỆN NẾU ĐÃ APPROVED ---
     if (savedValue.status === KpiValueStatus.APPROVED) {
       const assignment =
         savedValue.kpiAssignment ??
@@ -606,7 +604,7 @@ export class KpiValuesService {
       `[approveValueByManager] Attempting to SAVE KpiValue ID ${kpiValue.id} with NEW status: ${kpiValue.status}`,
     );
 
-    const savedValue = await this.kpiValuesRepository.save(kpiValue); // Lưu trước
+    const savedValue = await this.kpiValuesRepository.save(kpiValue);
     this.logger.log(
       `[approveValueByManager] Saved KpiValue ID ${savedValue.id} with status ${savedValue.status}`,
     );
@@ -616,10 +614,8 @@ export class KpiValuesService {
       statusBefore,
       'APPROVE_MANAGER',
       userId,
-    ); // Log sau
+    );
 
-    // --- PHÁT SỰ KIỆN (Luôn xảy ra vì status là APPROVED) ---
-    // Cần load assignment nếu findKpiValueForWorkflow không load sẵn kpi_id
     const assignment =
       savedValue.kpiAssignment ??
       (await this.kpiAssignmentRepository.findOneBy({

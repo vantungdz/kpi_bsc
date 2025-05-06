@@ -315,25 +315,27 @@ const isDisplayResult = ref(false);
 const activePanelKeys = ref([]);
 
 const sectionGroups = computed(() => {
-  const groupedData = {};
+  const groupedData = {}; // Format: { sectionId: { section: 'Section Name', sectionId: 123, data: { 'PerspectiveKey': [rowData1, rowData2] } } }
 
-  const displayData = sectionKpiList.value
-    ? sectionKpiList.value.data || sectionKpiList.value
-    : [];
+  // Lấy dữ liệu KPI đã fetch, đảm bảo nó là một mảng
+  const displayData = Array.isArray(sectionKpiList.value?.data)
+    ? sectionKpiList.value.data
+    : Array.isArray(sectionKpiList.value)
+      ? sectionKpiList.value
+      : [];
+
   const allSections = store.getters["sections/sectionList"] || [];
   const currentFilterDepartmentId = localFilters.departmentId;
   const currentFilterSectionId = localFilters.sectionId;
-  if (
-    displayData === null ||
-    displayData === undefined ||
-    !Array.isArray(displayData) ||
-    displayData.length === 0
-  ) {
+
+  if (!Array.isArray(displayData) || displayData.length === 0) {
     return [];
   }
 
   displayData.forEach((kpi) => {
-    if (!kpi || !kpi.assignments || kpi.assignments.length === 0) {
+    // Mỗi 'kpi' ở đây là một đối tượng định nghĩa KPI, giờ đã bao gồm kpi.actuals_by_section_id từ backend
+    if (!kpi || !kpi.assignments) {
+      // Vẫn cần assignments để lấy target, status của assignment cho section, etc.
       return;
     }
 
@@ -343,135 +345,176 @@ const sectionGroups = computed(() => {
       kpiUnit: kpi.unit || "",
       kpiStartDate: kpi.start_date,
       kpiEndDate: kpi.end_date,
-      kpiWeight: kpi.weight,
-      kpiStatus: kpi.status,
-      kpiTarget: kpi.target,
+      kpiWeight: kpi.weight, // Weight từ định nghĩa KPI
+      kpiStatus: kpi.status, // Status của định nghĩa KPI
+      kpiTarget: kpi.target, // Target của định nghĩa KPI
       perspectiveId: kpi.perspective_id,
       perspectiveName: kpi.perspective ? kpi.perspective.name : "Uncategorized",
     };
 
+    // Xác định các section liên quan cho KPI này dựa trên assignments của nó
+    // Map<sectionId, { sectionName: string, sectionAssignmentDetails: object | null }>
+    const sectionsForThisKpi = new Map();
+
     kpi.assignments.forEach((assignment) => {
-      let assignedDepartmentId = undefined;
-      if (
-        assignment?.assigned_to_department !== null &&
-        assignment?.assigned_to_department !== undefined
-      ) {
-        assignedDepartmentId = assignment.assigned_to_department;
-      } else if (
-        assignment?.assigned_to_section !== null &&
-        assignment?.assigned_to_section !== undefined
-      ) {
-        if (assignment.section) {
-          if (
-            assignment.section.department?.id !== null &&
-            assignment.section.department?.id !== undefined
-          ) {
-            assignedDepartmentId = assignment.section.department.id;
-          } else if (
-            assignment.section?.department_id !== null &&
-            assignment.section?.department_id !== undefined
-          ) {
-            assignedDepartmentId = assignment.section.department_id;
-          }
-        }
-      } else if (
-        assignment?.assigned_to_employee !== null &&
-        assignment?.assigned_to_employee !== undefined
-      ) {
-        if (assignment.employee?.section) {
-          if (
-            assignment.employee.section.department?.id !== null &&
-            assignment.employee.section.department?.id !== undefined
-          ) {
-            assignedDepartmentId = assignment.employee.section.department.id;
-          } else if (
-            assignment.employee.section.department_id !== null &&
-            assignment.employee.section.department_id !== undefined
-          ) {
-            assignedDepartmentId = assignment.employee.section.department_id;
-          }
-        }
-      }
+      let targetSectionId = null;
+      let departmentIdOfSection = null; // Department ID của section mà assignment này thuộc về
 
-      const assignedSectionId =
-        assignment?.assigned_to_section || assignment?.employee?.section_id;
-      if (!assignedSectionId) {
-        return;
-      }
-
-      if (currentFilterDepartmentId && currentFilterDepartmentId !== "") {
-        const filterDeptIdNumber = parseInt(currentFilterDepartmentId, 10);
-        if (
-          !isNaN(filterDeptIdNumber) &&
-          Number(assignedDepartmentId) !== filterDeptIdNumber
-        ) {
-          return;
-        }
-      }
-
-      if (currentFilterSectionId && currentFilterSectionId !== 0) {
-        const filterSectionIdNumber = parseInt(currentFilterSectionId, 10);
-        if (
-          !isNaN(filterSectionIdNumber) &&
-          Number(assignedSectionId) !== filterSectionIdNumber
-        ) {
-          return;
-        }
-      }
-
-      const assignedSection = allSections.find(
-        (s) => Number(s.id) === Number(assignedSectionId)
+      const sectionInfoFromAssignment = allSections.find(
+        (s) =>
+          (assignment.assigned_to_section &&
+            s.id === Number(assignment.assigned_to_section)) ||
+          (assignment.assigned_to_employee &&
+            assignment.employee?.sectionId &&
+            s.id === Number(assignment.employee.sectionId))
       );
 
-      if (!assignedSection) {
-        return;
+      if (sectionInfoFromAssignment) {
+        targetSectionId = sectionInfoFromAssignment.id;
+        departmentIdOfSection =
+          sectionInfoFromAssignment.department_id ||
+          sectionInfoFromAssignment.department?.id;
+
+        if (!sectionsForThisKpi.has(targetSectionId)) {
+          let details = null;
+          if (
+            assignment.assigned_to_section &&
+            Number(assignment.assigned_to_section) === targetSectionId
+          ) {
+            // Đây là assignment trực tiếp cho section
+            details = {
+              target: assignment.targetValue,
+              weight: assignment.weight, // Giả sử weight có thể được gán theo section
+              status: assignment.status,
+              startDate: assignment.start_date || kpiDetails.kpiStartDate,
+              endDate: assignment.end_date || kpiDetails.kpiEndDate,
+            };
+          }
+          sectionsForThisKpi.set(targetSectionId, {
+            sectionName: sectionInfoFromAssignment.name,
+            sectionAssignmentDetails: details,
+          });
+        } else if (
+          assignment.assigned_to_section &&
+          Number(assignment.assigned_to_section) === targetSectionId &&
+          !sectionsForThisKpi.get(targetSectionId).sectionAssignmentDetails
+        ) {
+          // Nếu đã có entry cho section này (từ employee assignment) nhưng chưa có details từ direct section assignment
+          sectionsForThisKpi.get(targetSectionId).sectionAssignmentDetails = {
+            target: assignment.targetValue,
+            weight: assignment.weight,
+            status: assignment.status,
+            startDate: assignment.start_date || kpiDetails.kpiStartDate,
+            endDate: assignment.end_date || kpiDetails.kpiEndDate,
+          };
+        }
       }
 
-      const sectionName = assignedSection.name;
+      if (targetSectionId === null) return; // Bỏ qua nếu không xác định được section
+
+      // Áp dụng bộ lọc department và section
+      if (
+        currentFilterDepartmentId &&
+        Number(departmentIdOfSection) !== Number(currentFilterDepartmentId)
+      ) {
+        sectionsForThisKpi.delete(targetSectionId); // Xóa section này khỏi map nếu không khớp department filter
+        return;
+      }
+      if (
+        currentFilterSectionId &&
+        currentFilterSectionId !== 0 &&
+        targetSectionId !== Number(currentFilterSectionId)
+      ) {
+        sectionsForThisKpi.delete(targetSectionId); // Xóa section này khỏi map nếu không khớp section filter
+        return;
+      }
+    });
+
+    // Với mỗi section liên quan cho KPI này, tạo một dòng dữ liệu (rowData)
+    sectionsForThisKpi.forEach((sectionData, sectionId) => {
       const perspectiveKey = `${kpiDetails.perspectiveId}. ${kpiDetails.perspectiveName}`;
-      if (!groupedData[assignedSectionId]) {
-        groupedData[assignedSectionId] = {
-          section: sectionName,
-          sectionId: assignedSectionId,
+
+      if (!groupedData[sectionId]) {
+        groupedData[sectionId] = {
+          section: sectionData.sectionName,
+          sectionId: sectionId,
           data: {},
         };
       }
-      if (!groupedData[assignedSectionId].data[perspectiveKey]) {
-        groupedData[assignedSectionId].data[perspectiveKey] = [];
+      if (!groupedData[sectionId].data[perspectiveKey]) {
+        groupedData[sectionId].data[perspectiveKey] = [];
       }
 
-      let assignToDisplay = sectionName;
-      if (assignment?.assigned_to_employee && assignment?.employee) {
-        assignToDisplay = assignment.employee.name;
-      } else if (assignment?.assigned_to_team && assignment?.team) {
-        assignToDisplay = assignment.team.name;
+      let displayTarget = kpiDetails.kpiTarget;
+      const displayWeight = kpiDetails.kpiWeight; // Weight luôn lấy từ KPI definition theo yêu cầu trước
+      let displayStatus = kpiDetails.kpiStatus;
+      let displayStartDate = kpiDetails.kpiStartDate;
+      let displayEndDate = kpiDetails.kpiEndDate;
+      let displayAssignTo = sectionData.sectionName; // Mặc định là tên section
+
+      if (sectionData.sectionAssignmentDetails) {
+        // Nếu có assignment trực tiếp cho section, ưu tiên các giá trị từ đó
+        displayTarget =
+          sectionData.sectionAssignmentDetails.target ?? displayTarget;
+        // displayWeight không được ghi đè ở đây, giữ nguyên từ kpiDetails.kpiWeight
+        displayStatus =
+          sectionData.sectionAssignmentDetails.status ?? displayStatus;
+        displayStartDate =
+          sectionData.sectionAssignmentDetails.startDate ?? displayStartDate;
+        displayEndDate =
+          sectionData.sectionAssignmentDetails.endDate ?? displayEndDate;
+      } else {
+        // Nếu không có assignment trực tiếp cho section, có thể nó là tổng hợp từ user assignments
+        // hoặc KPI này được áp dụng cho section mà không có target/status riêng cho section.
+        // Trong trường hợp này, `assignTo` có thể cần làm rõ hơn.
+        // Ví dụ: nếu có employee assignments trong section này cho KPI này.
+        const hasEmployeeAssignmentsInThisSectionForKpi = kpi.assignments.some(
+          (assign) =>
+            assign.assigned_to_employee &&
+            Number(assign.employee?.sectionId) === sectionId
+        );
+        if (hasEmployeeAssignmentsInThisSectionForKpi) {
+          displayAssignTo = `Users in ${sectionData.sectionName}`;
+        }
       }
+
+      // Lấy giá trị actual đã được tổng hợp từ backend cho section này
+      const sectionSpecificActual =
+        kpi.actuals_by_section_id &&
+        kpi.actuals_by_section_id[sectionId] !== undefined
+          ? kpi.actuals_by_section_id[sectionId]
+          : null;
+
       const rowData = {
-        key: `assignment-${assignment?.id}`,
+        key: `kpi-${kpi.id}-section-${sectionId}`, // Key duy nhất cho mỗi dòng
         kpiId: kpiDetails.kpiId,
         kpiName: kpiDetails.kpiName,
         perspectiveName: kpiDetails.perspectiveName,
-        assignTo: assignToDisplay,
-        startDate: kpiDetails.kpiStartDate,
-        endDate: kpiDetails.kpiEndDate,
-        weight: kpiDetails.kpiWeight,
-        target: assignment?.targetValue || "0",
+        assignTo: displayAssignTo,
+        startDate: displayStartDate,
+        endDate: displayEndDate,
+        weight: displayWeight,
+        target: displayTarget,
         actual:
-          assignment?.kpiValues && assignment.kpiValues.length > 0
-            ? assignment.kpiValues[0].value || "0"
-            : "0",
+          sectionSpecificActual !== null
+            ? sectionSpecificActual.toString()
+            : "0", // Sử dụng giá trị từ backend
         unit: kpiDetails.kpiUnit,
-        status: assignment?.status || "Unknown",
+        status: displayStatus, // Status của assignment cho section, hoặc của KPI definition
       };
-      groupedData[assignedSectionId].data[perspectiveKey].push(rowData);
+      groupedData[sectionId].data[perspectiveKey].push(rowData);
     });
   });
 
+  // Chuyển đổi object groupedData thành mảng và sắp xếp
   const finalGroupedArray = Object.values(groupedData).map((sectionGroup) => {
     const sortedPerspectives = Object.keys(sectionGroup.data)
-      .sort()
+      .sort() // Sắp xếp các perspective theo key (ví dụ: "1. Financial")
       .reduce((sortedMap, perspectiveKey) => {
-        sortedMap[perspectiveKey] = sectionGroup.data[perspectiveKey];
+        // Sắp xếp các KPI trong mỗi perspective theo tên (ví dụ)
+        sortedMap[perspectiveKey] = sectionGroup.data[perspectiveKey].sort(
+          (a, b) => a.kpiName.localeCompare(b.kpiName)
+        );
         return sortedMap;
       }, {});
 
@@ -482,6 +525,7 @@ const sectionGroups = computed(() => {
     };
   });
 
+  // Sắp xếp các section theo tên
   finalGroupedArray.sort((a, b) => a.section.localeCompare(b.section));
   return finalGroupedArray;
 });
@@ -544,9 +588,8 @@ const tableData = (perspectiveGroupRowsArray) => {
 };
 
 const goToCreateKpi = () => {
-  
   router.push({
-    name: "KpiCreateSection"
+    name: "KpiCreateSection",
   });
 };
 

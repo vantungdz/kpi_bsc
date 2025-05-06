@@ -45,9 +45,11 @@
 </template>
 
 <script setup>
+// Vue core imports
 import { computed } from "vue";
+// Vuex store
 import { useStore } from "vuex";
-
+// Ant Design Vue components and icons
 import {
   LayoutSider as ALayoutSider,
   Menu as AMenu,
@@ -56,12 +58,16 @@ import {
 } from "ant-design-vue";
 import { SettingOutlined } from "@ant-design/icons-vue";
 
+// Store instance
 const store = useStore();
 
+// Computed property for user role
 const effectiveRole = computed(() => store.getters["auth/effectiveRole"]);
 
+// Check if user is admin
 const isAdmin = computed(() => effectiveRole.value === "admin");
 
+// Permissions for viewing different KPI levels
 const canViewCompanyLevel = computed(() =>
   ["admin", "manager", "department", "section"].includes(effectiveRole.value)
 );
@@ -72,9 +78,10 @@ const canViewSectionLevel = computed(() =>
   ["admin", "manager", "department", "section"].includes(effectiveRole.value)
 );
 
+// Permission for viewing approvals
 const canViewApprovals = computed(() => {
   if (!effectiveRole.value) return false;
-  return ['leader', 'manager', 'admin'].includes(effectiveRole.value);
+  return ["leader", "manager", "admin"].includes(effectiveRole.value);
 });
 
 // // Example computed for other conditional links

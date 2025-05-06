@@ -53,15 +53,13 @@
           :rules="[{ required: true, message: 'Please enter Unit' }]"
         >
           <a-select v-model:value="form.unit" placeholder="Unit">
-            <a-select-option value="MM">MM</a-select-option>
-            <a-select-option value="Point">Point</a-select-option>
-            <a-select-option value="Product">Product</a-select-option>
-            <a-select-option value="Project">Project</a-select-option>
-            <a-select-option value="Certification"
-              >Certification</a-select-option
+            <a-select-option
+              v-for="(unitValue, unitKey) in KpiUnits"
+              :key="unitKey"
+              :value="unitValue"
             >
-            <a-select-option value="Article">Article</a-select-option>
-            <a-select-option value="Person">Person</a-select-option>
+              {{ unitKey }}
+            </a-select-option>
           </a-select>
         </a-form-item>
       </a-col>
@@ -158,6 +156,7 @@ import { useRouter } from "vue-router";
 import { useStore } from "vuex";
 import { notification } from "ant-design-vue";
 import dayjs from "dayjs";
+import { KpiUnits } from "../constants/kpiConstants.js";
 
 const router = useRouter();
 const store = useStore();
