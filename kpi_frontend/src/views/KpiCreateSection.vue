@@ -1,45 +1,39 @@
 <template>
   <div v-if="canAccessCreatePage">
-    <a-form
-      ref="formRef"
-      :model="form"
-      :rules="formRules"
-      layout="vertical"
-      @finish="handleChangeCreate"
-      @finishFailed="onFinishFailed"
-    >
+    <a-form ref="formRef" :model="form" :rules="formRules" layout="vertical" @finish="handleChangeCreate"
+      @finishFailed="onFinishFailed">
       <a-row :gutter="12">
         <a-col :span="12">
-          <a-form-item
-            label="Use Existing KPI as Template (Optional)"
-            name="templateKpi"
-          >
-            <a-select
-              v-model:value="selectedTemplateKpiId"
-              placeholder="Select a KPI to use as template..."
-              show-search
-              allow-clear
-              :options="kpiTemplateOptions"
-              :filter-option="
+          <a-form-item label="Use Existing KPI as Template (Optional)" name="templateKpi">
+            <a-select v-model:value="selectedTemplateKpiId" placeholder="Select a KPI to use as template..." show-search
+              allow-clear :options="kpiTemplateOptions" :filter-option="
                 (input, option) =>
                   option.label.toLowerCase().includes(input.toLowerCase())
-              "
-              :loading="loadingKpiTemplates"
-              style="width: 100%; margin-bottom: 15px"
-              @change="loadKpiTemplate"
-            />
+              " :loading="loadingKpiTemplates" style="width: 100%; margin-bottom: 15px" @change="loadKpiTemplate" />
           </a-form-item>
         </a-col>
       </a-row>
 
       <a-form-item class="textLabel" label="Perspective" name="perspective_id">
         <a-select v-model:value="form.perspective_id" placeholder="Perspective">
-          <a-select-option
-            v-for="perspective in perspectiveList"
-            :key="perspective.id"
-            :value="perspective.id"
-            >{{ perspective.name }}</a-select-option
-          >
+          <a-select-option v-for="perspective in perspectiveList" :key="perspective.id" :value="perspective.id">{{
+            perspective.name }}</a-select-option>
+        </a-select>
+      </a-form-item>
+
+      <a-form-item class="textLabel" label="Department" name="department_id" required>
+        <a-select v-model:value="form.department_id" placeholder="Select Department">
+          <a-select-option v-for="department in departmentList" :key="department.id" :value="department.id">
+            {{ department.name }}
+          </a-select-option>
+        </a-select>
+      </a-form-item>
+
+      <a-form-item class="textLabel" label="Section" name="section_id" required>
+        <a-select v-model:value="form.section_id" placeholder="Select Section">
+          <a-select-option v-for="section in sectionList" :key="section.id" :value="section.id">
+            {{ section.name }}
+          </a-select-option>
         </a-select>
       </a-form-item>
       <a-row :gutter="12">
@@ -49,20 +43,9 @@
           </a-form-item>
         </a-col>
         <a-col :span="12">
-          <a-form-item
-            class="textLabel"
-            label="Calculation Formula"
-            name="calculation_type"
-          >
-            <a-select
-              v-model:value="form.calculation_type"
-              placeholder="Chọn Calculation Formula"
-            >
-              <a-select-option
-                v-for="formula in formulaList"
-                :key="formula.id"
-                :value="formula.id"
-              >
+          <a-form-item class="textLabel" label="Calculation Formula" name="calculation_type">
+            <a-select v-model:value="form.calculation_type" placeholder="Chọn Calculation Formula">
+              <a-select-option v-for="formula in formulaList" :key="formula.id" :value="formula.id">
                 {{ formula.name }}
               </a-select-option>
             </a-select>
@@ -97,20 +80,14 @@
       <a-row :gutter="12">
         <a-col :span="12">
           <a-form-item class="textLabel" label="Target" name="target">
-            <a-input
-              v-model:value="form.target"
-              placeholder="Target"
-              @input="(event) => handleNumericInput('target', event)"
-            />
+            <a-input v-model:value="form.target" placeholder="Target"
+              @input="(event) => handleNumericInput('target', event)" />
           </a-form-item>
         </a-col>
         <a-col :span="12">
           <a-form-item class="textLabel" label="Weight (%)" name="weight">
-            <a-input
-              v-model:value="form.weight"
-              placeholder="Weight"
-              @input="(event) => handleNumericInput('weight', event)"
-            />
+            <a-input v-model:value="form.weight" placeholder="Weight"
+              @input="(event) => handleNumericInput('weight', event)" />
           </a-form-item>
         </a-col>
       </a-row>
@@ -126,75 +103,33 @@
       <a-row :gutter="12">
         <a-col :span="6">
           <a-form-item class="textLabel" label="Date Start" name="start_date">
-            <a-date-picker
-              v-model:value="form.start_date"
-              style="width: 100%"
-              value-format="YYYY-MM-DD"
-            />
+            <a-date-picker v-model:value="form.start_date" style="width: 100%" value-format="YYYY-MM-DD" />
           </a-form-item>
         </a-col>
         <a-col :span="6">
-          <a-form-item
-            class="textLabel"
-            label="Date End"
-            name="end_date"
-            :rules="[{ validator: validateEndDate }]"
-          >
-            <a-date-picker
-              v-model:value="form.end_date"
-              style="width: 100%"
-              value-format="YYYY-MM-DD"
-            />
+          <a-form-item class="textLabel" label="Date End" name="end_date" :rules="[{ validator: validateEndDate }]">
+            <a-date-picker v-model:value="form.end_date" style="width: 100%" value-format="YYYY-MM-DD" />
           </a-form-item>
         </a-col>
       </a-row>
       <a-form-item class="textLabel" label="Description" name="description">
-        <a-textarea
-          v-model:value="form.description"
-          placeholder="Description"
-          allow-clear
-        />
+        <a-textarea v-model:value="form.description" placeholder="Description" allow-clear />
       </a-form-item>
 
-      <a-form-item
-        v-if="canAssignDirectlyToUser"
-        class="textLabel"
-        label="Assign To User"
-        name="assigned_user_id"
-      >
-        <a-alert
-          v-if="assignmentError"
-          :message="assignmentError"
-          type="error"
-          show-icon
-          style="margin-bottom: 10px"
-        />
-        <a-select
-          v-model:value="form.assigned_user_id"
-          placeholder="Select a user..."
-          show-search
-          allow-clear
-          :options="sectionUserOptions"
-          :filter-option="
+      <a-form-item v-if="canAssignDirectlyToUser" class="textLabel" label="Assign To User" name="assigned_user_id">
+        <a-alert v-if="assignmentError" :message="assignmentError" type="error" show-icon style="margin-bottom: 10px" />
+        <a-select v-model:value="form.assigned_user_id" placeholder="Select a user..." show-search allow-clear
+          :options="sectionUserOptions" :filter-option="
             (input, option) =>
               option.label.toLowerCase().includes(input.toLowerCase())
-          "
-          :loading="loadingSectionUsers"
-          style="width: 100%"
-        />
+          " :loading="loadingSectionUsers" style="width: 100%" />
       </a-form-item>
-
       <a-form-item>
         <a-row justify="end" style="margin-top: 10px">
           <a-button style="margin-right: 10px" @click="resetForm(true)">
             Clear Form
           </a-button>
-          <a-button
-            style="margin-right: 10px"
-            type="primary"
-            html-type="submit"
-            :loading="loading"
-          >
+          <a-button style="margin-right: 10px" type="primary" html-type="submit" :loading="loading">
             Save KPI
           </a-button>
           <a-button type="default" @click="goBack"> Back </a-button>
@@ -203,12 +138,8 @@
     </a-form>
   </div>
   <div v-else>
-    <a-alert
-      message="Access Denied"
-      description="You do not have permission to create KPIs with the current role/scope."
-      type="error"
-      show-icon
-    />
+    <a-alert message="Access Denied"
+      description="You do not have permission to create KPIs with the current role/scope." type="error" show-icon />
     <a-button type="default" style="margin-top: 15px" @click="goBack">
       Back
     </a-button>
@@ -259,9 +190,11 @@ const form = ref({
   weight: null,
   frequency: null,
   perspective_id: null,
+  department_id: null,
   start_date: null,
   end_date: null,
   assigned_user_id: null,
+  assigned_user_target: null,
   description: "",
 });
 
@@ -283,6 +216,12 @@ const formulaList = ref([
 const perspectiveList = computed(
   () => store.getters["perspectives/perspectiveList"] || []
 );
+const departmentList = computed(() => store.getters["departments/departmentList"] || []);
+const sectionList = computed(() =>
+  form.value.department_id
+    ? store.getters["sections/sectionsByDepartment"](form.value.department_id)
+    : []
+);
 const kpiTemplateList = computed(() => store.getters["kpis/kpiListAll"] || []);
 const loadingKpiTemplates = computed(() => store.getters["kpis/loadingAll"]);
 
@@ -294,7 +233,7 @@ const kpiTemplateOptions = computed(() =>
 );
 
 const sectionUserList = computed(
-  () => store.getters["users/usersBySection"](sectionId.value) || []
+  () => store.getters["employees/usersBySection"](form.value.section_id) || []
 );
 const loadingSectionUsers = computed(
   () => store.getters["users/loadingBySection"] || false
@@ -436,19 +375,41 @@ const handleChangeCreate = async () => {
 
     const assignmentsPayload = {
       from: creationScope,
-      to_user: null,
+      assigned_to_employee: [],
+      to_sections: [],
+      to_departments: [],
     };
 
     let hasValidAssignment = false;
 
     if (canAssignDirectlyToUser.value && form.value.assigned_user_id !== null) {
-      assignmentsPayload.to_user = { id: form.value.assigned_user_id };
+      assignmentsPayload.assigned_to_employee = form.value.assigned_user_id;
+      hasValidAssignment = true;
+    }
+
+    // Add the selected section as to_sections with target equal to main target
+    if (form.value.section_id !== null && form.value.section_id !== undefined) {
+      assignmentsPayload.to_sections.push({
+        id: form.value.section_id,
+        target:
+          form.value.target !== null ? Number(form.value.target) : null,
+      });
+      hasValidAssignment = true;
+    }
+
+    // Add the selected department as to_departments with target equal to main target
+    if (form.value.department_id !== null && form.value.department_id !== undefined) {
+      assignmentsPayload.to_departments.push({
+        id: form.value.department_id,
+        target:
+          form.value.target !== null ? Number(form.value.target) : null,
+      });
       hasValidAssignment = true;
     }
 
     if (!hasValidAssignment) {
       assignmentError.value =
-        "Assignment Required: Please select a user to assign this KPI.";
+        "Assignment Required: Please select a user or section/department to assign this KPI.";
       throw new Error(assignmentError.value);
     }
 
@@ -476,11 +437,10 @@ const handleChangeCreate = async () => {
       start_date: formattedStartDate,
       end_date: formattedEndDate,
 
-      section_id: sectionId.value,
+      section_id: form.value.section_id,
+      department_id: form.value.department_id,
       assignments: assignmentsPayload,
     };
-
-    delete kpiData.assignments.to_sections;
 
     console.log("Submitting KPI Data (Final Structure):", kpiData);
 
@@ -491,7 +451,7 @@ const handleChangeCreate = async () => {
 
     router.push({
       name: "KpiListSection",
-      params: { sectionId: sectionId.value },
+      params: { sectionId: form.value.section_id },
     });
   } catch (error) {
     if (error instanceof Error && error.message === assignmentError.value) {
@@ -560,6 +520,12 @@ const validateEndDate = async (_, value) => {
 };
 
 const formRules = reactive({
+  section_id: [
+    {
+      required: true,
+      message: "Please select Section",
+    },
+  ],
   perspective_id: [
     {
       required: true,
@@ -656,10 +622,9 @@ const formRules = reactive({
 watch(
   () => form.value.assigned_user_id,
   (newVal) => {
-    if (canAssignDirectlyToUser.value && newVal === null) {
-    } else {
-      assignmentError.value = null;
-    }
+    if (!(canAssignDirectlyToUser.value && newVal === null)) {
+      assignmentError.value = null
+    } 
 
     formRef.value?.validateFields(["assigned_user_id"]).catch(() => {});
   },
@@ -667,25 +632,21 @@ watch(
 );
 
 onMounted(async () => {
-  if (!sectionId.value || isNaN(sectionId.value)) {
-    console.error("Invalid Section ID in route params.");
-    notification.error({
-      message: "Invalid Section ID.",
-      description: "Cannot create KPI without a valid section.",
-    });
-
-    router.push({ name: "KpiListSection" });
-    return;
-  }
-
   loadingInitialData.value = true;
   try {
     await Promise.all([
       store.dispatch("perspectives/fetchPerspectives"),
       store.dispatch("kpis/fetchAllKpisForSelect"),
-
-      store.dispatch("users/fetchUsersBySection", sectionId.value),
+      store.dispatch("departments/fetchDepartments"),
     ]);
+
+    if (form.value.department_id) {
+      await store.dispatch("sections/fetchSectionsByDepartment", form.value.department_id);
+    }
+
+    if (form.value.section_id) {
+      await store.dispatch("employees/fetchUsersBySection", form.value.section_id);
+    }
 
     const templateKpiIdFromRoute = route.query.templateKpiId;
     if (templateKpiIdFromRoute) {
@@ -709,6 +670,47 @@ onMounted(async () => {
     loadingInitialData.value = false;
   }
 });
+watch(
+  () => form.value.section_id,
+  async (newSectionId, oldSectionId) => {
+    if (newSectionId && newSectionId !== oldSectionId) {
+      loadingInitialData.value = true;
+      try {
+        await store.dispatch("employees/fetchUsersBySection", newSectionId);
+      } catch (error) {
+        console.error("Error fetching users by section:", error);
+        notification.error({
+          message: "Failed to load users for selected section.",
+          description: error.message || "An error occurred.",
+          duration: 5,
+        });
+      } finally {
+        loadingInitialData.value = false;
+      }
+    }
+  }
+);
+watch(
+  () => form.value.department_id,
+  async (newDepartmentId, oldDepartmentId) => {
+    if (newDepartmentId && newDepartmentId !== oldDepartmentId) {
+      loadingInitialData.value = true;
+      try {
+        await store.dispatch("sections/fetchSectionsByDepartment", newDepartmentId);
+        form.value.section_id = null;
+      } catch (error) {
+        console.error("Error fetching sections by department:", error);
+        notification.error({
+          message: "Failed to load sections for selected department.",
+          description: error.message || "An error occurred.",
+          duration: 5,
+        });
+      } finally {
+        loadingInitialData.value = false;
+      }
+    }
+  }
+);
 </script>
 
 <style scoped>

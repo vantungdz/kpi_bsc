@@ -281,7 +281,7 @@
 <script setup>
 import { reactive, computed, onMounted, ref, watch } from "vue";
 import { useStore } from "vuex";
-import { useRouter, useRoute } from "vue-router";
+import { useRouter } from "vue-router";
 import {
   PlusOutlined,
   FilterOutlined,
@@ -294,7 +294,6 @@ import { notification } from "ant-design-vue";
 
 const store = useStore();
 const router = useRouter();
-const route = useRoute();
 
 const loading = computed(() => store.getters["kpis/isLoading"]);
 const error = computed(() => store.getters["kpis/error"]);
@@ -306,7 +305,6 @@ const sectionKpiList = computed(
   () => store.getters["kpis/sectionKpiList"] || []
 );
 
-const creationScope = computed(() => route.query.scope || "section");
 const selectSectionList = ref([]);
 
 const isDeleteModalVisible = ref(false);
@@ -546,20 +544,9 @@ const tableData = (perspectiveGroupRowsArray) => {
 };
 
 const goToCreateKpi = () => {
-  const targetSectionId = localFilters.value;
-  if (!targetSectionId && creationScope.value === "section") {
-    console.warn("Cannot navigate to create KPI: Section ID is not selected.");
-    notification.warning({
-      message: "Please select a Section to create a KPI for.",
-    });
-    return;
-  }
+  
   router.push({
-    name: "KpiCreate",
-    query: {
-      scope: "section",
-      sectionId: targetSectionId,
-    },
+    name: "KpiCreateSection"
   });
 };
 

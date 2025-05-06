@@ -240,28 +240,25 @@ const mutations = {
     console.log(
       `Mutation UPDATE_SINGLE_KPI_STATUS: kpiId=${kpiId}, newStatus=${newStatus}`
     );
+    const newAssignmentStatus =
+      newStatus === KpiDefinitionStatus.APPROVED ? "approved" : "draft";
+
     if (state.currentKpi && state.currentKpi.id === kpiId) {
-      console.log(`Updating currentKpi status`);
-      
+      console.log(`Updating currentKpi status and its assignments`);
       state.currentKpi = {
         ...state.currentKpi,
         status: newStatus,
-        
         assignments:
           state.currentKpi.assignments?.map((a) => ({
             ...a,
-            status:
-              newStatus === KpiDefinitionStatus.APPROVED ? "approved" : "draft",
+            status: newAssignmentStatus,
           })) || [],
       };
     }
 
-    
     const kpiIndex = state.kpis.findIndex((kpi) => kpi.id === kpiId);
     if (kpiIndex !== -1) {
       console.log(`Updating kpi status in kpis list at index ${kpiIndex}`);
-      
-      
       const oldKpi = state.kpis[kpiIndex];
       state.kpis.splice(kpiIndex, 1, {
         ...oldKpi,
@@ -269,14 +266,12 @@ const mutations = {
         assignments:
           oldKpi.assignments?.map((a) => ({
             ...a,
-            status:
-              newStatus === KpiDefinitionStatus.APPROVED ? "approved" : "draft",
+            status: newAssignmentStatus,
           })) || [],
       });
     } else {
       console.log(`KPI ID ${kpiId} not found in kpis list state.`);
     }
-
   },
 };
 
@@ -330,12 +325,25 @@ const actions = {
     }
   },
 
-  async fetchDepartmentKpis({ commit }, id) {
+  async fetchDepartmentKpis(
+    { commit },
+    { departmentId = null, filters = {} } = {}
+  ) {
     commit("SET_LOADING", true);
     commit("SET_ERROR", null);
     commit("SET_DEPARTMENT_KPI_LIST", null);
     try {
-      const response = await apiClient.get(`/kpis/departments/${id}`);
+      let url = "/kpis/departments";
+      if (
+        departmentId !== null &&
+        departmentId !== "" &&
+        departmentId !== undefined
+      ) {
+        url += `/${departmentId}`;
+      }
+      // Remove departmentId from filters to avoid duplication
+      const { ...queryFilters } = filters;
+      const response = await apiClient.get(url, { params: queryFilters });
       commit("SET_DEPARTMENT_KPI_LIST", response.data);
       return response.data;
     } catch (error) {
@@ -484,26 +492,23 @@ const actions = {
     { commit, dispatch },
     { kpiId, assignmentsArray }
   ) {
-    commit("SET_SUBMITTING_DEPARTMENT_SECTION_ASSIGNMENT", true);
-    commit("SET_DEPARTMENT_SECTION_ASSIGNMENT_SAVE_ERROR", null);
-
+    commit("SET_SUBMITTING_DEPARTMENT_SECTION_ASSIGNMENT", true); // Đảm bảo mutation này tồn tại
+    commit("SET_DEPARTMENT_SECTION_ASSIGNMENT_SAVE_ERROR", null); // Đảm bảo mutation này tồn tại
     try {
       const response = await apiClient.post(
         `/kpis/${kpiId}/sections/assignments`,
         { assignments: assignmentsArray }
       );
       notification.success({ message: "Assignment saved successfully!" });
-
-      await dispatch("fetchKpiUserAssignments", kpiId);
-
+      await dispatch("fetchKpiDetail", kpiId);
       return response.data;
     } catch (error) {
-      commit("SET_DEPARTMENT_SECTION_ASSIGNMENT_SAVE_ERROR", error);
-      console.error("Error saving assignment:", error.response || error);
-      notification.error({
-        message: "Failed to save assignment.",
-        description: error.response?.data?.message || error.message,
-      });
+      const errorMsg =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to save assignment.";
+      commit("SET_DEPARTMENT_SECTION_ASSIGNMENT_SAVE_ERROR", errorMsg);
+      notification.error({ message: "Save Failed", description: errorMsg });
       throw error;
     } finally {
       commit("SET_SUBMITTING_DEPARTMENT_SECTION_ASSIGNMENT", false);
@@ -514,29 +519,27 @@ const actions = {
     { commit, dispatch },
     { kpiId, assignmentsPayload }
   ) {
-    commit("SET_SUBMITTING_USER_DELETION", true);
-    commit("SET_USER_DELETION_ERROR", null);
-
+    // Lưu ý: Nên tạo state/mutation riêng cho save user assignment thay vì dùng tạm của delete
+    commit("SET_SUBMITTING_USER_ASSIGNMENT_SAVE", true); // Ví dụ: Mutation mới
+    commit("SET_USER_ASSIGNMENT_SAVE_ERROR", null); // Ví dụ: Mutation mới
     try {
       const response = await apiClient.post(
         `/kpis/${kpiId}/assignments`,
         assignmentsPayload
       );
       notification.success({ message: "User Assignment saved successfully!" });
-
-      await dispatch("fetchKpiUserAssignments", kpiId);
-
+      await dispatch("fetchKpiDetail", kpiId);
       return response.data;
     } catch (error) {
-      commit("SET_USER_DELETION_ERROR", error);
-      console.error("Error saving user assignment:", error.response || error);
-      notification.error({
-        message: "Failed to save user assignment.",
-        description: error.response?.data?.message || error.message,
-      });
+      const errorMsg =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to save user assignment.";
+      commit("SET_USER_ASSIGNMENT_SAVE_ERROR", errorMsg);
+      notification.error({ message: "Save Failed", description: errorMsg });
       throw error;
     } finally {
-      commit("SET_SUBMITTING_USER_DELETION", false);
+      commit("SET_SUBMITTING_USER_ASSIGNMENT_SAVE", false);
     }
   },
 
@@ -575,23 +578,40 @@ const actions = {
     commit("SET_SUBMITTING_USER_DELETION", true);
     commit("SET_USER_DELETION_ERROR", null);
 
+    if (!kpiId || !assignmentId) {
+      console.error("deleteUserAssignment: Missing kpiId or assignmentId");
+      commit("SET_USER_DELETION_ERROR", "Thiếu ID cần thiết để xóa.");
+      commit("SET_SUBMITTING_USER_DELETION", false);
+      throw new Error("Thiếu ID cần thiết để xóa.");
+    }
+
     try {
       await apiClient.delete(`/kpi-assignments/${assignmentId}`);
-
       notification.success({
         message: "User Assignment deleted successfully!",
       });
 
-      await dispatch("fetchKpiUserAssignments", kpiId);
+      try {
+        await dispatch("fetchKpiDetail", kpiId);
+        console.log(
+          `[deleteUserAssignment] Refetched KPI Detail ${kpiId} after deleting assignment ${assignmentId}`
+        );
+      } catch (fetchError) {
+        console.error(
+          `[deleteUserAssignment] Error refetching KPI Detail ${kpiId} after delete:`,
+          fetchError
+        );
+      }
 
       return true;
     } catch (error) {
-      commit("SET_USER_DELETION_ERROR", error);
+      const errorMsg =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to delete user assignment.";
+      commit("SET_USER_DELETION_ERROR", errorMsg);
       console.error("Error deleting user assignment:", error.response || error);
-      notification.error({
-        message: "Failed to delete user assignment.",
-        description: error.response?.data?.message || error.message,
-      });
+      notification.error({ message: "Deletion Failed", description: errorMsg });
       throw error;
     } finally {
       commit("SET_SUBMITTING_USER_DELETION", false);
@@ -651,21 +671,20 @@ const actions = {
   },
 
   async toggleKpiStatus({ commit }, { kpiId }) {
-    // Bỏ dispatch nếu không fetch lại detail
+    // Bỏ dispatch
     commit("SET_TOGGLING_KPI_STATUS", true);
     commit("SET_TOGGLE_KPI_STATUS_ERROR", null);
     try {
+      // Gọi API, response chứa Kpi đã cập nhật status
       const response = await apiClient.patch(`/kpis/${kpiId}/toggle-status`);
-      const updatedKpi = response.data; // API trả về KPI đã cập nhật
+      const updatedKpi = response.data;
 
       if (updatedKpi && updatedKpi.status) {
-        // --- GỌI MUTATION ĐÃ CẬP NHẬT ---
-        // Mutation này sẽ cập nhật cả currentKpi và item trong kpis list
+        // Chỉ cần commit mutation để cập nhật state đồng bộ
         commit("UPDATE_SINGLE_KPI_STATUS", {
           kpiId: kpiId,
           newStatus: updatedKpi.status,
         });
-        // --- KẾT THÚC GỌI MUTATION ---
         notification.success({ message: "KPI status updated successfully!" });
         return updatedKpi;
       } else {

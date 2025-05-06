@@ -219,12 +219,13 @@ export class KpisService {
               createdType: 'department',
               departmentIdFromPath: departmentId,
             },
-          ).orWhere(
-            'assignment.assigned_to_department = :departmentIdFromPath',
-            {
-              departmentIdFromPath: departmentId,
-            },
-          );
+          )
+          .orWhere('assignment.assigned_to_department = :departmentIdFromPath', {
+            departmentIdFromPath: departmentId,
+          })
+          .orWhere('employee.departmentId = :departmentIdFromPath', {
+            departmentIdFromPath: departmentId,
+          });
         }),
       );
 
@@ -291,23 +292,44 @@ export class KpisService {
       .take(limit)
       .getManyAndCount();
 
+    // Calculate aggregated actual_value for department by aggregating latest approved kpiValues of employee assignments under the department
     const dataWithActualValue = data.map((kpi) => {
       const activeAssignments = kpi.assignments.filter(
         (assignment) =>
           assignment.deleted_at === null || assignment.deleted_at === undefined,
       );
-      const allValues = activeAssignments
-        .flatMap((assignment) => assignment.kpiValues)
-        .map((value) => Number(value.value) || 0);
 
-      const actual_value =
-        kpi.calculation_type === 'sum'
-          ? allValues.reduce((sum, val) => sum + val, 0)
-          : allValues.length > 0
-            ? allValues.reduce((sum, val) => sum + val, 0) / allValues.length
-            : 0;
+      // Map employeeId to latest approved kpiValue for that employee
+      const employeeLatestApprovedValues = new Map<number, number>();
 
-      return { ...kpi, actual_value };
+      activeAssignments.forEach((assignment) => {
+        if (
+          assignment.assigned_to_employee &&
+          assignment.kpiValues &&
+          assignment.kpiValues.length > 0
+        ) {
+          // Find latest approved kpiValue for this assignment
+          const approvedValues = assignment.kpiValues
+            .filter((kv) => kv.status === 'APPROVED')
+            .sort(
+              (a, b) =>
+                new Date(b.updated_at || b.timestamp).getTime() -
+                new Date(a.updated_at || a.timestamp).getTime(),
+            );
+          if (approvedValues.length > 0) {
+            const latestValue = Number(approvedValues[0].value) || 0;
+            employeeLatestApprovedValues.set(assignment.assigned_to_employee, latestValue);
+          }
+        }
+      });
+
+      // Collect all latest approved values for employees in the department
+      const allValues = Array.from(employeeLatestApprovedValues.values());
+
+      // Use aggregateValues method to calculate actual_value based on kpi.calculation_type
+      const actual_value = this.aggregateValues(kpi.calculation_type, allValues, []);
+
+      return { ...kpi, actual_value: actual_value ?? 0 };
     });
 
     const pagination = {

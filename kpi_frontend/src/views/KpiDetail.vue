@@ -259,71 +259,6 @@
       </a-skeleton>
     </a-card>
 
-    <a-card title="KPI Evaluations" style="margin-top: 20px">
-      <a-button type="primary" style="margin-bottom: 10px" @click="openEvaluationModal" :loading="loadingUsersForEval"
-        v-if="canEvaluateKpi">
-        Evaluate this KPI
-      </a-button>
-      <a-skeleton :loading="loadingEvaluations" active>
-        <a-table v-show="!loadingEvaluations && kpiEvaluations.length > 0" :data-source="kpiEvaluations"
-          :columns="evaluationColumns" row-key="id" size="small">
-          <template #bodyCell="{ column, record }">
-            <template v-if="column.dataIndex === 'evaluator'">
-              <span v-if="record.evaluator">
-                <a-avatar :src="record.evaluator.avatar_url" size="small" style="margin-right: 8px" />
-                {{ record.evaluator.first_name }}
-                {{ record.evaluator.last_name }}
-              </span>
-              <span v-else> </span>
-            </template>
-            <template v-else-if="column.dataIndex === 'evaluatee'">
-              <span v-if="record.evaluatee">
-                <a-avatar :src="record.evaluatee.avatar_url" size="small" style="margin-right: 8px" />
-                {{ record.evaluatee.first_name }}
-                {{ record.evaluatee.last_name }}
-              </span>
-              <span v-else> </span>
-            </template>
-            <template v-else-if="column.dataIndex === 'evaluation_date'">
-              {{
-              record.evaluation_date
-              ? dayjs(record.evaluation_date).format("L")
-              : ""
-              }}
-            </template>
-            <template v-else-if="column.dataIndex === 'period'">
-              {{
-              record.period_start_date
-              ? dayjs(record.period_start_date).format("YYYY-MM-DD")
-              : "?"
-              }}
-              -
-              {{
-              record.period_end_date
-              ? dayjs(record.period_end_date).format("YYYY-MM-DD")
-              : "?"
-              }}
-            </template>
-            <template v-else-if="column.dataIndex === 'status'">
-              <a-tag :bordered="false" :color="getEvaluationStatusColor(record.status)">
-                {{ record.status || "" }}
-              </a-tag>
-            </template>
-            <template v-else-if="column.dataIndex === 'actions'">
-              <a-button type="link" @click="viewEvaluation(record)">
-                View
-              </a-button>
-            </template>
-            <template v-else>
-              {{ record[column.dataIndex] }}
-            </template>
-          </template>
-        </a-table>
-        <a-empty v-show="!loadingEvaluations && kpiEvaluations.length === 0"
-          description="No evaluations found for this KPI." />
-      </a-skeleton>
-    </a-card>
-
     <a-modal :open="isViewEvaluationModalVisible" @update:open="isViewEvaluationModalVisible = $event"
       title="KPI Evaluation Details" :width="1000" :footer="null" @cancel="closeViewEvaluationModal">
       <a-descriptions bordered :column="2" v-if="selectedEvaluation.id" size="small">
@@ -628,8 +563,6 @@ const userAssignmentSubmitError = ref(null);
 const isDeleteUserAssignModalVisible = ref(false);
 const userAssignmentToDelete = ref(null);
 const submittingUserDeletion = ref(false);
-const loadingEvaluations = ref(false);
-const loadingUsersForEval = ref(false);
 const kpiEvaluations = ref([]);
 const isViewEvaluationModalVisible = ref(false);
 const selectedEvaluation = ref({});
@@ -956,12 +889,6 @@ const canManageAssignments = computed(() => {
   );
   return result;
 });
-const canEvaluateKpi = computed(() => {
-  if (!kpiDetailData.value) return false;
-  return ["admin", "manager", "department", "section"].includes(
-    effectiveRole.value
-  );
-});
 
 const handleToggleStatus = async (kpiId) => {
   if (!kpiId || isToggling.value) return;
@@ -1027,75 +954,39 @@ const isMySection = (sectId) => {
 };
 
 const filteredDirectUserAssignments = computed(() => {
+  const allAssignments = kpiDetailData.value?.assignments;
   const kpi = kpiDetailData.value;
-  const currentDeptId =
-    kpi?.created_by_type === "department" ? kpi?.created_by : null;
+  // Xác định departmentId của KPI gốc (nếu nó được tạo bởi Department)
+  const currentDeptId = kpi?.created_by_type === "department" ? kpi?.created_by : null;
+  // TODO: Có thể cần thêm logic kiểm tra xem Department này có Section con không
 
-  const userAssignments = allUserAssignmentsForKpi.value;
-
-  if (
-    !kpi ||
-    kpi.created_by_type !== "department" ||
-    departmentHasSections.value !== false ||
-    !currentDeptId
-  ) {
+  if (!kpi || kpi.created_by_type !== "department" || !currentDeptId || !Array.isArray(allAssignments)) {
     return [];
   }
 
-  if (!Array.isArray(userAssignments)) {
-    console.error(
-      "filteredDirectUserAssignments: userAssignments is NOT an array!",
-      userAssignments
-    );
-    return [];
-  }
-
-  const result = userAssignments.filter((assign) => {
+  return allAssignments.filter((assign) => {
     const isUserAssignment = assign.assigned_to_employee !== null;
+    // Cần đảm bảo assign.employee và các thuộc tính của nó được load đúng từ backend
+    let employeeDepartmentId = assign.employee?.departmentId;
+    let employeeHasSection = assign.employee?.sectionId !== null && assign.employee?.sectionId !== undefined;
 
-    let employeeDepartmentId = undefined;
-    let employeeHasSection = false;
-
-    if (isUserAssignment && assign.employee) {
-      employeeDepartmentId = assign.employee.department_id;
-
-      employeeHasSection =
-        assign.employee.sectionId !== null &&
-        assign.employee.sectionId !== undefined;
-    }
-    const matchesDepartment = employeeDepartmentId === currentDeptId;
-    return isUserAssignment && matchesDepartment && !employeeHasSection;
+    return isUserAssignment && employeeDepartmentId === currentDeptId && !employeeHasSection;
   });
-
-  return result;
 });
 
 const filteredSectionUserAssignments = computed(() => {
-  const userAssignments = allUserAssignmentsForKpi.value;
-  const sectionIdToFilterBy = contextSectionId.value;
+  const allAssignments = kpiDetailData.value?.assignments;
+  const sectionIdToFilterBy = contextSectionId.value; // Lấy từ route query
 
-  if (!sectionIdToFilterBy) {
+  if (!sectionIdToFilterBy || !Array.isArray(allAssignments)) {
     return [];
   }
 
-  if (!Array.isArray(userAssignments)) {
-    return [];
-  }
-
-  const result = userAssignments.filter((assign) => {
-    const isUserAssignment = assign.assigned_to_employee !== null;
-    if (!isUserAssignment || !assign.employee) {
-      return false;
-    }
-    const employeeSectionId = assign.employee.sectionId;
-
-    const matchesSection =
-      String(employeeSectionId) === String(sectionIdToFilterBy);
-
-    return matchesSection;
+  return allAssignments.filter((assign) => {
+    // Lọc assignment gán cho employee VÀ employee đó thuộc section đang xem context
+    return assign.assigned_to_employee !== null &&
+      assign.employee?.sectionId == sectionIdToFilterBy; // Dùng == để linh hoạt kiểu dữ liệu nếu cần
   });
-
-  return result;
 });
 
 const shouldShowDirectUserAssignmentCard = computed(() => {
@@ -1310,18 +1201,21 @@ const userAssignmentColumns = [
     key: "target",
     dataIndex: "target",
     align: "right",
+    width: "25%",
   },
   {
     title: "Latest Actual",
     key: "actual",
     dataIndex: "latest_actual_value",
     align: "right",
+    width: "20%",
   },
   {
     title: "Status",
     key: "status",
     dataIndex: "status",
     align: "center",
+    width: "20%",
   },
   {
     title: "Actions",
@@ -1342,43 +1236,7 @@ const modalUserAssignmentInputColumns = [
     width: "30%",
   },
 ];
-const evaluationColumns = [
-  {
-    title: "Evaluator",
-    dataIndex: "evaluator",
-    key: "evaluator",
-  },
-  {
-    title: "Evaluatee",
-    dataIndex: "evaluatee",
-    key: "evaluatee",
-  },
-  {
-    title: "Period",
-    dataIndex: "period",
-    key: "period",
-  },
-  {
-    title: "Rating",
-    dataIndex: "rating",
-    key: "rating",
-  },
-  {
-    title: "Date",
-    dataIndex: "evaluation_date",
-    key: "evaluation_date",
-  },
-  {
-    title: "Status",
-    dataIndex: "status",
-    key: "status",
-  },
-  {
-    title: "Actions",
-    dataIndex: "actions",
-    key: "actions",
-  },
-];
+
 
 const getAssignmentStatusText = (status) => {
   if (status === 'approved') return 'Active';
@@ -1393,45 +1251,35 @@ const getAssignmentStatusColor = (status) => {
 
 
 const filteredAssignmentsForContextDepartment = computed(() => {
-  const assignments = kpiDetailData.value?.assignments;
-  const deptIdContext = contextDepartmentId.value;
+  const allAssignments = kpiDetailData.value?.assignments;
+  const deptIdContext = contextDepartmentId.value; // Lấy từ route query
 
-  if (
-    deptIdContext === null ||
-    !assignments ||
-    assignments.length === 0 ||
-    !allSections.value ||
-    allSections.value.length === 0
-  ) {
-    return [];
-  }
-
+  // Tạo map section -> department (chỉ khi cần và dữ liệu allSections có sẵn)
   const sectionToDeptMap = new Map();
   allSections.value.forEach((section) => {
     const sectionId = section?.id;
-    const deptId = section?.department?.id;
+    // Đường dẫn tới department id có thể khác tùy cấu trúc dữ liệu trả về
+    const deptId = section?.department?.id || section?.department_id;
     if (typeof sectionId === "number" && typeof deptId === "number") {
       sectionToDeptMap.set(sectionId, deptId);
     }
   });
 
-  const filteredList = assignments.filter((assign) => {
-    if (
-      assign.assigned_to_section !== null &&
-      assign.assigned_to_section !== undefined
-    ) {
+  if (deptIdContext === null || deptIdContext === undefined || !Array.isArray(allAssignments)) {
+    return [];
+  }
+
+  // Lọc ra các assignment được gán cho Section VÀ Section đó thuộc Department context
+  return allAssignments.filter((assign) => {
+    if (assign.assigned_to_section !== null && assign.assigned_to_section !== undefined) {
       const sectionId = Number(assign.assigned_to_section);
-      if (
-        !isNaN(sectionId) &&
-        sectionToDeptMap.get(sectionId) === deptIdContext
-      ) {
-        return true;
+      if (!isNaN(sectionId) && sectionToDeptMap.get(sectionId) === deptIdContext) {
+        return true; // Giữ lại assignment này
       }
     }
+    // Bỏ qua assignment gán trực tiếp cho Department hoặc Employee trong bảng này
     return false;
   });
-
-  return filteredList;
 });
 
 const shouldShowDepartmentSectionAssignmentCard = computed(() => {
@@ -1495,7 +1343,7 @@ const handleDeleteDepartmentSectionAssignment = async () => {
     isDeleteDepartmentSectionAssignmentModalVisible.value = false;
     departmentSectionAssignmentToDelete.value = null;
 
-    await loadInitialData();
+    await loadDetail();
   } catch (error) {
     console.error("Failed to delete Department/Section assignment:", error);
     const errorMessage =
@@ -1590,7 +1438,7 @@ const handleSaveDepartmentSectionAssignment = async () => {
     });
 
     closeManageDepartmentSectionAssignments();
-    await loadInitialData();
+    await loadDetail();
   } catch (error) {
     console.error("Failed to save Department/Section assignment:", error);
     const errMsg =
@@ -1635,21 +1483,7 @@ const getStatusColor = (status) => {
       return "default";
   }
 };
-const getEvaluationStatusColor = (status) => {
-  switch (status?.toLowerCase()) {
-    case "met":
-    case "exceeded":
-      return "success";
-    case "not met":
-      return "error";
-    case "in progress":
-      return "processing";
-    case "not started":
-      return "default";
-    default:
-      return "default";
-  }
-};
+
 
 const ensureUserAssignmentDetail = (
   userId,
@@ -1665,29 +1499,19 @@ const ensureUserAssignmentDetail = (
   }
 };
 
-const loadInitialData = async () => {
-  const currentKpiId = kpiId.value;
-  if (!currentKpiId) {
-    notification.error({
-      message: "Invalid KPI ID in URL.",
-    });
-    return;
-  }
-  try {
-    await store.dispatch("kpis/fetchKpiDetail", currentKpiId);
-
-    loadingUsersForEval.value = true;
-    await store.dispatch("employees/fetchUsers", {
-      params: {},
-    });
-  } catch (error) {
-    notification.error({
-      message: `Failed to load initial KPI data: ${error.message || "Unknown error"
-        }`,
-    });
-    console.error("Error loading initial data:", error);
-  } finally {
-    loadingUsersForEval.value = false;
+const loadDetail = async () => {
+  const id = kpiId.value;
+  if (id && !isNaN(id)) {
+    console.log(`KpiDetail: Fetching details for KPI ID: ${id}`);
+    // Chỉ gọi fetchKpiDetail, nó sẽ lấy cả assignments lồng nhau
+    await store.dispatch("kpis/fetchKpiDetail", id);
+    // Xóa lỗi toggle cũ nếu có
+    store.commit('kpis/SET_TOGGLE_KPI_STATUS_ERROR', null);
+  } else {
+    console.error("KpiDetail: Invalid KPI ID from route params:", route.params.id);
+    // Xử lý lỗi ID không hợp lệ, ví dụ chuyển hướng hoặc báo lỗi
+    // notification.error({ message: 'ID KPI không hợp lệ.' });
+    // router.push({ name: 'NotFound' }); // Ví dụ
   }
 };
 
@@ -1921,21 +1745,10 @@ const handleDeleteUserAssignment = async () => {
   }
 };
 
-const viewEvaluation = (record) => {
-  selectedEvaluation.value = record;
-  isViewEvaluationModalVisible.value = true;
-};
 const closeViewEvaluationModal = () => {
   isViewEvaluationModalVisible.value = false;
 };
-const openEvaluationModal = () => {
-  newEvaluation.value = {
-    kpi_id: kpiId.value,
-    evaluator_id: actualUser.value?.id,
-    evaluatee_id: null,
-  };
-  isCreateEvaluationModalVisible.value = true;
-};
+
 const closeCreateEvaluationModal = () => {
   isCreateEvaluationModalVisible.value = false;
 };
@@ -2055,9 +1868,14 @@ watch(
   }
 );
 
-onMounted(async () => {
-  await loadInitialData();
+watch(kpiId, (newId, oldId) => {
+  if (newId !== oldId && newId !== null && !isNaN(newId)) {
+    loadDetail(); // Gọi lại hàm load detail khi ID thay đổi
+  }
 });
+
+onMounted(loadDetail);
+
 </script>
 <style scoped>
 .ant-descriptions-item-label {

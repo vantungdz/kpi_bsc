@@ -364,20 +364,8 @@ const tableData = (perspectiveGroupRowsArray) => {
 };
 
 const goToCreateKpi = () => {
-  const targetDepartmentId = localFilters.departmentId;
-
-  if (!targetDepartmentId) {
-    notification.warning({
-      message: "Please select a Department to create a KPI for.",
-    });
-    return;
-  }
-
   router.push({
-    name: "KpiCreateDepartment",
-    params: {
-      departmentId: targetDepartmentId,
-    },
+    name: "KpiCreateDepartment"
   });
 };
 
@@ -387,7 +375,17 @@ const applyFilters = async () => {
   isDisplayResult.value = false;
 
   try {
-    await store.dispatch("kpis/fetchDepartmentKpis", localFilters.departmentId);
+    const filters = {
+      name: localFilters.name,
+      perspectiveId: localFilters.perspectiveId,
+      startDate: localFilters.startDate,
+      endDate: localFilters.endDate,
+      status: localFilters.status,
+    };
+    await store.dispatch("kpis/fetchDepartmentKpis", {
+      departmentId: localFilters.departmentId,
+      filters,
+    });
     isDisplayResult.value = true;
   } catch (err) {
     error.value = err.message || "Failed to fetch KPIs.";
@@ -517,6 +515,7 @@ const departmentGroups = computed(() => {
         groupedData[assignmentDepartmentId] = {
           department: departmentName,
           data: {},
+          actualSum: 0,
         };
       }
 
@@ -531,6 +530,11 @@ const departmentGroups = computed(() => {
         assignToDisplay = assignment.employee.name;
       }
 
+      // Use the aggregated actual_value from the KPI for the actual field
+      const actualValue = kpi.actual_value !== undefined && kpi.actual_value !== null
+        ? parseFloat(kpi.actual_value) || 0
+        : 0;
+
       const rowData = {
         key: `assignment-${assignment.id}`,
         departmentId: assignmentDepartmentId,
@@ -542,15 +546,14 @@ const departmentGroups = computed(() => {
         endDate: kpiDetails.kpiEndDate,
         weight: kpiDetails.kpiWeight,
         target: assignment.targetValue || "0",
-        actual:
-          assignment.kpiValues && assignment.kpiValues.length > 0
-            ? assignment.kpiValues[0].value || "0"
-            : "0",
+        actual: actualValue.toString(),
         unit: kpiDetails.kpiUnit,
         status: assignment.status || "Unknown",
       };
 
       groupedData[assignmentDepartmentId].data[perspectiveKey].push(rowData);
+
+      groupedData[assignmentDepartmentId].actualSum += actualValue;
     });
   });
 
@@ -562,9 +565,17 @@ const departmentGroups = computed(() => {
         return sortedMap;
       }, {});
 
+    // Update actualSum to sum of kpi.actual_value for KPIs in this department group
+    const actualSum = Object.values(deptGroup.data).flat().reduce((sum, row) => {
+      // row.actual is string, convert to float
+      const actualVal = parseFloat(row.actual) || 0;
+      return sum + actualVal;
+    }, 0);
+
     return {
       department: deptGroup.department,
       data: sortedPerspectives,
+      actualSum: actualSum,
     };
   });
 

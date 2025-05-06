@@ -32,6 +32,17 @@
         </a-col>
       </a-row>
 
+      <a-form-item class="textLabel" label="Department" name="department_id" required>
+        <a-select v-model:value="form.department_id" placeholder="Select Department">
+          <a-select-option
+            v-for="department in departmentList"
+            :key="department.id"
+            :value="department.id"
+            >{{ department.name }}</a-select-option
+          >
+        </a-select>
+      </a-form-item>
+
       <a-form-item class="textLabel" label="Perspective" name="perspective_id">
         <a-select v-model:value="form.perspective_id" placeholder="Perspective">
           <a-select-option
@@ -276,7 +287,7 @@
 
 <script setup>
 import { ref, computed, onMounted, watch, reactive } from "vue";
-import { useRouter, useRoute } from "vue-router";
+import { useRouter } from "vue-router";
 import { useStore } from "vuex";
 import {
   notification,
@@ -298,10 +309,7 @@ import {
 import dayjs from "dayjs";
 
 const router = useRouter();
-const route = useRoute();
 const store = useStore();
-
-const departmentId = computed(() => parseInt(route.params.departmentId, 10));
 
 const creationScope = "department";
 
@@ -323,6 +331,7 @@ const form = ref({
   weight: null,
   frequency: null,
   perspective_id: null,
+  department_id: null,
   start_date: null,
   end_date: null,
 
@@ -348,13 +357,13 @@ const formulaList = ref([
 ]);
 
 const rawSectionsForCurrentDepartment = computed(
-  () => store.getters["sections/sectionsByDepartment"](departmentId.value) || []
+  () => store.getters["sections/sectionsByDepartment"](form.value.department_id) || []
 );
 
 const sectionsForAssignmentTable = computed(() => {
   if (
-    !departmentId.value ||
-    isNaN(departmentId.value) ||
+    !form.value.department_id ||
+    isNaN(form.value.department_id) ||
     !rawSectionsForCurrentDepartment.value
   )
     return [];
@@ -371,6 +380,7 @@ const sectionsForAssignmentTable = computed(() => {
 const perspectiveList = computed(
   () => store.getters["perspectives/perspectiveList"] || []
 );
+const departmentList = computed(() => store.getters["departments/departmentList"] || []);
 const kpiTemplateList = computed(() => store.getters["kpis/kpiListAll"] || []);
 const loadingKpiTemplates = computed(() => store.getters["kpis/loadingAll"]);
 
@@ -667,9 +677,15 @@ const handleChangeCreate = async () => {
 
     const assignmentsPayload = {
       from: creationScope,
+      to_departments: [],
       to_sections: [],
       to_user: null,
     };
+
+    assignmentsPayload.to_departments.push({
+      id: form.value.department_id,
+      target: form.value.target,
+    });
 
     let hasValidAssignment = false;
 
@@ -751,8 +767,7 @@ const handleChangeCreate = async () => {
       description: form.value.description,
       start_date: formattedStartDate,
       end_date: formattedEndDate,
-
-      department_id: departmentId.value,
+      department_id: form.value.department_id,
       assignments: assignmentsPayload,
     };
 
@@ -771,7 +786,7 @@ const handleChangeCreate = async () => {
 
     router.push({
       name: "KpiListDepartment",
-      params: { departmentId: departmentId.value },
+      params: { departmentId: form.value.department_id },
     });
   } catch (error) {
     if (error instanceof Error && error.message === assignmentError.value) {
@@ -840,6 +855,12 @@ const validateEndDate = async (_, value) => {
 };
 
 const formRules = reactive({
+  department_id: [
+    {
+      required: true,
+      message: "Please select Department",
+    },
+  ],
   perspective_id: [
     {
       required: true,
@@ -1043,37 +1064,13 @@ watch(
 );
 
 onMounted(async () => {
-  if (!departmentId.value || isNaN(departmentId.value)) {
-    console.error("Invalid Department ID in route params.");
-    notification.error({
-      message: "Invalid Department ID.",
-      description: "Cannot create KPI without a valid department.",
-    });
-
-    router.push({ name: "KpiListDepartment" });
-    return;
-  }
-
   loadingInitialData.value = true;
   try {
     await Promise.all([
       store.dispatch("perspectives/fetchPerspectives"),
-
-      store.dispatch("sections/fetchSectionsByDepartment", departmentId.value),
+      store.dispatch("departments/fetchDepartments"),
       store.dispatch("kpis/fetchAllKpisForSelect"),
     ]);
-
-    const templateKpiIdFromRoute = route.query.templateKpiId;
-    if (templateKpiIdFromRoute) {
-      const kpiId = parseInt(templateKpiIdFromRoute, 10);
-      if (!isNaN(kpiId)) {
-        await loadKpiTemplate(kpiId);
-        selectedTemplateKpiId.value = kpiId;
-      } else {
-        console.error("Invalid templateKpiId in route query.");
-        notification.error({ message: "Invalid template ID provided." });
-      }
-    }
   } catch (error) {
     console.error("Error fetching initial data:", error);
     notification.error({
@@ -1085,6 +1082,36 @@ onMounted(async () => {
     loadingInitialData.value = false;
   }
 });
+
+watch(
+  () => form.value.department_id,
+  async (newDepartmentId) => {
+    if (!newDepartmentId || isNaN(newDepartmentId)) {
+      selectedRowKeys.value = [];
+      form.value.section_id = [];
+      targetValues.value = {};
+      form.value.targets = {};
+      return;
+    }
+    loadingInitialData.value = true;
+    try {
+      await store.dispatch("sections/fetchSectionsByDepartment", newDepartmentId);
+      selectedRowKeys.value = [];
+      form.value.section_id = [];
+      targetValues.value = {};
+      form.value.targets = {};
+    } catch (error) {
+      console.error("Error fetching sections for department:", error);
+      notification.error({
+        message: "Failed to load sections for selected department.",
+        description: error.message || "An error occurred.",
+        duration: 5,
+      });
+    } finally {
+      loadingInitialData.value = false;
+    }
+  }
+);
 </script>
 
 <style scoped>
