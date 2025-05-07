@@ -17,7 +17,7 @@ import { Section } from './section.entity';
 import { Team } from './team.entity';
 import { KpiValue } from './kpi-value.entity';
 
-@Entity('kpi_assignment') 
+@Entity('kpi_assignment')
 export class KPIAssignment {
   @PrimaryGeneratedColumn()
   id: number;
@@ -39,7 +39,7 @@ export class KPIAssignment {
     onDelete: 'SET NULL',
     nullable: true,
     eager: false,
-  }) 
+  })
   @JoinColumn({ name: 'assigned_to_department' })
   department: Department | null;
 
@@ -50,14 +50,14 @@ export class KPIAssignment {
     onDelete: 'SET NULL',
     nullable: true,
     eager: false,
-  }) 
+  })
   @JoinColumn({ name: 'assigned_to_section' })
   section: Section | null;
 
   @Column({ type: 'numeric', nullable: true })
   assigned_to_team: number | null;
 
-  @ManyToOne(() => Team, { onDelete: 'SET NULL', nullable: true, eager: false }) 
+  @ManyToOne(() => Team, { onDelete: 'SET NULL', nullable: true, eager: false })
   @JoinColumn({ name: 'assigned_to_team' })
   team: Team | null;
 
@@ -68,19 +68,18 @@ export class KPIAssignment {
     onDelete: 'SET NULL',
     nullable: true,
     eager: false,
-  }) 
+  })
   @JoinColumn({ name: 'assigned_to_employee' })
   employee: Employee | null;
 
-  
   @Column({ type: 'numeric', nullable: true })
   employee_id: number | null;
 
   @Column({
     type: 'varchar',
     length: 50,
-    enum: ['draft', 'approved'],
-    default: 'draft',
+    enum: ['DRAFT', 'APPROVED'],
+    default: 'DRAFT',
   })
   status: string;
 
@@ -93,21 +92,20 @@ export class KPIAssignment {
   @Column({ type: 'timestamp', nullable: true })
   created_at: Date;
 
-  @UpdateDateColumn({ type: 'timestamp', nullable: true }) 
+  @UpdateDateColumn({ type: 'timestamp', nullable: true })
   updated_at: Date | null;
 
   @Column({ type: 'timestamp', nullable: true })
   approved_at: Date | null;
 
-  
-  @Column({ type: 'numeric', nullable: true }) 
-  targetValue: number | null; 
+  @Column({ type: 'numeric', nullable: true })
+  targetValue: number | null;
 
-  @CreateDateColumn() 
+  @CreateDateColumn()
   assignedAt: Date;
 
   @Column({ nullable: true })
-  assignedBy: number; 
+  assignedBy: number;
 
   @DeleteDateColumn({ type: 'timestamp', nullable: true })
   deleted_at?: Date;

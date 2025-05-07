@@ -24,8 +24,8 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { CreateKpiDto } from './dto/create_kpi_dto';
-import { KpiFilterDto } from './dto/filter-kpi.dto';
-import { OnEvent } from '@nestjs/event-emitter';
+import { KpiFilterDto } from './dto/filter-kpi.dto'; // Thêm EventEmitter2
+import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 
 interface AssignmentWithLatestValue extends KPIAssignment {
   latest_actual_value?: number | null;
@@ -52,6 +52,7 @@ export class KpisService {
     private readonly kpiAssignmentRepository: Repository<KPIAssignment>,
     @InjectRepository(Employee)
     private readonly employeeRepository: Repository<Employee>,
+    private eventEmitter: EventEmitter2, // Inject EventEmitter2
   ) {}
 
   async getKpisByEmployeeId(employeeId: number): Promise<Kpi[]> {
@@ -912,7 +913,9 @@ export class KpisService {
           : KpiDefinitionStatus.DRAFT;
 
       const newAssignmentStatus =
-        newKpiStatus === KpiDefinitionStatus.APPROVED ? 'approved' : 'draft';
+        newKpiStatus === KpiDefinitionStatus.APPROVED
+          ? KpiDefinitionStatus.APPROVED
+          : KpiDefinitionStatus.DRAFT;
 
       kpi.status = newKpiStatus;
       kpi.updated_by = userId;
@@ -1083,7 +1086,7 @@ export class KpisService {
             assignment.targetValue =
               Number(targetDepartment.target) ?? Number(kpiData.target);
             assignment.assignedBy = assignedByUserId;
-            assignment.status = 'draft';
+            assignment.status = KpiDefinitionStatus.DRAFT;
             assignmentEntities.push(assignment);
           }
         }
@@ -1097,7 +1100,7 @@ export class KpisService {
             assignment.targetValue =
               Number(targetSection.target) ?? Number(kpiData.target);
             assignment.assignedBy = assignedByUserId;
-            assignment.status = 'draft';
+            assignment.status = KpiDefinitionStatus.DRAFT;
             assignmentEntities.push(assignment);
           }
         }
@@ -1111,7 +1114,7 @@ export class KpisService {
           employeeAssignment.employee_id = assignedToEmployeeId;
           employeeAssignment.targetValue = Number(kpiData.target);
           employeeAssignment.assignedBy = assignedByUserId;
-          employeeAssignment.status = 'draft';
+          employeeAssignment.status = KpiDefinitionStatus.DRAFT;
           assignmentEntities.push(employeeAssignment);
         }
 
@@ -1182,7 +1185,7 @@ export class KpisService {
           employee_id: incomingAssignment.user_id,
           targetValue: incomingAssignment.target,
           weight: kpiWeight,
-          status: 'draft',
+          status: KpiDefinitionStatus.DRAFT,
           assignedFrom: assignedFromType,
           assignedBy: assignedById,
           created_at: new Date(),
@@ -1192,6 +1195,14 @@ export class KpisService {
           assigned_to_team: null,
         } as unknown as import('typeorm').DeepPartial<KPIAssignment>);
         assignmentsToSave.push(newAssignment);
+
+        // Emit event khi gán KPI mới cho nhân viên
+        if (newAssignment.assigned_to_employee) {
+          this.eventEmitter.emit('kpi.assigned', {
+            assignment: newAssignment,
+            kpiName: kpi.name,
+          });
+        }
       }
     }
 

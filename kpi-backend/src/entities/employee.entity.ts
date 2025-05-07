@@ -11,6 +11,8 @@ import { KpiEvaluation } from './kpi-evaluation.entity';
 import { Department } from './department.entity';
 import { Section } from './section.entity';
 import { Team } from './team.entity';
+import { Notification } from './notification.entity'; // Thêm import này
+
 
 @Entity('employees')
 export class Employee {
@@ -47,6 +49,9 @@ export class Employee {
 
   @Column({ nullable: true, name: 'departmentId' })
   departmentId: number;
+
+  @OneToMany(() => Notification, (notification) => notification.user)
+  notifications: Notification[]; // Thêm thuộc tính này
 
   @ManyToOne(() => Department, (department) => department.employees)
   @JoinColumn({ name: 'departmentId' })

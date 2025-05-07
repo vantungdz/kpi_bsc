@@ -216,6 +216,20 @@ export class KpiValuesService {
         } as DeepPartial<KpiValueHistory>);
         await historyRepo.save(historyEntry);
 
+        // Emit event khi nhân viên submit và cần section duyệt
+        if (savedKpiValue.status === KpiValueStatus.PENDING_SECTION_APPROVAL) {
+          const submitter = await transactionalEntityManager.getRepository(Employee).findOneBy({ id: userId });
+          if (submitter && assignment.kpi) {
+            this.eventEmitter.emit('kpi_value.submitted_for_section_approval', {
+              kpiValue: savedKpiValue,
+              submitter: submitter,
+              kpiName: assignment.kpi.name,
+              assignmentId: assignment.id, // Thêm assignmentId để dễ truy vấn
+              kpiId: assignment.kpi_id // Thêm kpiId
+            });
+          }
+        }
+
         return savedKpiValue;
       },
     );
@@ -286,12 +300,13 @@ export class KpiValuesService {
       userId,
     );
 
+    const assignment =
+      savedValue.kpiAssignment ??
+      (await this.kpiAssignmentRepository.findOneBy({
+        id: savedValue.kpi_assigment_id,
+      }));
+
     if (savedValue.status === KpiValueStatus.APPROVED) {
-      const assignment =
-        savedValue.kpiAssignment ??
-        (await this.kpiAssignmentRepository.findOneBy({
-          id: savedValue.kpi_assigment_id,
-        }));
       if (assignment && typeof assignment.kpi_id === 'number') {
         this.logger.log(
           `Emitting kpi_value.approved event for KPI ID: ${assignment.kpi_id}`,
@@ -304,6 +319,22 @@ export class KpiValuesService {
         this.logger.error(
           `Cannot emit kpi_value.approved event: Missing assignment or kpi_id for KpiValue ID ${savedValue.id}`,
         );
+      }
+      // Thông báo cho người submit rằng KPI value của họ đã được duyệt (nếu người duyệt không phải là người submit)
+      if (assignment && assignment.employee_id && assignment.employee_id !== userId) {
+         this.eventEmitter.emit('kpi_value.approved_by_user', {
+            kpiValue: savedValue,
+            submitterId: assignment.employee_id,
+            kpiName: assignment.kpi?.name || 'N/A',
+         });
+      }
+    } else if (savedValue.status === KpiValueStatus.PENDING_DEPT_APPROVAL) {
+      // Emit event khi section đã duyệt và chuyển cho department duyệt
+      const submitter = assignment?.employee_id ? await this.employeeRepository.findOneBy({ id: assignment.employee_id }) : null;
+      if (submitter && assignment?.kpi) {
+        this.eventEmitter.emit('kpi_value.submitted_for_dept_approval', { // Event mới
+          kpiValue: savedValue, submitter, kpiName: assignment.kpi.name, assignmentId: assignment.id, kpiId: assignment.kpi_id
+        });
       }
     }
     return savedValue;
@@ -372,7 +403,15 @@ export class KpiValuesService {
     console.log(
       `[rejectValueBySection] SAVING KpiValue ID ${kpiValue.id} with NEW status: ${kpiValue.status}`,
     );
-    return this.kpiValuesRepository.save(kpiValue);
+    const rejectedValue = await this.kpiValuesRepository.save(kpiValue);
+    // Thông báo cho người submit rằng KPI value của họ đã bị từ chối
+    const assignment = rejectedValue.kpiAssignment ?? (await this.kpiAssignmentRepository.findOneBy({ id: rejectedValue.kpi_assigment_id }));
+    if (assignment && assignment.employee_id) {
+      this.eventEmitter.emit('kpi_value.rejected_by_user', {
+        kpiValue: rejectedValue, submitterId: assignment.employee_id, kpiName: assignment.kpi?.name || 'N/A', reason
+      });
+    }
+    return rejectedValue;
   }
 
   async approveValueByDepartment(
@@ -437,12 +476,13 @@ export class KpiValuesService {
       userId,
     );
 
+    const assignment =
+      savedValue.kpiAssignment ??
+      (await this.kpiAssignmentRepository.findOneBy({
+        id: savedValue.kpi_assigment_id,
+      }));
+
     if (savedValue.status === KpiValueStatus.APPROVED) {
-      const assignment =
-        savedValue.kpiAssignment ??
-        (await this.kpiAssignmentRepository.findOneBy({
-          id: savedValue.kpi_assigment_id,
-        }));
       if (assignment && typeof assignment.kpi_id === 'number') {
         this.logger.log(
           `Emitting kpi_value.approved event for KPI ID: ${assignment.kpi_id}`,
@@ -454,6 +494,22 @@ export class KpiValuesService {
         this.logger.error(
           `Cannot emit kpi_value.approved event: Missing assignment or kpi_id for KpiValue ID ${savedValue.id}`,
         );
+      }
+      // Thông báo cho người submit rằng KPI value của họ đã được duyệt (nếu người duyệt không phải là người submit)
+      if (assignment && assignment.employee_id && assignment.employee_id !== userId) {
+         this.eventEmitter.emit('kpi_value.approved_by_user', {
+            kpiValue: savedValue,
+            submitterId: assignment.employee_id,
+            kpiName: assignment.kpi?.name || 'N/A',
+         });
+      }
+    } else if (savedValue.status === KpiValueStatus.PENDING_MANAGER_APPROVAL) {
+      // Emit event khi department đã duyệt và chuyển cho manager duyệt
+      const submitter = assignment?.employee_id ? await this.employeeRepository.findOneBy({ id: assignment.employee_id }) : null;
+      if (submitter && assignment?.kpi) {
+        this.eventEmitter.emit('kpi_value.submitted_for_manager_approval', { // Event mới
+          kpiValue: savedValue, submitter, kpiName: assignment.kpi.name, assignmentId: assignment.id, kpiId: assignment.kpi_id
+        });
       }
     }
     return savedValue;
@@ -528,7 +584,15 @@ export class KpiValuesService {
     console.log(
       `[rejectValueByDepartment] SAVING KpiValue ID ${kpiValue.id} with NEW status: ${kpiValue.status}`,
     );
-    return this.kpiValuesRepository.save(kpiValue);
+    const rejectedValue = await this.kpiValuesRepository.save(kpiValue);
+    // Thông báo cho người submit rằng KPI value của họ đã bị từ chối
+    const assignment = rejectedValue.kpiAssignment ?? (await this.kpiAssignmentRepository.findOneBy({ id: rejectedValue.kpi_assigment_id }));
+    if (assignment && assignment.employee_id) {
+      this.eventEmitter.emit('kpi_value.rejected_by_user', {
+        kpiValue: rejectedValue, submitterId: assignment.employee_id, kpiName: assignment.kpi?.name || 'N/A', reason
+      });
+    }
+    return rejectedValue;
   }
 
   async approveValueByManager(
@@ -633,6 +697,14 @@ export class KpiValuesService {
         `Cannot emit kpi_value.approved event: Missing assignment or kpi_id for KpiValue ID ${savedValue.id}`,
       );
     }
+    // Thông báo cho người submit rằng KPI value của họ đã được duyệt (nếu người duyệt không phải là người submit)
+    if (assignment && assignment.employee_id && assignment.employee_id !== userId) {
+        this.eventEmitter.emit('kpi_value.approved_by_user', {
+          kpiValue: savedValue,
+          submitterId: assignment.employee_id,
+          kpiName: assignment.kpi?.name || 'N/A',
+        });
+    }
     return savedValue;
   }
 
@@ -695,7 +767,15 @@ export class KpiValuesService {
     console.log(
       `[rejectValueByManager] SAVING KpiValue ID ${kpiValue.id} with NEW status: ${kpiValue.status}`,
     );
-    return this.kpiValuesRepository.save(kpiValue);
+    const rejectedValue = await this.kpiValuesRepository.save(kpiValue);
+    // Thông báo cho người submit rằng KPI value của họ đã bị từ chối
+    const assignment = rejectedValue.kpiAssignment ?? (await this.kpiAssignmentRepository.findOneBy({ id: rejectedValue.kpi_assigment_id }));
+    if (assignment && assignment.employee_id) {
+      this.eventEmitter.emit('kpi_value.rejected_by_user', {
+        kpiValue: rejectedValue, submitterId: assignment.employee_id, kpiName: assignment.kpi?.name || 'N/A', reason
+      });
+    }
+    return rejectedValue;
   }
 
   private async findKpiValueForWorkflow(valueId: number): Promise<KpiValue> {

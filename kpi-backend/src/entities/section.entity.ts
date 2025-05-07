@@ -8,6 +8,7 @@ import {
 import { Department } from './department.entity';
 import { Team } from './team.entity';
 import { Employee } from './employee.entity';
+import { Notification } from './notification.entity'; // Added import
 
 @Entity('sections')
 export class Section {
@@ -16,6 +17,9 @@ export class Section {
 
   @Column()
   name: string;
+
+  @OneToMany(() => Notification, (notification) => notification.section) // Changed from notification.user to notification.section
+  notifications: Notification[]; // This section can have many notifications
 
   @ManyToOne(() => Department, (department) => department.sections)
   department: Department;

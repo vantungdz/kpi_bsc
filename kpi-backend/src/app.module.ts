@@ -15,6 +15,8 @@ import { KpiAssignmentsModule } from './kpi-assessments/kpi-assessments.module';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { RolesGuard } from './auth/guards/roles.guard';
 import { EventEmitterModule } from '@nestjs/event-emitter';
+import { NotificationModule } from './notification/notification.module';
+
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -38,6 +40,7 @@ import { EventEmitterModule } from '@nestjs/event-emitter';
       },
       inject: [ConfigService],
     }),
+    NotificationModule,
     EmployeesModule,
     KpisModule,
     DepartmentsModule,
