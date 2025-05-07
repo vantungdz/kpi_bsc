@@ -2,10 +2,14 @@ import {
   Injectable,
   UnauthorizedException,
   NotFoundException,
+  ConflictException,
+  BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Employee } from 'src/entities/employee.entity';
-import { Repository, FindManyOptions, DeepPartial } from 'typeorm';
+import { Repository, FindManyOptions, DeepPartial, DataSource } from 'typeorm';
+import * as XLSX from 'xlsx';
+import * as bcrypt from 'bcrypt';
 
 interface EmployeeFilterOptions {
   departmentId?: number;
@@ -18,12 +22,40 @@ export class EmployeesService {
   constructor(
     @InjectRepository(Employee)
     private readonly employeeRepository: Repository<Employee>,
+    private readonly dataSource: DataSource,
   ) {}
 
-  async create(createEmployeeDto: Employee): Promise<Employee> {
-    const employee = this.employeeRepository.create(
-      createEmployeeDto as DeepPartial<Employee>,
-    );
+  async create(createEmployeeDto: Partial<Employee>): Promise<Employee> {
+    const { username, email, password, ...restOfDto } = createEmployeeDto;
+
+    if (!username) {
+      throw new BadRequestException('Username is required.');
+    }
+    if (!email) {
+      throw new BadRequestException('Email is required.');
+    }
+    if (!password) {
+      throw new BadRequestException('Password is required for new employee.');
+    }
+
+    let existingEmployee = await this.employeeRepository.findOneBy({
+      username,
+    });
+    if (existingEmployee) {
+      throw new ConflictException(`Username '${username}' already exists.`);
+    }
+    existingEmployee = await this.employeeRepository.findOneBy({ email });
+    if (existingEmployee) {
+      throw new ConflictException(`Email '${email}' already exists.`);
+    }
+
+    const employee = this.employeeRepository.create({
+      username,
+      email,
+      password,
+      ...restOfDto,
+      role: createEmployeeDto.role || 'employee',
+    } as DeepPartial<Employee>);
     return this.employeeRepository.save(employee);
   }
 
@@ -32,7 +64,7 @@ export class EmployeesService {
   ): Promise<Employee[]> {
     const findOptions: FindManyOptions<Employee> = {
       where: {},
-      relations: ['department', 'section', 'team'], // Add relations if needed
+      relations: ['department', 'section', 'team'],
     };
 
     if (
@@ -59,7 +91,7 @@ export class EmployeesService {
   async findOne(id: number): Promise<Employee> {
     const user = await this.employeeRepository.findOne({
       where: { id },
-      relations: ['department', 'section', 'team'], // Load relations
+      relations: ['department', 'section', 'team'],
     });
 
     if (!user) {
@@ -73,7 +105,7 @@ export class EmployeesService {
   ): Promise<Employee | undefined> {
     const foundUser = await this.employeeRepository.findOne({
       where: [{ email: usernameOrEmail }, { username: usernameOrEmail }],
-      relations: ['department', 'section', 'team'], // Load relations
+      relations: ['department', 'section', 'team'],
       select: [
         'id',
         'username',
@@ -85,7 +117,7 @@ export class EmployeesService {
         'teamId',
         'first_name',
         'last_name',
-      ], // Select necessary fields including password
+      ],
     });
     return foundUser || undefined;
   }
@@ -103,14 +135,13 @@ export class EmployeesService {
     }
     return this.employeeRepository.findOne({
       where: {
-        section: { id: sectionId }, // Assuming Employee entity has a 'section' relation
-        role: 'leader', // Adjust 'leader' to match your role system
+        section: { id: sectionId },
+        role: 'leader',
       },
     });
   }
 
   async findAllAdmins(): Promise<Employee[]> {
-    // Giả sử vai trò admin được lưu là 'admin'
     return this.employeeRepository.find({ where: { role: 'admin' } });
   }
 
@@ -120,12 +151,107 @@ export class EmployeesService {
     if (!departmentId) {
       return null;
     }
-    // Adjust 'manager' and the way department is linked if your structure is different
+
     return this.employeeRepository.findOne({
       where: {
-        department: { id: departmentId }, // Assuming Employee has a 'department' relation
-        role: 'manager', // Or your specific role for department heads
+        department: { id: departmentId },
+        role: 'manager',
       },
     });
+  }
+
+  async saveEmployeeData(data: any[]): Promise<{
+    successCount: number;
+    errors: { rowData: any; error: string }[];
+    message?: string;
+  }> {
+    const results = {
+      successCount: 0,
+      errors: [] as { rowData: any; error: string }[],
+    };
+
+    await this.dataSource.transaction(async (transactionalEntityManager) => {
+      const employeeRepo = transactionalEntityManager.getRepository(Employee);
+
+      for (const row of data) {
+        const username = row['Username']?.trim();
+        const email = row['Email']?.trim();
+        const role = row['Role']?.toLowerCase() || 'employee';
+        const firstName = row['First Name']?.trim();
+        const lastName = row['Last Name']?.trim();
+        const departmentId = row['Department ID'];
+        const sectionId = row['Section ID'];
+        const teamId = row['Team ID'];
+
+        if (!username || !email) {
+          console.warn('Skipping row due to missing fields:', row);
+          results.errors.push({
+            rowData: row,
+            error: 'Missing required fields: Username or Email',
+          });
+          continue;
+        }
+
+        try {
+          const existingEmployee = await employeeRepo.findOneBy({ username });
+          if (existingEmployee) {
+            console.warn(`Username '${username}' already exists.`);
+            results.errors.push({
+              rowData: row,
+              error: `Username '${username}' already exists.`,
+            });
+            continue;
+          }
+
+          const existingEmail = await employeeRepo.findOneBy({ email });
+          if (existingEmail) {
+            console.warn(`Email '${email}' already exists.`);
+            results.errors.push({
+              rowData: row,
+              error: `Email '${email}' already exists.`,
+            });
+            continue;
+          }
+
+          const hashedPassword = await bcrypt.hash('default_password', 10);
+
+          const employeeData: DeepPartial<Employee> = {
+            username,
+            email,
+            password: hashedPassword,
+            role,
+            first_name: firstName,
+            last_name: lastName,
+            departmentId,
+            sectionId,
+            teamId,
+          };
+
+          const newEmployee = employeeRepo.create(employeeData);
+          await employeeRepo.save(newEmployee);
+          console.log('Employee saved:', newEmployee);
+          results.successCount++;
+        } catch (error) {
+          console.error('Error saving employee:', error.message || error);
+          results.errors.push({
+            rowData: row,
+            error: `Failed to save employee: ${error.message || 'Unknown error'}`,
+          });
+        }
+      }
+    });
+
+    if (results.successCount === 0) {
+      console.warn('No employees were saved.');
+    }
+
+    return {
+      message:
+        results.successCount > 0
+          ? 'Some employees were saved with errors.'
+          : 'No employees were saved.',
+      successCount: results.successCount,
+      errors: results.errors,
+    };
   }
 }

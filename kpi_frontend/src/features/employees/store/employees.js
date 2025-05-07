@@ -26,101 +26,97 @@ const mutations = {
     state.error = error ? error.response?.data?.message || error.message : null;
   },
   SET_USERS(state, users) {
-    state.userList = users;
+    state.userList = users || [];
   },
   SET_USERS_BY_SECTION(state, { sectionId, users }) {
     const key = String(sectionId);
     state.usersBySection = {
       ...state.usersBySection,
-      [key]: users,
+      [key]: users || [],
     };
   },
   SET_USERS_BY_DEPARTMENT(state, { departmentId, users }) {
     const key = String(departmentId);
     state.usersByDepartment = {
       ...state.usersByDepartment,
-      [key]: users,
+      [key]: users || [],
     };
   },
 };
 
 const actions = {
   async fetchUsers({ commit, state }, params = {}) {
-    const sectionIdParam = params.sectionId;
-    const departmentIdParam = params.departmentId;
+    const { sectionId, departmentId, force = false } = params;
 
     const hasSectionIdParam =
-      typeof sectionIdParam !== "undefined" &&
-      sectionIdParam !== null &&
-      sectionIdParam !== "";
+      typeof sectionId !== "undefined" &&
+      sectionId !== null &&
+      sectionId !== "";
     const hasDepartmentIdParam =
-      typeof departmentIdParam !== "undefined" &&
-      departmentIdParam !== null &&
-      departmentIdParam !== "";
-    if (
-      hasSectionIdParam &&
-      state.usersBySection[String(sectionIdParam)]?.length > 0
-    ) {
-      return state.usersBySection[String(sectionIdParam)];
+      typeof departmentId !== "undefined" &&
+      departmentId !== null &&
+      departmentId !== "";
+
+    if (!force) {
+      if (
+        hasSectionIdParam &&
+        state.usersBySection[String(sectionId)]?.length > 0
+      ) {
+        return state.usersBySection[String(sectionId)];
+      }
+      if (
+        hasDepartmentIdParam &&
+        state.usersByDepartment[String(departmentId)]?.length > 0
+      ) {
+        return state.usersByDepartment[String(departmentId)];
+      }
     }
 
-    if (
-      hasDepartmentIdParam &&
-      state.usersByDepartment[String(departmentIdParam)]?.length > 0
-    ) {
-      return state.usersByDepartment[String(departmentIdParam)];
-    }
-
+    const apiParamsForCheck = { ...params };
+    delete apiParamsForCheck.force;
     const isGeneralFetch =
       !hasSectionIdParam &&
       !hasDepartmentIdParam &&
-      Object.keys(params).length === 0;
-    if (isGeneralFetch && state.userList.length > 0) {
+      Object.keys(apiParamsForCheck).length === 0;
+
+    if (!force && isGeneralFetch && state.userList.length > 0) {
       return state.userList;
     }
 
     commit("SET_LOADING", true);
     commit("SET_ERROR", null);
     try {
-      const response = await apiClient.get("/employees", { params });
+      const apiParams = { ...params };
+      delete apiParams.force;
+
+      const response = await apiClient.get("/employees", { params: apiParams });
       const fetchedUsers = response.data?.data || response.data || [];
 
       if (isGeneralFetch) {
         commit("SET_USERS", fetchedUsers);
       } else if (hasSectionIdParam) {
         commit("SET_USERS_BY_SECTION", {
-          sectionId: sectionIdParam,
+          sectionId: sectionId,
           users: fetchedUsers,
         });
       } else if (hasDepartmentIdParam) {
         commit("SET_USERS_BY_DEPARTMENT", {
-          departmentId: departmentIdParam,
+          departmentId: departmentId,
           users: fetchedUsers,
         });
-      } else {
-        console.warn(
-          "fetchUsers action: API call with unexpected params, data not committed to specific state.",
-          params
-        );
       }
-
       return fetchedUsers;
     } catch (error) {
       console.error("Error fetching users:", error.response || error);
       commit("SET_ERROR", error);
-      if (isGeneralFetch) {
-        commit("SET_USERS", []);
-      } else if (hasSectionIdParam) {
-        commit("SET_USERS_BY_SECTION", {
-          sectionId: sectionIdParam,
-          users: [],
-        });
-      } else if (hasDepartmentIdParam) {
+      if (isGeneralFetch) commit("SET_USERS", []);
+      else if (hasSectionIdParam)
+        commit("SET_USERS_BY_SECTION", { sectionId: sectionId, users: [] });
+      else if (hasDepartmentIdParam)
         commit("SET_USERS_BY_DEPARTMENT", {
-          departmentId: departmentIdParam,
+          departmentId: departmentId,
           users: [],
         });
-      }
       throw error;
     } finally {
       commit("SET_LOADING", false);
@@ -145,6 +141,46 @@ const actions = {
       return state.usersByDepartment[String(departmentId)];
     }
     return dispatch("fetchUsers", { departmentId: departmentId });
+  },
+
+  async uploadEmployeeExcel({ commit, dispatch }, file) {
+    commit("SET_LOADING", true);
+    commit("SET_ERROR", null);
+    const formData = new FormData();
+    formData.append("file", file);
+    try {
+      const response = await apiClient.post("/employees/upload", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      await dispatch("fetchUsers", { force: true });
+      return response.data;
+    } catch (error) {
+      console.error("Error uploading employee Excel:", error.response || error);
+      commit("SET_ERROR", error);
+      throw error;
+    } finally {
+      commit("SET_LOADING", false);
+    }
+  },
+
+  async uploadFile({ commit, dispatch }, file) {
+    commit("SET_LOADING", true);
+    commit("SET_ERROR", null);
+    const formData = new FormData();
+    formData.append("file", file);
+    try {
+      const response = await apiClient.post("/employees/upload", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      await dispatch("fetchUsers", { force: true });
+      return response.data;
+    } catch (error) {
+      console.error("Error uploading employee Excel:", error.response || error);
+      commit("SET_ERROR", error);
+      throw error.response?.data || error;
+    } finally {
+      commit("SET_LOADING", false);
+    }
   },
 };
 
