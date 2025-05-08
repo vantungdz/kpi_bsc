@@ -173,7 +173,9 @@ export class KpiValuesService {
         const currentTimestamp = new Date();
         const projectDetailsObject = projectDetails;
 
-        const submitter = await transactionalEntityManager.getRepository(Employee).findOneBy({ id: userId });
+        const submitter = await transactionalEntityManager
+          .getRepository(Employee)
+          .findOneBy({ id: userId });
         if (!submitter) {
           throw new UnauthorizedException('Submitter information not found.');
         }
@@ -182,20 +184,34 @@ export class KpiValuesService {
 
         if (submitter.role === 'department') {
           initialStatusAfterSubmit = KpiValueStatus.PENDING_MANAGER_APPROVAL;
-          this.logger.log(`Submitter role is 'department', next status: PENDING_MANAGER_APPROVAL`);
+          this.logger.log(
+            `Submitter role is 'department', next status: PENDING_MANAGER_APPROVAL`,
+          );
         } else if (submitter.role === 'section') {
           initialStatusAfterSubmit = KpiValueStatus.PENDING_DEPT_APPROVAL;
-          this.logger.log(`Submitter role is 'section', next status: PENDING_DEPT_APPROVAL`);
-        } else { // Default for 'employee' or other roles considered lower
-          if (submitter.sectionId) { // Employee in a section
+          this.logger.log(
+            `Submitter role is 'section', next status: PENDING_DEPT_APPROVAL`,
+          );
+        } else {
+          // Default for 'employee' or other roles considered lower
+          if (submitter.sectionId) {
+            // Employee in a section
             initialStatusAfterSubmit = KpiValueStatus.PENDING_SECTION_APPROVAL;
-            this.logger.log(`Submitter role '${submitter.role}' in section ${submitter.sectionId}, next status: PENDING_SECTION_APPROVAL`);
-          } else if (submitter.departmentId) { // Employee in a department but not a specific section (or section structure not used)
+            this.logger.log(
+              `Submitter role '${submitter.role}' in section ${submitter.sectionId}, next status: PENDING_SECTION_APPROVAL`,
+            );
+          } else if (submitter.departmentId) {
+            // Employee in a department but not a specific section (or section structure not used)
             initialStatusAfterSubmit = KpiValueStatus.PENDING_DEPT_APPROVAL;
-            this.logger.log(`Submitter role '${submitter.role}' in department ${submitter.departmentId} (no section), next status: PENDING_DEPT_APPROVAL`);
-          } else { // Employee not in a section or department (e.g., direct report to manager/admin)
+            this.logger.log(
+              `Submitter role '${submitter.role}' in department ${submitter.departmentId} (no section), next status: PENDING_DEPT_APPROVAL`,
+            );
+          } else {
+            // Employee not in a section or department (e.g., direct report to manager/admin)
             initialStatusAfterSubmit = KpiValueStatus.PENDING_MANAGER_APPROVAL;
-            this.logger.log(`Submitter role '${submitter.role}' (no section/dept), next status: PENDING_MANAGER_APPROVAL`);
+            this.logger.log(
+              `Submitter role '${submitter.role}' (no section/dept), next status: PENDING_MANAGER_APPROVAL`,
+            );
           }
         }
 
@@ -242,22 +258,37 @@ export class KpiValuesService {
         await historyRepo.save(historyEntry);
 
         // Emit event khi nhân viên submit và cần section duyệt
-        if (assignment.kpi) { // Ensure kpi is loaded
-          if (savedKpiValue.status === KpiValueStatus.PENDING_SECTION_APPROVAL) {
+        if (assignment.kpi) {
+          // Ensure kpi is loaded
+          if (
+            savedKpiValue.status === KpiValueStatus.PENDING_SECTION_APPROVAL
+          ) {
             this.eventEmitter.emit('kpi_value.submitted_for_section_approval', {
               kpiValue: savedKpiValue,
               submitter: submitter,
               kpiName: assignment.kpi.name,
               assignmentId: assignment.id, // Thêm assignmentId để dễ truy vấn
-              kpiId: assignment.kpi_id // Thêm kpiId
+              kpiId: assignment.kpi_id, // Thêm kpiId
             });
-          } else if (savedKpiValue.status === KpiValueStatus.PENDING_DEPT_APPROVAL) {
+          } else if (
+            savedKpiValue.status === KpiValueStatus.PENDING_DEPT_APPROVAL
+          ) {
             this.eventEmitter.emit('kpi_value.submitted_for_dept_approval', {
-              kpiValue: savedKpiValue, submitter, kpiName: assignment.kpi.name, assignmentId: assignment.id, kpiId: assignment.kpi_id
+              kpiValue: savedKpiValue,
+              submitter,
+              kpiName: assignment.kpi.name,
+              assignmentId: assignment.id,
+              kpiId: assignment.kpi_id,
             });
-          } else if (savedKpiValue.status === KpiValueStatus.PENDING_MANAGER_APPROVAL) {
+          } else if (
+            savedKpiValue.status === KpiValueStatus.PENDING_MANAGER_APPROVAL
+          ) {
             this.eventEmitter.emit('kpi_value.submitted_for_manager_approval', {
-              kpiValue: savedKpiValue, submitter, kpiName: assignment.kpi.name, assignmentId: assignment.id, kpiId: assignment.kpi_id
+              kpiValue: savedKpiValue,
+              submitter,
+              kpiName: assignment.kpi.name,
+              assignmentId: assignment.id,
+              kpiId: assignment.kpi_id,
             });
           }
         }
@@ -353,19 +384,32 @@ export class KpiValuesService {
         );
       }
       // Thông báo cho người submit rằng KPI value của họ đã được duyệt (nếu người duyệt không phải là người submit)
-      if (assignment && assignment.employee_id && assignment.employee_id !== userId) {
-         this.eventEmitter.emit('kpi_value.approved_by_user', {
-            kpiValue: savedValue,
-            submitterId: assignment.employee_id,
-            kpiName: assignment.kpi?.name || 'N/A',
-         });
+      if (
+        assignment &&
+        assignment.employee_id &&
+        assignment.employee_id !== userId
+      ) {
+        this.eventEmitter.emit('kpi_value.approved_by_user', {
+          kpiValue: savedValue,
+          submitterId: assignment.employee_id,
+          kpiName: assignment.kpi?.name || 'N/A',
+        });
       }
     } else if (savedValue.status === KpiValueStatus.PENDING_DEPT_APPROVAL) {
       // Emit event khi section đã duyệt và chuyển cho department duyệt
-      const submitter = assignment?.employee_id ? await this.employeeRepository.findOneBy({ id: assignment.employee_id }) : null;
+      const submitter = assignment?.employee_id
+        ? await this.employeeRepository.findOneBy({
+            id: assignment.employee_id,
+          })
+        : null;
       if (submitter && assignment?.kpi) {
-        this.eventEmitter.emit('kpi_value.submitted_for_dept_approval', { // Event mới
-          kpiValue: savedValue, submitter, kpiName: assignment.kpi.name, assignmentId: assignment.id, kpiId: assignment.kpi_id
+        this.eventEmitter.emit('kpi_value.submitted_for_dept_approval', {
+          // Event mới
+          kpiValue: savedValue,
+          submitter,
+          kpiName: assignment.kpi.name,
+          assignmentId: assignment.id,
+          kpiId: assignment.kpi_id,
         });
       }
     }
@@ -427,10 +471,17 @@ export class KpiValuesService {
     );
     const rejectedValue = await this.kpiValuesRepository.save(kpiValue);
     // Thông báo cho người submit rằng KPI value của họ đã bị từ chối
-    const assignment = rejectedValue.kpiAssignment ?? (await this.kpiAssignmentRepository.findOneBy({ id: rejectedValue.kpi_assigment_id }));
+    const assignment =
+      rejectedValue.kpiAssignment ??
+      (await this.kpiAssignmentRepository.findOneBy({
+        id: rejectedValue.kpi_assigment_id,
+      }));
     if (assignment && assignment.employee_id) {
       this.eventEmitter.emit('kpi_value.rejected_by_user', {
-        kpiValue: rejectedValue, submitterId: assignment.employee_id, kpiName: assignment.kpi?.name || 'N/A', reason
+        kpiValue: rejectedValue,
+        submitterId: assignment.employee_id,
+        kpiName: assignment.kpi?.name || 'N/A',
+        reason,
       });
     }
     return rejectedValue;
@@ -518,19 +569,32 @@ export class KpiValuesService {
         );
       }
       // Thông báo cho người submit rằng KPI value của họ đã được duyệt (nếu người duyệt không phải là người submit)
-      if (assignment && assignment.employee_id && assignment.employee_id !== userId) {
-         this.eventEmitter.emit('kpi_value.approved_by_user', {
-            kpiValue: savedValue,
-            submitterId: assignment.employee_id,
-            kpiName: assignment.kpi?.name || 'N/A',
-         });
+      if (
+        assignment &&
+        assignment.employee_id &&
+        assignment.employee_id !== userId
+      ) {
+        this.eventEmitter.emit('kpi_value.approved_by_user', {
+          kpiValue: savedValue,
+          submitterId: assignment.employee_id,
+          kpiName: assignment.kpi?.name || 'N/A',
+        });
       }
     } else if (savedValue.status === KpiValueStatus.PENDING_MANAGER_APPROVAL) {
       // Emit event khi department đã duyệt và chuyển cho manager duyệt
-      const submitter = assignment?.employee_id ? await this.employeeRepository.findOneBy({ id: assignment.employee_id }) : null;
+      const submitter = assignment?.employee_id
+        ? await this.employeeRepository.findOneBy({
+            id: assignment.employee_id,
+          })
+        : null;
       if (submitter && assignment?.kpi) {
-        this.eventEmitter.emit('kpi_value.submitted_for_manager_approval', { // Event mới
-          kpiValue: savedValue, submitter, kpiName: assignment.kpi.name, assignmentId: assignment.id, kpiId: assignment.kpi_id
+        this.eventEmitter.emit('kpi_value.submitted_for_manager_approval', {
+          // Event mới
+          kpiValue: savedValue,
+          submitter,
+          kpiName: assignment.kpi.name,
+          assignmentId: assignment.id,
+          kpiId: assignment.kpi_id,
         });
       }
     }
@@ -598,10 +662,17 @@ export class KpiValuesService {
     );
     const rejectedValue = await this.kpiValuesRepository.save(kpiValue);
     // Thông báo cho người submit rằng KPI value của họ đã bị từ chối
-    const assignment = rejectedValue.kpiAssignment ?? (await this.kpiAssignmentRepository.findOneBy({ id: rejectedValue.kpi_assigment_id }));
+    const assignment =
+      rejectedValue.kpiAssignment ??
+      (await this.kpiAssignmentRepository.findOneBy({
+        id: rejectedValue.kpi_assigment_id,
+      }));
     if (assignment && assignment.employee_id) {
       this.eventEmitter.emit('kpi_value.rejected_by_user', {
-        kpiValue: rejectedValue, submitterId: assignment.employee_id, kpiName: assignment.kpi?.name || 'N/A', reason
+        kpiValue: rejectedValue,
+        submitterId: assignment.employee_id,
+        kpiName: assignment.kpi?.name || 'N/A',
+        reason,
       });
     }
     return rejectedValue;
@@ -681,12 +752,16 @@ export class KpiValuesService {
       );
     }
     // Thông báo cho người submit rằng KPI value của họ đã được duyệt (nếu người duyệt không phải là người submit)
-    if (assignment && assignment.employee_id && assignment.employee_id !== userId) {
-        this.eventEmitter.emit('kpi_value.approved_by_user', {
-          kpiValue: savedValue,
-          submitterId: assignment.employee_id,
-          kpiName: assignment.kpi?.name || 'N/A',
-        });
+    if (
+      assignment &&
+      assignment.employee_id &&
+      assignment.employee_id !== userId
+    ) {
+      this.eventEmitter.emit('kpi_value.approved_by_user', {
+        kpiValue: savedValue,
+        submitterId: assignment.employee_id,
+        kpiName: assignment.kpi?.name || 'N/A',
+      });
     }
     return savedValue;
   }
@@ -745,7 +820,11 @@ export class KpiValuesService {
     const rejectedValue = await this.kpiValuesRepository.save(kpiValue);
 
     // Notify the submitter that their KPI value has been rejected
-    const assignment = rejectedValue.kpiAssignment ?? await this.kpiAssignmentRepository.findOneBy({ id: rejectedValue.kpi_assigment_id });
+    const assignment =
+      rejectedValue.kpiAssignment ??
+      (await this.kpiAssignmentRepository.findOneBy({
+        id: rejectedValue.kpi_assigment_id,
+      }));
     if (assignment?.employee_id) {
       this.eventEmitter.emit('kpi_value.rejected_by_user', {
         kpiValue: rejectedValue,
@@ -775,7 +854,7 @@ export class KpiValuesService {
 
     if (!kpiValue.kpiAssignment) {
       throw new InternalServerErrorException(
-        `Assignment not found for KPI Value ID ${valueId}. Data might be inconsistent.`
+        `Assignment not found for KPI Value ID ${valueId}. Data might be inconsistent.`,
       );
     }
 
@@ -803,22 +882,45 @@ export class KpiValuesService {
       return false;
     }
 
-    const effectiveTargetSectionId = assignment.assigned_to_section || assignment.employee?.sectionId;
-    const effectiveTargetDepartmentId = assignment.assigned_to_department || assignment.employee?.departmentId;
+    const effectiveTargetSectionId =
+      assignment.assigned_to_section || assignment.employee?.sectionId;
+    const effectiveTargetDepartmentId =
+      assignment.assigned_to_department || assignment.employee?.departmentId;
 
     let hasRequiredRole = false;
 
     switch (action) {
       case 'SECTION_APPROVE':
       case 'SECTION_REJECT':
-        hasRequiredRole = user.role === 'section' && user.sectionId === effectiveTargetSectionId;
+        // Các vai trò được phép bởi controller: 'manager', 'admin', 'department', 'section'
+        if (user.role === 'section') {
+          hasRequiredRole = user.sectionId === effectiveTargetSectionId;
+        } else if (user.role === 'department') {
+          // Trưởng phòng có thể hành động ở cấp section nếu section đó thuộc phòng của họ,
+          // hoặc nếu KPI được giao trực tiếp cho phòng của họ.
+          // Điều này giả định trưởng phòng có thể thực hiện hành động ở cấp section cho các section của mình.
+          // Cần xem xét kỹ logic này dựa trên quy tắc nghiệp vụ chính xác của bạn.
+          hasRequiredRole =
+            (assignment.section?.department.id === user.departmentId &&
+              effectiveTargetSectionId === assignment.section.id) ||
+            (user.departmentId === effectiveTargetDepartmentId &&
+              assignment.assigned_to_department === user.departmentId);
+        } else if (user.role === 'manager' || user.role === 'admin') {
+          hasRequiredRole = true; // Manager/Admin có thể thực hiện hành động ở cấp section
+        }
         break;
       case 'DEPT_APPROVE':
       case 'DEPT_REJECT':
-        hasRequiredRole = user.role === 'department' && user.departmentId === effectiveTargetDepartmentId;
+        // Các vai trò được phép bởi controller: 'manager', 'admin', 'department'
+        if (user.role === 'department') {
+          hasRequiredRole = user.departmentId === effectiveTargetDepartmentId;
+        } else if (user.role === 'manager' || user.role === 'admin') {
+          hasRequiredRole = true; // Manager/Admin có thể thực hiện hành động ở cấp department
+        }
         break;
       case 'MANAGER_APPROVE':
       case 'MANAGER_REJECT':
+        // Các vai trò được phép bởi controller: 'manager', 'admin'
         hasRequiredRole = user.role === 'manager' || user.role === 'admin';
         break;
       default:
@@ -826,7 +928,9 @@ export class KpiValuesService {
     }
 
     if (!hasRequiredRole) {
-      this.logger.warn(`Access denied for UserID: ${userId}, Action: ${action}`);
+      this.logger.warn(
+        `Access denied for UserID: ${userId}, Role: ${user.role}, Action: ${action}, TargetSection: ${effectiveTargetSectionId}, TargetDept: ${effectiveTargetDepartmentId}, UserSection: ${user.sectionId}, UserDept: ${user.departmentId}`,
+      );
     }
 
     return hasRequiredRole;
@@ -902,7 +1006,9 @@ export class KpiValuesService {
           `Applying filter for role: leader, sectionId: ${user.sectionId}`,
         );
         if (!user.sectionId) {
-          this.logger.warn('Leader user has no sectionId, returning empty array.');
+          this.logger.warn(
+            'Leader user has no sectionId, returning empty array.',
+          );
           return [];
         }
         query
@@ -926,29 +1032,32 @@ export class KpiValuesService {
         this.logger.debug(
           `Applying filter for role: manager, departmentId: ${user.departmentId}, sectionId: ${user.sectionId}`,
         );
-        if (!user.departmentId) { // Người dùng department phải có departmentId
-          this.logger.warn('Department user has no departmentId, returning empty array.');
+        if (!user.departmentId) {
+          // Người dùng department phải có departmentId
+          this.logger.warn(
+            'Department user has no departmentId, returning empty array.',
+          );
           return [];
         }
-          query
-            .where('kpiValue.status = :status', {
-              status: KpiValueStatus.PENDING_DEPT_APPROVAL,
-            })
-            .andWhere(
-              new Brackets((qb) => {
-                qb.where('assignment.assigned_to_department = :deptId', {
+        query
+          .where('kpiValue.status = :status', {
+            status: KpiValueStatus.PENDING_DEPT_APPROVAL,
+          })
+          .andWhere(
+            new Brackets((qb) => {
+              qb.where('assignment.assigned_to_department = :deptId', {
+                deptId: user.departmentId,
+              })
+
+                .orWhere('departmentOfAssignedSection.id = :deptId', {
                   deptId: user.departmentId,
                 })
 
-                  .orWhere('departmentOfAssignedSection.id = :deptId', {
-                    deptId: user.departmentId,
-                  })
-
-                  .orWhere('assignedEmployee.departmentId = :deptId', {
-                    deptId: user.departmentId,
-                  });
-              }),
-            );
+                .orWhere('assignedEmployee.departmentId = :deptId', {
+                  deptId: user.departmentId,
+                });
+            }),
+          );
         break;
 
       case 'manager':
@@ -979,7 +1088,9 @@ export class KpiValuesService {
         break;
 
       case 'admin':
-        this.logger.debug('Applying filter for role: admin (all pending types)');
+        this.logger.debug(
+          'Applying filter for role: admin (all pending types)',
+        );
         query.where('kpiValue.status IN (:...statuses)', {
           statuses: [
             KpiValueStatus.PENDING_SECTION_APPROVAL,

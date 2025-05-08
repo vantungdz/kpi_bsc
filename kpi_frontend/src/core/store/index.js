@@ -2,16 +2,18 @@ import { createStore } from "vuex";
 import kpis from "../../features/kpi/store/kpis";
 import departments from "../../features/organization/store/departments";
 import perspectives from "../../features/kpi/store/perspectives";
-import employees from "../../features/employees/store/employees"; 
+import employees from "../../features/employees/store/employees";
 import kpiEvaluations from "../../features/evaluation/store/kpiEvaluations";
 import kpiValues from "../../features/kpi/store/kpiValues";
 import sections from "../../features/organization/store/sections";
 import auth from "../../features/auth/store/auth";
-import notifications from "../../features/notifications/store/notifications"; // Import module mới
+import notifications from "../../features/notifications/store/notifications";
+import dashboard from "../../features/dashboard/store/dashboard"; // Import the dashboard module
 
 const store = createStore({
   modules: {
     auth,
+    dashboard, // Add the dashboard module here
     notifications,
     kpis,
     departments,

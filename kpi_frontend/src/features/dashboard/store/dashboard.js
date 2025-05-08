@@ -6,7 +6,7 @@ const state = {
   loadingKpiAwaitingStats: false,
   kpiAwaitingStatsError: null,
 
-  kpiStatusOverTimeStats: { approvedLastXDays: 0, rejectedLastXDays: 0 },
+  kpiStatusOverTimeStats: [], // Thay đổi thành mảng rỗng
   loadingKpiStatusOverTime: false,
   kpiStatusOverTimeError: null,
 
@@ -44,8 +44,13 @@ const actions = {
     commit("SET_KPI_AWAITING_APPROVAL_STATS", { total: 0, byLevel: [] }); // Reset
     try {
       // API endpoint mới từ dashboard controller
-      const response = await apiClient.get("/dashboard/statistics/kpi-awaiting-approval");
-      commit("SET_KPI_AWAITING_APPROVAL_STATS", response.data || { total: 0, byLevel: [] });
+      const response = await apiClient.get(
+        "/dashboard/statistics/kpi-awaiting-approval"
+      );
+      commit(
+        "SET_KPI_AWAITING_APPROVAL_STATS",
+        response.data || { total: 0, byLevel: [] }
+      );
       return response.data;
     } catch (error) {
       const errorMsg =
@@ -66,10 +71,13 @@ const actions = {
   async fetchKpiStatusOverTimeStats({ commit }, params = { days: 7 }) {
     commit("SET_LOADING_KPI_STATUS_OVER_TIME", true);
     commit("SET_KPI_STATUS_OVER_TIME_ERROR", null);
-    commit("SET_KPI_STATUS_OVER_TIME_STATS", { approvedLastXDays: 0, rejectedLastXDays: 0 }); // Reset
+    commit("SET_KPI_STATUS_OVER_TIME_STATS", []); // Reset thành mảng rỗng
     try {
-      const response = await apiClient.get("/dashboard/statistics/kpi-status-over-time", { params });
-      commit("SET_KPI_STATUS_OVER_TIME_STATS", response.data || { approvedLastXDays: 0, rejectedLastXDays: 0 });
+      const response = await apiClient.get(
+        "/dashboard/statistics/kpi-status-over-time",
+        { params }
+      );
+      commit("SET_KPI_STATUS_OVER_TIME_STATS", response.data || []); // Lưu dữ liệu mảng
       return response.data;
     } catch (error) {
       const errorMsg =
@@ -90,10 +98,18 @@ const actions = {
   async fetchAverageApprovalTimeStats({ commit }) {
     commit("SET_LOADING_AVERAGE_APPROVAL_TIME", true);
     commit("SET_AVERAGE_APPROVAL_TIME_ERROR", null);
-    commit("SET_AVERAGE_APPROVAL_TIME_STATS", { totalAverageTime: null, byLevel: [] }); // Reset
+    commit("SET_AVERAGE_APPROVAL_TIME_STATS", {
+      totalAverageTime: null,
+      byLevel: [],
+    }); // Reset
     try {
-      const response = await apiClient.get("/dashboard/statistics/average-approval-time");
-      commit("SET_AVERAGE_APPROVAL_TIME_STATS", response.data || { totalAverageTime: null, byLevel: [] });
+      const response = await apiClient.get(
+        "/dashboard/statistics/average-approval-time"
+      );
+      commit(
+        "SET_AVERAGE_APPROVAL_TIME_STATS",
+        response.data || { totalAverageTime: null, byLevel: [] }
+      );
       return response.data;
     } catch (error) {
       const errorMsg =
@@ -116,8 +132,14 @@ const actions = {
     commit("SET_TOP_KPI_ACTIVITY_ERROR", null);
     commit("SET_TOP_KPI_ACTIVITY_STATS", { submitted: [], updated: [] }); // Reset
     try {
-      const response = await apiClient.get("/dashboard/statistics/top-kpi-activity", { params });
-      commit("SET_TOP_KPI_ACTIVITY_STATS", response.data || { submitted: [], updated: [] });
+      const response = await apiClient.get(
+        "/dashboard/statistics/top-kpi-activity",
+        { params }
+      );
+      commit(
+        "SET_TOP_KPI_ACTIVITY_STATS",
+        response.data || { submitted: [], updated: [] }
+      );
       return response.data;
     } catch (error) {
       const errorMsg =
