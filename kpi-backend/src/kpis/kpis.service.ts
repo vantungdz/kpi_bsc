@@ -24,7 +24,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { CreateKpiDto } from './dto/create_kpi_dto';
-import { KpiFilterDto } from './dto/filter-kpi.dto'; // Thêm EventEmitter2
+import { KpiFilterDto } from './dto/filter-kpi.dto'; 
 import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 
 interface AssignmentWithLatestValue extends KPIAssignment {
@@ -52,7 +52,7 @@ export class KpisService {
     private readonly kpiAssignmentRepository: Repository<KPIAssignment>,
     @InjectRepository(Employee)
     private readonly employeeRepository: Repository<Employee>,
-    private eventEmitter: EventEmitter2, // Inject EventEmitter2
+    private eventEmitter: EventEmitter2, 
   ) {}
 
   async getKpisByEmployeeId(employeeId: number): Promise<Kpi[]> {
@@ -198,6 +198,7 @@ export class KpisService {
   async getDepartmentKpis(
     departmentId: number,
     filterDto: KpiFilterDto,
+    loggedInUser: Employee, 
   ): Promise<{
     data: Kpi[];
     pagination: {
@@ -208,6 +209,29 @@ export class KpisService {
     };
   }> {
     const { page = 1, limit = 15 } = filterDto;
+    let effectiveDepartmentId: number | null = departmentId;
+
+    if (loggedInUser.role === 'department') {
+      if (!loggedInUser.departmentId)
+        throw new UnauthorizedException(
+          'Department user has no assigned department.',
+        );
+      effectiveDepartmentId = loggedInUser.departmentId;
+      
+      this.logger.log(
+        `Department user ${loggedInUser.id} viewing KPIs for their department ${effectiveDepartmentId}. Original filter departmentId ${departmentId} ignored.`,
+      );
+    } else if (loggedInUser.role === 'section') {
+      if (!loggedInUser.departmentId)
+        throw new UnauthorizedException(
+          'Section user is not part of any department to view department KPIs.',
+        );
+      effectiveDepartmentId = loggedInUser.departmentId;
+      this.logger.log(
+        `Section user ${loggedInUser.id} viewing KPIs for their department ${effectiveDepartmentId}. Original filter departmentId ${departmentId} ignored.`,
+      );
+    }
+    
 
     const query = this.kpisRepository
       .createQueryBuilder('kpi')
@@ -220,26 +244,34 @@ export class KpisService {
       .leftJoinAndSelect('section.department', 'departmentOfSection')
       .where('kpi.deleted_at IS NULL')
       .andWhere('assignment.deleted_at IS NULL')
-      .andWhere(
-        new Brackets((qb) => {
-          qb.where(
-            'kpi.created_by_type = :createdType AND kpi.created_by = :departmentIdFromPath',
-            {
-              createdType: 'department',
-              departmentIdFromPath: departmentId,
-            },
-          )
-            .orWhere(
-              'assignment.assigned_to_department = :departmentIdFromPath',
+
+    if (effectiveDepartmentId !== null && effectiveDepartmentId !== 0) {
+      query.andWhere(
+          new Brackets((qb) => {
+            qb.where(
+              'kpi.created_by_type = :createdType AND kpi.created_by = :deptId',
               {
-                departmentIdFromPath: departmentId,
+                createdType: 'department',
+                deptId: effectiveDepartmentId,
               },
             )
-            .orWhere('employee.departmentId = :departmentIdFromPath', {
-              departmentIdFromPath: departmentId,
-            });
-        }),
-      );
+              .orWhere('assignment.assigned_to_department = :deptId', {
+                deptId: effectiveDepartmentId,
+              })
+              .orWhere('departmentOfSection.id = :deptId', { 
+                deptId: effectiveDepartmentId,
+              })
+              .orWhere('employee.departmentId = :deptId', { 
+                deptId: effectiveDepartmentId,
+              });
+          }),
+        );
+    } else if (loggedInUser.role !== 'admin' && loggedInUser.role !== 'manager') {
+      
+      this.logger.warn(`User role ${loggedInUser.role} (ID: ${loggedInUser.id}) attempted to view all department KPIs. Returning empty.`);
+      return { data: [], pagination: { currentPage: page, totalPages: 0, totalItems: 0, itemsPerPage: limit }};
+    }
+    
 
     if (filterDto.name) {
       query.andWhere('kpi.name ILIKE :name', {
@@ -393,6 +425,7 @@ export class KpisService {
   async getSectionKpis(
     sectionIdParam: number | string,
     filterDto: KpiFilterDto,
+    loggedInUser: Employee, 
   ): Promise<{
     data: KpiWithSectionActuals[];
     pagination: {
@@ -402,9 +435,26 @@ export class KpisService {
       itemsPerPage: number;
     };
   }> {
-    const sectionId = Number(sectionIdParam);
-
     const { page = 1, limit = 15 } = filterDto;
+    let effectiveSectionId: number | null = Number(sectionIdParam);
+    let effectiveDepartmentId: number | null = filterDto.departmentId ?? null;
+
+    if (loggedInUser.role === 'section') {
+      if (!loggedInUser.sectionId) throw new UnauthorizedException("Section user has no assigned section.");
+      effectiveSectionId = loggedInUser.sectionId; 
+      effectiveDepartmentId = loggedInUser.departmentId || null; 
+      this.logger.log(
+        `Section user ${loggedInUser.id} viewing KPIs for their section ${effectiveSectionId} in department ${effectiveDepartmentId}. Original filters sectionId ${sectionIdParam}, departmentId ${filterDto.departmentId} ignored/overridden.`,
+      );
+    } else if (loggedInUser.role === 'department') {
+      if (!loggedInUser.departmentId) throw new UnauthorizedException("Department user has no assigned department.");
+      effectiveDepartmentId = loggedInUser.departmentId; 
+      
+      this.logger.log(
+        `Department user ${loggedInUser.id} viewing KPIs for department ${effectiveDepartmentId}. Section filter: ${effectiveSectionId}. Original department filter ${filterDto.departmentId} ignored.`,
+      );
+    }
+    
 
     const query = this.kpisRepository
       .createQueryBuilder('kpi')
@@ -424,34 +474,41 @@ export class KpisService {
       .where('kpi.deleted_at IS NULL')
       .andWhere('assignment.deleted_at IS NULL');
 
-    if (sectionId === 0) {
-      if (filterDto.departmentId) {
-        query.andWhere(
-          new Brackets((qb) => {
-            qb.where('assignment.assigned_to_department = :deptId', {
-              deptId: filterDto.departmentId,
-            })
-              .orWhere('departmentOfSection.id = :deptId', {
-                deptId: filterDto.departmentId,
-              })
-              .orWhere('departmentOfEmployeeSection.id = :deptId', {
-                deptId: filterDto.departmentId,
-              });
-          }),
-        );
-      } else {
-        query.andWhere('assignment.assigned_to_section IS NOT NULL');
-      }
-    } else {
+    
+    if (effectiveDepartmentId !== null && effectiveDepartmentId !== 0) {
       query.andWhere(
         new Brackets((qb) => {
-          qb.where('assignment.assigned_to_section = :sectionIdFromPath', {
-            sectionIdFromPath: sectionId,
-          }).orWhere('employee.sectionId = :sectionIdFromPath', {
-            sectionIdFromPath: sectionId,
-          });
+          qb.where('departmentOfSection.id = :deptId', { deptId: effectiveDepartmentId })
+            .orWhere('departmentOfEmployeeSection.id = :deptId', { deptId: effectiveDepartmentId });
+          
+          
         }),
       );
+    }
+
+    
+    if (effectiveSectionId !== null && effectiveSectionId !== 0) { 
+      query.andWhere(
+        new Brackets((qb) => {
+          qb.where('assignment.assigned_to_section = :sid', { sid: effectiveSectionId })
+            .orWhere('employee.sectionId = :sid', { sid: effectiveSectionId });
+        }),
+      );
+    } else { 
+      
+      if (loggedInUser.role === 'admin' || loggedInUser.role === 'manager' || loggedInUser.role === 'department') {
+        
+        query.andWhere(
+          new Brackets((qb) => {
+            qb.where('assignment.assigned_to_section IS NOT NULL')
+              .orWhere('employee.sectionId IS NOT NULL');
+          }),
+        );
+      } else if (loggedInUser.role !== 'section') { 
+        this.logger.warn(`User role ${loggedInUser.role} (ID: ${loggedInUser.id}) attempted to view all section KPIs without admin/manager/department rights. Returning empty.`);
+        return { data: [], pagination: { currentPage: page, totalPages: 0, totalItems: 0, itemsPerPage: limit }};
+      }
+      
     }
 
     if (filterDto.name) {
@@ -1086,7 +1143,7 @@ export class KpisService {
             assignment.targetValue =
               Number(targetDepartment.target) ?? Number(kpiData.target);
             assignment.assignedBy = assignedByUserId;
-            assignment.status = KpiDefinitionStatus.DRAFT;
+            assignment.status = savedKpiObject.status; 
             assignmentEntities.push(assignment);
           }
         }
@@ -1100,7 +1157,7 @@ export class KpisService {
             assignment.targetValue =
               Number(targetSection.target) ?? Number(kpiData.target);
             assignment.assignedBy = assignedByUserId;
-            assignment.status = KpiDefinitionStatus.DRAFT;
+            assignment.status = savedKpiObject.status; 
             assignmentEntities.push(assignment);
           }
         }
@@ -1114,7 +1171,7 @@ export class KpisService {
           employeeAssignment.employee_id = assignedToEmployeeId;
           employeeAssignment.targetValue = Number(kpiData.target);
           employeeAssignment.assignedBy = assignedByUserId;
-          employeeAssignment.status = KpiDefinitionStatus.DRAFT;
+          employeeAssignment.status = savedKpiObject.status; 
           assignmentEntities.push(employeeAssignment);
         }
 
@@ -1143,12 +1200,13 @@ export class KpisService {
   async saveUserAssignments(
     kpiId: number,
     assignments: { user_id: number; target: number; weight?: number }[],
+    loggedInUser: Employee, 
   ): Promise<KPIAssignment[]> {
     const kpi = await this.kpisRepository.findOne({ where: { id: kpiId } });
     if (!kpi) {
       throw new NotFoundException(`KPI with ID ${kpiId} not found`);
     }
-    const assignedById = 1;
+    const assignedById = loggedInUser.id; 
     const assignedFromType = kpi.created_by_type;
     const kpiWeight = kpi.weight;
 
@@ -1169,6 +1227,23 @@ export class KpisService {
     const assignmentsToSave: KPIAssignment[] = [];
 
     for (const incomingAssignment of assignments) {
+      
+      if (loggedInUser.role === 'section') {
+        if (!loggedInUser.sectionId) {
+          throw new UnauthorizedException(
+            'You are not assigned to a section and cannot assign KPIs.',
+          );
+        }
+        const employeeToAssign = await this.employeeRepository.findOne({
+          where: { id: incomingAssignment.user_id, sectionId: loggedInUser.sectionId },
+        });
+        if (!employeeToAssign) {
+          throw new UnauthorizedException(
+            `You can only assign KPIs to employees within your own section. User ID ${incomingAssignment.user_id} is not in your section or does not exist.`,
+          );
+        }
+      }
+
       const existingAssignment = existingAssignmentsMap.get(
         incomingAssignment.user_id,
       );
@@ -1185,7 +1260,7 @@ export class KpisService {
           employee_id: incomingAssignment.user_id,
           targetValue: incomingAssignment.target,
           weight: kpiWeight,
-          status: KpiDefinitionStatus.DRAFT,
+          status: kpi.status, 
           assignedFrom: assignedFromType,
           assignedBy: assignedById,
           created_at: new Date(),
@@ -1196,7 +1271,7 @@ export class KpisService {
         } as unknown as import('typeorm').DeepPartial<KPIAssignment>);
         assignmentsToSave.push(newAssignment);
 
-        // Emit event khi gán KPI mới cho nhân viên
+        
         if (newAssignment.assigned_to_employee) {
           this.eventEmitter.emit('kpi.assigned', {
             assignment: newAssignment,
@@ -1289,17 +1364,12 @@ export class KpisService {
             );
           }
 
-          const initialStatus =
-            kpi.status === KpiDefinitionStatus.APPROVED
-              ? KpiDefinitionStatus.APPROVED
-              : KpiDefinitionStatus.DRAFT;
-
           const newAssignment = assignmentRepo.create({
             kpi: { id: kpiId } as Kpi,
             assignedFrom: kpi.created_by_type,
             assignedBy: userId,
             targetValue: assignmentData.targetValue,
-            status: initialStatus,
+            status: kpi.status, 
             assigned_to_department:
               assignmentData.assigned_to_department || null,
             assigned_to_section: assignmentData.assigned_to_section || null,

@@ -319,7 +319,6 @@ const handleDeleteKpi = () => {
       selectedKpiName.value = '';
     })
     .catch(err => {
-      alert(`Delete failed KPI: ${store.getters['kpis/error'] || 'Unknown error'}`);
       console.error('Delete KPI error:', err);
     });
 };

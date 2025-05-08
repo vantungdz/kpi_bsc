@@ -143,26 +143,6 @@ const actions = {
     return dispatch("fetchUsers", { departmentId: departmentId });
   },
 
-  async uploadEmployeeExcel({ commit, dispatch }, file) {
-    commit("SET_LOADING", true);
-    commit("SET_ERROR", null);
-    const formData = new FormData();
-    formData.append("file", file);
-    try {
-      const response = await apiClient.post("/employees/upload", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
-      await dispatch("fetchUsers", { force: true });
-      return response.data;
-    } catch (error) {
-      console.error("Error uploading employee Excel:", error.response || error);
-      commit("SET_ERROR", error);
-      throw error;
-    } finally {
-      commit("SET_LOADING", false);
-    }
-  },
-
   async uploadFile({ commit, dispatch }, file) {
     commit("SET_LOADING", true);
     commit("SET_ERROR", null);

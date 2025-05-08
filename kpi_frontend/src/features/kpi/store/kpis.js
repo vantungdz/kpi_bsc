@@ -310,31 +310,53 @@ const actions = {
   async fetchSectionKpis({ commit }, filterParams) {
     commit("SET_LOADING", true);
     commit("SET_ERROR", null);
-    commit("SET_SECTION_KPIS", null);
+    commit("SET_SECTION_KPIS", null); // Reset data trước khi fetch
 
     try {
-      const sectionIdInPath = filterParams.sectionId;
+      // Lấy sectionIdForApi từ filterParams để đưa vào path của URL.
+      // Tên thuộc tính này (sectionIdForApi) phải khớp với tên bạn đã đặt
+      // trong component KpiListSection.vue khi gửi filtersToSend.
+      const sectionIdInPath = filterParams.sectionIdForApi;
 
+      // Tạo một bản sao của filterParams để làm queryParams.
       const queryParams = { ...filterParams };
-      delete queryParams.sectionId;
+
+      // Xóa sectionIdForApi khỏi queryParams vì nó đã được dùng trong path.
+      delete queryParams.sectionIdForApi;
+
+      // Ánh xạ departmentIdForQuery thành departmentId nếu backend KpiFilterDto mong đợi 'departmentId'.
+      // Đồng thời, xóa departmentIdForQuery khỏi queryParams sau khi đã ánh xạ.
+      if (
+        queryParams.departmentIdForQuery !== undefined &&
+        queryParams.departmentIdForQuery !== null
+      ) {
+        queryParams.departmentId = queryParams.departmentIdForQuery;
+        delete queryParams.departmentIdForQuery;
+      }
+      // Các tham số khác như name, startDate, endDate sẽ được giữ nguyên nếu tên của chúng
+      // trong filterParams (được truyền từ KpiListSection.vue) đã khớp với KpiFilterDto ở backend.
+      // Ví dụ: nếu KpiListSection.vue gửi { name: "abc" }, và KpiFilterDto có thuộc tính `name`,
+      // thì queryParams.name sẽ được gửi đi.
 
       const url = `/kpis/sections/${sectionIdInPath}`;
 
       const response = await apiClient.get(url, {
-        params: queryParams,
+        params: queryParams, // Gửi các filter còn lại dưới dạng query parameters
       });
 
+      // Mutation SET_SECTION_KPIS cần xử lý đúng cấu trúc response.data
+      // (ví dụ: response.data có thể là { data: Kpi[], pagination: {...} } hoặc chỉ là Kpi[])
       commit("SET_SECTION_KPIS", response.data);
 
-      return response.data;
+      return response.data; // Trả về dữ liệu để component có thể sử dụng nếu cần
     } catch (error) {
       console.error(
         "ACTION fetchSectionKpis: Lỗi khi fetch section KPIs:",
         error.response || error
       );
       commit("SET_ERROR", error);
-      commit("SET_SECTION_KPIS", null);
-      throw error;
+      commit("SET_SECTION_KPIS", null); // Đặt lại data nếu có lỗi
+      throw error; // Ném lỗi để component có thể bắt và xử lý
     } finally {
       commit("SET_LOADING", false);
     }
@@ -427,8 +449,18 @@ const actions = {
     commit("SET_ERROR", null);
     try {
       const response = await apiClient.post("/kpis/createKpi", kpiData);
+      const createdKpi = response.data;
 
-      commit("ADD_KPI", response.data);
+      commit("ADD_KPI", createdKpi);
+      if (createdKpi && createdKpi.status === KpiDefinitionStatus.DRAFT) {
+        notification.success({
+          message: "KPI Created Successfully!",
+          description:
+            "KPI has been created successfully. Please wait or contact your manager for approval, then you can submit value.",
+        });
+      } else if (createdKpi) {
+        notification.success({ message: "KPI Created Successfully!" });
+      }
       return response.data;
     } catch (error) {
       commit("SET_ERROR", error);
@@ -464,12 +496,21 @@ const actions = {
       commit("REMOVE_KPI", id);
       notification.success({ message: "KPI deleted successfully!" });
       return true;
-    } catch (error) {
+    } catch (error) {      
       commit("SET_ERROR", error);
       console.error("Error deleting KPI:", error.response || error);
+
+      let errorMessage = "Failed to delete KPI.";
+      let errorDescription = error.response?.data?.message || error.message;
+
+      if (error.response?.status === 403) {
+        errorMessage = "No Permission";
+        errorDescription =
+          "You do not have permission to delete KPI, please contact admin or manager to do this.";
+      }
       notification.error({
-        message: "Failed to delete KPI.",
-        description: error.response?.data?.message || error.message,
+        message: errorMessage,
+        description: errorDescription,
       });
       throw error;
     } finally {

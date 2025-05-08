@@ -475,6 +475,7 @@ const contextSectionId = computed(() => {
 });
 const loadingKpi = computed(() => store.getters["kpis/isLoading"]);
 const kpiDetailData = computed(() => store.getters["kpis/currentKpi"]);
+const currentUser = computed(() => store.getters["auth/user"]);
 const allUserAssignmentsForKpi = computed(
   () => store.getters["kpis/currentKpiUserAssignments"]
 );
@@ -902,62 +903,34 @@ const handleToggleStatus = async (kpiId) => {
   try {
     await store.dispatch('kpis/toggleKpiStatus', { kpiId });
   } catch (error) {
-    console.error("Failed to toggle KPI status from detail component:", error);
+    console.error("Error toggling KPI status:", error);
   }
 };
 
-const getKpiDefinitionStatusText = (status) => {
-  return KpiDefinitionStatusText[status] || status || 'N/A';
-};
-const getKpiDefinitionStatusColor = (status) => {
-  return KpiDefinitionStatusColor[status] || 'default';
-};
+const getKpiDefinitionStatusText = (status) => KpiDefinitionStatusText[status] || 'N/A';
+
+const getKpiDefinitionStatusColor = (status) => KpiDefinitionStatusColor[status] || 'default';
 
 const clearToggleError = () => {
   store.commit('kpis/SET_TOGGLE_KPI_STATUS_ERROR', null);
-}
-
-const isMyDepartment = (deptId) => {
-  if (!deptId || !actualUser.value) return false;
-
-  if (["admin", "manager"].includes(actualUser.value?.role)) return true;
-
-  if (
-    actualUser.value?.role === "department" &&
-    actualUser.value?.department_id === deptId
-  )
-    return true;
-
-  return false;
 };
 
-const isMySection = (sectId) => {
-  if (!sectId || !actualUser.value) return false;
-
-  if (["admin", "manager"].includes(actualUser.value?.role)) return true;
-
-  if (
-    actualUser.value?.role === "section" &&
-    actualUser.value?.section_id === sectId
-  )
-    return true;
-
-  if (
-    actualUser.value?.role === "department" &&
-    actualUser.value?.department_id
-  ) {
-    const allSectionsList = allSections.value;
-
-    return Array.isArray(allSectionsList)
-      ? allSectionsList.some(
-        (s) =>
-          s.id == sectId && s.department_id === actualUser.value.department_id
-      )
-      : false;
+const sectionIdForUserAssignmentsCard = computed(() => {
+  if (effectiveRole.value === 'section' && currentUser.value?.sectionId) {
+    return currentUser.value.sectionId;
   }
 
-  return false;
-};
+  if (contextSectionId.value) {
+    return contextSectionId.value;
+  }
+
+  if (['admin', 'manager'].includes(effectiveRole.value) &&
+      kpiDetailData.value?.created_by_type === 'section' && kpiDetailData.value?.created_by) {
+    return kpiDetailData.value.created_by;
+  }
+
+  return null;
+});
 
 const filteredDirectUserAssignments = computed(() => {
   const allAssignments = kpiDetailData.value?.assignments;
@@ -982,7 +955,7 @@ const filteredDirectUserAssignments = computed(() => {
 
 const filteredSectionUserAssignments = computed(() => {
   const allAssignments = kpiDetailData.value?.assignments;
-  const sectionIdToFilterBy = contextSectionId.value; 
+  const sectionIdToFilterBy = sectionIdForUserAssignmentsCard.value;
 
   if (!sectionIdToFilterBy || !Array.isArray(allAssignments)) {
     return [];
@@ -1029,9 +1002,7 @@ const shouldShowDirectUserAssignmentCard = computed(() => {
     return false;
   }
 
-  const canManageThis =
-    ["admin", "manager"].includes(effectiveRole.value) ||
-    (effectiveRole.value === "department" && isMyDepartment(departmentId));
+  const canManageThis = ["admin", "manager"].includes(effectiveRole.value) || (effectiveRole.value === "department" && actualUser.value?.department_id === departmentId);
 
   const finalResult =
     isAllowedRole && canManageThis && deptHasSections === false;
@@ -1041,48 +1012,32 @@ const shouldShowDirectUserAssignmentCard = computed(() => {
 
 const shouldShowSectionUserAssignmentCard = computed(() => {
   const kpi = kpiDetailData.value;
+  const userRole = effectiveRole.value;
+  const user = currentUser.value;
 
-  const hasSectionContext = !!contextSectionId.value;
+  if (!kpi || !userRole || !user) return false;
 
-  const isCorrectTypeOrContext =
-    kpi?.created_by_type === "section" || hasSectionContext;
-
-  if (!kpi || !isCorrectTypeOrContext) {
-    return false;
-  }
-  const isAllowedRole = ["admin", "manager", "department", "section"].includes(
-    effectiveRole.value
-  );
-  if (!isAllowedRole) {
-    return false;
-  }
-  const sectionIdToCheck = contextSectionId.value || kpi.created_by;
-  if (!sectionIdToCheck) {
-    return false;
-  }
-  const allSectionsList = Array.isArray(allSections.value)
-    ? allSections.value
-    : [];
-  const sectionInfo = allSectionsList.find((s) => s.id == sectionIdToCheck);
-  if (!sectionInfo) {
-    return false;
-  }
-  let canManageThis = false;
-  if (["admin", "manager"].includes(effectiveRole.value)) {
-    canManageThis = true;
-  } else if (
-    effectiveRole.value === "department" &&
-    isMyDepartment(sectionInfo.department_id)
-  ) {
-    canManageThis = true;
-  } else if (
-    effectiveRole.value === "section" &&
-    isMySection(sectionIdToCheck)
-  ) {
-    canManageThis = true;
+  if (userRole === 'section') {
+    return !!user.sectionId;
   }
 
-  return canManageThis;
+  if (userRole === 'admin' || userRole === 'manager') {
+    return !!sectionIdForUserAssignmentsCard.value;
+  }
+
+  if (userRole === 'department') {
+    const relevantSectionId = sectionIdForUserAssignmentsCard.value;
+    if (relevantSectionId && user.departmentId) {
+      const sectionInfo = allSections.value.find(s => s.id == relevantSectionId); // Use == for potential type mismatch if IDs are strings vs numbers
+      if (sectionInfo) {
+        const sectionDeptId = sectionInfo.department_id || sectionInfo.department?.id;
+        return sectionDeptId == user.departmentId; // Use == for potential type mismatch
+      }
+    }
+    return false;
+  }
+
+  return false;
 });
 
 const assignableUserOptions = computed(() => {
@@ -1160,29 +1115,18 @@ const modalUserDataSource = computed(() => {
 });
 
 const assignUserModalTitle = computed(() => {
-  if (contextSectionId.value) {
-    const contextSection = allSections.value.find(
-      (s) => s.id == contextSectionId.value
+  const sectionIdForTitle = sectionIdForUserAssignmentsCard.value;
+
+  if (sectionIdForTitle) {
+    const sectionInfo = allSections.value.find(
+      (s) => s.id == sectionIdForTitle
     );
-    const sectionName = contextSection?.name || `ID ${contextSectionId.value}`;
-    return `Assign KPI to Users Section ${sectionName}`;
+    const sectionName = sectionInfo?.name || `ID ${sectionIdForTitle}`;
+    return `Assign KPI to Users in Section: ${sectionName}`;
   }
 
   if (isEditingUserAssignment.value) {
     return "Edit User Assignment";
-  }
-  if (kpiDetailData.value?.created_by_type === "section") {
-    const creatingSectionId = kpiDetailData.value.created_by;
-    const creatingSection = allSections.value.find(
-      (section) => section.id == creatingSectionId
-    );
-
-    const sectionName = creatingSection?.name || "";
-    return `Assign KPI to Users(Section: ${sectionName})`;
-  }
-  if (kpiDetailData.value?.created_by_type === "department") {
-    return `Assign KPI Directly to Users(Dept: ${kpiDetailData.value.department?.name || ""
-      })`;
   }
   return "Assign KPI to Users";
 });

@@ -15,6 +15,8 @@ import ForgotPasswordPage from "../../features/auth/views/ForgotPasswordPage.vue
 import KpiValueApprovalList from "../../features/kpi/views/KpiValueApprovalList.vue";
 import UserProfile from "../../features/employees/views/UserProfile.vue";
 import EmployeeList from "../../features/employees/views/EmployeeList.vue";
+import DashBoard from "../../features/dashboard/DashBoard.vue"; // Đây là trang tổng quan
+import KpiProcessStatistics from "../../features/dashboard/views/KpiProcessStatistics.vue"; // Trang chi tiết thống kê KPI
 
 const routes = [
   {
@@ -22,6 +24,18 @@ const routes = [
     name: "LoginPage",
     component: LoginPage,
     meta: { requiresAuth: false },
+  },
+  {
+    path: "/dashboard",
+    name: "DashBoard", // Route cho trang tổng quan
+    component: DashBoard, 
+    meta: { requiresAuth: true, roles: ["admin", "manager"] }, // Only admin and manager can access
+  },
+  {
+    path: "/dashboard/kpi-process-stats", // Route cho trang chi tiết thống kê quy trình KPI
+    name: "KpiProcessStats",
+    component: KpiProcessStatistics,
+    meta: { requiresAuth: true, roles: ["admin", "manager"] }, 
   },
   {
     path: "/profile",
@@ -56,7 +70,7 @@ const routes = [
         path: "department",
         name: "KpiListDepartment",
         component: KpiListDepartment,
-        meta: { roles: ["admin", "manager"] },
+        meta: { roles: ["admin", "manager", "department"] },
       },
       {
         path: "department-create",
@@ -69,7 +83,7 @@ const routes = [
         path: "section",
         name: "KpiListSection",
         component: KpiListSection,
-        meta: { roles: ["admin", "manager", "leader", "department"] },
+        meta: { roles: ["admin", "manager", "section", "department"] },
       },
       {
         path: "section-create",
@@ -99,7 +113,6 @@ const routes = [
     component: KpiValueApprovalList,
     meta: {
       requiresAuth: true,
-      roles: ["leader", "manager", "admin"],
     },
   },
   {
@@ -118,7 +131,7 @@ const routes = [
     path: "/employees",
     name: "EmployeeList",
     component: EmployeeList,
-    meta: { requiresAuth: true, roles: ["admin"] },
+    meta: { requiresAuth: true, roles: ["admin" , "manager"] },
   },
 ];
 

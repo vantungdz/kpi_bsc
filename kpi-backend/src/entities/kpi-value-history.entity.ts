@@ -5,7 +5,7 @@ import {
   ManyToOne,
   JoinColumn,
 } from 'typeorm';
-import { KpiValue } from './kpi-value.entity';
+import { KpiValue, KpiValueStatus } from './kpi-value.entity'; // Import KpiValueStatus
 import { Employee } from './employee.entity';
 import { KPIAssignment } from './kpi-assignment.entity';
 
@@ -45,6 +45,22 @@ export class KpiValueHistory {
 
   @Column({ type: 'text', nullable: true })
   reason: string;
+
+  @Column({
+    type: 'enum',
+    enum: KpiValueStatus,
+    nullable: true,
+    name: 'status_before',
+  })
+  status_before: KpiValueStatus;
+
+  @Column({
+    type: 'enum',
+    enum: KpiValueStatus,
+    nullable: true,
+    name: 'status_after',
+  })
+  status_after: KpiValueStatus;
 
   @Column()
   action: string; // 'CREATE', 'UPDATE', 'DELETE'

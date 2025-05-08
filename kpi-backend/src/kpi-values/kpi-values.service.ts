@@ -172,8 +172,33 @@ export class KpiValuesService {
         let historyAction: string;
         const currentTimestamp = new Date();
         const projectDetailsObject = projectDetails;
-        const initialStatusAfterSubmit =
-          KpiValueStatus.PENDING_SECTION_APPROVAL;
+
+        const submitter = await transactionalEntityManager.getRepository(Employee).findOneBy({ id: userId });
+        if (!submitter) {
+          throw new UnauthorizedException('Submitter information not found.');
+        }
+
+        let initialStatusAfterSubmit: KpiValueStatus;
+
+        if (submitter.role === 'department') {
+          initialStatusAfterSubmit = KpiValueStatus.PENDING_MANAGER_APPROVAL;
+          this.logger.log(`Submitter role is 'department', next status: PENDING_MANAGER_APPROVAL`);
+        } else if (submitter.role === 'section') {
+          initialStatusAfterSubmit = KpiValueStatus.PENDING_DEPT_APPROVAL;
+          this.logger.log(`Submitter role is 'section', next status: PENDING_DEPT_APPROVAL`);
+        } else { // Default for 'employee' or other roles considered lower
+          if (submitter.sectionId) { // Employee in a section
+            initialStatusAfterSubmit = KpiValueStatus.PENDING_SECTION_APPROVAL;
+            this.logger.log(`Submitter role '${submitter.role}' in section ${submitter.sectionId}, next status: PENDING_SECTION_APPROVAL`);
+          } else if (submitter.departmentId) { // Employee in a department but not a specific section (or section structure not used)
+            initialStatusAfterSubmit = KpiValueStatus.PENDING_DEPT_APPROVAL;
+            this.logger.log(`Submitter role '${submitter.role}' in department ${submitter.departmentId} (no section), next status: PENDING_DEPT_APPROVAL`);
+          } else { // Employee not in a section or department (e.g., direct report to manager/admin)
+            initialStatusAfterSubmit = KpiValueStatus.PENDING_MANAGER_APPROVAL;
+            this.logger.log(`Submitter role '${submitter.role}' (no section/dept), next status: PENDING_MANAGER_APPROVAL`);
+          }
+        }
+
         const statusBeforeSubmit = existingRecord?.status;
 
         if (existingRecord) {
@@ -217,15 +242,22 @@ export class KpiValuesService {
         await historyRepo.save(historyEntry);
 
         // Emit event khi nhân viên submit và cần section duyệt
-        if (savedKpiValue.status === KpiValueStatus.PENDING_SECTION_APPROVAL) {
-          const submitter = await transactionalEntityManager.getRepository(Employee).findOneBy({ id: userId });
-          if (submitter && assignment.kpi) {
+        if (assignment.kpi) { // Ensure kpi is loaded
+          if (savedKpiValue.status === KpiValueStatus.PENDING_SECTION_APPROVAL) {
             this.eventEmitter.emit('kpi_value.submitted_for_section_approval', {
               kpiValue: savedKpiValue,
               submitter: submitter,
               kpiName: assignment.kpi.name,
               assignmentId: assignment.id, // Thêm assignmentId để dễ truy vấn
               kpiId: assignment.kpi_id // Thêm kpiId
+            });
+          } else if (savedKpiValue.status === KpiValueStatus.PENDING_DEPT_APPROVAL) {
+            this.eventEmitter.emit('kpi_value.submitted_for_dept_approval', {
+              kpiValue: savedKpiValue, submitter, kpiName: assignment.kpi.name, assignmentId: assignment.id, kpiId: assignment.kpi_id
+            });
+          } else if (savedKpiValue.status === KpiValueStatus.PENDING_MANAGER_APPROVAL) {
+            this.eventEmitter.emit('kpi_value.submitted_for_manager_approval', {
+              kpiValue: savedKpiValue, submitter, kpiName: assignment.kpi.name, assignmentId: assignment.id, kpiId: assignment.kpi_id
             });
           }
         }
@@ -376,15 +408,9 @@ export class KpiValuesService {
     if (user.role === 'admin' || user.role === 'manager') {
       newStatus = KpiValueStatus.REJECTED_BY_MANAGER;
       logAction = 'REJECT_MANAGER';
-      console.log(
-        `[rejectValueBySection] Admin/Manager (ID: ${userId}) rejecting at Section level. Final Status: REJECTED_BY_MANAGER. Logging Action: ${logAction}`,
-      );
     } else {
       newStatus = KpiValueStatus.REJECTED_BY_SECTION;
       logAction = 'REJECT_SECTION';
-      console.log(
-        `[rejectValueBySection] Leader (ID: ${userId}) rejecting at Section level. Final Status: REJECTED_BY_SECTION. Logging Action: ${logAction}`,
-      );
     }
 
     kpiValue.status = newStatus;
@@ -398,10 +424,6 @@ export class KpiValuesService {
       logAction,
       userId,
       reason,
-    );
-
-    console.log(
-      `[rejectValueBySection] SAVING KpiValue ID ${kpiValue.id} with NEW status: ${kpiValue.status}`,
     );
     const rejectedValue = await this.kpiValuesRepository.save(kpiValue);
     // Thông báo cho người submit rằng KPI value của họ đã bị từ chối
@@ -433,7 +455,7 @@ export class KpiValuesService {
     );
     if (!canApprove) {
       throw new UnauthorizedException(
-        'User does not have permission for Section level action.',
+        'User does not have permission for Department level approval.',
       );
     }
 
@@ -533,7 +555,7 @@ export class KpiValuesService {
     );
     if (!canReject) {
       throw new UnauthorizedException(
-        'User does not have permission to reject at Department level.',
+        'User does not have permission for Department level rejection.',
       );
     }
 
@@ -557,13 +579,7 @@ export class KpiValuesService {
     if (user.role === 'admin' || user.role === 'manager') {
       newStatus = KpiValueStatus.REJECTED_BY_MANAGER;
       logAction = 'REJECT_MANAGER';
-      console.log(
-        `[rejectValueByDepartment] Admin/Manager (ID: ${userId}) rejecting at/before Dept level. Final Status: REJECTED_BY_MANAGER. Logging Action: ${logAction}`,
-      );
     } else {
-      console.warn(
-        `[rejectValueByDepartment] Unexpected user role (${user.role}) attempting Dept rejection. Logging as REJECT_DEPT.`,
-      );
       newStatus = KpiValueStatus.REJECTED_BY_DEPT;
       logAction = 'REJECT_DEPT';
     }
@@ -580,10 +596,6 @@ export class KpiValuesService {
       userId,
       reason,
     );
-
-    console.log(
-      `[rejectValueByDepartment] SAVING KpiValue ID ${kpiValue.id} with NEW status: ${kpiValue.status}`,
-    );
     const rejectedValue = await this.kpiValuesRepository.save(kpiValue);
     // Thông báo cho người submit rằng KPI value của họ đã bị từ chối
     const assignment = rejectedValue.kpiAssignment ?? (await this.kpiAssignmentRepository.findOneBy({ id: rejectedValue.kpi_assigment_id }));
@@ -599,22 +611,13 @@ export class KpiValuesService {
     valueId: number,
     userId: number,
   ): Promise<KpiValue> {
-    console.log(
-      `--- approveValueByManager CALLED by UserID: ${userId} for ValueID: ${valueId} ---`,
-    );
     const kpiValue = await this.findKpiValueForWorkflow(valueId);
     const statusBefore = kpiValue.status;
     const user = await this.employeeRepository.findOneBy({ id: userId });
 
     if (!user) {
-      console.error(
-        `[approveValueByManager] Approving user ${userId} not found.`,
-      );
       throw new UnauthorizedException('Approving user not found.');
     }
-    console.log(
-      `[approveValueByManager] Approver Info: ID=${user.id}, Role=${user.role}`,
-    );
 
     const canApprove = await this.checkPermission(
       userId,
@@ -622,9 +625,6 @@ export class KpiValuesService {
       'MANAGER_APPROVE',
     );
     if (!canApprove) {
-      console.error(
-        `[approveValueByManager] Permission DENIED by checkPermission.`,
-      );
       throw new UnauthorizedException(
         'User does not have permission for Section level action.',
       );
@@ -637,20 +637,11 @@ export class KpiValuesService {
         KpiValueStatus.PENDING_SECTION_APPROVAL,
       ].includes(kpiValue.status)
     ) {
-      console.error(
-        `[approveValueByManager] Invalid current status: ${kpiValue.status}`,
-      );
       throw new BadRequestException(
         `Cannot perform final Manager Approval on value with status '${kpiValue.status}'. Expected a pending status.`,
       );
     }
-
     const newStatus = KpiValueStatus.APPROVED;
-
-    console.log(`[approveValueByManager] Status Before: ${statusBefore}`);
-    console.log(
-      `[approveValueByManager] Determined New Status based on role '${user.role}': ${newStatus}`,
-    );
 
     kpiValue.status = newStatus;
     kpiValue.updated_at = new Date();
@@ -664,15 +655,7 @@ export class KpiValuesService {
       userId,
     );
 
-    console.log(
-      `[approveValueByManager] Attempting to SAVE KpiValue ID ${kpiValue.id} with NEW status: ${kpiValue.status}`,
-    );
-
     const savedValue = await this.kpiValuesRepository.save(kpiValue);
-    this.logger.log(
-      `[approveValueByManager] Saved KpiValue ID ${savedValue.id} with status ${savedValue.status}`,
-    );
-
     await this.logWorkflowHistory(
       savedValue,
       statusBefore,
@@ -747,10 +730,6 @@ export class KpiValuesService {
 
     const newStatus = KpiValueStatus.REJECTED_BY_MANAGER;
     const logAction = 'REJECT_MANAGER';
-    console.log(
-      `[rejectValueByManager] Manager/Admin (ID: ${userId}) performing final rejection. Setting status to REJECTED_BY_MANAGER. Logging Action: ${logAction}`,
-    );
-
     kpiValue.status = newStatus;
     kpiValue.rejection_reason = reason;
     kpiValue.updated_at = new Date();
@@ -763,18 +742,19 @@ export class KpiValuesService {
       userId,
       reason,
     );
-
-    console.log(
-      `[rejectValueByManager] SAVING KpiValue ID ${kpiValue.id} with NEW status: ${kpiValue.status}`,
-    );
     const rejectedValue = await this.kpiValuesRepository.save(kpiValue);
-    // Thông báo cho người submit rằng KPI value của họ đã bị từ chối
-    const assignment = rejectedValue.kpiAssignment ?? (await this.kpiAssignmentRepository.findOneBy({ id: rejectedValue.kpi_assigment_id }));
-    if (assignment && assignment.employee_id) {
+
+    // Notify the submitter that their KPI value has been rejected
+    const assignment = rejectedValue.kpiAssignment ?? await this.kpiAssignmentRepository.findOneBy({ id: rejectedValue.kpi_assigment_id });
+    if (assignment?.employee_id) {
       this.eventEmitter.emit('kpi_value.rejected_by_user', {
-        kpiValue: rejectedValue, submitterId: assignment.employee_id, kpiName: assignment.kpi?.name || 'N/A', reason
+        kpiValue: rejectedValue,
+        submitterId: assignment.employee_id,
+        kpiName: assignment.kpi?.name || 'N/A',
+        reason,
       });
     }
+
     return rejectedValue;
   }
 
@@ -788,14 +768,17 @@ export class KpiValuesService {
         'kpiAssignment.section.department',
       ],
     });
+
     if (!kpiValue) {
       throw new NotFoundException(`KPI Value with ID ${valueId} not found.`);
     }
+
     if (!kpiValue.kpiAssignment) {
       throw new InternalServerErrorException(
-        `Assignment not found for KPI Value ID ${valueId}. Data might be inconsistent.`,
+        `Assignment not found for KPI Value ID ${valueId}. Data might be inconsistent.`
       );
     }
+
     return kpiValue;
   }
 
@@ -804,16 +787,11 @@ export class KpiValuesService {
     assignmentId: number,
     action: string,
   ): Promise<boolean> {
-    console.log(
-      `--- checkPermission CALLED --- UserID: ${userId}, AssignmentID: ${assignmentId}, Action: ${action}`,
-    );
-
     const user = await this.employeeRepository.findOneBy({ id: userId });
     if (!user) {
-      console.error(`Permission check failed: User ${userId} not found.`);
+      this.logger.warn(`User with ID ${userId} not found.`);
       return false;
     }
-    console.log(`User found:`, JSON.stringify(user, null, 2));
 
     const assignment = await this.kpiAssignmentRepository.findOne({
       where: { id: assignmentId },
@@ -821,142 +799,34 @@ export class KpiValuesService {
     });
 
     if (!assignment) {
-      console.error(
-        `Permission check failed: Assignment ${assignmentId} not found.`,
-      );
+      this.logger.warn(`Assignment with ID ${assignmentId} not found.`);
       return false;
     }
-    console.log(`Assignment found:`, JSON.stringify(assignment, null, 2));
 
-    let effectiveTargetSectionId: number | null | undefined =
-      assignment.assigned_to_section;
-    let effectiveTargetDepartmentId: number | null | undefined =
-      assignment.assigned_to_department;
-
-    if (assignment.assigned_to_employee && assignment.employee) {
-      if (
-        effectiveTargetSectionId === null ||
-        effectiveTargetSectionId === undefined
-      ) {
-        effectiveTargetSectionId = assignment.employee.sectionId;
-      }
-
-      if (
-        effectiveTargetDepartmentId === null ||
-        effectiveTargetDepartmentId === undefined
-      ) {
-        effectiveTargetDepartmentId = assignment.employee.departmentId;
-      }
-    } else if (
-      assignment.assigned_to_section &&
-      assignment.section?.department?.id
-    ) {
-      if (
-        effectiveTargetDepartmentId === null ||
-        effectiveTargetDepartmentId === undefined
-      ) {
-        effectiveTargetDepartmentId = assignment.section.department.id;
-      }
-    }
-
-    console.log(
-      `Effective Target Section ID: ${effectiveTargetSectionId}, Effective Target Department ID: ${effectiveTargetDepartmentId}`,
-    );
+    const effectiveTargetSectionId = assignment.assigned_to_section || assignment.employee?.sectionId;
+    const effectiveTargetDepartmentId = assignment.assigned_to_department || assignment.employee?.departmentId;
 
     let hasRequiredRole = false;
 
     switch (action) {
       case 'SECTION_APPROVE':
       case 'SECTION_REJECT':
-        if (!effectiveTargetSectionId) {
-          console.error(
-            `Permission Check [${action}]: No effective target section ID found for assignment ${assignmentId}. Denying.`,
-          );
-          hasRequiredRole = false;
-        } else {
-          const isLeaderOfSection =
-            user.role === 'leader' &&
-            user.sectionId === effectiveTargetSectionId;
-          const isManager = user.role === 'manager';
-          const isAdmin = user.role === 'admin';
-          hasRequiredRole = isLeaderOfSection || isManager || isAdmin;
-
-          console.log(`--- Permission Check [${action}] Details ---`);
-          console.log(
-            `- User Role: ${user.role}, User Section: ${user.sectionId}`,
-          );
-          console.log(
-            `- Effective Target Section ID: ${effectiveTargetSectionId}`,
-          );
-          console.log(`- Is Leader of Section? ${isLeaderOfSection}`);
-          console.log(`- Is Manager? ${isManager}`);
-          console.log(`- Is Admin? ${isAdmin}`);
-          console.log(
-            `- Final Permission Result for Section Action: ${hasRequiredRole}`,
-          );
-        }
+        hasRequiredRole = user.role === 'section' && user.sectionId === effectiveTargetSectionId;
         break;
-
       case 'DEPT_APPROVE':
       case 'DEPT_REJECT':
-        if (!effectiveTargetDepartmentId) {
-          console.error(
-            `Permission Check [${action}]: No effective target department ID found for assignment ${assignmentId}. Denying.`,
-          );
-          hasRequiredRole = false;
-        } else {
-          const isManagerOfDept =
-            user.role === 'manager' &&
-            user.departmentId === effectiveTargetDepartmentId;
-          const isAdmin = user.role === 'admin';
-          hasRequiredRole = isManagerOfDept || isAdmin;
-
-          console.log(`--- Permission Check [${action}] Details ---`);
-          console.log(
-            `- User Role: ${user.role}, User Department: ${user.departmentId}`,
-          );
-          console.log(
-            `- Effective Target Department ID: ${effectiveTargetDepartmentId}`,
-          );
-          console.log(`- Is Manager of Department? ${isManagerOfDept}`);
-          console.log(`- Is Admin? ${isAdmin}`);
-          console.log(
-            `- Final Permission Result for Dept Action: ${hasRequiredRole}`,
-          );
-        }
+        hasRequiredRole = user.role === 'department' && user.departmentId === effectiveTargetDepartmentId;
         break;
-
       case 'MANAGER_APPROVE':
       case 'MANAGER_REJECT':
-        const isManager = user.role === 'manager';
-        const isAdmin = user.role === 'admin';
-        hasRequiredRole = isManager || isAdmin;
-
-        console.log(`--- Permission Check [${action}] Details ---`);
-        console.log(`- User Role: ${user.role}`);
-        console.log(`- Is Manager? ${isManager}`);
-        console.log(`- Is Admin? ${isAdmin}`);
-        console.log(
-          `- Final Permission Result for Manager Action: ${hasRequiredRole}`,
-        );
+        hasRequiredRole = user.role === 'manager' || user.role === 'admin';
         break;
-
       default:
-        console.warn(
-          `Permission check: Unknown action '${action}'. Denying access.`,
-        );
-        hasRequiredRole = false;
-        break;
+        this.logger.warn(`Unknown action '${action}' for permission check.`);
     }
 
     if (!hasRequiredRole) {
-      console.warn(
-        `--- Access DENIED by checkPermission --- UserID: ${userId}, AssignmentID: ${assignmentId}, Action: ${action}`,
-      );
-    } else {
-      console.log(
-        `--- Access GRANTED by checkPermission --- UserID: ${userId}, AssignmentID: ${assignmentId}, Action: ${action}`,
-      );
+      this.logger.warn(`Access denied for UserID: ${userId}, Action: ${action}`);
     }
 
     return hasRequiredRole;
@@ -1005,12 +875,7 @@ export class KpiValuesService {
   }
 
   async getPendingApprovals(user: Employee): Promise<KpiValue[]> {
-    console.log(
-      '--- getPendingApprovals called for user:',
-      JSON.stringify(user, null, 2),
-    );
     if (!user || !user.role) {
-      console.error('getPendingApprovals: Invalid user object received.');
       throw new UnauthorizedException(
         'Invalid user data for fetching pending approvals.',
       );
@@ -1032,12 +897,12 @@ export class KpiValuesService {
       .leftJoinAndSelect('kpi.perspective', 'perspective');
 
     switch (user.role) {
-      case 'leader':
-        console.log(
+      case 'section':
+        this.logger.debug(
           `Applying filter for role: leader, sectionId: ${user.sectionId}`,
         );
         if (!user.sectionId) {
-          console.warn('Leader user has no sectionId, returning empty array.');
+          this.logger.warn('Leader user has no sectionId, returning empty array.');
           return [];
         }
         query
@@ -1057,13 +922,14 @@ export class KpiValuesService {
           );
         break;
 
-      case 'manager':
-        console.log(
+      case 'department': // Thêm case riêng cho vai trò 'department'
+        this.logger.debug(
           `Applying filter for role: manager, departmentId: ${user.departmentId}, sectionId: ${user.sectionId}`,
         );
-
-        if (user.departmentId && !user.sectionId) {
-          console.log('Applying filter for Dept Manager');
+        if (!user.departmentId) { // Người dùng department phải có departmentId
+          this.logger.warn('Department user has no departmentId, returning empty array.');
+          return [];
+        }
           query
             .where('kpiValue.status = :status', {
               status: KpiValueStatus.PENDING_DEPT_APPROVAL,
@@ -1083,16 +949,37 @@ export class KpiValuesService {
                   });
               }),
             );
-        } else {
-          console.log('Applying filter for Final Manager');
-          query.where('kpiValue.status = :status', {
-            status: KpiValueStatus.PENDING_MANAGER_APPROVAL,
-          });
-        }
+        break;
+
+      case 'manager':
+        this.logger.debug(
+          `Applying filter for role: manager. DepartmentId: ${user.departmentId}, SectionId: ${user.sectionId}`,
+        );
+        // Manager duyệt các mục đã được department duyệt (PENDING_MANAGER_APPROVAL)
+        query.where('kpiValue.status = :status', {
+          status: KpiValueStatus.PENDING_MANAGER_APPROVAL,
+        });
+        // Nếu manager cũng là người quản lý một phòng ban cụ thể và có thể duyệt PENDING_DEPT_APPROVAL
+        // của phòng ban đó, bạn có thể thêm logic orWhere tương tự như case 'department'.
+        // Ví dụ:
+        // if (user.departmentId) {
+        //   query.orWhere(
+        //       new Brackets((qb) => {
+        //           qb.where('kpiValue.status = :deptStatus', { deptStatus: KpiValueStatus.PENDING_DEPT_APPROVAL})
+        //             .andWhere(
+        //               new Brackets((subQb) => {
+        //                   subQb.where('assignedEmployee.departmentId = :deptId', { deptId: user.departmentId })
+        //                   .orWhere('departmentOfAssignedSection.id = :deptId', { deptId: user.departmentId })
+        //                   .orWhere('assignment.assigned_to_department = :deptId', { deptId: user.departmentId });
+        //               })
+        //             );
+        //       })
+        //   );
+        // }
         break;
 
       case 'admin':
-        console.log('Applying filter for role: admin (all pending)');
+        this.logger.debug('Applying filter for role: admin (all pending types)');
         query.where('kpiValue.status IN (:...statuses)', {
           statuses: [
             KpiValueStatus.PENDING_SECTION_APPROVAL,
@@ -1103,7 +990,7 @@ export class KpiValuesService {
         break;
 
       default:
-        console.log(
+        this.logger.warn(
           `No pending approvals logic defined for role: ${user.role}`,
         );
         return [];
@@ -1112,13 +999,13 @@ export class KpiValuesService {
     query.orderBy('kpiValue.timestamp', 'ASC');
 
     try {
-      console.log('SQL Query:', query.getSql());
-      console.log('Parameters:', query.getParameters());
+      this.logger.debug('SQL Query:', query.getSql());
+      this.logger.debug('Parameters:', query.getParameters());
       const results = await query.getMany();
-      console.log(`Found ${results.length} pending approvals.`);
+      this.logger.debug(`Found ${results.length} pending approvals.`);
       return results;
     } catch (error) {
-      console.error('Error executing getPendingApprovals query:', error);
+      this.logger.error('Error executing getPendingApprovals query:', error);
       throw error;
     }
   }

@@ -5,32 +5,36 @@
     </div>
 
     <a-menu theme="light" mode="inline" class="menu-list">
-      <a-menu-item key="1" v-if="effectiveRole">
+      <a-menu-item key="dashboard" v-if="canViewDashboard">
+        <router-link to="/dashboard">Dashboard</router-link>
+      </a-menu-item>
+
+      <a-menu-item key="performance" v-if="effectiveRole">
         <router-link to="/performance">Performance Objectives</router-link>
       </a-menu-item>
 
-      <a-menu-item key="2" v-if="canViewCompanyLevel">
+      <a-menu-item key="employees" v-if="isAdmin">
+        <router-link to="/employees">Employee List</router-link>
+      </a-menu-item>
+
+      <a-menu-item key="kpis-company" v-if="canViewCompanyLevel">
         <router-link to="/kpis/company">Company KPI List</router-link>
       </a-menu-item>
 
-      <a-menu-item key="3" v-if="canViewDepartmentLevel">
+      <a-menu-item key="kpis-department" v-if="canViewDepartmentLevel">
         <router-link to="/kpis/department">Department KPI List</router-link>
       </a-menu-item>
 
-      <a-menu-item key="4" v-if="canViewSectionLevel">
+      <a-menu-item key="kpis-section" v-if="canViewSectionLevel">
         <router-link to="/kpis/section">Section KPI List</router-link>
       </a-menu-item>
 
-      <a-menu-item key="5" v-if="canViewApprovals">
+      <a-menu-item key="approvals" v-if="canViewApprovals">
         <router-link to="/approvals">Duyệt Kết quả KPI</router-link>
       </a-menu-item>
 
-      <a-menu-item key="6" v-if="effectiveRole">
+      <a-menu-item key="personal-kpis" v-if="effectiveRole">
         <router-link to="/personal">My Personal KPIs</router-link>
-      </a-menu-item>
-
-      <a-menu-item key="7" v-if="isAdmin">
-        <router-link to="/employees">Employee List</router-link>
       </a-menu-item>
 
       <a-sub-menu key="admin" v-if="isAdmin">
@@ -71,12 +75,17 @@ const effectiveRole = computed(() => store.getters["auth/effectiveRole"]);
 // Check if user is admin
 const isAdmin = computed(() => effectiveRole.value === "admin");
 
+// Permission for viewing Dashboard (example: admin and manager)
+const canViewDashboard = computed(() =>
+  ["admin", "manager"].includes(effectiveRole.value)
+);
+
 // Permissions for viewing different KPI levels
 const canViewCompanyLevel = computed(() =>
-  ["admin", "manager", "department", "section"].includes(effectiveRole.value)
+  ["admin", "manager"].includes(effectiveRole.value)
 );
 const canViewDepartmentLevel = computed(() =>
-  ["admin", "manager", "department", "section"].includes(effectiveRole.value)
+  ["admin", "manager", "department"].includes(effectiveRole.value)
 );
 const canViewSectionLevel = computed(() =>
   ["admin", "manager", "department", "section"].includes(effectiveRole.value)
@@ -85,7 +94,7 @@ const canViewSectionLevel = computed(() =>
 // Permission for viewing approvals
 const canViewApprovals = computed(() => {
   if (!effectiveRole.value) return false;
-  return ["leader", "manager", "admin"].includes(effectiveRole.value);
+  return ["manager", "admin", "department", "section", "employee"].includes(effectiveRole.value);
 });
 
 // // Example computed for other conditional links

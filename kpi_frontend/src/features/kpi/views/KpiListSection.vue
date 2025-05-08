@@ -10,47 +10,52 @@
     </div>
 
     <div class="filter-controls">
-      <a-row :gutter="[20]">
-        <a-col :span="5">
-          <a-form-item label="Department:">
-            <a-select v-model:value="localFilters.departmentId" style="width: 100%" @change="handleDepartmentChange">
-              <a-select-option v-for="department in departmentList" :key="department.id" :value="department.id">
-                {{ department.name }}
-              </a-select-option>
-            </a-select>
+      <a-row :gutter="[22]">
+        <a-col :span="6">
+          <a-form-item label="Search:">
+            <a-input v-model:value="localFilters.name" placeholder="KPI name..." @pressEnter="applyFilters" />
           </a-form-item>
         </a-col>
 
-        <a-col :span="4">
-          <a-form-item label="Section:">
-            <a-select v-model:value="localFilters.sectionId" style="width: 100%">
-              <a-select-option v-if="
-                  selectSectionList.length > 1 || localFilters.sectionId === 0
-                " :value="0">All</a-select-option>
-              <a-select-option v-for="section in selectSectionList" :key="section.id" :value="section.id">
-                {{ section.name }}
-              </a-select-option>
-            </a-select>
-          </a-form-item>
-        </a-col>
+      <a-col :span="5" v-if="!isSectionUser">
+        <a-form-item label="Department:">
+          <a-select v-model:value="localFilters.departmentId" style="width: 100%" @change="handleDepartmentChange"
+            :disabled="(isSectionUser && !!currentUser?.departmentId) || isDepartmentUser">
+            <a-select-option v-if="!((isSectionUser && !!currentUser?.departmentId) || isDepartmentUser)"
+              :value="null">All Departments</a-select-option>
+            <a-select-option v-for="department in departmentList" :key="department.id" :value="department.id">
+              {{ department.name }}
+            </a-select-option>
+          </a-select>
+        </a-form-item>
+      </a-col>
+
+      <a-col :span="4">
+        <a-form-item label="Section:">
+          <a-select v-model:value="localFilters.sectionId" style="width: 100%" :disabled="isSectionUser">
+            <a-select-option v-if="!isSectionUser" :value="0">All Sections</a-select-option>
+            <a-select-option v-for="section in selectSectionList" :key="section.id" :value="section.id">
+              {{ section.name }}
+            </a-select-option>
+          </a-select>
+        </a-form-item>
+      </a-col>
         <a-col :span="4">
           <a-form-item label="Start Date:">
-            <a-date-picker v-model:value="localFilters.startDate" style="width: 100%" />
+            <a-date-picker v-model:value="localFilters.startDate" style="width: 100%" @change="applyFilters" />
           </a-form-item>
         </a-col>
         <a-col :span="4">
           <a-form-item label="End Date:">
-            <a-date-picker v-model:value="localFilters.endDate" style="width: 100%" />
+            <a-date-picker v-model:value="localFilters.endDate" style="width: 100%" @change="applyFilters" />
           </a-form-item>
         </a-col>
-        <a-col :span="7" style="text-align: right">
-          <a-button type="primary" @click="applyFilters" :loading="loading">
-            <template #icon><filter-outlined /></template>
-            Apply
+        <a-col :span="5" style="text-align: right">
+          <a-button type="primary" :loading="loading" @click="applyFilters">
+            <template #icon><filter-outlined /></template> Apply
           </a-button>
-          <a-button @click="resetFilters" :loading="loading" style="margin-left: 8px">
-            <template #icon><reload-outlined /></template>
-            Reset
+          <a-button style="margin-left: 8px" :loading="loading" @click="resetFilters">
+            <template #icon><reload-outlined /></template> Reset
           </a-button>
         </a-col>
       </a-row>
@@ -194,17 +199,21 @@ import { notification } from "ant-design-vue";
 const store = useStore();
 const router = useRouter();
 
+const effectiveRole = computed(() => store.getters["auth/effectiveRole"]);
+const currentUser = computed(() => store.getters["auth/currentUser"]);
 const loading = computed(() => store.getters["kpis/isLoading"]);
 const error = computed(() => store.getters["kpis/error"]);
 const departmentList = computed(
   () => store.getters["departments/departmentList"] || []
 );
-const sectionList = computed(() => store.getters["sections/sectionList"] || []);
 const sectionKpiList = computed(
   () => store.getters["kpis/sectionKpiList"] || []
 );
 
 const selectSectionList = ref([]);
+
+const isSectionUser = computed(() => effectiveRole.value === 'section');
+const isDepartmentUser = computed(() => effectiveRole.value === 'department');
 
 const isDeleteModalVisible = ref(false);
 const selectedKpiId = ref(null);
@@ -212,6 +221,15 @@ const selectedKpiName = ref(null);
 const deletedKpiName = ref(null);
 const isDisplayResult = ref(false);
 const activePanelKeys = ref([]);
+
+const localFilters = reactive({
+  name: "",
+  departmentId: null, // Sẽ được đặt trong onMounted
+  sectionId: null,    // Sẽ được đặt trong onMounted, 0 có thể có nghĩa là "All" cho admin/manager
+  startDate: "",
+  endDate: "",
+});
+
 
 const sectionGroups = computed(() => {
   const groupedData = {}; 
@@ -440,10 +458,19 @@ const applyFilters = async () => {
   error.value = null;
   isDisplayResult.value = false;
 
+  const departmentId = (localFilters.departmentId === null || Number.isNaN(Number(localFilters.departmentId)))
+    ? null
+    : Number(localFilters.departmentId);
+
+  // Ensure sectionIdForApi is null if localFilters.sectionId is 0 (All Sections), null, or NaN-producing, otherwise use the number.
+  const sectionIdForPath = (localFilters.sectionId === null || Number.isNaN(Number(localFilters.sectionId)))
+    ? 0 // Mặc định là 0 nếu không hợp lệ, vì 0 có nghĩa là "all" trong ngữ cảnh này cho department
+    : Number(localFilters.sectionId);
+
   try {
     const filtersToSend = {
-      departmentId: localFilters.departmentId || "",
-      sectionId: localFilters.sectionId,
+      sectionIdForApi: sectionIdForPath,
+      departmentIdForQuery: departmentId,
       name: localFilters.name,
       startDate: localFilters.startDate,
       endDate: localFilters.endDate,
@@ -460,31 +487,25 @@ const applyFilters = async () => {
 };
 
 const handleDepartmentChange = async () => {
-  loading.value = true;
-  error.value = null;
+  if (isDepartmentUser.value && currentUser.value?.departmentId) {
+    localFilters.departmentId = currentUser.value.departmentId; // Gán phòng ban cố định
+    notification.info({ message: "Thông báo", description: "Bạn chỉ có thể xem các bộ phận trong phòng ban của mình." });
+    return;
+  }
 
   try {
     if (localFilters.departmentId) {
-      await store.dispatch("sections/fetchSections", {
-        department_id: localFilters.departmentId,
-      });
+      await store.dispatch("sections/fetchSections", { department_id: localFilters.departmentId });
     } else {
-      console.warn(
-        "Department filter is not selected in handleDepartmentChange."
-      );
       await store.dispatch("sections/fetchSections");
     }
+
+    selectSectionList.value = store.getters["sections/sectionList"] || [];
+    if (!isSectionUser.value) {
+      localFilters.sectionId = selectSectionList.value.length > 0 ? 0 : null;
+    }
   } catch (err) {
-    error.value = err.message || "Failed to fetch sections.";
-  } finally {
-    selectSectionList.value = sectionList.value;
-
-    localFilters.sectionId =
-      selectSectionList.value.length > 1
-        ? 0
-        : selectSectionList.value[0]?.id || "";
-
-    loading.value = false;
+    notification.error({ message: "Lỗi tải bộ phận", description: err.message || "Failed to fetch sections." });
   }
 };
 
@@ -534,20 +555,9 @@ const handleDeleteKpi = () => {
       selectedKpiName.value = "";
     })
     .catch((err) => {
-      alert(
-        `Delete failed KPI: ${store.getters["kpis/error"] || "Unknown error"}`
-      );
       console.error("Delete KPI error:", err);
     });
 };
-
-const localFilters = reactive({
-  name: "",
-  departmentId: 1,
-  sectionId: 0,
-  startDate: "",
-  endDate: "",
-});
 
 const columns = [
   {
@@ -606,19 +616,19 @@ const columns = [
 
 watch(
   () => [localFilters.departmentId, localFilters.sectionId],
-  ([newDeptId, newSectionId], [oldDeptId, oldSectionId] = []) => {
-    if (newDeptId !== oldDeptId || newSectionId !== oldSectionId) {
-      applyFilters();
-    }
-  },
+  // ([newDeptId, newSectionId], [oldDeptId, oldSectionId] = []) => {
+  //   if (newDeptId !== oldDeptId || newSectionId !== oldSectionId) {
+  //     // applyFilters(); // Bỏ tự động apply, để người dùng nhấn nút
+  //   }
+  // },
   { immediate: true }
 );
 
 const resetFilters = () => {
   localFilters.name = "";
   localFilters.departmentId = 1;
-  localFilters.sectionId = "";
-  localFilters.startDate = "";
+  localFilters.sectionId = 0; // Mặc định "All"
+  localFilters.startDate = null;
   localFilters.endDate = "";
 };
 
@@ -656,10 +666,37 @@ watch(
 onMounted(async () => {
   try {
     await store.dispatch("departments/fetchDepartments");
-    await handleDepartmentChange();
+
+    if (isDepartmentUser.value && currentUser.value) {
+      // Gán phòng ban của người dùng
+      localFilters.departmentId = currentUser.value.departmentId || null;
+
+      // Tải danh sách sections thuộc phòng ban
+      await store.dispatch("sections/fetchSections", { department_id: currentUser.value.departmentId });
+
+      // Mặc định "All Sections" trong phòng ban
+      localFilters.sectionId = 0;
+    } else if (isSectionUser.value && currentUser.value) {
+      // Logic cho role section user
+      localFilters.sectionId = currentUser.value.sectionId || null;
+      localFilters.departmentId = currentUser.value.departmentId || null;
+      await store.dispatch("sections/fetchSections", { department_id: currentUser.value.departmentId });
+    } else {
+      // Logic cho admin/manager
+      if (departmentList.value.length > 0) {
+        localFilters.departmentId = departmentList.value[0].id;
+        await store.dispatch("sections/fetchSections", { department_id: localFilters.departmentId });
+        localFilters.sectionId = 0;
+      } else {
+        await store.dispatch("sections/fetchSections");
+        localFilters.sectionId = 0;
+      }
+    }
+
+    selectSectionList.value = store.getters["sections/sectionList"] || [];
+    await applyFilters(); // Tải dữ liệu KPI ban đầu
   } catch (err) {
     error.value = err.message || "Failed to fetch initial data.";
-    loading.value = false;
   }
 });
 </script>

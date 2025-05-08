@@ -792,7 +792,6 @@ const handleChangeCreate = async () => {
 
     await store.dispatch("kpis/createKpi", kpiData);
 
-    notification.success({ message: "KPI created successfully" });
     resetForm(true);
 
     router.push({

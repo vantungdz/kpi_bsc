@@ -31,7 +31,7 @@ export class Employee {
   @Column({
     type: 'varchar',
     length: 50,
-    enum: ['admin', 'manager', 'leader', 'employee'],
+    enum: ['admin', 'manager', 'department','section', 'employee'],
   })
   role: string;
 

@@ -14,6 +14,8 @@ import {
   UseInterceptors,
   HttpException,
   HttpStatus,
+  Req,
+  UnauthorizedException, // Thêm Req
 } from '@nestjs/common';
 import { EmployeesService } from './employees.service';
 import { Employee } from 'src/entities/employee.entity';
@@ -23,6 +25,7 @@ import { RolesGuard } from 'src/auth/guards/roles.guard';
 import { Roles } from 'src/auth/guards/roles.decorator';
 import { FileInterceptor } from '@nestjs/platform-express';
 import * as XLSX from 'xlsx';
+import { Request } from 'express'; // Thêm Request từ express
 
 @ApiTags('Employees')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -31,7 +34,7 @@ export class EmployeesController {
   constructor(private readonly employeeService: EmployeesService) {}
 
   @Get()
-  @Roles('admin', 'manager', 'leader')
+  @Roles('admin', 'manager' , 'department', 'section')
   @ApiOperation({
     summary:
       'Get all employees, optionally filtered by department, section, or team',
@@ -49,18 +52,22 @@ export class EmployeesController {
     description: 'Filter employees by Section ID',
   })
   async findAll(
+    @Req() req: Request & { user?: Employee }, // Thêm @Req() để lấy thông tin user
     @Query('departmentId', new ParseIntPipe({ optional: true }))
     departmentId?: number,
     @Query('sectionId', new ParseIntPipe({ optional: true }))
     sectionId?: number,
     @Query('teamId', new ParseIntPipe({ optional: true })) teamId?: number,
   ): Promise<Employee[]> {
+    if (!req.user) {
+      throw new UnauthorizedException('User not authenticated.');
+    }
     const filterOptions = { departmentId, sectionId, teamId };
-    return this.employeeService.findAll(filterOptions);
+    return this.employeeService.findAll(filterOptions, req.user); // Truyền req.user vào service
   }
 
   @Get(':id')
-  @Roles('admin', 'manager', 'leader')
+  @Roles('admin', 'manager', 'department', 'section')
   @ApiOperation({ summary: 'Get employee details by ID' })
   @ApiResponse({ status: 200, description: 'Employee found', type: Employee })
   @ApiResponse({ status: 404, description: 'Employee not found' })
@@ -107,7 +114,7 @@ export class EmployeesController {
       const result = await this.employeeService.saveEmployeeData(data);
 
       return {
-        message: 'Employee data uploaded successfully',
+        message: result.message,
         successCount: result.successCount,
         errors: result.errors,
       };

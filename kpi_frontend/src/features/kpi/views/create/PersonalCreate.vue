@@ -254,8 +254,6 @@ const handleChangeCreate = async () => {
 
     await store.dispatch("kpis/createKpi", payload);
 
-    notification.success({ message: "Personal KPI created successfully" });
-
     router.push("/personal");
   } catch (error) {
     console.error("Personal KPI creation failed:", error);

@@ -345,6 +345,7 @@ const isSubmitDisabled = (latestValue, kpiDefinitionStatus) => {
     KpiValueStatus.REJECTED_BY_DEPT,
     KpiValueStatus.REJECTED_BY_MANAGER
   ];
+  
   const isDisabled = !allowedStatuses.includes(valueStatus);
   return isDisabled;
 };
@@ -380,17 +381,23 @@ const getKpiLevelColor = (level) => {
     default: return "default";
   }
 };
-const formatDate = (dateString) => {
-  if (!dateString) return 'N/A';
-  return dayjs(dateString).format('YYYY-MM-DD HH:mm');
-};
-const truncateText = (text, length) => {
-  if (!text) return '';
-  return text.length > length ? text.substring(0, length) + '...' : text;
-};
+const formatDate = (dateString) => dateString ? dayjs(dateString).format('YYYY-MM-DD HH:mm') : 'N/A';
+const truncateText = (text, length) => (text?.length > length ? `${text.substring(0, length)}...` : text || '');
 const getActionText = (actionKey) => {
-  const map = { 'SUBMIT_CREATE': 'Tạo & Gửi duyệt', 'SUBMIT_UPDATE': 'Cập nhật & Gửi duyệt', 'APPROVE_SECTION': 'Section Duyệt', 'REJECT_SECTION': 'Section Từ chối', 'APPROVE_DEPT': 'Dept Duyệt', 'REJECT_DEPT': 'Dept Từ chối', 'APPROVE_MANAGER': 'Manager Duyệt', 'REJECT_MANAGER': 'Manager Từ chối', 'CREATE': 'Tạo mới', 'UPDATE': 'Cập nhật', 'DELETE': 'Xóa' };
-  return map[actionKey?.toUpperCase()] || actionKey || 'Không rõ';
+  const actionMap = {
+    SUBMIT_CREATE: 'Tạo & Gửi duyệt',
+    SUBMIT_UPDATE: 'Cập nhật & Gửi duyệt',
+    APPROVE_SECTION: 'Section Duyệt',
+    REJECT_SECTION: 'Section Từ chối',
+    APPROVE_DEPT: 'Dept Duyệt',
+    REJECT_DEPT: 'Dept Từ chối',
+    APPROVE_MANAGER: 'Manager Duyệt',
+    REJECT_MANAGER: 'Manager Từ chối',
+    CREATE: 'Tạo mới',
+    UPDATE: 'Cập nhật',
+    DELETE: 'Xóa',
+  };
+  return actionMap[actionKey?.toUpperCase()] || actionKey || 'Không rõ';
 };
 
 const fetchMyAssignedKpis = async () => {

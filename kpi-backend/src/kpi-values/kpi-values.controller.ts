@@ -1,4 +1,4 @@
-// kpi-values.controller.ts (Đã sắp xếp lại thứ tự, không comment)
+// kpi-values.controller.ts
 
 import {
   Controller,
@@ -32,32 +32,19 @@ export class KpiValuesController {
   constructor(private readonly kpiValuesService: KpiValuesService) {}
 
   @Get()
-  @ApiOperation({
-    summary: 'Lấy danh sách tất cả KpiValue (cần xem lại quyền)',
-  })
+  @ApiOperation({ summary: 'Lấy danh sách tất cả KpiValue' })
   @ApiResponse({ status: 200, type: [KpiValue] })
   async findAll(): Promise<KpiValue[]> {
-    return await this.kpiValuesService.findAll();
+    return this.kpiValuesService.findAll();
   }
 
   @Get('pending-approvals')
-  @Roles('leader', 'manager', 'admin')
-  @ApiOperation({
-    summary: 'Lấy danh sách giá trị KPI đang chờ người dùng hiện tại phê duyệt',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'Danh sách giá trị chờ duyệt.',
-    type: [KpiValue],
-  })
+  @Roles('manager', 'admin', 'department', 'section')
+  @ApiOperation({ summary: 'Lấy danh sách giá trị KPI đang chờ phê duyệt' })
+  @ApiResponse({ status: 200, description: 'Danh sách giá trị chờ duyệt.', type: [KpiValue] })
   @ApiResponse({ status: 403, description: 'Forbidden.' })
-  async getMyPendingApprovals(
-    @Req() req: Request & { user?: Employee },
-  ): Promise<KpiValue[]> {
+  async getMyPendingApprovals(@Req() req: Request & { user?: Employee }): Promise<KpiValue[]> {
     if (!req.user) {
-      console.error(
-        'User object is missing from the request in getMyPendingApprovals.',
-      );
       throw new UnauthorizedException('User information not available.');
     }
     return this.kpiValuesService.getPendingApprovals(req.user);
@@ -66,9 +53,7 @@ export class KpiValuesController {
   @Get(':id/history')
   @ApiOperation({ summary: 'Lấy lịch sử thay đổi của một giá trị KPI' })
   @ApiResponse({ status: 200, type: [KpiValueHistory] })
-  async getHistory(
-    @Param('id', ParseIntPipe) id: number,
-  ): Promise<KpiValueHistory[]> {
+  async getHistory(@Param('id', ParseIntPipe) id: number): Promise<KpiValueHistory[]> {
     return this.kpiValuesService.getHistory(id);
   }
 
@@ -77,18 +62,14 @@ export class KpiValuesController {
   @ApiResponse({ status: 200, type: KpiValue })
   @ApiResponse({ status: 404, description: 'Không tìm thấy' })
   async findOne(@Param('id', ParseIntPipe) id: number): Promise<KpiValue> {
-    console.log(
-      `!!!!!! KpiValuesController.findOne ENTERED with id: ${id} !!!!!!`,
-    );
-    const kpiValue = await this.kpiValuesService.findOne(id);
-    return kpiValue;
+    return this.kpiValuesService.findOne(id);
   }
 
   @Post()
-  @ApiOperation({ summary: 'Tạo một KpiValue mới (cần xem lại logic/quyền)' })
+  @ApiOperation({ summary: 'Tạo một KpiValue mới' })
   @ApiResponse({ status: 201, type: KpiValue })
   async create(@Body() kpiValueData: Partial<KpiValue>): Promise<KpiValue> {
-    const createdBy = 1; // Sửa lại để lấy user thật
+    const createdBy = 1; // Placeholder for authenticated user ID
     return this.kpiValuesService.create(kpiValueData, createdBy);
   }
 
@@ -101,97 +82,82 @@ export class KpiValuesController {
     @Body() updateData: { notes: string; project_details: any[] },
     @Req() req: Request & { user?: Employee },
   ): Promise<KpiValue> {
-    if (!req.user || !req.user.id) {
+    if (!req.user?.id) {
       throw new UnauthorizedException('User not authenticated.');
     }
-    const userId = req.user.id;
     return this.kpiValuesService.submitProgressUpdate(
       assignmentId,
       updateData.notes,
       updateData.project_details,
-      userId,
+      req.user.id,
     );
   }
 
   @Post(':valueId/approve-section')
-  @Roles('leader', 'manager', 'admin')
-  @ApiOperation({
-    summary: 'Section Leader/Manager/Admin phê duyệt giá trị KPI',
-  })
+  @Roles('manager', 'admin', 'department', 'section')
+  @ApiOperation({ summary: 'Section Manager/Admin phê duyệt giá trị KPI' })
   @ApiResponse({ status: 200, type: KpiValue })
-  @ApiResponse({ status: 400 })
-  @ApiResponse({ status: 403 })
-  @ApiResponse({ status: 404 })
   async approveBySection(
     @Param('valueId', ParseIntPipe) valueId: number,
     @Req() req: Request & { user?: Employee },
   ): Promise<KpiValue> {
-    if (!req.user || !req.user.id)
+    if (!req.user?.id) {
       throw new UnauthorizedException('User not authenticated.');
-    const userId = req.user.id;
-    return this.kpiValuesService.approveValueBySection(valueId, userId);
+    }
+    return this.kpiValuesService.approveValueBySection(valueId, req.user.id);
   }
 
   @Post(':valueId/reject-section')
-  @Roles('leader', 'manager', 'admin')
+  @Roles('manager', 'admin', 'department', 'section')
   @ApiOperation({ summary: 'Section Leader/Manager/Admin từ chối giá trị KPI' })
   @ApiBody({ type: RejectValueDto })
   @ApiResponse({ status: 200, type: KpiValue })
-  @ApiResponse({ status: 400 })
-  @ApiResponse({ status: 403 })
-  @ApiResponse({ status: 404 })
   async rejectBySection(
     @Param('valueId', ParseIntPipe) valueId: number,
     @Body() rejectDto: RejectValueDto,
     @Req() req: Request & { user?: Employee },
   ): Promise<KpiValue> {
-    if (!req.user || !req.user.id)
+    if (!req.user?.id) {
       throw new UnauthorizedException('User not authenticated.');
-    const userId = req.user.id;
+    }
     return this.kpiValuesService.rejectValueBySection(
       valueId,
       rejectDto.reason,
-      userId,
+      req.user.id,
     );
   }
 
   @Post(':valueId/approve-department')
-  @Roles('manager', 'admin')
+  @Roles('manager', 'admin', 'department')
   @ApiOperation({ summary: 'Department Manager/Admin phê duyệt giá trị KPI' })
   @ApiResponse({ status: 200, type: KpiValue })
-  @ApiResponse({ status: 400 })
-  @ApiResponse({ status: 403 })
-  @ApiResponse({ status: 404 })
   async approveByDepartment(
     @Param('valueId', ParseIntPipe) valueId: number,
     @Req() req: Request & { user?: Employee },
   ): Promise<KpiValue> {
-    if (!req.user || !req.user.id)
+    if (!req.user?.id) {
       throw new UnauthorizedException('User not authenticated.');
-    const userId = req.user.id;
-    return this.kpiValuesService.approveValueByDepartment(valueId, userId);
+    }
+    return this.kpiValuesService.approveValueByDepartment(valueId, req.user.id);
   }
 
   @Post(':valueId/reject-department')
-  @Roles('manager', 'admin')
+  @Roles('manager', 'admin', 'department')
   @ApiOperation({ summary: 'Department Manager/Admin từ chối giá trị KPI' })
   @ApiBody({ type: RejectValueDto })
   @ApiResponse({ status: 200, type: KpiValue })
-  @ApiResponse({ status: 400 })
-  @ApiResponse({ status: 403 })
-  @ApiResponse({ status: 404 })
   async rejectByDepartment(
     @Param('valueId', ParseIntPipe) valueId: number,
     @Body() rejectDto: RejectValueDto,
     @Req() req: Request & { user?: Employee },
   ): Promise<KpiValue> {
-    if (!req.user || !req.user.id)
+    if (!req.user?.id) {
       throw new UnauthorizedException('User not authenticated.');
-    const userId = req.user.id;
+    }
     return this.kpiValuesService.rejectValueByDepartment(
       valueId,
       rejectDto.reason,
-      userId,
+      req.user.id,
     );
   }
 
@@ -199,17 +165,14 @@ export class KpiValuesController {
   @Roles('manager', 'admin')
   @ApiOperation({ summary: 'Manager/Admin phê duyệt cuối cùng giá trị KPI' })
   @ApiResponse({ status: 200, type: KpiValue })
-  @ApiResponse({ status: 400 })
-  @ApiResponse({ status: 403 })
-  @ApiResponse({ status: 404 })
   async approveByManager(
     @Param('valueId', ParseIntPipe) valueId: number,
     @Req() req: Request & { user?: Employee },
   ): Promise<KpiValue> {
-    if (!req.user || !req.user.id)
+    if (!req.user?.id) {
       throw new UnauthorizedException('User not authenticated.');
-    const userId = req.user.id;
-    return this.kpiValuesService.approveValueByManager(valueId, userId);
+    }
+    return this.kpiValuesService.approveValueByManager(valueId, req.user.id);
   }
 
   @Post(':valueId/reject-manager')
@@ -217,57 +180,45 @@ export class KpiValuesController {
   @ApiOperation({ summary: 'Manager/Admin từ chối cuối cùng giá trị KPI' })
   @ApiBody({ type: RejectValueDto })
   @ApiResponse({ status: 200, type: KpiValue })
-  @ApiResponse({ status: 400 })
-  @ApiResponse({ status: 403 })
-  @ApiResponse({ status: 404 })
   async rejectByManager(
     @Param('valueId', ParseIntPipe) valueId: number,
     @Body() rejectDto: RejectValueDto,
     @Req() req: Request & { user?: Employee },
   ): Promise<KpiValue> {
-    if (!req.user || !req.user.id)
+    if (!req.user?.id) {
       throw new UnauthorizedException('User not authenticated.');
-    const userId = req.user.id;
+    }
     return this.kpiValuesService.rejectValueByManager(
       valueId,
       rejectDto.reason,
-      userId,
+      req.user.id,
     );
   }
 
   @Patch(':id')
-  @ApiOperation({ summary: 'Cập nhật một KpiValue (cần xem lại logic/quyền)' })
+  @ApiOperation({ summary: 'Cập nhật một KpiValue' })
   @ApiResponse({ status: 200, type: KpiValue })
-  @ApiResponse({ status: 404 })
   async update(
     @Param('id', ParseIntPipe) id: number,
     @Body() updateData: Partial<KpiValue>,
-    @Req() req: Request & { user?: Employee }, // Lấy user thật
+    @Req() req: Request & { user?: Employee },
   ): Promise<KpiValue> {
-    if (!req.user || !req.user.id) {
+    if (!req.user?.id) {
       throw new UnauthorizedException('User not authenticated.');
     }
-    const updatedBy = req.user.id; // Lấy user thật
-    const kpiValue = await this.kpiValuesService.update(
-      id,
-      updateData,
-      updatedBy,
-    );
-    return kpiValue; // Service đã xử lý NotFound
+    return this.kpiValuesService.update(id, updateData, req.user.id);
   }
 
   @Delete(':id')
-  @ApiOperation({ summary: 'Xóa một KpiValue (cần xem lại quyền)' })
+  @ApiOperation({ summary: 'Xóa một KpiValue' })
   @ApiResponse({ status: 200 })
-  @ApiResponse({ status: 404 })
   async delete(
     @Param('id', ParseIntPipe) id: number,
     @Req() req: Request & { user?: Employee },
   ): Promise<void> {
-    if (!req.user || !req.user.id) {
+    if (!req.user?.id) {
       throw new UnauthorizedException('User not authenticated.');
     }
-    const deletedBy = req.user.id; // Lấy user thật
-    await this.kpiValuesService.delete(id, deletedBy); // Service đã xử lý NotFound
+    await this.kpiValuesService.delete(id, req.user.id);
   }
 }
