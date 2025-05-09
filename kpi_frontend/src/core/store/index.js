@@ -8,12 +8,12 @@ import kpiValues from "../../features/kpi/store/kpiValues";
 import sections from "../../features/organization/store/sections";
 import auth from "../../features/auth/store/auth";
 import notifications from "../../features/notifications/store/notifications";
-import dashboard from "../../features/dashboard/store/dashboard"; // Import the dashboard module
+import dashboard from "../../features/dashboard/store/dashboard"; 
 
 const store = createStore({
   modules: {
     auth,
-    dashboard, // Add the dashboard module here
+    dashboard, 
     notifications,
     kpis,
     departments,

@@ -182,37 +182,46 @@ export class KpiValuesService {
 
         let initialStatusAfterSubmit: KpiValueStatus;
 
-        if (submitter.role === 'department') {
-          initialStatusAfterSubmit = KpiValueStatus.PENDING_MANAGER_APPROVAL;
-          this.logger.log(
-            `Submitter role is 'department', next status: PENDING_MANAGER_APPROVAL`,
-          );
-        } else if (submitter.role === 'section') {
-          initialStatusAfterSubmit = KpiValueStatus.PENDING_DEPT_APPROVAL;
-          this.logger.log(
-            `Submitter role is 'section', next status: PENDING_DEPT_APPROVAL`,
-          );
-        } else {
-          // Default for 'employee' or other roles considered lower
-          if (submitter.sectionId) {
-            // Employee in a section
-            initialStatusAfterSubmit = KpiValueStatus.PENDING_SECTION_APPROVAL;
+        // Xác định trạng thái tiếp theo dựa trên vai trò của người submit
+        switch (submitter.role) {
+          case 'admin': // Admin tự duyệt hoặc có quy trình riêng
+          case 'manager': // Manager submit thì có thể tự duyệt hoặc chuyển cho Admin khác nếu cần
+            initialStatusAfterSubmit = KpiValueStatus.APPROVED; // Hoặc PENDING_ADMIN_APPROVAL nếu có
             this.logger.log(
-              `Submitter role '${submitter.role}' in section ${submitter.sectionId}, next status: PENDING_SECTION_APPROVAL`,
+              `Submitter role is '${submitter.role}', KPI value is auto-approved or pending higher approval.`,
             );
-          } else if (submitter.departmentId) {
-            // Employee in a department but not a specific section (or section structure not used)
-            initialStatusAfterSubmit = KpiValueStatus.PENDING_DEPT_APPROVAL;
-            this.logger.log(
-              `Submitter role '${submitter.role}' in department ${submitter.departmentId} (no section), next status: PENDING_DEPT_APPROVAL`,
-            );
-          } else {
-            // Employee not in a section or department (e.g., direct report to manager/admin)
+            break;
+          case 'department':
             initialStatusAfterSubmit = KpiValueStatus.PENDING_MANAGER_APPROVAL;
             this.logger.log(
-              `Submitter role '${submitter.role}' (no section/dept), next status: PENDING_MANAGER_APPROVAL`,
+              `Submitter role is 'department', next status: PENDING_MANAGER_APPROVAL`,
             );
-          }
+            break;
+          case 'section':
+            initialStatusAfterSubmit = KpiValueStatus.PENDING_DEPT_APPROVAL;
+            this.logger.log(
+              `Submitter role is 'section', next status: PENDING_DEPT_APPROVAL`,
+            );
+            break;
+          case 'employee':
+          default: // Mặc định cho 'employee' hoặc các vai trò không xác định khác
+            // Logic này giả định nhân viên bình thường sẽ cần section leader duyệt trước tiên nếu có sectionId
+            // Nếu không có sectionId nhưng có departmentId, thì cần department manager duyệt
+            // Nếu không có cả hai, thì cần manager/admin duyệt
+            initialStatusAfterSubmit = KpiValueStatus.PENDING_SECTION_APPROVAL;
+            this.logger.log(
+              `Submitter role is '${submitter.role}', default next status: PENDING_SECTION_APPROVAL (or higher if no section/dept)`,
+            );
+            // Bạn có thể tinh chỉnh thêm ở đây dựa trên cấu trúc phòng ban của nhân viên
+            // Ví dụ:
+            // if (submitter.sectionId) {
+            //   initialStatusAfterSubmit = KpiValueStatus.PENDING_SECTION_APPROVAL;
+            // } else if (submitter.departmentId) {
+            //   initialStatusAfterSubmit = KpiValueStatus.PENDING_DEPT_APPROVAL;
+            // } else {
+            //   initialStatusAfterSubmit = KpiValueStatus.PENDING_MANAGER_APPROVAL;
+            // }
+            break;
         }
 
         const statusBeforeSubmit = existingRecord?.status;

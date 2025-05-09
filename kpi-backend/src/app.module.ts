@@ -17,6 +17,7 @@ import { RolesGuard } from './auth/guards/roles.guard';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { NotificationModule } from './notification/notification.module';
 import { DashboardsModule } from './dashboard/dashboard.module';
+import { EvaluationModule } from './evaluation/evaluation.module';
 
 @Module({
   imports: [
@@ -54,6 +55,7 @@ import { DashboardsModule } from './dashboard/dashboard.module';
     AuthModule,
     PerformanceEvaluationModule,
     KpiAssignmentsModule,
+    EvaluationModule,
   ],
   controllers: [],
   // providers: [JwtAuthGuard, RolesGuard],

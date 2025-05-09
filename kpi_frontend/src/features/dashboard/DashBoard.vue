@@ -1,7 +1,7 @@
 <template>
   <div class="dashboard-overview-container">
     <h1>Dashboard Tổng Quan</h1>
-    <a-row :gutter="[16, 16]">
+    <a-row :gutter="[16, 24]">
       <a-col :xs="24" :sm="12" :md="8" :lg="6">
         <router-link to="/dashboard/kpi-process-stats">
           <a-card hoverable class="dashboard-block-card card-kpi-stats">
@@ -15,14 +15,51 @@
           </a-card>
         </router-link>
       </a-col>
+      <!-- Thêm Card mới cho User Activity Stats -->
       <a-col :xs="24" :sm="12" :md="8" :lg="6">
-        <router-link to="/dashboard/notification-stats">
+        <router-link to="/dashboard/user-activity-stats">
           <a-card
             hoverable
-            class="dashboard-block-card card-notification-stats"
+            class="dashboard-block-card card-user-activity-stats"
           >
-            <template #title> <bell-outlined /> Thống kê Thông báo </template>
-            <p>Phân tích số lượng và loại thông báo trong hệ thống.</p>
+            <template #title>
+              <user-switch-outlined /> Thống kê Hoạt động Người dùng
+            </template>
+            <p>
+              Phân tích hoạt động của người dùng và các bộ phận trong hệ thống (dành cho Admin/Manager).
+            </p>
+          </a-card>
+        </router-link>
+      </a-col>
+      <!-- Thêm Card mới cho KPI Performance Overview -->
+      <a-col :xs="24" :sm="12" :md="8" :lg="6">
+        <router-link to="/dashboard/kpi-performance-overview">
+          <a-card
+            hoverable
+            class="dashboard-block-card card-kpi-performance"
+          >
+            <template #title>
+              <bar-chart-outlined /> Tổng quan Hiệu suất KPI
+            </template>
+            <p>
+              Theo dõi tổng số KPI, tỷ lệ đạt/không đạt mục tiêu, KPI chưa cập nhật và hiệu suất theo vai trò.
+            </p>
+          </a-card>
+        </router-link>
+      </a-col>
+      <!-- Thêm Card mới cho Tổng quan Kho KPI -->
+      <a-col :xs="24" :sm="12" :md="8" :lg="6">
+        <router-link to="/dashboard/kpi-inventory-stats"> 
+          <a-card
+            hoverable
+            class="dashboard-block-card card-kpi-inventory"
+          >
+            <template #title>
+              <appstore-outlined /> Tổng quan Kho KPI
+            </template>
+            <p>
+              Theo dõi số lượng và sự phân bổ của các KPI và lượt giao KPI trong toàn hệ thống.
+            </p>
           </a-card>
         </router-link>
       </a-col>
@@ -31,7 +68,7 @@
 </template>
 
 <script setup>
-import { LineChartOutlined, BellOutlined } from "@ant-design/icons-vue";
+import { LineChartOutlined, UserSwitchOutlined, BarChartOutlined, AppstoreOutlined } from "@ant-design/icons-vue";
 </script>
 
 <style scoped>
@@ -90,6 +127,56 @@ import { LineChartOutlined, BellOutlined } from "@ant-design/icons-vue";
   color: #874d00;
 }
 
+.card-user-activity-stats {
+  border-left: 5px solid #722ed1; /* Màu tím cho user activity */
+}
+.card-user-activity-stats :deep(.ant-card-head) {
+  background-color: #f9f0ff; /* Màu nền nhạt hơn của tím */
+}
+.card-user-activity-stats :deep(.ant-card-body) {
+  background-color: #fef6ff; /* Màu nền rất nhạt của tím */
+}
+.card-user-activity-stats .ant-card-head-title,
+.card-user-activity-stats :deep(.anticon) {
+  color: #391085; /* Màu chữ đậm của tím */
+}
+.card-user-activity-stats p {
+  color: #531dab; /* Màu chữ vừa của tím */
+}
+
+.card-kpi-performance {
+  border-left: 5px solid #52c41a; /* Màu xanh lá cho performance */
+}
+.card-kpi-performance :deep(.ant-card-head) {
+  background-color: #f6ffed; /* Màu nền nhạt hơn của xanh lá */
+}
+.card-kpi-performance :deep(.ant-card-body) {
+  background-color: #fcfff6; /* Màu nền rất nhạt của xanh lá */
+}
+.card-kpi-performance .ant-card-head-title,
+.card-kpi-performance :deep(.anticon) {
+  color: #237804; /* Màu chữ đậm của xanh lá */
+}
+.card-kpi-performance p {
+  color: #389e0d; /* Màu chữ vừa của xanh lá */
+}
+
+.card-kpi-inventory {
+  border-left: 5px solid #13c2c2; /* Màu teal/cyan */
+}
+.card-kpi-inventory :deep(.ant-card-head) {
+  background-color: #e6fffb; /* Màu nền nhạt của teal/cyan */
+}
+.card-kpi-inventory :deep(.ant-card-body) {
+  background-color: #f0fffb; /* Màu nền rất nhạt của teal/cyan */
+}
+.card-kpi-inventory .ant-card-head-title,
+.card-kpi-inventory :deep(.anticon) {
+  color: #006d75; /* Màu chữ đậm của teal/cyan */
+}
+.card-kpi-inventory p {
+  color: #08979c; /* Màu chữ vừa của teal/cyan */
+}
 .dashboard-block-card:hover {
   transform: translateY(-5px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);

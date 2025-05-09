@@ -17,6 +17,26 @@ const state = {
   topKpiActivityStats: { submitted: [], updated: [] },
   loadingTopKpiActivity: false,
   topKpiActivityError: null,
+
+  // For Top Pending Approvers
+  topPendingApproversStats: [],
+  loadingTopPendingApprovers: false,
+  topPendingApproversError: null,
+
+  // For KPI Submission Stats
+  kpiSubmissionStats: [],
+  loadingKpiSubmissionStats: false,
+  kpiSubmissionStatsError: null,
+
+  // For KPI Performance Overview
+  kpiPerformanceOverviewStats: null,
+  loadingKpiPerformanceOverview: false,
+  kpiPerformanceOverviewError: null,
+
+  // For KPI Inventory Stats
+  kpiInventoryStats: null,
+  loadingKpiInventory: false,
+  kpiInventoryError: null,
 };
 
 const getters = {
@@ -35,6 +55,26 @@ const getters = {
   getTopKpiActivityStats: (state) => state.topKpiActivityStats,
   isLoadingTopKpiActivity: (state) => state.loadingTopKpiActivity,
   getTopKpiActivityError: (state) => state.topKpiActivityError,
+
+  // Getter for Top Pending Approvers
+  getTopPendingApproversStats: (state) => state.topPendingApproversStats,
+  isLoadingTopPendingApprovers: (state) => state.loadingTopPendingApprovers,
+  getTopPendingApproversError: (state) => state.topPendingApproversError,
+
+  // Getters for KPI Submission Stats
+  getKpiSubmissionStats: (state) => state.kpiSubmissionStats,
+  isLoadingKpiSubmissionStats: (state) => state.loadingKpiSubmissionStats,
+  getKpiSubmissionStatsError: (state) => state.kpiSubmissionStatsError,
+
+  // Getters for KPI Performance Overview
+  getKpiPerformanceOverviewStats: (state) => state.kpiPerformanceOverviewStats,
+  isLoadingKpiPerformanceOverview: (state) => state.loadingKpiPerformanceOverview,
+  getKpiPerformanceOverviewError: (state) => state.kpiPerformanceOverviewError,
+
+  // Getters for KPI Inventory Stats
+  getKpiInventoryStats: (state) => state.kpiInventoryStats,
+  isLoadingKpiInventory: (state) => state.loadingKpiInventory,
+  getKpiInventoryError: (state) => state.kpiInventoryError,
 };
 
 const actions = {
@@ -156,7 +196,125 @@ const actions = {
       commit("SET_LOADING_TOP_KPI_ACTIVITY", false);
     }
   },
-  // Thêm các actions khác cho dashboard nếu cần
+
+  async fetchTopPendingApproversStats({ commit }, params = { limit: 5 }) {
+    commit("SET_LOADING_TOP_PENDING_APPROVERS", true);
+    commit("SET_TOP_PENDING_APPROVERS_ERROR", null);
+    commit("SET_TOP_PENDING_APPROVERS_STATS", []); // Reset
+    try {
+      const response = await apiClient.get(
+        "/dashboard/statistics/top-pending-approvers",
+        { params }
+      );
+      commit(
+        "SET_TOP_PENDING_APPROVERS_STATS",
+        response.data || []
+      );
+      return response.data;
+    } catch (error) {
+      const errorMsg =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to fetch top pending approvers statistics.";
+      commit("SET_TOP_PENDING_APPROVERS_ERROR", errorMsg);
+      notification.error({
+        message: "Loading Stats Failed",
+        description: errorMsg,
+      });
+      return null;
+    } finally {
+      commit("SET_LOADING_TOP_PENDING_APPROVERS", false);
+    }
+  },
+
+  async fetchKpiSubmissionStats({ commit }, params) {
+    commit("SET_LOADING_KPI_SUBMISSION_STATS", true);
+    commit("SET_KPI_SUBMISSION_STATS_ERROR", null);
+    commit("SET_KPI_SUBMISSION_STATS", []); // Reset
+    try {
+      const response = await apiClient.get(
+        "/dashboard/statistics/kpi-submission-stats",
+        { params }
+      );
+      commit(
+        "SET_KPI_SUBMISSION_STATS",
+        response.data || []
+      );
+      return response.data;
+    } catch (error) {
+      const errorMsg =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to fetch KPI submission statistics.";
+      commit("SET_KPI_SUBMISSION_STATS_ERROR", errorMsg);
+      notification.error({
+        message: "Loading Stats Failed",
+        description: errorMsg,
+      });
+      return null;
+    } finally {
+      commit("SET_LOADING_KPI_SUBMISSION_STATS", false);
+    }
+  },
+
+  async fetchKpiInventoryStats({ commit }) {
+    commit("SET_LOADING_KPI_INVENTORY", true);
+    commit("SET_KPI_INVENTORY_ERROR", null);
+    commit("SET_KPI_INVENTORY_STATS", null); // Reset
+    try {
+      const response = await apiClient.get(
+        "/dashboard/statistics/kpi-inventory-stats"
+      );
+      commit(
+        "SET_KPI_INVENTORY_STATS",
+        response.data || null
+      );
+      return response.data;
+    } catch (error) {
+      const errorMsg =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to fetch KPI inventory statistics.";
+      commit("SET_KPI_INVENTORY_ERROR", errorMsg);
+      notification.error({
+        message: "Loading Stats Failed",
+        description: errorMsg,
+      });
+      return null;
+    } finally {
+      commit("SET_LOADING_KPI_INVENTORY", false);
+    }
+  },
+
+  async fetchKpiPerformanceOverviewStats({ commit }, params = { daysForNotUpdated: 7 }) {
+    commit("SET_LOADING_KPI_PERFORMANCE_OVERVIEW", true);
+    commit("SET_KPI_PERFORMANCE_OVERVIEW_ERROR", null);
+    commit("SET_KPI_PERFORMANCE_OVERVIEW_STATS", null); // Reset
+    try {
+      const response = await apiClient.get(
+        "/dashboard/statistics/kpi-performance-overview",
+        { params }
+      );
+      commit(
+        "SET_KPI_PERFORMANCE_OVERVIEW_STATS",
+        response.data || null
+      );
+      return response.data;
+    } catch (error) {
+      const errorMsg =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to fetch KPI performance overview statistics.";
+      commit("SET_KPI_PERFORMANCE_OVERVIEW_ERROR", errorMsg);
+      notification.error({
+        message: "Loading Stats Failed",
+        description: errorMsg,
+      });
+      return null;
+    } finally {
+      commit("SET_LOADING_KPI_PERFORMANCE_OVERVIEW", false);
+    }
+  },
 };
 
 const mutations = {
@@ -199,7 +357,50 @@ const mutations = {
   SET_TOP_KPI_ACTIVITY_ERROR(state, error) {
     state.topKpiActivityError = error;
   },
-  // Thêm các mutations khác cho dashboard nếu cần
+
+  // Mutations for Top Pending Approvers
+  SET_TOP_PENDING_APPROVERS_STATS(state, stats) {
+    state.topPendingApproversStats = stats;
+  },
+  SET_LOADING_TOP_PENDING_APPROVERS(state, isLoading) {
+    state.loadingTopPendingApprovers = isLoading;
+  },
+  SET_TOP_PENDING_APPROVERS_ERROR(state, error) {
+    state.topPendingApproversError = error;
+  },
+
+  // Mutations for KPI Submission Stats
+  SET_KPI_SUBMISSION_STATS(state, stats) {
+    state.kpiSubmissionStats = stats;
+  },
+  SET_LOADING_KPI_SUBMISSION_STATS(state, isLoading) {
+    state.loadingKpiSubmissionStats = isLoading;
+  },
+  SET_KPI_SUBMISSION_STATS_ERROR(state, error) {
+    state.kpiSubmissionStatsError = error;
+  },
+
+  // Mutations for KPI Performance Overview
+  SET_KPI_PERFORMANCE_OVERVIEW_STATS(state, stats) {
+    state.kpiPerformanceOverviewStats = stats;
+  },
+  SET_LOADING_KPI_PERFORMANCE_OVERVIEW(state, isLoading) {
+    state.loadingKpiPerformanceOverview = isLoading;
+  },
+  SET_KPI_PERFORMANCE_OVERVIEW_ERROR(state, error) {
+    state.kpiPerformanceOverviewError = error;
+  },
+
+  // Mutations for KPI Inventory Stats
+  SET_KPI_INVENTORY_STATS(state, stats) {
+    state.kpiInventoryStats = stats;
+  },
+  SET_LOADING_KPI_INVENTORY(state, isLoading) {
+    state.loadingKpiInventory = isLoading;
+  },
+  SET_KPI_INVENTORY_ERROR(state, error) {
+    state.kpiInventoryError = error;
+  },
 };
 
 export default {

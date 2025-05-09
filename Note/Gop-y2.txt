@@ -1,0 +1,49 @@
+A. Người dùng/Bộ phận submit KPI nhiều nhất/ít nhất:
+
+Backend (dashboard.service.ts):
+
+Tạo một phương thức mới, ví dụ async getKpiSubmissionStats(currentUser: Employee, days: number, limit: number, entityType: 'user' | 'section' | 'department', orderBy: 'most' | 'least').
+Phương thức này sẽ truy vấn KpiValueHistory với action = 'SUBMIT_CREATE' (hoặc action = 'SUBMIT_UPDATE' nếu bạn muốn tính cả cập nhật).
+Nhóm kết quả theo created_by_user_id.
+Nếu entityType là 'section' hoặc 'department', bạn cần join với bảng Employee để lấy sectionId hoặc departmentId của người submit, sau đó join tiếp với bảng Section hoặc Department để lấy tên.
+Đếm số lượng submission cho mỗi user/section/department.
+Sắp xếp kết quả (nhiều nhất hoặc ít nhất) và giới hạn số lượng (limit).
+Trả về danh sách { id, name, submissionCount }.
+Backend (dashboard.controller.ts):
+
+Tạo một endpoint mới, ví dụ @Get('statistics/kpi-submission-stats'), cho phép truyền các tham số days, limit, entityType, orderBy.
+Bảo vệ endpoint này với @Roles('admin', 'manager').
+Vuex (dashboard.js):
+
+Thêm state, getters, actions (fetchKpiSubmissionStats), mutations mới cho dữ liệu này.
+Frontend (UserActivityStatistics.vue):
+
+Thêm một a-card mới.
+Thêm các bộ lọc (ví dụ: a-select cho entityType, a-radio-group cho orderBy).
+Gọi action Vuex tương ứng khi bộ lọc thay đổi.
+Hiển thị dữ liệu bằng a-list hoặc a-table.
+B. Tỷ lệ KPI được duyệt/từ chối theo người duyệt hoặc bộ phận duyệt:
+
+Backend (dashboard.service.ts):
+
+Tạo một phương thức mới, ví dụ async getApprovalRatesByApprover(currentUser: Employee, days: number, entityType: 'user' | 'department').
+Phương thức này sẽ phức tạp hơn. Bạn cần phân tích KpiValueHistory:
+Lọc các bản ghi có action là các hành động duyệt/từ chối (ví dụ: APPROVE_SECTION, REJECT_SECTION, APPROVE_DEPT, REJECT_DEPT, APPROVE_MANAGER, REJECT_MANAGER).
+Xác định người duyệt (changed_by_user_id) cho mỗi hành động.
+Nếu entityType là 'department', bạn cần lấy departmentId của người duyệt.
+Nhóm kết quả theo người duyệt (hoặc department của người duyệt).
+Đếm số lượng approved và rejected cho mỗi người/bộ phận duyệt.
+Tính toán tỷ lệ.
+Trả về danh sách { approverId, approverName, approvedCount, rejectedCount, approvalRate, rejectionRate }.
+Backend (dashboard.controller.ts):
+
+Tạo một endpoint mới, ví dụ @Get('statistics/approval-rates-by-approver').
+Bảo vệ endpoint này.
+Vuex (dashboard.js):
+
+Thêm state, getters, actions, mutations mới.
+Frontend (UserActivityStatistics.vue):
+
+Thêm một a-card mới.
+Có thể có bộ lọc cho entityType.
+Hiển thị dữ liệu bằng a-table, bao gồm các cột cho tên người/bộ phận duyệt, số lượng duyệt, số lượng từ chối, và tỷ lệ.

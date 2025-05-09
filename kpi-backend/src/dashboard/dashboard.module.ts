@@ -6,15 +6,17 @@ import { KpiValue } from '../entities/kpi-value.entity';
 import { Employee } from '../entities/employee.entity';
 import { KpiValueHistory } from '../entities/kpi-value-history.entity';
 import { Kpi } from '../entities/kpi.entity';
+import { KPIAssignment } from 'src/entities/kpi-assignment.entity';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([
       KpiValue,
-      KpiValueHistory, // <-- This was missing
-      Kpi, // KpiRepository is also injected
-      Employee, // Good to include as Employee entity is used
-    ]), // Thêm Employee nếu service có inject EmployeeRepository
+      KpiValueHistory,
+      Kpi,
+      Employee,
+      KPIAssignment,
+    ]),
   ],
   providers: [DashboardsService],
   controllers: [DashboardsController],

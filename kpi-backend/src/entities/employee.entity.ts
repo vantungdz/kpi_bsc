@@ -12,7 +12,7 @@ import { Department } from './department.entity';
 import { Section } from './section.entity';
 import { Team } from './team.entity';
 import { Notification } from './notification.entity'; // Thêm import này
-
+import { KpiReview } from './kpi-review.entity'; // Import KpiReview
 
 @Entity('employees')
 export class Employee {
@@ -70,4 +70,7 @@ export class Employee {
   @ManyToOne(() => Team, (team) => team.employees, { nullable: true })
   @JoinColumn({ name: 'teamId' })
   team?: Team;
+
+  @OneToMany(() => KpiReview, (review) => review.reviewedBy) // Thêm mối quan hệ OneToMany
+  kpiReviews: KpiReview[];
 }

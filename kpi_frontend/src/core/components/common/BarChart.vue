@@ -24,7 +24,7 @@ ChartJS.register(
   LinearScale
 );
 
-// Props được định nghĩa và tự động có sẵn trong template.
+
 defineProps({
   chartData: {
     type: Object,
@@ -39,14 +39,14 @@ defineProps({
         y: {
           beginAtZero: true,
           ticks: {
-            // Ensure only integers are shown on the y-axis
+            
             precision: 0,
           },
         },
       },
       plugins: {
         legend: {
-          display: true, // Hoặc false nếu bạn không muốn hiển thị legend
+          display: true, 
         },
       },
     }),

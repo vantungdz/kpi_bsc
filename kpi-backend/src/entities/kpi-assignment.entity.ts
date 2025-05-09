@@ -16,6 +16,7 @@ import { Department } from './department.entity';
 import { Section } from './section.entity';
 import { Team } from './team.entity';
 import { KpiValue } from './kpi-value.entity';
+import { KpiReview } from './kpi-review.entity'; // Import KpiReview
 
 @Entity('kpi_assignment')
 export class KPIAssignment {
@@ -112,4 +113,7 @@ export class KPIAssignment {
 
   @OneToMany(() => KpiValue, (kpiValue) => kpiValue.kpiAssignment)
   kpiValues: KpiValue[];
+
+  @OneToMany(() => KpiReview, (review) => review.assignment)
+  reviews: KpiReview[];
 }

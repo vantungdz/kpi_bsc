@@ -11,14 +11,26 @@ import KpiPersonal from "../../features/kpi/views/KpiPersonal.vue";
 import KpiCreateDepartment from "../../features/kpi/views/create/KpiCreateDepartment.vue";
 import KpiCreateSection from "../../features/kpi/views/create/KpiCreateSection.vue";
 import LoginPage from "../../features/auth/views/LoginPage.vue";
+import KpiPerformanceOverview from "../../features/dashboard/views/KpiPerformanceOverview.vue"; 
 import ForgotPasswordPage from "../../features/auth/views/ForgotPasswordPage.vue";
 import KpiValueApprovalList from "../../features/kpi/views/KpiValueApprovalList.vue";
 import UserProfile from "../../features/employees/views/UserProfile.vue";
 import EmployeeList from "../../features/employees/views/EmployeeList.vue";
-import DashBoard from "../../features/dashboard/DashBoard.vue"; // Đây là trang tổng quan
-import KpiProcessStatistics from "../../features/dashboard/views/KpiProcessStatistics.vue"; // Trang chi tiết thống kê KPI
+import DashBoard from "../../features/dashboard/DashBoard.vue"; 
+import KpiProcessStatistics from "../../features/dashboard/views/KpiProcessStatistics.vue"; 
+import UserActivityStatistics from "../../features/dashboard/views/UserActivityStatistics.vue"; 
+import KpiInventoryStatistics from "@/features/dashboard/views/KpiInventoryStatistics.vue";
+import KpiReview from "../../features/evaluation/views/KpiReview.vue"; // Hoặc đường dẫn đúng
+
 
 const routes = [
+  {
+    path: "/kpi/review", // Hoặc một path khác phù hợp
+    name: "KpiReview",
+    component: KpiReview,
+    meta: { requiresAuth: true, roles: ["manager", "admin"] }, // Chỉ manager và admin được review
+  },
+
   {
     path: "/",
     name: "LoginPage",
@@ -27,21 +39,39 @@ const routes = [
   },
   {
     path: "/dashboard",
-    name: "DashBoard", // Route cho trang tổng quan
-    component: DashBoard, 
-    meta: { requiresAuth: true, roles: ["admin", "manager"] }, // Only admin and manager can access
+    name: "DashBoard",
+    component: DashBoard,
+    meta: { requiresAuth: true, roles: ["admin", "manager"] },
   },
   {
-    path: "/dashboard/kpi-process-stats", // Route cho trang chi tiết thống kê quy trình KPI
+    path: "/dashboard/kpi-process-stats",
     name: "KpiProcessStats",
     component: KpiProcessStatistics,
-    meta: { requiresAuth: true, roles: ["admin", "manager"] }, 
+    meta: { requiresAuth: true, roles: ["admin", "manager"] },
+  },
+  {
+    path: "/dashboard/kpi-inventory-stats",
+    name: "KpiInventoryStatistics",
+    component: KpiInventoryStatistics,
+    meta: { requiresAuth: true, roles: ["admin", "manager"] },
+  },
+  {
+    path: "/dashboard/user-activity-stats",
+    name: "UserActivityStatistics",
+    component: UserActivityStatistics,
+    meta: { requiresAuth: true, roles: ["admin", "manager"] },
+  },
+  {
+    path: "/dashboard/kpi-performance-overview",
+    name: "KpiPerformanceOverview",
+    component: KpiPerformanceOverview,
+    meta: { requiresAuth: true, roles: ["admin", "manager"] },
   },
   {
     path: "/profile",
     name: "UserProfile",
     component: UserProfile,
-    meta: { requiresAuth: true }, 
+    meta: { requiresAuth: true },
   },
   {
     path: "/forgot-password",
@@ -131,7 +161,7 @@ const routes = [
     path: "/employees",
     name: "EmployeeList",
     component: EmployeeList,
-    meta: { requiresAuth: true, roles: ["admin" , "manager"] },
+    meta: { requiresAuth: true, roles: ["admin", "manager"] },
   },
 ];
 
@@ -148,7 +178,7 @@ router.beforeEach((to, from, next) => {
   
   const isAuthenticated = store.getters["auth/isAuthenticated"];
 
-  // Nếu người dùng đã đăng nhập và truy cập "/", chuyển hướng sang "/performance"
+  
   if (isAuthenticated && to.path === "/") {
     next({ path: "/performance" });
     return;

@@ -5,6 +5,11 @@ import { Employee } from '../entities/employee.entity';
 import { KpiValueHistory } from '../entities/kpi-value-history.entity';
 import { KpiValue, KpiValueStatus } from '../entities/kpi-value.entity';
 import { Kpi } from '../entities/kpi.entity';
+import { KPIAssignment } from '../entities/kpi-assignment.entity';
+import { Section } from '../entities/section.entity'; 
+import { Department } from '../entities/department.entity'; 
+import { KpiInventoryDto, KpiPerformanceOverviewDto, PerformanceByRoleDto } from './dto/dashboard.dto';
+
 
 @Injectable()
 export class DashboardsService {
@@ -13,13 +18,14 @@ export class DashboardsService {
   constructor(
     @InjectRepository(KpiValue)
     private readonly kpiValuesRepository: Repository<KpiValue>,
-    @InjectRepository(KpiValueHistory) // Đảm bảo đã inject KpiValueHistoryRepository
+    @InjectRepository(KpiValueHistory) 
     private readonly kpiValueHistoryRepository: Repository<KpiValueHistory>,
-    @InjectRepository(Kpi) // Inject KpiRepository để lấy tên KPI
+    @InjectRepository(Kpi) 
     private readonly kpisRepository: Repository<Kpi>,
-    // Inject EmployeeRepository nếu bạn cần lấy thông tin chi tiết của Employee
-    // @InjectRepository(Employee)
-    // private readonly employeeRepository: Repository<Employee>,
+    @InjectRepository(Employee) 
+    private readonly employeeRepository: Repository<Employee>,
+    @InjectRepository(KPIAssignment) // Inject KPIAssignmentRepository
+    private readonly kpiAssignmentRepository: Repository<KPIAssignment>,
   ) {}
 
   async getKpiAwaitingApprovalStats(currentUser: Employee): Promise<{
@@ -44,12 +50,12 @@ export class DashboardsService {
         ],
       });
 
-    // Apply role-based filters
-    // Ensure aliases match those used in the main query's joins
+    
+    
     const canProceed = this.applyRoleBasedFilters(query, currentUser, {
-      assignmentAlias: 'assignment', // Default, but explicit
-      assignedEmployeeAlias: 'assignedEmployee', // Default, but explicit
-      departmentOfAssignedSectionAlias: 'departmentOfAssignedSection', // Default, but explicit
+      assignmentAlias: 'assignment', 
+      assignedEmployeeAlias: 'assignedEmployee', 
+      departmentOfAssignedSectionAlias: 'departmentOfAssignedSection', 
     });
     if (!canProceed) {
       return { total: 0, byLevel: [] };
@@ -98,7 +104,7 @@ export class DashboardsService {
 
   async getKpiStatusOverTimeStats(
     currentUser: Employee,
-    days: number = 7, // Mặc định là 7 ngày
+    days: number = 7, 
   ): Promise<{ approvedLastXDays: number; rejectedLastXDays: number }> {
     this.logger.debug(
       `[getKpiStatusOverTimeStats] Called by user: ${currentUser.id} for last ${days} days`,
@@ -113,7 +119,7 @@ export class DashboardsService {
       .leftJoin('assignment.employee', 'assignedEmployee')
       .leftJoin('assignment.section', 'assignedSection')
       .leftJoin('assignedSection.department', 'departmentOfAssignedSection')
-      .where('kpiValue.updated_at >= :sinceDate', { sinceDate }); // Chỉ xét các KpiValue được cập nhật gần đây
+      .where('kpiValue.updated_at >= :sinceDate', { sinceDate }); 
 
     const canProceedStatusOverTime = this.applyRoleBasedFilters(
       baseQuery,
@@ -150,16 +156,16 @@ export class DashboardsService {
   }
 
   async getAverageApprovalTimeStats(currentUser: Employee): Promise<{
-    totalAverageTime: number | null; // in hours
-    byLevel: { name: string; averageTime: number | null }[]; // in hours
+    totalAverageTime: number | null; 
+    byLevel: { name: string; averageTime: number | null }[]; 
   }> {
     this.logger.debug(
       `[getAverageApprovalTimeStats] Called by user: ${currentUser.id}`,
     );
 
-    // Lấy tất cả các KpiValue đã được APPROVED hoặc REJECTED (đã hoàn thành quy trình)
-    // và có lịch sử thay đổi.
-    // Cần join với KpiAssignment để áp dụng phân quyền
+    
+    
+    
     const completedKpiValuesQuery = this.kpiValuesRepository
       .createQueryBuilder('kv')
       .innerJoin('kv.kpiAssignment', 'assignment')
@@ -176,7 +182,7 @@ export class DashboardsService {
       })
       .select(['kv.id']);
 
-    // Áp dụng phân quyền
+    
     const canProceedAvgTime = this.applyRoleBasedFilters(
       completedKpiValuesQuery,
       currentUser,
@@ -206,12 +212,12 @@ export class DashboardsService {
       .addOrderBy('history.changed_at', 'ASC')
       .getMany();
 
-    const processingTimes: number[] = []; // Store processing times in milliseconds
+    const processingTimes: number[] = []; 
 
-    // Logic tính toán thời gian (đơn giản hóa)
-    // Bạn cần một logic phức tạp hơn để theo dõi chính xác thời gian ở mỗi bước
-    // dựa trên 'action' và 'status_before', 'status_after' trong KpiValueHistory.
-    // Ví dụ này chỉ tính tổng thời gian từ lúc submit đầu tiên đến lúc có kết quả cuối.
+    
+    
+    
+    
     const kpiValueTimeMap = new Map<
       number,
       { startTime?: Date; endTime?: Date }
@@ -226,7 +232,7 @@ export class DashboardsService {
         kpiValueTimeMap.set(record.kpi_value_id, entry);
       }
 
-      // Ghi nhận thời điểm submit đầu tiên (SUBMIT_CREATE hoặc SUBMIT_UPDATE)
+      
       if (
         (record.action === 'SUBMIT_CREATE' ||
           record.action === 'SUBMIT_UPDATE') &&
@@ -235,7 +241,7 @@ export class DashboardsService {
         entry.startTime = record.changed_at;
       }
 
-      // Ghi nhận thời điểm có kết quả cuối cùng
+      
       if (
         [
           KpiValueStatus.APPROVED,
@@ -267,9 +273,9 @@ export class DashboardsService {
       (totalAverageMs / (1000 * 60 * 60)).toFixed(2),
     );
 
-    // Việc tính byLevel sẽ phức tạp hơn, đòi hỏi phân tích action trong history
-    // Ví dụ: thời gian từ PENDING_SECTION_APPROVAL -> APPROVE_SECTION hoặc PENDING_DEPT_APPROVAL
-    // Tạm thời trả về mảng rỗng cho byLevel
+    
+    
+    
     return { totalAverageTime: totalAverageHours, byLevel: [] };
   }
 
@@ -288,12 +294,12 @@ export class DashboardsService {
     const sinceDate = new Date();
     sinceDate.setDate(sinceDate.getDate() - days);
 
-    // --- Top Submitted KPIs (dựa trên KpiValueHistory với action SUBMIT_CREATE) ---
+    
     const submittedQuery = this.kpiValueHistoryRepository
       .createQueryBuilder('history')
       .select('history.kpi_id', 'kpiId')
       .addSelect('COUNT(history.id)', 'count')
-      .innerJoin('history.kpiValue', 'kpiValue') // Join để có thể join tiếp với KpiAssignment
+      .innerJoin('history.kpiValue', 'kpiValue') 
       .innerJoin('kpiValue.kpiAssignment', 'assignment')
       .leftJoin('assignment.employee', 'assignedEmployee')
       .leftJoin('assignment.section', 'assignedSection')
@@ -301,27 +307,29 @@ export class DashboardsService {
       .where('history.action = :action', { action: 'SUBMIT_CREATE' })
       .andWhere('history.changed_at >= :sinceDate', { sinceDate })
       .groupBy('history.kpi_id')
+      .innerJoin(Kpi, 'kpi_entity', 'kpi_entity.id = history.kpi_id') 
+      .andWhere('kpi_entity.deleted_at IS NULL') 
       .orderBy('count', 'DESC')
       .limit(limit);
 
-    // Áp dụng phân quyền cho submittedQuery
-    // Note: The aliases here are based on the joins in submittedQuery
-    // 'assignment' is kpiValue.kpiAssignment
-    // 'assignedEmployee' is assignment.employee
-    // 'departmentOfAssignedSection' is assignedSection.department
+    
+    
+    
+    
+    
     const canProceedSubmitted = this.applyRoleBasedFilters(
       submittedQuery,
       currentUser,
       {
-        assignmentAlias: 'assignment', // This alias is defined in the submittedQuery
-        assignedEmployeeAlias: 'assignedEmployee', // This alias is defined in the submittedQuery
-        departmentOfAssignedSectionAlias: 'departmentOfAssignedSection', // This alias is defined in the submittedQuery
+        assignmentAlias: 'assignment', 
+        assignedEmployeeAlias: 'assignedEmployee', 
+        departmentOfAssignedSectionAlias: 'departmentOfAssignedSection', 
       },
     );
     if (!canProceedSubmitted) return { submitted: [], updated: [] };
     const topSubmittedRaw = await submittedQuery.getRawMany();
-    // --- Top Updated KPIs (dựa trên KpiValueHistory với các action không phải SUBMIT_CREATE) ---
-    // Bao gồm SUBMIT_UPDATE, APPROVE_*, REJECT_*
+    
+    
     const updatedQuery = this.kpiValueHistoryRepository
       .createQueryBuilder('history')
       .select('history.kpi_id', 'kpiId')
@@ -334,28 +342,33 @@ export class DashboardsService {
       .where('history.action != :actionCreate', {
         actionCreate: 'SUBMIT_CREATE',
       })
+      .innerJoin(
+        Kpi,
+        'kpi_entity_updated',
+        'kpi_entity_updated.id = history.kpi_id',
+      ) 
+      .andWhere('kpi_entity_updated.deleted_at IS NULL') 
       .andWhere('history.changed_at >= :sinceDate', { sinceDate })
       .groupBy('history.kpi_id')
       .orderBy('count', 'DESC')
       .limit(limit);
 
-    // Áp dụng phân quyền cho updatedQuery
+    
     const canProceedUpdated = this.applyRoleBasedFilters(
       updatedQuery,
       currentUser,
       {
-        assignmentAlias: 'assignment', // This alias is defined in the updatedQuery
-        assignedEmployeeAlias: 'assignedEmployee', // This alias is defined in the updatedQuery
-        departmentOfAssignedSectionAlias: 'departmentOfAssignedSection', // This alias is defined in the updatedQuery
+        assignmentAlias: 'assignment', 
+        assignedEmployeeAlias: 'assignedEmployee', 
+        departmentOfAssignedSectionAlias: 'departmentOfAssignedSection', 
       },
     );
-    // If canProceedUpdated is false, topUpdatedRaw will be empty if query isn't run,
-    // or you can return early like for submitted. For simplicity, let it run if it's already constructed.
+    
     if (!canProceedUpdated && !canProceedSubmitted)
-      return { submitted: [], updated: [] }; // if both failed
+      return { submitted: [], updated: [] }; 
     const topUpdatedRaw = await updatedQuery.getRawMany();
 
-    // Lấy tên KPI cho kết quả
+    
     const kpiIds = [
       ...new Set([
         ...topSubmittedRaw.map((r) => r.kpiId),
@@ -379,20 +392,19 @@ export class DashboardsService {
 
     return { submitted, updated };
   }
-
-  // Helper method to apply role-based filters
-  private applyRoleBasedFilters<T extends KpiValue | KpiValueHistory>(
+  
+  private applyRoleBasedFilters<T extends KpiValue | KpiValueHistory | Kpi | KPIAssignment>(
     query: SelectQueryBuilder<T>,
     currentUser: Employee,
     aliases: {
-      // Aliases used in the specific query being filtered
+      
       assignmentAlias: string;
       assignedEmployeeAlias: string;
       departmentOfAssignedSectionAlias: string;
-      // assignedSectionAlias?: string, // If needed for direct section conditions
+      assignedDirectlyToDepartmentAlias?: string; // Thêm alias cho department gán trực tiếp
     },
   ): boolean {
-    // Returns true if query should proceed, false if access denied or essential ID missing
+    
     switch (currentUser.role) {
       case 'section':
         if (!currentUser.sectionId) {
@@ -434,11 +446,640 @@ export class DashboardsService {
                 `${aliases.assignedEmployeeAlias}.departmentId = :deptId`,
                 { deptId: currentUser.departmentId },
               );
+            // Nếu có alias cho department gán trực tiếp, thêm điều kiện
+            if (aliases.assignedDirectlyToDepartmentAlias) {
+              qb.orWhere(`${aliases.assignedDirectlyToDepartmentAlias}.id = :deptId`, { deptId: currentUser.departmentId });
+            }
+
           }),
         );
         break;
-      // 'manager' and 'admin' see all, no specific query changes needed here.
     }
-    return true; // Filters applied or not needed for role
+    return true; 
+  }
+
+  async getTopPendingApproversStats(
+    currentUser: Employee,
+    limit: number = 5,
+  ): Promise<
+    {
+      approverType: 'user' | 'department' | 'section';
+      approverId: number;
+      approverName: string;
+      pendingCount: number;
+      pendingKpis?: { kpiValueId: number; kpiId: number; kpiName: string; submittedBy?: string }[];
+    }[]
+  > {
+    this.logger.debug(
+      `[getTopPendingApproversStats] Called by user: ${currentUser.id}, limit: ${limit}`,
+    );
+    
+
+    const pendingValuesQuery = this.kpiValuesRepository
+      .createQueryBuilder('kpiValue')
+      .innerJoinAndSelect('kpiValue.kpiAssignment', 'assignment')
+      .innerJoinAndSelect('assignment.kpi', 'kpi') 
+      .leftJoinAndSelect('assignment.employee', 'assignedEmployee') 
+      .leftJoinAndSelect('assignedEmployee.section', 'submitterSection')
+      .leftJoinAndSelect('assignedEmployee.department', 'submitterDepartment')
+      .leftJoinAndSelect('assignment.section', 'assignedSection') 
+      .leftJoinAndSelect(
+        'assignedSection.department',
+        'departmentOfAssignedSection',
+      ) 
+      .leftJoinAndSelect('assignment.department', 'assignedDepartment') 
+      .where('kpiValue.status IN (:...statuses)', {
+        statuses: [
+          KpiValueStatus.PENDING_SECTION_APPROVAL,
+          KpiValueStatus.PENDING_DEPT_APPROVAL,
+          KpiValueStatus.PENDING_MANAGER_APPROVAL,
+        ],
+      });
+
+    
+    
+    
+    if (currentUser.role === 'manager' && currentUser.departmentId) {
+      
+      pendingValuesQuery.andWhere(
+        new Brackets((qb) => {
+          qb.where('assignedDepartment.id = :userDeptId', {
+            userDeptId: currentUser.departmentId,
+          })
+            .orWhere('departmentOfAssignedSection.id = :userDeptId', {
+              userDeptId: currentUser.departmentId,
+            })
+            .orWhere('submitterDepartment.id = :userDeptId', {
+              userDeptId: currentUser.departmentId,
+            });
+        }),
+      );
+    } else if (currentUser.role === 'department' && currentUser.departmentId) {
+      
+      pendingValuesQuery.andWhere(
+        new Brackets((qb) => {
+          qb.where('departmentOfAssignedSection.id = :userDeptId', {
+            userDeptId: currentUser.departmentId,
+          }).orWhere('submitterSection.departmentId = :userDeptId', {
+            userDeptId: currentUser.departmentId,
+          });
+        }),
+      );
+    }
+
+    const pendingValues = await pendingValuesQuery.getMany();
+
+    const approverCounts: Record<
+      string,
+      {
+        approverType: 'user' | 'department' | 'section';
+        approverId: number;
+        approverName: string;
+        pendingCount: number;
+        pendingKpis: { kpiValueId: number; kpiId: number; kpiName: string; submittedBy?: string }[];
+        sortKey: string;
+      }
+    > = {};
+
+    for (const pv of pendingValues) {
+      let approverKey: string | null = null;
+      let approverType: 'user' | 'department' | 'section' | null = null;
+      let approverEntityId: number | null = null; 
+      let approverName: string = 'N/A';
+
+      const assignment = pv.kpiAssignment;
+      if (!assignment) continue;
+      const kpiDetail = { kpiValueId: pv.id, kpiId: assignment.kpi.id, kpiName: assignment.kpi.name, submittedBy: assignment.employee ? `${assignment.employee.first_name} ${assignment.employee.last_name}` : (assignment.section ? assignment.section.name : 'N/A') };
+
+      
+      if (pv.status === KpiValueStatus.PENDING_SECTION_APPROVAL) {
+        
+        const targetSection = assignment.section || assignment.employee?.section; 
+        if (targetSection) {
+          
+          
+          
+          approverType = 'section';
+          approverEntityId = targetSection.id;
+          approverName = targetSection.name || `Section ID ${targetSection.id}`;
+          approverKey = `section_${targetSection.id}`;
+        }
+      } else if (pv.status === KpiValueStatus.PENDING_DEPT_APPROVAL) {
+        
+        const targetDepartment =
+          assignment.department || 
+          assignment.section?.department || 
+          assignment.employee?.department; 
+        if (targetDepartment) {
+          approverType = 'department';
+          approverEntityId = targetDepartment.id;
+          approverName =
+            targetDepartment.name || `Department ID ${targetDepartment.id}`;
+          approverKey = `department_${targetDepartment.id}`;
+        }
+      } else if (pv.status === KpiValueStatus.PENDING_MANAGER_APPROVAL) {
+        
+        
+        approverType = 'user'; 
+        approverEntityId = 0; 
+        approverName = 'Cấp Quản lý/Admin';
+        approverKey = `group_manager_admin`;
+      }
+
+      if (approverKey && approverEntityId !== null && approverType) {
+        if (!approverCounts[approverKey]) {
+          approverCounts[approverKey] = {
+            approverType,
+            approverId: approverEntityId, 
+            approverName,
+            pendingCount: 0,
+            pendingKpis: [],
+            sortKey: approverName.toLowerCase(),
+          };
+        }
+        approverCounts[approverKey].pendingCount++;
+        if (approverCounts[approverKey].pendingKpis.length < 5) { 
+          approverCounts[approverKey].pendingKpis.push(kpiDetail);
+        }
+      }
+    }
+    const sortedApprovers = Object.values(approverCounts)
+      .sort((a, b) => {
+        if (b.pendingCount === a.pendingCount) {
+          return a.sortKey.localeCompare(b.sortKey); 
+        }
+        return b.pendingCount - a.pendingCount;
+      })
+      .slice(0, limit);
+
+    
+    return sortedApprovers.map(({ sortKey, ...rest }) => rest);
+  }
+
+  async getKpiSubmissionStats(
+    currentUser: Employee,
+    params: {
+      days: number;
+      limit: number;
+      entityType: 'user' | 'section' | 'department';
+      orderBy: 'most' | 'least';
+      recentKpisLimit?: number; 
+    },
+  ): Promise<
+    {
+      id: number | string;
+      name: string;
+      count: number;
+      recentSubmittedKpis?: { kpiId: number; kpiName: string; submittedAt: Date }[];
+    }[]
+  > {
+    const { days, limit, entityType, orderBy, recentKpisLimit = 3 } = params; 
+    this.logger.debug(
+      `[getKpiSubmissionStats] Called by user: ${currentUser.id}, entityType: ${entityType}, orderBy: ${orderBy}, days: ${days}, limit: ${limit}, recentKpisLimit: ${recentKpisLimit}`,
+    );
+
+    const sinceDate = new Date();
+    sinceDate.setDate(sinceDate.getDate() - days);
+
+    const topEntitiesQuery = this.kpiValueHistoryRepository
+      .createQueryBuilder('history')
+      .select('COUNT(history.id)', 'count')
+      
+      
+      .innerJoin(Employee, 'submitter', 'submitter.id = history.changed_by')
+      
+      .innerJoin(Kpi, 'kpi_for_count', 'kpi_for_count.id = history.kpi_id')
+      .where('history.action = :action', { action: 'SUBMIT_CREATE' })
+      .andWhere('history.changed_at >= :sinceDate', { sinceDate })
+      .andWhere('kpi_for_count.deleted_at IS NULL'); 
+
+    
+    if (currentUser.role === 'manager' && currentUser.departmentId) {
+      topEntitiesQuery.andWhere('submitter.departmentId = :userDepartmentId', { 
+        userDepartmentId: currentUser.departmentId,
+      });
+    }
+    
+
+    switch (entityType) {
+      case 'user':
+        topEntitiesQuery
+          .addSelect('submitter.id', 'id')
+          
+          
+          .addSelect("CONCAT(submitter.first_name, ' ', submitter.last_name)", 'name')
+          .groupBy('submitter.id, submitter.first_name, submitter.last_name');
+        break;
+      case 'section':
+        topEntitiesQuery
+          .leftJoin('submitter.section', 'sectionEntity') 
+          .addSelect('sectionEntity.id', 'id')
+          .addSelect('sectionEntity.name', 'name')
+          .andWhere('sectionEntity.id IS NOT NULL') 
+          .groupBy('sectionEntity.id, sectionEntity.name');
+        break;
+      case 'department':
+        topEntitiesQuery
+          .leftJoin('submitter.department', 'departmentEntity') 
+          .addSelect('departmentEntity.id', 'id')
+          .addSelect('departmentEntity.name', 'name')
+          .andWhere('departmentEntity.id IS NOT NULL') 
+          .groupBy('departmentEntity.id, departmentEntity.name');
+        break;
+    }
+
+    topEntitiesQuery.orderBy('count', orderBy === 'most' ? 'DESC' : 'ASC').limit(limit);
+
+    const topEntitiesRaw = await topEntitiesQuery.getRawMany();
+
+    if (topEntitiesRaw.length === 0) {
+      return [];
+    }
+
+    
+    const results: {
+      id: number | string;
+      name: string;
+      count: number;
+      recentSubmittedKpis?: {
+        kpiId: number;
+        kpiName: string;
+        submittedAt: Date;
+      }[];
+    }[] = [];
+
+    for (const entity of topEntitiesRaw) {
+      const entityId = entity.id;
+      let entityName = entity.name;
+      const submissionCount = parseInt(entity.count, 10);
+      let recentKpis: { kpiId: number; kpiName: string; submittedAt: Date }[] = [];
+
+      if (!entityName) {
+        if (entityType === 'section') entityName = 'Không có Bộ phận';
+        else if (entityType === 'department') entityName = 'Không có Phòng ban';
+        else entityName = 'Người dùng không xác định';
+      }
+
+      if (recentKpisLimit > 0 && entityId) { 
+        const kpiDetailsQuery = this.kpiValueHistoryRepository
+          .createQueryBuilder('h_detail')
+          .select('h_detail.kpi_id', 'kpiId')
+          .addSelect('kpi_entity.name', 'kpiName')
+          .addSelect('h_detail.changed_at', 'submittedAt')
+          .innerJoin(Kpi, 'kpi_entity', 'kpi_entity.id = h_detail.kpi_id')
+          .innerJoin(Employee, 'submitter_detail', 'submitter_detail.id = h_detail.changed_by')
+          .where('h_detail.action = :action', { action: 'SUBMIT_CREATE' })
+          .andWhere('h_detail.changed_at >= :sinceDate', { sinceDate })
+          .andWhere('kpi_entity.deleted_at IS NULL');
+
+        if (entityType === 'user') {
+          kpiDetailsQuery.andWhere('h_detail.changed_by = :entityIdParam', { entityIdParam: entityId });
+        } else if (entityType === 'section') {
+          kpiDetailsQuery.andWhere('submitter_detail.sectionId = :entityIdParam', { entityIdParam: entityId });
+        } else { 
+          kpiDetailsQuery.andWhere('submitter_detail.departmentId = :entityIdParam', { entityIdParam: entityId });
+        }
+
+        if (currentUser.role === 'manager' && currentUser.departmentId) {
+          kpiDetailsQuery.andWhere('submitter_detail.departmentId = :managerDeptId', { managerDeptId: currentUser.departmentId });
+        }
+
+        recentKpis = await kpiDetailsQuery
+          .orderBy('h_detail.changed_at', 'DESC')
+          .limit(recentKpisLimit)
+          .getRawMany();
+      }
+
+      results.push({
+        id: entityId,
+        name: entityName,
+        count: submissionCount,
+        recentSubmittedKpis: recentKpis.map(kpi => ({
+          kpiId: kpi.kpiId,
+          kpiName: kpi.kpiName,
+          submittedAt: new Date(kpi.submittedAt)
+        })),
+      });
+    }
+    return results;
+  }
+
+  async getKpiPerformanceOverview( // Giữ nguyên phương thức này
+    currentUser: Employee,
+    daysForNotUpdated: number = 7, 
+  ): Promise<KpiPerformanceOverviewDto> {
+    this.logger.debug(
+      `[getKpiPerformanceOverview] Called by user: ${currentUser.id}`,
+    );
+
+    const baseKpiQuery = this.kpisRepository
+      .createQueryBuilder('kpi')
+      .where('kpi.deleted_at IS NULL');
+    
+    
+    
+    
+
+    const totalKpis = await baseKpiQuery.getCount();
+
+    
+    
+    const relevantAssignmentsQuery = this.kpisRepository
+      .createQueryBuilder('kpi')
+      .select([
+        'kpi.id',
+        'assignment.id',
+        'assignment.targetValue',
+        'latestValue.value',
+        'latestValue.id AS latestValue_kpi_value_id',
+        'assignedEmployee.id', 
+        'assignedEmployee.first_name',
+        'assignedEmployee.last_name',
+        'assignedEmployee.departmentId AS assignedEmployee_departmentId', 
+        'assignedEmployeeDepartment.name AS assignedEmployee_department_name', 
+        'assignedDirectlyToDepartment.id AS assignedDirectlyToDepartment_id', 
+        'assignedDirectlyToDepartment.name AS assignedDirectlyToDepartment_name', 
+        'departmentOfAssignedSection.id AS departmentOfAssignedSection_id', 
+        'departmentOfAssignedSection.name AS departmentOfAssignedSection_name', 
+        'latestValue.timestamp',
+      ])
+      .innerJoin('kpi.assignments', 'assignment')
+      .leftJoin(
+        (qb) =>
+          qb
+            .select('kv_sub.kpi_assigment_id, MAX(kv_sub.timestamp) as max_timestamp') 
+            .from(KpiValue, 'kv_sub')
+            .groupBy('kv_sub.kpi_assigment_id'), 
+        'latest_value_time',
+        'latest_value_time.kpi_assigment_id = assignment.id', 
+      )
+      .leftJoin(
+        KpiValue,
+        'latestValue',
+        'latestValue.kpi_assigment_id = assignment.id AND latestValue.timestamp = latest_value_time.max_timestamp', 
+      )
+      .where('kpi.deleted_at IS NULL')
+      .andWhere('assignment.deleted_at IS NULL');
+      
+    
+    this.applyRoleBasedFilters(relevantAssignmentsQuery, currentUser, {
+      assignmentAlias: 'assignment',
+      
+      
+      assignedEmployeeAlias: 'assignedEmployee',
+      departmentOfAssignedSectionAlias: 'departmentOfAssignedSection', 
+    });
+    
+    
+    relevantAssignmentsQuery
+      .leftJoin('assignment.employee', 'assignedEmployee')
+      .leftJoin('assignedEmployee.department', 'assignedEmployeeDepartment') 
+      .leftJoin('assignment.section', 'assignedSection')
+      .leftJoin('assignedSection.department', 'departmentOfAssignedSection')
+      .leftJoin('assignment.department', 'assignedDirectlyToDepartment'); 
+
+
+    const assignmentsWithLatestValues = await relevantAssignmentsQuery.getRawMany();
+
+    let achievedCount = 0;
+    let notAchievedCount = 0;
+    let notUpdatedRecentlyCount = 0;
+    const kpisWithValues = assignmentsWithLatestValues.filter(a => a.latestValue_value !== null);
+    const totalKpisWithValues = kpisWithValues.length;
+
+
+    const thresholdDate = new Date();
+    thresholdDate.setDate(thresholdDate.getDate() - daysForNotUpdated);
+
+    for (const item of assignmentsWithLatestValues) {
+      if (item.latestValue_value !== null && item.assignment_targetValue !== null) {
+        if (parseFloat(item.latestValue_value) >= parseFloat(item.assignment_targetValue)) {
+          achievedCount++;
+        } else {
+          notAchievedCount++;
+        }
+      }
+
+      if (item.latestValue_value === null || (item.latestValue_timestamp && new Date(item.latestValue_timestamp) < thresholdDate) ) {
+         
+        if (item.latestValue_value === null && new Date(item.assignment_created_at || item.kpi_created_at || Date.now()) < thresholdDate) {
+            
+            notUpdatedRecentlyCount++;
+        } else if (item.latestValue_value !== null && new Date(item.latestValue_timestamp) < thresholdDate) {
+            
+            notUpdatedRecentlyCount++;
+        }
+      }
+    }
+
+    const totalRatedKpis = achievedCount + notAchievedCount;
+    const achievedRate = totalRatedKpis > 0 ? parseFloat(((achievedCount / totalRatedKpis) * 100).toFixed(2)) : 0;
+    const notAchievedRate = totalRatedKpis > 0 ? parseFloat(((notAchievedCount / totalRatedKpis) * 100).toFixed(2)) : 0;
+    const notUpdatedRecentlyRate = totalKpisWithValues > 0 ? parseFloat(((notUpdatedRecentlyCount / totalKpisWithValues) * 100).toFixed(2)) : 0;
+
+    
+    const performanceByRole: PerformanceByRoleDto[] = [];
+    if (currentUser.role === 'admin' || currentUser.role === 'manager') {
+      const performanceMap = new Map<number, { departmentName: string; total: number; achieved: number; notAchieved: number }>();
+
+      for (const item of kpisWithValues) {
+        
+        const departmentId =
+          item.assigneddirectlytodepartment_id ||
+          item.assignedemployee_departmentid ||
+          item.departmentofassignedsection_id;
+        const departmentName =
+          item.assigneddirectlytodepartment_name ||
+          item.assignedemployee_department_name ||
+          item.departmentofassignedsection_name ||
+          'Không xác định';
+
+        if (departmentId) {
+          
+          if (currentUser.role === 'manager' && currentUser.departmentId !== departmentId) {
+            continue;
+          }
+
+          if (!performanceMap.has(departmentId)) {
+            performanceMap.set(departmentId, { departmentName: departmentName, total: 0, achieved: 0, notAchieved: 0 });
+          }
+          const deptStat = performanceMap.get(departmentId)!;
+          deptStat.total++;
+          if (item.latestValue_value !== null && item.assignment_targetValue !== null) {
+            if (parseFloat(item.latestValue_value) >= parseFloat(item.assignment_targetValue)) {
+              deptStat.achieved++;
+            } else {
+              deptStat.notAchieved++;
+            }
+          }
+        }
+      }
+
+      performanceMap.forEach((stat, deptId) => {
+        performanceByRole.push({
+          roleType: 'department',
+          roleId: deptId,
+          roleName: stat.departmentName,
+          totalAssignedKpis: stat.total,
+          achievedCount: stat.achieved,
+          notAchievedCount: stat.notAchieved,
+          achievedRate: stat.total > 0 ? parseFloat(((stat.achieved / stat.total) * 100).toFixed(2)) : 0,
+        });
+      });
+       
+       performanceByRole.sort((a, b) => a.roleName.localeCompare(b.roleName));
+    }
+    
+
+
+
+    return {
+      totalKpis,
+      achievedCount,
+      notAchievedCount,
+      achievedRate,
+      notAchievedRate,
+      notUpdatedRecentlyCount,
+      totalKpisWithValues,
+      notUpdatedRecentlyRate,
+      performanceByRole: performanceByRole.length > 0 ? performanceByRole : undefined,
+    };
+  }
+
+  async getKpiInventoryStats(
+    currentUser: Employee,
+  ): Promise<KpiInventoryDto> {
+    this.logger.debug(
+      `[getKpiInventoryStats] Called by user: ${currentUser.id} with role: ${currentUser.role}`,
+    );
+
+    // 1. Tổng số Định nghĩa KPI đang hoạt động
+    const totalKpiDefinitionsQuery = this.kpisRepository
+      .createQueryBuilder('kpi')
+      .where('kpi.deleted_at IS NULL');
+
+    // TODO: Áp dụng bộ lọc vai trò cho tổng số định nghĩa KPI nếu cần.
+    // Điều này phức tạp vì định nghĩa KPI không trực tiếp thuộc về phòng ban/nhân viên.
+    // Có thể cần join qua KPIAssignment để lọc (ví dụ: chỉ đếm KPI có ít nhất 1 assignment trong phạm vi của user).
+    // Tạm thời, Admin thấy tất cả, Manager thấy tất cả định nghĩa KPI có ít nhất 1 assignment trong phạm vi của họ.
+    if (currentUser.role === 'manager' && currentUser.departmentId) {
+       totalKpiDefinitionsQuery
+         .innerJoin('kpi.assignments', 'assignment', 'assignment.deleted_at IS NULL')
+         .leftJoin('assignment.employee', 'assignedEmployee')
+         .leftJoin('assignment.section', 'assignedSection')
+         .leftJoin('assignedSection.department', 'departmentOfAssignedSection')
+         .leftJoin('assignment.department', 'assignedDirectlyToDepartment')
+         .andWhere(
+           new Brackets((qb) => {
+             qb.where('assignedDirectlyToDepartment.id = :userDeptId', { userDeptId: currentUser.departmentId })
+               .orWhere('departmentOfAssignedSection.id = :userDeptId', { userDeptId: currentUser.departmentId })
+               .orWhere('assignedEmployee.departmentId = :userDeptId', { userDeptId: currentUser.departmentId });
+           })
+         )
+         .distinct(true); // Đếm các KPI distinct
+    }
+
+    const totalKpiDefinitions = await totalKpiDefinitionsQuery.getCount();
+
+    // 2. Tổng số Lượt giao KPI đang hoạt động
+    const totalKpiAssignmentsQuery = this.kpiValuesRepository // Sử dụng KpiValueRepository để join Assignment
+      .createQueryBuilder('kpiValue') // Bắt đầu từ KpiValue để dễ join Assignment
+      .select('COUNT(DISTINCT assignment.id)', 'count') // Đếm DISTINCT assignment.id
+      .innerJoin('kpiValue.kpiAssignment', 'assignment', 'assignment.deleted_at IS NULL')
+      .leftJoin('assignment.employee', 'assignedEmployee')
+      .leftJoin('assignment.section', 'assignedSection')
+      .leftJoin('assignedSection.department', 'departmentOfAssignedSection')
+      .leftJoin('assignment.department', 'assignedDirectlyToDepartment')
+      .where('assignment.deleted_at IS NULL'); // Chỉ đếm assignment đang hoạt động
+
+    // Áp dụng bộ lọc vai trò cho lượt giao KPI
+    this.applyRoleBasedFilters(totalKpiAssignmentsQuery, currentUser, {
+      assignmentAlias: 'assignment',
+      assignedEmployeeAlias: 'assignedEmployee',
+      departmentOfAssignedSectionAlias: 'departmentOfAssignedSection',
+      assignedDirectlyToDepartmentAlias: 'assignedDirectlyToDepartment',
+    });
+
+    const totalKpiAssignmentsRaw = await totalKpiAssignmentsQuery.getRawOne();
+    const totalKpiAssignments = parseInt(totalKpiAssignmentsRaw?.count || '0', 10);
+
+    // 3. Phân bổ Lượt giao KPI theo Phòng ban
+    const assignmentsByDepartmentQuery = this.kpiValuesRepository // Or KPIAssignment repository
+      .createQueryBuilder('kpiValue') // Starting from kpiValue to easily apply role filters via assignment
+      .innerJoin('kpiValue.kpiAssignment', 'assignment', 'assignment.deleted_at IS NULL')
+      .leftJoin('assignment.department', 'assignedDirectlyToDepartment')
+      .leftJoin('assignment.employee', 'assignedEmployee')
+      .leftJoin('assignedEmployee.department', 'employeeDepartment')
+      .leftJoin('assignment.section', 'assignedSection')
+      .leftJoin('assignedSection.department', 'sectionDepartment')
+      .select('COALESCE(assignedDirectlyToDepartment.id, employeeDepartment.id, sectionDepartment.id)', 'departmentId')
+      .addSelect('COALESCE(assignedDirectlyToDepartment.name, employeeDepartment.name, sectionDepartment.name)', 'departmentName')
+      .addSelect('COUNT(DISTINCT assignment.id)', 'count')
+      .where('assignment.deleted_at IS NULL')
+      // Ensure we only count assignments that have a department link
+      .andWhere(new Brackets(qb => {
+        qb.where('assignedDirectlyToDepartment.id IS NOT NULL')
+          .orWhere('employeeDepartment.id IS NOT NULL')
+          .orWhere('sectionDepartment.id IS NOT NULL');
+      }));
+
+    this.applyRoleBasedFilters(assignmentsByDepartmentQuery, currentUser, {
+      assignmentAlias: 'assignment',
+      assignedEmployeeAlias: 'assignedEmployee',
+      departmentOfAssignedSectionAlias: 'sectionDepartment', // Alias for department of section
+      assignedDirectlyToDepartmentAlias: 'assignedDirectlyToDepartment',
+    });
+    
+    assignmentsByDepartmentQuery
+      .groupBy('COALESCE(assignedDirectlyToDepartment.id, employeeDepartment.id, sectionDepartment.id)')
+      .addGroupBy('COALESCE(assignedDirectlyToDepartment.name, employeeDepartment.name, sectionDepartment.name)')
+      .orderBy('"departmentName"', 'ASC');
+
+    const assignmentsByDepartmentRaw = await assignmentsByDepartmentQuery.getRawMany();
+    const assignmentsByDepartment = assignmentsByDepartmentRaw.map(item => ({
+      departmentId: parseInt(item.departmentId, 10),
+      departmentName: item.departmentName || 'Không xác định',
+      count: parseInt(item.count, 10),
+    })).filter(item => item.departmentId); // Ensure departmentId is valid
+
+    // TODO: Tính toán assignmentsByStatus
+    // 4. Phân bổ Lượt giao KPI theo Trạng thái Giao việc (Assignment Status)
+    const assignmentsByStatusQuery = this.kpiAssignmentRepository
+      .createQueryBuilder('assignment')
+      .select('assignment.status', 'status')
+      .addSelect('COUNT(assignment.id)', 'count')
+      .where('assignment.deleted_at IS NULL'); // Only count active assignments
+
+    // Apply role-based filters
+    // Need to join entities required by applyRoleBasedFilters
+    assignmentsByStatusQuery
+      .leftJoin('assignment.employee', 'assignedEmployee')
+      .leftJoin('assignment.section', 'assignedSection')
+      .leftJoin('assignedSection.department', 'departmentOfAssignedSection')
+      .leftJoin('assignment.department', 'assignedDirectlyToDepartment');
+
+    this.applyRoleBasedFilters(assignmentsByStatusQuery, currentUser, {
+      assignmentAlias: 'assignment',
+      assignedEmployeeAlias: 'assignedEmployee',
+      departmentOfAssignedSectionAlias: 'departmentOfAssignedSection',
+      assignedDirectlyToDepartmentAlias: 'assignedDirectlyToDepartment',
+    });
+
+    assignmentsByStatusQuery.groupBy('assignment.status');
+
+    const assignmentsByStatusRaw = await assignmentsByStatusQuery.getRawMany();
+    const assignmentsByStatus = assignmentsByStatusRaw.map(item => ({
+      status: item.status,
+      count: parseInt(item.count, 10),
+    }));
+    // TODO: Map status string to a more friendly name if needed
+
+
+    return {
+      totalKpiDefinitions,
+      totalKpiAssignments,
+      assignmentsByDepartment: assignmentsByDepartment.length > 0 ? assignmentsByDepartment : undefined,
+      assignmentsByStatus: assignmentsByStatus.length > 0 ? assignmentsByStatus : undefined,
+    };
   }
 }

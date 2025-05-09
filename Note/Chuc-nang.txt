@@ -1,0 +1,11 @@
+
+Chức năng chưa có:
+	- Tạo tài khoản và import nhân viên //
+    - Thống kê Dashboard
+    - Review đánh giá kết quả KPI
+	- Form tổng hợp KPI của cá nhân employee 
+	- Form so sách tiến độ kpi mỗi năm ( Hiện thị dạng biểu đồ cột )
+    - Phân quyền chức năng sử dụng hệ thống
+    - Xuất report
+	
+	

@@ -13,8 +13,12 @@
         <router-link to="/performance">Performance Objectives</router-link>
       </a-menu-item>
 
-      <a-menu-item key="employees" v-if="isAdmin">
+      <a-menu-item key="employees" v-if="canViewDashboard">
         <router-link to="/employees">Employee List</router-link>
+      </a-menu-item>
+
+      <a-menu-item key="evaluation" v-if="effectiveRole">
+        <router-link to="/kpi/review">Evaluation</router-link>
       </a-menu-item>
 
       <a-menu-item key="kpis-company" v-if="canViewCompanyLevel">
@@ -71,9 +75,6 @@ const store = useStore();
 
 // Computed property for user role
 const effectiveRole = computed(() => store.getters["auth/effectiveRole"]);
-
-// Check if user is admin
-const isAdmin = computed(() => effectiveRole.value === "admin");
 
 // Permission for viewing Dashboard (example: admin and manager)
 const canViewDashboard = computed(() =>

@@ -1,0 +1,79 @@
+Component "Review đánh giá kết quả KPI" là một thành phần rất quan trọng trong một hệ thống quản lý hiệu suất. Nó đóng vai trò then chốt trong việc hoàn tất chu trình KPI, đảm bảo tính minh bạch, công bằng và tạo cơ hội cho phản hồi, cải thiện.
+
+Mục đích của Component "Review đánh giá kết quả KPI":
+
+Xác nhận kết quả: Quản lý (hoặc người có thẩm quyền) xem xét và xác nhận giá trị KPI cuối cùng mà nhân viên/bộ phận đã đạt được.
+Đưa ra đánh giá/nhận xét: Không chỉ là con số, quản lý có thể đưa ra những nhận xét định tính về quá trình thực hiện, những điểm mạnh, điểm cần cải thiện.
+Thảo luận và phản hồi: Tạo không gian để nhân viên và quản lý cùng thảo luận về kết quả, những khó khăn gặp phải và kế hoạch cho kỳ tiếp theo.
+Lưu trữ lịch sử đánh giá: Kết quả review và nhận xét được lưu lại làm cơ sở cho các quyết định về lương thưởng, đào tạo, phát triển sau này.
+Hoàn tất chu kỳ KPI: Đánh dấu việc một chu kỳ KPI đã được xem xét và kết thúc.
+Thời điểm sử dụng Component "Review đánh giá kết quả KPI":
+
+Component này thường được sử dụng vào cuối mỗi chu kỳ đánh giá KPI. Thời điểm cụ thể có thể là:
+
+Sau khi tất cả giá trị KPI đã được cập nhật và phê duyệt (nếu có quy trình duyệt giá trị):
+
+Khi nhân viên đã nộp giá trị cuối cùng cho KPI của mình và giá trị đó đã được các cấp (nếu có) phê duyệt (ví dụ: qua KpiValueApprovalList.vue).
+Lúc này, con số KPI đã "chốt" và sẵn sàng để được review tổng thể.
+Theo lịch đánh giá định kỳ của công ty:
+
+Ví dụ: Cuối tháng, cuối quý, cuối 6 tháng, hoặc cuối năm.
+Công ty sẽ có một khoảng thời gian nhất định để quản lý thực hiện việc review và đánh giá cho nhân viên của mình.
+Khi có yêu cầu đột xuất:
+
+Trong một số trường hợp, có thể cần review lại KPI giữa kỳ nếu có những thay đổi lớn hoặc vấn đề phát sinh.
+Những gì Component "Review đánh giá kết quả KPI" cần có:
+
+Để component này hoạt động hiệu quả, nó cần những thông tin và chức năng sau:
+
+Thông tin hiển thị (cho mỗi KPI hoặc cho tổng thể của một nhân viên/bộ phận):
+
+Thông tin chung về KPI:
+Tên KPI.
+Mô tả KPI.
+Người/Bộ phận được giao.
+Chu kỳ đánh giá (ví dụ: Tháng 5/2025, Quý 2/2025).
+Mục tiêu (Target):
+Giá trị mục tiêu đã đặt ra.
+Đơn vị tính.
+Kết quả thực tế (Actual Value):
+Giá trị thực tế cuối cùng đã được phê duyệt.
+Tỷ lệ hoàn thành (Actual/Target * 100%).
+Có thể có biểu đồ nhỏ thể hiện tiến độ (nếu có dữ liệu lịch sử).
+Lịch sử cập nhật giá trị (nếu cần thiết):
+Một liên kết hoặc phần hiển thị tóm tắt các lần cập nhật giá trị và ghi chú của nhân viên.
+Phần đánh giá của Quản lý:
+Điểm số (Rating/Score): Nếu công ty có thang điểm đánh giá (ví dụ: Xuất sắc, Tốt, Khá, Cần cải thiện, hoặc thang điểm 1-5).
+Nhận xét/Phản hồi (Comments/Feedback): Một ô văn bản lớn để quản lý ghi lại những nhận xét chi tiết, điểm mạnh, điểm yếu, thành tựu, những khó khăn, và định hướng phát triển.
+Kế hoạch hành động (Action Plan - tùy chọn): Những bước cụ thể cần thực hiện để cải thiện hoặc phát triển trong kỳ tới.
+Phần phản hồi của Nhân viên (tùy chọn, có thể là một bước sau):
+Sau khi quản lý review, nhân viên có thể có cơ hội xem và đưa ra phản hồi/ý kiến của mình về đánh giá đó.
+Trạng thái Review:
+Ví dụ: "Chưa Review", "Đã Review", "Đã Thảo luận với Nhân viên", "Hoàn tất".
+Chức năng cần có:
+
+Tải danh sách KPI cần review:
+Quản lý có thể thấy danh sách nhân viên/bộ phận thuộc quyền quản lý của mình và các KPI tương ứng cần review.
+Có thể có bộ lọc theo chu kỳ, theo trạng thái review.
+Giao diện nhập liệu cho Quản lý:
+Cho phép chọn điểm số (nếu có).
+Cho phép nhập nhận xét, kế hoạch hành động.
+Lưu trữ kết quả Review:
+Lưu điểm số, nhận xét, trạng thái review vào cơ sở dữ liệu.
+Thông báo:
+Thông báo cho nhân viên khi KPI của họ đã được review.
+Thông báo cho các bên liên quan khác (nếu có).
+Xem lại lịch sử Review (tùy chọn):
+Cho phép quản lý và nhân viên xem lại các lần review trước đó.
+Tích hợp với các component khác:
+
+Component này có thể được truy cập từ một mục menu riêng ("Đánh giá KPI", "Review Kết quả") hoặc từ trang chi tiết của nhân viên/bộ phận.
+Dữ liệu về kết quả thực tế có thể lấy từ nơi lưu trữ KpiValue đã được phê duyệt.
+Về mặt kỹ thuật:
+
+Backend: Cần có API để:
+Lấy danh sách KPI cần review cho một quản lý.
+Lưu kết quả review (điểm, nhận xét).
+Cập nhật trạng thái review.
+Frontend: Component Vue để hiển thị thông tin và cho phép quản lý nhập liệu.
+Tóm lại, component "Review đánh giá kết quả KPI" là một phần không thể thiếu để hoàn thiện quy trình quản lý hiệu suất. Nó nên được sử dụng định kỳ sau mỗi chu kỳ KPI và cần cung cấp đầy đủ thông tin cũng như chức năng để quản lý có thể đưa ra những đánh giá công tâm và hữu ích.
