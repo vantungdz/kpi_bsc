@@ -13,6 +13,8 @@ const state = {
   kpisToReview: [],
   loadingKpisToReview: false,
   kpisToReviewError: null,
+  existingOverallReview: null, // Thêm state cho đánh giá tổng thể đã có
+  // existingOverallReviewError: null, // Tùy chọn: lỗi riêng cho overall review
 
   isSubmittingReview: false,
   submitReviewError: null,
@@ -30,6 +32,8 @@ const getters = {
   getKpisToReview: (state) => state.kpisToReview,
   isLoadingKpisToReview: (state) => state.loadingKpisToReview,
   getKpisToReviewError: (state) => state.kpisToReviewError,
+  getExistingOverallReview: (state) => state.existingOverallReview, // Thêm getter
+  // getExistingOverallReviewError: (state) => state.existingOverallReviewError, // Tùy chọn
 
   isSubmittingKpiReview: (state) => state.isSubmittingReview,
   getSubmitKpiReviewError: (state) => state.submitReviewError,
@@ -44,9 +48,15 @@ const actions = {
       commit("SET_REVIEWABLE_TARGETS", response.data || []);
       return response.data;
     } catch (error) {
-      const errorMsg = error.response?.data?.message || error.message || "Failed to fetch reviewable targets.";
+      const errorMsg =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to fetch reviewable targets.";
       commit("SET_REVIEWABLE_TARGETS_ERROR", errorMsg);
-      notification.error({ message: "Lỗi tải đối tượng review", description: errorMsg });
+      notification.error({
+        message: "Lỗi tải đối tượng review",
+        description: errorMsg,
+      });
       return null;
     } finally {
       commit("SET_LOADING_REVIEWABLE_TARGETS", false);
@@ -61,9 +71,15 @@ const actions = {
       commit("SET_REVIEW_CYCLES", response.data || []);
       return response.data;
     } catch (error) {
-      const errorMsg = error.response?.data?.message || error.message || "Failed to fetch review cycles.";
+      const errorMsg =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to fetch review cycles.";
       commit("SET_REVIEW_CYCLES_ERROR", errorMsg);
-      notification.error({ message: "Lỗi tải chu kỳ review", description: errorMsg });
+      notification.error({
+        message: "Lỗi tải chu kỳ review",
+        description: errorMsg,
+      });
       return null;
     } finally {
       commit("SET_LOADING_REVIEW_CYCLES", false);
@@ -74,23 +90,74 @@ const actions = {
     commit("SET_LOADING_KPIS_TO_REVIEW", true);
     commit("SET_KPIS_TO_REVIEW_ERROR", null);
     commit("SET_KPIS_TO_REVIEW", []); // Reset
+    console.log(
+      "[Vuex kpiEvaluations/fetchKpisForReview] Fetching with params:",
+      {
+        targetId,
+        targetType,
+        cycleId,
+      }
+    );
+    commit("SET_EXISTING_OVERALL_REVIEW", null); // Reset overall review
     try {
       const response = await apiClient.get("/evaluation/kpis-for-review", {
         params: { targetId, targetType, cycleId },
       });
-      // Map data to include managerComment and managerScore for form binding
-      const kpis = (response.data || []).map(kpi => ({
-        ...kpi,
-        managerComment: kpi.existingManagerComment || '',
-        managerScore: kpi.existingManagerScore || null,
-      }));
-      commit("SET_KPIS_TO_REVIEW", kpis);
-      return kpis;
+
+      console.log(
+        "[Vuex kpiEvaluations/fetchKpisForReview] API Response Data:",
+        response.data
+      );
+      if (response.data && typeof response.data === "object") {
+        const kpisData = response.data.kpisToReview;
+        const overallReviewData = response.data.existingOverallReview;
+
+        if (Array.isArray(kpisData)) {
+          // Map data to include managerComment and managerScore for form binding
+          const kpisMapped = kpisData.map((kpi) => ({
+            ...kpi,
+            managerComment: kpi.existingManagerComment || "",
+            managerScore:
+              kpi.existingManagerScore === undefined
+                ? null
+                : kpi.existingManagerScore,
+          }));
+          commit("SET_KPIS_TO_REVIEW", kpisMapped);
+        } else {
+          commit("SET_KPIS_TO_REVIEW", []);
+          console.warn(
+            "[Vuex kpiEvaluations/fetchKpisForReview] response.data.kpisToReview is not an array:",
+            kpisData
+          );
+        }
+
+        commit("SET_EXISTING_OVERALL_REVIEW", overallReviewData || null);
+        return response.data; // Trả về toàn bộ object response nếu component cần
+      } else {
+        console.error(
+          "[Vuex kpiEvaluations/fetchKpisForReview] Invalid response data structure:",
+          response.data
+        );
+        commit("SET_KPIS_TO_REVIEW_ERROR", "Dữ liệu trả về không hợp lệ.");
+        // Đảm bảo reset state
+        commit("SET_KPIS_TO_REVIEW", []);
+        commit("SET_EXISTING_OVERALL_REVIEW", null);
+        return null;
+      }
     } catch (error) {
-      const errorMsg = error.response?.data?.message || error.message || "Failed to fetch KPIs for review.";
+      const errorMsg =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to fetch KPIs for review.";
       commit("SET_KPIS_TO_REVIEW_ERROR", errorMsg);
-      notification.error({ message: "Lỗi tải KPI để review", description: errorMsg });
-      return null;
+      notification.error({
+        message: "Lỗi tải KPI để review",
+        description: errorMsg,
+      });
+      // Đảm bảo reset state khi có lỗi
+      commit("SET_KPIS_TO_REVIEW", []);
+      commit("SET_EXISTING_OVERALL_REVIEW", null);
+      return null; // Hoặc throw error tùy theo cách bạn muốn xử lý ở component
     } finally {
       commit("SET_LOADING_KPIS_TO_REVIEW", false);
     }
@@ -103,7 +170,10 @@ const actions = {
       await apiClient.post("/evaluation/submit-review", reviewData);
       // No data to commit to state on success, just handle loading/error
     } catch (error) {
-      const errorMsg = error.response?.data?.message || error.message || "Failed to submit KPI review.";
+      const errorMsg =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to submit KPI review.";
       commit("SET_SUBMIT_REVIEW_ERROR", errorMsg);
       throw error; // Re-throw to be caught in component
     } finally {
@@ -142,6 +212,14 @@ const mutations = {
   SET_KPIS_TO_REVIEW_ERROR(state, error) {
     state.kpisToReviewError = error;
   },
+
+  SET_EXISTING_OVERALL_REVIEW(state, overallReview) {
+    // Thêm mutation
+    state.existingOverallReview = overallReview;
+  },
+  // SET_EXISTING_OVERALL_REVIEW_ERROR(state, error) { // Tùy chọn
+  //   state.existingOverallReviewError = error;
+  // },
 
   SET_IS_SUBMITTING_REVIEW(state, isSubmitting) {
     state.isSubmittingReview = isSubmitting;

@@ -18,10 +18,13 @@ export class KpiReview {
   @PrimaryGeneratedColumn()
   id: number;
 
+  @Column({ type: 'varchar', length: 50, nullable: false }) // Adjust length as needed
+  cycleId: string;
+
   @Column()
   assignmentId: number; // Foreign key to KPIAssignment
 
-  @ManyToOne(() => KPIAssignment, (assignment) => assignment.reviews) 
+  @ManyToOne(() => KPIAssignment, (assignment) => assignment.reviews)
   @JoinColumn({ name: 'assignmentId' })
   assignment: KPIAssignment;
 

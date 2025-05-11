@@ -8,9 +8,20 @@ import { Department } from '../entities/department.entity';
 import { KPIAssignment } from '../entities/kpi-assignment.entity';
 import { KpiValue } from '../entities/kpi-value.entity';
 import { KpiReview } from '../entities/kpi-review.entity';
+import { OverallReview } from '../entities/overall-review.entity'; // Import OverallReview
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Employee, Section, Department, KPIAssignment, KpiValue, KpiReview])], // Register entities
+  imports: [
+    TypeOrmModule.forFeature([
+      Employee,
+      Section,
+      Department,
+      KPIAssignment,
+      KpiValue,
+      KpiReview,
+      OverallReview,
+    ]),
+  ], // Add OverallReview
   controllers: [EvaluationController],
   providers: [EvaluationService],
 })

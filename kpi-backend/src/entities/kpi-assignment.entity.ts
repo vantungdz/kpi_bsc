@@ -1,11 +1,10 @@
-
 import {
   Entity,
   PrimaryGeneratedColumn,
   Column,
   ManyToOne,
   CreateDateColumn,
-  UpdateDateColumn, 
+  UpdateDateColumn,
   JoinColumn,
   OneToMany,
   DeleteDateColumn,
@@ -104,6 +103,12 @@ export class KPIAssignment {
 
   @CreateDateColumn()
   assignedAt: Date;
+
+  @Column({ type: 'timestamp', nullable: true, name: 'start_date' })
+  startDate: Date | null;
+
+  @Column({ type: 'timestamp', nullable: true, name: 'end_date' })
+  endDate: Date | null;
 
   @Column({ nullable: true })
   assignedBy: number;

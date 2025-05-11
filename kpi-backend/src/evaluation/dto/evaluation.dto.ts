@@ -27,6 +27,12 @@ export class KpiToReviewDto {
   // Add other relevant fields like assignment period, etc.
 }
 
+// DTO for an existing overall review (part of the response when fetching KPIs for review)
+export class ExistingOverallReviewDto {
+  overallComment?: string | null;
+  overallScore?: number | null;
+}
+
 // DTO for submitting the review results
 export class SubmitKpiReviewDto {
   targetId: number;
@@ -39,4 +45,10 @@ export class SubmitKpiReviewDto {
     managerComment?: string | null;
     managerScore?: number | null; // If using scores per KPI
   }[];
+}
+
+// DTO for the response of getKpisForReview endpoint
+export class KpisForReviewResponseDto {
+  kpisToReview: KpiToReviewDto[];
+  existingOverallReview?: ExistingOverallReviewDto | null;
 }
