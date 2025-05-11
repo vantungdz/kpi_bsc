@@ -21,7 +21,8 @@ import KpiProcessStatistics from "../../features/dashboard/views/KpiProcessStati
 import UserActivityStatistics from "../../features/dashboard/views/UserActivityStatistics.vue";
 import KpiInventoryStatistics from "@/features/dashboard/views/KpiInventoryStatistics.vue";
 import KpiReview from "../../features/evaluation/views/KpiReview.vue";
-const MyKpiReview = () => import("@/features/evaluation/views/MyKpiReview.vue");
+import ReviewHistoryPage from "../../features/evaluation/views/ReviewHistoryPage.vue";
+import MyKpiReview from "../../features/evaluation/views/MyKpiReview.vue";
 
 const routes = [
   {
@@ -29,6 +30,16 @@ const routes = [
     name: "KpiReview",
     component: KpiReview,
     meta: { requiresAuth: true, roles: ["manager", "admin"] },
+  },
+
+  {
+    path: "/review-history/:targetType/:targetId",
+    name: "ReviewHistory",
+    component: ReviewHistoryPage,
+    props: true,
+    meta: {
+      requiresAuth: true,
+    },
   },
 
   {

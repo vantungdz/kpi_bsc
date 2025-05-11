@@ -5,6 +5,7 @@ const state = {
   usersBySection: {},
   usersByDepartment: {},
   loading: false,
+  loadingDetail: false, // Thêm state cho loading user detail
   error: null,
 };
 
@@ -15,12 +16,17 @@ const getters = {
   usersByDepartment: (state) => (departmentId) =>
     state.usersByDepartment[String(departmentId)] || [],
   isLoading: (state) => state.loading,
+  isLoadingDetail: (state) => state.loadingDetail, // Getter mới
   error: (state) => state.error,
 };
 
 const mutations = {
   SET_LOADING(state, isLoading) {
     state.loading = isLoading;
+  },
+  SET_LOADING_DETAIL(state, isLoading) {
+    // Mutation mới
+    state.loadingDetail = isLoading;
   },
   SET_ERROR(state, error) {
     state.error = error ? error.response?.data?.message || error.message : null;
@@ -141,6 +147,29 @@ const actions = {
       return state.usersByDepartment[String(departmentId)];
     }
     return dispatch("fetchUsers", { departmentId: departmentId });
+  },
+
+  async fetchUserById({ commit }, userId) {
+    if (!userId) {
+      commit("SET_ERROR", "User ID is required to fetch details.");
+      return null;
+    }
+    commit("SET_LOADING_DETAIL", true);
+    commit("SET_ERROR", null);
+    try {
+      // Giả sử API của bạn là GET /employees/:id
+      const response = await apiClient.get(`/employees/${userId}`);
+      return response.data; // Trả về dữ liệu chi tiết của user
+    } catch (error) {
+      console.error(
+        `Error fetching user by ID ${userId}:`,
+        error.response || error
+      );
+      commit("SET_ERROR", error);
+      throw error; // Ném lỗi để component có thể bắt
+    } finally {
+      commit("SET_LOADING_DETAIL", false);
+    }
   },
 
   async uploadFile({ commit, dispatch }, file) {

@@ -31,6 +31,8 @@ import {
   EmployeeReviewResponseDto,
   SubmitEmployeeFeedbackDto,
   KpisForReviewResponseDto,
+  ReviewHistoryItemDto,
+  ReviewHistoryResponseDto,
 } from './dto/evaluation.dto';
 import { OverallReviewStatus } from '../entities/overall-review.entity';
 import { KpiValueStatus } from '../entities/kpi-value.entity';
@@ -842,5 +844,66 @@ export class EvaluationService {
       employee: employee, // Nhân viên gửi phản hồi
     });
     return updatedReview;
+  }
+
+  async getReviewHistory(
+    currentUser: Employee,
+    targetId: number,
+    targetType: 'employee' | 'section' | 'department',
+  ): Promise<ReviewHistoryResponseDto> {
+    this.logger.debug(
+      `[getReviewHistory] Called by user ${currentUser.id} for target ${targetType}:${targetId}`,
+    );
+
+    // Permission Check:
+    // 1. If employee, can only view their own history.
+    // 2. If manager/admin, can view history of targets they are allowed to review.
+    let canViewHistory = false;
+    if (targetType === 'employee' && currentUser.id === targetId) {
+      canViewHistory = true; // Employee viewing their own history
+    } else if (['admin', 'manager'].includes(currentUser.role)) {
+      const reviewableTargets = await this.getReviewableTargets(currentUser);
+      canViewHistory = reviewableTargets.some(
+        (rt) => rt.id === targetId && rt.type === targetType,
+      );
+    }
+    // Add more specific roles like 'department' or 'section' head if they can view history of their units
+
+    if (!canViewHistory) {
+      throw new UnauthorizedException(
+        'You are not authorized to view the review history for this target.',
+      );
+    }
+
+    // Fetch all overall reviews for the target, ordered by cycleId or createdAt
+    const overallReviews = await this.overallReviewRepository.find({
+      where: {
+        targetId: targetId,
+        targetType: targetType,
+      },
+      relations: ['reviewedBy'], // Eager load the reviewer (manager)
+      order: {
+        cycleId: 'DESC', // Or createdAt: 'DESC'
+        // Consider how cycleId is structured for sorting (e.g., '2023-Q4' vs '2023-Year')
+        // If cycleId is not easily sortable, sort by createdAt or updatedAt of OverallReview
+        createdAt: 'DESC',
+      },
+    });
+
+    if (!overallReviews || overallReviews.length === 0) {
+      return []; // No history found
+    }
+
+    return overallReviews.map((or) => ({
+      overallReviewId: or.id,
+      cycleId: or.cycleId,
+      overallComment: or.overallComment,
+      overallScore: or.overallScore,
+      status: or.status,
+      reviewedByUsername: or.reviewedBy?.username || 'N/A', // Get username from related reviewedBy
+      reviewedAt: or.updatedAt, // Or createdAt, depending on your logic
+      employeeComment: or.employeeComment,
+      employeeFeedbackDate: or.employeeFeedbackDate,
+    }));
   }
 }

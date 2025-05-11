@@ -63,3 +63,20 @@ export class SubmitEmployeeFeedbackDto {
   cycleId: string;
   employeeComment: string;
 }
+
+export class ReviewHistoryItemDto {
+  overallReviewId: number;
+  cycleId: string;
+  overallComment?: string | null;
+  overallScore?: number | null;
+  status: string; // OverallReviewStatus
+  reviewedByUsername: string; // Username of the manager
+  reviewedAt: Date; // Date of the overall review
+  employeeComment?: string | null;
+  employeeFeedbackDate?: Date | null;
+  // Optionally, include detailed KPI reviews for this cycle
+  // kpiReviews?: KpiToReviewDto[]; // This might make the payload large, consider a separate API if needed
+}
+
+// DTO for the response of review history API
+export type ReviewHistoryResponseDto = ReviewHistoryItemDto[];

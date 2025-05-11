@@ -6,9 +6,19 @@
         Upload Employee Excel
       </a-button>
     </div>
-    <a-modal :open="isUploadModalVisible" title="Upload Employee Excel" @ok="handleUpload" @cancel="closeUploadModal"
-      :confirm-loading="uploading">
-      <a-upload :before-upload="beforeUpload" :file-list="fileList" @remove="handleRemove" accept=".xlsx, .xls">
+    <a-modal
+      :open="isUploadModalVisible"
+      title="Upload Employee Excel"
+      @ok="handleUpload"
+      @cancel="closeUploadModal"
+      :confirm-loading="uploading"
+    >
+      <a-upload
+        :before-upload="beforeUpload"
+        :file-list="fileList"
+        @remove="handleRemove"
+        accept=".xlsx, .xls"
+      >
         <a-button> <upload-outlined /> Select File </a-button>
       </a-upload>
     </a-modal>
@@ -17,7 +27,7 @@
         <template v-if="column.dataIndex === 'fullName'">
           {{ record.first_name }} {{ record.last_name }}
         </template>
-       
+
         <template v-else-if="column.dataIndex === 'department'">
           {{ record.department?.name || "--" }}
         </template>
@@ -27,9 +37,23 @@
         <template v-else-if="column.dataIndex === 'role'">
           {{ record.role || "--" }}
         </template>
-        <template v-else-if="
+        <template v-else-if="column.key === 'actions'">
+          <a-space>
+            <a-button
+              type="link"
+              size="small"
+              @click="viewReviewHistory(record)"
+            >
+              <history-outlined />
+              Lịch sử Review
+            </a-button>
+          </a-space>
+        </template>
+        <template
+          v-else-if="
             column.dataIndex && record.hasOwnProperty(column.dataIndex)
-          ">
+          "
+        >
           {{ record[column.dataIndex] || "--" }}
         </template>
         <template v-else> -- </template>
@@ -48,10 +72,13 @@ import {
   Modal as AModal,
   Upload as AUpload,
   Table as ATable,
+  Space as ASpace, // Thêm ASpace
 } from "ant-design-vue";
-import { UploadOutlined } from "@ant-design/icons-vue";
+import { UploadOutlined, HistoryOutlined } from "@ant-design/icons-vue"; // Thêm HistoryOutlined nếu dùng icon
+import { useRouter } from "vue-router"; // Thêm useRouter
 
 const store = useStore();
+const router = useRouter(); // Khởi tạo router
 const employees = computed(() => store.getters["employees/userList"]);
 const isUploadModalVisible = ref(false);
 const fileList = ref([]);
@@ -97,46 +124,55 @@ const handleUpload = async () => {
 
     const successCount = response?.successCount || 0;
     const responseErrors = response?.errors || [];
-    
-    const notificationMessage = response?.message || `Successfully imported ${successCount} employees. Errors: ${responseErrors.length}.`;
-    let notificationDescription = ""; 
+
+    const notificationMessage =
+      response?.message ||
+      `Successfully imported ${successCount} employees. Errors: ${responseErrors.length}.`;
+    let notificationDescription = "";
 
     if (responseErrors.length > 0) {
-      const errorDetails = responseErrors.slice(0, 3).map(err => {
-        let rowIdentifier = '';
-        if (err.rowNumber) {
-          rowIdentifier = `Excel Row ${err.rowNumber}`;
-        } else if (err.rowData) { 
-          const username = err.rowData['Username'];
-          const email = err.rowData['Email'];
-          if (username || email) {
-            rowIdentifier = `Row (Username: ${username || 'N/A'}, Email: ${email || 'N/A'})`;
+      const errorDetails = responseErrors
+        .slice(0, 3)
+        .map((err) => {
+          let rowIdentifier = "";
+          if (err.rowNumber) {
+            rowIdentifier = `Excel Row ${err.rowNumber}`;
+          } else if (err.rowData) {
+            const username = err.rowData["Username"];
+            const email = err.rowData["Email"];
+            if (username || email) {
+              rowIdentifier = `Row (Username: ${username || "N/A"}, Email: ${email || "N/A"})`;
+            } else {
+              const firstFewEntries = Object.entries(err.rowData)
+                .slice(0, 2)
+                .map(([k, v]) => `${k}: ${v}`)
+                .join(", ");
+              rowIdentifier = firstFewEntries
+                ? `Row data starting with (${firstFewEntries})`
+                : "Problematic row data";
+            }
           } else {
-            
-            const firstFewEntries = Object.entries(err.rowData).slice(0, 2).map(([k, v]) => `${k}: ${v}`).join(', ');
-            rowIdentifier = firstFewEntries ? `Row data starting with (${firstFewEntries})` : 'Problematic row data';
+            rowIdentifier = "Details for a row unavailable";
           }
-        } else {
-          rowIdentifier = "Details for a row unavailable";
-        }
-        
-        return `  • ${rowIdentifier}: ${err.error}`; 
-      }).join('\n');
-      
+
+          return `  • ${rowIdentifier}: ${err.error}`;
+        })
+        .join("\n");
+
       notificationDescription = `Details for the first ${Math.min(3, responseErrors.length)} errors:\n${errorDetails}`;
     }
 
     const notificationConfig = {
       message: notificationMessage,
       description: notificationDescription,
-      duration: responseErrors.length > 0 ? 10 : 4.5, 
+      duration: responseErrors.length > 0 ? 10 : 4.5,
     };
 
     if (responseErrors.length > 0 && successCount === 0) {
-      notification.error(notificationConfig); 
+      notification.error(notificationConfig);
     } else if (responseErrors.length > 0 && successCount > 0) {
-      notification.warning(notificationConfig); 
-    } else { 
+      notification.warning(notificationConfig);
+    } else {
       notification.success(notificationConfig);
     }
     await store.dispatch("employees/fetchUsers", { force: true });
@@ -152,6 +188,14 @@ const handleUpload = async () => {
     isUploadModalVisible.value = false;
     fileList.value = [];
   }
+};
+
+const viewReviewHistory = (employee) => {
+  // Điều hướng đến trang lịch sử review, truyền employee.id
+  router.push({
+    name: "ReviewHistory", // Tên route bạn đã định nghĩa cho ReviewHistoryPage.vue
+    params: { targetType: "employee", targetId: employee.id },
+  });
 };
 
 onMounted(() => {
@@ -187,7 +231,7 @@ const columns = ref([
     key: "email",
     sorter: (a, b) => a.email.localeCompare(b.email),
   },
-  
+
   {
     title: "Phòng ban",
     dataIndex: "department",
@@ -213,6 +257,12 @@ const columns = ref([
     dataIndex: "role",
     key: "role",
     sorter: (a, b) => (a.role || "").localeCompare(b.role || ""),
+  },
+  {
+    title: "Hành động",
+    dataIndex: "actions",
+    key: "actions",
+    align: "center",
   },
 ]);
 </script>

@@ -56,6 +56,21 @@
             </a-select>
           </a-form-item>
         </a-col>
+        <a-col
+          :xs="24"
+          :sm="12"
+          :md="8"
+          style="display: flex; align-items: flex-end; padding-bottom: 24px"
+        >
+          <!-- Nút Xem Lịch sử Review -->
+          <a-button
+            v-if="selectedTarget && selectedCycle"
+            type="dashed"
+            @click="viewTargetReviewHistory"
+          >
+            Xem Lịch sử Review
+          </a-button>
+        </a-col>
       </a-row>
 
       <a-spin :spinning="isLoadingKpis" tip="Đang tải KPI cần review...">
@@ -266,7 +281,7 @@
 
 <script setup>
 import { ref, computed, onMounted, watch } from "vue";
-import { useStore } from "vuex";
+import { useStore, useRouter } from "vuex";
 import {
   Card as ACard,
   Row as ARow,
@@ -294,6 +309,7 @@ import dayjs from "dayjs";
 import { cloneDeep } from "lodash-es";
 
 const store = useStore();
+const router = useRouter(); // Khởi tạo router
 
 const selectedTarget = ref(null);
 const reviewTargets = computed(
@@ -646,6 +662,28 @@ const handleCompleteReview = async () => {
     notification.error({
       message: "Lỗi hoàn tất review",
       description: errorMsg,
+    });
+  }
+};
+
+const viewTargetReviewHistory = () => {
+  if (!selectedTarget.value) {
+    notification.warn({
+      message: "Vui lòng chọn một đối tượng để xem lịch sử.",
+    });
+    return;
+  }
+  const target = reviewTargets.value.find((t) => t.id === selectedTarget.value);
+  if (target) {
+    router.push({
+      name: "ReviewHistory", // Tên route của ReviewHistoryPage.vue
+      params: { targetType: target.type, targetId: target.id },
+    });
+  } else {
+    notification.error({
+      message: "Lỗi",
+      description:
+        "Không tìm thấy thông tin đối tượng được chọn để xem lịch sử.",
     });
   }
 };

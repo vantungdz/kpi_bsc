@@ -9,6 +9,7 @@ import {
   Req,
   UnauthorizedException,
   ParseIntPipe,
+  BadRequestException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -32,6 +33,8 @@ import {
   CompleteReviewDto,
   EmployeeReviewResponseDto,
   SubmitEmployeeFeedbackDto,
+  ReviewHistoryItemDto,
+  ReviewHistoryResponseDto,
 } from './dto/evaluation.dto';
 import { OverallReview } from 'src/entities/overall-review.entity';
 
@@ -198,5 +201,39 @@ export class EvaluationController {
   ): Promise<OverallReview> {
     const user = this.validateUser(req);
     return this.evaluationService.submitEmployeeFeedback(user, feedbackDto);
+  }
+
+  @Get('review-history/:targetId')
+  @Roles('admin', 'manager', 'employee') // Employee can view their own, manager/admin can view others they manage
+  @ApiOperation({
+    summary:
+      'Get review history for a specific target (employee/section/department)',
+  })
+  @ApiQuery({
+    name: 'targetType',
+    required: true,
+    enum: ['employee', 'section', 'department'],
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Review history retrieved successfully.',
+    type: [ReviewHistoryItemDto],
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  @ApiResponse({ status: 403, description: 'Forbidden.' })
+  @ApiResponse({
+    status: 404,
+    description: 'Target not found or no history available.',
+  })
+  async getReviewHistory(
+    @Req() req: Request & { user?: Employee },
+    @Param('targetId', ParseIntPipe) targetId: number,
+    @Query('targetType') targetType: 'employee' | 'section' | 'department',
+  ): Promise<ReviewHistoryResponseDto> {
+    const user = this.validateUser(req);
+    if (!['employee', 'section', 'department'].includes(targetType)) {
+      throw new BadRequestException('Invalid targetType for review history.');
+    }
+    return this.evaluationService.getReviewHistory(user, targetId, targetType);
   }
 }

@@ -26,6 +26,10 @@ const state = {
   employeeReviewError: null,
   isSubmittingEmployeeFeedback: false,
   submitEmployeeFeedbackError: null,
+
+  reviewHistory: [], // State mới cho lịch sử review
+  isLoadingReviewHistory: false,
+  reviewHistoryError: null,
 };
 
 const getters = {
@@ -53,6 +57,10 @@ const getters = {
   getEmployeeReviewError: (state) => state.employeeReviewError,
   isSubmittingEmpFeedback: (state) => state.isSubmittingEmployeeFeedback,
   getSubmitEmpFeedbackError: (state) => state.submitEmployeeFeedbackError,
+
+  getReviewHistory: (state) => state.reviewHistory, // Getter mới
+  isLoadingReviewHistory: (state) => state.isLoadingReviewHistory,
+  getReviewHistoryError: (state) => state.reviewHistoryError,
 };
 
 const actions = {
@@ -277,6 +285,39 @@ const actions = {
       commit("SET_IS_SUBMITTING_EMPLOYEE_FEEDBACK", false);
     }
   },
+
+  async fetchReviewHistory({ commit }, { targetId, targetType }) {
+    commit("SET_IS_LOADING_REVIEW_HISTORY", true);
+    commit("SET_REVIEW_HISTORY", []);
+    commit("SET_REVIEW_HISTORY_ERROR", null);
+    try {
+      const response = await apiClient.get(
+        `/evaluation/review-history/${targetId}`,
+        {
+          params: { targetType },
+        }
+      );
+      console.log(
+        "[Vuex fetchReviewHistory] API response.data:",
+        JSON.parse(JSON.stringify(response.data))
+      );
+      commit("SET_REVIEW_HISTORY", response.data || []);
+      return response.data;
+    } catch (error) {
+      const errorMsg =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to fetch review history.";
+      commit("SET_REVIEW_HISTORY_ERROR", errorMsg);
+      notification.error({
+        message: "Lỗi tải lịch sử review",
+        description: errorMsg,
+      });
+      return null;
+    } finally {
+      commit("SET_IS_LOADING_REVIEW_HISTORY", false);
+    }
+  },
 };
 
 const mutations = {
@@ -353,6 +394,23 @@ const mutations = {
         ...updatedOverallReview,
       };
     }
+  },
+
+  SET_REVIEW_HISTORY(state, history) {
+    // Mutation mới
+    console.log(
+      "[Vuex SET_REVIEW_HISTORY] Committing history:",
+      JSON.parse(JSON.stringify(history))
+    );
+    state.reviewHistory = history;
+  },
+  SET_IS_LOADING_REVIEW_HISTORY(state, isLoading) {
+    // Mutation mới
+    state.isLoadingReviewHistory = isLoading;
+  },
+  SET_REVIEW_HISTORY_ERROR(state, error) {
+    // Mutation mới
+    state.reviewHistoryError = error;
   },
 };
 

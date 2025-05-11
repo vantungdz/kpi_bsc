@@ -5,6 +5,8 @@ const state = {
   loading: false,
   error: null,
   sectionsByDepartment: {},
+  // loadingDetail: false, // Đã có trong file bạn cung cấp, tốt!
+  // detailError: null,    // Đã có trong file bạn cung cấp, tốt!
 };
 
 const getters = {
@@ -13,6 +15,8 @@ const getters = {
   error: (state) => state.error,
   sectionsByDepartment: (state) => (departmentId) =>
     state.sectionsByDepartment[departmentId] || [],
+  // isLoadingDetail: (state) => state.loadingDetail, // Đã có
+  // getDetailError: (state) => state.detailError,    // Đã có
 };
 
 const mutations = {
@@ -31,6 +35,14 @@ const mutations = {
       ...state.sectionsByDepartment,
       [key]: sections?.data || sections || [],
     };
+  },
+  SET_LOADING_DETAIL(state, isLoading) {
+    // Đã có
+    state.loadingDetail = isLoading;
+  },
+  SET_DETAIL_ERROR(state, error) {
+    // Đã có
+    state.detailError = error;
   },
 };
 
@@ -101,6 +113,36 @@ const actions = {
     return dispatch("fetchSections", {
       params: { department_id: departmentId },
     });
+  },
+
+  async fetchSectionById({ commit }, sectionId) {
+    if (!sectionId) {
+      commit("SET_DETAIL_ERROR", "Section ID is required to fetch details.");
+      return null;
+    }
+    commit("SET_LOADING_DETAIL", true);
+    commit("SET_DETAIL_ERROR", null);
+    try {
+      // Giả sử API của bạn là GET /sections/:id
+      const response = await apiClient.get(`/sections/${sectionId}`);
+      // Bạn có thể commit vào state nếu muốn lưu chi tiết section hiện tại
+      // commit("SET_CURRENT_SECTION_DETAIL", response.data);
+      return response.data; // Trả về dữ liệu chi tiết của section
+    } catch (error) {
+      console.error(
+        `Error fetching section by ID ${sectionId}:`,
+        error.response || error
+      );
+      const errorMsg =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to fetch section details.";
+      commit("SET_DETAIL_ERROR", errorMsg);
+      // Không ném lỗi ở đây để component ReviewHistoryPage có thể xử lý fallback tên
+      return null;
+    } finally {
+      commit("SET_LOADING_DETAIL", false);
+    }
   },
 };
 
