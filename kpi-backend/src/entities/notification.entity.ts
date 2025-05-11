@@ -18,6 +18,10 @@ export enum NotificationType {
   KPI_VALUE_SUBMITTED = 'KPI_VALUE_SUBMITTED',
   KPI_VALUE_APPROVED = 'KPI_VALUE_APPROVED',
   KPI_VALUE_REJECTED = 'KPI_VALUE_REJECTED',
+  // Thêm các loại thông báo cho Review
+  REVIEW_PENDING_EMPLOYEE_FEEDBACK = 'REVIEW_PENDING_EMPLOYEE_FEEDBACK', // Gửi cho NV khi QL review xong, chờ NV phản hồi
+  REVIEW_EMPLOYEE_RESPONDED = 'REVIEW_EMPLOYEE_RESPONDED', // Gửi cho QL khi NV đã phản hồi
+  REVIEW_COMPLETED = 'REVIEW_COMPLETED', // Gửi cho NV khi QL hoàn tất review
   // Add other notification types as needed
 }
 
@@ -61,7 +65,12 @@ export class Notification {
   @Column({ name: 'related_entity_id', type: 'int', nullable: true })
   relatedEntityId: number | null;
 
-  @Column({ name: 'related_entity_type', type: 'varchar', length: 50, nullable: true })
+  @Column({
+    name: 'related_entity_type',
+    type: 'varchar',
+    length: 50,
+    nullable: true,
+  })
   relatedEntityType: string | null;
 
   @Index()
@@ -77,6 +86,10 @@ export class Notification {
   @UpdateDateColumn({ name: 'updated_at', type: 'timestamp with time zone' })
   updatedAt: Date;
 
-  @DeleteDateColumn({ name: 'deleted_at', type: 'timestamp with time zone', nullable: true })
+  @DeleteDateColumn({
+    name: 'deleted_at',
+    type: 'timestamp with time zone',
+    nullable: true,
+  })
   deletedAt: Date | null;
 }

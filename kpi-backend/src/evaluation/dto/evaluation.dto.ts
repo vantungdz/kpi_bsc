@@ -1,54 +1,65 @@
-// DTOs for Evaluation/Review Module
-
-// DTO for a reviewable target (Employee, Section, or Department)
 export class ReviewableTargetDto {
   id: number;
   name: string;
   type: 'employee' | 'section' | 'department';
 }
 
-// DTO for a review cycle
 export class ReviewCycleDto {
-  id: string; // Or number, depending on how you identify cycles (e.g., '2024-Q2', '2023-Year')
-  name: string; // Friendly name (e.g., 'Quý 2 - 2024', 'Năm 2023')
+  id: string;
+  name: string;
 }
 
-// DTO for a KPI item to be reviewed (fetched from backend)
 export class KpiToReviewDto {
   assignmentId: number;
   kpiId: number;
   kpiName: string;
+  kpiDescription?: string | null;
   targetValue: number | null;
-  actualValue: number | null; // The latest approved/final value
+  actualValue: number | null;
   unit: string | null;
-  // Existing review data (if any)
+
   existingManagerComment?: string | null;
-  existingManagerScore?: number | null; // If using scores
-  // Add other relevant fields like assignment period, etc.
+  existingManagerScore?: number | null;
 }
 
-// DTO for an existing overall review (part of the response when fetching KPIs for review)
 export class ExistingOverallReviewDto {
   overallComment?: string | null;
   overallScore?: number | null;
+  status?: string;
+  employeeComment?: string | null;
+  employeeFeedbackDate?: Date | null;
 }
 
-// DTO for submitting the review results
 export class SubmitKpiReviewDto {
   targetId: number;
   targetType: 'employee' | 'section' | 'department';
-  cycleId: string; // Or number
+  cycleId: string;
   overallComment?: string | null;
-  overallScore?: number | null; // If using overall score
+  overallScore?: number | null;
   kpiReviews: {
     assignmentId: number;
     managerComment?: string | null;
-    managerScore?: number | null; // If using scores per KPI
+    managerScore?: number | null;
   }[];
 }
 
-// DTO for the response of getKpisForReview endpoint
 export class KpisForReviewResponseDto {
   kpisToReview: KpiToReviewDto[];
   existingOverallReview?: ExistingOverallReviewDto | null;
+}
+
+export class CompleteReviewDto {
+  targetId: number;
+  targetType: 'employee' | 'section' | 'department';
+  cycleId: string;
+}
+
+export class EmployeeReviewResponseDto {
+  kpisReviewedByManager: KpiToReviewDto[];
+  overallReviewByManager: ExistingOverallReviewDto | null;
+}
+
+export class SubmitEmployeeFeedbackDto {
+  cycleId: string;
+  employeeComment: string;
 }

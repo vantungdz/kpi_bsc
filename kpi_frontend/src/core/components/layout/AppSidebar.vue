@@ -6,39 +6,73 @@
 
     <a-menu theme="light" mode="inline" class="menu-list">
       <a-menu-item key="dashboard" v-if="canViewDashboard">
-        <router-link to="/dashboard">Dashboard</router-link>
+        <router-link to="/dashboard">
+          <dashboard-outlined />
+          <span>Dashboard</span>
+        </router-link>
       </a-menu-item>
 
       <a-menu-item key="performance" v-if="effectiveRole">
-        <router-link to="/performance">Performance Objectives</router-link>
+        <router-link to="/performance">
+          <bar-chart-outlined />
+          <span>Performance Objectives</span>
+        </router-link>
       </a-menu-item>
 
       <a-menu-item key="employees" v-if="canViewDashboard">
-        <router-link to="/employees">Employee List</router-link>
+        <router-link to="/employees">
+          <team-outlined />
+          <span>Employee List</span>
+        </router-link>
       </a-menu-item>
 
       <a-menu-item key="evaluation" v-if="effectiveRole">
-        <router-link to="/kpi/review">Evaluation</router-link>
+        <router-link to="/kpi/review">
+          <solution-outlined />
+          <span>Evaluation</span>
+        </router-link>
       </a-menu-item>
 
       <a-menu-item key="kpis-company" v-if="canViewCompanyLevel">
-        <router-link to="/kpis/company">Company KPI List</router-link>
+        <router-link to="/kpis/company">
+          <global-outlined />
+          <span>Company KPI List</span>
+        </router-link>
       </a-menu-item>
 
       <a-menu-item key="kpis-department" v-if="canViewDepartmentLevel">
-        <router-link to="/kpis/department">Department KPI List</router-link>
+        <router-link to="/kpis/department">
+          <apartment-outlined />
+          <span>Department KPI List</span>
+        </router-link>
       </a-menu-item>
 
       <a-menu-item key="kpis-section" v-if="canViewSectionLevel">
-        <router-link to="/kpis/section">Section KPI List</router-link>
+        <router-link to="/kpis/section">
+          <cluster-outlined />
+          <span>Section KPI List</span>
+        </router-link>
       </a-menu-item>
 
       <a-menu-item key="approvals" v-if="canViewApprovals">
-        <router-link to="/approvals">Duyệt Kết quả KPI</router-link>
+        <router-link to="/approvals">
+          <check-square-outlined />
+          <span>Duyệt Kết quả KPI</span>
+        </router-link>
       </a-menu-item>
 
       <a-menu-item key="personal-kpis" v-if="effectiveRole">
-        <router-link to="/personal">My Personal KPIs</router-link>
+        <router-link to="/personal">
+          <user-outlined />
+          <span>My Personal KPIs</span>
+        </router-link>
+      </a-menu-item>
+
+      <a-menu-item key="my-review" v-if="effectiveRole">
+        <router-link to="/my-kpi-review">
+          <audit-outlined />
+          <span>My KPI Review</span>
+        </router-link>
       </a-menu-item>
 
       <a-sub-menu key="admin" v-if="isAdmin">
@@ -68,7 +102,19 @@ import {
   MenuItem as AMenuItem,
   SubMenu as ASubMenu,
 } from "ant-design-vue";
-import { SettingOutlined } from "@ant-design/icons-vue";
+import {
+  SettingOutlined,
+  DashboardOutlined,
+  BarChartOutlined,
+  TeamOutlined,
+  SolutionOutlined,
+  GlobalOutlined,
+  ApartmentOutlined,
+  ClusterOutlined,
+  CheckSquareOutlined,
+  UserOutlined,
+  AuditOutlined,
+} from "@ant-design/icons-vue";
 
 // Store instance
 const store = useStore();
@@ -95,7 +141,9 @@ const canViewSectionLevel = computed(() =>
 // Permission for viewing approvals
 const canViewApprovals = computed(() => {
   if (!effectiveRole.value) return false;
-  return ["manager", "admin", "department", "section", "employee"].includes(effectiveRole.value);
+  return ["manager", "admin", "department", "section", "employee"].includes(
+    effectiveRole.value
+  );
 });
 
 // // Example computed for other conditional links

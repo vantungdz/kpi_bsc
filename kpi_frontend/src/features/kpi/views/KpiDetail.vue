@@ -1099,7 +1099,7 @@ const modalFilterSectionId = ref(null);
 
 const modalFilterAssignableSections = computed(() => {
   if (!modalFilterDepartmentId.value) return [];
-  // Giả sử allSections.value là danh sách tất cả sections và mỗi section có department_id hoặc department.id
+
   return allSections.value.filter(
     (s) =>
       s.department_id === modalFilterDepartmentId.value ||
@@ -1110,8 +1110,8 @@ const modalFilterAssignableSections = computed(() => {
 const isCompanyOverviewMode = computed(() => {
   const roleOk =
     effectiveRole.value === "admin" || effectiveRole.value === "manager";
-  const noDeptContext = !contextDepartmentId.value; // Sẽ là true nếu null
-  const noSectionContext = !contextSectionId.value; // Sẽ là true nếu null (đã sửa ở lần trước)
+  const noDeptContext = !contextDepartmentId.value;
+  const noSectionContext = !contextSectionId.value;
   return roleOk && noDeptContext && noSectionContext;
 });
 
@@ -1570,7 +1570,7 @@ const companyOverviewSectionAssignments = computed(() => {
     ? kpiDetailData.value.assignments
     : [];
 
-  const sectionsList = allSections.value; // allSections is computed with "|| []" guard
+  const sectionsList = allSections.value;
 
   return assignmentsArray
     .filter(
@@ -1782,11 +1782,11 @@ const shouldShowSectionUserAssignmentCard = computed(() => {
     if (relevantSectionId && user.departmentId) {
       const sectionInfo = allSections.value.find(
         (s) => s.id == relevantSectionId
-      ); // Use == for potential type mismatch if IDs are strings vs numbers
+      );
       if (sectionInfo) {
         const sectionDeptId =
           sectionInfo.department_id || sectionInfo.department?.id;
-        return sectionDeptId == user.departmentId; // Use == for potential type mismatch
+        return sectionDeptId == user.departmentId;
       }
     }
     return false;
@@ -2131,9 +2131,8 @@ const handleSaveDepartmentSectionAssignment = async () => {
       assignmentPayload.assigned_to_section =
         editingDepartmentSectionAssignment.value.assigned_to_section;
     } else if (hasContext) {
-      // When adding a new assignment (to a section) within a department context
-      assignmentPayload.assigned_to_department = contextDepartmentId.value; // The department of the section
-      assignmentPayload.assigned_to_section = // The selected section
+      assignmentPayload.assigned_to_department = contextDepartmentId.value;
+      assignmentPayload.assigned_to_section =
         departmentSectionAssignmentForm.assigned_to_section;
       assignmentPayload.status = kpiDetailData.value?.status;
     } else {
@@ -2192,15 +2191,11 @@ const handleSaveDepartmentSectionAssignment = async () => {
 };
 
 const handleDepartmentSelectInModal = (departmentId) => {
-  // Reset the selected section when the department changes
   departmentSectionAssignmentForm.assigned_to_section = null;
 
   if (departmentId) {
-    // Only fetch if a department is actually selected
     store.dispatch("sections/fetchSectionsByDepartment", departmentId);
   }
-  // If departmentId is null (cleared), assignableSections will become empty
-  // due to its own logic, so no explicit action needed here for that.
 };
 
 const getStatusColor = (status) => {
@@ -2281,8 +2276,8 @@ const fetchKpiUserAssignmentsData = async (id) => {
   }
 };
 const fetchAssignableUsersData = async (
-  modalDeptFilter = null, // Parameter for department filter from modal in Company Overview Mode
-  modalSectFilter = null // Parameter for section filter from modal in Company Overview Mode
+  modalDeptFilter = null,
+  modalSectFilter = null
 ) => {
   const kpi = kpiDetailData.value;
 
@@ -2299,12 +2294,10 @@ const fetchAssignableUsersData = async (
   try {
     if (isCompanyOverviewMode.value) {
       if (modalSectFilter && modalDeptFilter) {
-        // Section selected in modal (implies department is also selected)
         await store.dispatch("employees/fetchUsersBySection", modalSectFilter);
         fetchedUsersList =
           store.getters["employees/usersBySection"](modalSectFilter);
       } else if (modalDeptFilter) {
-        // Only department selected in modal (no section, or section cleared)
         await store.dispatch(
           "employees/fetchUsersByDepartment",
           modalDeptFilter
@@ -2312,13 +2305,10 @@ const fetchAssignableUsersData = async (
         fetchedUsersList =
           store.getters["employees/usersByDepartment"](modalDeptFilter);
       } else {
-        // No filters selected in modal yet for company overview, or both cleared
         fetchedUsersList = [];
       }
     } else {
-      // Not in Company Overview Mode - use context from URL or KPI
       if (contextSectionId.value) {
-        // Viewing KPI in a specific section's context
         await store.dispatch(
           "employees/fetchUsersBySection",
           contextSectionId.value
@@ -2329,17 +2319,13 @@ const fetchAssignableUsersData = async (
       } else if (
         kpi?.created_by_type === "department" &&
         kpi.created_by &&
-        departmentHasSections.value === false // KPI is for a dept that doesn't break down to sections for assignment
+        departmentHasSections.value === false
       ) {
         const departmentId = kpi.created_by;
         await store.dispatch("employees/fetchUsersByDepartment", departmentId);
         fetchedUsersList =
           store.getters["employees/usersByDepartment"](departmentId);
       } else {
-        // Other context-specific scenarios or if no specific context matches
-        // For example, a department-level KPI where assignments are expected to sections,
-        // but we are not in a specific section's context yet.
-        // Or a company-level KPI not in company overview mode (should not happen with current routing).
         fetchedUsersList = [];
       }
     }
@@ -2380,35 +2366,32 @@ const openAssignUserModal = () => {
   if (isCompanyOverviewMode.value) {
     modalFilterDepartmentId.value = null;
     modalFilterSectionId.value = null;
-    assignableUsers.value = []; // Don't load users initially in company overview
+    assignableUsers.value = [];
   } else {
-    fetchAssignableUsersData(); // Load users based on context
+    fetchAssignableUsersData();
   }
   isAssignUserModalVisible.value = true;
 };
 
 const handleModalDepartmentFilterChange = () => {
-  modalFilterSectionId.value = null; // Reset section when department changes
-  assignableUsers.value = []; // Clear users before fetching new list
-  selectedUserIds.value = []; // Clear selected users
+  modalFilterSectionId.value = null;
+  assignableUsers.value = [];
+  selectedUserIds.value = [];
   if (modalFilterDepartmentId.value) {
     fetchAssignableUsersData(modalFilterDepartmentId.value, null);
   }
 };
 
 const handleModalSectionFilterChange = () => {
-  assignableUsers.value = []; // Clear users before fetching new list
-  selectedUserIds.value = []; // Clear selected users
+  assignableUsers.value = [];
+  selectedUserIds.value = [];
   if (modalFilterSectionId.value && modalFilterDepartmentId.value) {
     fetchAssignableUsersData(
       modalFilterDepartmentId.value,
       modalFilterSectionId.value
     );
   } else if (modalFilterDepartmentId.value) {
-    // If section is cleared but department is still selected, fetch for department
     fetchAssignableUsersData(modalFilterDepartmentId.value, null);
-  } else {
-    // If department is also cleared, assignableUsers remains empty
   }
 };
 

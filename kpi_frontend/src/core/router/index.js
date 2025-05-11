@@ -1,5 +1,5 @@
 import { createRouter, createWebHistory } from "vue-router";
-import store from "../store"; 
+import store from "../store";
 import PerformanceObjectives from "../../features/evaluation/views/PerformanceObjectives.vue";
 import KpiListCompany from "../../features/kpi/views/KpiListCompany.vue";
 import KpiListDepartment from "../../features/kpi/views/KpiListDepartment.vue";
@@ -11,24 +11,34 @@ import KpiPersonal from "../../features/kpi/views/KpiPersonal.vue";
 import KpiCreateDepartment from "../../features/kpi/views/create/KpiCreateDepartment.vue";
 import KpiCreateSection from "../../features/kpi/views/create/KpiCreateSection.vue";
 import LoginPage from "../../features/auth/views/LoginPage.vue";
-import KpiPerformanceOverview from "../../features/dashboard/views/KpiPerformanceOverview.vue"; 
+import KpiPerformanceOverview from "../../features/dashboard/views/KpiPerformanceOverview.vue";
 import ForgotPasswordPage from "../../features/auth/views/ForgotPasswordPage.vue";
 import KpiValueApprovalList from "../../features/kpi/views/KpiValueApprovalList.vue";
 import UserProfile from "../../features/employees/views/UserProfile.vue";
 import EmployeeList from "../../features/employees/views/EmployeeList.vue";
-import DashBoard from "../../features/dashboard/DashBoard.vue"; 
-import KpiProcessStatistics from "../../features/dashboard/views/KpiProcessStatistics.vue"; 
-import UserActivityStatistics from "../../features/dashboard/views/UserActivityStatistics.vue"; 
+import DashBoard from "../../features/dashboard/DashBoard.vue";
+import KpiProcessStatistics from "../../features/dashboard/views/KpiProcessStatistics.vue";
+import UserActivityStatistics from "../../features/dashboard/views/UserActivityStatistics.vue";
 import KpiInventoryStatistics from "@/features/dashboard/views/KpiInventoryStatistics.vue";
-import KpiReview from "../../features/evaluation/views/KpiReview.vue"; // Hoặc đường dẫn đúng
-
+import KpiReview from "../../features/evaluation/views/KpiReview.vue";
+const MyKpiReview = () => import("@/features/evaluation/views/MyKpiReview.vue");
 
 const routes = [
   {
-    path: "/kpi/review", // Hoặc một path khác phù hợp
+    path: "/kpi/review",
     name: "KpiReview",
     component: KpiReview,
-    meta: { requiresAuth: true, roles: ["manager", "admin"] }, // Chỉ manager và admin được review
+    meta: { requiresAuth: true, roles: ["manager", "admin"] },
+  },
+
+  {
+    path: "/my-kpi-review",
+    name: "MyKpiReview",
+    component: MyKpiReview,
+    meta: {
+      requiresAuth: true,
+      roles: ["employee", "section", "department", "manager", "admin"],
+    },
   },
 
   {
@@ -170,27 +180,19 @@ const router = createRouter({
   routes,
 });
 
-
 router.beforeEach((to, from, next) => {
-  
   const requiresAuth = to.matched.some((record) => record.meta.requiresAuth);
 
-  
   const isAuthenticated = store.getters["auth/isAuthenticated"];
 
-  
   if (isAuthenticated && to.path === "/") {
     next({ path: "/performance" });
     return;
   }
 
   if (requiresAuth && !isAuthenticated) {
-    
-    
     next({ name: "LoginPage", query: { redirect: to.fullPath } });
   } else {
-    
-    
     const allowedRoles = to.meta.roles;
 
     if (
@@ -198,28 +200,21 @@ router.beforeEach((to, from, next) => {
       Array.isArray(allowedRoles) &&
       allowedRoles.length > 0
     ) {
-      
-      
       const userEffectiveRole = store.getters["auth/effectiveRole"];
 
       if (!userEffectiveRole || !allowedRoles.includes(userEffectiveRole)) {
-        
         console.warn(
           `User role '${userEffectiveRole}' not authorized for route ${to.name}`
         );
-        
-        
-        next(false); 
+
+        next(false);
       } else {
-        
         next();
       }
     } else {
-      
       next();
     }
   }
 });
-
 
 export default router;

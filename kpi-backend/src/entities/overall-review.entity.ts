@@ -10,8 +10,16 @@ import {
 } from 'typeorm';
 import { Employee } from './employee.entity';
 
+export enum OverallReviewStatus {
+  PENDING_REVIEW = 'PENDING_REVIEW',
+  MANAGER_REVIEWED = 'MANAGER_REVIEWED',
+  EMPLOYEE_FEEDBACK_PENDING = 'EMPLOYEE_FEEDBACK_PENDING',
+  EMPLOYEE_RESPONDED = 'EMPLOYEE_RESPONDED',
+  COMPLETED = 'COMPLETED',
+}
+
 @Entity('overall_reviews')
-@Index(['targetId', 'targetType', 'cycleId', 'reviewedById'], { unique: true }) // Ensure one overall review per target, cycle, reviewer
+@Index(['targetId', 'targetType', 'cycleId', 'reviewedById'], { unique: true })
 export class OverallReview {
   @PrimaryGeneratedColumn()
   id: number;
@@ -35,8 +43,27 @@ export class OverallReview {
   @Column({ type: 'int', nullable: true })
   overallScore: number | null;
 
+  @Column({ type: 'text', nullable: true })
+  employeeComment: string | null;
+
+  @Column({ type: 'timestamp', nullable: true })
+  employeeFeedbackDate: Date | null;
+
   @Column()
   reviewedById: number;
+
+  @Column({
+    type: 'enum',
+    enum: [
+      'PENDING_REVIEW',
+      'MANAGER_REVIEWED',
+      'EMPLOYEE_FEEDBACK_PENDING',
+      'EMPLOYEE_RESPONDED',
+      'COMPLETED',
+    ],
+    default: 'PENDING_REVIEW',
+  })
+  status: string;
 
   @ManyToOne(() => Employee, { nullable: false })
   @JoinColumn({ name: 'reviewedById' })

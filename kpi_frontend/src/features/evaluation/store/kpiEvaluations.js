@@ -13,11 +13,19 @@ const state = {
   kpisToReview: [],
   loadingKpisToReview: false,
   kpisToReviewError: null,
-  existingOverallReview: null, // Thêm state cho đánh giá tổng thể đã có
-  // existingOverallReviewError: null, // Tùy chọn: lỗi riêng cho overall review
+  existingOverallReview: null,
 
   isSubmittingReview: false,
   submitReviewError: null,
+
+  isCompletingReview: false,
+  completeReviewError: null,
+
+  employeeReviewDetails: null,
+  isLoadingEmployeeReview: false,
+  employeeReviewError: null,
+  isSubmittingEmployeeFeedback: false,
+  submitEmployeeFeedbackError: null,
 };
 
 const getters = {
@@ -32,11 +40,19 @@ const getters = {
   getKpisToReview: (state) => state.kpisToReview,
   isLoadingKpisToReview: (state) => state.loadingKpisToReview,
   getKpisToReviewError: (state) => state.kpisToReviewError,
-  getExistingOverallReview: (state) => state.existingOverallReview, // Thêm getter
-  // getExistingOverallReviewError: (state) => state.existingOverallReviewError, // Tùy chọn
+  getExistingOverallReview: (state) => state.existingOverallReview,
 
   isSubmittingKpiReview: (state) => state.isSubmittingReview,
   getSubmitKpiReviewError: (state) => state.submitReviewError,
+
+  isCompletingKpiReview: (state) => state.isCompletingReview,
+  getCompleteKpiReviewError: (state) => state.completeReviewError,
+
+  getEmployeeReviewDetails: (state) => state.employeeReviewDetails,
+  isLoadingEmployeeReview: (state) => state.isLoadingEmployeeReview,
+  getEmployeeReviewError: (state) => state.employeeReviewError,
+  isSubmittingEmpFeedback: (state) => state.isSubmittingEmployeeFeedback,
+  getSubmitEmpFeedbackError: (state) => state.submitEmployeeFeedbackError,
 };
 
 const actions = {
@@ -89,7 +105,7 @@ const actions = {
   async fetchKpisForReview({ commit }, { targetId, targetType, cycleId }) {
     commit("SET_LOADING_KPIS_TO_REVIEW", true);
     commit("SET_KPIS_TO_REVIEW_ERROR", null);
-    commit("SET_KPIS_TO_REVIEW", []); // Reset
+    commit("SET_KPIS_TO_REVIEW", []);
     console.log(
       "[Vuex kpiEvaluations/fetchKpisForReview] Fetching with params:",
       {
@@ -98,7 +114,7 @@ const actions = {
         cycleId,
       }
     );
-    commit("SET_EXISTING_OVERALL_REVIEW", null); // Reset overall review
+    commit("SET_EXISTING_OVERALL_REVIEW", null);
     try {
       const response = await apiClient.get("/evaluation/kpis-for-review", {
         params: { targetId, targetType, cycleId },
@@ -113,10 +129,10 @@ const actions = {
         const overallReviewData = response.data.existingOverallReview;
 
         if (Array.isArray(kpisData)) {
-          // Map data to include managerComment and managerScore for form binding
           const kpisMapped = kpisData.map((kpi) => ({
             ...kpi,
             managerComment: kpi.existingManagerComment || "",
+
             managerScore:
               kpi.existingManagerScore === undefined
                 ? null
@@ -132,14 +148,14 @@ const actions = {
         }
 
         commit("SET_EXISTING_OVERALL_REVIEW", overallReviewData || null);
-        return response.data; // Trả về toàn bộ object response nếu component cần
+        return response.data;
       } else {
         console.error(
           "[Vuex kpiEvaluations/fetchKpisForReview] Invalid response data structure:",
           response.data
         );
         commit("SET_KPIS_TO_REVIEW_ERROR", "Dữ liệu trả về không hợp lệ.");
-        // Đảm bảo reset state
+
         commit("SET_KPIS_TO_REVIEW", []);
         commit("SET_EXISTING_OVERALL_REVIEW", null);
         return null;
@@ -154,10 +170,10 @@ const actions = {
         message: "Lỗi tải KPI để review",
         description: errorMsg,
       });
-      // Đảm bảo reset state khi có lỗi
+
       commit("SET_KPIS_TO_REVIEW", []);
       commit("SET_EXISTING_OVERALL_REVIEW", null);
-      return null; // Hoặc throw error tùy theo cách bạn muốn xử lý ở component
+      return null;
     } finally {
       commit("SET_LOADING_KPIS_TO_REVIEW", false);
     }
@@ -167,17 +183,98 @@ const actions = {
     commit("SET_IS_SUBMITTING_REVIEW", true);
     commit("SET_SUBMIT_REVIEW_ERROR", null);
     try {
-      await apiClient.post("/evaluation/submit-review", reviewData);
-      // No data to commit to state on success, just handle loading/error
+      const response = await apiClient.post(
+        "/evaluation/submit-review",
+        reviewData
+      );
+
+      if (response.data) {
+        commit("SET_EXISTING_OVERALL_REVIEW", response.data);
+      }
     } catch (error) {
       const errorMsg =
         error.response?.data?.message ||
         error.message ||
         "Failed to submit KPI review.";
       commit("SET_SUBMIT_REVIEW_ERROR", errorMsg);
-      throw error; // Re-throw to be caught in component
+      throw error;
     } finally {
       commit("SET_IS_SUBMITTING_REVIEW", false);
+    }
+  },
+
+  async completeKpiReview({ commit }, completeReviewDto) {
+    commit("SET_IS_COMPLETING_REVIEW", true);
+    commit("SET_COMPLETE_REVIEW_ERROR", null);
+    try {
+      const response = await apiClient.post(
+        "/evaluation/complete-review",
+        completeReviewDto
+      );
+
+      if (response.data && response.data.updatedReview) {
+        commit("SET_EXISTING_OVERALL_REVIEW", response.data.updatedReview);
+      }
+      return response.data;
+    } catch (error) {
+      const errorMsg =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to complete KPI review.";
+      commit("SET_COMPLETE_REVIEW_ERROR", errorMsg);
+
+      throw error;
+    } finally {
+      commit("SET_IS_COMPLETING_REVIEW", false);
+    }
+  },
+
+  async fetchMyReviewDetails({ commit }, { cycleId }) {
+    commit("SET_IS_LOADING_EMPLOYEE_REVIEW", true);
+    commit("SET_EMPLOYEE_REVIEW_DETAILS", null);
+    commit("SET_EMPLOYEE_REVIEW_ERROR", null);
+    try {
+      const response = await apiClient.get(`/evaluation/my-review/${cycleId}`);
+      commit("SET_EMPLOYEE_REVIEW_DETAILS", response.data);
+      return response.data;
+    } catch (error) {
+      const errorMsg =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to fetch your review details.";
+      commit("SET_EMPLOYEE_REVIEW_ERROR", errorMsg);
+      notification.error({
+        message: "Lỗi tải chi tiết đánh giá",
+        description: errorMsg,
+      });
+      return null;
+    } finally {
+      commit("SET_IS_LOADING_EMPLOYEE_REVIEW", false);
+    }
+  },
+
+  async submitEmployeeFeedback({ commit }, feedbackDto) {
+    commit("SET_IS_SUBMITTING_EMPLOYEE_FEEDBACK", true);
+    commit("SET_SUBMIT_EMPLOYEE_FEEDBACK_ERROR", null);
+    try {
+      const response = await apiClient.post(
+        "/evaluation/my-review/submit-feedback",
+        feedbackDto
+      );
+
+      if (response.data) {
+        commit("UPDATE_EMPLOYEE_REVIEW_OVERALL_STATUS", response.data);
+      }
+      return response.data;
+    } catch (error) {
+      const errorMsg =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to submit your feedback.";
+      commit("SET_SUBMIT_EMPLOYEE_FEEDBACK_ERROR", errorMsg);
+      throw error;
+    } finally {
+      commit("SET_IS_SUBMITTING_EMPLOYEE_FEEDBACK", false);
     }
   },
 };
@@ -214,18 +311,48 @@ const mutations = {
   },
 
   SET_EXISTING_OVERALL_REVIEW(state, overallReview) {
-    // Thêm mutation
     state.existingOverallReview = overallReview;
   },
-  // SET_EXISTING_OVERALL_REVIEW_ERROR(state, error) { // Tùy chọn
-  //   state.existingOverallReviewError = error;
-  // },
 
   SET_IS_SUBMITTING_REVIEW(state, isSubmitting) {
     state.isSubmittingReview = isSubmitting;
   },
   SET_SUBMIT_REVIEW_ERROR(state, error) {
     state.submitReviewError = error;
+  },
+
+  SET_IS_COMPLETING_REVIEW(state, isCompleting) {
+    state.isCompletingReview = isCompleting;
+  },
+  SET_COMPLETE_REVIEW_ERROR(state, error) {
+    state.completeReviewError = error;
+  },
+
+  SET_EMPLOYEE_REVIEW_DETAILS(state, details) {
+    state.employeeReviewDetails = details;
+  },
+  SET_IS_LOADING_EMPLOYEE_REVIEW(state, isLoading) {
+    state.isLoadingEmployeeReview = isLoading;
+  },
+  SET_EMPLOYEE_REVIEW_ERROR(state, error) {
+    state.employeeReviewError = error;
+  },
+  SET_IS_SUBMITTING_EMPLOYEE_FEEDBACK(state, isSubmitting) {
+    state.isSubmittingEmployeeFeedback = isSubmitting;
+  },
+  SET_SUBMIT_EMPLOYEE_FEEDBACK_ERROR(state, error) {
+    state.submitEmployeeFeedbackError = error;
+  },
+  UPDATE_EMPLOYEE_REVIEW_OVERALL_STATUS(state, updatedOverallReview) {
+    if (
+      state.employeeReviewDetails &&
+      state.employeeReviewDetails.overallReviewByManager
+    ) {
+      state.employeeReviewDetails.overallReviewByManager = {
+        ...state.employeeReviewDetails.overallReviewByManager,
+        ...updatedOverallReview,
+      };
+    }
   },
 };
 

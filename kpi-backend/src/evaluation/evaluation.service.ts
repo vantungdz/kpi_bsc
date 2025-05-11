@@ -13,12 +13,13 @@ import {
   EntityManager,
   In,
 } from 'typeorm';
+import { EventEmitter2 } from '@nestjs/event-emitter'; // Thêm import này
 import { Employee } from '../entities/employee.entity';
 import { Section } from '../entities/section.entity';
 import { Department } from '../entities/department.entity';
 import { KPIAssignment } from '../entities/kpi-assignment.entity';
 import { KpiValue } from '../entities/kpi-value.entity';
-import { KpiReview } from '../entities/kpi-review.entity'; // Assuming you have a KpiReview entity
+import { KpiReview } from '../entities/kpi-review.entity';
 import { OverallReview } from '../entities/overall-review.entity';
 import {
   ReviewableTargetDto,
@@ -26,9 +27,13 @@ import {
   KpiToReviewDto,
   SubmitKpiReviewDto,
   ExistingOverallReviewDto,
+  CompleteReviewDto,
+  EmployeeReviewResponseDto,
+  SubmitEmployeeFeedbackDto,
   KpisForReviewResponseDto,
 } from './dto/evaluation.dto';
-import { KpiValueStatus } from '../entities/kpi-value.entity'; // Adjusted import path
+import { OverallReviewStatus } from '../entities/overall-review.entity';
+import { KpiValueStatus } from '../entities/kpi-value.entity';
 
 @Injectable()
 export class EvaluationService {
@@ -45,10 +50,11 @@ export class EvaluationService {
     private readonly assignmentRepository: Repository<KPIAssignment>,
     @InjectRepository(KpiValue)
     private readonly kpiValueRepository: Repository<KpiValue>,
-    @InjectRepository(KpiReview) // Inject KpiReview Repository
+    @InjectRepository(KpiReview)
     private readonly kpiReviewRepository: Repository<KpiReview>,
-    @InjectRepository(OverallReview) // Inject OverallReview Repository
+    @InjectRepository(OverallReview)
     private readonly overallReviewRepository: Repository<OverallReview>,
+    private readonly eventEmitter: EventEmitter2, // Inject EventEmitter
   ) {}
 
   async getReviewableTargets(
@@ -84,11 +90,6 @@ export class EvaluationService {
         reviewableTargets.push({ id: d.id, name: d.name, type: 'department' }),
       );
     } else if (currentUser.role === 'manager') {
-      // Giả định Manager quản lý một hoặc nhiều Department.
-      // Cần có cách xác định Department(s) mà Manager này quản lý.
-      // Ví dụ: Nếu Employee entity có mảng managed_department_ids hoặc một quan hệ.
-      // Hoặc, nếu manager cũng là department head, họ sẽ có department_id.
-      // Tạm thời, nếu manager có department_id, coi như họ quản lý department đó.
       if (currentUser.departmentId) {
         const managedDepartment = await this.departmentRepository.findOne({
           where: { id: currentUser.departmentId },
@@ -106,7 +107,6 @@ export class EvaluationService {
         });
         employeesInDept.forEach((e) => {
           if (e.id !== currentUser.id) {
-            // Manager không tự review mình qua vai trò này
             reviewableTargets.push({
               id: e.id,
               name: `${e.first_name} ${e.last_name} (${e.username})`,
@@ -122,9 +122,7 @@ export class EvaluationService {
           reviewableTargets.push({ id: s.id, name: s.name, type: 'section' }),
         );
       }
-      // TODO: Mở rộng logic nếu manager quản lý nhiều department hoặc có cấu trúc phức tạp hơn.
     } else if (currentUser.role === 'department') {
-      // Giả định đây là Department Head
       if (currentUser.departmentId) {
         const ownDepartment = await this.departmentRepository.findOne({
           where: { id: currentUser.departmentId },
@@ -158,7 +156,6 @@ export class EvaluationService {
         );
       }
     } else if (currentUser.role === 'section') {
-      // Giả định đây là Section Lead
       if (currentUser.sectionId) {
         const ownSection = await this.sectionRepository.findOne({
           where: { id: currentUser.sectionId },
@@ -194,16 +191,14 @@ export class EvaluationService {
     const cycles: ReviewCycleDto[] = [];
     const today = new Date();
     const currentYear = today.getFullYear();
-    const currentMonth = today.getMonth(); // 0-11 (Jan=0)
+    const currentMonth = today.getMonth();
     const currentQuarter = Math.floor(currentMonth / 3) + 1;
 
-    // 1. Current Quarter
     cycles.push({
       id: `${currentYear}-Q${currentQuarter}`,
       name: `Quý ${currentQuarter} - ${currentYear}`,
     });
 
-    // 2. Previous Quarter
     let prevQYear = currentYear;
     let prevQuarter = currentQuarter - 1;
     if (prevQuarter === 0) {
@@ -215,7 +210,6 @@ export class EvaluationService {
       name: `Quý ${prevQuarter} - ${prevQYear}`,
     });
 
-    // 3. Quarter before Previous Quarter
     let prevPrevQYear = prevQYear;
     let prevPrevQuarter = prevQuarter - 1;
     if (prevPrevQuarter === 0) {
@@ -227,29 +221,24 @@ export class EvaluationService {
       name: `Quý ${prevPrevQuarter} - ${prevPrevQYear}`,
     });
 
-    // 4. Current Year
     cycles.push({ id: `${currentYear}-Year`, name: `Năm ${currentYear}` });
 
-    // 5. Previous Year
     const previousYearVal = currentYear - 1;
     cycles.push({
       id: `${previousYearVal}-Year`,
       name: `Năm ${previousYearVal}`,
     });
 
-    // 6. Q4 of Previous Year
     cycles.push({
       id: `${previousYearVal}-Q4`,
       name: `Quý 4 - ${previousYearVal}`,
     });
 
-    // 7. Q3 of Previous Year
     cycles.push({
       id: `${previousYearVal}-Q3`,
       name: `Quý 3 - ${previousYearVal}`,
     });
 
-    // Remove duplicates using a Map (keyed by id)
     const uniqueCycleMap = new Map<string, ReviewCycleDto>();
     cycles.forEach((cycle) => {
       if (!uniqueCycleMap.has(cycle.id)) {
@@ -257,26 +246,24 @@ export class EvaluationService {
       }
     });
 
-    // Sort the unique cycles: Year descending, then 'Year' type after 'Qx' type, then Quarter descending
     return Array.from(uniqueCycleMap.values()).sort((a, b) => {
       const [yearA, periodTypeA] = a.id.split('-');
       const [yearB, periodTypeB] = b.id.split('-');
       const numYearA = parseInt(yearA);
       const numYearB = parseInt(yearB);
 
-      if (numYearA !== numYearB) return numYearB - numYearA; // Newer years first
+      if (numYearA !== numYearB) return numYearB - numYearA;
 
       const isQ_A = periodTypeA.startsWith('Q');
       const isQ_B = periodTypeB.startsWith('Q');
 
-      if (isQ_A && !isQ_B) return -1; // Quarters before "Year"
-      if (!isQ_A && isQ_B) return 1; // "Year" after Quarters
+      if (isQ_A && !isQ_B) return -1;
+      if (!isQ_A && isQ_B) return 1;
 
       if (isQ_A && isQ_B) {
-        // Both are quarters
         const qNumA = parseInt(periodTypeA.substring(1));
         const qNumB = parseInt(periodTypeB.substring(1));
-        return qNumB - qNumA; // Higher quarter number first (Q4, Q3, ...)
+        return qNumB - qNumA;
       }
       return 0;
     });
@@ -289,14 +276,23 @@ export class EvaluationService {
     cycleId: string,
   ): Promise<KpisForReviewResponseDto> {
     this.logger.debug(
+      `[getKpisForReview - ENTRY] Called by (simulated/actual) user ID: ${currentUser.id} for target ${targetType}:${targetId}, cycle: ${cycleId}`,
+    );
+
+    this.logger.debug(
       `[getKpisForReview] Called by user: ${currentUser.id} for target ${targetType}:${targetId}, cycle: ${cycleId}`,
     );
 
-    // 1. Permission Check: Can currentUser review this targetId/targetType?
     const reviewableTargetsForCurrentUser =
       await this.getReviewableTargets(currentUser);
     const isAllowedToReviewTarget = reviewableTargetsForCurrentUser.some(
       (rt) => rt.id === targetId && rt.type === targetType,
+    );
+    this.logger.debug(
+      `[getKpisForReview] reviewableTargetsForCurrentUser (for user ${currentUser.id}): ${JSON.stringify(reviewableTargetsForCurrentUser.map((rt) => rt.id + '-' + rt.type))}`,
+    );
+    this.logger.debug(
+      `[getKpisForReview] Checking if user ${currentUser.id} can review ${targetType}:${targetId}. Result: ${isAllowedToReviewTarget}`,
     );
 
     if (!isAllowedToReviewTarget) {
@@ -309,9 +305,6 @@ export class EvaluationService {
     }
     let assignments: KPIAssignment[] = [];
 
-    // Define date range for the cycleId
-    // This is a simplified example; you'll need a robust way to parse cycleId
-    // (e.g., '2024-Q2', '2023-Year') into start and end dates.
     const { startDate, endDate } = this.getDateRangeFromCycleId(cycleId);
     if (!startDate || !endDate) {
       this.logger.warn(
@@ -324,9 +317,7 @@ export class EvaluationService {
       assignments = await this.assignmentRepository.find({
         where: {
           assigned_to_employee: targetId,
-          // Filter assignments that are active within the review cycle
-          // Assumes KPIAssignment has start_date and end_date
-          // An assignment is relevant if its period overlaps with the review cycle
+
           startDate: LessThanOrEqual(endDate),
           endDate: MoreThanOrEqual(startDate),
         },
@@ -371,41 +362,37 @@ export class EvaluationService {
     }
 
     if (!assignments || assignments.length === 0) {
-      // Still try to fetch overall review even if no specific KPIs are assigned for review
     }
 
     const kpisToReview: KpiToReviewDto[] = [];
 
     for (const assignment of assignments) {
-      if (!assignment.kpi) continue; // Skip if KPI definition is missing
+      if (!assignment.kpi) continue;
 
-      // Determine the correct actualValue for the cycle.
-      // Find the latest KpiValue within the cycle's date range that has an 'approved' status.
-      // Assumes KpiValue has a 'timestamp' (or created_at/updated_at) and 'status'
       let relevantKpiValue: KpiValue | undefined = undefined;
       if (assignment.kpiValues && assignment.kpiValues.length > 0) {
         relevantKpiValue = assignment.kpiValues
           .filter(
             (kv) =>
-              kv.status === KpiValueStatus.APPROVED && // Or your final approved status
-              kv.timestamp >= startDate && // Ensure KpiValue timestamp is within cycle
+              kv.status === KpiValueStatus.APPROVED &&
+              kv.timestamp >= startDate &&
               kv.timestamp <= endDate,
           )
-          .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())[0]; // Get the latest
+          .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())[0];
       }
       const actualValue = relevantKpiValue ? relevantKpiValue.value : null;
 
-      // Find existing review by this currentUser for this assignment and cycle.
       const existingReview = assignment.reviews?.find(
         (review) =>
-          review.reviewedBy?.id === currentUser.id && // Check against the ID of the related Employee
-          review.cycleId === cycleId, // Make sure KpiReview entity has cycleId
+          review.reviewedBy?.id === currentUser.id &&
+          review.cycleId === cycleId,
       );
 
       kpisToReview.push({
         assignmentId: assignment.id,
         kpiId: assignment.kpi.id,
         kpiName: assignment.kpi.name,
+        kpiDescription: assignment.kpi.description,
         targetValue: assignment.targetValue,
         actualValue: actualValue,
         unit: assignment.kpi.unit,
@@ -418,7 +405,6 @@ export class EvaluationService {
       });
     }
 
-    // Fetch existing overall review
     let existingOverallReviewData: ExistingOverallReviewDto | null = null;
     const overallReviewRecord = await this.overallReviewRepository.findOne({
       where: {
@@ -433,6 +419,9 @@ export class EvaluationService {
       existingOverallReviewData = {
         overallComment: overallReviewRecord.overallComment,
         overallScore: overallReviewRecord.overallScore,
+        status: overallReviewRecord.status,
+        employeeComment: overallReviewRecord.employeeComment,
+        employeeFeedbackDate: overallReviewRecord.employeeFeedbackDate,
       };
     }
 
@@ -442,21 +431,17 @@ export class EvaluationService {
     };
   }
 
-  // Helper function to parse cycleId - THIS IS A SIMPLIFIED EXAMPLE
   private getDateRangeFromCycleId(cycleId: string): {
     startDate: Date | null;
     endDate: Date | null;
   } {
-    // Example: '2024-Q2' -> startDate: 2024-04-01, endDate: 2024-06-30
-    // Example: '2023-Year' -> startDate: 2023-01-01, endDate: 2023-12-31
-    // You'll need to implement robust parsing based on your cycleId format.
     this.logger.debug(`Parsing cycleId: ${cycleId}`);
     if (cycleId.includes('-Year')) {
       const year = parseInt(cycleId.split('-')[0]);
       if (isNaN(year)) return { startDate: null, endDate: null };
       return {
-        startDate: new Date(year, 0, 1), // First day of year
-        endDate: new Date(year, 11, 31, 23, 59, 59, 999), // Last millisecond of year
+        startDate: new Date(year, 0, 1),
+        endDate: new Date(year, 11, 31, 23, 59, 59, 999),
       };
     } else if (cycleId.includes('-Q')) {
       const parts = cycleId.split('-Q');
@@ -468,11 +453,11 @@ export class EvaluationService {
         return { startDate: null, endDate: null };
       }
 
-      const startMonth = (quarter - 1) * 3; // Q1->0, Q2->3, Q3->6, Q4->9
-      const endMonth = startMonth + 2; // Q1->2, Q2->5, Q3->8, Q4->11
+      const startMonth = (quarter - 1) * 3;
+      const endMonth = startMonth + 2;
 
       const sDate = new Date(year, startMonth, 1);
-      // To get the last day of the endMonth, set day to 0 of the *next* month
+
       const eDate = new Date(year, endMonth + 1, 0, 23, 59, 59, 999);
 
       return { startDate: sDate, endDate: eDate };
@@ -483,12 +468,11 @@ export class EvaluationService {
   async submitKpiReview(
     currentUser: Employee,
     reviewData: SubmitKpiReviewDto,
-  ): Promise<void> {
+  ): Promise<OverallReview | null> {
     this.logger.debug(
       `[submitKpiReview] Called by user: ${currentUser.id} for target ${reviewData.targetType}:${reviewData.targetId}, cycle: ${reviewData.cycleId}`,
     );
 
-    // 1. Permission Check
     const reviewableTargets = await this.getReviewableTargets(currentUser);
     const canReviewThisTarget = reviewableTargets.some(
       (rt) =>
@@ -501,14 +485,10 @@ export class EvaluationService {
       );
     }
 
-    // 2. Basic Validation (Controller already does some)
     if (!reviewData.kpiReviews || reviewData.kpiReviews.length === 0) {
       this.logger.warn('[submitKpiReview] No KPI reviews provided.');
-      // Depending on requirements, this might not be an error if only overallComment is submitted
-      // For now, we assume kpiReviews are expected if the array exists.
     }
 
-    // Pre-fetch valid assignment IDs for the given target and cycle to validate against
     const { startDate, endDate } = this.getDateRangeFromCycleId(
       reviewData.cycleId,
     );
@@ -521,7 +501,7 @@ export class EvaluationService {
 
     let validAssignmentsForTarget: Pick<KPIAssignment, 'id'>[] = [];
     const commonAssignmentQueryOptions = {
-      select: ['id'] as (keyof KPIAssignment)[], // Explicitly type as keys of KPIAssignment
+      select: ['id'] as (keyof KPIAssignment)[],
       where: {
         startDate: LessThanOrEqual(endDate),
         endDate: MoreThanOrEqual(startDate),
@@ -561,10 +541,9 @@ export class EvaluationService {
       this.logger.warn(
         `[submitKpiReview] No valid assignments found for target ${reviewData.targetType}:${reviewData.targetId} in cycle ${reviewData.cycleId}, but reviews were submitted.`,
       );
-      // Potentially throw an error or handle as per business logic
     }
 
-    // 3. Database Operations within a Transaction
+    let savedOverallReview: OverallReview | null = null;
     await this.kpiReviewRepository.manager.transaction(
       async (transactionalEntityManager: EntityManager) => {
         for (const kpiReviewItem of reviewData.kpiReviews) {
@@ -578,12 +557,11 @@ export class EvaluationService {
             continue;
           }
 
-          // Validate if the assignmentId from the review item belongs to the target being reviewed
           if (!validAssignmentIds.has(kpiReviewItem.assignmentId)) {
             this.logger.warn(
               `[submitKpiReview] Attempted to submit review for assignmentId ${kpiReviewItem.assignmentId} which does not belong to target ${reviewData.targetType}:${reviewData.targetId} in cycle ${reviewData.cycleId}. Skipping.`,
             );
-            continue; // Skip this review item
+            continue;
           }
 
           let reviewRecord = await transactionalEntityManager.findOne(
@@ -598,15 +576,12 @@ export class EvaluationService {
           );
 
           if (reviewRecord) {
-            // Update existing review
             reviewRecord.managerComment = kpiReviewItem.managerComment ?? null;
             reviewRecord.managerScore = kpiReviewItem.managerScore ?? null;
-            // reviewRecord.updatedAt = new Date(); // Handled by @UpdateDateColumn
           } else {
-            // Create new review
             reviewRecord = transactionalEntityManager.create(KpiReview, {
-              assignment: { id: kpiReviewItem.assignmentId }, // TypeORM will handle relation by ID
-              reviewedBy: { id: currentUser.id }, // TypeORM will handle relation by ID
+              assignment: { id: kpiReviewItem.assignmentId },
+              reviewedBy: { id: currentUser.id },
               cycleId: reviewData.cycleId,
               managerComment: kpiReviewItem.managerComment ?? null,
               managerScore: kpiReviewItem.managerScore ?? null,
@@ -615,7 +590,6 @@ export class EvaluationService {
           await transactionalEntityManager.save(KpiReview, reviewRecord);
         }
 
-        // Handle saving reviewData.overallComment and reviewData.overallScore
         if (
           reviewData.overallComment !== undefined ||
           reviewData.overallScore !== undefined
@@ -633,12 +607,12 @@ export class EvaluationService {
           );
 
           if (overallReviewRecord) {
-            // Update existing overall review
             overallReviewRecord.overallComment =
               reviewData.overallComment ?? null;
+            overallReviewRecord.status =
+              OverallReviewStatus.EMPLOYEE_FEEDBACK_PENDING;
             overallReviewRecord.overallScore = reviewData.overallScore ?? null;
           } else {
-            // Create new overall review
             overallReviewRecord = transactionalEntityManager.create(
               OverallReview,
               {
@@ -648,10 +622,11 @@ export class EvaluationService {
                 reviewedById: currentUser.id,
                 overallComment: reviewData.overallComment ?? null,
                 overallScore: reviewData.overallScore ?? null,
+                status: OverallReviewStatus.EMPLOYEE_FEEDBACK_PENDING,
               },
             );
           }
-          await transactionalEntityManager.save(
+          savedOverallReview = await transactionalEntityManager.save(
             OverallReview,
             overallReviewRecord,
           );
@@ -661,5 +636,211 @@ export class EvaluationService {
     this.logger.log(
       `Review submitted successfully for target ${reviewData.targetType}:${reviewData.targetId}, cycle ${reviewData.cycleId} by user ${currentUser.id}`,
     );
+
+    // Phát sự kiện khi quản lý submit review và trạng thái là EMPLOYEE_FEEDBACK_PENDING
+    // Explicitly check for null and then access properties
+    if (savedOverallReview) {
+      // This also checks for null/undefined
+      // Re-assign to a new const with explicit type to help TS
+      const confirmedReview: OverallReview = savedOverallReview;
+
+      if (
+        confirmedReview.status === OverallReviewStatus.EMPLOYEE_FEEDBACK_PENDING
+      ) {
+        this.eventEmitter.emit('overall_review.employee_feedback_pending', {
+          overallReview: confirmedReview,
+          manager: currentUser,
+          targetId: reviewData.targetId,
+          targetType: reviewData.targetType,
+        });
+      }
+    }
+    return savedOverallReview;
+  }
+
+  async completeOverallReview(
+    currentUser: Employee,
+    completeReviewDto: CompleteReviewDto,
+  ): Promise<OverallReview> {
+    this.logger.debug(
+      `[completeOverallReview] Called by user: ${currentUser.id} for target ${completeReviewDto.targetType}:${completeReviewDto.targetId}, cycle: ${completeReviewDto.cycleId}`,
+    );
+
+    const reviewableTargets = await this.getReviewableTargets(currentUser);
+    const canReviewThisTarget = reviewableTargets.some(
+      (rt) =>
+        rt.id === completeReviewDto.targetId &&
+        rt.type === completeReviewDto.targetType,
+    );
+
+    if (!canReviewThisTarget) {
+      throw new UnauthorizedException(
+        'You do not have permission to complete the review for this target.',
+      );
+    }
+
+    const overallReviewRecord = await this.overallReviewRepository.findOne({
+      where: {
+        targetId: completeReviewDto.targetId,
+        targetType: completeReviewDto.targetType,
+        cycleId: completeReviewDto.cycleId,
+        reviewedById: currentUser.id,
+      },
+    });
+
+    if (!overallReviewRecord) {
+      throw new BadRequestException('Overall review record not found.');
+    }
+
+    const allowedPreviousStatuses = [
+      OverallReviewStatus.MANAGER_REVIEWED,
+      OverallReviewStatus.EMPLOYEE_FEEDBACK_PENDING,
+      OverallReviewStatus.EMPLOYEE_RESPONDED,
+    ];
+    if (
+      !allowedPreviousStatuses.includes(
+        overallReviewRecord.status as OverallReviewStatus,
+      )
+    ) {
+      throw new BadRequestException(
+        `Review cannot be completed from current status: ${overallReviewRecord.status}. Allowed previous statuses are: ${allowedPreviousStatuses.join(', ')}.`,
+      );
+    }
+
+    overallReviewRecord.status = OverallReviewStatus.COMPLETED;
+    const completedReview =
+      await this.overallReviewRepository.save(overallReviewRecord);
+
+    // Phát sự kiện khi review được hoàn tất
+    this.eventEmitter.emit('overall_review.completed', {
+      overallReview: completedReview,
+      manager: currentUser,
+      targetId: completeReviewDto.targetId,
+      targetType: completeReviewDto.targetType,
+    });
+    return completedReview;
+  }
+
+  async getEmployeeReviewDetails(
+    employee: Employee,
+    cycleId: string,
+  ): Promise<EmployeeReviewResponseDto> {
+    this.logger.debug(
+      `[getEmployeeReviewDetails - ENTRY] Called by actual employee: ${employee.id} (${employee.username}) for cycle: ${cycleId}`,
+    );
+
+    this.logger.debug(
+      `[getEmployeeReviewDetails] Called by employee: ${employee.id} for cycle: ${cycleId}`,
+    );
+
+    const overallReviewRecord = await this.overallReviewRepository.findOne({
+      where: {
+        targetId: employee.id,
+        targetType: 'employee',
+        cycleId: cycleId,
+      },
+    });
+    this.logger.debug(
+      `[getEmployeeReviewDetails] Found overallReviewRecord: ${overallReviewRecord ? overallReviewRecord.id : 'null'}`,
+    );
+
+    if (!overallReviewRecord) {
+      this.logger.warn(
+        `[getEmployeeReviewDetails] No overall review found for employee ${employee.id}, cycle ${cycleId}`,
+      );
+      const emptyResponse: EmployeeReviewResponseDto = {
+        kpisReviewedByManager: [],
+        overallReviewByManager: null,
+      };
+      return emptyResponse;
+    }
+
+    const managerWhoReviewedId = overallReviewRecord.reviewedById;
+    this.logger.debug(
+      `[getEmployeeReviewDetails] managerWhoReviewedId from overallReviewRecord: ${managerWhoReviewedId}`,
+    );
+
+    const managerWhoReviewed = await this.employeeRepository.findOne({
+      where: { id: managerWhoReviewedId },
+    });
+
+    if (!managerWhoReviewed) {
+      this.logger.error(
+        `[getEmployeeReviewDetails] Manager (reviewer) with ID ${managerWhoReviewedId} not found. Returning DTO with error indication.`,
+      );
+      const errorIndicatingResponse: EmployeeReviewResponseDto = {
+        kpisReviewedByManager: [],
+        overallReviewByManager: {
+          overallComment: `Error: Could not load review details because the reviewing manager (ID: ${managerWhoReviewedId}) was not found.`,
+          status: OverallReviewStatus.PENDING_REVIEW,
+          overallScore: null,
+        },
+      };
+      return errorIndicatingResponse;
+    }
+
+    const reviewDataFromManagerPerspective = await this.getKpisForReview(
+      managerWhoReviewed,
+      employee.id,
+      'employee',
+      cycleId,
+    );
+
+    const response: EmployeeReviewResponseDto = {
+      kpisReviewedByManager: reviewDataFromManagerPerspective.kpisToReview,
+      overallReviewByManager:
+        reviewDataFromManagerPerspective.existingOverallReview ?? null,
+    };
+    return response;
+  }
+
+  async submitEmployeeFeedback(
+    employee: Employee,
+    feedbackDto: SubmitEmployeeFeedbackDto,
+  ): Promise<OverallReview> {
+    this.logger.debug(
+      `[submitEmployeeFeedback] Called by employee: ${employee.id} for cycle: ${feedbackDto.cycleId}`,
+    );
+
+    const overallReviewRecord = await this.overallReviewRepository.findOne({
+      where: {
+        targetId: employee.id,
+        targetType: 'employee',
+        cycleId: feedbackDto.cycleId,
+      },
+    });
+
+    if (!overallReviewRecord) {
+      throw new BadRequestException(
+        'Overall review record not found for this cycle. Cannot submit feedback.',
+      );
+    }
+
+    if (
+      overallReviewRecord.status !==
+      OverallReviewStatus.EMPLOYEE_FEEDBACK_PENDING
+    ) {
+      throw new BadRequestException(
+        `Cannot submit feedback. Review status is '${overallReviewRecord.status}', expected '${OverallReviewStatus.EMPLOYEE_FEEDBACK_PENDING}'.`,
+      );
+    }
+
+    overallReviewRecord.employeeComment = feedbackDto.employeeComment;
+    overallReviewRecord.employeeFeedbackDate = new Date();
+    overallReviewRecord.status = OverallReviewStatus.EMPLOYEE_RESPONDED;
+
+    const updatedReview =
+      await this.overallReviewRepository.save(overallReviewRecord);
+
+    this.logger.log(
+      `Employee feedback submitted for review ID ${updatedReview.id} by employee ${employee.id}`,
+    );
+
+    // Phát sự kiện khi nhân viên gửi phản hồi
+    this.eventEmitter.emit('overall_review.employee_responded', {
+      overallReview: updatedReview,
+      employee: employee, // Nhân viên gửi phản hồi
+    });
+    return updatedReview;
   }
 }

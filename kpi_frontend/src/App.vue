@@ -1,95 +1,121 @@
 <template>
-    <a-layout style="min-height: 100vh">
-        <AppSidebar v-if="isAuthenticated" />
+  <!-- Layout ngoài cùng chiếm đúng 100% chiều cao viewport và không tự cuộn -->
+  <a-layout style="height: 100vh; overflow: hidden" class="app-layout-wrapper">
+    <AppSidebar v-if="isAuthenticated" />
 
-        <a-layout>
-            <AppHeader v-if="isAuthenticated" />
+    <!-- Layout này sẽ chứa header, content, và footer -->
+    <a-layout class="site-layout">
+      <AppHeader v-if="isAuthenticated" />
 
-            <a-layout-content style="margin: 16px;">
-                <div v-if="isAuthenticating"
-                    style="display: flex; justify-content: center; align-items: center; height: calc(100vh - 100px);">
-                    <a-spin size="large" tip="Loading user data..." />
-                </div>
-                <router-view v-else />
-            </a-layout-content>
+      <!-- Khu vực nội dung chính, phần này sẽ cuộn -->
+      <a-layout-content class="site-layout-content">
+        <div
+          v-if="isAuthenticating"
+          style="
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: calc(100vh - 100px);
+          "
+        >
+          <a-spin size="large" tip="Loading user data..." />
+        </div>
+        <router-view v-else />
+      </a-layout-content>
 
-            <a-layout-footer style="text-align: center; padding: 13px 50px; background: #f0f2f5;"> Created by IVC ©{{
-                new Date().getFullYear() }}
-            </a-layout-footer>
-        </a-layout>
+      <!-- Footer sẽ nằm ở dưới cùng của site-layout -->
+      <a-layout-footer
+        class="site-layout-footer"
+        style="text-align: center; padding: 13px 50px; background: #f0f2f5"
+      >
+        Created by IVC ©{{ new Date().getFullYear() }}
+      </a-layout-footer>
     </a-layout>
+  </a-layout>
 </template>
 
 <script setup>
+// ... (phần script giữ nguyên)
+import { ref, computed, onMounted, watch } from "vue";
+import { useStore } from "vuex";
+import AppHeader from "@/core/components/layout/AppHeader.vue";
+import AppSidebar from "@/core/components/layout/AppSidebar.vue";
 
-import { ref, computed, onMounted, watch } from 'vue'; 
-import { useStore } from 'vuex'; 
-import AppHeader from '@/core/components/layout/AppHeader.vue';
-import AppSidebar from '@/core/components/layout/AppSidebar.vue';
-
-import { Layout as ALayout, LayoutContent as ALayoutContent, LayoutFooter as ALayoutFooter, Spin as ASpin } from 'ant-design-vue';
-
+import {
+  Layout as ALayout,
+  LayoutContent as ALayoutContent,
+  LayoutFooter as ALayoutFooter,
+  Spin as ASpin,
+} from "ant-design-vue";
 
 const store = useStore();
 
-
-
 const isAuthenticating = ref(true);
 
-
-
-const isAuthenticated = computed(() => store.getters['auth/isAuthenticated']);
-
+const isAuthenticated = computed(() => store.getters["auth/isAuthenticated"]);
 
 onMounted(async () => {
-    isAuthenticating.value = true;
-    const token = store.getters['auth/token'];
+  isAuthenticating.value = true;
+  const token = store.getters["auth/token"];
 
-    
-    if (token) {
-        
-        console.log('App.vue onMounted: Token found, fetching user profile...');
-        try {
-            await store.dispatch('auth/fetchUserProfile');
-            console.log('App.vue onMounted: User profile fetch attempt finished.');
-            
-            if (isAuthenticated.value) { 
-                store.dispatch("notifications/fetchUnreadCount");
-            }
-        } catch (error) {
-            
-            console.error('App.vue onMounted: Error during fetchUserProfile dispatch (logout might have been triggered).');
-        }
-    } else {
-        console.log('App.vue onMounted: No token found.');
-        
-        if (store.getters['auth/user']) {
-            console.warn("App.vue: User state exists without token, forcing logout.");
-            store.dispatch('auth/logout'); 
-        }
+  if (token) {
+    console.log("App.vue onMounted: Token found, fetching user profile...");
+    try {
+      await store.dispatch("auth/fetchUserProfile");
+      console.log("App.vue onMounted: User profile fetch attempt finished.");
+
+      if (isAuthenticated.value) {
+        store.dispatch("notifications/fetchUnreadCount");
+      }
+    } catch (error) {
+      console.error(
+        "App.vue onMounted: Error during fetchUserProfile dispatch (logout might have been triggered)."
+      );
     }
-    
+  } else {
+    console.log("App.vue onMounted: No token found.");
 
-    isAuthenticating.value = false;
+    if (store.getters["auth/user"]) {
+      console.warn("App.vue: User state exists without token, forcing logout.");
+      store.dispatch("auth/logout");
+    }
+  }
+
+  isAuthenticating.value = false;
 });
 
-
 watch(isAuthenticated, (newValue, oldValue) => {
-    
-    if (newValue && !oldValue) {
-        store.dispatch("notifications/fetchUnreadCount");
-    }
+  if (newValue && !oldValue) {
+    store.dispatch("notifications/fetchUnreadCount");
+  }
 });
 </script>
 
-<style scoped>
-/* Thêm style nếu cần */
-.ant-layout-content {
-    padding: 24px;
-    /* Thêm padding cho nội dung */
-    background: #fff;
-    /* Nền trắng cho nội dung */
-    min-height: calc(100vh - 64px - 48px - 32px);
-    /* Tính toán chiều cao tối thiểu (Header 64, Footer ~48, Margin 16*2) */
+<style>
+/* CSS này nên được giữ nguyên từ lần sửa trước */
+.app-layout-wrapper {
+  display: flex;
+  flex-direction: row;
+  /* height: 100vh; đã được đặt inline */
+  /* overflow: hidden; đã được đặt inline */
+}
+
+.site-layout {
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
+  overflow: hidden; /* Quan trọng để header sticky hoạt động đúng trong context này */
+}
+
+.site-layout-content {
+  margin: 16px;
+  padding: 24px;
+  background: #fff;
+  overflow-y: auto; /* Chỉ phần này cuộn */
+  flex-grow: 1; /* Đẩy footer xuống */
+}
+
+.site-layout-footer {
+  flex-shrink: 0; /* Ngăn footer co lại */
 }
 </style>

@@ -8,7 +8,7 @@ import { Department } from '../entities/department.entity';
 import { KPIAssignment } from '../entities/kpi-assignment.entity';
 import { KpiValue } from '../entities/kpi-value.entity';
 import { KpiReview } from '../entities/kpi-review.entity';
-import { OverallReview } from '../entities/overall-review.entity'; // Import OverallReview
+import { OverallReview } from '../entities/overall-review.entity';
 
 @Module({
   imports: [
@@ -21,7 +21,7 @@ import { OverallReview } from '../entities/overall-review.entity'; // Import Ove
       KpiReview,
       OverallReview,
     ]),
-  ], // Add OverallReview
+  ],
   controllers: [EvaluationController],
   providers: [EvaluationService],
 })

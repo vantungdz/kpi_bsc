@@ -15,7 +15,7 @@ import { Department } from './department.entity';
 import { Section } from './section.entity';
 import { Team } from './team.entity';
 import { KpiValue } from './kpi-value.entity';
-import { KpiReview } from './kpi-review.entity'; // Import KpiReview
+import { KpiReview } from './kpi-review.entity';
 
 @Entity('kpi_assignment')
 export class KPIAssignment {

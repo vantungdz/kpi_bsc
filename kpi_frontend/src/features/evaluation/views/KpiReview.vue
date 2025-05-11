@@ -89,13 +89,35 @@
         </div>
 
         <div v-else-if="kpisToReview.length > 0">
-          <a-form layout="vertical" @finish="submitReviewData">
+          <!-- Hiển thị Trạng thái Review Hiện tại -->
+          <div style="margin-bottom: 16px; text-align: right">
+            <span style="margin-right: 8px">Trạng thái Review:</span>
+            <!-- eslint-disable-next-line vue/no-undef-components -->
+            <a-tag :color="reviewStatusColor">
+              {{ reviewStatusText }}
+            </a-tag>
+            <!-- Make sure ATag is registered or globally available as a-tag -->
+            <!-- If using Ant Design Vue 3.x/4.x, ATag is imported and used as <a-tag> -->
+          </div>
+
+          <a-form
+            layout="vertical"
+            @finish="submitReviewData"
+            @finishFailed="onFinishFailed"
+          >
             <div
               v-for="(kpiItem, index) in kpisToReview"
               :key="kpiItem.assignmentId"
               class="kpi-review-item"
             >
               <a-divider v-if="index > 0" />
+              <!-- Thêm hiển thị Mô tả KPI -->
+              <p
+                v-if="kpiItem.kpiDescription"
+                style="font-style: italic; color: #555; margin-bottom: 8px"
+              >
+                <strong>Mô tả KPI:</strong> {{ kpiItem.kpiDescription }}
+              </p>
               <h3>{{ index + 1 }}. {{ kpiItem.kpiName }}</h3>
               <a-row :gutter="16">
                 <a-col :span="8">
@@ -148,39 +170,92 @@
                   v-model:value="kpiItem.managerComment"
                   placeholder="Nhận xét, điểm mạnh, điểm cần cải thiện..."
                   :rows="3"
+                  :disabled="
+                    isLoadingKpis || overallReview.status === 'COMPLETED'
+                  "
                 />
               </a-form-item>
-              <!-- Tùy chọn: Thêm trường nhập điểm số nếu có -->
-              <!--
-              <a-form-item label="Điểm số (1-5)">
+
+              <a-form-item
+                :label="`Điểm số (1-5) cho KPI: ${kpiItem.kpiName}`"
+                :name="['kpiItem', index, 'managerScore']"
+              >
+                <!-- eslint-disable-next-line vue/no-undef-components -->
                 <a-rate v-model:value="kpiItem.managerScore" />
               </a-form-item>
-              -->
             </div>
 
             <a-divider />
+            <!-- Phần hiển thị Phản hồi của Nhân viên -->
+            <div
+              v-if="
+                overallReview.employeeComment &&
+                (overallReview.status === 'EMPLOYEE_RESPONDED' ||
+                  overallReview.status === 'COMPLETED')
+              "
+            >
+              <h3>Phản hồi từ Nhân viên</h3>
+              <a-descriptions
+                bordered
+                :column="1"
+                size="small"
+                style="margin-bottom: 16px"
+              >
+                <a-descriptions-item label="Ngày phản hồi">
+                  {{ formatDate(overallReview.employeeFeedbackDate) }}
+                </a-descriptions-item>
+                <a-descriptions-item label="Nội dung phản hồi">
+                  <p style="white-space: pre-wrap">
+                    {{ overallReview.employeeComment }}
+                  </p>
+                </a-descriptions-item>
+              </a-descriptions>
+              <a-divider />
+            </div>
+
             <a-form-item
               label="Nhận xét/Đánh giá Tổng thể của Quản lý"
               name="overallManagerComment"
             >
-              <a-textarea
+              <Input.TextArea
                 v-model:value="overallReview.managerComment"
                 placeholder="Đánh giá chung về hiệu suất trong chu kỳ, định hướng phát triển..."
                 :rows="5"
               />
             </a-form-item>
-            <!-- Tùy chọn: Thêm trường nhập điểm tổng thể nếu có -->
+
+            <a-form-item label="Điểm Tổng thể (1-5)" name="overallManagerScore">
+              <!-- eslint-disable-next-line vue/no-undef-components -->
+              <a-rate v-model:value="overallReview.managerScore" />
+            </a-form-item>
 
             <a-form-item>
               <a-button
                 type="primary"
-                html-type="submit"
+                html-type="button"
+                @click="handleSaveButtonClick"
                 :loading="isSubmitting"
-                :disabled="isLoadingKpis"
+                :disabled="
+                  isLoadingKpis || overallReview.status === 'COMPLETED'
+                "
               >
                 Lưu Đánh giá
               </a-button>
               <!-- Tùy chọn: Thêm nút "Hoàn tất Review" nếu có quy trình nhiều bước -->
+              <a-button
+                v-if="
+                  overallReview.status === 'MANAGER_REVIEWED' ||
+                  overallReview.status === 'EMPLOYEE_FEEDBACK_PENDING' ||
+                  overallReview.status === 'EMPLOYEE_RESPONDED'
+                "
+                type="primary"
+                danger
+                @click="handleCompleteReview"
+                :loading="isCompletingReview"
+                style="margin-left: 8px"
+              >
+                Hoàn tất Review
+              </a-button>
             </a-form-item>
           </a-form>
         </div>
@@ -200,25 +275,26 @@ import {
   SelectOption as ASelectOption,
   Form as AForm,
   FormItem as AFormItem,
-  InputTextarea as ATextarea,
+  Input,
   Button as AButton,
   Spin as ASpin,
   Alert as AAlert,
   Empty as AEmpty,
   Divider as ADivider,
   Descriptions as ADescriptions,
+  Tag as ATag,
   DescriptionsItem as ADescriptionsItem,
   Progress as AProgress,
-  // Rate as ARate, // Nếu dùng điểm số dạng sao
   notification,
   Breadcrumb as ABreadcrumb,
+  Rate as ARate,
   BreadcrumbItem as ABreadcrumbItem,
 } from "ant-design-vue";
-import { cloneDeep } from "lodash-es"; // Hoặc một thư viện deep clone khác
+import dayjs from "dayjs";
+import { cloneDeep } from "lodash-es";
 
 const store = useStore();
 
-// --- State cho việc chọn đối tượng và chu kỳ ---
 const selectedTarget = ref(null);
 const reviewTargets = computed(
   () => store.getters["kpiEvaluations/getReviewableTargets"]
@@ -226,7 +302,6 @@ const reviewTargets = computed(
 const isLoadingTargets = computed(
   () => store.getters["kpiEvaluations/isLoadingReviewableTargets"]
 );
-// const reviewTargetsError = computed(() => store.getters["kpiEvaluations/getReviewableTargetsError"]);
 
 const selectedCycle = ref(null);
 const reviewCycles = computed(
@@ -235,27 +310,27 @@ const reviewCycles = computed(
 const isLoadingCycles = computed(
   () => store.getters["kpiEvaluations/isLoadingReviewCycles"]
 );
-// const reviewCyclesError = computed(() => store.getters["kpiEvaluations/getReviewCyclesError"]);
 
-// --- State cho danh sách KPI cần review ---
 const kpisFromStore = computed(
   () => store.getters["kpiEvaluations/getKpisToReview"]
 );
 const existingOverallReviewFromStore = computed(
-  () => store.getters["kpiEvaluations/getExistingOverallReview"] // Thêm getter này vào store
+  () => store.getters["kpiEvaluations/getExistingOverallReview"]
 );
-const kpisToReview = ref([]); // Local, editable copy
+const kpisToReview = ref([]);
 const isLoadingKpis = computed(
   () => store.getters["kpiEvaluations/isLoadingKpisToReview"]
 );
 const loadingError = computed(
   () => store.getters["kpiEvaluations/getKpisToReviewError"]
-); // Chung cho lỗi tải KPI
+);
 
-// --- State cho đánh giá tổng thể ---
 const overallReview = ref({
   managerComment: "",
-  // managerScore: null, // Nếu có
+  managerScore: null,
+  employeeComment: null,
+  employeeFeedbackDate: null,
+  status: null,
 });
 
 const isSubmitting = computed(
@@ -265,7 +340,10 @@ const submitError = computed(
   () => store.getters["kpiEvaluations/getSubmitKpiReviewError"]
 );
 
-// Watch for changes from the store and update the local copy
+const isCompletingReview = computed(
+  () => store.getters["kpiEvaluations/isCompletingKpiReview"]
+);
+
 watch(
   kpisFromStore,
   (newKpis) => {
@@ -277,8 +355,7 @@ watch(
     if (newKpis && Array.isArray(newKpis)) {
       kpisToReview.value = cloneDeep(newKpis).map((kpi) => ({
         ...kpi,
-        // Ensure managerComment and managerScore are initialized
-        // Use existing review data if available, otherwise default
+
         managerComment: kpi.existingManagerComment || "",
         managerScore:
           kpi.existingManagerScore === undefined
@@ -302,16 +379,26 @@ watch(
     if (newOverallReview) {
       overallReview.value.managerComment =
         newOverallReview.overallComment || "";
-      // overallReview.value.managerScore = newOverallReview.overallScore === undefined ? null : newOverallReview.overallScore; // Nếu dùng score
+      overallReview.value.managerScore =
+        newOverallReview.overallScore === undefined
+          ? null
+          : newOverallReview.overallScore;
+      overallReview.value.status = newOverallReview.status || null;
+      overallReview.value.employeeComment =
+        newOverallReview.employeeComment || null;
+      overallReview.value.employeeFeedbackDate =
+        newOverallReview.employeeFeedbackDate || null;
     } else {
       overallReview.value.managerComment = "";
-      // overallReview.value.managerScore = null;
+      overallReview.value.managerScore = null;
+      overallReview.value.status = null;
+      overallReview.value.employeeComment = null;
+      overallReview.value.employeeFeedbackDate = null;
     }
   },
   { deep: true, immediate: true }
 );
 
-// --- Computed Properties ---
 const pageTitle = computed(() => {
   const targetName = getSelectedTargetName();
   const cycleName = getSelectedCycleName();
@@ -321,7 +408,22 @@ const pageTitle = computed(() => {
   return "Đánh giá Kết quả KPI";
 });
 
-// --- Methods ---
+const reviewStatusText = computed(() => {
+  const statusMap = {
+    PENDING_REVIEW: "Chờ Review",
+    MANAGER_REVIEWED: "Quản lý Đã Review",
+    EMPLOYEE_FEEDBACK_PENDING: "Chờ Nhân viên Phản hồi",
+    EMPLOYEE_RESPONDED: "Nhân viên Đã Phản hồi",
+    COMPLETED: "Hoàn tất",
+  };
+  return statusMap[overallReview.value.status] || "Không xác định";
+});
+const reviewStatusColor = computed(() => {
+  if (overallReview.value.status === "MANAGER_REVIEWED") return "blue";
+  if (overallReview.value.status === "COMPLETED") return "green";
+  return "default";
+});
+
 const getSelectedTargetName = () => {
   const target = reviewTargets.value.find((t) => t.id === selectedTarget.value);
   return target ? target.name : "";
@@ -342,7 +444,6 @@ const fetchReviewTargets = async () => {
   try {
     await store.dispatch("kpiEvaluations/fetchReviewableTargets");
   } catch (error) {
-    // Store action already handles notification
     console.error("Component error fetching review targets:", error);
   }
 };
@@ -351,7 +452,6 @@ const fetchReviewCycles = async () => {
   try {
     await store.dispatch("kpiEvaluations/fetchReviewCycles");
   } catch (error) {
-    // Store action already handles notification
     console.error("Component error fetching review cycles:", error);
   }
 };
@@ -384,9 +484,9 @@ const fetchKpisForReview = async () => {
         cycle: selectedCycle.value,
       }
     );
-    store.commit("kpiEvaluations/SET_KPIS_TO_REVIEW", []); // Clear kpis if no selection
-    store.commit("kpiEvaluations/SET_EXISTING_OVERALL_REVIEW", null); // Clear overall review
-    // overallReview.value.managerComment = ""; // Reset local overall review
+    store.commit("kpiEvaluations/SET_KPIS_TO_REVIEW", []);
+    store.commit("kpiEvaluations/SET_EXISTING_OVERALL_REVIEW", null);
+    overallReview.value.managerComment = "";
     return;
   }
   try {
@@ -414,7 +514,7 @@ const fetchKpisForReview = async () => {
       console.error(
         "[KpiReview.vue] Component fetchKpisForReview: Target object not found in reviewTargets.value."
       );
-      // Clear data if target is not found to avoid stale display
+
       store.commit("kpiEvaluations/SET_KPIS_TO_REVIEW", []);
       store.commit("kpiEvaluations/SET_EXISTING_OVERALL_REVIEW", null);
       return;
@@ -433,7 +533,6 @@ const fetchKpisForReview = async () => {
       cycleId: selectedCycle.value,
     });
   } catch (error) {
-    // Store action already handles notification and error state
     console.error("Component error fetching KPIs for review:", error);
   }
 };
@@ -459,6 +558,14 @@ const getCompletionStatus = (rate) => {
 
 const submitReviewData = async () => {
   try {
+    console.log("[KpiReview.vue] submitReviewData called.");
+    console.log("[KpiReview.vue] selectedTarget.value:", selectedTarget.value);
+    console.log(
+      "[KpiReview.vue] reviewTargets.value:",
+      JSON.parse(JSON.stringify(reviewTargets.value))
+    );
+    console.log("[KpiReview.vue] selectedCycle.value:", selectedCycle.value);
+
     const target = reviewTargets.value.find(
       (t) => t.id === selectedTarget.value
     );
@@ -472,21 +579,20 @@ const submitReviewData = async () => {
     const reviewData = {
       targetId: selectedTarget.value,
       targetType: target.type,
-      cycleId: selectedCycle.value, // Ensure selectedCycle.value is the ID
+      cycleId: selectedCycle.value,
       overallComment: overallReview.value.managerComment,
-      // overallScore: overallReview.value.managerScore, // Nếu có
+      overallScore: overallReview.value.managerScore,
       kpiReviews: kpisToReview.value.map((kpi) => ({
-        // Use the local kpisToReview
         assignmentId: kpi.assignmentId,
         managerComment: kpi.managerComment,
-        managerScore: kpi.managerScore, // Nếu có
+        managerScore: kpi.managerScore,
       })),
     };
     console.log("Submitting review data:", reviewData);
     await store.dispatch("kpiEvaluations/submitKpiReview", reviewData);
     notification.success({ message: "Lưu đánh giá thành công!" });
   } catch (err) {
-    const error = err || submitError.value; // Use error from store if dispatch itself didn't throw awaited error
+    const error = err || submitError.value;
     notification.error({
       message: "Lỗi lưu đánh giá",
       description: error.message,
@@ -494,12 +600,64 @@ const submitReviewData = async () => {
   }
 };
 
+const handleSaveButtonClick = () => {
+  console.log("[KpiReview.vue] 'Lưu Đánh giá' button was clicked directly.");
+
+  submitReviewData();
+};
+const onFinishFailed = (errorInfo) => {
+  console.log("[KpiReview.vue] Form validation failed:", errorInfo);
+  notification.error({
+    message: "Validation Failed",
+    description: "Please check the form fields for errors.",
+  });
+};
+
+const handleCompleteReview = async () => {
+  if (!selectedTarget.value || !selectedCycle.value) {
+    notification.error({
+      message: "Lỗi",
+      description: "Vui lòng chọn đối tượng và chu kỳ review.",
+    });
+    return;
+  }
+  const target = reviewTargets.value.find((t) => t.id === selectedTarget.value);
+  if (!target) {
+    notification.error({
+      message: "Lỗi",
+      description: "Không tìm thấy thông tin đối tượng được chọn.",
+    });
+    return;
+  }
+
+  try {
+    const completeReviewDto = {
+      targetId: selectedTarget.value,
+      targetType: target.type,
+      cycleId: selectedCycle.value,
+    };
+    await store.dispatch("kpiEvaluations/completeKpiReview", completeReviewDto);
+    notification.success({ message: "Review đã được hoàn tất thành công!" });
+  } catch (error) {
+    const errorMsg =
+      error.response?.data?.message ||
+      error.message ||
+      "Không thể hoàn tất review.";
+    notification.error({
+      message: "Lỗi hoàn tất review",
+      description: errorMsg,
+    });
+  }
+};
+
+const formatDate = (dateString) => {
+  if (!dateString) return "";
+  return dayjs(dateString).format("DD/MM/YYYY HH:mm");
+};
+
 onMounted(() => {
   fetchReviewTargets();
   fetchReviewCycles();
-  // TODO: Có thể lấy targetId và cycleId từ route params nếu người dùng điều hướng từ một nơi cụ thể
-  // Ví dụ: selectedTarget.value = route.query.targetId; selectedCycle.value = route.query.cycleId;
-  // if (selectedTarget.value && selectedCycle.value) fetchKpisForReview();
 });
 </script>
 

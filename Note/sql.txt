@@ -1,0 +1,64 @@
+-- 1. CHÈN DỮ LIỆU NHÂN VIÊN (EMPLOYEES)
+-- Giả sử nhân viên ID 1 là người được đánh giá và cũng là người quản lý thực hiện review
+-- (Trong thực tế, người review có thể là một ID khác)
+INSERT INTO employees (id, username, password, email, role, first_name, last_name, "departmentId")
+VALUES
+    (1, 'employee_target', 'hashed_password', 'employee.target@example.com', 'employee', 'Target', 'User', 1),
+    (2, 'manager_reviewer', 'hashed_password', 'manager.reviewer@example.com', 'manager', 'Manager', 'Reviewer', 1)
+ON CONFLICT (id) DO NOTHING; -- Hoặc DO UPDATE nếu bạn muốn cập nhật
+
+-- (Tùy chọn) Chèn Department nếu chưa có
+INSERT INTO departments (id, name)
+VALUES (1, 'Sales Department')
+ON CONFLICT (id) DO NOTHING;
+
+-- 2. CHÈN DỮ LIỆU KPI (KPIS)
+INSERT INTO kpis (id, name, calculation_type, type, unit, target, frequency, weight, perspective_id, start_date, end_date, status, created_by_type, created_by)
+VALUES
+    (101, 'Doanh số bán hàng cá nhân', 'sum', 'Financial', 'VND', 100000000, 'yearly', 50, 1, '2025-01-01', '2025-12-31', 'APPROVED', 'company', 1),
+    (102, 'Số lượng khách hàng mới', 'sum', 'Customer', 'Khách hàng', 20, 'yearly', 30, 2, '2025-01-01', '2025-12-31', 'APPROVED', 'company', 1)
+ON CONFLICT (id) DO NOTHING;
+
+-- (Tùy chọn) Chèn Perspective nếu chưa có
+INSERT INTO perspectives (id, name, description)
+VALUES
+    (1, 'Tài chính', 'Các mục tiêu liên quan đến tài chính'),
+    (2, 'Khách hàng', 'Các mục tiêu liên quan đến khách hàng')
+ON CONFLICT (id) DO NOTHING;
+
+
+-- 3. CHÈN DỮ LIỆU GIAO KPI (KPI_ASSIGNMENT)
+-- Giao KPI 101 và 102 cho nhân viên ID 1 trong năm 2025
+INSERT INTO kpi_assignment (id, kpi_id, assigned_to_employee, "targetValue", start_date, end_date, status, "assignedBy", created_at) -- SỬA Ở ĐÂY
+VALUES
+    (201, 101, 1, 120000000, '2025-01-01', '2025-12-31', 'APPROVED', 2, NOW()), -- KPI "Doanh số bán hàng cá nhân"
+    (202, 102, 1, 25, '2025-01-01', '2025-12-31', 'APPROVED', 2, NOW())         -- KPI "Số lượng khách hàng mới"
+ON CONFLICT (id) DO NOTHING;
+
+
+-- 4. CHÈN DỮ LIỆU GIÁ TRỊ THỰC TẾ (KPI_VALUES)
+-- Giá trị thực tế cho các assignment ở trên, nằm trong chu kỳ '2025-Year' và đã được 'APPROVED'
+INSERT INTO kpi_values (id, kpi_assigment_id, value, timestamp, notes, status, created_at, updated_by)
+VALUES
+    (301, 201, 110000000, '2025-12-15 10:00:00', 'Kết quả cuối năm cho doanh số', 'APPROVED', NOW(), 2),
+    (302, 202, 22, '2025-12-15 11:00:00', 'Số lượng khách hàng mới đạt được', 'APPROVED', NOW(), 2)
+ON CONFLICT (id) DO NOTHING;
+
+
+-- 5. CHÈN DỮ LIỆU ĐÁNH GIÁ CHI TIẾT KPI TỪ LẦN TRƯỚC (KPI_REVIEW) - TÙY CHỌN
+-- Giả sử người quản lý (ID=2) đã review các KPI này cho chu kỳ '2025-Year' trước đó
+-- Nếu bạn muốn giao diện hiển thị "existingManagerComment" và "existingManagerScore"
+INSERT INTO kpi_review (id, "cycleId", "assignmentId", "managerComment", "managerScore", "reviewedById", "createdAt")
+VALUES
+    (401, '2025-Year', 201, 'Cần cố gắng hơn để đạt mục tiêu doanh số.', 3, 2, NOW()),
+    (402, '2025-Year', 202, 'Làm tốt việc tìm kiếm khách hàng mới, tuy nhiên cần cải thiện tỷ lệ chốt đơn.', 4, 2, NOW())
+ON CONFLICT (id) DO NOTHING;
+
+
+-- 6. CHÈN DỮ LIỆU ĐÁNH GIÁ TỔNG THỂ TỪ LẦN TRƯỚC (OVERALL_REVIEWS) - TÙY CHỌN
+-- Giả sử người quản lý (ID=2) đã có đánh giá tổng thể cho nhân viên ID 1 trong chu kỳ '2025-Year'
+-- Nếu bạn muốn giao diện hiển thị "existingOverallReview"
+INSERT INTO overall_reviews (id, "targetId", "targetType", "cycleId", "overallComment", "overallScore", "reviewedById", "createdAt")
+VALUES
+    (501, 1, 'employee', '2025-Year', 'Nhìn chung, nhân viên đã có nhiều nỗ lực trong năm. Cần cải thiện kỹ năng bán hàng và quản lý thời gian để đạt kết quả tốt hơn trong các mục tiêu được giao.', 3, 2, NOW())
+ON CONFLICT (id) DO NOTHING;

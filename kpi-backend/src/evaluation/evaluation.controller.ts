@@ -29,11 +29,15 @@ import {
   KpiToReviewDto,
   SubmitKpiReviewDto,
   KpisForReviewResponseDto,
+  CompleteReviewDto,
+  EmployeeReviewResponseDto,
+  SubmitEmployeeFeedbackDto,
 } from './dto/evaluation.dto';
+import { OverallReview } from 'src/entities/overall-review.entity';
 
 @ApiTags('Evaluation')
-@ApiBearerAuth() // Requires JWT token
-@UseGuards(JwtAuthGuard, RolesGuard) // Apply JWT and Role guards
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('evaluation')
 export class EvaluationController {
   private validateUser(req: Request & { user?: Employee }): Employee {
@@ -46,7 +50,7 @@ export class EvaluationController {
   constructor(private readonly evaluationService: EvaluationService) {}
 
   @Get('reviewable-targets')
-  @Roles('admin', 'manager') // Only Admin and Manager can review others
+  @Roles('admin', 'manager')
   @ApiOperation({
     summary:
       'Get list of employees/sections/departments the current user can review',
@@ -66,7 +70,7 @@ export class EvaluationController {
   }
 
   @Get('review-cycles')
-  @Roles('admin', 'manager') // Adjust roles as needed
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Get list of available review cycles' })
   @ApiResponse({
     status: 200,
@@ -83,7 +87,7 @@ export class EvaluationController {
   }
 
   @Get('kpis-for-review')
-  @Roles('admin', 'manager') // Adjust roles as needed
+  @Roles('admin', 'manager')
   @ApiOperation({
     summary: 'Get list of KPIs to review for a specific target and cycle',
   })
@@ -93,7 +97,7 @@ export class EvaluationController {
     required: true,
     enum: ['employee', 'section', 'department'],
   })
-  @ApiQuery({ name: 'cycleId', required: true, type: String }) // Adjust type if cycleId is number
+  @ApiQuery({ name: 'cycleId', required: true, type: String })
   @ApiResponse({
     status: 200,
     description: 'List of KPIs and existing overall review.',
@@ -108,7 +112,7 @@ export class EvaluationController {
     @Query('cycleId') cycleId: string,
   ): Promise<KpisForReviewResponseDto> {
     const user = this.validateUser(req);
-    // Basic validation
+
     if (!['employee', 'section', 'department'].includes(targetType)) {
       throw new UnauthorizedException('Invalid targetType.');
     }
@@ -121,7 +125,7 @@ export class EvaluationController {
   }
 
   @Post('submit-review')
-  @Roles('admin', 'manager') // Adjust roles as needed
+  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Submit KPI review results' })
   @ApiResponse({ status: 200, description: 'Review submitted successfully.' })
   @ApiResponse({ status: 400, description: 'Invalid input.' })
@@ -130,15 +134,69 @@ export class EvaluationController {
   async submitKpiReview(
     @Req() req: Request & { user?: Employee },
     @Body() reviewData: SubmitKpiReviewDto,
-  ): Promise<void> {
+  ): Promise<OverallReview | null> {
     const user = this.validateUser(req);
-    // Basic validation
+
     if (
       !['employee', 'section', 'department'].includes(reviewData.targetType)
     ) {
       throw new UnauthorizedException('Invalid targetType in review data.');
     }
-    // TODO: Add more validation for reviewData structure and content
+
     return this.evaluationService.submitKpiReview(user, reviewData);
+  }
+
+  @Post('complete-review')
+  @Roles('admin', 'manager')
+  @ApiOperation({ summary: 'Mark an overall review as completed' })
+  @ApiResponse({
+    status: 200,
+    description: 'Review marked as completed successfully.',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Invalid input or review not found/not in correct state.',
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  @ApiResponse({ status: 403, description: 'Forbidden.' })
+  async completeReview(
+    @Req() req: Request & { user?: Employee },
+    @Body() completeReviewDto: CompleteReviewDto,
+  ): Promise<{ message: string; updatedReview: OverallReview }> {
+    const user = this.validateUser(req);
+    if (
+      !['employee', 'section', 'department'].includes(
+        completeReviewDto.targetType,
+      )
+    ) {
+      throw new UnauthorizedException(
+        'Invalid targetType in complete review data.',
+      );
+    }
+    const updatedReview = await this.evaluationService.completeOverallReview(
+      user,
+      completeReviewDto,
+    );
+    return { message: 'Review completed successfully', updatedReview };
+  }
+
+  @Get('my-review/:cycleId')
+  @Roles('employee', 'section', 'department', 'manager', 'admin')
+  async getMyReview(
+    @Req() req: Request & { user?: Employee },
+    @Param('cycleId') cycleId: string,
+  ): Promise<EmployeeReviewResponseDto> {
+    const user = this.validateUser(req);
+    return this.evaluationService.getEmployeeReviewDetails(user, cycleId);
+  }
+
+  @Post('my-review/submit-feedback')
+  @Roles('employee', 'section', 'department', 'manager', 'admin')
+  async submitEmployeeFeedback(
+    @Req() req: Request & { user?: Employee },
+    @Body() feedbackDto: SubmitEmployeeFeedbackDto,
+  ): Promise<OverallReview> {
+    const user = this.validateUser(req);
+    return this.evaluationService.submitEmployeeFeedback(user, feedbackDto);
   }
 }
