@@ -53,7 +53,7 @@ export class EvaluationController {
   constructor(private readonly evaluationService: EvaluationService) {}
 
   @Get('reviewable-targets')
-  @Roles('admin', 'manager')
+  @Roles('admin', 'manager', 'section', 'department')
   @ApiOperation({
     summary:
       'Get list of employees/sections/departments the current user can review',
@@ -73,7 +73,6 @@ export class EvaluationController {
   }
 
   @Get('review-cycles')
-  @Roles('admin', 'manager')
   @ApiOperation({ summary: 'Get list of available review cycles' })
   @ApiResponse({
     status: 200,

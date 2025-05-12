@@ -29,7 +29,10 @@ const routes = [
     path: "/kpi/review",
     name: "KpiReview",
     component: KpiReview,
-    meta: { requiresAuth: true, roles: ["manager", "admin"] },
+    meta: {
+      requiresAuth: true,
+      roles: ["manager", "admin", "department", "section"],
+    },
   },
 
   {
@@ -115,46 +118,56 @@ const routes = [
         path: "company",
         name: "KpiListCompany",
         component: KpiListCompany,
-        meta: { roles: ["admin", "manager"] },
+        meta: { requiresAuth: true, roles: ["admin", "manager"] },
       },
       {
         path: "department",
         name: "KpiListDepartment",
         component: KpiListDepartment,
-        meta: { roles: ["admin", "manager", "department"] },
+        meta: { requiresAuth: true, roles: ["admin", "manager", "department"] },
       },
       {
         path: "department-create",
         name: "KpiCreateDepartment",
         component: KpiCreateDepartment,
         props: true,
-        meta: { roles: ["admin", "manager", "department"] },
+        meta: { requiresAuth: true, roles: ["admin", "manager", "department"] },
       },
       {
         path: "section",
         name: "KpiListSection",
         component: KpiListSection,
-        meta: { roles: ["admin", "manager", "section", "department"] },
+        meta: {
+          requiresAuth: true,
+          roles: ["admin", "manager", "department", "section"],
+        },
       },
       {
         path: "section-create",
         name: "KpiCreateSection",
         component: KpiCreateSection,
         props: true,
-        meta: { roles: ["admin", "manager", "department", "section"] },
+        meta: {
+          requiresAuth: true,
+          roles: ["admin", "manager", "department", "section"],
+        },
       },
       {
         path: "create",
         name: "KpiCreateCompany",
         component: KpiCreateCompany,
         props: (route) => ({ scope: route.query.scope }),
-        meta: { roles: ["admin", "manager"] },
+        meta: { requiresAuth: true, roles: ["admin", "manager"] },
       },
       {
         path: ":id",
         name: "KpiDetail",
         component: KpiDetail,
         props: true,
+        meta: {
+          requiresAuth: true,
+          roles: ["admin", "manager", "department", "section"],
+        },
       },
     ],
   },
@@ -164,6 +177,7 @@ const routes = [
     component: KpiValueApprovalList,
     meta: {
       requiresAuth: true,
+      roles: ["admin", "manager", "department", "section"],
     },
   },
   {

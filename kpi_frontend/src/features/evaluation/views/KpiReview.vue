@@ -2,9 +2,9 @@
   <div class="kpi-review-page">
     <a-breadcrumb style="margin-bottom: 16px">
       <a-breadcrumb-item>
-        <router-link to="/dashboard">{{ $t('dashboard') }}</router-link>
+        <router-link to="/dashboard">{{ $t("dashboard") }}</router-link>
       </a-breadcrumb-item>
-      <a-breadcrumb-item>{{ $t('kpiReviewTitle') }}</a-breadcrumb-item>
+      <a-breadcrumb-item>{{ $t("kpiReviewTitle") }}</a-breadcrumb-item>
     </a-breadcrumb>
 
     <a-card :title="pageTitle" :bordered="false">
@@ -20,14 +20,14 @@
               :loading="isLoadingTargets"
             >
               <a-select-option
-                v-for="target in reviewTargets"
+                v-for="target in filteredReviewTargets"
                 :key="`${target.type}-${target.id}`"
                 :value="`${target.type}-${target.id}`"
               >
                 {{ target.name }} ({{
-                  target.type === 'employee'
-                    ? $t('employee')
-                    : $t('departmentOrSection')
+                  target.type === "employee"
+                    ? $t("employee")
+                    : $t("departmentOrSection")
                 }})
               </a-select-option>
             </a-select>
@@ -62,7 +62,7 @@
             type="dashed"
             @click="viewTargetReviewHistory"
           >
-            {{ $t('viewReviewHistory') }}
+            {{ $t("viewReviewHistory") }}
           </a-button>
         </a-col>
       </a-row>
@@ -89,15 +89,13 @@
           class="empty-state"
         >
           <a-empty
-            :description="
-              `${$t('noKpisToReview')} ${getSelectedTargetName()} ${$t('inCycle')} ${getSelectedCycleName()}.`
-            "
+            :description="`${$t('noKpisToReview')} ${getSelectedTargetName()} ${$t('inCycle')} ${getSelectedCycleName()}.`"
           />
         </div>
 
         <div v-else-if="kpisToReview.length > 0">
           <div style="margin-bottom: 16px; text-align: right">
-            <span style="margin-right: 8px">{{ $t('reviewStatus') }}:</span>
+            <span style="margin-right: 8px">{{ $t("reviewStatus") }}:</span>
             <a-tag :color="reviewStatusColor">
               {{ reviewStatusText }}
             </a-tag>
@@ -118,7 +116,8 @@
                 v-if="kpiItem.kpiDescription"
                 style="font-style: italic; color: #555; margin-bottom: 8px"
               >
-                <strong>{{ $t('kpiDescription') }}:</strong> {{ kpiItem.kpiDescription }}
+                <strong>{{ $t("kpiDescription") }}:</strong>
+                {{ kpiItem.kpiDescription }}
               </p>
               <h3>{{ index + 1 }}. {{ kpiItem.kpiName }}</h3>
               <a-row :gutter="16">
@@ -191,7 +190,7 @@
                   overallReview.status === 'COMPLETED')
               "
             >
-              <h3>{{ $t('employeeFeedback') }}</h3>
+              <h3>{{ $t("employeeFeedback") }}</h3>
               <a-descriptions
                 bordered
                 :column="1"
@@ -210,7 +209,10 @@
               <a-divider />
             </div>
 
-            <a-form-item :label="$t('overallManagerComment')" name="overallManagerComment">
+            <a-form-item
+              :label="$t('overallManagerComment')"
+              name="overallManagerComment"
+            >
               <Input.TextArea
                 v-model:value="overallReview.managerComment"
                 :placeholder="$t('overallManagerCommentPlaceholder')"
@@ -218,7 +220,10 @@
               />
             </a-form-item>
 
-            <a-form-item :label="$t('overallManagerScore')" name="overallManagerScore">
+            <a-form-item
+              :label="$t('overallManagerScore')"
+              name="overallManagerScore"
+            >
               <a-rate v-model:value="overallReview.managerScore" />
             </a-form-item>
 
@@ -232,7 +237,7 @@
                   isLoadingKpis || overallReview.status === 'COMPLETED'
                 "
               >
-                {{ $t('saveReview') }}
+                {{ $t("saveReview") }}
               </a-button>
               <a-button
                 v-if="
@@ -246,7 +251,7 @@
                 :loading="isCompletingReview"
                 style="margin-left: 8px"
               >
-                {{ $t('completeReview') }}
+                {{ $t("completeReview") }}
               </a-button>
             </a-form-item>
           </a-form>
@@ -283,7 +288,7 @@ import {
   Rate as ARate,
   BreadcrumbItem as ABreadcrumbItem,
 } from "ant-design-vue";
-import { useI18n } from 'vue-i18n';
+import { useI18n } from "vue-i18n";
 
 const { t: $t } = useI18n();
 import dayjs from "dayjs";
@@ -299,6 +304,31 @@ const reviewTargets = computed(
 const isLoadingTargets = computed(
   () => store.getters["kpiEvaluations/isLoadingReviewableTargets"]
 );
+
+const currentUser = computed(() => store.getters["auth/user"]);
+
+const filteredReviewTargets = computed(() => {
+  if (!reviewTargets.value || !Array.isArray(reviewTargets.value)) return [];
+  const user = currentUser.value;
+  if (!user) return reviewTargets.value;
+  // Nếu là admin, trả về tất cả
+  if (user.role === "admin") return reviewTargets.value;
+  // Nếu là manager hoặc department
+  if (user.role === "manager" || user.role === "department") {
+    // Tạm thời chỉ lọc theo type (nếu muốn chỉ hiện employee và section)
+    return reviewTargets.value.filter(
+      (t) => t.type === "employee" || t.type === "section"
+    );
+  }
+  // Nếu là section
+  if (user.role === "section") {
+    return reviewTargets.value.filter(
+      (t) => t.type === "employee" || t.type === "section"
+    );
+  }
+  // Mặc định trả về tất cả
+  return reviewTargets.value;
+});
 
 const selectedCycle = ref(null);
 const reviewCycles = computed(
@@ -400,9 +430,9 @@ const pageTitle = computed(() => {
   const targetName = getSelectedTargetName();
   const cycleName = getSelectedCycleName();
   if (targetName && cycleName) {
-    return `${$t('kpiReviewTitleFor')} ${targetName} - ${$t('cycle')}: ${cycleName}`;
+    return `${$t("kpiReviewTitleFor")} ${targetName} - ${$t("cycle")}: ${cycleName}`;
   }
-  return $t('kpiReviewTitle');
+  return $t("kpiReviewTitle");
 });
 
 const reviewStatusText = computed(() => {
@@ -423,9 +453,11 @@ const reviewStatusColor = computed(() => {
 
 const getSelectedTargetName = () => {
   if (!selectedTarget.value) return "";
-  const [type, idStr] = selectedTarget.value.split('-');
+  const [type, idStr] = selectedTarget.value.split("-");
   const id = parseInt(idStr, 10);
-  const target = reviewTargets.value.find((t) => t.id === id && t.type === type);
+  const target = reviewTargets.value.find(
+    (t) => t.id === id && t.type === type
+  );
   return target ? target.name : "";
 };
 
@@ -435,12 +467,11 @@ const getSelectedCycleName = () => {
 };
 
 const filterOption = (input, option) => {
-  const optionText = option.children && option.children[0] && option.children[0].children
-    ? option.children[0].children
-    : (option.label || ''); 
-  return optionText
-    .toLowerCase()
-    .includes(input.toLowerCase());
+  const optionText =
+    option.children && option.children[0] && option.children[0].children
+      ? option.children[0].children
+      : option.label || "";
+  return optionText.toLowerCase().includes(input.toLowerCase());
 };
 
 const fetchReviewTargets = async () => {
@@ -494,12 +525,14 @@ const fetchKpisForReview = async () => {
   }
   try {
     if (!selectedTarget.value) {
-        console.error("[KpiReview.vue] Component fetchKpisForReview: selectedTarget.value is null or undefined.");
-        store.commit("kpiEvaluations/SET_KPIS_TO_REVIEW", []);
-        store.commit("kpiEvaluations/SET_EXISTING_OVERALL_REVIEW", null);
-        return;
+      console.error(
+        "[KpiReview.vue] Component fetchKpisForReview: selectedTarget.value is null or undefined."
+      );
+      store.commit("kpiEvaluations/SET_KPIS_TO_REVIEW", []);
+      store.commit("kpiEvaluations/SET_EXISTING_OVERALL_REVIEW", null);
+      return;
     }
-    const [targetType, targetIdStr] = selectedTarget.value.split('-');
+    const [targetType, targetIdStr] = selectedTarget.value.split("-");
     const targetId = parseInt(targetIdStr, 10);
     if (!targetType || isNaN(targetId)) {
       notification.error({
@@ -559,7 +592,7 @@ const submitReviewData = async () => {
       "[KpiReview.vue] reviewTargets.value:",
       JSON.parse(JSON.stringify(reviewTargets.value))
     );
-    console.log("[KpiReview.vue] selectedCycle.value:", selectedCycle.value);    
+    console.log("[KpiReview.vue] selectedCycle.value:", selectedCycle.value);
 
     if (!selectedTarget.value) {
       notification.error({
@@ -569,7 +602,7 @@ const submitReviewData = async () => {
       return;
     }
 
-    const [targetType, targetIdStr] = selectedTarget.value.split('-');
+    const [targetType, targetIdStr] = selectedTarget.value.split("-");
     const targetId = parseInt(targetIdStr, 10);
 
     const reviewData = {
@@ -617,7 +650,7 @@ const handleCompleteReview = async () => {
     });
     return;
   }
-  const [targetType, targetIdStr] = selectedTarget.value.split('-');
+  const [targetType, targetIdStr] = selectedTarget.value.split("-");
   const targetId = parseInt(targetIdStr, 10);
   if (!targetType || isNaN(targetId)) {
     notification.error({
@@ -654,7 +687,7 @@ const viewTargetReviewHistory = () => {
     });
     return;
   }
-  const [targetType, targetIdStr] = selectedTarget.value.split('-');
+  const [targetType, targetIdStr] = selectedTarget.value.split("-");
   const targetId = parseInt(targetIdStr, 10);
 
   if (targetType && !isNaN(targetId)) {
