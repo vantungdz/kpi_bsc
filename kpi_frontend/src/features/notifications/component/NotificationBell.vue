@@ -9,7 +9,7 @@
     <template #content>
       <div class="notification-panel">
         <div class="notification-header">
-          <h3>Thông báo</h3>
+          <h3>{{ $t('notifications') }}</h3>
           <a-button
             v-if="unreadCount > 0"
             type="link"
@@ -17,10 +17,10 @@
             @click="handleMarkAllAsRead"
             :loading="isProcessingMarkAll"
           >
-            Đánh dấu tất cả đã đọc
+            {{ $t('markAllAsRead') }}
           </a-button>
         </div>
-        <a-spin :spinning="isLoadingNotifications" tip="Đang tải...">
+        <a-spin :spinning="isLoadingNotifications" :tip="$t('loading')">
           <a-list
             v-if="notifications.length > 0"
             item-layout="horizontal"
@@ -28,7 +28,6 @@
             class="notification-list"
           >
             <template #renderItem="{ item }">
-              {{ console.log("item", item) }}
               <a-list-item
                 :class="{ 'notification-unread': !item.is_read }"
                 @click="handleNotificationClick(item)"
@@ -70,7 +69,7 @@
                   </template>
                 </a-list-item-meta>
                 <template #actions>
-                  <a-tooltip title="Đánh dấu đã đọc" v-if="!item.is_read">
+                  <a-tooltip :title="$t('markAsRead')" v-if="!item.is_read">
                     <a-button
                       type="text"
                       shape="circle"
@@ -89,13 +88,13 @@
           </a-list>
           <a-empty
             v-if="!isLoadingNotifications && notifications.length === 0"
-            description="Không có thông báo nào."
+            :description="$t('noNotifications')"
             style="padding: 20px 0"
           />
         </a-spin>
         <div class="notification-footer" v-if="notifications.length > 0">
           <a-button type="link" block @click="viewAllNotifications">
-            Xem tất cả thông báo
+            {{ $t('viewAllNotifications') }}
           </a-button>
         </div>
       </div>

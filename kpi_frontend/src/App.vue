@@ -18,9 +18,11 @@
             height: calc(100vh - 100px);
           "
         >
-          <a-spin size="large" tip="Loading user data..." />
+          <a-spin size="large" :tip="$t('loadingUserData')" />
         </div>
-        <router-view v-else />
+        <div v-else id="app">
+          <router-view />
+        </div>
       </a-layout-content>
 
       <!-- Footer sẽ nằm ở dưới cùng của site-layout -->
@@ -28,18 +30,18 @@
         class="site-layout-footer"
         style="text-align: center; padding: 13px 50px; background: #f0f2f5"
       >
-        Created by IVC ©{{ new Date().getFullYear() }}
+        {{ $t('footerText', { year: new Date().getFullYear() }) }}
       </a-layout-footer>
     </a-layout>
   </a-layout>
 </template>
 
 <script setup>
-// ... (phần script giữ nguyên)
-import { ref, computed, onMounted, watch } from "vue";
+import { ref, computed, onMounted, watch, getCurrentInstance } from "vue";
 import { useStore } from "vuex";
 import AppHeader from "@/core/components/layout/AppHeader.vue";
 import AppSidebar from "@/core/components/layout/AppSidebar.vue";
+import  { useI18nLocale } from "@/core/i18n";
 
 import {
   Layout as ALayout,
@@ -53,6 +55,8 @@ const store = useStore();
 const isAuthenticating = ref(true);
 
 const isAuthenticated = computed(() => store.getters["auth/isAuthenticated"]);
+
+const i18nLocale = useI18nLocale();
 
 onMounted(async () => {
   isAuthenticating.value = true;
@@ -89,6 +93,13 @@ watch(isAuthenticated, (newValue, oldValue) => {
     store.dispatch("notifications/fetchUnreadCount");
   }
 });
+
+watch(i18nLocale, (newLocale) => {
+  console.log('Global locale changed to:', newLocale);
+  const app = getCurrentInstance();
+  if (app) app.proxy.$forceUpdate();
+});
+
 </script>
 
 <style>

@@ -1,18 +1,18 @@
 <template>
     <div class="kpi-performance-overview-container">
         <a-breadcrumb style="margin-bottom: 16px">
-            <a-breadcrumb-item><router-link to="/dashboard">Dashboard Tổng Quan</router-link></a-breadcrumb-item>
-            <a-breadcrumb-item>Tổng quan Hiệu suất KPI</a-breadcrumb-item>
+            <a-breadcrumb-item><router-link to="/dashboard">{{ $t('dashboardOverview') }}</router-link></a-breadcrumb-item>
+            <a-breadcrumb-item>{{ $t('kpiPerformanceOverview') }}</a-breadcrumb-item>
         </a-breadcrumb>
-        <h1>Tổng quan Hiệu suất KPI</h1>
+        <h1>{{ $t('kpiPerformanceOverview') }}</h1>
 
-        <a-spin :spinning="isLoadingOverview" tip="Đang tải dữ liệu hiệu suất...">
+        <a-spin :spinning="isLoadingOverview" :tip="$t('loadingData')">
             <a-alert v-if="loadingError" type="error" show-icon closable style="margin-bottom: 16px"
                 :message="loadingError" @close="loadingError = null" />
 
             <div v-if="!loadingError">
                 <!-- Section 1: Tổng quan các chỉ số chính -->
-                <a-card title="Các chỉ số hiệu suất chính" class="dashboard-card performance-summary-card">
+                <a-card :title="$t('kpiInventorySummary')" class="dashboard-card performance-summary-card">
                     <a-row :gutter="[16, 24]" align="middle">
                         <a-col :xs="24" :sm="24" :md="14" :lg="16">
                             <a-row :gutter="[16, 16]">
@@ -20,9 +20,9 @@
                                 <a-col :xs="24" :sm="12" :lg="8">
                                     <a-card class="stat-card">
                                         <a-skeleton :loading="isLoadingOverview" active :paragraph="{ rows: 2 }">
-                                            <a-statistic title="Tổng số KPI" :value="kpiOverviewStats?.totalKpis ?? 0"
+                                            <a-statistic :title="$t('totalKpiDefinitions')" :value="kpiOverviewStats?.totalKpis ?? 0"
                                                 class="statistic-value" />
-                                            <p class="stat-description">Tổng số định nghĩa KPI đang theo dõi.</p>
+                                            <p class="stat-description">{{ $t('totalKpiDefinitionsDescription') }}</p>
                                         </a-skeleton>
                                     </a-card>
                                 </a-col>
@@ -30,7 +30,7 @@
                                 <a-col :xs="24" :sm="12" :lg="8">
                                     <a-card class="stat-card">
                                         <a-skeleton :loading="isLoadingOverview" active :paragraph="{ rows: 1 }">
-                                            <a-statistic title="Tổng Lượt giao KPI có giá trị" :value="kpiOverviewStats?.totalKpisWithValues ?? 0" class="statistic-value" />
+                                            <a-statistic :title="$t('totalKpiAssignments')" :value="kpiOverviewStats?.totalKpisWithValues ?? 0" class="statistic-value" />
                                         </a-skeleton>
                                     </a-card>
                                 </a-col>
@@ -39,7 +39,7 @@
                                 <a-col :xs="24" :sm="12" :lg="8">
                                     <a-card class="stat-card">
                                         <a-skeleton :loading="isLoadingOverview" active :paragraph="{ rows: 1 }">
-                                            <a-statistic title="% Lượt giao KPI Đạt Mục tiêu"
+                                            <a-statistic :title="$t('kpiAchieved')"
                                                 :value="kpiOverviewStats?.achievedRate ?? 0" suffix="%"
                                                 :value-style="{ color: '#3f8600' }" class="statistic-value" />
                                         </a-skeleton>
@@ -50,7 +50,7 @@
                                 <a-col :xs="24" :sm="12" :lg="8">
                                     <a-card class="stat-card">
                                         <a-skeleton :loading="isLoadingOverview" active :paragraph="{ rows: 1 }">
-                                            <a-statistic title="% Lượt giao KPI Không Đạt"
+                                            <a-statistic :title="$t('kpiNotAchieved')"
                                                 :value="kpiOverviewStats?.notAchievedRate ?? 0" suffix="%"
                                                 :value-style="{ color: '#cf1322' }" class="statistic-value" />
                                         </a-skeleton>
@@ -61,7 +61,7 @@
                                 <a-col :xs="24" :sm="12" :lg="8">
                                     <a-card class="stat-card">
                                         <a-skeleton :loading="isLoadingOverview" active :paragraph="{ rows: 1 }">
-                                            <a-statistic title="% KPI Chưa Cập nhật"
+                                            <a-statistic :title="$t('kpiNotUpdatedRecently')"
                                                 :value="kpiOverviewStats?.notUpdatedRecentlyRate ?? 0" suffix="%"
                                                 :value-style="{ color: '#faad14' }" class="statistic-value" />
                                         </a-skeleton>
@@ -76,18 +76,18 @@
                                     :chart-options="kpiAchievementChartOptions" style="height: 220px;" />
                             </div>
                             <div v-else-if="!isLoadingOverview" class="empty-chart-message main-overview-chart-empty">
-                                Không có dữ liệu để vẽ biểu đồ tỷ lệ đạt/không đạt.
+                                {{ $t('noKpiInventoryData') }}
                             </div>
                         </a-col>
                     </a-row>
                 </a-card>
 
                 <!-- Section 2: Trạng thái KPI theo vai trò (Sẽ thêm bảng/biểu đồ sau) -->
-                <a-card title="Trạng thái KPI theo vai trò" class="dashboard-card card-style-role-performance">
+                <a-card :title="$t('assignmentsByRole')" class="dashboard-card card-style-role-performance">
                     <a-skeleton :loading="isLoadingOverview" active :paragraph="{ rows: 5 }" />
                     <div v-if="!isLoadingOverview && (!kpiOverviewStats || !kpiOverviewStats.performanceByRole || kpiOverviewStats.performanceByRole.length === 0)"
                         class="empty-list">
-                        Không có dữ liệu trạng thái KPI theo phòng ban.
+                        {{ $t('noRoleData') }}
                     </div>
                     <a-table
                         v-if="!isLoadingOverview && kpiOverviewStats && kpiOverviewStats.performanceByRole && kpiOverviewStats.performanceByRole.length > 0"
@@ -111,7 +111,7 @@
 
             </div>
             <a-empty v-if="!isLoadingOverview && !kpiOverviewStats && !loadingError"
-                description="Không có dữ liệu tổng quan hiệu suất KPI." />
+                :description="$t('noKpiPerformanceOverviewData')" />
         </a-spin>
     </div>
 </template>
@@ -119,6 +119,7 @@
 <script setup>
 import { onMounted, ref ,computed } from 'vue';
 import { useStore } from 'vuex'; 
+import { useI18n } from 'vue-i18n';
 import {
     Breadcrumb as ABreadcrumb,
     BreadcrumbItem as ABreadcrumbItem,
@@ -135,19 +136,19 @@ import {
 } from 'ant-design-vue';
 import PieChart from "@/core/components/common/PieChart.vue"; 
 
+const { t: $t } = useI18n();
 const store = useStore(); 
 
 const kpiOverviewStats = computed(() => store.getters["dashboard/getKpiPerformanceOverviewStats"]);
 const isLoadingOverview = computed(() => store.getters["dashboard/isLoadingKpiPerformanceOverview"]);
 const loadingError = computed(() => store.getters["dashboard/getKpiPerformanceOverviewError"]);
 
-
 const performanceByRoleColumns = ref([
-    { title: 'Phòng ban', dataIndex: 'roleName', key: 'roleName', sorter: (a, b) => a.roleName.localeCompare(b.roleName), defaultSortOrder: 'ascend' },
-    { title: 'Tổng KPI có giá trị', dataIndex: 'totalAssignedKpis', key: 'totalAssignedKpis', align: 'right', sorter: (a, b) => a.totalAssignedKpis - b.totalAssignedKpis },
-    { title: 'KPI Đạt', dataIndex: 'achievedCount', key: 'achievedCount', align: 'right', sorter: (a, b) => a.achievedCount - b.achievedCount },
-    { title: 'KPI Không Đạt', dataIndex: 'notAchievedCount', key: 'notAchievedCount', align: 'right', sorter: (a, b) => a.notAchievedCount - b.notAchievedCount },
-    { title: 'Tỷ lệ Đạt (%)', dataIndex: 'achievedRate', key: 'achievedRate', align: 'center', width: 150, sorter: (a, b) => a.achievedRate - b.achievedRate },
+    { title: $t('department'), dataIndex: 'roleName', key: 'roleName', sorter: (a, b) => a.roleName.localeCompare(b.roleName), defaultSortOrder: 'ascend' },
+    { title: $t('totalKpiAssignments'), dataIndex: 'totalAssignedKpis', key: 'totalAssignedKpis', align: 'right', sorter: (a, b) => a.totalAssignedKpis - b.totalAssignedKpis },
+    { title: $t('kpiAchieved'), dataIndex: 'achievedCount', key: 'achievedCount', align: 'right', sorter: (a, b) => a.achievedCount - b.achievedCount },
+    { title: $t('kpiNotAchieved'), dataIndex: 'notAchievedCount', key: 'notAchievedCount', align: 'right', sorter: (a, b) => a.notAchievedCount - b.notAchievedCount },
+    { title: $t('achievedRatePercentage'), dataIndex: 'achievedRate', key: 'achievedRate', align: 'center', width: 150, sorter: (a, b) => a.achievedRate - b.achievedRate },
 ]);
 
 const kpiAchievementChartData = computed(() => {
@@ -155,10 +156,10 @@ const kpiAchievementChartData = computed(() => {
         return { labels: [], datasets: [] };
     }
     return {
-        labels: ['KPI Đạt Mục tiêu', 'KPI Không Đạt'],
+        labels: [$t('kpiAchieved'), $t('kpiNotAchieved')],
         datasets: [
             {
-                label: 'Tỷ lệ KPI',
+                label: $t('kpiRate'),
                 data: [
                     kpiOverviewStats.value.achievedCount ?? 0,
                     kpiOverviewStats.value.notAchievedCount ?? 0,
@@ -182,13 +183,12 @@ const kpiAchievementChartOptions = computed(() => ({
     maintainAspectRatio: false,
     plugins: {
         legend: { position: 'top' },
-        title: { display: true, text: 'Tỷ lệ Lượt giao KPI Đạt/Không Đạt Mục tiêu' }
+        title: { display: true, text: $t('kpiAchievementChartTitle') }
     }
 }));
 
 onMounted(() => {
     store.dispatch("dashboard/fetchKpiPerformanceOverviewStats", { daysForNotUpdated: 7 });
-
 });
 </script>
 

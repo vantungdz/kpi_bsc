@@ -545,11 +545,11 @@ export class DashboardsService {
       let approverKey: string | null = null;
       let approverType: 'user' | 'department' | 'section' | null = null;
       let approverEntityId: number | null = null; 
-      let approverName: string = 'N/A';
+      let approverName: string = '';
 
       const assignment = pv.kpiAssignment;
       if (!assignment) continue;
-      const kpiDetail = { kpiValueId: pv.id, kpiId: assignment.kpi.id, kpiName: assignment.kpi.name, submittedBy: assignment.employee ? `${assignment.employee.first_name} ${assignment.employee.last_name}` : (assignment.section ? assignment.section.name : 'N/A') };
+      const kpiDetail = { kpiValueId: pv.id, kpiId: assignment.kpi.id, kpiName: assignment.kpi.name, submittedBy: assignment.employee ? `${assignment.employee.first_name} ${assignment.employee.last_name}` : (assignment.section ? assignment.section.name : '') };
 
       
       if (pv.status === KpiValueStatus.PENDING_SECTION_APPROVAL) {

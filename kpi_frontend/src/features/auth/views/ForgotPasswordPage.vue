@@ -1,12 +1,12 @@
 <template>
   <div class="forgot-password-container">
     <div class="forgot-password-box">
-      <img src="@/core/assets/logo.png" alt="Logo" class="logo-image" />
-      <h2>Forgot Your Password</h2>
+      <img src="@/core/assets/logo.png" :alt="$t('logoAlt')" class="logo-image" />
+      <h2>{{ $t('forgotPassword') }}</h2>
       <a-form ref="formRef" :model="formData" :rules="rules" layout="vertical" @finish="handleRequestReset"
         @finishFailed="onFinishFailed" style="margin-top: 30px">
-        <a-form-item label="Email Address" name="email" has-feedback :validateTrigger="['change', 'blur']">
-          <a-input v-model:value="formData.email" placeholder="Enter your registered email" :disabled="loading"
+        <a-form-item :label="$t('emailAddress')" name="email" has-feedback :validateTrigger="['change', 'blur']">
+          <a-input v-model:value="formData.email" :placeholder="$t('enterRegisteredEmail')" :disabled="loading"
             size="large">
             <template #prefix><mail-outlined /></template>
           </a-input>
@@ -18,13 +18,13 @@
 
         <a-form-item>
           <a-button type="primary" html-type="submit" :loading="loading" block size="large">
-            Send Password Reset Link
+            {{ $t('sendPasswordResetLink') }}
           </a-button>
         </a-form-item>
       </a-form>
 
       <div class="back-to-login">
-        <router-link to="/">← Back to Login</router-link>
+        <router-link to="/">← {{ $t('backToLogin') }}</router-link>
       </div>
     </div>
   </div>

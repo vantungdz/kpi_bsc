@@ -900,7 +900,7 @@ export class EvaluationService {
       overallComment: or.overallComment,
       overallScore: or.overallScore,
       status: or.status,
-      reviewedByUsername: or.reviewedBy?.username || 'N/A', // Get username from related reviewedBy
+      reviewedByUsername: or.reviewedBy?.username || '', // Get username from related reviewedBy
       reviewedAt: or.updatedAt, // Or createdAt, depending on your logic
       employeeComment: or.employeeComment,
       employeeFeedbackDate: or.employeeFeedbackDate,

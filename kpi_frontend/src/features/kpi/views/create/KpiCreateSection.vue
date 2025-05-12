@@ -11,12 +11,12 @@
       <a-row :gutter="12">
         <a-col :span="12">
           <a-form-item
-            label="Use Existing KPI as Template (Optional)"
+            :label="$t('useExistingKpiTemplate')"
             name="templateKpi"
           >
             <a-select
               v-model:value="selectedTemplateKpiId"
-              placeholder="Select a KPI to use as template..."
+              :placeholder="$t('selectKpiTemplate')"
               show-search
               allow-clear
               :options="kpiTemplateOptions"
@@ -32,8 +32,8 @@
         </a-col>
       </a-row>
 
-      <a-form-item class="textLabel" label="Perspective" name="perspective_id">
-        <a-select v-model:value="form.perspective_id" placeholder="Perspective">
+      <a-form-item class="textLabel" :label="$t('perspective')" name="perspective_id">
+        <a-select v-model:value="form.perspective_id" :placeholder="$t('selectPerspective')">
           <a-select-option
             v-for="perspective in perspectiveList"
             :key="perspective.id"
@@ -45,13 +45,13 @@
 
       <a-form-item
         class="textLabel"
-        label="Department"
+        :label="$t('department')"
         name="department_id"
         required
       >
         <a-select
           v-model:value="form.department_id"
-          placeholder="Select Department"
+          :placeholder="$t('selectDepartment')"
         >
           <a-select-option
             v-for="department in departmentList"
@@ -63,8 +63,8 @@
         </a-select>
       </a-form-item>
 
-      <a-form-item class="textLabel" label="Section" name="section_id" required>
-        <a-select v-model:value="form.section_id" placeholder="Select Section">
+      <a-form-item class="textLabel" :label="$t('section')" name="section_id" required>
+        <a-select v-model:value="form.section_id" :placeholder="$t('selectSection')">
           <a-select-option
             v-for="section in sectionList"
             :key="section.id"
@@ -76,19 +76,19 @@
       </a-form-item>
       <a-row :gutter="12">
         <a-col :span="12">
-          <a-form-item class="textLabel" label="KPI Name" name="name">
-            <a-input v-model:value="form.name" placeholder="KPI Name" />
+          <a-form-item class="textLabel" :label="$t('kpiName')" name="name">
+            <a-input v-model:value="form.name" :placeholder="$t('enterKpiName')" />
           </a-form-item>
         </a-col>
         <a-col :span="12">
           <a-form-item
             class="textLabel"
-            label="Calculation Formula"
+            :label="$t('calculationFormula')"
             name="calculation_type"
           >
             <a-select
               v-model:value="form.calculation_type"
-              placeholder="Chọn Calculation Formula"
+              :placeholder="$t('selectCalculationFormula')"
             >
               <a-select-option
                 v-for="formula in formulaList"
@@ -103,16 +103,16 @@
       </a-row>
       <a-row :gutter="12">
         <a-col :span="12">
-          <a-form-item class="textLabel" label="Type" name="type">
-            <a-select v-model:value="form.type" placeholder="Type KPI">
-              <a-select-option value="efficiency"> Hiệu suất </a-select-option>
-              <a-select-option value="qualitative"> Định Tính </a-select-option>
+          <a-form-item class="textLabel" :label="$t('type')" name="type">
+            <a-select v-model:value="form.type" :placeholder="$t('selectType')">
+              <a-select-option value="efficiency"> {{ $t('efficiency') }} </a-select-option>
+              <a-select-option value="qualitative"> {{ $t('qualitative') }} </a-select-option>
             </a-select>
           </a-form-item>
         </a-col>
         <a-col :span="12">
-          <a-form-item class="textLabel" label="Unit" name="unit">
-            <a-select v-model:value="form.unit" placeholder="Unit">
+          <a-form-item class="textLabel" :label="$t('unit')" name="unit">
+            <a-select v-model:value="form.unit" :placeholder="$t('selectUnit')">
               <a-select-option
                 v-for="(unitValue, unitKey) in KpiUnits"
                 :key="unitKey"
@@ -126,36 +126,36 @@
       </a-row>
       <a-row :gutter="12">
         <a-col :span="12">
-          <a-form-item class="textLabel" label="Target" name="target">
+          <a-form-item class="textLabel" :label="$t('target')" name="target">
             <a-input
               v-model:value="form.target"
-              placeholder="Target"
+              :placeholder="$t('enterTarget')"
               @input="(event) => handleNumericInput('target', event)"
             />
           </a-form-item>
         </a-col>
         <a-col :span="12">
-          <a-form-item class="textLabel" label="Weight (%)" name="weight">
+          <a-form-item class="textLabel" :label="$t('weight')" name="weight">
             <a-input
               v-model:value="form.weight"
-              placeholder="Weight"
+              :placeholder="$t('enterWeight')"
               @input="(event) => handleNumericInput('weight', event)"
             />
           </a-form-item>
         </a-col>
       </a-row>
-      <a-form-item class="textLabel" label="Frequency" name="frequency">
-        <a-select v-model:value="form.frequency" placeholder="Frequency">
-          <a-select-option value="daily"> Daily </a-select-option>
-          <a-select-option value="weekly"> Weekly </a-select-option>
-          <a-select-option value="monthly"> Monthly </a-select-option>
-          <a-select-option value="quarterly"> Quarterly </a-select-option>
-          <a-select-option value="yearly"> Yearly </a-select-option>
+      <a-form-item class="textLabel" :label="$t('frequency')" name="frequency">
+        <a-select v-model:value="form.frequency" :placeholder="$t('selectFrequency')">
+          <a-select-option value="daily"> {{ $t('daily') }} </a-select-option>
+          <a-select-option value="weekly"> {{ $t('weekly') }} </a-select-option>
+          <a-select-option value="monthly"> {{ $t('monthly') }} </a-select-option>
+          <a-select-option value="quarterly"> {{ $t('quarterly') }} </a-select-option>
+          <a-select-option value="yearly"> {{ $t('yearly') }} </a-select-option>
         </a-select>
       </a-form-item>
       <a-row :gutter="12">
         <a-col :span="6">
-          <a-form-item class="textLabel" label="Date Start" name="start_date">
+          <a-form-item class="textLabel" :label="$t('dateStart')" name="start_date">
             <a-date-picker
               v-model:value="form.start_date"
               style="width: 100%"
@@ -166,7 +166,7 @@
         <a-col :span="6">
           <a-form-item
             class="textLabel"
-            label="Date End"
+            :label="$t('dateEnd')"
             name="end_date"
             :rules="[{ validator: validateEndDate }]"
           >
@@ -178,10 +178,10 @@
           </a-form-item>
         </a-col>
       </a-row>
-      <a-form-item class="textLabel" label="Description" name="description">
+      <a-form-item class="textLabel" :label="$t('description')" name="description">
         <a-textarea
           v-model:value="form.description"
-          placeholder="Description"
+          :placeholder="$t('enterDescription')"
           allow-clear
         />
       </a-form-item>
@@ -189,7 +189,7 @@
       <a-form-item
         v-if="canAssignDirectlyToUser"
         class="textLabel"
-        label="Assign To User"
+        :label="$t('assignToUser')"
         name="assigned_user_id"
       >
         <a-alert
@@ -201,7 +201,7 @@
         />
         <a-select
           v-model:value="form.assigned_user_id"
-          placeholder="Select a user..."
+          :placeholder="$t('selectUser')"
           show-search
           allow-clear
           :options="sectionUserOptions"
@@ -216,7 +216,7 @@
       <a-form-item>
         <a-row justify="end" style="margin-top: 10px">
           <a-button style="margin-right: 10px" @click="resetForm(true)">
-            Clear Form
+            {{ $t('clearForm') }}
           </a-button>
           <a-button
             style="margin-right: 10px"
@@ -224,22 +224,22 @@
             html-type="submit"
             :loading="loading"
           >
-            Save KPI
+            {{ $t('saveKpi') }}
           </a-button>
-          <a-button type="default" @click="goBack"> Back </a-button>
+          <a-button type="default" @click="goBack"> {{ $t('back') }} </a-button>
         </a-row>
       </a-form-item>
     </a-form>
   </div>
   <div v-else>
     <a-alert
-      message="Access Denied"
-      description="You do not have permission to create KPIs with the current role/scope."
+      :message="$t('accessDenied')"
+      :description="$t('accessDeniedDescription')"
       type="error"
       show-icon
     />
     <a-button type="default" style="margin-top: 15px" @click="goBack">
-      Back
+      {{ $t('back') }}
     </a-button>
   </div>
 </template>

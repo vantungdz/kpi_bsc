@@ -1,25 +1,33 @@
 <template>
   <div class="kpi-inventory-statistics-container">
     <a-breadcrumb style="margin-bottom: 16px">
-      <a-breadcrumb-item><router-link to="/dashboard">Dashboard Tổng Quan</router-link></a-breadcrumb-item>
-      <a-breadcrumb-item>Tổng quan Kho KPI</a-breadcrumb-item>
+      <a-breadcrumb-item>
+        <router-link to="/dashboard">{{ $t('dashboardOverview') }}</router-link>
+      </a-breadcrumb-item>
+      <a-breadcrumb-item>{{ $t('kpiInventoryOverview') }}</a-breadcrumb-item>
     </a-breadcrumb>
-    <h1>Tổng quan Kho KPI</h1>
+    <h1>{{ $t('kpiInventoryOverview') }}</h1>
 
-    <a-spin :spinning="isLoading" tip="Đang tải dữ liệu...">
-      <a-alert v-if="loadingError" type="error" show-icon closable style="margin-bottom: 16px" :message="loadingError"
-        @close="loadingError = null" />
+    <a-spin :spinning="isLoading" :tip="$t('loadingData')">
+      <a-alert
+        v-if="loadingError"
+        type="error"
+        show-icon
+        closable
+        style="margin-bottom: 16px"
+        :message="loadingError"
+        @close="loadingError = null"
+      />
 
       <div v-if="!loadingError">
-        <!-- Section 1: Số liệu tổng hợp -->
-        <a-card title="Số liệu Kho KPI Tổng hợp" class="dashboard-card summary-metrics-card card-style-summary">
+        <!-- Section 1: Summary Metrics -->
+        <a-card :title="$t('kpiInventorySummary')" class="dashboard-card summary-metrics-card card-style-summary">
           <a-row :gutter="[16, 16]">
             <a-col :xs="24" :sm="12" :md="8" :lg="6">
               <div class="metric-item">
                 <database-outlined class="metric-icon" />
                 <a-skeleton :loading="isLoading" active :paragraph="{ rows: 1 }">
-                  <a-statistic title="Tổng số Định nghĩa KPI" :value="inventoryStats?.totalKpiDefinitions ?? 0"
-                    class="statistic-value" />
+                  <a-statistic :title="$t('totalKpiDefinitions')" :value="inventoryStats?.totalKpiDefinitions ?? 0" class="statistic-value" />
                 </a-skeleton>
               </div>
             </a-col>
@@ -27,42 +35,37 @@
               <div class="metric-item">
                 <branches-outlined class="metric-icon" />
                 <a-skeleton :loading="isLoading" active :paragraph="{ rows: 1 }">
-                  <a-statistic title="Tổng số Lượt giao KPI" :value="inventoryStats?.totalKpiAssignments ?? 0"
-                    class="statistic-value" />
+                  <a-statistic :title="$t('totalKpiAssignments')" :value="inventoryStats?.totalKpiAssignments ?? 0" class="statistic-value" />
                 </a-skeleton>
               </div>
             </a-col>
           </a-row>
         </a-card>
 
-        <!-- Section 2: Phân bổ Lượt giao KPI theo Phòng ban -->
-        <a-card title="Phân bổ Lượt giao KPI theo Phòng ban" class="dashboard-card card-style-department">
+        <!-- Section 2: Assignments by Department -->
+        <a-card :title="$t('assignmentsByDepartment')" class="dashboard-card card-style-department">
           <a-skeleton :loading="isLoading" active :paragraph="{ rows: 5 }" />
           <div v-if="!isLoading && !inventoryStats?.assignmentsByDepartment?.length" class="empty-list">
-            Không có dữ liệu phân bổ theo phòng ban.
+            {{ $t('noDepartmentData') }}
           </div>
           <div class="chart-container" v-if="!isLoading && inventoryStats?.assignmentsByDepartment?.length">
-            <bar-chart :chart-data="assignmentsByDepartmentChartData"
-              :chart-options="assignmentsByDepartmentChartOptions" style="height: 350px;" />
+            <bar-chart :chart-data="assignmentsByDepartmentChartData" :chart-options="assignmentsByDepartmentChartOptions" style="height: 350px;" />
           </div>
         </a-card>
 
-        <!-- Section 3: Phân bổ Lượt giao KPI theo Trạng thái Giao việc (Nếu có) -->
-        <a-card title="Phân bổ Lượt giao KPI theo Trạng thái Giao việc" class="dashboard-card card-style-status">
+        <!-- Section 3: Assignments by Status -->
+        <a-card :title="$t('assignmentsByStatus')" class="dashboard-card card-style-status">
           <a-skeleton :loading="isLoading" active :paragraph="{ rows: 5 }" />
           <div v-if="!isLoading && !inventoryStats?.assignmentsByStatus?.length" class="empty-list">
-            Không có dữ liệu phân bổ theo trạng thái giao việc.
+            {{ $t('noStatusData') }}
           </div>
-          <!-- Biểu đồ tròn hoặc Bảng sẽ được thêm vào đây -->
           <div class="chart-container" v-if="!isLoading && inventoryStats?.assignmentsByStatus?.length">
-            <pie-chart :chart-data="assignmentsByStatusChartData" :chart-options="assignmentsByStatusChartOptions"
-              style="height: 300px;" />
+            <pie-chart :chart-data="assignmentsByStatusChartData" :chart-options="assignmentsByStatusChartOptions" style="height: 300px;" />
           </div>
         </a-card>
-
       </div>
-      <a-empty v-if="!isLoading && !inventoryStats && !loadingError"
-        description="Không có dữ liệu tổng quan kho KPI." />
+
+      <a-empty v-if="!isLoading && !inventoryStats && !loadingError" :description="$t('noKpiInventoryData')" />
     </a-spin>
   </div>
 </template>
@@ -70,6 +73,7 @@
 <script setup>
 import { onMounted, computed } from 'vue';
 import { useStore } from 'vuex';
+import { useI18n } from 'vue-i18n';
 import {
   Breadcrumb as ABreadcrumb,
   BreadcrumbItem as ABreadcrumbItem,
@@ -87,6 +91,7 @@ import BarChart from "@/core/components/common/BarChart.vue";
 import PieChart from "@/core/components/common/PieChart.vue"; 
 
 const store = useStore();
+const { t: $t } = useI18n();
 
 const isLoading = computed(() => store.getters["dashboard/isLoadingKpiInventory"]);
 const loadingError = computed(() => store.getters["dashboard/getKpiInventoryError"]); 
@@ -102,7 +107,7 @@ const assignmentsByDepartmentChartData = computed(() => {
     labels: labels,
     datasets: [
       {
-        label: 'Số Lượt giao KPI',
+        label: $t('kpiAssignments'), // Dynamic translation
         backgroundColor: 'rgba(24, 144, 255, 0.7)', 
         borderColor: 'rgba(24, 144, 255, 1)',
         borderWidth: 1,
@@ -120,10 +125,10 @@ const assignmentsByDepartmentChartOptions = computed(() => ({
   indexAxis: 'y', 
   plugins: {
     legend: { display: false },
-    title: { display: true, text: 'Số Lượt giao KPI theo Phòng ban' }
+    title: { display: true, text: $t('kpiAssignmentsByDepartment') } // Dynamic translation
   },
   scales: {
-    x: { beginAtZero: true, ticks: { precision: 0 }, title: { display: true, text: 'Số Lượt giao' } },
+    x: { beginAtZero: true, ticks: { precision: 0 }, title: { display: true, text: $t('kpiAssignmentsCount') } }, // Dynamic translation
     y: { ticks: { autoSkip: false } }
   },
 }));
@@ -131,24 +136,22 @@ const assignmentsByDepartmentChartOptions = computed(() => ({
 
 const assignmentsByStatusChartData = computed(() => {
   const data = inventoryStats.value?.assignmentsByStatus || [];
-  
-  const labels = data.map(item => item.status); 
+
+  const labels = data.map(item => $t(`status_chart.${item.status}`)); // Ensure dynamic translation
   const counts = data.map(item => item.count);
 
-  
   const backgroundColors = [
     'rgba(255, 159, 64, 0.7)',  
     'rgba(54, 162, 235, 0.7)',   
     'rgba(201, 203, 207, 0.7)', 
-    
   ];
-   const borderColors = backgroundColors.map(color => color.replace('0.7', '1'));
+  const borderColors = backgroundColors.map(color => color.replace('0.7', '1'));
 
   return {
     labels: labels,
     datasets: [
       {
-        label: 'Số Lượt giao',
+        label: $t('kpiAssignments'), // Dynamic translation
         data: counts,
         backgroundColor: backgroundColors.slice(0, data.length),
         borderColor: borderColors.slice(0, data.length),
@@ -163,7 +166,7 @@ const assignmentsByStatusChartOptions = computed(() => ({
   maintainAspectRatio: false,
   plugins: {
     legend: { position: 'top' },
-    title: { display: true, text: 'Phân bổ Lượt giao KPI theo Trạng thái' }
+    title: { display: true, text: $t('kpiAssignmentsByStatus') } // Dynamic translation
   }
 }));
 

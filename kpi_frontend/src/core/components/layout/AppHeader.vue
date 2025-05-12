@@ -1,14 +1,14 @@
 <template>
   <a-layout-header class="app-header-container">
     <div class="header-left">
-      <div class="logo-title">KPI Dashboard</div>
+      <div class="logo-title">{{ $t('kpiDashboard') }}</div>
     </div>
 
     <div class="header-right">
       <!-- Notification Bell -->
-      <NotificationBell v-if="isAuthenticated" />
+      <NotificationBell v-if="isUserAuthenticated" />
 
-      <a-dropdown v-if="isAuthenticated" placement="bottomRight">
+      <a-dropdown v-if="isUserAuthenticated" placement="bottomRight">
         <div class="user-profile-trigger">
           <a-avatar :src="actualUser?.avatar_url" size="small">
             <template #icon><span v-if="userInitial">{{ userInitial }}</span><span v-else>
@@ -17,7 +17,7 @@
           </a-avatar>
           <span class="user-name">
             {{ displayName }}
-            <span class="role-display"> ({{ userRole || "No Role" }})</span>
+            <span class="role-display"> ({{ userRole || $t('noRole') }})</span>
           </span>
           <down-outlined class="user-arrow" />
         </div>
@@ -25,14 +25,28 @@
           <a-menu @click="handleMenuClick" :items="menuItems" />
         </template>
       </a-dropdown>
+
+      <a-dropdown placement="bottomRight">
+        <template #overlay>
+          <a-menu>
+            <a-menu-item @click="changeLanguage('en')">English</a-menu-item>
+            <a-menu-item @click="changeLanguage('vi')">Tiếng Việt</a-menu-item>
+          </a-menu>
+        </template>
+        <a-button>
+          {{ $t('language') }} <DownOutlined />
+        </a-button>
+      </a-dropdown>
     </div>
   </a-layout-header>
 </template>
 
 <script setup>
 
-import { computed } from "vue";
+import { computed, watch } from "vue";
 import { h } from 'vue'; 
+import { useI18n } from 'vue-i18n';
+import { useCurrentLocale, setLocale } from '@/core/i18n';
 
 import { useStore } from "vuex";
 import { useRouter } from "vue-router";
@@ -47,19 +61,26 @@ import {
 import { MENU_KEYS, ROUTES } from "@/core/constants/navigation";
 import NotificationBell from "../../../features/notifications/component/NotificationBell.vue"; 
 
+const { t: $t } = useI18n();
 const store = useStore();
 const router = useRouter();
 
+const currentLocale = useCurrentLocale();
 
-const isAuthenticated = computed(() => store.getters["auth/isAuthenticated"]);
+watch(currentLocale, (newLocale) => {
+  console.log('Language changed to:', newLocale);
+  // Removed force update logic as it caused errors
+});
+
+const isUserAuthenticated = computed(() => store.getters["auth/isAuthenticated"]);
 const actualUser = computed(() => store.getters["auth/user"]);
 
 const userRole = computed(() => store.getters["auth/effectiveRole"]);
 
 
 const displayName = computed(() => {
-  if (!actualUser.value) return "User";
-  return actualUser.value.first_name || actualUser.value.username || "User";
+  if (!actualUser.value) return $t("user");
+  return actualUser.value.first_name || actualUser.value.username || $t("user");
 });
 
 
@@ -75,12 +96,12 @@ const userInitial = computed(() => {
 const menuItems = computed(() => [
   {
     key: MENU_KEYS.PROFILE,
-    label: "Profile",
+    label: $t("profile"),
     icon: () => h(UserOutlined),
   },
   {
     key: MENU_KEYS.SETTINGS,
-    label: "Settings",
+    label: $t("settings"),
     icon: () => h(SettingOutlined),
   },
   {
@@ -88,7 +109,7 @@ const menuItems = computed(() => [
   },
   {
     key: MENU_KEYS.LOGOUT,
-    label: "Logout",
+    label: $t("logout"),
     icon: () => h(LogoutOutlined),
   }
 ]);
@@ -108,6 +129,12 @@ const handleMenuClick = ({ key }) => {
 const handleLogout = () => {
   store.dispatch("auth/logout");
 };
+
+function changeLanguage(lang) {
+  console.log('Changing language to:', lang);
+  setLocale(lang);
+  console.log('Current locale after change:', currentLocale.value);
+}
 </script>
 
 <style scoped>

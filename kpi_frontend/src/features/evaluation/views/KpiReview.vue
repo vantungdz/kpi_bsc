@@ -1,23 +1,19 @@
 <template>
   <div class="kpi-review-page">
     <a-breadcrumb style="margin-bottom: 16px">
-      <!-- eslint-disable-next-line vue/no-undef-components -->
-      <a-breadcrumb-item
-        ><router-link to="/dashboard">Dashboard</router-link></a-breadcrumb-item
-      >
-      <!-- Có thể thêm breadcrumb cho danh sách nhân viên/bộ phận nếu đi từ đó -->
-      <a-breadcrumb-item>Đánh giá Kết quả KPI</a-breadcrumb-item>
+      <a-breadcrumb-item>
+        <router-link to="/dashboard">{{ $t('dashboard') }}</router-link>
+      </a-breadcrumb-item>
+      <a-breadcrumb-item>{{ $t('kpiReviewTitle') }}</a-breadcrumb-item>
     </a-breadcrumb>
 
     <a-card :title="pageTitle" :bordered="false">
-      <!-- Bộ lọc (Filters) -->
       <a-row :gutter="16" style="margin-bottom: 20px">
         <a-col :xs="24" :sm="12" :md="8">
-          <a-form-item label="Chọn Nhân viên/Bộ phận">
-            <!-- eslint-disable-next-line vue/no-undef-components -->
+          <a-form-item :label="$t('selectTarget')">
             <a-select
               v-model:value="selectedTarget"
-              placeholder="Chọn đối tượng để review"
+              :placeholder="$t('selectTargetPlaceholder')"
               show-search
               :filter-option="filterOption"
               @change="handleTargetChange"
@@ -25,24 +21,23 @@
             >
               <a-select-option
                 v-for="target in reviewTargets"
-                :key="target.id"
-                :value="target.id"
+                :key="`${target.type}-${target.id}`"
+                :value="`${target.type}-${target.id}`"
               >
                 {{ target.name }} ({{
-                  target.type === "employee"
-                    ? "Nhân viên"
-                    : "Bộ phận/Phòng ban"
+                  target.type === 'employee'
+                    ? $t('employee')
+                    : $t('departmentOrSection')
                 }})
               </a-select-option>
             </a-select>
           </a-form-item>
         </a-col>
         <a-col :xs="24" :sm="12" :md="8">
-          <a-form-item label="Chọn Chu kỳ Đánh giá">
-            <!-- eslint-disable-next-line vue/no-undef-components -->
+          <a-form-item :label="$t('selectCycle')">
             <a-select
               v-model:value="selectedCycle"
-              placeholder="Chọn chu kỳ"
+              :placeholder="$t('selectCyclePlaceholder')"
               @change="fetchKpisForReview"
               :loading="isLoadingCycles"
             >
@@ -62,19 +57,17 @@
           :md="8"
           style="display: flex; align-items: flex-end; padding-bottom: 24px"
         >
-          <!-- Nút Xem Lịch sử Review -->
           <a-button
             v-if="selectedTarget && selectedCycle"
             type="dashed"
             @click="viewTargetReviewHistory"
           >
-            Xem Lịch sử Review
+            {{ $t('viewReviewHistory') }}
           </a-button>
         </a-col>
       </a-row>
 
-      <a-spin :spinning="isLoadingKpis" tip="Đang tải KPI cần review...">
-        <!-- eslint-disable-next-line vue/no-undef-components -->
+      <a-spin :spinning="isLoadingKpis" :tip="$t('loadingKpis')">
         <a-alert
           v-if="loadingError"
           type="error"
@@ -86,12 +79,9 @@
         />
 
         <div v-if="!selectedTarget || !selectedCycle" class="empty-state">
-          <a-empty
-            description="Vui lòng chọn Đối tượng và Chu kỳ để bắt đầu review."
-          />
+          <a-empty :description="$t('selectTargetAndCycle')" />
         </div>
 
-        <!-- eslint-disable-next-line vue/no-undef-components -->
         <div
           v-else-if="
             !isLoadingKpis && kpisToReview.length === 0 && !loadingError
@@ -99,20 +89,18 @@
           class="empty-state"
         >
           <a-empty
-            :description="`Không có KPI nào cần review cho ${getSelectedTargetName()} trong chu kỳ ${getSelectedCycleName()}.`"
+            :description="
+              `${$t('noKpisToReview')} ${getSelectedTargetName()} ${$t('inCycle')} ${getSelectedCycleName()}.`
+            "
           />
         </div>
 
         <div v-else-if="kpisToReview.length > 0">
-          <!-- Hiển thị Trạng thái Review Hiện tại -->
           <div style="margin-bottom: 16px; text-align: right">
-            <span style="margin-right: 8px">Trạng thái Review:</span>
-            <!-- eslint-disable-next-line vue/no-undef-components -->
+            <span style="margin-right: 8px">{{ $t('reviewStatus') }}:</span>
             <a-tag :color="reviewStatusColor">
               {{ reviewStatusText }}
             </a-tag>
-            <!-- Make sure ATag is registered or globally available as a-tag -->
-            <!-- If using Ant Design Vue 3.x/4.x, ATag is imported and used as <a-tag> -->
           </div>
 
           <a-form
@@ -126,35 +114,31 @@
               class="kpi-review-item"
             >
               <a-divider v-if="index > 0" />
-              <!-- Thêm hiển thị Mô tả KPI -->
               <p
                 v-if="kpiItem.kpiDescription"
                 style="font-style: italic; color: #555; margin-bottom: 8px"
               >
-                <strong>Mô tả KPI:</strong> {{ kpiItem.kpiDescription }}
+                <strong>{{ $t('kpiDescription') }}:</strong> {{ kpiItem.kpiDescription }}
               </p>
               <h3>{{ index + 1 }}. {{ kpiItem.kpiName }}</h3>
               <a-row :gutter="16">
                 <a-col :span="8">
                   <a-descriptions size="small" bordered :column="1">
-                    <!-- eslint-disable-next-line vue/no-undef-components -->
-                    <a-descriptions-item label="Mục tiêu (Target)">
+                    <a-descriptions-item :label="$t('target')">
                       {{ kpiItem.targetValue }} {{ kpiItem.unit }}
                     </a-descriptions-item>
                   </a-descriptions>
                 </a-col>
                 <a-col :span="8">
-                  <!-- eslint-disable-next-line vue/no-undef-components -->
                   <a-descriptions size="small" bordered :column="1">
-                    <a-descriptions-item label="Kết quả Thực tế">
+                    <a-descriptions-item :label="$t('actualResult')">
                       {{ kpiItem.actualValue }} {{ kpiItem.unit }}
                     </a-descriptions-item>
                   </a-descriptions>
                 </a-col>
-                <!-- eslint-disable-next-line vue/no-undef-components -->
                 <a-col :span="8">
                   <a-descriptions size="small" bordered :column="1">
-                    <a-descriptions-item label="Tỷ lệ Hoàn thành">
+                    <a-descriptions-item :label="$t('completionRate')">
                       <a-progress
                         :percent="
                           calculateCompletionRate(
@@ -177,13 +161,13 @@
               </a-row>
 
               <a-form-item
-                :label="`Đánh giá của Quản lý cho KPI: ${kpiItem.kpiName}`"
+                :label="`${$t('managerCommentForKpi')} ${kpiItem.kpiName}`"
                 :name="['kpiItem', index, 'managerComment']"
                 style="margin-top: 10px"
               >
                 <a-textarea
                   v-model:value="kpiItem.managerComment"
-                  placeholder="Nhận xét, điểm mạnh, điểm cần cải thiện..."
+                  :placeholder="$t('managerCommentPlaceholder')"
                   :rows="3"
                   :disabled="
                     isLoadingKpis || overallReview.status === 'COMPLETED'
@@ -192,16 +176,14 @@
               </a-form-item>
 
               <a-form-item
-                :label="`Điểm số (1-5) cho KPI: ${kpiItem.kpiName}`"
+                :label="`${$t('managerScoreForKpi')} ${kpiItem.kpiName}`"
                 :name="['kpiItem', index, 'managerScore']"
               >
-                <!-- eslint-disable-next-line vue/no-undef-components -->
                 <a-rate v-model:value="kpiItem.managerScore" />
               </a-form-item>
             </div>
 
             <a-divider />
-            <!-- Phần hiển thị Phản hồi của Nhân viên -->
             <div
               v-if="
                 overallReview.employeeComment &&
@@ -209,17 +191,17 @@
                   overallReview.status === 'COMPLETED')
               "
             >
-              <h3>Phản hồi từ Nhân viên</h3>
+              <h3>{{ $t('employeeFeedback') }}</h3>
               <a-descriptions
                 bordered
                 :column="1"
                 size="small"
                 style="margin-bottom: 16px"
               >
-                <a-descriptions-item label="Ngày phản hồi">
+                <a-descriptions-item :label="$t('feedbackDate')">
                   {{ formatDate(overallReview.employeeFeedbackDate) }}
                 </a-descriptions-item>
-                <a-descriptions-item label="Nội dung phản hồi">
+                <a-descriptions-item :label="$t('feedbackContent')">
                   <p style="white-space: pre-wrap">
                     {{ overallReview.employeeComment }}
                   </p>
@@ -228,19 +210,15 @@
               <a-divider />
             </div>
 
-            <a-form-item
-              label="Nhận xét/Đánh giá Tổng thể của Quản lý"
-              name="overallManagerComment"
-            >
+            <a-form-item :label="$t('overallManagerComment')" name="overallManagerComment">
               <Input.TextArea
                 v-model:value="overallReview.managerComment"
-                placeholder="Đánh giá chung về hiệu suất trong chu kỳ, định hướng phát triển..."
+                :placeholder="$t('overallManagerCommentPlaceholder')"
                 :rows="5"
               />
             </a-form-item>
 
-            <a-form-item label="Điểm Tổng thể (1-5)" name="overallManagerScore">
-              <!-- eslint-disable-next-line vue/no-undef-components -->
+            <a-form-item :label="$t('overallManagerScore')" name="overallManagerScore">
               <a-rate v-model:value="overallReview.managerScore" />
             </a-form-item>
 
@@ -254,9 +232,8 @@
                   isLoadingKpis || overallReview.status === 'COMPLETED'
                 "
               >
-                Lưu Đánh giá
+                {{ $t('saveReview') }}
               </a-button>
-              <!-- Tùy chọn: Thêm nút "Hoàn tất Review" nếu có quy trình nhiều bước -->
               <a-button
                 v-if="
                   overallReview.status === 'MANAGER_REVIEWED' ||
@@ -269,7 +246,7 @@
                 :loading="isCompletingReview"
                 style="margin-left: 8px"
               >
-                Hoàn tất Review
+                {{ $t('completeReview') }}
               </a-button>
             </a-form-item>
           </a-form>
@@ -281,7 +258,8 @@
 
 <script setup>
 import { ref, computed, onMounted, watch } from "vue";
-import { useStore, useRouter } from "vuex";
+import { useStore } from "vuex";
+import { useRouter } from "vue-router";
 import {
   Card as ACard,
   Row as ARow,
@@ -305,6 +283,9 @@ import {
   Rate as ARate,
   BreadcrumbItem as ABreadcrumbItem,
 } from "ant-design-vue";
+import { useI18n } from 'vue-i18n';
+
+const { t: $t } = useI18n();
 import dayjs from "dayjs";
 import { cloneDeep } from "lodash-es";
 
@@ -419,18 +400,18 @@ const pageTitle = computed(() => {
   const targetName = getSelectedTargetName();
   const cycleName = getSelectedCycleName();
   if (targetName && cycleName) {
-    return `Đánh giá Kết quả KPI cho ${targetName} - Chu kỳ: ${cycleName}`;
+    return `${$t('kpiReviewTitleFor')} ${targetName} - ${$t('cycle')}: ${cycleName}`;
   }
-  return "Đánh giá Kết quả KPI";
+  return $t('kpiReviewTitle');
 });
 
 const reviewStatusText = computed(() => {
   const statusMap = {
-    PENDING_REVIEW: "Chờ Review",
-    MANAGER_REVIEWED: "Quản lý Đã Review",
-    EMPLOYEE_FEEDBACK_PENDING: "Chờ Nhân viên Phản hồi",
-    EMPLOYEE_RESPONDED: "Nhân viên Đã Phản hồi",
-    COMPLETED: "Hoàn tất",
+    PENDING_REVIEW: "Pending Review",
+    MANAGER_REVIEWED: "Manager Reviewed",
+    EMPLOYEE_FEEDBACK_PENDING: "Awaiting Employee Feedback",
+    EMPLOYEE_RESPONDED: "Employee Responded",
+    COMPLETED: "Completed",
   };
   return statusMap[overallReview.value.status] || "Không xác định";
 });
@@ -441,7 +422,10 @@ const reviewStatusColor = computed(() => {
 });
 
 const getSelectedTargetName = () => {
-  const target = reviewTargets.value.find((t) => t.id === selectedTarget.value);
+  if (!selectedTarget.value) return "";
+  const [type, idStr] = selectedTarget.value.split('-');
+  const id = parseInt(idStr, 10);
+  const target = reviewTargets.value.find((t) => t.id === id && t.type === type);
   return target ? target.name : "";
 };
 
@@ -451,7 +435,10 @@ const getSelectedCycleName = () => {
 };
 
 const filterOption = (input, option) => {
-  return option.children[0].children
+  const optionText = option.children && option.children[0] && option.children[0].children
+    ? option.children[0].children
+    : (option.label || ''); 
+  return optionText
     .toLowerCase()
     .includes(input.toLowerCase());
 };
@@ -506,23 +493,15 @@ const fetchKpisForReview = async () => {
     return;
   }
   try {
-    const target = reviewTargets.value.find(
-      (t) => t.id === selectedTarget.value
-    );
-    console.log(
-      "[KpiReview.vue] Component fetchKpisForReview: Attempting to find target object. selectedTarget.value:",
-      selectedTarget.value
-    );
-    console.log(
-      "[KpiReview.vue] Component fetchKpisForReview: reviewTargets.value:",
-      JSON.parse(JSON.stringify(reviewTargets.value))
-    );
-    console.log(
-      "[KpiReview.vue] Component fetchKpisForReview: Found target object:",
-      target
-    );
-
-    if (!target) {
+    if (!selectedTarget.value) {
+        console.error("[KpiReview.vue] Component fetchKpisForReview: selectedTarget.value is null or undefined.");
+        store.commit("kpiEvaluations/SET_KPIS_TO_REVIEW", []);
+        store.commit("kpiEvaluations/SET_EXISTING_OVERALL_REVIEW", null);
+        return;
+    }
+    const [targetType, targetIdStr] = selectedTarget.value.split('-');
+    const targetId = parseInt(targetIdStr, 10);
+    if (!targetType || isNaN(targetId)) {
       notification.error({
         message: "Lỗi",
         description: "Không tìm thấy thông tin đối tượng được chọn.",
@@ -538,14 +517,14 @@ const fetchKpisForReview = async () => {
     console.log(
       "[KpiReview.vue] Component fetchKpisForReview: Dispatching Vuex action kpiEvaluations/fetchKpisForReview with params:",
       {
-        targetId: selectedTarget.value,
-        targetType: target.type,
+        targetId: targetId,
+        targetType: targetType,
         cycleId: selectedCycle.value,
       }
     );
     await store.dispatch("kpiEvaluations/fetchKpisForReview", {
-      targetId: selectedTarget.value,
-      targetType: target.type,
+      targetId: targetId,
+      targetType: targetType,
       cycleId: selectedCycle.value,
     });
   } catch (error) {
@@ -580,21 +559,22 @@ const submitReviewData = async () => {
       "[KpiReview.vue] reviewTargets.value:",
       JSON.parse(JSON.stringify(reviewTargets.value))
     );
-    console.log("[KpiReview.vue] selectedCycle.value:", selectedCycle.value);
+    console.log("[KpiReview.vue] selectedCycle.value:", selectedCycle.value);    
 
-    const target = reviewTargets.value.find(
-      (t) => t.id === selectedTarget.value
-    );
-    if (!target) {
+    if (!selectedTarget.value) {
       notification.error({
         message: "Lỗi",
         description: "Vui lòng chọn đối tượng review hợp lệ.",
       });
       return;
     }
+
+    const [targetType, targetIdStr] = selectedTarget.value.split('-');
+    const targetId = parseInt(targetIdStr, 10);
+
     const reviewData = {
-      targetId: selectedTarget.value,
-      targetType: target.type,
+      targetId: targetId,
+      targetType: targetType,
       cycleId: selectedCycle.value,
       overallComment: overallReview.value.managerComment,
       overallScore: overallReview.value.managerScore,
@@ -637,8 +617,9 @@ const handleCompleteReview = async () => {
     });
     return;
   }
-  const target = reviewTargets.value.find((t) => t.id === selectedTarget.value);
-  if (!target) {
+  const [targetType, targetIdStr] = selectedTarget.value.split('-');
+  const targetId = parseInt(targetIdStr, 10);
+  if (!targetType || isNaN(targetId)) {
     notification.error({
       message: "Lỗi",
       description: "Không tìm thấy thông tin đối tượng được chọn.",
@@ -648,8 +629,8 @@ const handleCompleteReview = async () => {
 
   try {
     const completeReviewDto = {
-      targetId: selectedTarget.value,
-      targetType: target.type,
+      targetId: targetId,
+      targetType: targetType,
       cycleId: selectedCycle.value,
     };
     await store.dispatch("kpiEvaluations/completeKpiReview", completeReviewDto);
@@ -673,11 +654,13 @@ const viewTargetReviewHistory = () => {
     });
     return;
   }
-  const target = reviewTargets.value.find((t) => t.id === selectedTarget.value);
-  if (target) {
+  const [targetType, targetIdStr] = selectedTarget.value.split('-');
+  const targetId = parseInt(targetIdStr, 10);
+
+  if (targetType && !isNaN(targetId)) {
     router.push({
       name: "ReviewHistory", // Tên route của ReviewHistoryPage.vue
-      params: { targetType: target.type, targetId: target.id },
+      params: { targetType: targetType, targetId: targetId },
     });
   } else {
     notification.error({

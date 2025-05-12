@@ -1,24 +1,24 @@
 <template>
   <div class="kpi-company-list-page">
     <div class="list-header">
-      <h2>Company KPI List</h2>
+      <h2>{{ $t('companyKpiList') }}</h2>
       <div class="action-buttons">
         <a-button type="primary" @click="goToCreateKpi" style="float: bottom" v-if="canCreateCompanyKpi">
-          <plus-outlined /> Create New KPI
+          <plus-outlined /> {{ $t('createNewKpi') }}
         </a-button>
       </div>
     </div>
     <div class="filter-controls">
       <a-row :gutter="[22]">
         <a-col :span="6">
-          <a-form-item label="Search:">
-            <a-input placeholder="KPI name..." v-model:value="localFilters.name" @pressEnter="applyFilters" />
+          <a-form-item :label="$t('search')">
+            <a-input :placeholder="$t('kpiNamePlaceholder')" v-model:value="localFilters.name" @pressEnter="applyFilters" />
           </a-form-item>
         </a-col>
         <a-col :span="5">
-          <a-form-item label="Department:">
+          <a-form-item :label="$t('department')">
             <a-select v-model:value="localFilters.departmentId" style="width: 100%">
-              <a-select-option value="">All</a-select-option>
+              <a-select-option value="">{{ $t('all') }}</a-select-option>
               <a-select-option v-for="department in departmentList" :key="department.id" :value="department.id">
                 {{ department.name }}
               </a-select-option>
@@ -26,101 +26,82 @@
           </a-form-item>
         </a-col>
         <a-col :span="4">
-          <a-form-item label="Start Date:">
+          <a-form-item :label="$t('startDate')">
             <a-date-picker v-model:value="localFilters.startDate" style="width: 100%" />
           </a-form-item>
         </a-col>
         <a-col :span="4">
-          <a-form-item label="End Date:">
+          <a-form-item :label="$t('endDate')">
             <a-date-picker v-model:value="localFilters.endDate" style="width: 100%" />
           </a-form-item>
         </a-col>
         <a-col :span="5" style="text-align: right">
           <a-button type="primary" @click="applyFilters" :loading="loading">
-            <template #icon><filter-outlined /></template> Apply
+            <template #icon><filter-outlined /></template> {{ $t('apply') }}
           </a-button>
           <a-button @click="resetFilters" :loading="loading" style="margin-left: 8px">
-            <template #icon><reload-outlined /></template> Reset
+            <template #icon><reload-outlined /></template> {{ $t('reset') }}
           </a-button>
         </a-col>
       </a-row>
     </div>
 
     <div style="margin-top: 20px; margin-bottom: 20px">
-      <a-alert v-if="loading" message="Loading KPIs..." type="info" show-icon>
+      <a-alert v-if="loading" :message="$t('loadingKpis')" type="info" show-icon>
         <template #icon> <a-spin /> </template>
       </a-alert>
       <a-alert v-else-if="error" :message="error" type="error" show-icon closable />
-      <a-alert v-else-if="kpis.length === 0" message="No KPIs found matching your criteria." type="warning" show-icon
-        closable />
-      <a-alert v-if="deletedKpiName" :message="`KPI '${deletedKpiName}' was deleted successfully!`" type="success"
-        closable @close="deletedKpiName = null" show-icon />
-      <a-alert v-if="toggleStatusError" message="Lỗi cập nhật trạng thái KPI" :description="toggleStatusError"
-        type="error" show-icon closable @close="clearToggleError" style="margin-top: 10px;" />
+      <a-alert v-else-if="kpis.length === 0" :message="$t('noKpisFound')" type="warning" show-icon closable />
+      <a-alert v-if="deletedKpiName" :message="$t('kpiDeleted', { name: deletedKpiName })" type="success" closable @close="deletedKpiName = null" show-icon />
+      <a-alert v-if="toggleStatusError" :message="$t('toggleStatusError')" :description="toggleStatusError" type="error" show-icon closable @close="clearToggleError" style="margin-top: 10px;" />
     </div>
 
     <div v-if="groupedKpis" class="data-container">
       <a-collapse v-model:activeKey="activePanelKeys" expandIconPosition="end">
-        <a-collapse-panel v-for="(kpiList, perspectiveId) in groupedKpis" :key="perspectiveId"
-          :header="`${kpiList[0]?.perspective?.id || perspectiveId}. ${kpiList[0]?.perspective?.name || 'Uncategorized'} (${kpiList ? kpiList.length : 0} KPIs)`"
-          accordion>
+        <a-collapse-panel v-for="(kpiList, perspectiveId) in groupedKpis" :key="perspectiveId" :header="$t('perspectiveHeader', { id: kpiList[0]?.perspective?.id || perspectiveId, name: kpiList[0]?.perspective?.name || $t('uncategorized'), count: kpiList ? kpiList.length : 0 })" accordion>
           <div v-if="kpiList && kpiList.length > 0">
-            <a-table :columns="columns" :data-source="kpiList" row-key="id" :pagination="false" :size="'small'"
-              bordered>
+            <a-table :columns="columns" :data-source="kpiList" row-key="id" :pagination="false" :size="'small'" bordered>
               <template #bodyCell="{ column, record }">
                 <template v-if="column.dataIndex === 'department'">
-                  {{ record.department?.name || "--" }}
+                  {{ record.department?.name || '--' }}
                 </template>
                 <template v-else-if="column.dataIndex === 'section'">
-                  {{ record.section?.name || "--" }}
+                  {{ record.section?.name || '--' }}
                 </template>
                 <template v-else-if="column.dataIndex === 'assignedTo'">
-                  {{
-                  record.assignedTo
-                  ? `${record.assignedTo.first_name || ""} ${record.assignedTo.last_name || ""}`.trim()
-                  : "--"
-                  }}
+                  {{ record.assignedTo ? `${record.assignedTo.first_name || ''} ${record.assignedTo.last_name || ''}`.trim() : '--' }}
                 </template>
-                <template v-else-if="column.key === 'status'"> 
-                  <a-tag
-                    :color="getKpiDefinitionStatusColor(record.status)" style="margin-right: 8px;"> {{
-                      getKpiDefinitionStatusText(record.status) }} </a-tag>
-                  <a-switch v-if="isManagerOrAdmin" :checked="record.status === KpiDefinitionStatus.APPROVED"
-                    :loading="isToggling && currentToggleKpiId === record.id"
-                    :disabled="isToggling && currentToggleKpiId !== record.id" checked-children="ON"
-                    un-checked-children="OFF" size="small" @change="() => handleToggleStatus(record.id)"
-                    title="Toggle DRAFT/APPROVED status" />
+                <template v-else-if="column.key === 'status'">
+                  <a-tag :color="getKpiDefinitionStatusColor(record.status)" style="margin-right: 8px">{{ getKpiDefinitionStatusText(record.status) }}</a-tag>
+                  <a-switch v-if="isManagerOrAdmin" :checked="record.status === KpiDefinitionStatus.APPROVED" :loading="isToggling && currentToggleKpiId === record.id" :disabled="isToggling && currentToggleKpiId !== record.id" :checked-children="$t('on')" :un-checked-children="$t('off')" size="small" @change="() => handleToggleStatus(record.id)" :title="$t('toggleStatus')" />
                 </template>
                 <template v-else-if="column.dataIndex === 'action'">
                   <a-space>
-                    <a-tooltip title="View Details">
+                    <a-tooltip :title="$t('viewDetails')">
                       <a-button type="default" size="small" class="kpi-actions-button" @click="goToDetail(record)">
-                        <schedule-outlined /> Details
+                        <schedule-outlined /> {{ $t('details') }}
                       </a-button>
                     </a-tooltip>
-                    <a-tooltip title="Copy KPI">
+                    <a-tooltip :title="$t('copyKpi')">
                       <a-button type="dashed" size="small" @click="handleCopyKpi(record)">
-                        <copy-outlined /> Copy
+                        <copy-outlined /> {{ $t('copy') }}
                       </a-button>
                     </a-tooltip>
-                    <a-tooltip title="Delete KPI">
-                      <a-button danger size="small" class="kpi-actions-button" v-if="canDeleteCompanyKpi"
-                        @click="showConfirmDeleteDialog(record.id, record.name)"><delete-outlined /> Delete
-                      </a-button>
+                    <a-tooltip :title="$t('deleteKpi')">
+                      <a-button danger size="small" class="kpi-actions-button" v-if="canDeleteCompanyKpi" @click="showConfirmDeleteDialog(record.id, record.name)"><delete-outlined /> {{ $t('delete') }}</a-button>
                     </a-tooltip>
                   </a-space>
                 </template>
               </template>
             </a-table>
           </div>
-          <span v-else>No KPIs found for this perspective.</span>
+          <span v-else>{{ $t('noKpisForPerspective') }}</span>
         </a-collapse-panel>
       </a-collapse>
     </div>
-    <a-empty v-else-if="!loading && !error" description="No KPIs found." />
-    <a-modal danger v-model:open="isDeleteModalVisible" title="Confirm Dialog" @ok="handleDeleteKpi"
-      @cancel="isDeleteModalVisible = false">
-      <p>Are you sure to delete "{{ selectedKpiName }}"?</p>
+    <a-empty v-else-if="!loading && !error" :description="$t('noKpisFound')" />
+    <a-modal danger v-model:open="isDeleteModalVisible" :title="$t('confirmDialog')" @ok="handleDeleteKpi" @cancel="isDeleteModalVisible = false">
+      <p>{{ $t('confirmDelete', { name: selectedKpiName }) }}</p>
     </a-modal>
   </div>
 </template>
@@ -129,6 +110,7 @@
 import { reactive, computed, onMounted, ref, watch } from "vue";
 import { useStore } from "vuex";
 import { useRouter } from "vue-router";
+import { useI18n } from 'vue-i18n';
 
 import {
   Button as AButton,
@@ -163,6 +145,7 @@ import { KpiDefinitionStatus, KpiDefinitionStatusText, KpiDefinitionStatusColor 
 
 const store = useStore();
 const router = useRouter();
+const { t: $t } = useI18n();
 
 const localFilters = reactive({
   name: "",
@@ -213,65 +196,65 @@ const canDeleteCompanyKpi = computed(() =>
   ["admin", "manager"].includes(effectiveRole.value)
 );
 
-const columns = [
+const columns = computed(() => [
   {
-    title: "KPI name",
+    title: $t('kpiName'),
     dataIndex: "name",
     key: "name",
     width: "20%",
     ellipsis: true,
   },
   {
-    title: "Department",
+    title: $t('department'),
     dataIndex: "department",
     key: "department",
     width: "12%",
     ellipsis: true,
   },
   {
-    title: "Section",
+    title: $t('section'),
     dataIndex: "section",
     key: "section",
     width: "12%",
     ellipsis: true,
   },
   {
-    title: "Assigned To",
+    title: $t('assignedTo'),
     dataIndex: "assignedTo",
     key: "assignedTo",
     width: "12%",
     ellipsis: true,
   },
   {
-    title: "Target",
+    title: $t('target'),
     dataIndex: "target",
     key: "target",
     width: "8%",
     align: "right",
   },
   {
-    title: "Weight",
+    title: $t('weight'),
     dataIndex: "weight",
     key: "weight",
     width: "7%",
     align: "right",
   },
-  { title: "Frequency", dataIndex: "frequency", key: "frequency", width: "8%" },
+  { title: $t('frequency'), dataIndex: "frequency", key: "frequency", width: "8%" },
   {
-    title: "Status",
+    title: $t('status'),
     dataIndex: "status",
     key: "status",
     width: "8%",
     align: "center",
   },
   {
-    title: "Action",
+    title: $t('action'),
     dataIndex: "action",
     key: "action",
     width: "300px",
     align: "center",
   },
-];
+]);
 
 const goToCreateKpi = () => {
   router.push({ name: "KpiCreateCompany", query: { scope: "company" } });
@@ -361,7 +344,7 @@ const handleToggleStatus = async (kpiId) => {
 };
 
 const getKpiDefinitionStatusText = (status) => {
-  return KpiDefinitionStatusText[status] || status || 'N/A';
+  return KpiDefinitionStatusText[status] || status || '';
 };
 const getKpiDefinitionStatusColor = (status) => {
   return KpiDefinitionStatusColor[status] || 'default';

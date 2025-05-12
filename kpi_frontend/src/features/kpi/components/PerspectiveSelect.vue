@@ -5,11 +5,9 @@
     class="perspective-select-component"
     :disabled="loading || !!error"
   >
-    <option :value="null" disabled>-- Chọn Khía cạnh BSC --</option>
-
-    <option v-if="loading" disabled value="">Đang tải...</option>
-    <option v-else-if="error" disabled value="">Lỗi tải danh sách</option>
-
+    <option :value="null" disabled>{{ $t('selectBscPerspective') }}</option>
+    <option v-if="loading" disabled value="">{{ $t('loading') }}</option>
+    <option v-else-if="error" disabled value="">{{ $t('loadingError') }}</option>
     <option v-for="perspective in perspectives" :key="perspective.id" :value="perspective.id">
       {{ perspective.name }}
     </option>

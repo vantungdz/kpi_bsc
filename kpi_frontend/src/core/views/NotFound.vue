@@ -1,10 +1,10 @@
 <template>
   <div class="not-found-container">
     <h1>404</h1>
-    <h2>Page Not Found</h2>
-    <p>Sorry, the page you are looking for does not exist.</p>
+    <h2>{{ $t('pageNotFound') }}</h2>
+    <p>{{ $t('pageNotFoundDescription') }}</p>
     <router-link :to="{ name: 'Dashboard' }">
-      <button class="btn-primary">Go to Dashboard</button>
+      <button class="btn-primary">{{ $t('goToDashboard') }}</button>
     </router-link>
   </div>
 </template>

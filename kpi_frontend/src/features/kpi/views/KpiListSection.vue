@@ -1,10 +1,10 @@
 <template>
   <div class="kpi-section-list-page">
     <div class="list-header">
-      <h2>Section KPI List</h2>
+      <h2>{{ $t('sectionKpiList') }}</h2>
       <div class="action-buttons">
         <a-button type="primary" @click="goToCreateKpi" style="float: bottom">
-          <plus-outlined /> Create New KPI
+          <plus-outlined /> {{ $t('createNewKpi') }}
         </a-button>
       </div>
     </div>
@@ -12,81 +12,77 @@
     <div class="filter-controls">
       <a-row :gutter="[22]">
         <a-col :span="6">
-          <a-form-item label="Search:">
-            <a-input v-model:value="localFilters.name" placeholder="KPI name..." @pressEnter="applyFilters" />
+          <a-form-item :label="$t('search')">
+            <a-input v-model:value="localFilters.name" :placeholder="$t('kpiNamePlaceholder')" @pressEnter="applyFilters" />
           </a-form-item>
         </a-col>
 
-      <a-col :span="5" v-if="!isSectionUser">
-        <a-form-item label="Department:">
-          <a-select v-model:value="localFilters.departmentId" style="width: 100%" @change="handleDepartmentChange"
-            :disabled="(isSectionUser && !!currentUser?.departmentId) || isDepartmentUser">
-            <a-select-option v-if="!((isSectionUser && !!currentUser?.departmentId) || isDepartmentUser)"
-              :value="null">All Departments</a-select-option>
-            <a-select-option v-for="department in departmentList" :key="department.id" :value="department.id">
-              {{ department.name }}
-            </a-select-option>
-          </a-select>
-        </a-form-item>
-      </a-col>
+        <a-col :span="5" v-if="!isSectionUser">
+          <a-form-item :label="$t('department')">
+            <a-select v-model:value="localFilters.departmentId" style="width: 100%" @change="handleDepartmentChange" :disabled="(isSectionUser && !!currentUser?.departmentId) || isDepartmentUser">
+              <a-select-option v-if="!((isSectionUser && !!currentUser?.departmentId) || isDepartmentUser)" :value="null">{{ $t('allDepartments') }}</a-select-option>
+              <a-select-option v-for="department in departmentList" :key="department.id" :value="department.id">
+                {{ department.name }}
+              </a-select-option>
+            </a-select>
+          </a-form-item>
+        </a-col>
 
-      <a-col :span="4">
-        <a-form-item label="Section:">
-          <a-select v-model:value="localFilters.sectionId" style="width: 100%" :disabled="isSectionUser">
-            <a-select-option v-if="!isSectionUser" :value="0">All Sections</a-select-option>
-            <a-select-option v-for="section in selectSectionList" :key="section.id" :value="section.id">
-              {{ section.name }}
-            </a-select-option>
-          </a-select>
-        </a-form-item>
-      </a-col>
         <a-col :span="4">
-          <a-form-item label="Start Date:">
+          <a-form-item :label="$t('section')">
+            <a-select v-model:value="localFilters.sectionId" style="width: 100%" :disabled="isSectionUser">
+              <a-select-option v-if="!isSectionUser" :value="0">{{ $t('allSections') }}</a-select-option>
+              <a-select-option v-for="section in selectSectionList" :key="section.id" :value="section.id">
+                {{ section.name }}
+              </a-select-option>
+            </a-select>
+          </a-form-item>
+        </a-col>
+
+        <a-col :span="4">
+          <a-form-item :label="$t('startDate')">
             <a-date-picker v-model:value="localFilters.startDate" style="width: 100%" @change="applyFilters" />
           </a-form-item>
         </a-col>
+
         <a-col :span="4">
-          <a-form-item label="End Date:">
+          <a-form-item :label="$t('endDate')">
             <a-date-picker v-model:value="localFilters.endDate" style="width: 100%" @change="applyFilters" />
           </a-form-item>
         </a-col>
+
         <a-col :span="5" style="text-align: right">
           <a-button type="primary" :loading="loading" @click="applyFilters">
-            <template #icon><filter-outlined /></template> Apply
+            <template #icon><filter-outlined /></template> {{ $t('apply') }}
           </a-button>
           <a-button style="margin-left: 8px" :loading="loading" @click="resetFilters">
-            <template #icon><reload-outlined /></template> Reset
+            <template #icon><reload-outlined /></template> {{ $t('reset') }}
           </a-button>
         </a-col>
       </a-row>
     </div>
 
     <div style="margin-top: 20px; margin-bottom: 20px">
-      <a-alert v-if="loading" message="Loading KPIs..." type="info" show-icon>
+      <a-alert v-if="loading" :message="$t('loadingKpis')" type="info" show-icon>
         <template #icon> <a-spin /> </template>
       </a-alert>
 
       <a-alert v-else-if="error" :message="error" type="error" show-icon closable />
 
-      <a-alert v-else-if="isDisplayResult && sectionGroups.length === 0" message="No KPIs found matching your criteria."
-        type="warning" show-icon closable />
+      <a-alert v-else-if="isDisplayResult && sectionGroups.length === 0" :message="$t('noKpisFound')" type="warning" show-icon closable />
 
-      <a-alert v-if="deletedKpiName" :message="`KPI '${deletedKpiName}' was deleted successfully!`" type="success"
-        closable @close="deletedKpiName = null" show-icon />
+      <a-alert v-if="deletedKpiName" :message="$t('kpiDeleted', { name: deletedKpiName })" type="success" closable @close="deletedKpiName = null" show-icon />
     </div>
 
     <div v-if="isDisplayResult" class="data-container">
       <div v-for="(sectionGroup, sectionIndex) in sectionGroups" :key="'sec-' + sectionIndex" class="mb-8">
         <h4 class="text-lg font-bold mb-2" style="margin-top: 10px; margin-bottom: 10px">
-          {{ sectionGroup.section }}
+          {{ $t('sectionHeader', { name: sectionGroup.section }) }}
         </h4>
 
         <a-collapse v-model:activeKey="activePanelKeys" expandIconPosition="end">
-          <a-collapse-panel v-for="(perspectiveGroupRows, perspectiveKey) in sectionGroup.data"
-            :key="'pers-' + sectionIndex + '-' + perspectiveKey"
-            :header="perspectiveKey.split('. ')[1] || perspectiveKey">
-            <a-table :columns="columns" :dataSource="tableData(perspectiveGroupRows)" :pagination="false" rowKey="key"
-              :rowClassName="rowClassName" size="small" bordered>
+          <a-collapse-panel v-for="(perspectiveGroupRows, perspectiveKey) in sectionGroup.data" :key="'pers-' + sectionIndex + '-' + perspectiveKey" :header="perspectiveKey.split('. ')[1] || perspectiveKey">
+            <a-table :columns="columns" :dataSource="tableData(perspectiveGroupRows)" :pagination="false" rowKey="key" :rowClassName="rowClassName" size="small" bordered>
               <template #bodyCell="{ column, record }">
                 <template v-if="column.dataIndex === 'kpiName'">
                   <span>{{ record.kpiName }}</span>
@@ -95,7 +91,7 @@
                 <template v-else-if="column.dataIndex === 'chart'">
                   <apexchart type="donut" width="80%" height="80" :options="{
                       chart: { height: 80, type: 'donut' },
-                      labels: ['Actual', 'Remaining'],
+                      labels: [$t('actual'), $t('remaining')],
                       plotOptions: {
                         pie: { donut: { thickness: '40px' } },
                       },
@@ -122,19 +118,25 @@
                   <span>{{ record.assignTo }}</span>
                 </template>
 
-                <template v-else-if="column.dataIndex === 'startDate'"><span>{{ record.startDate }}</span></template>
+                <template v-else-if="column.dataIndex === 'startDate'">
+                  <span>{{ record.startDate }}</span>
+                </template>
 
-                <template v-else-if="column.dataIndex === 'endDate'"><span>{{ record.endDate }}</span></template>
+                <template v-else-if="column.dataIndex === 'endDate'">
+                  <span>{{ record.endDate }}</span>
+                </template>
 
-                <template v-else-if="column.dataIndex === 'weight'"><span>{{ record.weight }}</span></template>
+                <template v-else-if="column.dataIndex === 'weight'">
+                  <span>{{ record.weight }}</span>
+                </template>
 
-                <template v-else-if="column.dataIndex === 'target'"><span>{{
-                    `${record.target} ${record.unit}`
-                    }}</span></template>
+                <template v-else-if="column.dataIndex === 'target'">
+                  <span>{{ `${record.target} ${record.unit}` }}</span>
+                </template>
 
-                <template v-else-if="column.dataIndex === 'actual'"><span>{{
-                    `${record.actual} ${record.unit}`
-                    }}</span></template>
+                <template v-else-if="column.dataIndex === 'actual'">
+                  <span>{{ `${record.actual} ${record.unit}` }}</span>
+                </template>
 
                 <template v-else-if="column.dataIndex === 'status'">
                   <a-tag :bordered="false" :color="getStatusColor(record.status)">
@@ -143,7 +145,7 @@
                 </template>
 
                 <template v-else-if="column.dataIndex === 'action'">
-                  <a-tooltip title="View Details">
+                  <a-tooltip :title="$t('viewDetails')">
                     <a-button type="default" class="kpi-actions-button" @click="
                         $router.push({
                           name: 'KpiDetail',
@@ -151,19 +153,19 @@
                           query: { contextSectionId: sectionGroup.sectionId },
                         })
                       ">
-                      <schedule-outlined /> Details
+                      <schedule-outlined /> {{ $t('details') }}
                     </a-button>
                   </a-tooltip>
-                  <a-tooltip title="Copy KPI">
+                  <a-tooltip :title="$t('copyKpi')">
                     <a-button type="dashed" class="kpi-actions-button" size="small" @click="handleCopyKpi(record)">
-                      <copy-outlined /> Copy
+                      <copy-outlined /> {{ $t('copy') }}
                     </a-button>
                   </a-tooltip>
-                  <a-tooltip title="Delete KPI">
+                  <a-tooltip :title="$t('deleteKpi')">
                     <a-button danger class="kpi-actions-button" @click="
                         showConfirmDeleteDialog(record.kpiId, record.kpiName)
                       ">
-                      <delete-outlined /> Delete
+                      <delete-outlined /> {{ $t('delete') }}
                     </a-button>
                   </a-tooltip>
                 </template>
@@ -174,9 +176,8 @@
       </div>
     </div>
 
-    <a-modal danger v-model:open="isDeleteModalVisible" title="Confirm Dialog" @ok="handleDeleteKpi"
-      @cancel="isDeleteModalVisible = false">
-      <p>Are you sure to delete "{{ selectedKpiName }}"?</p>
+    <a-modal danger v-model:open="isDeleteModalVisible" :title="$t('confirmDialog')" @ok="handleDeleteKpi" @cancel="isDeleteModalVisible = false">
+      <p>{{ $t('confirmDelete', { name: selectedKpiName }) }}</p>
     </a-modal>
   </div>
 </template>
@@ -185,6 +186,7 @@
 import { reactive, computed, onMounted, ref, watch } from "vue";
 import { useStore } from "vuex";
 import { useRouter } from "vue-router";
+import { useI18n } from 'vue-i18n';
 import {
   PlusOutlined,
   FilterOutlined,
@@ -198,6 +200,7 @@ import { notification } from "ant-design-vue";
 
 const store = useStore();
 const router = useRouter();
+const { t: $t } = useI18n();
 
 const effectiveRole = computed(() => store.getters["auth/effectiveRole"]);
 const currentUser = computed(() => store.getters["auth/currentUser"]);
@@ -559,68 +562,63 @@ const handleDeleteKpi = () => {
     });
 };
 
-const columns = [
+const columns = computed(() => [
   {
-    title: "KPI Name",
+    title: $t('kpiName'),
     dataIndex: "kpiName",
     key: "kpiName",
     width: "15%",
   },
   {
-    title: "Progress", 
+    title: $t('progress'), 
     dataIndex: "chart",
     key: "chart",
     width: "10%", 
     align: "center", 
   },
   {
-    title: "Assign To",
+    title: $t('assignTo'),
     dataIndex: "assignTo",
     key: "assignTo",
     width: "12%",
   },
   {
-    title: "Start Date",
+    title: $t('startDate'),
     dataIndex: "startDate",
     key: "startDate",
     width: "10%",
   },
-  { title: "End Date", dataIndex: "endDate", key: "endDate", width: "10%" },
-  { title: "Weight", dataIndex: "weight", key: "weight", width: "10%" },
+  { title: $t('endDate'), dataIndex: "endDate", key: "endDate", width: "10%" },
+  { title: $t('weight'), dataIndex: "weight", key: "weight", width: "10%" },
   {
-    title: "Target",
+    title: $t('target'),
     dataIndex: "target",
     key: "target",
     width: "10%",
   },
   {
-    title: "Actual",
+    title: $t('actual'),
     dataIndex: "actual",
     key: "actual",
     width: "10%",
   },
   {
-    title: "Status",
+    title: $t('status'),
     dataIndex: "status",
     key: "status",
     width: "8%",
   },
   {
-    title: "Action",
+    title: $t('action'),
     dataIndex: "action",
     key: "action",
     width: "15%",
     rowClassName: "action-column-cell",
   },
-];
+]);
 
 watch(
   () => [localFilters.departmentId, localFilters.sectionId],
-  // ([newDeptId, newSectionId], [oldDeptId, oldSectionId] = []) => {
-  //   if (newDeptId !== oldDeptId || newSectionId !== oldSectionId) {
-  //     // applyFilters(); // Bỏ tự động apply, để người dùng nhấn nút
-  //   }
-  // },
   { immediate: true }
 );
 

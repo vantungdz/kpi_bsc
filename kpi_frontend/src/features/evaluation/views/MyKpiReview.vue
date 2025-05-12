@@ -1,20 +1,19 @@
 <template>
   <div class="my-kpi-review-page">
     <a-breadcrumb style="margin-bottom: 16px">
-      <a-breadcrumb-item
-        ><router-link to="/dashboard">Dashboard</router-link></a-breadcrumb-item
-      >
-      <a-breadcrumb-item>Đánh giá KPI của tôi</a-breadcrumb-item>
+      <a-breadcrumb-item>
+        <router-link to="/dashboard">{{ $t('dashboard') }}</router-link>
+      </a-breadcrumb-item>
+      <a-breadcrumb-item>{{ $t('myKpiReviewTitle') }}</a-breadcrumb-item>
     </a-breadcrumb>
 
     <a-card :title="pageTitle" :bordered="false">
-      <!-- Bộ lọc Chu kỳ -->
       <a-row :gutter="16" style="margin-bottom: 20px">
         <a-col :xs="24" :sm="12" :md="8">
-          <a-form-item label="Chọn Chu kỳ Đánh giá">
+          <a-form-item :label="$t('selectCycle')">
             <a-select
               v-model:value="selectedCycle"
-              placeholder="Chọn chu kỳ để xem"
+              :placeholder="$t('selectCyclePlaceholder')"
               @change="fetchMyReview"
               :loading="isLoadingCycles"
             >
@@ -30,7 +29,7 @@
         </a-col>
       </a-row>
 
-      <a-spin :spinning="isLoadingMyReview" tip="Đang tải đánh giá của bạn...">
+      <a-spin :spinning="isLoadingMyReview" :tip="$t('loadingMyReview')">
         <a-alert
           v-if="myReviewError"
           type="error"
@@ -42,7 +41,7 @@
         />
 
         <div v-if="!selectedCycle" class="empty-state">
-          <a-empty description="Vui lòng chọn Chu kỳ để xem đánh giá." />
+          <a-empty :description="$t('selectCycleToView')" />
         </div>
 
         <div
@@ -50,33 +49,32 @@
           class="empty-state"
         >
           <a-empty
-            :description="`Không tìm thấy đánh giá nào cho bạn trong chu kỳ ${getSelectedCycleName()}.`"
+            :description="`${$t('noReviewFoundForCycle')} ${getSelectedCycleName()}.`"
           />
         </div>
 
         <div v-if="reviewDetails && reviewDetails.overallReviewByManager">
           <div style="margin-bottom: 16px; text-align: right">
-            <span style="margin-right: 8px">Trạng thái Review:</span>
+            <span style="margin-right: 8px">{{ $t('reviewStatus') }}:</span>
             <a-tag :color="currentReviewStatusColor">
               {{ currentReviewStatusText }}
             </a-tag>
           </div>
 
-          <!-- Hiển thị Đánh giá Tổng thể của Quản lý -->
           <a-descriptions
-            title="Đánh giá Tổng thể từ Quản lý"
+            :title="$t('overallManagerReview')"
             bordered
             :column="1"
             size="small"
             style="margin-bottom: 24px"
           >
-            <a-descriptions-item label="Nhận xét Tổng thể">
+            <a-descriptions-item :label="$t('overallComment')">
               {{
                 reviewDetails.overallReviewByManager.overallComment ||
-                "Chưa có nhận xét."
+                $t('noComment')
               }}
             </a-descriptions-item>
-            <a-descriptions-item label="Điểm Tổng thể">
+            <a-descriptions-item :label="$t('overallScore')">
               <a-rate
                 :value="reviewDetails.overallReviewByManager.overallScore"
                 disabled
@@ -84,18 +82,17 @@
                   reviewDetails.overallReviewByManager.overallScore !== null
                 "
               />
-              <span v-else>Chưa có điểm.</span>
+              <span v-else>{{ $t('noScore') }}</span>
             </a-descriptions-item>
           </a-descriptions>
 
-          <!-- Hiển thị Đánh giá Chi tiết từng KPI của Quản lý -->
           <div
             v-if="
               reviewDetails.kpisReviewedByManager &&
               reviewDetails.kpisReviewedByManager.length > 0
             "
           >
-            <h3>Đánh giá Chi tiết KPI từ Quản lý</h3>
+            <h3>{{ $t('detailedKpiReview') }}</h3>
             <div
               v-for="(kpiItem, index) in reviewDetails.kpisReviewedByManager"
               :key="kpiItem.assignmentId"
@@ -107,19 +104,19 @@
                 v-if="kpiItem.kpiDescription"
                 style="font-style: italic; color: #555; margin-bottom: 8px"
               >
-                <strong>Mô tả KPI:</strong> {{ kpiItem.kpiDescription }}
+                <strong>{{ $t('kpiDescription') }}:</strong> {{ kpiItem.kpiDescription }}
               </p>
               <a-row :gutter="16" style="margin-bottom: 10px">
-                <a-col :span="8"
-                  ><strong>Mục tiêu:</strong> {{ kpiItem.targetValue }}
-                  {{ kpiItem.unit }}</a-col
-                >
-                <a-col :span="8"
-                  ><strong>Thực tế:</strong> {{ kpiItem.actualValue }}
-                  {{ kpiItem.unit }}</a-col
-                >
                 <a-col :span="8">
-                  <strong>Hoàn thành:</strong>
+                  <strong>{{ $t('target') }}:</strong> {{ kpiItem.targetValue }}
+                  {{ kpiItem.unit }}
+                </a-col>
+                <a-col :span="8">
+                  <strong>{{ $t('actualResult') }}:</strong> {{ kpiItem.actualValue }}
+                  {{ kpiItem.unit }}
+                </a-col>
+                <a-col :span="8">
+                  <strong>{{ $t('completionRate') }}:</strong>
                   <a-progress
                     :percent="
                       calculateCompletionRate(
@@ -132,35 +129,33 @@
                 </a-col>
               </a-row>
               <p>
-                <strong>Nhận xét của Quản lý:</strong>
-                {{ kpiItem.existingManagerComment || "Chưa có nhận xét." }}
+                <strong>{{ $t('managerComment') }}:</strong>
+                {{ kpiItem.existingManagerComment || $t('noComment') }}
               </p>
               <p v-if="kpiItem.existingManagerScore !== null">
-                <strong>Điểm của Quản lý:</strong>
+                <strong>{{ $t('managerScore') }}:</strong>
                 <a-rate :value="kpiItem.existingManagerScore" disabled />
               </p>
             </div>
           </div>
           <a-empty
             v-else
-            description="Không có đánh giá chi tiết KPI nào từ quản lý."
+            :description="$t('noDetailedKpiReview')"
           />
 
-          <!-- Phần Phản hồi của Nhân viên -->
           <a-divider />
-          <h3>Phản hồi của bạn</h3>
+          <h3>{{ $t('yourFeedback') }}</h3>
           <div
             v-if="
               reviewDetails.overallReviewByManager.status ===
               'EMPLOYEE_FEEDBACK_PENDING'
             "
           >
-            <a-form-item label="Nhập phản hồi của bạn về đánh giá này:">
-              <!-- Sử dụng Input.TextArea thay vì a-textarea -->
+            <a-form-item :label="$t('enterYourFeedback')">
               <Input.TextArea
                 v-model:value="employeeFeedbackComment"
                 :rows="4"
-                placeholder="Ý kiến, giải trình, hoặc kế hoạch cải thiện của bạn..."
+                :placeholder="$t('feedbackPlaceholder')"
               />
             </a-form-item>
             <a-button
@@ -168,19 +163,19 @@
               @click="submitFeedback"
               :loading="isSubmittingFeedback"
             >
-              Gửi Phản hồi
+              {{ $t('submitFeedback') }}
             </a-button>
           </div>
           <div v-else-if="reviewDetails.overallReviewByManager.employeeComment">
             <p>
-              <strong
-                >Phản hồi của bạn (Đã gửi ngày
+              <strong>
+                {{ $t('yourFeedbackSentOn') }}
                 {{
                   formatDate(
                     reviewDetails.overallReviewByManager.employeeFeedbackDate
                   )
-                }}):</strong
-              >
+                }}:
+              </strong>
             </p>
             <p style="white-space: pre-wrap">
               {{ reviewDetails.overallReviewByManager.employeeComment }}
@@ -192,10 +187,7 @@
               reviewDetails.overallReviewByManager.status === 'MANAGER_REVIEWED'
             "
           >
-            <p>
-              Đánh giá đã được quản lý xem xét hoặc hoàn tất. Không thể gửi phản
-              hồi thêm.
-            </p>
+            <p>{{ $t('reviewCompletedOrReviewed') }}</p>
           </div>
           <div
             v-else-if="
@@ -203,7 +195,7 @@
               'EMPLOYEE_RESPONDED'
             "
           >
-            <p>Bạn đã gửi phản hồi. Cảm ơn!</p>
+            <p>{{ $t('feedbackAlreadySent') }}</p>
           </div>
           <a-alert
             v-if="submitFeedbackError"

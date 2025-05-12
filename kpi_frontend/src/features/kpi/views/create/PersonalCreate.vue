@@ -8,11 +8,11 @@
   >
     <a-form-item
       class="textLabel"
-      label="Perspective"
+      :label="$t('perspective')"
       name="perspective_id"
-      :rules="[{ required: true, message: 'Please select Perspective' }]"
+      :rules="[{ required: true, message: $t('pleaseSelectPerspective') }]"
     >
-      <a-select v-model:value="form.perspective_id" placeholder="Perspective">
+      <a-select v-model:value="form.perspective_id" :placeholder="$t('perspective')">
         <a-select-option
           v-for="perspective in perspectiveList"
           :key="perspective.id"
@@ -25,34 +25,34 @@
 
     <a-form-item
       class="textLabel"
-      label="KPI Name"
+      :label="$t('kpiName')"
       name="name"
-      :rules="[{ required: true, message: 'Please enter KPI Name' }]"
+      :rules="[{ required: true, message: $t('pleaseEnterKpiName') }]"
     >
-      <a-input v-model:value="form.name" placeholder="KPI Name" />
+      <a-input v-model:value="form.name" :placeholder="$t('kpiName')" />
     </a-form-item>
     <a-row :gutter="12">
       <a-col :span="12">
         <a-form-item
           class="textLabel"
-          label="Type"
+          :label="$t('type')"
           name="type"
-          :rules="[{ required: true, message: 'Please enter type kpi' }]"
+          :rules="[{ required: true, message: $t('pleaseEnterTypeKpi') }]"
         >
-          <a-select v-model:value="form.type" placeholder="Type KPI">
-            <a-select-option value="efficiency">Hiệu suất</a-select-option>
-            <a-select-option value="qualitative">Định Tính</a-select-option>
+          <a-select v-model:value="form.type" :placeholder="$t('typeKpi')">
+            <a-select-option value="efficiency">{{ $t('efficiency') }}</a-select-option>
+            <a-select-option value="qualitative">{{ $t('qualitative') }}</a-select-option>
           </a-select>
         </a-form-item>
       </a-col>
       <a-col :span="12">
         <a-form-item
           class="textLabel"
-          label="Unit"
+          :label="$t('unit')"
           name="unit"
-          :rules="[{ required: true, message: 'Please enter Unit' }]"
+          :rules="[{ required: true, message: $t('pleaseEnterUnit') }]"
         >
-          <a-select v-model:value="form.unit" placeholder="Unit">
+          <a-select v-model:value="form.unit" :placeholder="$t('unit')">
             <a-select-option
               v-for="(unitValue, unitKey) in KpiUnits"
               :key="unitKey"
@@ -68,13 +68,13 @@
       <a-col :span="12">
         <a-form-item
           class="textLabel"
-          label="Target"
+          :label="$t('target')"
           name="target"
-          :rules="[{ required: true, message: 'Please enter Target' }]"
+          :rules="[{ required: true, message: $t('pleaseEnterTarget') }]"
         >
           <a-input
             v-model:value="form.target"
-            placeholder="Target"
+            :placeholder="$t('target')"
             @input="(event) => handleNumericInput('target', event)"
           />
         </a-form-item>
@@ -82,16 +82,16 @@
       <a-col :span="12">
         <a-form-item
           class="textLabel"
-          label="Weight (%)"
+          :label="$t('weight')"
           name="weight"
           :rules="[
-            { required: true, message: 'Please enter Weight' },
+            { required: true, message: $t('pleaseEnterWeight') },
             { validator: validateWeight },
           ]"
         >
           <a-input
             v-model:value="form.weight"
-            placeholder="Weight"
+            :placeholder="$t('weight')"
             @input="(event) => handleNumericInput('weight', event)"
           />
         </a-form-item>
@@ -99,35 +99,35 @@
     </a-row>
     <a-form-item
       class="textLabel"
-      label="Frequency"
+      :label="$t('frequency')"
       name="frequency"
-      :rules="[{ required: true, message: 'Please select Frequency' }]"
+      :rules="[{ required: true, message: $t('pleaseSelectFrequency') }]"
     >
-      <a-select v-model:value="form.frequency" placeholder="Frequency">
-        <a-select-option value="daily">Daily</a-select-option>
-        <a-select-option value="weekly">Weekly</a-select-option>
-        <a-select-option value="monthly">Monthly</a-select-option>
-        <a-select-option value="quarterly">Quarterly</a-select-option>
-        <a-select-option value="yearly">Yearly</a-select-option>
+      <a-select v-model:value="form.frequency" :placeholder="$t('frequency')">
+        <a-select-option value="daily">{{ $t('daily') }}</a-select-option>
+        <a-select-option value="weekly">{{ $t('weekly') }}</a-select-option>
+        <a-select-option value="monthly">{{ $t('monthly') }}</a-select-option>
+        <a-select-option value="quarterly">{{ $t('quarterly') }}</a-select-option>
+        <a-select-option value="yearly">{{ $t('yearly') }}</a-select-option>
       </a-select>
     </a-form-item>
 
     <a-row :gutter="12">
       <a-col :span="6">
-        <a-form-item class="textLabel" label="Date Start" name="start_date">
+        <a-form-item :label="$t('dateStart')" name="start_date">
           <a-date-picker v-model:value="form.start_date" style="width: 100%" />
         </a-form-item>
       </a-col>
       <a-col :span="6">
-        <a-form-item class="textLabel" label="Date End" name="end_date">
+        <a-form-item :label="$t('dateEnd')" name="end_date">
           <a-date-picker v-model:value="form.end_date" style="width: 100%" />
         </a-form-item>
       </a-col>
     </a-row>
-    <a-form-item class="textLabel" label="Description" name="description">
+    <a-form-item :label="$t('description')" name="description">
       <a-textarea
         v-model:value="form.description"
-        placeholder="Description"
+        :placeholder="$t('description')"
         allow-clear
       />
     </a-form-item>
@@ -140,10 +140,10 @@
           html-type="submit"
           :loading="loading"
         >
-          Save KPI
+          {{ $t('saveKpi') }}
         </a-button>
         <a-button type="default" @click="$router.push('/personal')"
-          >Back</a-button
+          >{{ $t('back') }}</a-button
         >
       </a-row>
     </a-form-item>

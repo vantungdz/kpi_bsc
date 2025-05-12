@@ -1,11 +1,11 @@
 <template>
   <div class="kpi-department-list-page">
     <div class="list-header">
-      <h2>Department KPI List</h2>
+      <h2>{{ $t('departmentKpiList') }}</h2>
 
       <div class="action-buttons">
         <a-button type="primary" style="float: bottom" @click="goToCreateKpi">
-          <plus-outlined /> Create New KPI
+          <plus-outlined /> {{ $t('createNewKpi') }}
         </a-button>
       </div>
     </div>
@@ -13,16 +13,15 @@
     <div class="filter-controls">
       <a-row :gutter="[22]">
         <a-col :span="6">
-          <a-form-item label="Search:">
-            <a-input v-model:value="localFilters.name" placeholder="KPI name..." @pressEnter="applyFilters" />
+          <a-form-item :label="$t('search')">
+            <a-input v-model:value="localFilters.name" :placeholder="$t('kpiNamePlaceholder')" @pressEnter="applyFilters" />
           </a-form-item>
         </a-col>
 
         <a-col :span="5">
-          <a-form-item label="Department:">
-            <a-select v-model:value="localFilters.departmentId" style="width: 100%" @change="applyFilters"
-              :disabled="isDepartmentUser">
-              <a-select-option v-if="!isDepartmentUser" :value="null">All Departments</a-select-option>
+          <a-form-item :label="$t('department')">
+            <a-select v-model:value="localFilters.departmentId" style="width: 100%" @change="applyFilters" :disabled="isDepartmentUser">
+              <a-select-option v-if="!isDepartmentUser" :value="null">{{ $t('allDepartments') }}</a-select-option>
               <a-select-option v-for="department in departmentList" :key="department.id" :value="department.id">
                 {{ department.name }}
               </a-select-option>
@@ -31,13 +30,13 @@
         </a-col>
 
         <a-col :span="4">
-          <a-form-item label="Start Date:">
+          <a-form-item :label="$t('startDate')">
             <a-date-picker v-model:value="localFilters.startDate" style="width: 100%" @change="applyFilters" />
           </a-form-item>
         </a-col>
 
         <a-col :span="4">
-          <a-form-item label="End Date:">
+          <a-form-item :label="$t('endDate')">
             <a-date-picker v-model:value="localFilters.endDate" style="width: 100%" @change="applyFilters" />
           </a-form-item>
         </a-col>
@@ -45,44 +44,38 @@
         <a-col :span="5" style="text-align: right">
           <a-button type="primary" :loading="loading" @click="applyFilters">
             <template #icon><filter-outlined /></template>
-            Apply
+            {{ $t('apply') }}
           </a-button>
 
           <a-button style="margin-left: 8px" :loading="loading" @click="resetFilters">
             <template #icon><reload-outlined /></template>
-            Reset
+            {{ $t('reset') }}
           </a-button>
         </a-col>
       </a-row>
     </div>
 
     <div style="margin-top: 20px; margin-bottom: 20px">
-      <a-alert v-if="loading" type="info" message="Loading KPIs..." show-icon>
+      <a-alert v-if="loading" type="info" :message="$t('loadingKpis')" show-icon>
         <template #icon> <a-spin /> </template>
       </a-alert>
 
       <a-alert v-else-if="error" type="error" :message="error" show-icon closable />
 
-      <a-alert v-else-if="isDisplayResult && departmentGroups.length === 0" type="warning"
-        message="No KPIs found matching your criteria." show-icon closable />
+      <a-alert v-else-if="isDisplayResult && departmentGroups.length === 0" type="warning" :message="$t('noKpisFound')" show-icon closable />
 
-      <a-alert v-if="deletedKpiName" type="success" :message="`KPI '${deletedKpiName}' was deleted successfully!`"
-        show-icon closable @close="deletedKpiName = null" />
+      <a-alert v-if="deletedKpiName" type="success" :message="$t('kpiDeleted', { name: deletedKpiName })" show-icon closable @close="deletedKpiName = null" />
     </div>
 
     <div class="data-container">
       <div v-for="(departmentItem, departmentIndex) in departmentGroups" :key="'dept-' + departmentIndex" class="mb-8">
         <h4 style="margin-top: 10px" class="text-lg font-bold mb-2">
-          {{ `Department: ${departmentItem.department}` }}
+          {{ $t('departmentHeader', { name: departmentItem.department }) }}
         </h4>
 
         <a-collapse v-model:activeKey="activePanelKeys" expandIconPosition="end">
-          <a-collapse-panel v-for="(
-              perspectiveGroupRows, perspectiveKey
-            ) in departmentItem.data" :key="'pers-' + departmentIndex + '-' + perspectiveKey"
-            :header="perspectiveKey.split('. ')[1] || perspectiveKey">
-            <a-table :columns="columns" :dataSource="tableData(perspectiveGroupRows)" :pagination="false" rowKey="key"
-              :rowClassName="rowClassName" size="small" bordered>
+          <a-collapse-panel v-for="(perspectiveGroupRows, perspectiveKey) in departmentItem.data" :key="'pers-' + departmentIndex + '-' + perspectiveKey" :header="perspectiveKey.split('. ')[1] || perspectiveKey">
+            <a-table :columns="columns" :dataSource="tableData(perspectiveGroupRows)" :pagination="false" rowKey="key" :rowClassName="rowClassName" size="small" bordered>
               <template #bodyCell="{ column, record }">
                 <template v-if="column.dataIndex === 'kpiName'">
                   <span>{{ record.kpiName }}</span>
@@ -91,7 +84,7 @@
                 <template v-else-if="column.dataIndex === 'chart'">
                   <apexchart type="donut" width="120px" height="100" :options="{
                       chart: { height: 100, type: 'donut' },
-                      labels: ['Actual', 'Remaining'],
+                      labels: [$t('actual'), $t('remaining')],
                       colors: ['#008FFB', '#B9E5FF'],
                       dataLabels: {
                         enabled: true,
@@ -141,7 +134,7 @@
                 </template>
 
                 <template v-else-if="column.dataIndex === 'action'">
-                  <a-tooltip title="View Details">
+                  <a-tooltip :title="$t('viewDetails')">
                     <a-button type="default" class="kpi-actions-button" @click="
                         $router.push({
                           name: 'KpiDetail',
@@ -149,19 +142,19 @@
                           query: { contextDepartmentId: record.departmentId },
                         })
                       ">
-                      <schedule-outlined /> Details
+                      <schedule-outlined /> {{ $t('details') }}
                     </a-button>
                   </a-tooltip>
-                  <a-tooltip title="Copy KPI">
+                  <a-tooltip :title="$t('copyKpi')">
                     <a-button type="dashed" size="small" @click="handleCopyKpi(record)">
-                      <copy-outlined /> Copy
+                      <copy-outlined /> {{ $t('copy') }}
                     </a-button>
                   </a-tooltip>
-                  <a-tooltip title="Delete KPI">
+                  <a-tooltip :title="$t('deleteKpi')">
                     <a-button danger class="kpi-actions-button" @click="
                         showConfirmDeleteDialog(record.key, record.kpiName)
                       ">
-                      <delete-outlined /> Delete
+                      <delete-outlined /> {{ $t('delete') }}
                     </a-button>
                   </a-tooltip>
                 </template>
@@ -170,9 +163,8 @@
           </a-collapse-panel>
         </a-collapse>
 
-        <a-modal danger v-model:open="isDeleteModalVisible" title="Confirm Dialog" @ok="handleDeleteKpi"
-          @cancel="isDeleteModalVisible = false">
-          <p>Are you sure to delete assignment for "{{ selectedKpiName }}"?</p>
+        <a-modal danger v-model:open="isDeleteModalVisible" :title="$t('confirmDialog')" @ok="handleDeleteKpi" @cancel="isDeleteModalVisible = false">
+          <p>{{ $t('confirmDeleteAssignment', { name: selectedKpiName }) }}</p>
         </a-modal>
       </div>
     </div>
@@ -184,6 +176,7 @@
 import { reactive, computed, onMounted, ref, watch } from "vue";
 import { useStore } from "vuex";
 import { useRouter } from "vue-router";
+import { useI18n } from 'vue-i18n';
 import {
   PlusOutlined,
   FilterOutlined,
@@ -197,6 +190,7 @@ import { KpiDefinitionStatus } from "@/core/constants/kpiStatus";
 
 const store = useStore();
 const router = useRouter();
+const { t: $t } = useI18n();
 
 const effectiveRole = computed(() => store.getters["auth/effectiveRole"]);
 const currentUser = computed(() => store.getters["auth/currentUser"]);
@@ -226,59 +220,59 @@ const localFilters = reactive({
   endDate: "",
 });
 
-const columns = [
+const columns = computed(() => [
   {
-    title: "KPI Name",
+    title: $t('kpiName'),
     dataIndex: "kpiName",
     key: "kpiName",
     width: "15%",
   },
   {
-    title: "Current Progress",
+    title: $t('currentProgress'),
     dataIndex: "chart",
     key: "chart",
     width: "10%",
   },
   {
-    title: "Assigned To",
+    title: $t('assignedTo'),
     dataIndex: "assignTo",
     key: "assignTo",
     width: "10%",
   },
   {
-    title: "Start Date",
+    title: $t('startDate'),
     dataIndex: "startDate",
     key: "startDate",
     width: "7%",
   },
-  { title: "End Date", dataIndex: "endDate", key: "endDate", width: "7%" },
-  { title: "Weight", dataIndex: "weight", key: "weight", width: "6%" },
+  { title: $t('endDate'), dataIndex: "endDate", key: "endDate", width: "7%" },
+  { title: $t('weight'), dataIndex: "weight", key: "weight", width: "6%" },
   {
-    title: "Target",
+    title: $t('target'),
     dataIndex: "target",
     key: "target",
     width: "6%",
   },
   {
-    title: "Actual",
+    title: $t('actual'),
     dataIndex: "actual",
     key: "actual",
     width: "6%",
   },
   {
-    title: "Status",
+    title: $t('status'),
     dataIndex: "status",
     key: "status",
     width: "6%",
   },
   {
-    title: "Action",
+    title: $t('action'),
     dataIndex: "action",
     key: "action",
     width: "13%",
     rowClassName: "action-column-cell",
   },
-];
+]);
 
 const tableData = (perspectiveGroupRowsArray) => {
   return perspectiveGroupRowsArray;

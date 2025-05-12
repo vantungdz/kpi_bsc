@@ -1,16 +1,16 @@
 <template>
     <div class="user-activity-statistics-container">
         <a-breadcrumb style="margin-bottom: 16px">
-            <a-breadcrumb-item><router-link to="/dashboard">Dashboard Tổng Quan</router-link></a-breadcrumb-item>
-            <a-breadcrumb-item>Thống kê Hoạt động Người dùng</a-breadcrumb-item>
+            <a-breadcrumb-item><router-link to="/dashboard">{{ $t('dashboardOverview') }}</router-link></a-breadcrumb-item>
+            <a-breadcrumb-item>{{ $t('userActivityStatistics') }}</a-breadcrumb-item>
         </a-breadcrumb>
-        <h1>Thống kê Hoạt động Người dùng</h1>
+        <h1>{{ $t('userActivityStatisticsTitle') }}</h1>
 
         <!-- 1. Người dùng/Bộ phận có nhiều KPI đang chờ duyệt nhất -->
-        <a-card title="Top Người duyệt/Bộ phận có nhiều KPI chờ duyệt nhất" class="dashboard-card">
+        <a-card :title="$t('topPendingApprovers')" class="dashboard-card">
             <a-row :gutter="[16, 16]">
                 <a-col v-if="topPendingApproversError" :span="24">
-                    <a-alert message="Lỗi" :description="topPendingApproversError" type="error" show-icon />
+                    <a-alert :message="$t('error')" :description="topPendingApproversError" type="error" show-icon />
                 </a-col>
                 <template v-if="!topPendingApproversError">
                     <a-col :span="24">
@@ -34,28 +34,26 @@
                                                         {{ formatApproverType(item.approverType) }}
                                                     </a-tag>
                                                 </span>
-                                                <span class="item-count"><strong>{{ item.pendingCount }}</strong> KPI chờ
-                                                    duyệt</span>
+                                                <span class="item-count"><strong>{{ item.pendingCount }}</strong> {{ $t('pendingKpiCount') }}</span>
                                             </div>
                                             <div v-if="isExpanded(item.approverId, 'approvers')"
                                                 class="expanded-details">
                                                 <div v-if="item.pendingKpis && item.pendingKpis.length > 0"
                                                     class="recent-kpis-list">
-                                                    <small>Các KPI đang chờ duyệt (tối đa 5):</small>
+                                                    <small>{{ $t('recentPendingKpis') }}</small>
                                                     <ul>
                                                         <li v-for="kpi_detail in item.pendingKpis"
                                                             :key="kpi_detail.kpiValueId">
                                                             <a @click="navigateToApproval(kpi_detail.kpiValueId, kpi_detail.kpiId)"
-                                                                :title="`KPI: ${kpi_detail.kpiName} (ID: ${kpi_detail.kpiId})\nNgười nộp: ${kpi_detail.submittedBy}`">
+                                                                :title="`${$t('kpi')}: ${kpi_detail.kpiName} (ID: ${kpi_detail.kpiId})\n${$t('submittedBy')}: ${kpi_detail.submittedBy}`">
                                                                 {{ kpi_detail.kpiName }} (ID: {{ kpi_detail.kpiId }})
-                                                                <span v-if="kpi_detail.submittedBy" style="font-size: 0.9em; color: #777;"> - Nộp bởi: {{ kpi_detail.submittedBy }}</span>
+                                                                <span v-if="kpi_detail.submittedBy" style="font-size: 0.9em; color: #777;"> - {{ $t('submittedBy') }}: {{ kpi_detail.submittedBy }}</span>
                                                             </a>
                                                         </li>
                                                     </ul>
                                                 </div>
                                                 <div v-else class="recent-kpis-list">
-                                                    <small>Không có thông tin chi tiết KPI chờ duyệt hoặc đã xử lý
-                                                        hết.</small>
+                                                    <small>{{ $t('noPendingKpiDetails') }}</small>
                                                 </div>
                                             </div>
                                         </div>
@@ -64,7 +62,7 @@
                             </a-list>
                             <div v-else-if="!isLoadingTopPendingApprovers && topPendingApproversStats.length === 0"
                                 class="empty-list">
-                                Không có dữ liệu về người duyệt/bộ phận đang chờ duyệt.
+                                {{ $t('noPendingApproversData') }}
                             </div>
                         </a-skeleton>
                     </a-col>
@@ -84,10 +82,10 @@
 
 
         <!-- 2. Người dùng/Bộ phận submit KPI nhiều nhất/ít nhất -->
-        <a-card title="Thống kê Submit KPI" class="dashboard-card card-submission-stats">
+        <a-card :title="$t('kpiSubmissionStats')" class="dashboard-card card-submission-stats">
             <a-row :gutter="[16, 16]" style="margin-bottom: 16px;">
                 <a-col :xs="24" :sm="12" :md="12"> 
-                    <label>Loại đối tượng: </label>
+                    <label>{{ $t('entityType') }}: </label>
                     <a-radio-group v-model:value="kpiSubmissionFilters.entityType" button-style="solid" size="small">
                         <a-radio-button v-for="option in entityTypeOptions" :key="option.value" :value="option.value">
                             {{ option.label }}
@@ -95,7 +93,7 @@
                     </a-radio-group>
                 </a-col>
                 <a-col :xs="24" :sm="12" :md="12">  
-                    <label>Sắp xếp theo: </label>
+                    <label>{{ $t('orderBy') }}: </label>
                     <a-radio-group v-model:value="kpiSubmissionFilters.orderBy" button-style="solid" size="small">
                         <a-radio-button v-for="option in orderByOptions" :key="option.value" :value="option.value">
                             {{ option.label }}
@@ -103,7 +101,7 @@
                     </a-radio-group>
                 </a-col>
                 <a-col :xs="24" :sm="24" :md="8">
-                    <label>Trong: </label>
+                    <label>{{ $t('within') }}: </label>
                     <a-select v-model:value="kpiSubmissionFilters.days" style="width: 100%" size="small">
                         <a-select-option v-for="option in daysOptions" :key="option.value" :value="option.value">
                             {{ option.label }}
@@ -111,12 +109,12 @@
                     </a-select>
                 </a-col>
                 <a-col :xs="24" :sm="12" :md="8"> 
-                    <label>Top: </label>
+                    <label>{{ $t('top') }}: </label>
                     <a-input-number v-model:value="kpiSubmissionFilters.limit" :min="1" :max="50" style="width: 100%"
                         size="small" />
                 </a-col>
                 <a-col :xs="24" :sm="12" :md="8"> 
-                    <label>Số KPI gần nhất: </label>
+                    <label>{{ $t('recentKpisLimit') }}: </label>
                     <a-input-number v-model:value="kpiSubmissionFilters.recentKpisLimit" :min="0" :max="10"
                         style="width: 100%" size="small" />
                 </a-col>
@@ -124,7 +122,7 @@
 
             <a-row :gutter="[16, 16]">
                 <a-col v-if="kpiSubmissionStatsError" :span="24">
-                    <a-alert message="Lỗi" :description="kpiSubmissionStatsError" type="error" show-icon />
+                    <a-alert :message="$t('error')" :description="kpiSubmissionStatsError" type="error" show-icon />
                 </a-col>
                 <template v-if="!kpiSubmissionStatsError">
                     <a-col :span="24">
@@ -147,34 +145,30 @@
                                                 <span class="item-id"
                                                     v-if="kpiSubmissionFilters.entityType !== 'user' && item.id"> (ID:
                                                     {{ item.id }})</span>
-                                                <span class="item-count"><strong>{{ item.count }}</strong> lượt
-                                                    submit</span>
+                                                <span class="item-count"><strong>{{ item.count }}</strong> {{ $t('submissionCount') }}</span>
                                             </div>
                                             <div v-if="kpiSubmissionFilters.recentKpisLimit > 0 && isKpiSubmissionItemExpanded(item.id || index)"
                                                 class="expanded-details">
                                                 <div v-if="item.recentSubmittedKpis && item.recentSubmittedKpis.length > 0"
                                                     class="recent-kpis-list">
-                                                    <small>Các KPI đã submit (tối đa {{ item.recentSubmittedKpis.length
-                                                        }} KPI gần nhất):</small>
+                                                    <small>{{ $t('recentSubmittedKpis', { count: item.recentSubmittedKpis.length }) }}</small>
                                                     <ul>
                                                         <li v-for="kpi_detail in item.recentSubmittedKpis"
                                                             :key="kpi_detail.kpiId">
                                                             <a-tooltip
-                                                                :title="`Thời gian Submit: ${new Date(kpi_detail.submittedAt).toLocaleString()}`"> 
+                                                                :title="`${$t('submittedAt')}: ${new Date(kpi_detail.submittedAt).toLocaleString()}`"> 
                                                                 {{ kpi_detail.kpiName }}
                                                             </a-tooltip>
                                                         </li>
                                                     </ul>
                                                 </div>
                                                 <div v-else class="recent-kpis-list">
-                                                    <small>Không có KPI nào được submit gần đây trong khoảng thời gian
-                                                        đã chọn.</small>
+                                                    <small>{{ $t('noRecentSubmittedKpis') }}</small>
                                                 </div>
                                             </div>
                                             <div v-else-if="kpiSubmissionFilters.recentKpisLimit === 0 && isKpiSubmissionItemExpanded(item.id || index)"
                                                 class="expanded-details recent-kpis-list">
-                                                <small>Để xem chi tiết KPI đã submit, vui lòng đặt "Số KPI gần nhất" lớn
-                                                    hơn 0.</small>
+                                                <small>{{ $t('setRecentKpisLimit') }}</small>
                                             </div>
                                         </div>
                                     </a-list-item>
@@ -182,7 +176,7 @@
                             </a-list>
                             <div v-else-if="!isLoadingKpiSubmissionStats && kpiSubmissionStats.length === 0"
                                 class="empty-list">
-                                Không có dữ liệu submit KPI theo bộ lọc hiện tại.
+                                {{ $t('noKpiSubmissionData') }}
                             </div>
                         </a-skeleton>
                     </a-col>
@@ -205,6 +199,7 @@
 <script setup>
 import { computed, onMounted, reactive, watch, ref } from "vue";
 import { useStore } from "vuex";
+import { useI18n } from "vue-i18n";
 import { useRouter } from 'vue-router';
 import {
     Alert as AAlert,
@@ -223,6 +218,7 @@ import {
 import BarChart from "@/core/components/common/BarChart.vue"; 
 import { DownOutlined, RightOutlined } from '@ant-design/icons-vue';
 
+const { t: $t } = useI18n();
 const store = useStore();
 const router = useRouter();
 
@@ -232,9 +228,9 @@ const isLoadingTopPendingApprovers = computed(() => store.getters["dashboard/isL
 const topPendingApproversError = computed(() => store.getters["dashboard/getTopPendingApproversError"]);
 
 const formatApproverType = (type) => {
-    if (type === 'user') return 'Người dùng/Nhóm';
-    if (type === 'department') return 'Phòng ban';
-    if (type === 'section') return 'Bộ phận';
+    if (type === 'user') return $t('userOrGroup');
+    if (type === 'department') return $t('department');
+    if (type === 'section') return $t('section');
     return type;
 };
 
@@ -287,21 +283,21 @@ const toggleKpiSubmissionExpand = (itemId) => {
 };
 const isKpiSubmissionItemExpanded = (itemId) => isExpanded(itemId, 'submission');
 
-const entityTypeOptions = [
-  { label: 'Người dùng', value: 'user' },
-  { label: 'Bộ phận', value: 'section' },
-  { label: 'Phòng ban', value: 'department' },
-];
+const entityTypeOptions = computed(() => [
+  { label: $t('user'), value: 'user' },
+  { label: $t('section'), value: 'section' },
+  { label: $t('department'), value: 'department' },
+]);
 
-const orderByOptions = [
-  { label: 'Nhiều nhất', value: 'most' },
-  { label: 'Ít nhất', value: 'least' },
-];
+const orderByOptions = computed(() => [
+  { label: $t('most'), value: 'most' },
+  { label: $t('least'), value: 'least' },
+]);
 
 const daysOptions = [
-  { label: '7 ngày qua', value: 7 },
-  { label: '30 ngày qua', value: 30 },
-  { label: '90 ngày qua', value: 90 },
+  { label: $t('last7Days'), value: 7 },
+  { label: $t('last30Days'), value: 30 },
+  { label: $t('last90Days'), value: 90 },
 ];
 
 function fetchKpiSubmissionData() {
@@ -334,7 +330,7 @@ const topPendingApproversChartData = computed(() => {
     labels: labels,
     datasets: [
       {
-        label: 'Số KPI chờ duyệt',
+        label: $t('pendingKpiCountLabel'),
         backgroundColor: backgroundColors.slice(0, data.length), 
         borderColor: borderColors.slice(0, data.length),         
         borderWidth: 1,
@@ -356,7 +352,7 @@ const topPendingApproversChartOptions = computed(() => ({
     },
     title: {
       display: true,
-      text: 'Biểu đồ Top Người duyệt/Bộ phận có nhiều KPI chờ duyệt nhất',
+      text: $t('topPendingApproversChartTitle'),
       font: {
         size: 16
       }
@@ -364,20 +360,20 @@ const topPendingApproversChartOptions = computed(() => ({
     tooltip: {
       callbacks: {
         label: function(context) {
-          return `${context.dataset.label}: ${context.parsed.x} KPI`;
+          return `${context.dataset.label}: ${context.parsed.x} ${$t('kpi')}`;
         }
       }
     }
   },
   scales: {
-    x: { beginAtZero: true, ticks: { precision: 0 }, title: { display: true, text: 'Số lượng KPI' }},
+    x: { beginAtZero: true, ticks: { precision: 0 }, title: { display: true, text: $t('kpiCount') }},
     y: { ticks: { autoSkip: false } } 
   },
 }));
 
 
 const kpiSubmissionChartData = computed(() => {
-  const labels = kpiSubmissionStats.value.map(item => item.name || 'Không xác định');
+  const labels = kpiSubmissionStats.value.map(item => item.name || $t('undefined'));
   const data = kpiSubmissionStats.value.map(item => item.count);
 
   
@@ -395,7 +391,7 @@ const kpiSubmissionChartData = computed(() => {
     labels: labels,
     datasets: [
       {
-        label: `Số lượt submit (${kpiSubmissionFilters.orderBy === 'most' ? 'Nhiều nhất' : 'Ít nhất'})`,
+        label: $t('submissionCountLabel', { orderBy: kpiSubmissionFilters.orderBy === 'most' ? $t('most') : $t('least') }),
         backgroundColor: backgroundColors.slice(0, data.length),
         borderColor: borderColors.slice(0, data.length),
         borderWidth: 1,
@@ -418,12 +414,12 @@ const kpiSubmissionChartOptions = computed(() => ({
     },
     title: {
       display: true,
-      text: `Biểu đồ Submit KPI (${kpiSubmissionFilters.entityType === 'user' ? 'Người dùng' : kpiSubmissionFilters.entityType === 'section' ? 'Bộ phận' : 'Phòng ban'})`,
+      text: $t('kpiSubmissionChartTitle', { entityType: kpiSubmissionFilters.entityType === 'user' ? $t('user') : kpiSubmissionFilters.entityType === 'section' ? $t('section') : $t('department') }),
       font: { size: 16 }
     },
   },
   scales: {
-    x: { beginAtZero: true, ticks: { precision: 0 }, title: { display: true, text: 'Số lượt submit' } },
+    x: { beginAtZero: true, ticks: { precision: 0 }, title: { display: true, text: $t('submissionCount') } },
     y: { ticks: { autoSkip: false } }
   },
 }));

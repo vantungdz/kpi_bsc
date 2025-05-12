@@ -1,14 +1,14 @@
 <template>
   <div class="kpi-value-approval-list-page">
     <a-card :title="cardTitle" :bordered="false">
-      <a-spin :spinning="isLoadingPending" tip="Đang tải danh sách...">
+      <a-spin :spinning="isLoadingPending" :tip="$t('loadingList')">
         <a-alert
           v-if="loadingError"
           type="error"
           show-icon
           closable
           style="margin-bottom: 16px"
-          :message="loadingError"
+          :message="$t('loadingError')"
           @close="loadingError = null"
         />
 
@@ -24,7 +24,7 @@
           <template #bodyCell="{ column, record }">
             <template v-if="column.key === 'kpiName'">
               <a-tooltip :title="record.kpiAssignment?.kpi?.name">
-                <span>{{ record.kpiAssignment?.kpi?.name || "N/A" }}</span>
+                <span>{{ record.kpiAssignment?.kpi?.name || "" }}</span>
               </a-tooltip>
             </template>
 
@@ -32,12 +32,12 @@
               <span>
                 {{ record.kpiAssignment?.employee?.first_name || "" }}
                 {{ record.kpiAssignment?.employee?.last_name || "" }}
-                ({{ record.kpiAssignment?.employee?.username || "N/A" }})
+                ({{ record.kpiAssignment?.employee?.username || "" }})
               </span>
             </template>
 
             <template v-else-if="column.key === 'value'">
-              {{ record.value?.toLocaleString() ?? "N/A" }}
+              {{ record.value?.toLocaleString() ?? "" }}
               <span v-if="record.kpiAssignment?.kpi?.unit">
                 {{ record.kpiAssignment.kpi.unit }}</span
               >
@@ -55,7 +55,7 @@
                   {{ record.kpiAssignment.kpi.unit }}</span
                 >
               </span>
-              <span v-else>N/A</span>
+              <span v-else></span>
             </template>
 
             <template v-else-if="column.key === 'submittedAt'">
@@ -84,9 +84,9 @@
                   type="link"
                   size="small"
                   @click="openDetailModal(record)"
-                  title="Xem Chi tiết & Lịch sử"
+                  :title="$t('viewDetailsAndHistory')"
                 >
-                  <eye-outlined /> Chi tiết
+                  <eye-outlined /> {{ $t('details') }}
                 </a-button>
                 <a-button
                   type="primary"
@@ -94,18 +94,18 @@
                   @click="handleApprove(record.id)"
                   :loading="isProcessing && currentActionItemId === record.id"
                   :disabled="isProcessing && currentActionItemId !== record.id"
-                  title="Phê duyệt"
+                  :title="$t('approve')"
                 >
-                  <check-outlined /> Approve
+                  <check-outlined /> {{ $t('approve') }}
                 </a-button>
                 <a-button
                   danger
                   size="small"
                   @click="openRejectModal(record)"
                   :disabled="isProcessing"
-                  title="Từ chối"
+                  :title="$t('reject')"
                 >
-                  <close-outlined /> Reject
+                  <close-outlined /> {{ $t('reject') }}
                 </a-button>
               </a-space>
             </template>
@@ -114,21 +114,21 @@
 
         <a-empty
           v-if="!loadingError && pendingItems.length === 0"
-          description="Không có mục nào đang chờ duyệt."
+          :description="$t('noPendingItems')"
         />
       </a-spin>
     </a-card>
 
     <a-modal
       :open="isRejectModalVisible"
-      title="Lý do từ chối"
+      :title="$t('rejectReason')"
       @ok="handleReject"
       @cancel="closeRejectModal"
       :confirm-loading="
         isProcessing && currentActionItemId === itemToReject?.id
       "
-      ok-text="Xác nhận Từ chối"
-      cancel-text="Hủy"
+      :ok-text="$t('confirmReject')"
+      :cancel-text="$t('cancel')"
       :maskClosable="false"
       destroyOnClose
       @afterClose="resetRejectModalState"
@@ -141,23 +141,20 @@
         style="margin-bottom: 10px"
       />
       <p v-if="itemToReject" style="margin-bottom: 10px">
-        Từ chối giá trị
-        <strong>{{ itemToReject.value?.toLocaleString() }}</strong> cho KPI
-        <strong>"{{ itemToReject.kpiAssignment?.kpi?.name }}"</strong> của nhân
-        viên
-        <strong
-          >{{ itemToReject.kpiAssignment?.employee?.first_name }}
-          {{ itemToReject.kpiAssignment?.employee?.last_name }}</strong
-        >?
+        {{ $t('rejectValueForKpi', {
+          value: itemToReject.value?.toLocaleString(),
+          kpiName: itemToReject.kpiAssignment?.kpi?.name,
+          employeeName: `${itemToReject.kpiAssignment?.employee?.first_name} ${itemToReject.kpiAssignment?.employee?.last_name}`,
+        }) }}
       </p>
       <a-form-item
-        label="Lý do (bắt buộc):"
+        :label="$t('reasonRequired')"
         :validate-status="rejectError ? 'error' : ''"
         :help="rejectError"
       >
         <a-textarea
           v-model:value="rejectionReason"
-          placeholder="Nhập lý do từ chối..."
+          :placeholder="$t('enterRejectReason')"
           :rows="4"
         />
       </a-form-item>
@@ -165,24 +162,24 @@
 
     <a-modal
       :open="isDetailModalVisible"
-      title="Chi tiết và Lịch sử Cập nhật KPI"
+      :title="$t('detailsAndHistory')"
       @cancel="closeDetailModal"
       :width="1000"
       :footer="null"
       destroyOnClose
       @afterClose="resetDetailModalState"
     >
-      <a-spin :spinning="!selectedKpiValue" tip="Đang tải chi tiết...">
+      <a-spin :spinning="!selectedKpiValue" :tip="$t('loadingDetails')">
         <div v-if="selectedKpiValue">
           <a-descriptions bordered size="small" :column="2">
-            <a-descriptions-item label="Tên KPI">{{
+            <a-descriptions-item :label="$t('kpiName')">{{
               selectedKpiValue.kpiAssignment?.kpi?.name || ""
             }}</a-descriptions-item>
-            <a-descriptions-item label="Nhân viên">{{
+            <a-descriptions-item :label="$t('employee')">{{
               `${selectedKpiValue.kpiAssignment?.employee?.first_name || ""}
               ${selectedKpiValue.kpiAssignment?.employee?.last_name || ""}`
             }}</a-descriptions-item>
-            <a-descriptions-item label="Target Giao"
+            <a-descriptions-item :label="$t('assignedTarget')"
               >{{
                 selectedKpiValue.kpiAssignment?.targetValue?.toLocaleString()
               }}
@@ -190,36 +187,36 @@
                 selectedKpiValue.kpiAssignment?.kpi?.unit
               }}</a-descriptions-item
             >
-            <a-descriptions-item label="Đơn vị Tính">{{
+            <a-descriptions-item :label="$t('unit')">{{
               selectedKpiValue.kpiAssignment?.kpi?.unit || ""
             }}</a-descriptions-item>
           </a-descriptions>
 
           <a-descriptions
-            title="Chi tiết Lần Submit Hiện tại"
+            :title="$t('currentSubmissionDetails')"
             bordered
             size="small"
             :column="1"
             style="margin-top: 16px"
           >
-            <a-descriptions-item label="Trạng thái Hiện tại">
+            <a-descriptions-item :label="$t('currentStatus')">
               <a-tag :color="getValueStatusColor(selectedKpiValue.status)">
                 {{ getValueStatusText(selectedKpiValue.status) }}
               </a-tag>
             </a-descriptions-item>
-            <a-descriptions-item label="Giá trị Nộp">{{
+            <a-descriptions-item :label="$t('submittedValue')">{{
               selectedKpiValue.value?.toLocaleString() ?? ""
             }}</a-descriptions-item>
-            <a-descriptions-item label="Thời gian Nộp/Cập nhật">{{
+            <a-descriptions-item :label="$t('submissionTime')">{{
               formatDate(
                 selectedKpiValue.timestamp || selectedKpiValue.updated_at
               )
             }}</a-descriptions-item>
-            <a-descriptions-item label="Ghi chú (Notes)">{{
-              selectedKpiValue.notes || "Không có"
+            <a-descriptions-item :label="$t('notes')">{{
+              selectedKpiValue.notes || $t('noNotes')
             }}</a-descriptions-item>
 
-            <a-descriptions-item label="Chi tiết Dự án/Công việc">
+            <a-descriptions-item :label="$t('projectOrTaskDetails')">
               <div
                 v-if="
                   Array.isArray(selectedKpiValue.project_details) &&
@@ -237,16 +234,16 @@
                 >
                   <template #bodyCell="{ column, record }">
                     <template v-if="column.key === 'value'">
-                      {{ record.value?.toLocaleString() ?? "N/A" }}
+                      {{ record.value?.toLocaleString() ?? "" }}
                     </template>
                   </template>
                 </a-table>
               </div>
-              <span v-else>Không có chi tiết dự án/công việc.</span>
+              <span v-else>{{ $t('noProjectDetails') }}</span>
             </a-descriptions-item>
 
             <a-descriptions-item
-              label="Lý do Từ chối (nếu có)"
+              :label="$t('rejectionReasonIfAny')"
               v-if="selectedKpiValue.rejection_reason"
             >
               <span style="color: red">{{
@@ -256,9 +253,9 @@
           </a-descriptions>
 
           <h3 style="margin-top: 20px; margin-bottom: 10px">
-            Lịch sử Cập nhật/Phê duyệt
+            {{ $t('updateApprovalHistory') }}
           </h3>
-          <a-spin :spinning="isLoadingHistory" tip="Đang tải lịch sử...">
+          <a-spin :spinning="isLoadingHistory" :tip="$t('loadingHistory')">
             <a-alert
               v-if="historyError"
               type="error"
@@ -290,7 +287,7 @@
                 <template v-else-if="column.key === 'noteOrReason'">
                   <a-tooltip v-if="record.reason" :title="record.reason">
                     <span style="color: red"
-                      >Lý do: {{ truncateText(record.reason, 70) }}</span
+                      >{{ $t('reason') }}: {{ truncateText(record.reason, 70) }}</span
                     >
                   </a-tooltip>
                   <a-tooltip v-else-if="record.notes" :title="record.notes">
@@ -306,13 +303,13 @@
                   <span v-else-if="record.changed_by">
                     ID: {{ record.changed_by }}
                   </span>
-                  <span v-else>N/A</span>
+                  <span v-else></span>
                 </template>
               </template>
             </a-table>
             <a-empty
               v-if="!historyError && kpiValueHistory.length === 0"
-              description="Không có lịch sử."
+              :description="$t('noHistory')"
             />
           </a-spin>
         </div>
@@ -352,9 +349,15 @@ import dayjs from "dayjs";
 // Constants
 import {
   KpiValueStatus,
-  KpiValueStatusText,
   KpiValueStatusColor,
 } from "@/core/constants/kpiStatus";
+import { getKpiValueStatusText } from '@/core/constants/kpiStatus';
+import { useI18n } from 'vue-i18n';
+
+const { t: $t } = useI18n();
+const KpiValueStatusText = getKpiValueStatusText({ t: $t });
+
+console.log("KpiValueStatus:", KpiValueStatus);
 
 // Store instance
 const store = useStore();
@@ -383,58 +386,58 @@ const currentUser = computed(() => store.getters["auth/user"]);
 // Computed card title based on user role
 const cardTitle = computed(() => {
   const role = currentUser.value?.role;
-  if (role === "admin") return "Quản lý Phê duyệt Giá trị KPI (Admin)";
-  if (role === "manager") return "Giá trị KPI chờ Manager/Department duyệt";
-  if (role === "leader") return "Giá trị KPI chờ Section duyệt";
-  return "Danh sách chờ duyệt";
+  if (role === "admin") return $t('adminApprovalTitle');
+  if (role === "manager") return $t('managerApprovalTitle');
+  if (role === "leader") return $t('leaderApprovalTitle');
+  return $t('defaultApprovalTitle');
 });
 
 // Table columns definitions extracted outside component logic
-const columns = ref([
+const columns = computed(() => [
   {
-    title: "Tên KPI",
+    title: $t('kpiName'),
     dataIndex: ["kpiAssignment", "kpi", "name"],
     key: "kpiName",
     width: 200,
     ellipsis: true,
   },
-  { title: "Nhân viên", key: "employee", width: 150, ellipsis: true },
+  { title: $t('employee'), key: "employee", width: 150, ellipsis: true },
   {
-    title: "Giá trị Nộp",
+    title: $t('submittedValue'),
     dataIndex: "value",
     key: "value",
     align: "right",
     width: 120,
   },
   {
-    title: "Target",
+    title: $t('target'),
     dataIndex: ["kpiAssignment", "targetValue"],
     key: "target",
     align: "right",
     width: 120,
   },
   {
-    title: "Ngày Submit",
+    title: $t('submissionDate'),
     dataIndex: "timestamp",
     key: "submittedAt",
     width: 140,
   },
   {
-    title: "Ghi chú",
+    title: $t('notes'),
     dataIndex: "notes",
     key: "notes",
     width: 150,
     ellipsis: true,
   },
   {
-    title: "Trạng thái",
+    title: $t('status'),
     dataIndex: "status",
     key: "status",
     width: 180,
     align: "center",
   },
   {
-    title: "Hành động",
+    title: $t('actions'),
     key: "actions",
     align: "center",
     width: 180,
@@ -442,32 +445,32 @@ const columns = ref([
   },
 ]);
 
-const historyColumns = ref([
-  { title: "Thời gian", key: "timestamp", width: 140 },
-  { title: "Hành động", dataIndex: "action", key: "action", width: 180 },
+const historyColumns = computed(() => [
+  { title: $t('timestamp'), key: 'timestamp', width: 140 },
+  { title: $t('action'), dataIndex: 'action', key: 'action', width: 180 },
   {
-    title: "Giá trị",
-    dataIndex: "value",
-    key: "value",
-    align: "right",
+    title: $t('value'),
+    dataIndex: 'value',
+    key: 'value',
+    align: 'right',
     width: 100,
   },
-  { title: "Ghi chú / Lý do", key: "noteOrReason", ellipsis: true },
-  { title: "Người thực hiện", key: "changed_by", width: 150 },
+  { title: $t('noteOrReason'), key: 'noteOrReason', ellipsis: true },
+  { title: $t('changedBy'), key: 'changed_by', width: 150 },
 ]);
 
-const projectDetailsColumns = ref([
+const projectDetailsColumns = computed(() => [
   {
-    title: "Tên Dự án/Công việc",
-    dataIndex: "name",
-    key: "name",
+    title: $t('projectOrTaskName'),
+    dataIndex: 'name',
+    key: 'name',
     ellipsis: true,
   },
   {
-    title: "Giá trị",
-    dataIndex: "value",
-    key: "value",
-    align: "right",
+    title: $t('value'),
+    dataIndex: 'value',
+    key: 'value',
+    align: 'right',
     width: 100,
   },
 ]);
@@ -475,23 +478,23 @@ const projectDetailsColumns = ref([
 // Utility functions with comments
 const getActionText = (actionKey) => {
   const map = {
-    SUBMIT_CREATE: "Tạo & Gửi duyệt",
-    SUBMIT_UPDATE: "Cập nhật & Gửi duyệt", // Hoặc chỉ 'Gửi duyệt lại'?
-    APPROVE_SECTION: "Section Đã duyệt",
-    REJECT_SECTION: "Section Đã từ chối",
-    APPROVE_DEPT: "Department Đã duyệt",
-    REJECT_DEPT: "Department Đã từ chối",
-    APPROVE_MANAGER: "Manager/Admin Đã duyệt",
-    REJECT_MANAGER : "Manager/Admin Đã từ chối",
-    CREATE: "Tạo mới",
-    UPDATE: "Cập nhật",
-    DELETE: "Xóa",
+    SUBMIT_CREATE: $t('submitCreate'),
+    SUBMIT_UPDATE: $t('submitUpdate'),
+    APPROVE_SECTION: $t('approveSection'),
+    REJECT_SECTION: $t('rejectSection'),
+    APPROVE_DEPT: $t('approveDept'),
+    REJECT_DEPT: $t('rejectDept'),
+    APPROVE_MANAGER: $t('approveManager'),
+    REJECT_MANAGER: $t('rejectManager'),
+    CREATE: $t('create'),
+    UPDATE: $t('update'),
+    DELETE: $t('delete'),
   };
-  return map[actionKey?.toUpperCase()] || actionKey || "Không rõ";
+  return map[actionKey?.toUpperCase()] || actionKey || $t('unknown');
 };
 
 const formatDate = (dateString) => {
-  if (!dateString) return "N/A";
+  if (!dateString) return "";
   return dayjs(dateString).format("YYYY-MM-DD HH:mm");
 };
 
@@ -501,6 +504,7 @@ const truncateText = (text, length) => {
 };
 
 const getValueStatusText = (status) => {
+  console.log("getValueStatusText called with status:", status);
   return KpiValueStatusText[status] || status || "Không xác định";
 };
 
@@ -543,6 +547,11 @@ const handleApprove = async (valueId) => {
   currentActionItemId.value = valueId;
   let actionName = null;
   console.log(`Item Status to Approve: ${item.status}`);
+
+  if (!KpiValueStatus.PENDING_DEPT_APPROVAL) {
+    console.error("KpiValueStatus.PENDING_DEPT_APPROVAL is undefined");
+    return;
+  }
 
   switch (item.status) {
     case KpiValueStatus.PENDING_SECTION_APPROVAL:

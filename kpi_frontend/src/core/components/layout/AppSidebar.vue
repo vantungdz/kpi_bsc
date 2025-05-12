@@ -1,89 +1,89 @@
 <template>
   <a-layout-sider collapsible theme="light" class="app-sidebar-component">
     <div class="logo-area">
-      <img src="../../assets/logo.png" alt="Logo" class="sidebar-logo" />
+      <img src="../../assets/logo.png" :alt="$t('logoAlt')" class="sidebar-logo" />
     </div>
 
     <a-menu theme="light" mode="inline" class="menu-list">
       <a-menu-item key="dashboard" v-if="canViewDashboard">
         <router-link to="/dashboard">
           <dashboard-outlined />
-          <span>Dashboard</span>
+          <span>{{ $t('dashboard') }}</span>
         </router-link>
       </a-menu-item>
 
       <a-menu-item key="performance" v-if="effectiveRole">
         <router-link to="/performance">
           <bar-chart-outlined />
-          <span>Performance Objectives</span>
+          <span>{{ $t('performanceObjectives') }}</span>
         </router-link>
       </a-menu-item>
 
       <a-menu-item key="employees" v-if="canViewDashboard">
         <router-link to="/employees">
           <team-outlined />
-          <span>Employee List</span>
+          <span>{{ $t('employeeList') }}</span>
         </router-link>
       </a-menu-item>
 
       <a-menu-item key="evaluation" v-if="effectiveRole">
         <router-link to="/kpi/review">
           <solution-outlined />
-          <span>Evaluation</span>
+          <span>{{ $t('evaluation') }}</span>
         </router-link>
       </a-menu-item>
 
       <a-menu-item key="kpis-company" v-if="canViewCompanyLevel">
         <router-link to="/kpis/company">
           <global-outlined />
-          <span>Company KPI List</span>
+          <span>{{ $t('companyKpiList') }}</span>
         </router-link>
       </a-menu-item>
 
       <a-menu-item key="kpis-department" v-if="canViewDepartmentLevel">
         <router-link to="/kpis/department">
           <apartment-outlined />
-          <span>Department KPI List</span>
+          <span>{{ $t('departmentKpiList') }}</span>
         </router-link>
       </a-menu-item>
 
       <a-menu-item key="kpis-section" v-if="canViewSectionLevel">
         <router-link to="/kpis/section">
           <cluster-outlined />
-          <span>Section KPI List</span>
+          <span>{{ $t('sectionKpiList') }}</span>
         </router-link>
       </a-menu-item>
 
       <a-menu-item key="approvals" v-if="canViewApprovals">
         <router-link to="/approvals">
           <check-square-outlined />
-          <span>Duyệt Kết quả KPI</span>
+          <span>{{ $t('kpiApproval') }}</span>
         </router-link>
       </a-menu-item>
 
       <a-menu-item key="personal-kpis" v-if="effectiveRole">
         <router-link to="/personal">
           <user-outlined />
-          <span>My Personal KPIs</span>
+          <span>{{ $t('myPersonalKpis') }}</span>
         </router-link>
       </a-menu-item>
 
       <a-menu-item key="my-review" v-if="effectiveRole">
         <router-link to="/my-kpi-review">
           <audit-outlined />
-          <span>My KPI Review</span>
+          <span>{{ $t('myKpiReview') }}</span>
         </router-link>
       </a-menu-item>
 
       <a-sub-menu key="admin" v-if="isAdmin">
         <template #title>
-          <span><setting-outlined /><span>Administration</span></span>
+          <span><setting-outlined /><span>{{ $t('administration') }}</span></span>
         </template>
         <a-menu-item key="admin-users">
-          <router-link to="/admin/users">User Management</router-link>
+          <router-link to="/admin/users">{{ $t('userManagement') }}</router-link>
         </a-menu-item>
         <a-menu-item key="admin-roles">
-          <router-link to="/admin/roles">Role Management</router-link>
+          <router-link to="/admin/roles">{{ $t('roleManagement') }}</router-link>
         </a-menu-item>
       </a-sub-menu>
     </a-menu>

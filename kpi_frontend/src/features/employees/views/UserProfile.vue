@@ -1,6 +1,6 @@
 <template>
     <div class="user-profile-container">
-        <a-card title="Thông tin Tài khoản" :loading="!user" v-if="user">
+        <a-card :title="$t('accountInformation')" :loading="!user" v-if="user">
             <a-row :gutter="[16, 24]">
                 <a-col :xs="24" :sm="24" :md="8" :lg="6" style="text-align: center;">
                     <a-avatar :size="128" :src="user.avatar_url">
@@ -14,29 +14,27 @@
                 </a-col>
                 <a-col :xs="24" :sm="24" :md="16" :lg="18">
                     <a-descriptions bordered :column="{ xxl: 2, xl: 2, lg: 1, md: 1, sm: 1, xs: 1 }">
-                        <a-descriptions-item label="Họ và tên">{{ fullName }}</a-descriptions-item>
-                        <a-descriptions-item label="Tên đăng nhập">{{ user.username }}</a-descriptions-item>
-                        <a-descriptions-item label="Email">{{ user.email || 'Chưa cập nhật' }}</a-descriptions-item>
-                        <a-descriptions-item label="Vai trò hiện tại">
-                            <a-tag color="blue">{{ effectiveRole || 'Chưa có vai trò' }}</a-tag>
+                        <a-descriptions-item :label="$t('fullName')">{{ fullName }}</a-descriptions-item>
+                        <a-descriptions-item :label="$t('username')">{{ user.username }}</a-descriptions-item>
+                        <a-descriptions-item :label="$t('email')">{{ user.email || $t('notUpdated') }}</a-descriptions-item>
+                        <a-descriptions-item :label="$t('currentRole')">
+                            <a-tag color="blue">{{ effectiveRole || $t('noRole') }}</a-tag>
                         </a-descriptions-item>
-                        <a-descriptions-item label="Tất cả vai trò" :span="2" v-if="user.roles && user.roles.length">
+                        <a-descriptions-item :label="$t('allRoles')" :span="2" v-if="user.roles && user.roles.length">
                             <a-tag v-for="role in user.roles" :key="role" color="geekblue" style="margin-right: 8px;">
                                 {{ role }}
                             </a-tag>
                         </a-descriptions-item>
-                        <a-descriptions-item label="Phòng ban">{{ user.department?.name || 'Chưa cập nhật'
-                            }}</a-descriptions-item>
-                        <a-descriptions-item label="Bộ phận/Section">{{ user.section?.name || 'Chưa cập nhật'
-                            }}</a-descriptions-item>
-                        <a-descriptions-item label="Ngày tham gia">
-                            {{ user.date_joined ? formatDate(user.date_joined) : 'Không có thông tin' }}
+                        <a-descriptions-item :label="$t('department')">{{ user.department?.name || $t('notUpdated') }}</a-descriptions-item>
+                        <a-descriptions-item :label="$t('section')">{{ user.section?.name || $t('notUpdated') }}</a-descriptions-item>
+                        <a-descriptions-item :label="$t('dateJoined')">
+                            {{ user.date_joined ? formatDate(user.date_joined) : $t('noInformation') }}
                         </a-descriptions-item>
                     </a-descriptions>
                 </a-col>
             </a-row>
         </a-card>
-        <a-empty v-else description="Không tìm thấy thông tin người dùng hoặc bạn chưa đăng nhập." />
+        <a-empty v-else :description="$t('userNotFoundOrNotLoggedIn')" />
     </div>
 </template>
 

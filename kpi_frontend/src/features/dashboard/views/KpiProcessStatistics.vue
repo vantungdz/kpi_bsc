@@ -1,23 +1,23 @@
 <template>
   <div class="kpi-process-statistics-container">
     <a-breadcrumb style="margin-bottom: 16px">
-      <a-breadcrumb-item><router-link to="/dashboard">Dashboard Tổng Quan</router-link></a-breadcrumb-item>
-      <a-breadcrumb-item>Thống kê Quy trình Duyệt KPI</a-breadcrumb-item>
+      <a-breadcrumb-item><router-link to="/dashboard">{{ $t('dashboardOverview') }}</router-link></a-breadcrumb-item>
+      <a-breadcrumb-item>{{ $t('kpiProcessStatistics') }}</a-breadcrumb-item>
     </a-breadcrumb>
-    <h1>Thống kê Chi tiết: Quy trình Duyệt KPI</h1>
+    <h1>{{ $t('kpiProcessStatisticsDetail') }}</h1>
 
     <!-- 1. Số lượng KPI đang chờ duyệt -->
-    <a-card title="Số lượng KPI đang chờ duyệt" class="dashboard-card">
+    <a-card :title="$t('kpiAwaitingApproval')" class="dashboard-card">
       <a-row :gutter="[16, 16]">
         <a-col v-if="kpiAwaitingStatsError" :span="24">
-          <a-alert message="Lỗi" :description="kpiAwaitingStatsError" type="error" show-icon />
+          <a-alert :message="$t('error')" :description="kpiAwaitingStatsError" type="error" show-icon />
         </a-col>
         <template v-if="!kpiAwaitingStatsError">
           <!-- Tổng số KPI chờ duyệt -->
           <a-col :xs="24" :sm="12" :md="8" :lg="6">
             <a-card>
               <a-skeleton :loading="isLoadingKpiAwaitingStats" active :paragraph="{ rows: 1 }">
-                <a-statistic title="Tổng số KPI chờ duyệt" :value="kpiAwaitingApprovalStats?.total ?? 0"
+                <a-statistic :title="$t('totalKpiAwaitingApproval')" :value="kpiAwaitingApprovalStats?.total ?? 0"
                   class="statistic-value" />
               </a-skeleton>
             </a-card>
@@ -34,7 +34,7 @@
             <a-col v-for="level in kpiAwaitingApprovalStats.byLevel" :key="level.name" :xs="24" :sm="12" :md="8"
               :lg="6">
               <a-card>
-                <a-statistic :title="`${level.name}`" :value="level.count" class="statistic-value" />
+                <a-statistic :title="$t(`approvalLevels.${level.status}`)" :value="level.count" class="statistic-value" />
               </a-card>
             </a-col>
           </template>
@@ -42,7 +42,7 @@
             <!-- Áp dụng khi không loading và byLevel rỗng hoặc không tồn tại -->
             <a-col :span="24" style="text-align: center; color: #888; padding: 10px 0">
               <a-card>
-                <p>Không có dữ liệu chờ duyệt theo cấp.</p>
+                <p>{{ $t('noAwaitingApprovalData') }}</p>
               </a-card>
             </a-col>
           </template>
@@ -56,23 +56,22 @@
         <line-chart v-if="kpiAwaitingChartData.datasets[0].data.some((d) => d > 0)" :chart-data="kpiAwaitingChartData"
           :chart-options="kpiAwaitingChartOptions" style="height: 300px" />
         <p v-else class="empty-chart-message">
-          Không có dữ liệu để vẽ biểu đồ chờ duyệt.
+          {{ $t('noChartData') }}
         </p>
       </div>
     </a-card>
 
     <!-- 2. Số lượng KPI đã được duyệt/từ chối (7 ngày qua) -->
-    <a-card title="Số lượng KPI đã được duyệt/từ chối" class="dashboard-card">
-      <!-- Thêm (7 ngày qua) hoặc ({{ selectedDays }} ngày qua) nếu bạn có bộ lọc -->
+    <a-card :title="$t('kpiApprovedRejected')" class="dashboard-card">
       <a-row :gutter="[16, 16]">
         <a-col v-if="kpiStatusOverTimeError" :span="24">
-          <a-alert message="Lỗi" :description="kpiStatusOverTimeError" type="error" show-icon />
+          <a-alert :message="$t('error')" :description="kpiStatusOverTimeError" type="error" show-icon />
         </a-col>
         <template v-if="!kpiStatusOverTimeError">
           <a-col :xs="24" :sm="12">
             <a-card>
               <a-skeleton :loading="isLoadingKpiStatusOverTime" active :paragraph="{ rows: 1 }">
-                <a-statistic title="KPI Được Duyệt" :value="kpiStatusOverTimeStats?.approvedLastXDays ?? 0"
+                <a-statistic :title="$t('kpiApproved')" :value="kpiStatusOverTimeStats?.approvedLastXDays ?? 0"
                   class="statistic-value statistic-approved" />
               </a-skeleton>
             </a-card>
@@ -80,7 +79,7 @@
           <a-col :xs="24" :sm="12">
             <a-card>
               <a-skeleton :loading="isLoadingKpiStatusOverTime" active :paragraph="{ rows: 1 }">
-                <a-statistic title="KPI Bị Từ Chối" :value="kpiStatusOverTimeStats?.rejectedLastXDays ?? 0"
+                <a-statistic :title="$t('kpiRejected')" :value="kpiStatusOverTimeStats?.rejectedLastXDays ?? 0"
                   class="statistic-value statistic-rejected" />
               </a-skeleton>
             </a-card>
@@ -99,26 +98,26 @@
     </a-card>
 
     <!-- 3. Thời gian duyệt trung bình -->
-    <a-card title="Thời gian duyệt trung bình" class="dashboard-card card-avg-time">
+    <a-card :title="$t('averageApprovalTime')" class="dashboard-card card-avg-time">
       <a-row :gutter="[16, 16]">
         <a-col v-if="averageApprovalTimeError" :span="24">
-          <a-alert message="Lỗi" :description="averageApprovalTimeError" type="error" show-icon />
+          <a-alert :message="$t('error')" :description="averageApprovalTimeError" type="error" show-icon />
         </a-col>
         <template v-if="!averageApprovalTimeError">
           <a-col :xs="24" :sm="12" :md="8">
             <a-card>
               <a-skeleton :loading="isLoadingAverageApprovalTime" active :paragraph="{ rows: 1 }">
-                <a-statistic title="Tổng thời gian duyệt trung bình"
-                  :value="averageApprovalTimeStats?.totalAverageTime ?? ''" suffix="giờ" class="statistic-value" />
+                <a-statistic :title="$t('totalAverageApprovalTime')"
+                  :value="averageApprovalTimeStats?.totalAverageTime ?? ''" :suffix="$t('hours')"
+                  class="statistic-value" />
               </a-skeleton>
             </a-card>
           </a-col>
-          <!-- Hiện tại backend trả về byLevel rỗng, khi nào có dữ liệu sẽ hiển thị -->
           <a-col v-for="level in averageApprovalTimeStats?.byLevel" :key="level.name" :xs="24" :sm="12" :md="8">
             <a-card>
               <a-skeleton :loading="isLoadingAverageApprovalTime" active :paragraph="{ rows: 1 }">
-                <a-statistic :title="`TB duyệt tại ${level.name}`" :value="level.averageTime ?? 'N/A'" suffix="giờ"
-                  class="statistic-value" />
+                <a-statistic :title="$t('averageApprovalTimeAt', { level: level.name })"
+                  :value="level.averageTime ?? ''" suffix="$t('hours')" class="statistic-value" />
               </a-skeleton>
             </a-card>
           </a-col>
@@ -127,20 +126,19 @@
     </a-card>
 
     <!-- 4. Top KPI được submit/cập nhật nhiều nhất -->
-    <a-card title="Top KPI được submit/cập nhật nhiều nhất" class="dashboard-card card-top-activity">
-      <!-- Thêm (30 ngày qua, top 5) hoặc động nếu có filter -->
+    <a-card :title="$t('topKpiActivity')" class="dashboard-card card-top-activity">
       <a-row :gutter="[16, 16]">
         <a-col v-if="topKpiActivityError" :span="24">
-          <a-alert message="Lỗi" :description="topKpiActivityError" type="error" show-icon />
+          <a-alert :message="$t('error')" :description="topKpiActivityError" type="error" show-icon />
         </a-col>
         <template v-if="!topKpiActivityError">
           <a-col :xs="24" :sm="12">
-            <h4>Top KPI được submit nhiều nhất</h4>
+            <h4>{{ $t('topKpiSubmitted') }}</h4>
             <a-skeleton :loading="isLoadingTopKpiActivity" active avatar :paragraph="{ rows: 3 }">
               <a-list bordered :dataSource="topKpiActivityStats?.submitted">
                 <template #renderItem="{ item }">
                   <a-list-item>
-                    {{ item.name }} ({{ item.count }} lượt)
+                    {{ item.name }} ({{ item.count }} {{ $t('times') }})
                   </a-list-item>
                 </template>
                 <div v-if="
@@ -148,18 +146,18 @@
                     (!topKpiActivityStats?.submitted ||
                       topKpiActivityStats.submitted.length === 0)
                   " class="empty-list">
-                  Chưa có dữ liệu
+                  {{ $t('noData') }}
                 </div>
               </a-list>
             </a-skeleton>
           </a-col>
           <a-col :xs="24" :sm="12">
-            <h4>Top KPI được cập nhật nhiều nhất</h4>
+            <h4>{{ $t('topKpiUpdated') }}</h4>
             <a-skeleton :loading="isLoadingTopKpiActivity" active avatar :paragraph="{ rows: 3 }">
               <a-list bordered :dataSource="topKpiActivityStats?.updated">
                 <template #renderItem="{ item }">
                   <a-list-item>
-                    {{ item.name }} ({{ item.count }} lượt)
+                    {{ item.name }} ({{ item.count }} {{ $t('times') }})
                   </a-list-item>
                 </template>
                 <div v-if="
@@ -167,7 +165,7 @@
                     (!topKpiActivityStats?.updated ||
                       topKpiActivityStats.updated.length === 0)
                   " class="empty-list">
-                  Chưa có dữ liệu
+                  {{ $t('noData') }}
                 </div>
               </a-list>
             </a-skeleton>
@@ -181,13 +179,14 @@
 <script setup>
 import { onMounted, computed } from "vue";
 import { useStore } from "vuex";
+import { useI18n } from "vue-i18n";
 import { Breadcrumb as ABreadcrumb, BreadcrumbItem as ABreadcrumbItem } from 'ant-design-vue'; 
 import { Skeleton as ASkeleton, Alert as AAlert } from "ant-design-vue";
 import BarChart from "@/core/components/common/BarChart.vue";
 import LineChart from "@/core/components/common/LineChart.vue";
 
+const { t: $t } = useI18n();
 const store = useStore();
-
 
 const kpiAwaitingApprovalStats = computed(
   () => store.getters["dashboard/getKpiAwaitingApprovalStats"]
@@ -199,7 +198,6 @@ const kpiAwaitingStatsError = computed(
   () => store.getters["dashboard/getKpiAwaitingStatsError"]
 );
 
-
 const kpiStatusOverTimeStats = computed(
   () => store.getters["dashboard/getKpiStatusOverTimeStats"]
 );
@@ -209,7 +207,6 @@ const isLoadingKpiStatusOverTime = computed(
 const kpiStatusOverTimeError = computed(
   () => store.getters["dashboard/getKpiStatusOverTimeError"]
 );
-
 
 const averageApprovalTimeStats = computed(
   () => store.getters["dashboard/getAverageApprovalTimeStats"]
@@ -221,7 +218,6 @@ const averageApprovalTimeError = computed(
   () => store.getters["dashboard/getAverageApprovalTimeError"]
 );
 
-
 const topKpiActivityStats = computed(
   () => store.getters["dashboard/getTopKpiActivityStats"]
 );
@@ -232,7 +228,6 @@ const topKpiActivityError = computed(
   () => store.getters["dashboard/getTopKpiActivityError"]
 );
 
-
 const kpiAwaitingChartData = computed(() => {
   const labels =
     kpiAwaitingApprovalStats.value?.byLevel?.map((level) => level.name) || [];
@@ -242,7 +237,7 @@ const kpiAwaitingChartData = computed(() => {
     labels: labels,
     datasets: [
       {
-        label: "Số lượng KPI chờ duyệt",
+        label: $t("kpiAwaitingApproval"),
         borderColor: "#36A2EB", 
         backgroundColor: "rgba(54, 162, 235, 0.2)", 
         borderWidth: 2, 
@@ -270,7 +265,7 @@ const kpiAwaitingChartOptions = computed(() => ({
     },
     title: {
       display: true,
-      text: "Phân loại KPI đang chờ duyệt theo cấp",
+      text: $t("kpiAwaitingApprovalByLevel"),
     },
     tooltip: {
       enabled: true,
@@ -283,8 +278,7 @@ const kpiAwaitingChartOptions = computed(() => ({
       },
       callbacks: {
         title: function (tooltipItems) {
-          
-          return `Cấp duyệt: ${tooltipItems[0].label}`;
+          return `${$t("approvalLevel")}: ${tooltipItems[0].label}`;
         },
         label: function (context) {
           let label = context.dataset.label || "";
@@ -292,7 +286,7 @@ const kpiAwaitingChartOptions = computed(() => ({
             label += ": ";
           }
           if (context.parsed.y !== null) {
-            label += context.parsed.y + " KPI";
+            label += context.parsed.y + " " + $t("kpi");
           }
           return label;
         },
@@ -303,18 +297,17 @@ const kpiAwaitingChartOptions = computed(() => ({
     y: {
       beginAtZero: true,
       ticks: { precision: 0 },
-      title: { display: true, text: "Số lượng KPI" },
+      title: { display: true, text: $t("kpiCount") },
     },
-    x: { title: { display: true, text: "Cấp duyệt" } },
+    x: { title: { display: true, text: $t("approvalLevel") } },
   },
 }));
 
 const kpiStatusOverTimeChartData = computed(() => {
   return {
-    labels: ["Đã Duyệt", "Bị Từ Chối"],
+    labels: [$t("approved"), $t("rejected")],
     datasets: [
       {
-        
         data: [
           kpiStatusOverTimeStats.value?.approvedLastXDays ?? 0,
           kpiStatusOverTimeStats.value?.rejectedLastXDays ?? 0,
@@ -338,7 +331,7 @@ const kpiStatusOverTimeChartOptions = computed(() => ({
     },
     title: {
       display: true,
-      text: "Số lượng KPI được duyệt/từ chối (7 ngày qua)",
+      text: $t("kpiApprovedRejectedOverTime"),
     },
   },
   scales: {

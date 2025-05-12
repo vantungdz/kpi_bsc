@@ -401,7 +401,7 @@ export class KpiValuesService {
         this.eventEmitter.emit('kpi_value.approved_by_user', {
           kpiValue: savedValue,
           submitterId: assignment.employee_id,
-          kpiName: assignment.kpi?.name || 'N/A',
+          kpiName: assignment.kpi?.name || '',
         });
       }
     } else if (savedValue.status === KpiValueStatus.PENDING_DEPT_APPROVAL) {
@@ -489,7 +489,7 @@ export class KpiValuesService {
       this.eventEmitter.emit('kpi_value.rejected_by_user', {
         kpiValue: rejectedValue,
         submitterId: assignment.employee_id,
-        kpiName: assignment.kpi?.name || 'N/A',
+        kpiName: assignment.kpi?.name || '',
         reason,
       });
     }
@@ -586,7 +586,7 @@ export class KpiValuesService {
         this.eventEmitter.emit('kpi_value.approved_by_user', {
           kpiValue: savedValue,
           submitterId: assignment.employee_id,
-          kpiName: assignment.kpi?.name || 'N/A',
+          kpiName: assignment.kpi?.name || '',
         });
       }
     } else if (savedValue.status === KpiValueStatus.PENDING_MANAGER_APPROVAL) {
@@ -680,7 +680,7 @@ export class KpiValuesService {
       this.eventEmitter.emit('kpi_value.rejected_by_user', {
         kpiValue: rejectedValue,
         submitterId: assignment.employee_id,
-        kpiName: assignment.kpi?.name || 'N/A',
+        kpiName: assignment.kpi?.name || '',
         reason,
       });
     }
@@ -769,7 +769,7 @@ export class KpiValuesService {
       this.eventEmitter.emit('kpi_value.approved_by_user', {
         kpiValue: savedValue,
         submitterId: assignment.employee_id,
-        kpiName: assignment.kpi?.name || 'N/A',
+        kpiName: assignment.kpi?.name || '',
       });
     }
     return savedValue;
@@ -838,7 +838,7 @@ export class KpiValuesService {
       this.eventEmitter.emit('kpi_value.rejected_by_user', {
         kpiValue: rejectedValue,
         submitterId: assignment.employee_id,
-        kpiName: assignment.kpi?.name || 'N/A',
+        kpiName: assignment.kpi?.name || '',
         reason,
       });
     }
@@ -1001,23 +1001,15 @@ export class KpiValuesService {
       .leftJoinAndSelect('assignment.employee', 'assignedEmployee')
       .leftJoinAndSelect('assignment.section', 'assignedSection')
       .leftJoinAndSelect('assignment.department', 'assignedDepartment')
-      .leftJoinAndSelect(
-        'assignedSection.department',
-        'departmentOfAssignedSection',
-      )
+      .leftJoinAndSelect('assignedSection.department', 'departmentOfAssignedSection')
       .leftJoinAndSelect('assignedEmployee.section', 'employeeSection')
       .leftJoinAndSelect('assignedEmployee.department', 'employeeDepartment')
       .leftJoinAndSelect('kpi.perspective', 'perspective');
 
-    switch (user.role) {
-      case 'section':
-        this.logger.debug(
-          `Applying filter for role: leader, sectionId: ${user.sectionId}`,
-        );
+    const roleFilters: Record<string, () => void> = {
+      section: () => {
         if (!user.sectionId) {
-          this.logger.warn(
-            'Leader user has no sectionId, returning empty array.',
-          );
+          this.logger.warn('Leader user has no sectionId, returning empty array.');
           return [];
         }
         query
@@ -1028,24 +1020,15 @@ export class KpiValuesService {
             new Brackets((qb) => {
               qb.where('assignment.assigned_to_section = :sectionId', {
                 sectionId: user.sectionId,
-              })
-
-                .orWhere('assignedEmployee.sectionId = :sectionId', {
-                  sectionId: user.sectionId,
-                });
+              }).orWhere('assignedEmployee.sectionId = :sectionId', {
+                sectionId: user.sectionId,
+              });
             }),
           );
-        break;
-
-      case 'department': // Thêm case riêng cho vai trò 'department'
-        this.logger.debug(
-          `Applying filter for role: manager, departmentId: ${user.departmentId}, sectionId: ${user.sectionId}`,
-        );
+      },
+      department: () => {
         if (!user.departmentId) {
-          // Người dùng department phải có departmentId
-          this.logger.warn(
-            'Department user has no departmentId, returning empty array.',
-          );
+          this.logger.warn('Department user has no departmentId, returning empty array.');
           return [];
         }
         query
@@ -1057,49 +1040,21 @@ export class KpiValuesService {
               qb.where('assignment.assigned_to_department = :deptId', {
                 deptId: user.departmentId,
               })
-
                 .orWhere('departmentOfAssignedSection.id = :deptId', {
                   deptId: user.departmentId,
                 })
-
                 .orWhere('assignedEmployee.departmentId = :deptId', {
                   deptId: user.departmentId,
                 });
             }),
           );
-        break;
-
-      case 'manager':
-        this.logger.debug(
-          `Applying filter for role: manager. DepartmentId: ${user.departmentId}, SectionId: ${user.sectionId}`,
-        );
-        // Manager duyệt các mục đã được department duyệt (PENDING_MANAGER_APPROVAL)
+      },
+      manager: () => {
         query.where('kpiValue.status = :status', {
           status: KpiValueStatus.PENDING_MANAGER_APPROVAL,
         });
-        // Nếu manager cũng là người quản lý một phòng ban cụ thể và có thể duyệt PENDING_DEPT_APPROVAL
-        // của phòng ban đó, bạn có thể thêm logic orWhere tương tự như case 'department'.
-        // Ví dụ:
-        // if (user.departmentId) {
-        //   query.orWhere(
-        //       new Brackets((qb) => {
-        //           qb.where('kpiValue.status = :deptStatus', { deptStatus: KpiValueStatus.PENDING_DEPT_APPROVAL})
-        //             .andWhere(
-        //               new Brackets((subQb) => {
-        //                   subQb.where('assignedEmployee.departmentId = :deptId', { deptId: user.departmentId })
-        //                   .orWhere('departmentOfAssignedSection.id = :deptId', { deptId: user.departmentId })
-        //                   .orWhere('assignment.assigned_to_department = :deptId', { deptId: user.departmentId });
-        //               })
-        //             );
-        //       })
-        //   );
-        // }
-        break;
-
-      case 'admin':
-        this.logger.debug(
-          'Applying filter for role: admin (all pending types)',
-        );
+      },
+      admin: () => {
         query.where('kpiValue.status IN (:...statuses)', {
           statuses: [
             KpiValueStatus.PENDING_SECTION_APPROVAL,
@@ -1107,20 +1062,22 @@ export class KpiValuesService {
             KpiValueStatus.PENDING_MANAGER_APPROVAL,
           ],
         });
-        break;
+      },
+    };
 
-      default:
-        this.logger.warn(
-          `No pending approvals logic defined for role: ${user.role}`,
-        );
-        return [];
+    const applyFilter = roleFilters[user.role];
+    if (!applyFilter) {
+      this.logger.warn(`No pending approvals logic defined for role: ${user.role}`);
+      return [];
     }
+
+    applyFilter();
 
     query.orderBy('kpiValue.timestamp', 'ASC');
 
     try {
-      this.logger.debug('SQL Query:', query.getSql());
-      this.logger.debug('Parameters:', query.getParameters());
+      this.logger.debug('Executing SQL Query:', query.getSql());
+      this.logger.debug('Query Parameters:', query.getParameters());
       const results = await query.getMany();
       this.logger.debug(`Found ${results.length} pending approvals.`);
       return results;

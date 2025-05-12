@@ -1,84 +1,84 @@
 <template>
   <div>
-    <h2>KPI Reports</h2>
+    <h2>{{ $t('kpiReports') }}</h2>
 
     <div class="report-container detail-section">
        <div class="filters">
-           <label for="report-type">Report Type:</label>
+           <label for="report-type">{{ $t('reportType') }}</label>
            <select id="report-type" v-model="filterOptions.reportType">
-               <option value="overall">Overall</option>
-               <option value="department">By Department</option>
-               <option value="section">By Section</option>
-               <option value="team">By Team</option>
-               <option value="perspective">By Perspective</option>
-               <option value="individual">By Individual</option>
+               <option value="overall">{{ $t('overall') }}</option>
+               <option value="department">{{ $t('byDepartment') }}</option>
+               <option value="section">{{ $t('bySection') }}</option>
+               <option value="team">{{ $t('byTeam') }}</option>
+               <option value="perspective">{{ $t('byPerspective') }}</option>
+               <option value="individual">{{ $t('byIndividual') }}</option>
            </select>
 
-           <label v-if="filterOptions.reportType === 'department'" for="dept-filter">Department:</label>
+           <label v-if="filterOptions.reportType === 'department'" for="dept-filter">{{ $t('department') }}</label>
            <select v-if="filterOptions.reportType === 'department'" id="dept-filter" v-model="filterOptions.departmentId">
-                <option value="">All</option>
-                <option value="1">Department 1</option>
+                <option value="">{{ $t('all') }}</option>
+                <option value="1">{{ $t('department1') }}</option>
            </select>
 
-            <label v-if="filterOptions.reportType === 'perspective'" for="perspective-filter">Perspective:</label>
+            <label v-if="filterOptions.reportType === 'perspective'" for="perspective-filter">{{ $t('perspective') }}</label>
            <PerspectiveSelect v-if="filterOptions.reportType === 'perspective'" v-model="filterOptions.perspectiveId" />
 
-           <label v-if="filterOptions.reportType === 'individual'" for="user-filter">Employee:</label>
+           <label v-if="filterOptions.reportType === 'individual'" for="user-filter">{{ $t('employee') }}</label>
            <UserSelect v-if="filterOptions.reportType === 'individual'" v-model="filterOptions.assignedToId" />
-           <label for="start-date">From:</label>
+           <label for="start-date">{{ $t('from') }}</label>
            <input type="date" id="start-date" v-model="filterOptions.startDate">
-           <label for="end-date">To:</label>
+           <label for="end-date">{{ $t('to') }}</label>
            <input type="date" id="end-date" v-model="filterOptions.endDate">
 
-           <button @click="fetchReportData" :disabled="loading">Generate</button>
+           <button @click="fetchReportData" :disabled="loading">{{ $t('generate') }}</button>
        </div>
 
         <div v-if="!loading && reportData.length > 0" class="export-buttons">
-            <button @click="exportReport('excel')" :disabled="exporting"><i class="fas fa-file-excel"></i> Export Excel</button>
-            <button @click="exportReport('pdf')" :disabled="exporting"><i class="fas fa-file-pdf"></i> Export PDF</button>
-             <span v-if="exporting"> Exporting...</span>
+            <button @click="exportReport('excel')" :disabled="exporting"><i class="fas fa-file-excel"></i> {{ $t('exportExcel') }}</button>
+            <button @click="exportReport('pdf')" :disabled="exporting"><i class="fas fa-file-pdf"></i> {{ $t('exportPDF') }}</button>
+             <span v-if="exporting"> {{ $t('exporting') }}</span>
         </div>
 
-        <div v-if="loading">Loading report data...</div>
+        <div v-if="loading">{{ $t('loadingReportData') }}</div>
          <div v-else-if="error">{{ error }}</div>
-         <div v-else-if="reportData.length === 0 && hasGenerated">No data found for the selected criteria.</div>
+         <div v-else-if="reportData.length === 0 && hasGenerated">{{ $t('noDataFound') }}</div>
          <table v-else-if="reportData.length > 0">
             <thead>
                 <tr>
-                     <th>KPI Name</th>
-                     <th>Hierarchy</th>
-                     <th>Perspective</th>
-                     <th>Unit</th>
-                     <th>Target</th>
-                     <th>Actual</th>
-                     <th>Progress (%)</th>
-                     <th>Status</th>
-                     <th>Assigned To</th>
+                     <th>{{ $t('kpiName') }}</th>
+                     <th>{{ $t('hierarchy') }}</th>
+                     <th>{{ $t('perspective') }}</th>
+                     <th>{{ $t('unit') }}</th>
+                     <th>{{ $t('target') }}</th>
+                     <th>{{ $t('actual') }}</th>
+                     <th>{{ $t('progress') }} (%)</th>
+                     <th>{{ $t('status') }}</th>
+                     <th>{{ $t('assignedTo') }}</th>
                      </tr>
             </thead>
              <tbody>
                  <tr v-for="item in reportData" :key="item.id">
                     <td>{{ item.name }}</td>
-                    <td>{{ item.hierarchy || 'N/A' }}</td>
-                    <td>{{ item.perspective?.name || 'N/A' }}</td>
+                    <td>{{ item.hierarchy || '' }}</td>
+                    <td>{{ item.perspective?.name || '' }}</td>
                     <td>{{ item.unit }}</td>
                     <td>{{ formatValue(item.target, item.unit) }}</td>
                     <td>{{ formatValue(item.currentActual, item.unit) }}</td>
                      <td>{{ item.currentProgress?.toFixed(1) || 0 }}%</td>
                      <td><span :class="getStatusClass(item.currentProgress)">{{ getStatusText(item.currentProgress) }}</span></td>
-                     <td>{{ item.assignedTo?.username || 'N/A' }}</td>
+                     <td>{{ item.assignedTo?.username || '' }}</td>
                  </tr>
              </tbody>
          </table>
 
          <div v-if="!loading && reportData.length > 0" class="report-chart">
-             <h3>Report Chart (Example: Progress Distribution)</h3>
+             <h3>{{ $t('reportChart') }}</h3>
               <BaseChart
                  v-if="chartData.labels?.length"
                  type="bar"
                  :chart-data="chartData"
               />
-             <div v-else>Chart data not available.</div>
+             <div v-else>{{ $t('chartDataNotAvailable') }}</div>
          </div>
 
     </div>
@@ -126,7 +126,7 @@ const chartData = computed(() => {
         datasets: [{
             label: 'KPI Count by Status',
             data: Object.values(statusCounts),
-            backgroundColor: [ '#198754', '#ffc107','#dc3545', '#6c757d'], // Màu tương ứng Good, Warning, Bad, N/A
+            backgroundColor: [ '#198754', '#ffc107','#dc3545', '#6c757d'], // Màu tương ứng Good, Warning, Bad, 
         }]
     }
 });

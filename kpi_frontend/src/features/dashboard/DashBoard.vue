@@ -1,16 +1,15 @@
 <template>
   <div class="dashboard-overview-container">
-    <h1>Dashboard Tổng Quan</h1>
+    <h1>{{ $t('dashboardOverview') }}</h1>
     <a-row :gutter="[16, 24]">
       <a-col :xs="24" :sm="12" :md="8" :lg="6">
         <router-link to="/dashboard/kpi-process-stats">
           <a-card hoverable class="dashboard-block-card card-kpi-stats">
             <template #title>
-              <line-chart-outlined /> Thống kê Quy trình KPI
+              <line-chart-outlined /> {{ $t('kpiProcessStats') }}
             </template>
             <p>
-              Xem chi tiết số lượng KPI chờ duyệt, đã duyệt/từ chối, thời gian
-              duyệt trung bình và các KPI nổi bật.
+              {{ $t('kpiProcessStatsDescription') }}
             </p>
           </a-card>
         </router-link>
@@ -23,10 +22,10 @@
             class="dashboard-block-card card-user-activity-stats"
           >
             <template #title>
-              <user-switch-outlined /> Thống kê Hoạt động Người dùng
+              <user-switch-outlined /> {{ $t('userActivityStats') }}
             </template>
             <p>
-              Phân tích hoạt động của người dùng và các bộ phận trong hệ thống (dành cho Admin/Manager).
+              {{ $t('userActivityStatsDescription') }}
             </p>
           </a-card>
         </router-link>
@@ -39,10 +38,10 @@
             class="dashboard-block-card card-kpi-performance"
           >
             <template #title>
-              <bar-chart-outlined /> Tổng quan Hiệu suất KPI
+              <bar-chart-outlined /> {{ $t('kpiPerformanceOverview') }}
             </template>
             <p>
-              Theo dõi tổng số KPI, tỷ lệ đạt/không đạt mục tiêu, KPI chưa cập nhật và hiệu suất theo vai trò.
+              {{ $t('kpiPerformanceOverviewDescription') }}
             </p>
           </a-card>
         </router-link>
@@ -55,10 +54,10 @@
             class="dashboard-block-card card-kpi-inventory"
           >
             <template #title>
-              <appstore-outlined /> Tổng quan Kho KPI
+              <appstore-outlined /> {{ $t('kpiInventoryOverview') }}
             </template>
             <p>
-              Theo dõi số lượng và sự phân bổ của các KPI và lượt giao KPI trong toàn hệ thống.
+              {{ $t('kpiInventoryOverviewDescription') }}
             </p>
           </a-card>
         </router-link>

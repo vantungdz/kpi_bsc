@@ -1,28 +1,26 @@
 <template>
   <div class="review-history-page">
     <a-breadcrumb style="margin-bottom: 16px">
-      <a-breadcrumb-item
-        ><router-link to="/dashboard">Dashboard</router-link></a-breadcrumb-item
-      >
-      <!-- Breadcrumb có thể cần điều chỉnh tùy theo bạn điều hướng đến trang này từ đâu -->
-      <a-breadcrumb-item
-        ><router-link to="/employees" v-if="targetType === 'employee'"
-          >Danh sách Nhân viên</router-link
-        >
-        <!-- Thêm các link khác cho section/department nếu cần -->
+      <a-breadcrumb-item>
+        <router-link to="/dashboard">{{ $t('dashboard') }}</router-link>
       </a-breadcrumb-item>
-      <a-breadcrumb-item>Lịch sử Đánh giá</a-breadcrumb-item>
+      <a-breadcrumb-item>
+        <router-link to="/employees" v-if="targetType === 'employee'">
+          {{ $t('employees') }}
+        </router-link>
+      </a-breadcrumb-item>
+      <a-breadcrumb-item>{{ $t('reviewHistoryTitle') }}</a-breadcrumb-item>
     </a-breadcrumb>
 
     <a-card :title="pageTitle" :bordered="false">
-      <a-spin :spinning="isLoadingHistory" tip="Đang tải lịch sử...">
+      <a-spin :spinning="isLoadingHistory" :tip="$t('loadingHistory')">
         <a-alert
           v-if="historyError"
           type="error"
           show-icon
           closable
           style="margin-bottom: 16px"
-          :message="historyError"
+          :message="$t('historyError')"
           @close="clearHistoryError"
         />
 
@@ -32,7 +30,7 @@
           "
         >
           <a-empty
-            :description="`Không tìm thấy lịch sử đánh giá nào cho ${targetName}.`"
+            :description="`${$t('noReviewHistoryFound')} ${targetName}.`"
           />
         </div>
 
@@ -40,36 +38,36 @@
           <a-collapse-panel
             v-for="reviewItem in reviewHistory"
             :key="reviewItem.overallReviewId"
-            :header="`Chu kỳ: ${reviewItem.cycleId} - Ngày Review: ${formatDate(reviewItem.reviewedAt)} - Bởi: ${reviewItem.reviewedByUsername}`"
+            :header="`${$t('cycle')}: ${reviewItem.cycleId} - ${$t('reviewDate')}: ${formatDate(reviewItem.reviewedAt)} - ${$t('reviewedBy')}: ${reviewItem.reviewedByUsername}`"
             @click="
               () => console.log('Panel clicked:', reviewItem.overallReviewId)
             "
           >
             <a-descriptions bordered :column="1" size="small">
-              <a-descriptions-item label="Trạng thái Review">
+              <a-descriptions-item :label="$t('reviewStatus')">
                 <a-tag :color="getOverallReviewStatusColor(reviewItem.status)">
                   {{ getOverallReviewStatusText(reviewItem.status) }}
                 </a-tag>
               </a-descriptions-item>
-              <a-descriptions-item label="Đánh giá Tổng thể của Quản lý">
+              <a-descriptions-item :label="$t('overallManagerComment')">
                 <p style="white-space: pre-wrap">
-                  {{ reviewItem.overallComment || "Chưa có nhận xét." }}
+                  {{ reviewItem.overallComment || $t('noComment') }}
                 </p>
               </a-descriptions-item>
-              <a-descriptions-item label="Điểm Tổng thể của Quản lý">
+              <a-descriptions-item :label="$t('overallManagerScore')">
                 <a-rate
                   :value="reviewItem.overallScore"
                   disabled
                   v-if="reviewItem.overallScore !== null"
                 />
-                <span v-else>Chưa có điểm.</span>
+                <span v-else>{{ $t('noScore') }}</span>
               </a-descriptions-item>
 
               <template v-if="reviewItem.employeeComment">
-                <a-descriptions-item label="Phản hồi của Nhân viên (Ngày)">
+                <a-descriptions-item :label="$t('employeeFeedbackDate')">
                   {{ formatDate(reviewItem.employeeFeedbackDate) }}
                 </a-descriptions-item>
-                <a-descriptions-item label="Nội dung Phản hồi của Nhân viên">
+                <a-descriptions-item :label="$t('employeeFeedbackContent')">
                   <p style="white-space: pre-wrap">
                     {{ reviewItem.employeeComment }}
                   </p>
@@ -77,12 +75,11 @@
               </template>
               <a-descriptions-item
                 v-else-if="reviewItem.status === 'EMPLOYEE_FEEDBACK_PENDING'"
-                label="Phản hồi của Nhân viên"
+                :label="$t('employeeFeedback')"
               >
-                Đang chờ nhân viên phản hồi.
+                {{ $t('awaitingEmployeeFeedback') }}
               </a-descriptions-item>
             </a-descriptions>
-            <!-- Tùy chọn: Thêm nút để xem chi tiết KPI reviews cho chu kỳ này nếu cần -->
           </a-collapse-panel>
         </a-collapse>
       </a-spin>
@@ -109,7 +106,10 @@ import {
   BreadcrumbItem as ABreadcrumbItem,
   notification,
 } from "ant-design-vue";
+import { useI18n } from 'vue-i18n';
 import dayjs from "dayjs";
+
+const { t: $t } = useI18n();
 
 const OverallReviewStatus = {
   PENDING_REVIEW: "PENDING_REVIEW",
@@ -144,9 +144,9 @@ const activePanelKeys = ref([]);
 
 const pageTitle = computed(() => {
   if (targetName.value) {
-    return `Lịch sử Đánh giá cho: ${targetName.value}`;
+    return `${$t('reviewHistoryFor')}: ${targetName.value}`;
   }
-  return "Lịch sử Đánh giá";
+  return $t('reviewHistory');
 });
 
 const fetchTargetDetails = async () => {
@@ -239,25 +239,25 @@ const loadReviewHistory = async () => {
     }
   } else {
     notification.error({
-      message: "Thiếu thông tin Target ID hoặc Target Type để tải lịch sử.",
+      message: $t('missingTargetInfo'),
     });
   }
 };
 
 const formatDate = (dateString) => {
-  if (!dateString) return "N/A";
+  if (!dateString) return "";
   return dayjs(dateString).format("DD/MM/YYYY HH:mm");
 };
 
 const getOverallReviewStatusText = (statusKey) => {
   const statusMap = {
-    [OverallReviewStatus.PENDING_REVIEW]: "Chờ Review",
-    [OverallReviewStatus.MANAGER_REVIEWED]: "Quản lý Đã Review",
-    [OverallReviewStatus.EMPLOYEE_FEEDBACK_PENDING]: "Chờ Nhân viên Phản hồi",
-    [OverallReviewStatus.EMPLOYEE_RESPONDED]: "Nhân viên Đã Phản hồi",
-    [OverallReviewStatus.COMPLETED]: "Hoàn tất",
+    [OverallReviewStatus.PENDING_REVIEW]: $t('pendingReview'),
+    [OverallReviewStatus.MANAGER_REVIEWED]: $t('managerReviewed'),
+    [OverallReviewStatus.EMPLOYEE_FEEDBACK_PENDING]: $t('awaitingEmployeeFeedback'),
+    [OverallReviewStatus.EMPLOYEE_RESPONDED]: $t('employeeResponded'),
+    [OverallReviewStatus.COMPLETED]: $t('completed'),
   };
-  return statusMap[statusKey] || statusKey || "Không xác định";
+  return statusMap[statusKey] || statusKey || $t('unknown');
 };
 
 const getOverallReviewStatusColor = (statusKey) => {
@@ -302,7 +302,7 @@ watch(
       );
     } else {
       console.error("Invalid route params for Review History:", newParams);
-      notification.error({ message: "Đường dẫn không hợp lệ để xem lịch sử." });
+      notification.error({ message: $t('invalidRoute') });
       // Có thể điều hướng về trang trước hoặc trang lỗi
       // router.push({ name: 'NotFound' });
     }

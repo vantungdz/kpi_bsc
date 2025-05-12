@@ -1,14 +1,14 @@
 <template>
   <div class="employee-list">
     <div class="header">
-      <h2>Danh sách nhân viên</h2>
+      <h2>{{ $t('employeeListTitle') }}</h2>
       <a-button type="primary" @click="openUploadModal">
-        Upload Employee Excel
+        {{ $t('uploadEmployeeExcel') }}
       </a-button>
     </div>
     <a-modal
       :open="isUploadModalVisible"
-      title="Upload Employee Excel"
+      :title="$t('uploadEmployeeExcel')"
       @ok="handleUpload"
       @cancel="closeUploadModal"
       :confirm-loading="uploading"
@@ -19,7 +19,7 @@
         @remove="handleRemove"
         accept=".xlsx, .xls"
       >
-        <a-button> <upload-outlined /> Select File </a-button>
+        <a-button> <upload-outlined /> {{ $t('selectFile') }} </a-button>
       </a-upload>
     </a-modal>
     <a-table :columns="columns" :data-source="employees" row-key="id">
@@ -29,13 +29,13 @@
         </template>
 
         <template v-else-if="column.dataIndex === 'department'">
-          {{ record.department?.name || "--" }}
+          {{ record.department?.name || $t('noData') }}
         </template>
         <template v-else-if="column.dataIndex === 'section'">
-          {{ record.section?.name || "--" }}
+          {{ record.section?.name || $t('noData') }}
         </template>
         <template v-else-if="column.dataIndex === 'role'">
-          {{ record.role || "--" }}
+          {{ record.role || $t('noData') }}
         </template>
         <template v-else-if="column.key === 'actions'">
           <a-space>
@@ -45,7 +45,7 @@
               @click="viewReviewHistory(record)"
             >
               <history-outlined />
-              Lịch sử Review
+              {{ $t('reviewHistory') }}
             </a-button>
           </a-space>
         </template>
@@ -54,9 +54,9 @@
             column.dataIndex && record.hasOwnProperty(column.dataIndex)
           "
         >
-          {{ record[column.dataIndex] || "--" }}
+          {{ record[column.dataIndex] || $t('noData') }}
         </template>
-        <template v-else> -- </template>
+        <template v-else> {{ $t('noData') }} </template>
       </template>
     </a-table>
   </div>
@@ -141,7 +141,7 @@ const handleUpload = async () => {
             const username = err.rowData["Username"];
             const email = err.rowData["Email"];
             if (username || email) {
-              rowIdentifier = `Row (Username: ${username || "N/A"}, Email: ${email || "N/A"})`;
+              rowIdentifier = `Row (Username: ${username || ""}, Email: ${email || ""})`;
             } else {
               const firstFewEntries = Object.entries(err.rowData)
                 .slice(0, 2)

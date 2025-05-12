@@ -1,19 +1,19 @@
 <template>
   <div class="login-container">
     <div class="login-box">
-      <img src="@/core/assets/logo.png" alt="Logo" class="login-logo" />
-      <h2>KPI System Login</h2>
+      <img src="@/core/assets/logo.png" :alt="$t('logoAlt')" class="login-logo" />
+      <h2>{{ $t('kpiSystemLogin') }}</h2>
       <a-form ref="formRef" :model="formData" :rules="rules" layout="vertical" @finish="handleLogin"
         @finishFailed="onFinishFailed">
-        <a-form-item label="Username" name="username" has-feedback :validateTrigger="['change', 'blur']">
-          <a-input v-model:value="formData.username" placeholder="Enter your username" :disabled="loading" size="large">
+        <a-form-item :label="$t('username')" name="username" has-feedback :validateTrigger="['change', 'blur']">
+          <a-input v-model:value="formData.username" :placeholder="$t('enterUsername')" :disabled="loading" size="large">
             <template #prefix>
               <user-outlined />
             </template>
           </a-input>
         </a-form-item>
-        <a-form-item label="Password" name="password" has-feedback :validateTrigger="['change', 'blur']">
-          <a-input-password v-model:value="formData.password" placeholder="Enter your password" :disabled="loading"
+        <a-form-item :label="$t('password')" name="password" has-feedback :validateTrigger="['change', 'blur']">
+          <a-input-password v-model:value="formData.password" :placeholder="$t('enterPassword')" :disabled="loading"
             size="large">
             <template #prefix>
               <lock-outlined />
@@ -22,10 +22,10 @@
         </a-form-item>
         <a-form-item name="remember" class="remember-forgot-row">
           <a-checkbox v-model:checked="rememberMe" :disabled="loading">
-            Remember me
+            {{ $t('rememberMe') }}
           </a-checkbox>
           <router-link to="/forgot-password" class="forgot-password-link">
-            Forgot Password?
+            {{ $t('forgotPassword') }}
           </router-link>
         </a-form-item>
         <a-form-item v-if="error" style="margin-top: -10px; margin-bottom: 15px">
@@ -33,7 +33,7 @@
         </a-form-item>
         <a-form-item>
           <a-button type="primary" html-type="submit" :loading="loading" block size="large">
-            Login
+            {{ $t('login') }}
           </a-button>
         </a-form-item>
       </a-form>

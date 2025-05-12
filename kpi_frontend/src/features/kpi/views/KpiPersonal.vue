@@ -2,32 +2,32 @@
   <div class="kpi-personal-list-page">
     <a-card>
       <template #title>
-        My Assigned KPIs
+        {{ $t('myAssignedKpis') }}
       </template>
       <template #extra>
         <a-button type="primary" @click="goToCreatePersonalKpi">
           <plus-outlined />
-          Create Personal KPI
+          {{ $t('createPersonalKpi') }}
         </a-button>
       </template>
       <p style="margin-bottom: 16px">
-        List of KPIs assigned to you (User:{{ actualUser?.username || "N/A" }}). Submit your progress updates here.
+        {{ $t('listOfAssignedKpis', { user: actualUser?.username || '' }) }}
       </p>
       <div style="margin-bottom: 20px">
-        <a-alert v-if="loadingMyAssignments" message="Loading your KPIs..." type="info" show-icon>
+        <a-alert v-if="loadingMyAssignments" :message="$t('loadingYourKpis')" type="info" show-icon>
           <template #icon>
             <a-spin />
           </template>
         </a-alert>
         <a-alert v-else-if="myAssignmentsError" :message="myAssignmentsError" type="error" show-icon closable
           @close="clearError" />
-        <a-alert v-else-if="!loadingMyAssignments && myAssignments.length === 0" message="You have no assigned KPIs."
+        <a-alert v-else-if="!loadingMyAssignments && myAssignments.length === 0" :message="$t('noAssignedKpis')"
           type="warning" show-icon />
       </div>
       <div v-if="!loadingMyAssignments && hasKpis">
         <a-collapse v-model:activeKey="activePanelKeys" expandIconPosition="end">
           <a-collapse-panel v-for="(kpiList, perspectiveId) in groupedPersonalKpis" :key="perspectiveId"
-            :header="`${kpiList[0].perspective?.id || '?'}. ${kpiList[0].perspective?.name || 'Uncategorized'} (${kpiList.length} KPI${kpiList.length > 1 ? 's' : ''})`">
+            :header="`${kpiList[0].perspective?.id || '?'}. ${kpiList[0].perspective?.name || $t('uncategorized')} (${kpiList.length} ${kpiList.length > 1 ? $t('kpis') : $t('kpi')})`">
             <a-table :columns="myPersonalKpiColumns" :data-source="kpiList" :row-key="'id'" :pagination="false"
               size="small" bordered :scroll="{ x: 'max-content' }">
               <template #bodyCell="{ column, record }">
@@ -39,11 +39,11 @@
                 </template>
                 <template v-else-if="column.key === 'level'">
                   <a-tag :color="getKpiLevelColor(record.created_by_type)">
-                    {{ record.created_by_type?.toUpperCase() || "N/A" }}
+                    {{ record.created_by_type?.toUpperCase() || "" }}
                   </a-tag>
                 </template>
                 <template v-else-if="column.key === 'target'">
-                  {{ getTargetValue(record)?.toLocaleString() ?? 'N/A' }}
+                  {{ getTargetValue(record)?.toLocaleString() ?? '' }}
                   <span v-if="record.unit">
                     {{ record.unit }}
                   </span>
@@ -72,7 +72,7 @@
                       <a-tooltip placement="topLeft" :title="latestValue.rejection_reason">
                         <span style="color: #ff4d4f; font-size: 0.85em; cursor: help;">
                           <info-circle-outlined style="margin-right: 4px;" />
-                          Lý do từ chối
+                          {{ $t('rejectionReason') }}
                         </span>
                       </a-tooltip>
                     </div>
@@ -87,7 +87,7 @@
                       :loading="submittingUpdate && currentSubmittingAssignment?.assignment_id === getRelevantAssignment(record)?.id">
                       {{ submitButtonText(latestValueForActions) }}
                     </a-button>
-                    <a-tooltip title="Xem lịch sử cập nhật/phê duyệt">
+                    <a-tooltip :title="$t('viewUpdateApprovalHistory')">
                       <a-button type="default" size="small" @click="openHistoryModal(record)">
                         <history-outlined />
                       </a-button>
@@ -99,28 +99,28 @@
           </a-collapse-panel>
         </a-collapse>
       </div>
-      <a-empty v-else description="Bạn không có KPI nào được giao." />
+      <a-empty v-else :description="$t('noAssignedKpis')" />
     </a-card>
     <a-modal :open="isSubmitUpdateModalVisible" @update:open="isSubmitUpdateModalVisible = $event"
-      :title="`Submit Progress Update for ${currentSubmittingAssignment?.kpi_name}`" @ok="handleSubmitUpdate"
+      :title="$t('submitProgressUpdate', { kpiName: currentSubmittingAssignment?.kpi_name })" @ok="handleSubmitUpdate"
       @cancel="closeSubmitUpdateModal" :confirm-loading="submittingUpdate" :mask-closable="false" destroyOnClose
-      okText="Submit for Approval" cancelText="Cancel" width="600px">
+      :okText="$t('submitForApproval')" :cancelText="$t('cancel')" width="600px">
       <a-form layout="vertical" :model="submitUpdateForm" ref="submitFormRef">
         <div style="max-height: 300px; overflow-y: auto; margin-bottom: 15px; padding-right: 10px;">
           <div v-for="(project, index) in submitUpdateForm.projectValues" :key="project.id">
             <a-row :gutter="16" style="margin-bottom: 12px; display: flex; align-items: center">
               <a-col :span="10">
-                <a-form-item :name="['projectValues', index, 'projectName']" label="Project Name"
-                  :rules="[{ required: true, message: 'Project name required' }]" style="margin-bottom: 0">
-                  <a-input v-model:value="project.projectName" placeholder="Project Name" style="height: 36px" />
+                <a-form-item :name="['projectValues', index, 'projectName']" :label="$t('projectName')"
+                  :rules="[{ required: true, message: $t('projectNameRequired') }]" style="margin-bottom: 0">
+                  <a-input v-model:value="project.projectName" :placeholder="$t('projectName')" style="height: 36px" />
                 </a-form-item>
               </a-col>
               <a-col :span="10">
-                <a-form-item :name="['projectValues', index, 'projectValue']" label="Value"
-                  :rules="[{ required: true, message: 'Value required' }, { type: 'number', message: 'Must be a number', transform: (value) => Number(value) }]"
+                <a-form-item :name="['projectValues', index, 'projectValue']" :label="$t('value')"
+                  :rules="[{ required: true, message: $t('valueRequired') }, { type: 'number', message: $t('mustBeNumber'), transform: (value) => Number(value) }]"
                   style="margin-bottom: 0">
                   <a-input-number v-model:value="project.projectValue"
-                    :placeholder="`Value (${currentSubmittingAssignment?.unit || ''})`"
+                    :placeholder="`${$t('value')} (${currentSubmittingAssignment?.unit || ''})`"
                     style="width: 100%; height: 36px" :min="0" />
                 </a-form-item>
               </a-col>
@@ -133,16 +133,16 @@
         </div>
         <a-button type="dashed" block @click="addProjectValue" style="margin-bottom: 15px;">
           <plus-outlined />
-          Add Project Entry
+          {{ $t('addProjectEntry') }}
         </a-button>
-        <a-form-item label="Overall Notes (Optional)" name="notes">
-          <a-textarea v-model:value="submitUpdateForm.notes" rows="3" placeholder="Add any overall notes" />
+        <a-form-item :label="$t('overallNotesOptional')" name="notes">
+          <a-textarea v-model:value="submitUpdateForm.notes" rows="3" :placeholder="$t('addOverallNotes')" />
         </a-form-item>
       </a-form>
     </a-modal>
-    <a-modal :open="isHistoryModalVisible" title="Lịch sử cập nhật/phê duyệt" @cancel="closeHistoryModal" :width="1000"
+    <a-modal :open="isHistoryModalVisible" :title="$t('updateApprovalHistory')" @cancel="closeHistoryModal" :width="1000"
       :footer="null" destroyOnClose>
-      <a-spin :spinning="isLoadingHistory" tip="Đang tải lịch sử...">
+      <a-spin :spinning="isLoadingHistory" :tip="$t('loadingHistory')">
         <a-alert v-if="historyError" type="error" show-icon :message="historyError" style="margin-bottom: 10px" />
         <a-table v-if="!historyError && kpiValueHistory.length > 0" :columns="historyColumns"
           :data-source="kpiValueHistory" :row-key="'id'" size="small" bordered
@@ -178,7 +178,7 @@
             <template v-else-if="column.key === 'noteOrReason'">
               <a-tooltip placement="topLeft" v-if="record.reason" :title="record.reason">
                 <span style="color: red;">
-                  Lý do: {{ truncateText(record.reason, 70) }}
+                  {{ $t('reason') }}: {{ truncateText(record.reason, 70) }}
                 </span>
               </a-tooltip>
               <a-tooltip v-else-if="record.notes" :title="record.notes">
@@ -196,15 +196,15 @@
                 }}
               </span>
               <span v-else-if="record.changed_by">
-                ID: {{ record.changed_by }}
+                {{ $t('id') }}: {{ record.changed_by }}
               </span>
               <span v-else>
-                N/A
+                
               </span>
             </template>
           </template>
         </a-table>
-        <a-empty v-if="!historyError && kpiValueHistory.length === 0" description="Không có lịch sử." />
+        <a-empty v-if="!historyError && kpiValueHistory.length === 0" :description="$t('noHistory')" />
       </a-spin>
     </a-modal>
   </div>
@@ -223,7 +223,10 @@ import {
 } from "ant-design-vue";
 import { PlusOutlined, MinusCircleOutlined, InfoCircleOutlined, HistoryOutlined } from "@ant-design/icons-vue";
 import dayjs from 'dayjs';
-import { KpiValueStatus, KpiValueStatusText, KpiValueStatusColor, KpiDefinitionStatus } from '@/core/constants/kpiStatus';
+import { KpiValueStatus, getKpiValueStatusText, KpiValueStatusColor, KpiDefinitionStatus } from '@/core/constants/kpiStatus';
+import { useI18n } from 'vue-i18n';
+
+const { t: $t } = useI18n();
 
 const store = useStore();
 const router = useRouter();
@@ -276,23 +279,23 @@ const groupedPersonalKpis = computed(() => {
 });
 
 const myPersonalKpiColumns = ref([
-  { title: "KPI Name", key: "name", width: "20%", ellipsis: true, fixed: 'left' },
-  { title: "Level", dataIndex: "created_by_type", key: "level", width: "8%", align: "center" },
-  { title: "Target", key: "target", align: "right", width: "10%" },
-  { title: "Approved Value", key: "value", align: "right", width: "10%" },
-  { title: "Progress (%)", key: "progress", align: "center", width: "10%" },
-  { title: "Update Status", key: "status", align: "center", width: "18%" },
-  { title: "Actions", key: "actions", align: "center", width: "15%", fixed: 'right' },
+  { title: $t('kpiName'), key: "name", width: "20%", ellipsis: true, fixed: 'left' },
+  { title: $t('level'), dataIndex: "created_by_type", key: "level", width: "8%", align: "center" },
+  { title: $t('target'), key: "target", align: "right", width: "10%" },
+  { title: $t('approvedValue'), key: "value", align: "right", width: "10%" },
+  { title: $t('progressPercentage'), key: "progress", align: "center", width: "10%" },
+  { title: $t('updateStatus'), key: "status", align: "center", width: "18%" },
+  { title: $t('actions'), key: "actions", align: "center", width: "15%", fixed: 'right' },
 ]);
 
 const historyColumns = ref([
-  { title: 'Thời gian', key: 'timestamp', width: 140 },
-  { title: 'Hành động', dataIndex: 'action', key: 'action', width: 180 },
-  { title: 'Giá trị', dataIndex: 'value', key: 'value', align: 'right', width: 70 },
-  { title: 'Status Trước', key: 'status_before', align: 'center', width: 80 },
-  { title: 'Status Sau', key: 'status_after', align: 'center', width: 80 },
-  { title: 'Ghi chú / Lý do', key: 'noteOrReason', ellipsis: true },
-  { title: 'Người thực hiện', key: 'changed_by', width: 150 },
+  { title: $t('timestamp'), key: 'timestamp', width: 140 },
+  { title: $t('action'), dataIndex: 'action', key: 'action', width: 180 },
+  { title: $t('value'), dataIndex: 'value', key: 'value', align: 'right', width: 70 },
+  { title: $t('statusBefore'), key: 'status_before', align: 'center', width: 80 },
+  { title: $t('statusAfter'), key: 'status_after', align: 'center', width: 80 },
+  { title: $t('noteOrReason'), key: 'noteOrReason', ellipsis: true },
+  { title: $t('changedBy'), key: 'changed_by', width: 150 },
 ]);
 
 
@@ -356,21 +359,21 @@ const submitButtonText = (latestValue) => {
     case KpiValueStatus.REJECTED_BY_SECTION:
     case KpiValueStatus.REJECTED_BY_DEPT:
     case KpiValueStatus.REJECTED_BY_MANAGER:
-      return "Gửi lại Cập nhật";
+      return $t('resubmitUpdate');
     case KpiValueStatus.SUBMITTED:
     case KpiValueStatus.PENDING_SECTION_APPROVAL:
     case KpiValueStatus.PENDING_DEPT_APPROVAL:
     case KpiValueStatus.PENDING_MANAGER_APPROVAL:
-      return "Đang chờ duyệt...";
+      return $t('awaitingApproval');
     case KpiValueStatus.APPROVED:
-      return "Đã duyệt";
+      return $t('approved');
     default:
-      return "Gửi Cập nhật";
+      return $t('submitUpdate');
   }
 };
 
 const getValueStatusColor = (status) => KpiValueStatusColor[status] || 'default';
-const getValueStatusText = (status) => KpiValueStatusText[status] || status || 'Chưa submit';
+const getValueStatusText = (status) => getKpiValueStatusText[status] || status || $t('notSubmitted');
 
 const getKpiLevelColor = (level) => {
   switch (level?.toLowerCase()) {
@@ -381,28 +384,28 @@ const getKpiLevelColor = (level) => {
     default: return "default";
   }
 };
-const formatDate = (dateString) => dateString ? dayjs(dateString).format('YYYY-MM-DD HH:mm') : 'N/A';
+const formatDate = (dateString) => dateString ? dayjs(dateString).format('YYYY-MM-DD HH:mm') : '';
 const truncateText = (text, length) => (text?.length > length ? `${text.substring(0, length)}...` : text || '');
 const getActionText = (actionKey) => {
   const actionMap = {
-    SUBMIT_CREATE: 'Tạo & Gửi duyệt',
-    SUBMIT_UPDATE: 'Cập nhật & Gửi duyệt',
-    APPROVE_SECTION: 'Section Duyệt',
-    REJECT_SECTION: 'Section Từ chối',
-    APPROVE_DEPT: 'Dept Duyệt',
-    REJECT_DEPT: 'Dept Từ chối',
-    APPROVE_MANAGER: 'Manager Duyệt',
-    REJECT_MANAGER: 'Manager Từ chối',
-    CREATE: 'Tạo mới',
-    UPDATE: 'Cập nhật',
-    DELETE: 'Xóa',
+    SUBMIT_CREATE: $t('createAndSubmit'),
+    SUBMIT_UPDATE: $t('updateAndSubmit'),
+    APPROVE_SECTION: $t('sectionApprove'),
+    REJECT_SECTION: $t('sectionReject'),
+    APPROVE_DEPT: $t('deptApprove'),
+    REJECT_DEPT: $t('deptReject'),
+    APPROVE_MANAGER: $t('managerApprove'),
+    REJECT_MANAGER: $t('managerReject'),
+    CREATE: $t('create'),
+    UPDATE: $t('update'),
+    DELETE: $t('delete'),
   };
-  return actionMap[actionKey?.toUpperCase()] || actionKey || 'Không rõ';
+  return actionMap[actionKey?.toUpperCase()] || actionKey || $t('unknown');
 };
 
 const fetchMyAssignedKpis = async () => {
   const userId = actualUser.value?.id;
-  if (!userId) { myAssignmentsError.value = "Could not determine current user ID."; loadingMyAssignments.value = false; return; }
+  if (!userId) { myAssignmentsError.value = $t('couldNotDetermineUserId'); loadingMyAssignments.value = false; return; }
   loadingMyAssignments.value = true;
   myAssignmentsError.value = null;
   try {
@@ -418,7 +421,7 @@ const fetchMyAssignedKpis = async () => {
     }
     console.log("Fetched My Assignments (KPI Objects):", myAssignments.value);
   } catch (error) {
-    myAssignmentsError.value = store.getters["kpis/error"] || error.message || "Failed to load assigned KPIs.";
+    myAssignmentsError.value = store.getters["kpis/error"] || error.message || $t('failedToLoadAssignedKpis');
     myAssignments.value = [];
     console.error("Fetch my assignments error:", error);
   } finally {
@@ -429,8 +432,8 @@ const clearError = () => { myAssignmentsError.value = null; };
 
 const openSubmitUpdateModal = (kpiRecord) => {
   const relevantAssignment = getRelevantAssignment(kpiRecord);
-  if (!relevantAssignment || !relevantAssignment.id) { notification.error({ message: "Error", description: "Cannot identify assignment for this KPI." }); return; }
-  if (kpiRecord.status !== KpiDefinitionStatus.APPROVED) { notification.warn({ message: "Thông báo", description: `KPI "${kpiRecord.name}" chưa được duyệt, không thể submit giá trị.` }); return; }
+  if (!relevantAssignment || !relevantAssignment.id) { notification.error({ message: $t('error'), description: $t('cannotIdentifyAssignment') }); return; }
+  if (kpiRecord.status !== KpiDefinitionStatus.APPROVED) { notification.warn({ message: $t('notification'), description: $t('kpiNotApproved', { kpiName: kpiRecord.name }) }); return; }
   const latestValue = findLatestKpiValue(relevantAssignment);
   if (!isSubmitDisabled(latestValue, kpiRecord.status)) {
     currentSubmittingAssignment.value = {
@@ -442,7 +445,7 @@ const openSubmitUpdateModal = (kpiRecord) => {
     isSubmitUpdateModalVisible.value = true;
     nextTick(() => { submitFormRef.value?.resetFields(); });
   } else {
-    notification.info({ message: "Thông báo", description: "Trạng thái hiện tại không cho phép gửi cập nhật mới." });
+    notification.info({ message: $t('notification'), description: $t('currentStatusDoesNotAllowUpdate') });
   }
 };
 
@@ -451,13 +454,13 @@ const addProjectValue = () => { submitUpdateForm.projectValues.push({ id: Date.n
 const removeProjectValue = (itemToRemove) => {
   const index = submitUpdateForm.projectValues.findIndex(item => item.id === itemToRemove.id);
   if (index !== -1 && submitUpdateForm.projectValues.length > 1) { submitUpdateForm.projectValues.splice(index, 1); }
-  else if (submitUpdateForm.projectValues.length === 1) { notification.warn({ message: "Cannot remove last entry" }); }
+  else if (submitUpdateForm.projectValues.length === 1) { notification.warn({ message: $t('cannotRemoveLastEntry') }); }
 };
 
 const handleSubmitUpdate = async () => {
   try { await submitFormRef.value?.validate(); } catch (errorInfo) { return; }
-  if (submitUpdateForm.projectValues.length === 0) { notification.error({ message: "Validation Failed", description: "Add at least one project entry." }); return; }
-  if (submitUpdateForm.projectValues.some(p => !p.projectName || p.projectValue === null || p.projectValue < 0)) { notification.error({ message: "Validation Failed", description: "Enter project name and valid value (>=0)." }); return; }
+  if (submitUpdateForm.projectValues.length === 0) { notification.error({ message: $t('validationFailed'), description: $t('addAtLeastOneProjectEntry') }); return; }
+  if (submitUpdateForm.projectValues.some(p => !p.projectName || p.projectValue === null || p.projectValue < 0)) { notification.error({ message: $t('validationFailed'), description: $t('enterValidProjectDetails') }); return; }
   if (!currentSubmittingAssignment.value?.assignment_id) return;
 
   const payload = {
@@ -470,7 +473,7 @@ const handleSubmitUpdate = async () => {
       assignmentId: currentSubmittingAssignment.value.assignment_id,
       updateData: payload,
     });
-    notification.success({ message: "Update Submitted", description: "Progress submitted for approval." });
+    notification.success({ message: $t('updateSubmitted'), description: $t('progressSubmittedForApproval') });
     closeSubmitUpdateModal();
     await fetchMyAssignedKpis();
   } catch (error) {
@@ -482,9 +485,9 @@ const goToCreatePersonalKpi = () => { router.push({ name: "KpiPersonalCreate", q
 
 const openHistoryModal = async (kpiRecord) => {
   const assignment = getRelevantAssignment(kpiRecord);
-  if (!assignment || !assignment.id) { notification.error({ message: "Cannot view history without assignment ID." }); return; }
+  if (!assignment || !assignment.id) { notification.error({ message: $t('cannotViewHistoryWithoutAssignmentId') }); return; }
   const latestValue = findLatestKpiValue(assignment);
-  if (!latestValue || !latestValue.id) { notification.info({ message: "No submission history found for this KPI yet." }); return; }
+  if (!latestValue || !latestValue.id) { notification.info({ message: $t('noSubmissionHistoryFound') }); return; }
   selectedKpiValueForHistory.value = latestValue;
   kpiValueHistory.value = [];
   historyError.value = null;
@@ -500,7 +503,7 @@ const loadHistory = async (valueId) => {
     const historyData = await store.dispatch('kpiValues/fetchValueHistory', { valueId });
     kpiValueHistory.value = historyData || [];
   } catch (error) {
-    historyError.value = error.message || 'Lỗi khi tải lịch sử.';
+    historyError.value = error.message || $t('errorLoadingHistory');
   } finally {
     isLoadingHistory.value = false;
   }
