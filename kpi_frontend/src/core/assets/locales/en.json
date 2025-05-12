@@ -103,6 +103,7 @@
   "noData": "--",
   "reviewHistory": "Review History",
   "reviewHistoryTitle": "Review History",
+  "reviewHistoryFor": "Review history for",
   "loadingHistory": "Loading history...",
   "noReviewHistoryFound": "No review history found for",
   "cycle": "Cycle",
@@ -116,7 +117,7 @@
   "createNewKpi": "Create New KPI",
   "search": "Search:",
   "kpiNamePlaceholder": "KPI name...",
-  "departmentLabel": "Department:",
+  "departmentLabel": "Department",
   "department": "Department",
   "all": "All",
   "allDepartments": "All Departments",
@@ -411,5 +412,14 @@
     "PENDING_SECTION_APPROVAL": "Section Leader",
     "PENDING_DEPT_APPROVAL": "Department Manager",
     "PENDING_MANAGER_APPROVAL": "Manager"
-  }
+  },
+  "approvedValue": "Approved Value",
+  "progressPercentage": "Progress Percentage",
+  "updateStatus": "Update Status",
+  "noPendingItems": "No pending items.",
+  "employeeFullName": "Full Name",
+  "role": "Role",
+  "employees": "Employees",
+  "profile": "Profile",
+  "settings": "Settings"
 }

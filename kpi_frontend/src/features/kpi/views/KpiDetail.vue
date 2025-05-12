@@ -1,7 +1,9 @@
 <template>
   <div>
     <a-card
-      :title="$t('kpiDetailTitle', { name: kpiDetailData?.name || $t('loading') })"
+      :title="
+        $t('kpiDetailTitle', { name: kpiDetailData?.name || $t('loading') })
+      "
       style="margin-bottom: 20px"
     >
       <a-skeleton :loading="loadingKpi" active :paragraph="{ rows: 6 }">
@@ -15,13 +17,13 @@
                 width: 100%;
               "
             >
-              <span>{{ $t('kpiInformation') }}</span>
+              <span>{{ $t("kpiInformation") }}</span>
               <a-button
                 v-if="kpiDetailData?.id"
                 @click="copyKpiAsTemplate"
                 :disabled="loadingKpi"
               >
-                {{ $t('copyAsTemplate') }}
+                {{ $t("copyAsTemplate") }}
               </a-button>
             </div>
           </template>
@@ -29,13 +31,13 @@
             {{ kpiDetailData.id }}
           </a-descriptions-item>
           <a-descriptions-item :label="$t('createdByType')">
-            {{ kpiDetailData.created_by_type || '' }}
+            {{ kpiDetailData.created_by_type || "" }}
           </a-descriptions-item>
           <a-descriptions-item :label="$t('frequency')">
             {{ kpiDetailData.frequency }}
           </a-descriptions-item>
           <a-descriptions-item :label="$t('perspective')">
-            {{ kpiDetailData.perspective?.name || '' }}
+            {{ kpiDetailData.perspective?.name || "" }}
           </a-descriptions-item>
           <a-descriptions-item :label="$t('department')">
             {{ departmentNameFromSectionContext }}
@@ -44,13 +46,13 @@
             {{ sectionNameFromContext }}
           </a-descriptions-item>
           <a-descriptions-item :label="$t('unit')">
-            {{ kpiDetailData.unit || '' }}
+            {{ kpiDetailData.unit || "" }}
           </a-descriptions-item>
           <a-descriptions-item :label="$t('target')">
-            {{ kpiDetailData.target?.toLocaleString() ?? '' }}
+            {{ kpiDetailData.target?.toLocaleString() ?? "" }}
           </a-descriptions-item>
           <a-descriptions-item :label="$t('weight')">
-            {{ kpiDetailData.weight ?? '' }}
+            {{ kpiDetailData.weight ?? "" }}
           </a-descriptions-item>
 
           <a-descriptions-item :label="$t('status')" :span="2">
@@ -75,13 +77,15 @@
               v-if="toggleStatusError"
               style="color: red; font-size: 0.9em; margin-top: 5px"
             >
-              {{ $t('error') }}: {{ toggleStatusError }}
-              <a @click="clearToggleError" style="margin-left: 5px">({{ $t('clear') }})</a>
+              {{ $t("error") }}: {{ toggleStatusError }}
+              <a @click="clearToggleError" style="margin-left: 5px"
+                >({{ $t("clear") }})</a
+              >
             </div>
           </a-descriptions-item>
 
           <a-descriptions-item :label="$t('description')" :span="2">
-            {{ kpiDetailData.description || '' }}
+            {{ kpiDetailData.description || "" }}
           </a-descriptions-item>
         </a-descriptions>
         <a-empty
@@ -138,7 +142,7 @@
             type="primary"
             @click="openManageDepartmentSectionAssignments"
           >
-            <plus-outlined /> {{ $t('addDepartmentAssignment') }}
+            <plus-outlined /> {{ $t("addDepartmentAssignment") }}
           </a-button>
         </template>
         <a-skeleton :loading="loadingKpi" active :paragraph="{ rows: 3 }">
@@ -220,7 +224,7 @@
             type="primary"
             @click="openManageDepartmentSectionAssignments"
           >
-            <plus-outlined /> {{ $t('addSectionAssignment') }}
+            <plus-outlined /> {{ $t("addSectionAssignment") }}
           </a-button>
         </template>
         <a-skeleton :loading="loadingKpi" active :paragraph="{ rows: 3 }">
@@ -240,7 +244,7 @@
                     v-if="record.section.department"
                     style="font-size: 0.9em; color: #888"
                   >
-                    ({{ $t('dept') }}: {{ record.section.department.name }})
+                    ({{ $t("dept") }}: {{ record.section.department.name }})
                   </span>
                 </span>
                 <span v-else></span>
@@ -300,7 +304,7 @@
       >
         <template #extra>
           <a-button type="primary" @click="openAssignUserModal">
-            <user-add-outlined /> {{ $t('addUserAssignment') }}
+            <user-add-outlined /> {{ $t("addUserAssignment") }}
           </a-button>
         </template>
         <a-skeleton
@@ -330,10 +334,10 @@
                 <span style="font-size: 0.9em; color: #888">
                   ({{ record.employee?.username }})
                   <template v-if="record.employee?.section">
-                    - {{ $t('section') }}: {{ record.employee.section.name }}
+                    - {{ $t("section") }}: {{ record.employee.section.name }}
                   </template>
                   <template v-else-if="record.employee?.department">
-                    - {{ $t('dept') }}: {{ record.employee.department.name }}
+                    - {{ $t("dept") }}: {{ record.employee.department.name }}
                   </template>
                 </span>
               </template>
@@ -349,8 +353,8 @@
                 {{ record.latest_actual_value?.toLocaleString() ?? "" }}
               </template>
               <template v-else-if="column.key === 'status'">
-                <a-tag :color="getStatusColor(record.status)">
-                  {{ record.status || "" }}
+                <a-tag :color="getAssignmentStatusColor(record.status)">
+                  {{ getAssignmentStatusText(record.status) }}
                 </a-tag>
               </template>
               <template v-else-if="column.key === 'actions'">
@@ -406,7 +410,7 @@
             <template #icon>
               <plus-outlined />
             </template>
-            {{ $t('addAssignment') }}
+            {{ $t("addAssignment") }}
           </a-button>
         </template>
         <a-skeleton
@@ -425,10 +429,10 @@
             <template #bodyCell="{ column, record }">
               <template v-if="column.key === 'assignedUnit'">
                 <span v-if="record.section"
-                  >{{ record.section.name }} ({{ $t('section') }})</span
+                  >{{ record.section.name }} ({{ $t("section") }})</span
                 >
                 <span v-else-if="record.department"
-                  >{{ record.department.name }} ({{ $t('department') }})</span
+                  >{{ record.department.name }} ({{ $t("department") }})</span
                 >
                 <span v-else></span>
               </template>
@@ -498,7 +502,7 @@
             <template #icon>
               <user-add-outlined />
             </template>
-            {{ $t('addEditUserAssignment') }}
+            {{ $t("addEditUserAssignment") }}
           </a-button>
         </template>
         <a-skeleton
@@ -549,8 +553,8 @@
                 {{ record.latest_actual_value?.toLocaleString() ?? "" }}
               </template>
               <template v-else-if="column.key === 'status'">
-                <a-tag :color="getStatusColor(record.status)">
-                  {{ record.status || "" }}
+                <a-tag :color="getAssignmentStatusColor(record.status)">
+                  {{ getAssignmentStatusText(record.status) }}
                 </a-tag>
               </template>
               <template v-else-if="column.key === 'actions'">
@@ -605,7 +609,7 @@
             <template #icon>
               <user-add-outlined />
             </template>
-            {{ $t('addEditUserAssignment') }}
+            {{ $t("addEditUserAssignment") }}
           </a-button>
         </template>
         <a-skeleton
@@ -653,8 +657,8 @@
                 {{ record.latest_actual_value?.toLocaleString() ?? 0 }}
               </template>
               <template v-else-if="column.key === 'status'">
-                <a-tag :color="getStatusColor(record.status)">
-                  {{ record.status || "" }}
+                <a-tag :color="getAssignmentStatusColor(record.status)">
+                  {{ getAssignmentStatusText(record.status) }}
                 </a-tag>
               </template>
               <template v-else-if="column.key === 'actions'">
@@ -714,7 +718,7 @@
       <a-empty v-else :description="$t('couldNotLoadEvaluationDetails')" />
       <template #footer>
         <a-button key="back" @click="closeViewEvaluationModal">
-          {{ $t('close') }}
+          {{ $t("close") }}
         </a-button>
       </template>
     </a-modal>
@@ -847,7 +851,7 @@
             :loading="loadingAssignableUsers"
           />
         </a-form-item>
-        <h4 style="margin-bottom: 10px">{{ $t('setTargetAndWeight') }}</h4>
+        <h4 style="margin-bottom: 10px">{{ $t("setTargetAndWeight") }}</h4>
         <a-table
           :columns="modalUserAssignmentInputColumns"
           :data-source="modalUserDataSource"
@@ -899,14 +903,14 @@
       ok-type="danger"
     >
       <p v-if="userAssignmentToDelete?.employee">
-        {{ $t('confirmRemoveAssignmentForUser') }}
+        {{ $t("confirmRemoveAssignmentForUser") }}
         <strong>
           {{ userAssignmentToDelete.employee.first_name }}
           {{ userAssignmentToDelete.employee.last_name }}
         </strong>
         ?
       </p>
-      <p v-else>{{ $t('confirmDeleteAssignment') }}</p>
+      <p v-else>{{ $t("confirmDeleteAssignment") }}</p>
     </a-modal>
 
     <a-modal
@@ -1016,23 +1020,25 @@
       ok-type="danger"
     >
       <p v-if="departmentSectionAssignmentToDelete">
-        {{ $t('confirmRemoveAssignmentFor') }}
+        {{ $t("confirmRemoveAssignmentFor") }}
         <strong>
           <span v-if="departmentSectionAssignmentToDelete.department">
-            {{ $t('department') }}:
+            {{ $t("department") }}:
             {{ departmentSectionAssignmentToDelete.department.name }}
           </span>
           <span v-else-if="departmentSectionAssignmentToDelete.section">
-            {{ $t('section') }}: {{ departmentSectionAssignmentToDelete.section.name }}
+            {{ $t("section") }}:
+            {{ departmentSectionAssignmentToDelete.section.name }}
           </span>
           <span v-else-if="departmentSectionAssignmentToDelete.team">
-            {{ $t('team') }}: {{ departmentSectionAssignmentToDelete.team.name }}
+            {{ $t("team") }}:
+            {{ departmentSectionAssignmentToDelete.team.name }}
           </span>
-          <span v-else> {{ $t('thisUnit') }} </span>
+          <span v-else> {{ $t("thisUnit") }} </span>
         </strong>
         ?
       </p>
-      <p v-else>{{ $t('confirmDeleteAssignment') }}</p>
+      <p v-else>{{ $t("confirmDeleteAssignment") }}</p>
     </a-modal>
   </div>
 </template>
@@ -1041,7 +1047,7 @@
 import { ref, computed, watch, onMounted, reactive } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useStore } from "vuex";
-import { useI18n } from 'vue-i18n';
+import { useI18n } from "vue-i18n";
 
 const { t: $t } = useI18n();
 
@@ -1078,7 +1084,6 @@ import {
   KpiDefinitionStatus,
   KpiDefinitionStatusText,
   KpiDefinitionStatusColor,
-  KpiValueStatus,
 } from "@/core/constants/kpiStatus";
 
 const router = useRouter();
@@ -1642,7 +1647,7 @@ const handleToggleStatus = async (kpiId) => {
 };
 
 const getKpiDefinitionStatusText = (status) =>
-  KpiDefinitionStatusText[status] || "";
+  KpiDefinitionStatusText($t)[status] || status || "";
 
 const getKpiDefinitionStatusColor = (status) =>
   KpiDefinitionStatusColor[status] || "default";
@@ -1879,71 +1884,71 @@ const assignUserModalTitle = computed(() => {
       (s) => s.id == sectionIdForTitle
     );
     const sectionName = sectionInfo?.name || `ID ${sectionIdForTitle}`;
-    return $t('assignKpiToUsersInSection', { sectionName });
+    return $t("assignKpiToUsersInSection", { sectionName });
   }
 
   if (isEditingUserAssignment.value) {
-    return $t('editUserAssignment');
+    return $t("editUserAssignment");
   }
-  return $t('assignKpiToUsers');
+  return $t("assignKpiToUsers");
 });
 
 const departmentSectionAssignmentColumns = computed(() => [
-  { title: $t('assignedUnit'), key: "assignedUnit", width: "30%" },
+  { title: $t("assignedUnit"), key: "assignedUnit", width: "30%" },
   {
-    title: $t('targetValue'),
+    title: $t("targetValue"),
     key: "targetValue",
     dataIndex: "targetValue",
     width: "15%",
     align: "right",
   },
   {
-    title: $t('latestActual'),
+    title: $t("latestActual"),
     key: "actual",
     dataIndex: "latest_actual_value",
     width: "15%",
     align: "right",
   },
   {
-    title: $t('status'),
+    title: $t("status"),
     key: "status",
     dataIndex: "status",
     width: "15%",
     align: "center",
   },
-  { title: $t('actions'), key: "actions", align: "center", width: "100px" },
+  { title: $t("actions"), key: "actions", align: "center", width: "100px" },
 ]);
 
 const userAssignmentColumns = computed(() => [
   {
-    title: $t('user'),
+    title: $t("user"),
     key: "user",
     dataIndex: "user",
     width: "25%",
   },
   {
-    title: $t('target'),
+    title: $t("target"),
     key: "target",
     dataIndex: "target",
     align: "right",
     width: "25%",
   },
   {
-    title: $t('latestActual'),
+    title: $t("latestActual"),
     key: "actual",
     dataIndex: "latest_actual_value",
     align: "right",
     width: "20%",
   },
   {
-    title: $t('status'),
+    title: $t("status"),
     key: "status",
     dataIndex: "status",
     align: "center",
     width: "20%",
   },
   {
-    title: $t('actions'),
+    title: $t("actions"),
     key: "actions",
     align: "center",
     width: "150px",
@@ -1951,21 +1956,19 @@ const userAssignmentColumns = computed(() => [
 ]);
 const modalUserAssignmentInputColumns = computed(() => [
   {
-    title: $t('employee'),
+    title: $t("employee"),
     key: "user",
     width: "40%",
   },
   {
-    title: $t('target'),
+    title: $t("target"),
     key: "target",
     width: "30%",
   },
 ]);
 
 const getAssignmentStatusText = (status) => {
-  if (status === KpiDefinitionStatus.APPROVED) return $t('active');
-  if (status === KpiDefinitionStatus.DRAFT) return $t('inactive');
-  return status || "";
+  return KpiDefinitionStatusText($t)[status] || status || "";
 };
 const getAssignmentStatusColor = (status) => {
   if (status === KpiDefinitionStatus.APPROVED) return "success";
@@ -2051,8 +2054,8 @@ const handleDeleteDepartmentSectionAssignment = async () => {
     !departmentSectionAssignmentToDelete.value.id
   ) {
     notification.error({
-      message: $t('error'),
-      description: $t('cannotIdentifyAssignmentToDelete'),
+      message: $t("error"),
+      description: $t("cannotIdentifyAssignmentToDelete"),
     });
     return;
   }
@@ -2069,7 +2072,7 @@ const handleDeleteDepartmentSectionAssignment = async () => {
       kpiId: kpiIdForRefresh,
     });
 
-    notification.success({ message: $t('assignmentDeletedSuccessfully') });
+    notification.success({ message: $t("assignmentDeletedSuccessfully") });
 
     isDeleteDepartmentSectionAssignmentModalVisible.value = false;
     departmentSectionAssignmentToDelete.value = null;
@@ -2080,10 +2083,10 @@ const handleDeleteDepartmentSectionAssignment = async () => {
     const errorMessage =
       store.getters["kpis/error"] ||
       error.message ||
-      $t('failedToDeleteAssignment');
+      $t("failedToDeleteAssignment");
     departmentSectionAssignmentError.value = errorMessage;
     notification.error({
-      message: $t('deletionFailed'),
+      message: $t("deletionFailed"),
       description: errorMessage,
     });
   } finally {
@@ -2100,7 +2103,7 @@ const handleSaveDepartmentSectionAssignment = async () => {
     !isEditing &&
     !departmentSectionAssignmentForm.assigned_to_section
   ) {
-    departmentSectionAssignmentError.value = $t('selectSectionToAssign');
+    departmentSectionAssignmentError.value = $t("selectSectionToAssign");
     return;
   }
 
@@ -2114,7 +2117,7 @@ const handleSaveDepartmentSectionAssignment = async () => {
       departmentSectionAssignmentForm.targetValue === null ||
       typeof departmentSectionAssignmentForm.targetValue === "undefined"
     ) {
-      departmentSectionAssignmentError.value = $t('targetValueRequired');
+      departmentSectionAssignmentError.value = $t("targetValueRequired");
       submittingDepartmentSectionAssignment.value = false;
       return;
     }
@@ -2147,7 +2150,7 @@ const handleSaveDepartmentSectionAssignment = async () => {
       !assignmentPayload.assigned_to_department &&
       !assignmentPayload.assigned_to_section
     ) {
-      departmentSectionAssignmentError.value = $t('assignmentTargetRequired');
+      departmentSectionAssignmentError.value = $t("assignmentTargetRequired");
       submittingDepartmentSectionAssignment.value = false;
       return;
     }
@@ -2161,8 +2164,8 @@ const handleSaveDepartmentSectionAssignment = async () => {
 
     notification.success({
       message: isEditing
-        ? $t('assignmentUpdatedSuccessfully')
-        : $t('assignmentAddedSuccessfully'),
+        ? $t("assignmentUpdatedSuccessfully")
+        : $t("assignmentAddedSuccessfully"),
     });
 
     closeManageDepartmentSectionAssignments();
@@ -2173,7 +2176,7 @@ const handleSaveDepartmentSectionAssignment = async () => {
       store.getters["kpis/departmentSectionAssignmentSaveError"] ||
       error?.response?.data?.message ||
       error?.message ||
-      $t('saveFailed');
+      $t("saveFailed");
     departmentSectionAssignmentError.value = errMsg;
     if (error?.response?.data?.errors) {
       const fieldErrors = Object.values(error.response.data.errors)
@@ -2182,7 +2185,7 @@ const handleSaveDepartmentSectionAssignment = async () => {
       departmentSectionAssignmentError.value = `${errMsg}: ${fieldErrors}`;
     }
     notification.error({
-      message: $t('saveFailed'),
+      message: $t("saveFailed"),
       description: errMsg,
     });
   } finally {
@@ -2195,43 +2198,6 @@ const handleDepartmentSelectInModal = (departmentId) => {
 
   if (departmentId) {
     store.dispatch("sections/fetchSectionsByDepartment", departmentId);
-  }
-};
-
-const getStatusColor = (status) => {
-  switch (status) {
-    case KpiDefinitionStatus.APPROVED:
-    case KpiValueStatus.APPROVED:
-      return "success";
-    case KpiDefinitionStatus.DRAFT:
-    case KpiValueStatus.DRAFT:
-    case KpiValueStatus.REJECTED_BY_SECTION:
-    case KpiValueStatus.REJECTED_BY_DEPT:
-    case KpiValueStatus.REJECTED_BY_MANAGER:
-      return "error";
-    case KpiValueStatus.PENDING_SECTION_APPROVAL:
-    case KpiValueStatus.PENDING_DEPT_APPROVAL:
-    case KpiValueStatus.PENDING_MANAGER_APPROVAL:
-      return "warning";
-    default:
-      if (
-        status?.toLowerCase() === "active" ||
-        status?.toLowerCase() === "met" ||
-        status?.toLowerCase() === "exceeded"
-      )
-        return "success";
-      if (
-        status?.toLowerCase() === "inactive" ||
-        status?.toLowerCase() === "rejected" ||
-        status?.toLowerCase() === "not met"
-      )
-        return "error";
-      if (
-        status?.toLowerCase() === "pending" ||
-        status?.toLowerCase() === "in progress"
-      )
-        return "processing";
-      return "default";
   }
 };
 
@@ -2338,7 +2304,7 @@ const fetchAssignableUsersData = async (
         fetchedUsersList
       );
       assignableUsers.value = [];
-      userAssignmentSubmitError.value = $t('failedToProcessUserList');
+      userAssignmentSubmitError.value = $t("failedToProcessUserList");
     }
   } catch (err) {
     console.error(
@@ -2348,7 +2314,7 @@ const fetchAssignableUsersData = async (
     userAssignmentSubmitError.value =
       store.getters["employees/error"] ||
       err.message ||
-      $t('failedToLoadAssignableUsers');
+      $t("failedToLoadAssignableUsers");
     assignableUsers.value = [];
   } finally {
     loadingAssignableUsers.value = false;
@@ -2423,7 +2389,7 @@ const closeAssignUserModal = () => {
 const handleSaveUserAssignment = async () => {
   userAssignmentSubmitError.value = null;
   if (!isEditingUserAssignment.value && selectedUserIds.value.length === 0) {
-    userAssignmentSubmitError.value = $t('selectUsers');
+    userAssignmentSubmitError.value = $t("selectUsers");
     return;
   }
   let invalidDetail = false;
@@ -2437,13 +2403,13 @@ const handleSaveUserAssignment = async () => {
     }
   });
   if (invalidDetail) {
-    userAssignmentSubmitError.value = $t('invalidTarget');
+    userAssignmentSubmitError.value = $t("invalidTarget");
     return;
   }
   submittingUserAssignment.value = true;
   const currentKpiId = kpiId.value;
   if (!currentKpiId) {
-    userAssignmentSubmitError.value = $t('cannotGetKpiId');
+    userAssignmentSubmitError.value = $t("cannotGetKpiId");
     submittingUserAssignment.value = false;
     return;
   }
@@ -2472,7 +2438,7 @@ const handleSaveUserAssignment = async () => {
         assignmentsPayload: assignmentsPayload,
       });
       notification.success({
-        message: $t('assignmentUpdated'),
+        message: $t("assignmentUpdated"),
       });
     } else {
       const assignmentsPayload = {
@@ -2488,16 +2454,18 @@ const handleSaveUserAssignment = async () => {
         assignmentsPayload: assignmentsPayload,
       });
       notification.success({
-        message: $t('usersAssignedSuccessfully'),
+        message: $t("usersAssignedSuccessfully"),
       });
     }
     closeAssignUserModal();
     await fetchKpiUserAssignmentsData(currentKpiId);
   } catch (err) {
     userAssignmentSubmitError.value =
-      store.getters["kpis/assignmentError"] || err.message || $t('failedToSave');
+      store.getters["kpis/assignmentError"] ||
+      err.message ||
+      $t("failedToSave");
     notification.error({
-      message: $t('saveFailed'),
+      message: $t("saveFailed"),
       description: userAssignmentSubmitError.value,
     });
   } finally {
@@ -2511,7 +2479,7 @@ const confirmDeleteUserAssignment = (record) => {
 const handleDeleteUserAssignment = async () => {
   if (!userAssignmentToDelete.value || !userAssignmentToDelete.value.id) {
     notification.error({
-      message: $t('cannotDeleteMissingAssignmentId'),
+      message: $t("cannotDeleteMissingAssignmentId"),
     });
     return;
   }
@@ -2526,14 +2494,14 @@ const handleDeleteUserAssignment = async () => {
       assignmentId: assignmentIdToDelete,
     });
     notification.success({
-      message: $t('assignmentRemovedForUser', { userName }),
+      message: $t("assignmentRemovedForUser", { userName }),
     });
     isDeleteUserAssignModalVisible.value = false;
     userAssignmentToDelete.value = null;
     /* Action fetch lại */
   } catch (err) {
     notification.error({
-      message: $t('deletionFailed'),
+      message: $t("deletionFailed"),
       description: store.getters["kpis/assignmentError"] || err.message,
     });
     isDeleteUserAssignModalVisible.value = false;
@@ -2562,13 +2530,13 @@ const submitEvaluation = async () => {
 
     await store.dispatch("evaluations/createEvaluation", payload);
     notification.success({
-      message: $t('evaluationCreatedPlaceholder'),
+      message: $t("evaluationCreatedPlaceholder"),
     });
     closeCreateEvaluationModal();
     await store.dispatch("kpis/fetchKpiDetail", kpiId.value);
   } catch (error) {
     notification.error({
-      message: $t('failedToCreateEvaluation'),
+      message: $t("failedToCreateEvaluation"),
     });
   } finally {
     submittingEvaluation.value = false;
@@ -2593,7 +2561,7 @@ watch(
       } catch (fetchError) {
         console.error("Error fetching all sections/departments:", fetchError);
         notification.error({
-          message: $t('couldNotLoadSectionsDepartments'),
+          message: $t("couldNotLoadSectionsDepartments"),
         });
       }
 

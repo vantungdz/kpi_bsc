@@ -2,9 +2,9 @@
   <div class="my-kpi-review-page">
     <a-breadcrumb style="margin-bottom: 16px">
       <a-breadcrumb-item>
-        <router-link to="/dashboard">{{ $t('dashboard') }}</router-link>
+        <router-link to="/dashboard">{{ $t("dashboard") }}</router-link>
       </a-breadcrumb-item>
-      <a-breadcrumb-item>{{ $t('myKpiReviewTitle') }}</a-breadcrumb-item>
+      <a-breadcrumb-item>{{ $t("myKpiReviewTitle") }}</a-breadcrumb-item>
     </a-breadcrumb>
 
     <a-card :title="pageTitle" :bordered="false">
@@ -55,7 +55,7 @@
 
         <div v-if="reviewDetails && reviewDetails.overallReviewByManager">
           <div style="margin-bottom: 16px; text-align: right">
-            <span style="margin-right: 8px">{{ $t('reviewStatus') }}:</span>
+            <span style="margin-right: 8px">{{ $t("reviewStatus") }}:</span>
             <a-tag :color="currentReviewStatusColor">
               {{ currentReviewStatusText }}
             </a-tag>
@@ -71,7 +71,7 @@
             <a-descriptions-item :label="$t('overallComment')">
               {{
                 reviewDetails.overallReviewByManager.overallComment ||
-                $t('noComment')
+                $t("noComment")
               }}
             </a-descriptions-item>
             <a-descriptions-item :label="$t('overallScore')">
@@ -82,7 +82,7 @@
                   reviewDetails.overallReviewByManager.overallScore !== null
                 "
               />
-              <span v-else>{{ $t('noScore') }}</span>
+              <span v-else>{{ $t("noScore") }}</span>
             </a-descriptions-item>
           </a-descriptions>
 
@@ -92,7 +92,7 @@
               reviewDetails.kpisReviewedByManager.length > 0
             "
           >
-            <h3>{{ $t('detailedKpiReview') }}</h3>
+            <h3>{{ $t("detailedKpiReview") }}</h3>
             <div
               v-for="(kpiItem, index) in reviewDetails.kpisReviewedByManager"
               :key="kpiItem.assignmentId"
@@ -104,19 +104,21 @@
                 v-if="kpiItem.kpiDescription"
                 style="font-style: italic; color: #555; margin-bottom: 8px"
               >
-                <strong>{{ $t('kpiDescription') }}:</strong> {{ kpiItem.kpiDescription }}
+                <strong>{{ $t("kpiDescription") }}:</strong>
+                {{ kpiItem.kpiDescription }}
               </p>
               <a-row :gutter="16" style="margin-bottom: 10px">
                 <a-col :span="8">
-                  <strong>{{ $t('target') }}:</strong> {{ kpiItem.targetValue }}
+                  <strong>{{ $t("target") }}:</strong> {{ kpiItem.targetValue }}
                   {{ kpiItem.unit }}
                 </a-col>
                 <a-col :span="8">
-                  <strong>{{ $t('actualResult') }}:</strong> {{ kpiItem.actualValue }}
+                  <strong>{{ $t("actualResult") }}:</strong>
+                  {{ kpiItem.actualValue }}
                   {{ kpiItem.unit }}
                 </a-col>
                 <a-col :span="8">
-                  <strong>{{ $t('completionRate') }}:</strong>
+                  <strong>{{ $t("completionRate") }}:</strong>
                   <a-progress
                     :percent="
                       calculateCompletionRate(
@@ -129,22 +131,19 @@
                 </a-col>
               </a-row>
               <p>
-                <strong>{{ $t('managerComment') }}:</strong>
-                {{ kpiItem.existingManagerComment || $t('noComment') }}
+                <strong>{{ $t("managerComment") }}:</strong>
+                {{ kpiItem.existingManagerComment || $t("noComment") }}
               </p>
               <p v-if="kpiItem.existingManagerScore !== null">
-                <strong>{{ $t('managerScore') }}:</strong>
+                <strong>{{ $t("managerScore") }}:</strong>
                 <a-rate :value="kpiItem.existingManagerScore" disabled />
               </p>
             </div>
           </div>
-          <a-empty
-            v-else
-            :description="$t('noDetailedKpiReview')"
-          />
+          <a-empty v-else :description="$t('noDetailedKpiReview')" />
 
           <a-divider />
-          <h3>{{ $t('yourFeedback') }}</h3>
+          <h3>{{ $t("yourFeedback") }}</h3>
           <div
             v-if="
               reviewDetails.overallReviewByManager.status ===
@@ -163,13 +162,13 @@
               @click="submitFeedback"
               :loading="isSubmittingFeedback"
             >
-              {{ $t('submitFeedback') }}
+              {{ $t("submitFeedback") }}
             </a-button>
           </div>
           <div v-else-if="reviewDetails.overallReviewByManager.employeeComment">
             <p>
               <strong>
-                {{ $t('yourFeedbackSentOn') }}
+                {{ $t("yourFeedbackSentOn") }}
                 {{
                   formatDate(
                     reviewDetails.overallReviewByManager.employeeFeedbackDate
@@ -187,7 +186,7 @@
               reviewDetails.overallReviewByManager.status === 'MANAGER_REVIEWED'
             "
           >
-            <p>{{ $t('reviewCompletedOrReviewed') }}</p>
+            <p>{{ $t("reviewCompletedOrReviewed") }}</p>
           </div>
           <div
             v-else-if="
@@ -195,7 +194,7 @@
               'EMPLOYEE_RESPONDED'
             "
           >
-            <p>{{ $t('feedbackAlreadySent') }}</p>
+            <p>{{ $t("feedbackAlreadySent") }}</p>
           </div>
           <a-alert
             v-if="submitFeedbackError"
@@ -215,6 +214,8 @@
 <script setup>
 import { ref, computed, onMounted } from "vue";
 import { useStore } from "vuex";
+import { useI18n } from "vue-i18n";
+const { t: $t } = useI18n();
 import {
   Card as ACard,
   Row as ARow,
@@ -277,9 +278,9 @@ const submitFeedbackError = ref(
 const pageTitle = computed(() => {
   const cycleName = getSelectedCycleName();
   if (cycleName) {
-    return `Đánh giá KPI của tôi - Chu kỳ: ${cycleName}`;
+    return `${$t("myKpiReviewTitle")} - ${$t("selectCycle")}: ${cycleName}`;
   }
-  return "Đánh giá KPI của tôi";
+  return $t("myKpiReviewTitle");
 });
 
 const getSelectedCycleName = () => {

@@ -1,7 +1,7 @@
 <template>
   <a-layout-header class="app-header-container">
     <div class="header-left">
-      <div class="logo-title">{{ $t('kpiDashboard') }}</div>
+      <div class="logo-title">{{ $t("kpiDashboard") }}</div>
     </div>
 
     <div class="header-right">
@@ -11,13 +11,14 @@
       <a-dropdown v-if="isUserAuthenticated" placement="bottomRight">
         <div class="user-profile-trigger">
           <a-avatar :src="actualUser?.avatar_url" size="small">
-            <template #icon><span v-if="userInitial">{{ userInitial }}</span><span v-else>
-                <UserOutlined />
-              </span></template>
+            <template #icon
+              ><span v-if="userInitial">{{ userInitial }}</span
+              ><span v-else> <UserOutlined /> </span
+            ></template>
           </a-avatar>
           <span class="user-name">
             {{ displayName }}
-            <span class="role-display"> ({{ userRole || $t('noRole') }})</span>
+            <span class="role-display"> ({{ userRole || $t("noRole") }})</span>
           </span>
           <down-outlined class="user-arrow" />
         </div>
@@ -29,12 +30,26 @@
       <a-dropdown placement="bottomRight">
         <template #overlay>
           <a-menu>
-            <a-menu-item @click="changeLanguage('en')">English</a-menu-item>
-            <a-menu-item @click="changeLanguage('vi')">Tiếng Việt</a-menu-item>
+            <a-menu-item
+              v-for="lang in availableLanguages"
+              :key="lang.code"
+              @click="changeLanguage(lang.code)"
+            >
+              <flag
+                :iso="lang.countryCode"
+                style="margin-right: 8px; font-size: 1.2em"
+              />
+              <span>{{ $t(lang.nameKey) }}</span>
+            </a-menu-item>
           </a-menu>
         </template>
         <a-button>
-          {{ $t('language') }} <DownOutlined />
+          <flag
+            :iso="currentLanguageDisplay.countryCode"
+            style="margin-right: 8px; font-size: 1.2em"
+          />
+          {{ currentLanguageDisplay.name }}
+          <DownOutlined />
         </a-button>
       </a-dropdown>
     </div>
@@ -42,11 +57,10 @@
 </template>
 
 <script setup>
-
 import { computed, watch } from "vue";
-import { h } from 'vue'; 
-import { useI18n } from 'vue-i18n';
-import { useCurrentLocale, setLocale } from '@/core/i18n';
+import { h } from "vue";
+import { useI18n } from "vue-i18n";
+import { useCurrentLocale, setLocale } from "@/core/i18n";
 
 import { useStore } from "vuex";
 import { useRouter } from "vue-router";
@@ -59,7 +73,7 @@ import {
 } from "@ant-design/icons-vue";
 
 import { MENU_KEYS, ROUTES } from "@/core/constants/navigation";
-import NotificationBell from "../../../features/notifications/component/NotificationBell.vue"; 
+import NotificationBell from "../../../features/notifications/component/NotificationBell.vue";
 
 const { t: $t } = useI18n();
 const store = useStore();
@@ -67,30 +81,50 @@ const router = useRouter();
 
 const currentLocale = useCurrentLocale();
 
+const availableLanguages = [
+  { code: "en", nameKey: "english", countryCode: "us" }, // Sử dụng cờ Mỹ cho tiếng Anh
+  { code: "vi", nameKey: "vietnamese", countryCode: "vn" },
+  { code: "ja", nameKey: "japanese", countryCode: "jp" },
+];
+
+const currentLanguageDisplay = computed(() => {
+  const lang = availableLanguages.find((l) => l.code === currentLocale.value);
+  if (lang) {
+    return { ...lang, name: $t(lang.nameKey) };
+  }
+  // Fallback nếu currentLocale không nằm trong availableLanguages
+  // Điều này không nên xảy ra nếu locale được quản lý đúng cách
+  const fallbackLang = availableLanguages[0]; // Hoặc một ngôn ngữ mặc định cụ thể
+  return { ...fallbackLang, name: $t(fallbackLang.nameKey) };
+});
+
 watch(currentLocale, (newLocale) => {
-  console.log('Language changed to:', newLocale);
+  console.log("Language changed to:", newLocale);
   // Removed force update logic as it caused errors
 });
 
-const isUserAuthenticated = computed(() => store.getters["auth/isAuthenticated"]);
+const isUserAuthenticated = computed(
+  () => store.getters["auth/isAuthenticated"]
+);
 const actualUser = computed(() => store.getters["auth/user"]);
 
 const userRole = computed(() => store.getters["auth/effectiveRole"]);
-
 
 const displayName = computed(() => {
   if (!actualUser.value) return $t("user");
   return actualUser.value.first_name || actualUser.value.username || $t("user");
 });
 
-
 const userInitial = computed(() => {
-  if (actualUser.value && (actualUser.value.first_name || actualUser.value.username)) {
+  if (
+    actualUser.value &&
+    (actualUser.value.first_name || actualUser.value.username)
+  ) {
     return (actualUser.value.first_name || actualUser.value.username)
       .charAt(0)
       .toUpperCase();
   }
-  return null; 
+  return null;
 });
 
 const menuItems = computed(() => [
@@ -105,15 +139,14 @@ const menuItems = computed(() => [
     icon: () => h(SettingOutlined),
   },
   {
-    type: 'divider',
+    type: "divider",
   },
   {
     key: MENU_KEYS.LOGOUT,
     label: $t("logout"),
     icon: () => h(LogoutOutlined),
-  }
+  },
 ]);
-
 
 const handleMenuClick = ({ key }) => {
   if (key === MENU_KEYS.LOGOUT) {
@@ -125,15 +158,14 @@ const handleMenuClick = ({ key }) => {
   }
 };
 
-
 const handleLogout = () => {
   store.dispatch("auth/logout");
 };
 
 function changeLanguage(lang) {
-  console.log('Changing language to:', lang);
+  console.log("Changing language to:", lang);
   setLocale(lang);
-  console.log('Current locale after change:', currentLocale.value);
+  console.log("Current locale after change:", currentLocale.value);
 }
 </script>
 

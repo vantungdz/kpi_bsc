@@ -86,7 +86,7 @@
                   @click="openDetailModal(record)"
                   :title="$t('viewDetailsAndHistory')"
                 >
-                  <eye-outlined /> {{ $t('details') }}
+                  <eye-outlined /> {{ $t("details") }}
                 </a-button>
                 <a-button
                   type="primary"
@@ -96,7 +96,7 @@
                   :disabled="isProcessing && currentActionItemId !== record.id"
                   :title="$t('approve')"
                 >
-                  <check-outlined /> {{ $t('approve') }}
+                  <check-outlined /> {{ $t("approve") }}
                 </a-button>
                 <a-button
                   danger
@@ -105,7 +105,7 @@
                   :disabled="isProcessing"
                   :title="$t('reject')"
                 >
-                  <close-outlined /> {{ $t('reject') }}
+                  <close-outlined /> {{ $t("reject") }}
                 </a-button>
               </a-space>
             </template>
@@ -141,11 +141,13 @@
         style="margin-bottom: 10px"
       />
       <p v-if="itemToReject" style="margin-bottom: 10px">
-        {{ $t('rejectValueForKpi', {
-          value: itemToReject.value?.toLocaleString(),
-          kpiName: itemToReject.kpiAssignment?.kpi?.name,
-          employeeName: `${itemToReject.kpiAssignment?.employee?.first_name} ${itemToReject.kpiAssignment?.employee?.last_name}`,
-        }) }}
+        {{
+          $t("rejectValueForKpi", {
+            value: itemToReject.value?.toLocaleString(),
+            kpiName: itemToReject.kpiAssignment?.kpi?.name,
+            employeeName: `${itemToReject.kpiAssignment?.employee?.first_name} ${itemToReject.kpiAssignment?.employee?.last_name}`,
+          })
+        }}
       </p>
       <a-form-item
         :label="$t('reasonRequired')"
@@ -213,7 +215,7 @@
               )
             }}</a-descriptions-item>
             <a-descriptions-item :label="$t('notes')">{{
-              selectedKpiValue.notes || $t('noNotes')
+              selectedKpiValue.notes || $t("noNotes")
             }}</a-descriptions-item>
 
             <a-descriptions-item :label="$t('projectOrTaskDetails')">
@@ -239,7 +241,7 @@
                   </template>
                 </a-table>
               </div>
-              <span v-else>{{ $t('noProjectDetails') }}</span>
+              <span v-else>{{ $t("noProjectDetails") }}</span>
             </a-descriptions-item>
 
             <a-descriptions-item
@@ -253,7 +255,7 @@
           </a-descriptions>
 
           <h3 style="margin-top: 20px; margin-bottom: 10px">
-            {{ $t('updateApprovalHistory') }}
+            {{ $t("updateApprovalHistory") }}
           </h3>
           <a-spin :spinning="isLoadingHistory" :tip="$t('loadingHistory')">
             <a-alert
@@ -283,11 +285,11 @@
                   {{ record.value?.toLocaleString() ?? "" }}
                 </template>
 
-                
                 <template v-else-if="column.key === 'noteOrReason'">
                   <a-tooltip v-if="record.reason" :title="record.reason">
                     <span style="color: red"
-                      >{{ $t('reason') }}: {{ truncateText(record.reason, 70) }}</span
+                      >{{ $t("reason") }}:
+                      {{ truncateText(record.reason, 70) }}</span
                     >
                   </a-tooltip>
                   <a-tooltip v-else-if="record.notes" :title="record.notes">
@@ -351,11 +353,11 @@ import {
   KpiValueStatus,
   KpiValueStatusColor,
 } from "@/core/constants/kpiStatus";
-import { getKpiValueStatusText } from '@/core/constants/kpiStatus';
-import { useI18n } from 'vue-i18n';
+import { getKpiValueStatusText } from "@/core/constants/kpiStatus";
+import { useI18n } from "vue-i18n";
 
 const { t: $t } = useI18n();
-const KpiValueStatusText = getKpiValueStatusText({ t: $t });
+const KpiValueStatusText = getKpiValueStatusText($t);
 
 console.log("KpiValueStatus:", KpiValueStatus);
 
@@ -386,58 +388,58 @@ const currentUser = computed(() => store.getters["auth/user"]);
 // Computed card title based on user role
 const cardTitle = computed(() => {
   const role = currentUser.value?.role;
-  if (role === "admin") return $t('adminApprovalTitle');
-  if (role === "manager") return $t('managerApprovalTitle');
-  if (role === "leader") return $t('leaderApprovalTitle');
-  return $t('defaultApprovalTitle');
+  if (role === "admin") return $t("adminApprovalTitle");
+  if (role === "manager") return $t("managerApprovalTitle");
+  if (role === "leader") return $t("leaderApprovalTitle");
+  return $t("defaultApprovalTitle");
 });
 
 // Table columns definitions extracted outside component logic
 const columns = computed(() => [
   {
-    title: $t('kpiName'),
+    title: $t("kpiName"),
     dataIndex: ["kpiAssignment", "kpi", "name"],
     key: "kpiName",
     width: 200,
     ellipsis: true,
   },
-  { title: $t('employee'), key: "employee", width: 150, ellipsis: true },
+  { title: $t("employee"), key: "employee", width: 150, ellipsis: true },
   {
-    title: $t('submittedValue'),
+    title: $t("submittedValue"),
     dataIndex: "value",
     key: "value",
     align: "right",
     width: 120,
   },
   {
-    title: $t('target'),
+    title: $t("target"),
     dataIndex: ["kpiAssignment", "targetValue"],
     key: "target",
     align: "right",
     width: 120,
   },
   {
-    title: $t('submissionDate'),
+    title: $t("submissionDate"),
     dataIndex: "timestamp",
     key: "submittedAt",
     width: 140,
   },
   {
-    title: $t('notes'),
+    title: $t("notes"),
     dataIndex: "notes",
     key: "notes",
     width: 150,
     ellipsis: true,
   },
   {
-    title: $t('status'),
+    title: $t("status"),
     dataIndex: "status",
     key: "status",
     width: 180,
     align: "center",
   },
   {
-    title: $t('actions'),
+    title: $t("actions"),
     key: "actions",
     align: "center",
     width: 180,
@@ -446,31 +448,31 @@ const columns = computed(() => [
 ]);
 
 const historyColumns = computed(() => [
-  { title: $t('timestamp'), key: 'timestamp', width: 140 },
-  { title: $t('action'), dataIndex: 'action', key: 'action', width: 180 },
+  { title: $t("timestamp"), key: "timestamp", width: 140 },
+  { title: $t("action"), dataIndex: "action", key: "action", width: 180 },
   {
-    title: $t('value'),
-    dataIndex: 'value',
-    key: 'value',
-    align: 'right',
+    title: $t("value"),
+    dataIndex: "value",
+    key: "value",
+    align: "right",
     width: 100,
   },
-  { title: $t('noteOrReason'), key: 'noteOrReason', ellipsis: true },
-  { title: $t('changedBy'), key: 'changed_by', width: 150 },
+  { title: $t("noteOrReason"), key: "noteOrReason", ellipsis: true },
+  { title: $t("changedBy"), key: "changed_by", width: 150 },
 ]);
 
 const projectDetailsColumns = computed(() => [
   {
-    title: $t('projectOrTaskName'),
-    dataIndex: 'name',
-    key: 'name',
+    title: $t("projectOrTaskName"),
+    dataIndex: "name",
+    key: "name",
     ellipsis: true,
   },
   {
-    title: $t('value'),
-    dataIndex: 'value',
-    key: 'value',
-    align: 'right',
+    title: $t("value"),
+    dataIndex: "value",
+    key: "value",
+    align: "right",
     width: 100,
   },
 ]);
@@ -478,19 +480,19 @@ const projectDetailsColumns = computed(() => [
 // Utility functions with comments
 const getActionText = (actionKey) => {
   const map = {
-    SUBMIT_CREATE: $t('submitCreate'),
-    SUBMIT_UPDATE: $t('submitUpdate'),
-    APPROVE_SECTION: $t('approveSection'),
-    REJECT_SECTION: $t('rejectSection'),
-    APPROVE_DEPT: $t('approveDept'),
-    REJECT_DEPT: $t('rejectDept'),
-    APPROVE_MANAGER: $t('approveManager'),
-    REJECT_MANAGER: $t('rejectManager'),
-    CREATE: $t('create'),
-    UPDATE: $t('update'),
-    DELETE: $t('delete'),
+    SUBMIT_CREATE: $t("submitCreate"),
+    SUBMIT_UPDATE: $t("submitUpdate"),
+    APPROVE_SECTION: $t("approveSection"),
+    REJECT_SECTION: $t("rejectSection"),
+    APPROVE_DEPT: $t("approveDept"),
+    REJECT_DEPT: $t("rejectDept"),
+    APPROVE_MANAGER: $t("approveManager"),
+    REJECT_MANAGER: $t("rejectManager"),
+    CREATE: $t("create"),
+    UPDATE: $t("update"),
+    DELETE: $t("delete"),
   };
-  return map[actionKey?.toUpperCase()] || actionKey || $t('unknown');
+  return map[actionKey?.toUpperCase()] || actionKey || $t("unknown");
 };
 
 const formatDate = (dateString) => {

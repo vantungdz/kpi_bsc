@@ -1,9 +1,9 @@
 <template>
   <div class="employee-list">
     <div class="header">
-      <h2>{{ $t('employeeListTitle') }}</h2>
+      <h2>{{ $t("employeeListTitle") }}</h2>
       <a-button type="primary" @click="openUploadModal">
-        {{ $t('uploadEmployeeExcel') }}
+        {{ $t("uploadEmployeeExcel") }}
       </a-button>
     </div>
     <a-modal
@@ -19,7 +19,7 @@
         @remove="handleRemove"
         accept=".xlsx, .xls"
       >
-        <a-button> <upload-outlined /> {{ $t('selectFile') }} </a-button>
+        <a-button> <upload-outlined /> {{ $t("selectFile") }} </a-button>
       </a-upload>
     </a-modal>
     <a-table :columns="columns" :data-source="employees" row-key="id">
@@ -29,13 +29,13 @@
         </template>
 
         <template v-else-if="column.dataIndex === 'department'">
-          {{ record.department?.name || $t('noData') }}
+          {{ record.department?.name || $t("noData") }}
         </template>
         <template v-else-if="column.dataIndex === 'section'">
-          {{ record.section?.name || $t('noData') }}
+          {{ record.section?.name || $t("noData") }}
         </template>
         <template v-else-if="column.dataIndex === 'role'">
-          {{ record.role || $t('noData') }}
+          {{ record.role || $t("noData") }}
         </template>
         <template v-else-if="column.key === 'actions'">
           <a-space>
@@ -45,7 +45,7 @@
               @click="viewReviewHistory(record)"
             >
               <history-outlined />
-              {{ $t('reviewHistory') }}
+              {{ $t("reviewHistory") }}
             </a-button>
           </a-space>
         </template>
@@ -54,9 +54,9 @@
             column.dataIndex && record.hasOwnProperty(column.dataIndex)
           "
         >
-          {{ record[column.dataIndex] || $t('noData') }}
+          {{ record[column.dataIndex] || $t("noData") }}
         </template>
-        <template v-else> {{ $t('noData') }} </template>
+        <template v-else> {{ $t("noData") }} </template>
       </template>
     </a-table>
   </div>
@@ -66,6 +66,7 @@
 import { ref, computed, onMounted } from "vue";
 import { useStore } from "vuex";
 import { notification } from "ant-design-vue";
+import { useI18n } from "vue-i18n";
 
 import {
   Button as AButton,
@@ -77,6 +78,7 @@ import {
 import { UploadOutlined, HistoryOutlined } from "@ant-design/icons-vue"; // Thêm HistoryOutlined nếu dùng icon
 import { useRouter } from "vue-router"; // Thêm useRouter
 
+const { t: $t } = useI18n();
 const store = useStore();
 const router = useRouter(); // Khởi tạo router
 const employees = computed(() => store.getters["employees/userList"]);
@@ -208,9 +210,9 @@ onMounted(() => {
   });
 });
 
-const columns = ref([
+const columns = computed(() => [
   {
-    title: "Tên nhân viên",
+    title: $t("employeeFullName") || "Tên nhân viên",
     dataIndex: "fullName",
     key: "fullName",
     sorter: (a, b) => {
@@ -220,20 +222,19 @@ const columns = ref([
     },
   },
   {
-    title: "Tên đăng nhập",
+    title: $t("username"),
     dataIndex: "username",
     key: "username",
     sorter: (a, b) => a.username.localeCompare(b.username),
   },
   {
-    title: "Email",
+    title: $t("email"),
     dataIndex: "email",
     key: "email",
     sorter: (a, b) => a.email.localeCompare(b.email),
   },
-
   {
-    title: "Phòng ban",
+    title: $t("departmentLabel"),
     dataIndex: "department",
     key: "department",
     sorter: (a, b) => {
@@ -243,7 +244,7 @@ const columns = ref([
     },
   },
   {
-    title: "Bộ phận",
+    title: $t("section"),
     dataIndex: "section",
     key: "section",
     sorter: (a, b) => {
@@ -253,13 +254,13 @@ const columns = ref([
     },
   },
   {
-    title: "Vai trò",
+    title: $t("role"),
     dataIndex: "role",
     key: "role",
     sorter: (a, b) => (a.role || "").localeCompare(b.role || ""),
   },
   {
-    title: "Hành động",
+    title: $t("actions"),
     dataIndex: "actions",
     key: "actions",
     align: "center",

@@ -13,16 +13,16 @@ export const KpiValueStatus = Object.freeze({
 });
 
 // Bạn cũng có thể định nghĩa thêm text hoặc màu sắc tương ứng ở đây nếu muốn
-export const getKpiValueStatusText = (i18n) => ({
-  [KpiValueStatus.DRAFT]: i18n.t('draft'),
-  [KpiValueStatus.SUBMITTED]: i18n.t('submitted'),
-  [KpiValueStatus.PENDING_SECTION_APPROVAL]: i18n.t('pendingSectionApproval'),
-  [KpiValueStatus.PENDING_DEPT_APPROVAL]: i18n.t('pendingDeptApproval'),
-  [KpiValueStatus.PENDING_MANAGER_APPROVAL]: i18n.t('pendingManagerApproval'),
-  [KpiValueStatus.APPROVED]: i18n.t('approved'),
-  [KpiValueStatus.REJECTED_BY_SECTION]: i18n.t('rejectedBySection'),
-  [KpiValueStatus.REJECTED_BY_DEPT]: i18n.t('rejectedByDept'),
-  [KpiValueStatus.REJECTED_BY_MANAGER]: i18n.t('rejectedByManager'),
+export const getKpiValueStatusText = (t) => ({
+  [KpiValueStatus.DRAFT]: t("draft"),
+  [KpiValueStatus.SUBMITTED]: t("submitted"),
+  [KpiValueStatus.PENDING_SECTION_APPROVAL]: t("pendingSectionApproval"),
+  [KpiValueStatus.PENDING_DEPT_APPROVAL]: t("pendingDeptApproval"),
+  [KpiValueStatus.PENDING_MANAGER_APPROVAL]: t("pendingManagerApproval"),
+  [KpiValueStatus.APPROVED]: t("approved"),
+  [KpiValueStatus.REJECTED_BY_SECTION]: t("rejectedBySection"),
+  [KpiValueStatus.REJECTED_BY_DEPT]: t("rejectedByDept"),
+  [KpiValueStatus.REJECTED_BY_MANAGER]: t("rejectedByManager"),
 });
 
 export const KpiValueStatusColor = {
@@ -42,9 +42,9 @@ export const KpiDefinitionStatus = Object.freeze({
   APPROVED: "APPROVED",
 });
 
-export const KpiDefinitionStatusText = (i18n) => ({
-  [KpiDefinitionStatus.DRAFT]: i18n.t('draft'),
-  [KpiDefinitionStatus.APPROVED]: i18n.t('approved'),
+export const KpiDefinitionStatusText = (t) => ({
+  [KpiDefinitionStatus.DRAFT]: t("draft"),
+  [KpiDefinitionStatus.APPROVED]: t("approved"),
 });
 
 export const KpiDefinitionStatusColor = {
