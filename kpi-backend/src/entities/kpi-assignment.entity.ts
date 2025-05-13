@@ -101,6 +101,9 @@ export class KPIAssignment {
   @Column({ type: 'numeric', nullable: true })
   targetValue: number | null;
 
+  @Column({ type: 'numeric', nullable: true }) // Added weight column
+  weight: number | null;
+
   @CreateDateColumn()
   assignedAt: Date;
 

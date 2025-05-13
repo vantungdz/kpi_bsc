@@ -291,8 +291,12 @@ const getSelectedCycleName = () => {
 const fetchMyReview = async () => {
   if (!selectedCycle.value) {
     store.commit("kpiEvaluations/SET_EMPLOYEE_REVIEW_DETAILS", null);
+    if (myReviewError.value) {
+      myReviewError.value = null;
+    }
     return;
   }
+  myReviewError.value = null;
   await store.dispatch("kpiEvaluations/fetchMyReviewDetails", {
     cycleId: selectedCycle.value,
   });
@@ -375,6 +379,9 @@ const clearSubmitFeedbackError = () => {
 };
 
 onMounted(async () => {
+  if (myReviewError.value) {
+    myReviewError.value = null;
+  }
   await store.dispatch("kpiEvaluations/fetchReviewCycles");
 });
 </script>

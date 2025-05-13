@@ -61,6 +61,13 @@
         </router-link>
       </a-menu-item>
 
+      <a-menu-item key="performance-objective-approvals" v-if="canViewObjectiveApprovals">
+        <router-link to="/performance-objective-approvals">
+          <file-protect-outlined />
+          <span>{{ $t('performanceObjectiveApprovalMenu') }}</span>
+        </router-link>
+      </a-menu-item>
+
       <a-menu-item key="personal-kpis" v-if="effectiveRole">
         <router-link to="/personal">
           <user-outlined />
@@ -114,6 +121,7 @@ import {
   CheckSquareOutlined,
   UserOutlined,
   AuditOutlined,
+  FileProtectOutlined, // Thêm icon mới
 } from "@ant-design/icons-vue";
 
 // Store instance
@@ -146,6 +154,12 @@ const canViewApprovals = computed(() => {
   );
 });
 
+// Permission for viewing performance objective approvals
+const canViewObjectiveApprovals = computed(() => {
+  if (!effectiveRole.value) return false;
+  // Các vai trò này nên khớp với meta.roles của route PerformanceObjectiveApprovalList
+  return ["admin", "manager", "department", "section"].includes(effectiveRole.value);
+});
 // // Example computed for other conditional links
 // const isManagerOrAdmin = computed(() => {
 //    if (!userRole.value) return false;

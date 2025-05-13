@@ -2,10 +2,11 @@ import {
   BadRequestException,
   Injectable,
   Logger,
+  NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import {
+import { Brackets,
   LessThanOrEqual,
   MoreThanOrEqual,
   Repository,
@@ -20,6 +21,11 @@ import { KpiValue } from '../entities/kpi-value.entity';
 import { KpiReview } from '../entities/kpi-review.entity';
 import { OverallReview } from '../entities/overall-review.entity';
 import {
+  PerformanceObjectiveEvaluation,
+} from '../entities/performance-objective-evaluation.entity'; 
+import { PerformanceObjectiveEvaluationDetail } from '../entities/performance-objective-evaluation-detail.entity';
+import { PerformanceObjectiveEvaluationHistory } from '../entities/performance-objective-evaluation-history.entity'; 
+import {
   ReviewableTargetDto,
   ReviewCycleDto,
   KpiToReviewDto,
@@ -30,9 +36,15 @@ import {
   SubmitEmployeeFeedbackDto,
   KpisForReviewResponseDto,
   ReviewHistoryResponseDto,
+  PerformanceObjectiveItemDto,
 } from './dto/evaluation.dto';
-import { OverallReviewStatus } from '../entities/overall-review.entity';
+import { SavePerformanceObjectivesDto } from './dto/save-performance-objectives.dto';
+import {
+  OverallReviewStatus,
+} from '../entities/overall-review.entity';
+import {RejectObjectiveEvaluationDto} from './dto/reject-objective-evaluation.dto';
 import { KpiValueStatus } from '../entities/kpi-value.entity';
+import { ObjectiveEvaluationStatus } from 'src/entities/objective-evaluation-status.enum';
 
 @Injectable()
 export class EvaluationService {
@@ -53,6 +65,13 @@ export class EvaluationService {
     private readonly kpiReviewRepository: Repository<KpiReview>,
     @InjectRepository(OverallReview)
     private readonly overallReviewRepository: Repository<OverallReview>,
+    @InjectRepository(PerformanceObjectiveEvaluation)
+    private readonly objectiveEvaluationRepository: Repository<PerformanceObjectiveEvaluation>,
+    @InjectRepository(PerformanceObjectiveEvaluationDetail)
+    private readonly objectiveEvaluationDetailRepository: Repository<PerformanceObjectiveEvaluationDetail>,
+    @InjectRepository(PerformanceObjectiveEvaluationHistory)
+    private readonly objectiveEvaluationHistoryRepository: Repository<PerformanceObjectiveEvaluationHistory>,
+    private readonly entityManager: EntityManager, 
     private readonly eventEmitter: EventEmitter2,
   ) {}
 
@@ -799,4 +818,476 @@ export class EvaluationService {
       employeeFeedbackDate: or.employeeFeedbackDate,
     }));
   }
+
+  async getPerformanceObjectivesForEmployee(
+    employeeId: number,
+    cycleId?: string,
+  ): Promise<PerformanceObjectiveItemDto[]> {
+    this.logger.debug(
+      `[getPerformanceObjectivesForEmployee] Called for employee ${employeeId}, cycle ${cycleId ?? 'N/A'}`,
+    );
+
+    let dateRange;
+    if (cycleId) {
+      dateRange = this.getDateRangeFromCycleId(cycleId);
+      if (!dateRange.startDate || !dateRange.endDate) {
+        this.logger.warn(
+          `[getPerformanceObjectivesForEmployee] Invalid cycleId ${cycleId} for date range.`,
+        );
+        throw new BadRequestException('Invalid cycle ID provided.');
+      }
+    } else {
+      
+      const today = new Date();
+      dateRange = { startDate: today, endDate: today };
+    }
+
+    const assignments = await this.assignmentRepository.find({
+      where: {
+        assigned_to_employee: employeeId,
+        startDate: LessThanOrEqual(dateRange.endDate),
+        endDate: MoreThanOrEqual(dateRange.startDate),
+      },
+      relations: [
+        'kpi',
+        'kpi.perspective',
+        'kpiValues',
+      ],
+      order: { kpi: { perspective: { id: 'ASC' }, name: 'ASC' } }, 
+    });
+
+    // Fetch the existing PerformanceObjectiveEvaluation for this employee and cycle (if any)
+    // to get previously saved supervisor scores and notes.
+    let existingObjectiveEvaluation: PerformanceObjectiveEvaluation | null = null;
+    if (employeeId) { // cycleId is optional here based on your current logic
+      existingObjectiveEvaluation = await this.objectiveEvaluationRepository.findOne({
+        where: {
+          employee_id: employeeId,
+          review_cycle_id: cycleId ? Number(cycleId) : undefined, // Assuming cycleId can be null/undefined
+        },
+        relations: ['details'], // Load details which contain score and note
+      });
+    }
+
+    if (!assignments || assignments.length === 0) {
+      return [];
+    }
+
+    const objectives: PerformanceObjectiveItemDto[] = [];
+
+    for (const assignment of assignments) {
+      if (!assignment.kpi) continue;
+
+      
+      console.log(`KPI Values for assignment ${assignment.id}:`, assignment.kpiValues);
+
+      let latestKpiValue: KpiValue | undefined = undefined;
+      if (assignment.kpiValues && assignment.kpiValues.length > 0) {
+        latestKpiValue = assignment.kpiValues
+          .sort((a, b) => {
+            const dateA = a.updated_at || a.timestamp;
+            const dateB = b.updated_at || b.timestamp;
+            return new Date(dateB).getTime() - new Date(dateA).getTime();
+          })[0]; 
+      }
+
+      const actualValue = latestKpiValue ? latestKpiValue.value : null;
+      // Get supervisor score and note from existingObjectiveEvaluation.details
+      // We need to match by the original KPI's ID (assignment.kpi.id)
+      // because performance_objective_id in Detail entity refers to Kpi.id
+      const existingEvalDetail = existingObjectiveEvaluation?.details?.find(
+        detail => detail.performance_objective_id === assignment.kpi_id
+      );
+
+      const supervisorScore = existingEvalDetail ? existingEvalDetail.score : null;
+      const supervisorNote = existingEvalDetail ? existingEvalDetail.note : '';
+
+      objectives.push({
+        id: assignment.id,
+        name: assignment.kpi.name,
+        kpiDescription: assignment.kpi.description,
+        target: assignment.targetValue,
+        actualResult: actualValue, // This is from KpiValue
+        unit: assignment.kpi.unit,
+        weight: assignment.weight,
+        bscAspect: assignment.kpi.perspective?.name || 'Uncategorized',
+        supervisorEvalScore: supervisorScore, // Score from PerformanceObjectiveEvaluationDetail
+        note: supervisorNote,                 // Note from PerformanceObjectiveEvaluationDetail
+      });
+    }
+    return objectives;
+  }
+
+  async savePerformanceObjectives(
+    currentUser: Employee,
+    saveData: SavePerformanceObjectivesDto,
+  ): Promise<void> {
+    const { employeeId, cycleId, evaluations } = saveData; 
+
+    
+    const employee = await this.employeeRepository.findOne({ where: { id: employeeId } });
+    if (!employee) {
+      throw new Error('Employee not found');
+    }
+
+    
+    if (!Array.isArray(evaluations)) { 
+      throw new Error('Evaluations must be an array');
+    }
+
+    for (const evaluation of evaluations) { 
+      if (!evaluation.objectiveId || typeof evaluation.score !== 'number') {
+        throw new Error('Invalid evaluation data');
+      }
+
+      
+      console.log(`Processing evaluation for employeeId: ${employeeId}, KPI ID: ${evaluation.objectiveId}`);
+
+      const kpiAssignment = await this.assignmentRepository.findOne({
+        where: { assigned_to_employee: employeeId, kpi_id: evaluation.objectiveId },
+      });
+
+      if (!kpiAssignment) {
+        console.warn(`KPI Assignment not found for employeeId: ${employeeId}, KPI ID: ${evaluation.objectiveId}. Skipping this evaluation.`);
+        continue; 
+      }
+
+      await this.kpiValueRepository.save({
+        kpiAssignment: kpiAssignment,
+        value: evaluation.score, 
+        note: evaluation.note, 
+      });
+    }
+  }
+
+  
+
+  async submitObjectiveEvaluation(
+    evaluator: Employee,
+    dto: SavePerformanceObjectivesDto, 
+  ): Promise<PerformanceObjectiveEvaluation> {
+    return this.entityManager.transaction(async (transactionalEntityManager) => {
+      const objEvalRepo = transactionalEntityManager.getRepository(PerformanceObjectiveEvaluation);
+      const objEvalDetailRepo = transactionalEntityManager.getRepository(PerformanceObjectiveEvaluationDetail);
+      const objEvalHistoryRepo = transactionalEntityManager.getRepository(PerformanceObjectiveEvaluationHistory);
+      const assignmentRepo = transactionalEntityManager.getRepository(KPIAssignment);
+
+      const { employeeId, cycleId, evaluations } = dto;
+
+      const evaluatedEmployee = await this.employeeRepository.findOneBy({ id: employeeId });
+      if (!evaluatedEmployee) {
+        throw new BadRequestException(`Employee with ID ${employeeId} not found.`);
+      }
+
+      let totalWeightedScore = 0;
+      let totalWeightForAverage = 0;
+
+      const detailEntities: PerformanceObjectiveEvaluationDetail[] = [];
+
+      for (const evalItem of evaluations) {
+        const assignment = await assignmentRepo.findOne({
+          where: { id: evalItem.objectiveId, assigned_to_employee: employeeId },
+          relations: ['kpi'], 
+        });
+
+        if (!assignment || !assignment.kpi) {
+          this.logger.warn(`KPI Assignment ID ${evalItem.objectiveId} for employee ${employeeId} not found or KPI missing. Skipping.`);
+          continue;
+        }
+
+        const detail = new PerformanceObjectiveEvaluationDetail();
+        detail.performance_objective_id = assignment.kpi.id; 
+        detail.score = evalItem.score ?? null; 
+        detail.note = evalItem.note || ''; 
+        detailEntities.push(detail);
+
+        if (typeof evalItem.score === 'number' && typeof assignment.weight === 'number') {
+          totalWeightedScore += evalItem.score * assignment.weight;
+          if (assignment.weight > 0) {
+             totalWeightForAverage += assignment.weight;
+          }
+        }
+      }
+
+      const averageScore = totalWeightForAverage > 0 ? totalWeightedScore / totalWeightForAverage : 0;
+
+      
+      let initialStatus: ObjectiveEvaluationStatus;
+      switch (evaluator.role) {
+        case 'admin':
+        case 'manager':
+          initialStatus = ObjectiveEvaluationStatus.APPROVED; 
+          break;
+        case 'department': 
+          initialStatus = ObjectiveEvaluationStatus.PENDING_MANAGER_APPROVAL;
+          break;
+        case 'section': 
+          initialStatus = ObjectiveEvaluationStatus.PENDING_DEPT_APPROVAL;
+          break;
+        case 'employee': 
+        default:
+          initialStatus = ObjectiveEvaluationStatus.PENDING_SECTION_APPROVAL;
+          break;
+      }
+
+      
+      let objectiveEvaluation = await objEvalRepo.findOne({
+        where: { employee_id: employeeId, review_cycle_id: cycleId ? Number(cycleId) : undefined }, 
+      });
+
+      const historyAction = objectiveEvaluation ? 'UPDATE_SUBMITTED' : 'CREATE_SUBMITTED';
+      const statusBefore = objectiveEvaluation?.status;
+
+      if (objectiveEvaluation) {
+        
+        const currentObjectiveEvaluation: PerformanceObjectiveEvaluation = objectiveEvaluation;
+
+        currentObjectiveEvaluation.evaluator = evaluator;
+        currentObjectiveEvaluation.total_weighted_score_supervisor = totalWeightedScore;
+        currentObjectiveEvaluation.average_score_supervisor = averageScore;
+        currentObjectiveEvaluation.status = initialStatus;
+        currentObjectiveEvaluation.updated_by = evaluator.id;
+        currentObjectiveEvaluation.rejection_reason = null; 
+        
+        await objEvalDetailRepo.remove(await objEvalDetailRepo.find({where: {evaluation_id: currentObjectiveEvaluation.id}}));
+        currentObjectiveEvaluation.details = detailEntities.map(d => {
+          d.evaluation = currentObjectiveEvaluation; 
+          return d;
+        });
+      } else {
+        
+        objectiveEvaluation = objEvalRepo.create({
+          employee_id: employeeId,
+          evaluated_by_id: evaluator.id,
+          review_cycle_id: cycleId ? Number(cycleId) : undefined,
+          total_weighted_score_supervisor: totalWeightedScore,
+          average_score_supervisor: averageScore,
+          status: initialStatus,
+          details: detailEntities,
+          updated_by: evaluator.id,
+        });
+      }
+      
+      const savedObjectiveEvaluation = await objEvalRepo.save(objectiveEvaluation);
+
+      // Ensure details are always saved/updated correctly
+      // First, ensure all detail entities have the correct evaluation_id
+      for (const detail of detailEntities) { // Use detailEntities which holds the latest data
+        detail.evaluation_id = savedObjectiveEvaluation.id;
+      }
+      await objEvalDetailRepo.save(detailEntities); // Save all new/updated details
+
+      await this.logObjectiveEvaluationWorkflowHistory(
+        transactionalEntityManager,
+        savedObjectiveEvaluation,
+        statusBefore,
+        historyAction,
+        evaluator.id,
+      );
+      
+      
+
+      return savedObjectiveEvaluation;
+    });
+  }
+
+  async getPendingObjectiveEvaluations(currentUser: Employee): Promise<PerformanceObjectiveEvaluation[]> {
+    const query = this.objectiveEvaluationRepository
+      .createQueryBuilder('objEval')
+      .innerJoinAndSelect('objEval.employee', 'evaluatedEmployee') 
+      .leftJoinAndSelect('objEval.evaluator', 'evaluator')     
+      .leftJoinAndSelect('evaluatedEmployee.section', 'empSection')
+      .leftJoinAndSelect('evaluatedEmployee.department', 'empDepartment')
+      .leftJoinAndSelect('empSection.department', 'empSectionDepartment'); 
+
+    switch (currentUser.role) {
+      case 'section':
+        if (!currentUser.sectionId) return [];
+        query.where('objEval.status = :status', { status: ObjectiveEvaluationStatus.PENDING_SECTION_APPROVAL })
+             .andWhere('evaluatedEmployee.sectionId = :sectionId', { sectionId: currentUser.sectionId });
+        break;
+      case 'department':
+        if (!currentUser.departmentId) return [];
+        query.where('objEval.status = :status', { status: ObjectiveEvaluationStatus.PENDING_DEPT_APPROVAL })
+             .andWhere(new Brackets(qb => {
+                qb.where('evaluatedEmployee.departmentId = :deptId', { deptId: currentUser.departmentId })
+                  .orWhere('empSectionDepartment.id = :deptId', { deptId: currentUser.departmentId });
+             }));
+        break;
+      case 'manager':
+        query.where('objEval.status = :status', { status: ObjectiveEvaluationStatus.PENDING_MANAGER_APPROVAL });
+        
+        
+        break;
+      case 'admin':
+        query.where('objEval.status IN (:...statuses)', {
+          statuses: [
+            ObjectiveEvaluationStatus.PENDING_SECTION_APPROVAL,
+            ObjectiveEvaluationStatus.PENDING_DEPT_APPROVAL,
+            ObjectiveEvaluationStatus.PENDING_MANAGER_APPROVAL,
+          ],
+        });
+        break;
+      default:
+        return [];
+    }
+    query.orderBy('objEval.updated_at', 'ASC');
+    return query.getMany();
+  }
+
+  private async findObjectiveEvaluationForWorkflow(evaluationId: number): Promise<PerformanceObjectiveEvaluation> {
+    const evaluation = await this.objectiveEvaluationRepository.findOne({
+      where: { id: evaluationId },
+      relations: ['employee', 'employee.section', 'employee.department', 'employee.section.department'],
+    });
+    if (!evaluation) {
+      throw new NotFoundException(`Performance Objective Evaluation with ID ${evaluationId} not found.`);
+    }
+    if (!evaluation.employee) {
+        throw new BadRequestException(`Evaluated employee details not found for evaluation ID ${evaluationId}`);
+    }
+    return evaluation;
+  }
+
+  private async checkPermissionForObjectiveEvaluation(
+    approver: Employee,
+    evaluation: PerformanceObjectiveEvaluation, 
+    actionLevel: 'SECTION' | 'DEPARTMENT' | 'MANAGER'
+  ): Promise<boolean> {
+    const targetEmployee = evaluation.employee; 
+
+    if (!targetEmployee) {
+        this.logger.warn(`Target employee not loaded for evaluation ID ${evaluation.id}`);
+        return false;
+    }
+
+    switch (actionLevel) {
+      case 'SECTION':
+        
+        
+        
+        return (approver.role === 'section' && approver.sectionId === targetEmployee.sectionId) ||
+               (approver.role === 'department' && approver.departmentId === (targetEmployee.departmentId || targetEmployee.section?.department.id)) ||
+               approver.role === 'manager' ||
+               approver.role === 'admin';
+      case 'DEPARTMENT':
+        
+        
+        return (approver.role === 'department' && approver.departmentId === (targetEmployee.departmentId || targetEmployee.section?.department.id)) ||
+               approver.role === 'manager' ||
+               approver.role === 'admin';
+      case 'MANAGER':
+        
+        return approver.role === 'manager' || approver.role === 'admin';
+      default:
+        return false;
+    }
+  }
+
+  private async processApprovalOrRejection(
+    evaluationId: number,
+    approver: Employee,
+    action: 'APPROVE' | 'REJECT',
+    currentLevelStatus: ObjectiveEvaluationStatus, 
+    nextLevelStatusOnApprove: ObjectiveEvaluationStatus, 
+    rejectedStatusThisLevel: ObjectiveEvaluationStatus, 
+    rejectedStatusByManagerAdmin: ObjectiveEvaluationStatus, 
+    permissionLevel: 'SECTION' | 'DEPARTMENT' | 'MANAGER',
+    historyActionPrefix: string, 
+    rejectionReason?: string,
+  ): Promise<PerformanceObjectiveEvaluation> {
+    return this.entityManager.transaction(async (transactionalEntityManager) => {
+        const objEvalRepo = transactionalEntityManager.getRepository(PerformanceObjectiveEvaluation);
+        const evaluation = await this.findObjectiveEvaluationForWorkflow(evaluationId); 
+        const statusBefore = evaluation.status;
+
+        const hasPermission = await this.checkPermissionForObjectiveEvaluation(approver, evaluation, permissionLevel);
+        if (!hasPermission) {
+            throw new UnauthorizedException(`User does not have permission for ${permissionLevel} level action.`);
+        }
+
+        if (evaluation.status !== currentLevelStatus) {
+            throw new BadRequestException(`Cannot perform action. Evaluation status is '${evaluation.status}', expected '${currentLevelStatus}'.`);
+        }
+
+        if (action === 'REJECT' && (!rejectionReason || rejectionReason.trim() === '')) {
+            throw new BadRequestException('Rejection reason is required.');
+        }
+
+        if (action === 'APPROVE') {
+            evaluation.status = (approver.role === 'manager' || approver.role === 'admin') ? ObjectiveEvaluationStatus.APPROVED : nextLevelStatusOnApprove;
+            evaluation.rejection_reason = null;
+        } else { 
+            evaluation.status = (approver.role === 'manager' || approver.role === 'admin') ? rejectedStatusByManagerAdmin : rejectedStatusThisLevel;
+            evaluation.rejection_reason = rejectionReason!; 
+        }
+
+        evaluation.updated_by = approver.id;
+        evaluation.approved_by_id = (evaluation.status === ObjectiveEvaluationStatus.APPROVED) ? approver.id : null;
+        evaluation.approved_at = (evaluation.status === ObjectiveEvaluationStatus.APPROVED) ? new Date() : null;
+        
+        const savedEvaluation = await objEvalRepo.save(evaluation);
+
+        await this.logObjectiveEvaluationWorkflowHistory(
+            transactionalEntityManager,
+            savedEvaluation,
+            statusBefore,
+            `${historyActionPrefix}_${permissionLevel}`,
+            approver.id,
+            action === 'REJECT' ? rejectionReason : undefined,
+        );
+        
+        return savedEvaluation;
+    });
+  }
+
+  async approveObjectiveEvaluationBySection(evaluationId: number, approver: Employee): Promise<PerformanceObjectiveEvaluation> {
+    return this.processApprovalOrRejection(evaluationId, approver, 'APPROVE', ObjectiveEvaluationStatus.PENDING_SECTION_APPROVAL, ObjectiveEvaluationStatus.PENDING_DEPT_APPROVAL, ObjectiveEvaluationStatus.REJECTED_BY_SECTION, ObjectiveEvaluationStatus.REJECTED_BY_MANAGER, 'SECTION', 'APPROVE');
+  }
+  async rejectObjectiveEvaluationBySection(evaluationId: number, approver: Employee, dto: RejectObjectiveEvaluationDto): Promise<PerformanceObjectiveEvaluation> {
+    return this.processApprovalOrRejection(evaluationId, approver, 'REJECT', ObjectiveEvaluationStatus.PENDING_SECTION_APPROVAL, ObjectiveEvaluationStatus.PENDING_DEPT_APPROVAL, ObjectiveEvaluationStatus.REJECTED_BY_SECTION, ObjectiveEvaluationStatus.REJECTED_BY_MANAGER, 'SECTION', 'REJECT', dto.reason);
+  }
+  async approveObjectiveEvaluationByDepartment(evaluationId: number, approver: Employee): Promise<PerformanceObjectiveEvaluation> {
+    return this.processApprovalOrRejection(evaluationId, approver, 'APPROVE', ObjectiveEvaluationStatus.PENDING_DEPT_APPROVAL, ObjectiveEvaluationStatus.PENDING_MANAGER_APPROVAL, ObjectiveEvaluationStatus.REJECTED_BY_DEPT, ObjectiveEvaluationStatus.REJECTED_BY_MANAGER, 'DEPARTMENT', 'APPROVE');
+  }
+  async rejectObjectiveEvaluationByDepartment(evaluationId: number, approver: Employee, dto: RejectObjectiveEvaluationDto): Promise<PerformanceObjectiveEvaluation> {
+    return this.processApprovalOrRejection(evaluationId, approver, 'REJECT', ObjectiveEvaluationStatus.PENDING_DEPT_APPROVAL, ObjectiveEvaluationStatus.PENDING_MANAGER_APPROVAL, ObjectiveEvaluationStatus.REJECTED_BY_DEPT, ObjectiveEvaluationStatus.REJECTED_BY_MANAGER, 'DEPARTMENT', 'REJECT', dto.reason);
+  }
+  async approveObjectiveEvaluationByManager(evaluationId: number, approver: Employee): Promise<PerformanceObjectiveEvaluation> {
+    return this.processApprovalOrRejection(evaluationId, approver, 'APPROVE', ObjectiveEvaluationStatus.PENDING_MANAGER_APPROVAL, ObjectiveEvaluationStatus.APPROVED, ObjectiveEvaluationStatus.REJECTED_BY_MANAGER, ObjectiveEvaluationStatus.REJECTED_BY_MANAGER, 'MANAGER', 'APPROVE');
+  }
+  async rejectObjectiveEvaluationByManager(evaluationId: number, approver: Employee, dto: RejectObjectiveEvaluationDto): Promise<PerformanceObjectiveEvaluation> {
+    return this.processApprovalOrRejection(evaluationId, approver, 'REJECT', ObjectiveEvaluationStatus.PENDING_MANAGER_APPROVAL, ObjectiveEvaluationStatus.APPROVED, ObjectiveEvaluationStatus.REJECTED_BY_MANAGER, ObjectiveEvaluationStatus.REJECTED_BY_MANAGER, 'MANAGER', 'REJECT', dto.reason);
+  }
+
+  async getObjectiveEvaluationHistory(evaluationId: number): Promise<PerformanceObjectiveEvaluationHistory[]> {
+    return this.objectiveEvaluationHistoryRepository.find({
+      where: { performance_objective_evaluation_id: evaluationId },
+      relations: ['changedBy'],
+      order: { changed_at: 'DESC' },
+    });
+  }
+
+  private async logObjectiveEvaluationWorkflowHistory(
+    entityManager: EntityManager,
+    evaluation: PerformanceObjectiveEvaluation,
+    statusBefore: ObjectiveEvaluationStatus | null | undefined,
+    action: string,
+    changedById: number,
+    reason?: string,
+  ): Promise<void> {
+    const historyRepo = entityManager.getRepository(PerformanceObjectiveEvaluationHistory);
+    const historyEntry = historyRepo.create({
+      performance_objective_evaluation_id: evaluation.id,
+      status_before: statusBefore ?? null,
+      status_after: evaluation.status,
+      action: action,
+      changed_by_id: changedById,
+      reason: reason ?? null,
+      changed_at: new Date(),
+    });
+    await historyRepo.save(historyEntry);
+  }
+
+  
 }

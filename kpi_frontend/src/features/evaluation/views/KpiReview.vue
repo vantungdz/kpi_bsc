@@ -295,7 +295,7 @@ import dayjs from "dayjs";
 import { cloneDeep } from "lodash-es";
 
 const store = useStore();
-const router = useRouter(); // Khởi tạo router
+const router = useRouter(); 
 
 const selectedTarget = ref(null);
 const reviewTargets = computed(
@@ -311,22 +311,22 @@ const filteredReviewTargets = computed(() => {
   if (!reviewTargets.value || !Array.isArray(reviewTargets.value)) return [];
   const user = currentUser.value;
   if (!user) return reviewTargets.value;
-  // Nếu là admin, trả về tất cả
+  
   if (user.role === "admin") return reviewTargets.value;
-  // Nếu là manager hoặc department
+  
   if (user.role === "manager" || user.role === "department") {
-    // Tạm thời chỉ lọc theo type (nếu muốn chỉ hiện employee và section)
+    
     return reviewTargets.value.filter(
       (t) => t.type === "employee" || t.type === "section"
     );
   }
-  // Nếu là section
+  
   if (user.role === "section") {
     return reviewTargets.value.filter(
       (t) => t.type === "employee" || t.type === "section"
     );
   }
-  // Mặc định trả về tất cả
+  
   return reviewTargets.value;
 });
 
@@ -437,13 +437,13 @@ const pageTitle = computed(() => {
 
 const reviewStatusText = computed(() => {
   const statusMap = {
-    PENDING_REVIEW: "Pending Review",
-    MANAGER_REVIEWED: "Manager Reviewed",
-    EMPLOYEE_FEEDBACK_PENDING: "Awaiting Employee Feedback",
-    EMPLOYEE_RESPONDED: "Employee Responded",
-    COMPLETED: "Completed",
+    PENDING_REVIEW: $t("pendingReview"),
+    MANAGER_REVIEWED: $t("managerReviewedStatus", "Manager Reviewed"), 
+    EMPLOYEE_FEEDBACK_PENDING: $t("employeeFeedbackPendingStatus", "Awaiting Employee Feedback"), 
+    EMPLOYEE_RESPONDED: $t("employeeRespondedStatus", "Employee Responded"), 
+    COMPLETED: $t("completedStatus", "Completed"), 
   };
-  return statusMap[overallReview.value.status] || "Không xác định";
+  return statusMap[overallReview.value.status] || $t("unknownStatus", "Không xác định");
 });
 const reviewStatusColor = computed(() => {
   if (overallReview.value.status === "MANAGER_REVIEWED") return "blue";
@@ -692,7 +692,7 @@ const viewTargetReviewHistory = () => {
 
   if (targetType && !isNaN(targetId)) {
     router.push({
-      name: "ReviewHistory", // Tên route của ReviewHistoryPage.vue
+      name: "ReviewHistory", 
       params: { targetType: targetType, targetId: targetId },
     });
   } else {

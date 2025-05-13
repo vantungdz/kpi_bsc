@@ -9,6 +9,9 @@ import { KPIAssignment } from '../entities/kpi-assignment.entity';
 import { KpiValue } from '../entities/kpi-value.entity';
 import { KpiReview } from '../entities/kpi-review.entity';
 import { OverallReview } from '../entities/overall-review.entity';
+import { PerformanceObjectiveEvaluation } from '../entities/performance-objective-evaluation.entity';
+import { PerformanceObjectiveEvaluationDetail } from '../entities/performance-objective-evaluation-detail.entity';
+import { PerformanceObjectiveEvaluationHistory } from '../entities/performance-objective-evaluation-history.entity';
 
 @Module({
   imports: [
@@ -20,6 +23,9 @@ import { OverallReview } from '../entities/overall-review.entity';
       KpiValue,
       KpiReview,
       OverallReview,
+      PerformanceObjectiveEvaluation,
+      PerformanceObjectiveEvaluationDetail, 
+      PerformanceObjectiveEvaluationHistory,
     ]),
   ],
   controllers: [EvaluationController],

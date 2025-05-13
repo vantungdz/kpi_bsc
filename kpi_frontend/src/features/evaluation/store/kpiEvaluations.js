@@ -27,15 +27,39 @@ const state = {
   isSubmittingEmployeeFeedback: false,
   submitEmployeeFeedbackError: null,
 
-  reviewHistory: [], // State mới cho lịch sử review
+  reviewHistory: [], 
   isLoadingReviewHistory: false,
   reviewHistoryError: null,
+
+  
+  pendingObjectiveEvaluations: [],
+  isLoadingPendingObjectiveEvaluations: false,
+  pendingObjectiveEvaluationsError: null,
+
+  isProcessingObjectiveEvaluationApproval: false,
+  objectiveEvaluationApprovalError: null,
+
+  objectiveEvaluationHistory: [],
+  isLoadingObjectiveEvaluationHistory: false,
+  objectiveEvaluationHistoryError: null,
+
 };
 
 const getters = {
   getReviewableTargets: (state) => state.reviewableTargets,
   isLoadingReviewableTargets: (state) => state.loadingReviewableTargets,
   getReviewableTargetsError: (state) => state.reviewableTargetsError,
+
+  getAssignedPerformanceObjectives: (state) =>
+    state.assignedPerformanceObjectives,
+  isLoadingAssignedPerformanceObjectives: (state) =>
+    state.isLoadingAssignedPerformanceObjectives,
+  getAssignedPerformanceObjectivesError: (state) =>
+    state.assignedPerformanceObjectivesError,
+  isSavingPerformanceObjectiveEvaluation: (state) =>
+    state.isSavingPerformanceObjectiveEvaluation,
+  getSavePerformanceObjectiveEvaluationError: (state) =>
+    state.savePerformanceObjectiveEvaluationError,
 
   getReviewCycles: (state) => state.reviewCycles,
   isLoadingReviewCycles: (state) => state.loadingReviewCycles,
@@ -58,9 +82,23 @@ const getters = {
   isSubmittingEmpFeedback: (state) => state.isSubmittingEmployeeFeedback,
   getSubmitEmpFeedbackError: (state) => state.submitEmployeeFeedbackError,
 
-  getReviewHistory: (state) => state.reviewHistory, // Getter mới
+  getReviewHistory: (state) => state.reviewHistory, 
   isLoadingReviewHistory: (state) => state.isLoadingReviewHistory,
   getReviewHistoryError: (state) => state.reviewHistoryError,
+
+  
+  getPendingObjectiveEvaluations: (state) => state.pendingObjectiveEvaluations,
+  isLoadingPendingObjectiveEvaluations: (state) => state.isLoadingPendingObjectiveEvaluations,
+  getPendingObjectiveEvaluationsError: (state) => state.pendingObjectiveEvaluationsError,
+
+  isProcessingObjectiveEvalApproval: (state) => state.isProcessingObjectiveEvaluationApproval,
+  getObjectiveEvalApprovalError: (state) => state.objectiveEvaluationApprovalError,
+
+  getObjectiveEvaluationHistory: (state) => state.objectiveEvaluationHistory,
+  isLoadingObjectiveEvaluationHistory: (state) => state.isLoadingObjectiveEvaluationHistory,
+  getObjectiveEvaluationHistoryError: (state) => state.objectiveEvaluationHistoryError,
+
+
 };
 
 const actions = {
@@ -318,6 +356,226 @@ const actions = {
       commit("SET_IS_LOADING_REVIEW_HISTORY", false);
     }
   },
+
+  async fetchAssignedPerformanceObjectives(
+    { commit },
+    { employeeId, cycleId }
+  ) {
+    commit("SET_IS_LOADING_ASSIGNED_PERFORMANCE_OBJECTIVES", true);
+    commit("SET_ASSIGNED_PERFORMANCE_OBJECTIVES", []);
+    commit("SET_ASSIGNED_PERFORMANCE_OBJECTIVES_ERROR", null);
+    try {
+      
+      
+      
+      
+      const response = await apiClient.get(
+        `/evaluation/performance-objectives`,
+        {
+          params: { employeeId, cycleId },
+        }
+      );
+      
+      
+      commit("SET_ASSIGNED_PERFORMANCE_OBJECTIVES", response.data || []);
+      return response.data;
+    } catch (error) {
+      const errorMsg =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to fetch assigned performance objectives.";
+      commit("SET_ASSIGNED_PERFORMANCE_OBJECTIVES_ERROR", errorMsg);
+      notification.error({
+        message: "Lỗi tải mục tiêu đánh giá",
+        description: errorMsg,
+      });
+      return null;
+    } finally {
+      commit("SET_IS_LOADING_ASSIGNED_PERFORMANCE_OBJECTIVES", false);
+    }
+  },
+
+  async savePerformanceObjectiveEvaluation({ commit }, payload) {
+    commit("SET_IS_SAVING_PERFORMANCE_OBJECTIVE_EVALUATION", true);
+    commit("SET_SAVE_PERFORMANCE_OBJECTIVE_EVALUATION_ERROR", null);
+    try {
+      
+      
+      
+      const response = await apiClient.post(
+        "/evaluation/performance-objective-evaluations/save", 
+        payload 
+      );
+      
+      notification.success({
+        message: "Đánh giá mục tiêu đã được gửi đi chờ phê duyệt!", 
+      });
+      return response.data;
+    } catch (error) {
+      const errorMsg =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to save performance objective evaluation.";
+      commit("SET_SAVE_PERFORMANCE_OBJECTIVE_EVALUATION_ERROR", errorMsg);
+      notification.error({
+        message: "Lỗi lưu đánh giá mục tiêu",
+        description: errorMsg,
+      });
+      throw error;
+    } finally {
+      commit("SET_IS_SAVING_PERFORMANCE_OBJECTIVE_EVALUATION", false);
+    }
+  },
+
+  
+  async fetchPendingObjectiveEvaluations({ commit }) {
+    commit("SET_IS_LOADING_PENDING_OBJECTIVE_EVALUATIONS", true);
+    commit("SET_PENDING_OBJECTIVE_EVALUATIONS_ERROR", null);
+    commit("SET_PENDING_OBJECTIVE_EVALUATIONS", []);
+    try {
+      
+      const response = await apiClient.get("/evaluation/performance-objective-evaluations/pending-approvals"); 
+      commit("SET_PENDING_OBJECTIVE_EVALUATIONS", response.data || []);
+      return response.data;
+    } catch (error) {
+      const errorMsg = error.response?.data?.message || error.message || "Failed to fetch pending objective evaluations.";
+      commit("SET_PENDING_OBJECTIVE_EVALUATIONS_ERROR", errorMsg);
+      notification.error({ message: "Lỗi tải danh sách đánh giá chờ duyệt", description: errorMsg });
+      throw error;
+    } finally {
+      commit("SET_IS_LOADING_PENDING_OBJECTIVE_EVALUATIONS", false);
+    }
+  },
+
+  async approveObjectiveEvaluationSection({ commit, dispatch }, { evaluationId }) {
+    commit("SET_IS_PROCESSING_OBJECTIVE_EVALUATION_APPROVAL", true);
+    commit("SET_OBJECTIVE_EVALUATION_APPROVAL_ERROR", null);
+    try {
+      const response = await apiClient.post(`/evaluation/performance-objective-evaluations/${evaluationId}/approve-section`); 
+      notification.success({ message: "Đánh giá mục tiêu đã được Trưởng bộ phận phê duyệt!" });
+      await dispatch('fetchPendingObjectiveEvaluations');
+      return response.data;
+    } catch (error) {
+      const errorMsg = error.response?.data?.message || error.message || "Failed to approve objective evaluation at section level.";
+      commit("SET_OBJECTIVE_EVALUATION_APPROVAL_ERROR", errorMsg);
+      notification.error({ message: "Phê duyệt thất bại", description: errorMsg });
+      throw error;
+    } finally {
+      commit("SET_IS_PROCESSING_OBJECTIVE_EVALUATION_APPROVAL", false);
+    }
+  },
+
+  async rejectObjectiveEvaluationSection({ commit, dispatch }, { evaluationId, reason }) {
+    commit("SET_IS_PROCESSING_OBJECTIVE_EVALUATION_APPROVAL", true);
+    commit("SET_OBJECTIVE_EVALUATION_APPROVAL_ERROR", null);
+    try {
+      const response = await apiClient.post(`/evaluation/performance-objective-evaluations/${evaluationId}/reject-section`, { reason }); 
+      notification.success({ message: "Đánh giá mục tiêu đã bị Trưởng bộ phận từ chối!" });
+      await dispatch('fetchPendingObjectiveEvaluations');
+      return response.data;
+    } catch (error) {
+      const errorMsg = error.response?.data?.message || error.message || "Failed to reject objective evaluation at section level.";
+      commit("SET_OBJECTIVE_EVALUATION_APPROVAL_ERROR", errorMsg);
+      notification.error({ message: "Từ chối thất bại", description: errorMsg });
+      throw error;
+    } finally {
+      commit("SET_IS_PROCESSING_OBJECTIVE_EVALUATION_APPROVAL", false);
+    }
+  },
+
+  async approveObjectiveEvaluationDept({ commit, dispatch }, { evaluationId }) {
+    commit("SET_IS_PROCESSING_OBJECTIVE_EVALUATION_APPROVAL", true);
+    commit("SET_OBJECTIVE_EVALUATION_APPROVAL_ERROR", null);
+    try {
+      const response = await apiClient.post(`/evaluation/performance-objective-evaluations/${evaluationId}/approve-department`); 
+      notification.success({ message: "Đánh giá mục tiêu đã được Trưởng phòng phê duyệt!" });
+      await dispatch('fetchPendingObjectiveEvaluations');
+      return response.data;
+    } catch (error) {
+      const errorMsg = error.response?.data?.message || error.message || "Failed to approve objective evaluation at department level.";
+      commit("SET_OBJECTIVE_EVALUATION_APPROVAL_ERROR", errorMsg);
+      notification.error({ message: "Phê duyệt thất bại", description: errorMsg });
+      throw error;
+    } finally {
+      commit("SET_IS_PROCESSING_OBJECTIVE_EVALUATION_APPROVAL", false);
+    }
+  },
+
+  async rejectObjectiveEvaluationDept({ commit, dispatch }, { evaluationId, reason }) {
+    commit("SET_IS_PROCESSING_OBJECTIVE_EVALUATION_APPROVAL", true);
+    commit("SET_OBJECTIVE_EVALUATION_APPROVAL_ERROR", null);
+    try {
+      const response = await apiClient.post(`/evaluation/performance-objective-evaluations/${evaluationId}/reject-department`, { reason }); 
+      notification.success({ message: "Đánh giá mục tiêu đã bị Trưởng phòng từ chối!" });
+      await dispatch('fetchPendingObjectiveEvaluations');
+      return response.data;
+    } catch (error) {
+      const errorMsg = error.response?.data?.message || error.message || "Failed to reject objective evaluation at department level.";
+      commit("SET_OBJECTIVE_EVALUATION_APPROVAL_ERROR", errorMsg);
+      notification.error({ message: "Từ chối thất bại", description: errorMsg });
+      throw error;
+    } finally {
+      commit("SET_IS_PROCESSING_OBJECTIVE_EVALUATION_APPROVAL", false);
+    }
+  },
+
+  async approveObjectiveEvaluationManager({ commit, dispatch }, { evaluationId }) {
+    commit("SET_IS_PROCESSING_OBJECTIVE_EVALUATION_APPROVAL", true);
+    commit("SET_OBJECTIVE_EVALUATION_APPROVAL_ERROR", null);
+    try {
+      const response = await apiClient.post(`/evaluation/performance-objective-evaluations/${evaluationId}/approve-manager`); 
+      notification.success({ message: "Đánh giá mục tiêu đã được Quản lý phê duyệt!" });
+      await dispatch('fetchPendingObjectiveEvaluations');
+      return response.data;
+    } catch (error) {
+      const errorMsg = error.response?.data?.message || error.message || "Failed to approve objective evaluation at manager level.";
+      commit("SET_OBJECTIVE_EVALUATION_APPROVAL_ERROR", errorMsg);
+      notification.error({ message: "Phê duyệt thất bại", description: errorMsg });
+      throw error;
+    } finally {
+      commit("SET_IS_PROCESSING_OBJECTIVE_EVALUATION_APPROVAL", false);
+    }
+  },
+
+  async rejectObjectiveEvaluationManager({ commit, dispatch }, { evaluationId, reason }) {
+    commit("SET_IS_PROCESSING_OBJECTIVE_EVALUATION_APPROVAL", true);
+    commit("SET_OBJECTIVE_EVALUATION_APPROVAL_ERROR", null);
+    try {
+      const response = await apiClient.post(`/evaluation/performance-objective-evaluations/${evaluationId}/reject-manager`, { reason }); 
+      notification.success({ message: "Đánh giá mục tiêu đã bị Quản lý từ chối!" });
+      await dispatch('fetchPendingObjectiveEvaluations');
+      return response.data;
+    } catch (error) {
+      const errorMsg = error.response?.data?.message || error.message || "Failed to reject objective evaluation at manager level.";
+      commit("SET_OBJECTIVE_EVALUATION_APPROVAL_ERROR", errorMsg);
+      notification.error({ message: "Từ chối thất bại", description: errorMsg });
+      throw error;
+    } finally {
+      commit("SET_IS_PROCESSING_OBJECTIVE_EVALUATION_APPROVAL", false);
+    }
+  },
+
+  async fetchObjectiveEvaluationHistory({ commit }, { evaluationId }) {
+    commit("SET_IS_LOADING_OBJECTIVE_EVALUATION_HISTORY", true);
+    commit("SET_OBJECTIVE_EVALUATION_HISTORY_ERROR", null);
+    commit("SET_OBJECTIVE_EVALUATION_HISTORY", []);
+    try {
+      const response = await apiClient.get(`/evaluation/performance-objective-evaluations/${evaluationId}/history`);
+      commit("SET_OBJECTIVE_EVALUATION_HISTORY", response.data || []);
+      return response.data;
+    } catch (error) {
+      const errorMsg =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to fetch objective evaluation history.";
+      commit("SET_OBJECTIVE_EVALUATION_HISTORY_ERROR", errorMsg);
+      notification.error({ message: "Lỗi tải lịch sử đánh giá mục tiêu", description: errorMsg });
+      throw error;
+    } finally {
+      commit("SET_IS_LOADING_OBJECTIVE_EVALUATION_HISTORY", false);
+    }
+  },
+
 };
 
 const mutations = {
@@ -397,7 +655,7 @@ const mutations = {
   },
 
   SET_REVIEW_HISTORY(state, history) {
-    // Mutation mới
+    
     console.log(
       "[Vuex SET_REVIEW_HISTORY] Committing history:",
       JSON.parse(JSON.stringify(history))
@@ -405,12 +663,53 @@ const mutations = {
     state.reviewHistory = history;
   },
   SET_IS_LOADING_REVIEW_HISTORY(state, isLoading) {
-    // Mutation mới
+    
     state.isLoadingReviewHistory = isLoading;
   },
   SET_REVIEW_HISTORY_ERROR(state, error) {
-    // Mutation mới
+    
     state.reviewHistoryError = error;
+  },
+  SET_ASSIGNED_PERFORMANCE_OBJECTIVES(state, objectives) {
+    state.assignedPerformanceObjectives = objectives;
+  },
+  SET_IS_LOADING_ASSIGNED_PERFORMANCE_OBJECTIVES(state, isLoading) {
+    state.isLoadingAssignedPerformanceObjectives = isLoading;
+  },
+  SET_ASSIGNED_PERFORMANCE_OBJECTIVES_ERROR(state, error) {
+    state.assignedPerformanceObjectivesError = error;
+  },
+  SET_IS_SAVING_PERFORMANCE_OBJECTIVE_EVALUATION(state, isSaving) {
+    state.isSavingPerformanceObjectiveEvaluation = isSaving;
+  },
+  SET_SAVE_PERFORMANCE_OBJECTIVE_EVALUATION_ERROR(state, error) {
+    state.savePerformanceObjectiveEvaluationError = error;
+  },
+
+  
+  SET_PENDING_OBJECTIVE_EVALUATIONS(state, items) {
+    state.pendingObjectiveEvaluations = items;
+  },
+  SET_IS_LOADING_PENDING_OBJECTIVE_EVALUATIONS(state, isLoading) {
+    state.isLoadingPendingObjectiveEvaluations = isLoading;
+  },
+  SET_PENDING_OBJECTIVE_EVALUATIONS_ERROR(state, error) {
+    state.pendingObjectiveEvaluationsError = error;
+  },
+  SET_IS_PROCESSING_OBJECTIVE_EVALUATION_APPROVAL(state, isLoading) {
+    state.isProcessingObjectiveEvaluationApproval = isLoading;
+  },
+  SET_OBJECTIVE_EVALUATION_APPROVAL_ERROR(state, error) {
+    state.objectiveEvaluationApprovalError = error;
+  },
+  SET_OBJECTIVE_EVALUATION_HISTORY(state, history) {
+    state.objectiveEvaluationHistory = history;
+  },
+  SET_IS_LOADING_OBJECTIVE_EVALUATION_HISTORY(state, isLoading) {
+    state.isLoadingObjectiveEvaluationHistory = isLoading;
+  },
+  SET_OBJECTIVE_EVALUATION_HISTORY_ERROR(state, error) {
+    state.objectiveEvaluationHistoryError = error;
   },
 };
 

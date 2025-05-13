@@ -11,8 +11,9 @@ import { KpiEvaluation } from './kpi-evaluation.entity';
 import { Department } from './department.entity';
 import { Section } from './section.entity';
 import { Team } from './team.entity';
-import { Notification } from './notification.entity'; // Thêm import này
-import { KpiReview } from './kpi-review.entity'; // Import KpiReview
+import { Notification } from './notification.entity'; 
+import { KpiReview } from './kpi-review.entity'; 
+import { PerformanceObjectiveEvaluation } from './performance-objective-evaluation.entity';
 
 @Entity('employees')
 export class Employee {
@@ -31,7 +32,7 @@ export class Employee {
   @Column({
     type: 'varchar',
     length: 50,
-    enum: ['admin', 'manager', 'department','section', 'employee'],
+    enum: ['admin', 'manager', 'department', 'section', 'employee'],
   })
   role: string;
 
@@ -51,7 +52,7 @@ export class Employee {
   departmentId: number;
 
   @OneToMany(() => Notification, (notification) => notification.user)
-  notifications: Notification[]; // Thêm thuộc tính này
+  notifications: Notification[];
 
   @ManyToOne(() => Department, (department) => department.employees)
   @JoinColumn({ name: 'departmentId' })
@@ -71,6 +72,29 @@ export class Employee {
   @JoinColumn({ name: 'teamId' })
   team?: Team;
 
-  @OneToMany(() => KpiReview, (review) => review.reviewedBy) // Thêm mối quan hệ OneToMany
+  @OneToMany(() => KpiReview, (review) => review.reviewedBy)
   kpiReviews: KpiReview[];
+
+  @ManyToOne(() => Employee, (employee) => employee.directReports, {
+    nullable: true,
+  })
+  @JoinColumn({ name: 'managerId' })
+  manager?: Employee;
+
+  @OneToMany(() => Employee, (employee) => employee.manager)
+  directReports?: Employee[];
+
+  @Column({ nullable: true, name: 'managerId' })
+  managerId?: number;
+  @OneToMany(
+    () => PerformanceObjectiveEvaluation,
+    (evaluation) => evaluation.employee,
+  )
+  objectiveEvaluationsReceived: PerformanceObjectiveEvaluation[]; 
+
+  @OneToMany(
+    () => PerformanceObjectiveEvaluation,
+    (evaluation) => evaluation.evaluator,
+  )
+  objectiveEvaluationsDone: PerformanceObjectiveEvaluation[]; 
 }

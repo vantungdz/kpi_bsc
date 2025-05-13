@@ -846,6 +846,70 @@ export class KpiValuesService {
     return rejectedValue;
   }
 
+  async approveKpiReview(id: number, approverRole: string): Promise<KpiValue> {
+    const kpiValue = await this.findOne(id);
+    if (!kpiValue) {
+      throw new NotFoundException(`KPI Value with ID ${id} not found.`);
+    }
+
+    switch (approverRole) {
+      case 'SECTION':
+        kpiValue.status = KpiValueStatus.PENDING_DEPT_APPROVAL;
+        break;
+      case 'DEPARTMENT':
+        kpiValue.status = KpiValueStatus.PENDING_MANAGER_APPROVAL;
+        break;
+      case 'MANAGER':
+        kpiValue.status = KpiValueStatus.APPROVED;
+        break;
+      default:
+        throw new BadRequestException('Invalid approver role.');
+    }
+
+    return await this.kpiValuesRepository.save(kpiValue);
+  }
+
+  async rejectKpiReview(id: number, approverRole: string): Promise<KpiValue> {
+    const kpiValue = await this.findOne(id);
+    if (!kpiValue) {
+      throw new NotFoundException(`KPI Value with ID ${id} not found.`);
+    }
+
+    switch (approverRole) {
+      case 'SECTION':
+        kpiValue.status = KpiValueStatus.REJECTED_BY_SECTION;
+        break;
+      case 'DEPARTMENT':
+        kpiValue.status = KpiValueStatus.REJECTED_BY_DEPT;
+        break;
+      case 'MANAGER':
+        kpiValue.status = KpiValueStatus.REJECTED_BY_MANAGER;
+        break;
+      default:
+        throw new BadRequestException('Invalid approver role.');
+    }
+
+    return await this.kpiValuesRepository.save(kpiValue);
+  }
+
+  async resubmitKpiReview(id: number): Promise<KpiValue> {
+    const kpiValue = await this.findOne(id);
+    if (!kpiValue) {
+      throw new NotFoundException(`KPI Value with ID ${id} not found.`);
+    }
+
+    if (
+      kpiValue.status !== KpiValueStatus.REJECTED_BY_SECTION &&
+      kpiValue.status !== KpiValueStatus.REJECTED_BY_DEPT &&
+      kpiValue.status !== KpiValueStatus.REJECTED_BY_MANAGER
+    ) {
+      throw new BadRequestException('Only rejected KPI reviews can be resubmitted.');
+    }
+
+    kpiValue.status = KpiValueStatus.RESUBMITTED;
+    return await this.kpiValuesRepository.save(kpiValue);
+  }
+
   private async findKpiValueForWorkflow(valueId: number): Promise<KpiValue> {
     const kpiValue = await this.kpiValuesRepository.findOne({
       where: { id: valueId },

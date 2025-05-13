@@ -37,7 +37,7 @@ import { EvaluationModule } from './evaluation/evaluation.module';
           database: 'kpi_management',
           entities: [__dirname + '/**/*.entity{.ts,.js}'],
           synchronize: true,
-          logging: true,
+          logging: false,
         };
       },
       inject: [ConfigService],

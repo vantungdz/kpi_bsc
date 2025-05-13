@@ -159,22 +159,6 @@
             <template v-else-if="column.key === 'value'">
               {{ record.value?.toLocaleString() ?? '' }}
             </template>
-            <template v-else-if="column.key === 'status_before'">
-              <a-tag v-if="record.status_before" :color="getValueStatusColor(record.status_before)">
-                {{ getValueStatusText(record.status_before) }}
-              </a-tag>
-              <span v-else>
-                -
-              </span>
-            </template>
-            <template v-else-if="column.key === 'status_after'">
-              <a-tag v-if="record.status_after" :color="getValueStatusColor(record.status_after)">
-                {{ getValueStatusText(record.status_after) }}
-              </a-tag>
-              <span v-else>
-                -
-              </span>
-            </template>
             <template v-else-if="column.key === 'noteOrReason'">
               <a-tooltip placement="topLeft" v-if="record.reason" :title="record.reason">
                 <span style="color: red;">
@@ -278,7 +262,7 @@ const groupedPersonalKpis = computed(() => {
   return sortedGrouped;
 });
 
-const myPersonalKpiColumns = ref([
+const myPersonalKpiColumns = computed(() => [
   { title: $t('kpiName'), key: "name", width: "20%", ellipsis: true, fixed: 'left' },
   { title: $t('level'), dataIndex: "created_by_type", key: "level", width: "8%", align: "center" },
   { title: $t('target'), key: "target", align: "right", width: "10%" },
@@ -288,12 +272,10 @@ const myPersonalKpiColumns = ref([
   { title: $t('actions'), key: "actions", align: "center", width: "15%", fixed: 'right' },
 ]);
 
-const historyColumns = ref([
+const historyColumns = computed(() => [
   { title: $t('timestamp'), key: 'timestamp', width: 140 },
   { title: $t('action'), dataIndex: 'action', key: 'action', width: 180 },
-  { title: $t('value'), dataIndex: 'value', key: 'value', align: 'right', width: 70 },
-  { title: $t('statusBefore'), key: 'status_before', align: 'center', width: 80 },
-  { title: $t('statusAfter'), key: 'status_after', align: 'center', width: 80 },
+  { title: $t('value'), dataIndex: 'value', key: 'value', align: 'right', width: 180 },
   { title: $t('noteOrReason'), key: 'noteOrReason', ellipsis: true },
   { title: $t('changedBy'), key: 'changed_by', width: 150 },
 ]);

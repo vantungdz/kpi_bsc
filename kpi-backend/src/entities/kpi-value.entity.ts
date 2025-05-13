@@ -17,6 +17,7 @@ export enum KpiValueStatus {
   REJECTED_BY_SECTION = 'REJECTED_BY_SECTION',
   REJECTED_BY_DEPT = 'REJECTED_BY_DEPT',
   REJECTED_BY_MANAGER = 'REJECTED_BY_MANAGER',
+  RESUBMITTED = 'RESUBMITTED' // New state for resubmitting rejected reviews
 }
 
 @Entity('kpi_values')

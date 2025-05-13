@@ -80,3 +80,16 @@ export class ReviewHistoryItemDto {
 
 // DTO for the response of review history API
 export type ReviewHistoryResponseDto = ReviewHistoryItemDto[];
+
+export class PerformanceObjectiveItemDto {
+  id: number; // Corresponds to KPIAssignment ID
+  name: string; // KPI Name
+  kpiDescription?: string | null;
+  target: number | string | null; // Target value from KPIAssignment, can be number or string
+  actualResult: number | string | null; // Actual result, can be number or string
+  unit?: string | null;
+  weight?: number | null;
+  bscAspect: string; // Name of the BSC Perspective
+  supervisorEvalScore?: number | null; // Supervisor's score for this objective
+  note?: string | null; // Supervisor's note for this objective
+}

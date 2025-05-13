@@ -209,6 +209,30 @@ export class KpiValuesController {
     return this.kpiValuesService.update(id, updateData, req.user.id);
   }
 
+  @Patch(':id/approve/:role')
+  @ApiOperation({ summary: 'Approve a KPI review at a specific level' })
+  async approveKpiReview(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('role') role: string,
+  ): Promise<KpiValue> {
+    return this.kpiValuesService.approveKpiReview(id, role.toUpperCase());
+  }
+
+  @Patch(':id/reject/:role')
+  @ApiOperation({ summary: 'Reject a KPI review at a specific level' })
+  async rejectKpiReview(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('role') role: string,
+  ): Promise<KpiValue> {
+    return this.kpiValuesService.rejectKpiReview(id, role.toUpperCase());
+  }
+
+  @Patch(':id/resubmit')
+  @ApiOperation({ summary: 'Resubmit a rejected KPI review' })
+  async resubmitKpiReview(@Param('id', ParseIntPipe) id: number): Promise<KpiValue> {
+    return this.kpiValuesService.resubmitKpiReview(id);
+  }
+
   @Delete(':id')
   @ApiOperation({ summary: 'Xóa một KpiValue' })
   @ApiResponse({ status: 200 })

@@ -23,6 +23,7 @@ import KpiInventoryStatistics from "@/features/dashboard/views/KpiInventoryStati
 import KpiReview from "../../features/evaluation/views/KpiReview.vue";
 import ReviewHistoryPage from "../../features/evaluation/views/ReviewHistoryPage.vue";
 import MyKpiReview from "../../features/evaluation/views/MyKpiReview.vue";
+import PerformanceObjectiveApprovalList from "../../features/evaluation/views/PerformanceObjectiveApprovalList.vue";
 
 const routes = [
   {
@@ -34,7 +35,15 @@ const routes = [
       roles: ["manager", "admin", "department", "section"],
     },
   },
-
+  {
+    path: '/performance-objective-approvals', // Đường dẫn bạn muốn sử dụng
+    name: 'PerformanceObjectiveApprovalList',
+    component: PerformanceObjectiveApprovalList,
+    meta: {
+      requiresAuth: true,
+      roles: ['admin', 'manager', 'department', 'section'] // Điều chỉnh roles cho phù hợp với ai có quyền duyệt
+    },
+  },
   {
     path: "/review-history/:targetType/:targetId",
     name: "ReviewHistory",
