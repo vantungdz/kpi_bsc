@@ -462,12 +462,25 @@
   "invalidStatusForRejection": "ステータス「{status}」は却下には無効です。",
   "errorDuringRejection": "却下中にエラーが発生しました。",
   "errorLoadingHistory": "履歴の読み込みエラー。",
-  "status.pendingSectionApproval": "セクション承認待ち（目標）",
-  "status.pendingDeptApproval": "部門承認待ち（目標）",
-  "status.pendingManagerApproval": "マネージャー承認待ち（目標）",
-  "status.approved": "承認済み（目標）",
-  "status.rejectedBySection": "セクションにより却下（目標）",
-  "status.rejectedByDept": "部門により却下（目標）",
-  "status.rejectedByManager": "マネージャーにより却下（目標）",
-  "status.unknown": "不明なステータス"
+  "status_array": {
+    "pendingSectionApproval": "セクション承認待ち",
+    "pendingDeptApproval": "部門承認待ち",
+    "pendingManagerApproval": "マネージャー承認待ち",
+    "approved": "承認済み",
+    "rejectedBySection": "セクションにより却下",
+    "rejectedByDept": "部門により却下",
+    "rejectedByManager": "マネージャーにより却下",
+    "unknown": "不明なステータス"
+  },
+  "objectiveEvaluationStatus": {
+    "PENDING_SECTION_APPROVAL": "セクション承認待ち",
+    "PENDING_DEPT_APPROVAL": "部門承認待ち",
+    "PENDING_MANAGER_APPROVAL": "マネージャー承認待ち",
+    "APPROVED": "承認済み",
+    "REJECTED_BY_SECTION": "セクションにより却下",
+    "REJECTED_BY_DEPT": "部門により却下",
+    "REJECTED_BY_MANAGER": "マネージャーにより却下",
+    "UNKNOWN": "不明なステータス"
+  },
+   "performanceObjectiveApprovalList": "業績目標承認リスト"
 }

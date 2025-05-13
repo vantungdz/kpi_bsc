@@ -1,3 +1,6 @@
+import { ApiProperty } from '@nestjs/swagger';
+import { ObjectiveEvaluationStatus } from '../../entities/objective-evaluation-status.enum';
+
 export class ReviewableTargetDto {
   id: number;
   name: string;
@@ -92,4 +95,21 @@ export class PerformanceObjectiveItemDto {
   bscAspect: string; // Name of the BSC Perspective
   supervisorEvalScore?: number | null; // Supervisor's score for this objective
   note?: string | null; // Supervisor's note for this objective
+}
+
+export class PerformanceObjectivesResponseDto {
+  // Đảm bảo có 'export'
+  @ApiProperty({
+    type: () => [PerformanceObjectiveItemDto],
+    description: 'List of performance objectives for the employee.',
+  })
+  objectives: PerformanceObjectiveItemDto[];
+
+  @ApiProperty({
+    enum: ObjectiveEvaluationStatus,
+    nullable: true,
+    description:
+      'The current evaluation status of the objectives for the employee and cycle.',
+  })
+  evaluationStatus: ObjectiveEvaluationStatus | null;
 }

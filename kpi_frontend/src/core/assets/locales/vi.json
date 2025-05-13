@@ -69,7 +69,7 @@
   "selectEmployeePlaceholder": "Vui lòng chọn nhân viên",
   "selectEmployeeToViewObjectives": "Chọn nhân viên để xem mục tiêu",
   "noObjectivesAssigned": "Chưa có mục tiêu nào được giao",
-  "supervisorEvalScore": "Điểm Đánh giá của Quản lý",
+  "supervisorEvalScore": "Đánh giá của Quản lý",
   "weightedScoreSupervisor": "Điểm có Trọng số (Quản lý)",
   "note": "Ghi chú",
   "totalWeightedScoreSupervisor": "Tổng Điểm có Trọng số (Quản lý)",
@@ -450,12 +450,26 @@
   "invalidStatusForRejection": "Trạng thái '{status}' không hợp lệ để từ chối.",
   "errorDuringRejection": "Đã xảy ra lỗi trong quá trình từ chối.",
   "errorLoadingHistory": "Lỗi khi tải lịch sử.",
-  "status.pendingSectionApproval": "Chờ Trưởng Bộ Phận Duyệt (Mục tiêu)",
-  "status.pendingDeptApproval": "Chờ Trưởng Phòng Duyệt (Mục tiêu)",
-  "status.pendingManagerApproval": "Chờ Quản Lý Duyệt (Mục tiêu)",
-  "status.approved": "Đã Duyệt (Mục tiêu)",
-  "status.rejectedBySection": "Bị Trưởng Bộ Phận Từ Chối (Mục tiêu)",
-  "status.rejectedByDept": "Bị Trưởng Phòng Từ Chối (Mục tiêu)",
-  "status.rejectedByManager": "Bị Quản Lý Từ Chối (Mục tiêu)",
-  "status.unknown": "Trạng Thái Không Xác Định"
+  "status_array": {
+    "pendingSectionApproval": "Chờ Trưởng Bộ Phận Duyệt ",
+    "pendingDeptApproval": "Chờ Trưởng Phòng Duyệt ",
+    "pendingManagerApproval": "Chờ Quản Lý Duyệt ",
+    "approved": "Đã Duyệt ",
+    "rejectedBySection": "Bị Trưởng Bộ Phận Từ Chối ",
+    "rejectedByDept": "Bị Trưởng Phòng Từ Chối ",
+    "rejectedByManager": "Bị Quản Lý Từ Chối ",
+    "unknown": "Trạng Thái Không Xác Định"
+  },
+  "objectiveEvaluationStatus": {
+    "DRAFT": "Chưa duyệt",
+    "PENDING_SECTION_APPROVAL": "Chờ Trưởng Bộ Phận Duyệt ",
+    "PENDING_DEPT_APPROVAL": "Chờ Trưởng Phòng Duyệt ",
+    "PENDING_MANAGER_APPROVAL": "Chờ Quản Lý Duyệt ",
+    "APPROVED": "Đã Duyệt ",
+    "REJECTED_BY_SECTION": "Bị Trưởng Bộ Phận Từ Chối ",
+    "REJECTED_BY_DEPT": "Bị Trưởng Phòng Từ Chối ",
+    "REJECTED_BY_MANAGER": "Bị Quản Lý Từ Chối ",
+    "UNKNOWN": "Trạng Thái Không Xác Định "
+  },
+  "performanceObjectiveApprovalList": "Danh sách Phê duyệt Mục tiêu Hiệu suất"
 }

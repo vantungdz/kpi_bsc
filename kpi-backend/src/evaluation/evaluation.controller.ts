@@ -39,12 +39,12 @@ import {
   ReviewHistoryItemDto,
   ReviewHistoryResponseDto,
   PerformanceObjectiveItemDto,
-  
+  PerformanceObjectivesResponseDto,
 } from './dto/evaluation.dto';
 import { OverallReview } from 'src/entities/overall-review.entity';
 import { SavePerformanceObjectivesDto } from './dto/save-performance-objectives.dto';
 import { PerformanceObjectiveEvaluation } from '../entities/performance-objective-evaluation.entity';
-import { RejectObjectiveEvaluationDto } from './dto/reject-objective-evaluation.dto'
+import { RejectObjectiveEvaluationDto } from './dto/reject-objective-evaluation.dto';
 
 @ApiTags('Evaluation')
 @ApiBearerAuth()
@@ -212,7 +212,7 @@ export class EvaluationController {
   }
 
   @Get('review-history/:targetId')
-  @Roles('admin', 'manager', 'employee') 
+  @Roles('admin', 'manager', 'employee')
   @ApiOperation({
     summary:
       'Get review history for a specific target (employee/section/department)',
@@ -246,7 +246,7 @@ export class EvaluationController {
   }
 
   @Get('performance-objectives')
-  @Roles('admin', 'manager') 
+  @Roles('admin', 'manager', 'department', 'section')
   @ApiOperation({
     summary:
       'Get assigned performance objectives for an employee (optionally by cycle)',
@@ -262,7 +262,7 @@ export class EvaluationController {
   @ApiResponse({
     status: 200,
     description: 'List of assigned performance objectives.',
-    type: [PerformanceObjectiveItemDto], 
+    type: PerformanceObjectivesResponseDto, // + Sử dụng DTO mới
   })
   @ApiResponse({ status: 401, description: 'Unauthorized.' })
   @ApiResponse({ status: 403, description: 'Forbidden.' })
@@ -270,37 +270,25 @@ export class EvaluationController {
     @Req() req: Request & { user?: Employee },
     @Query('employeeId', ParseIntPipe) employeeId: number,
     @Query('cycleId') cycleId?: string,
-  ): Promise<PerformanceObjectiveItemDto[]> {
-    
-    const user = this.validateUser(req); 
+  ): Promise<PerformanceObjectivesResponseDto> {
+    // + Cập nhật kiểu trả về
+    const user = this.validateUser(req);
     return this.evaluationService.getPerformanceObjectivesForEmployee(
       employeeId,
       cycleId,
     );
   }
 
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-
-  
-  
-
-  @Post('performance-objective-evaluations/save') 
-  @Roles('admin', 'manager', 'department', 'section') 
-  @ApiOperation({ summary: 'Submit performance objective evaluation for approval' })
-  @ApiResponse({ status: 201, description: 'Evaluation submitted successfully.', type: PerformanceObjectiveEvaluation })
+  @Post('performance-objective-evaluations/save')
+  @Roles('admin', 'manager', 'department', 'section')
+  @ApiOperation({
+    summary: 'Submit performance objective evaluation for approval',
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Evaluation submitted successfully.',
+    type: PerformanceObjectiveEvaluation,
+  })
   @ApiResponse({ status: 400, description: 'Invalid input.' })
   async submitObjectiveEvaluation(
     @Req() req: Request & { user?: Employee },
@@ -312,8 +300,14 @@ export class EvaluationController {
 
   @Get('performance-objective-evaluations/pending-approvals')
   @Roles('admin', 'manager', 'department', 'section')
-  @ApiOperation({ summary: 'Get pending performance objective evaluations for current user' })
-  @ApiResponse({ status: 200, description: 'List of pending evaluations.', type: [PerformanceObjectiveEvaluation] })
+  @ApiOperation({
+    summary: 'Get pending performance objective evaluations for current user',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'List of pending evaluations.',
+    type: [PerformanceObjectiveEvaluation],
+  })
   async getPendingObjectiveEvaluations(
     @Req() req: Request & { user?: Employee },
   ): Promise<PerformanceObjectiveEvaluation[]> {
@@ -330,7 +324,10 @@ export class EvaluationController {
     @Req() req: Request & { user?: Employee },
   ): Promise<PerformanceObjectiveEvaluation> {
     const user = this.validateUser(req);
-    return this.evaluationService.approveObjectiveEvaluationBySection(evaluationId, user);
+    return this.evaluationService.approveObjectiveEvaluationBySection(
+      evaluationId,
+      user,
+    );
   }
 
   @Post('performance-objective-evaluations/:evaluationId/reject-section')
@@ -344,7 +341,11 @@ export class EvaluationController {
     @Req() req: Request & { user?: Employee },
   ): Promise<PerformanceObjectiveEvaluation> {
     const user = this.validateUser(req);
-    return this.evaluationService.rejectObjectiveEvaluationBySection(evaluationId, user, dto);
+    return this.evaluationService.rejectObjectiveEvaluationBySection(
+      evaluationId,
+      user,
+      dto,
+    );
   }
 
   @Post('performance-objective-evaluations/:evaluationId/approve-department')
@@ -356,7 +357,10 @@ export class EvaluationController {
     @Req() req: Request & { user?: Employee },
   ): Promise<PerformanceObjectiveEvaluation> {
     const user = this.validateUser(req);
-    return this.evaluationService.approveObjectiveEvaluationByDepartment(evaluationId, user);
+    return this.evaluationService.approveObjectiveEvaluationByDepartment(
+      evaluationId,
+      user,
+    );
   }
 
   @Post('performance-objective-evaluations/:evaluationId/reject-department')
@@ -370,7 +374,11 @@ export class EvaluationController {
     @Req() req: Request & { user?: Employee },
   ): Promise<PerformanceObjectiveEvaluation> {
     const user = this.validateUser(req);
-    return this.evaluationService.rejectObjectiveEvaluationByDepartment(evaluationId, user, dto);
+    return this.evaluationService.rejectObjectiveEvaluationByDepartment(
+      evaluationId,
+      user,
+      dto,
+    );
   }
 
   @Post('performance-objective-evaluations/:evaluationId/approve-manager')
@@ -382,7 +390,10 @@ export class EvaluationController {
     @Req() req: Request & { user?: Employee },
   ): Promise<PerformanceObjectiveEvaluation> {
     const user = this.validateUser(req);
-    return this.evaluationService.approveObjectiveEvaluationByManager(evaluationId, user);
+    return this.evaluationService.approveObjectiveEvaluationByManager(
+      evaluationId,
+      user,
+    );
   }
 
   @Post('performance-objective-evaluations/:evaluationId/reject-manager')
@@ -396,21 +407,29 @@ export class EvaluationController {
     @Req() req: Request & { user?: Employee },
   ): Promise<PerformanceObjectiveEvaluation> {
     const user = this.validateUser(req);
-    return this.evaluationService.rejectObjectiveEvaluationByManager(evaluationId, user, dto);
+    return this.evaluationService.rejectObjectiveEvaluationByManager(
+      evaluationId,
+      user,
+      dto,
+    );
   }
 
   @Get('performance-objective-evaluations/:evaluationId/history')
-  @Roles('admin', 'manager', 'department', 'section', 'employee') 
-  @ApiOperation({ summary: 'Get history of a performance objective evaluation' })
-  @ApiResponse({ status: 200, description: 'History list' /* type: [PerformanceObjectiveEvaluationHistoryDto] */ })
+  @Roles('admin', 'manager', 'department', 'section', 'employee')
+  @ApiOperation({
+    summary: 'Get history of a performance objective evaluation',
+  })
+  @ApiResponse({
+    status: 200,
+    description:
+      'History list' /* type: [PerformanceObjectiveEvaluationHistoryDto] */,
+  })
   async getObjectiveEvaluationHistory(
     @Param('evaluationId', ParseIntPipe) evaluationId: number,
     @Req() req: Request & { user?: Employee },
-  ): Promise<any[]> { 
+  ): Promise<any[]> {
     const user = this.validateUser(req);
-    
+
     return this.evaluationService.getObjectiveEvaluationHistory(evaluationId);
   }
-
-  
 }

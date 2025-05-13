@@ -36,12 +36,12 @@ const routes = [
     },
   },
   {
-    path: '/performance-objective-approvals', // Đường dẫn bạn muốn sử dụng
-    name: 'PerformanceObjectiveApprovalList',
+    path: "/performance-objective-approvals", // Đường dẫn bạn muốn sử dụng
+    name: "PerformanceObjectiveApprovalList",
     component: PerformanceObjectiveApprovalList,
     meta: {
       requiresAuth: true,
-      roles: ['admin', 'manager', 'department', 'section'] // Điều chỉnh roles cho phù hợp với ai có quyền duyệt
+      roles: ["admin", "manager", "department", "section"], // Điều chỉnh roles cho phù hợp với ai có quyền duyệt
     },
   },
   {
@@ -116,7 +116,10 @@ const routes = [
     path: "/performance",
     name: "PerformanceObjectives",
     component: PerformanceObjectives,
-    meta: { requiresAuth: true },
+    meta: {
+      requiresAuth: true,
+      roles: ["admin", "manager", "department", "section"],
+    },
   },
   {
     path: "/kpis",

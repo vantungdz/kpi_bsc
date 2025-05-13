@@ -461,12 +461,29 @@
   "invalidStatusForRejection": "Status '{status}' is invalid for rejection.",
   "errorDuringRejection": "An error occurred during rejection.",
   "errorLoadingHistory": "Error loading history.",
-  "status.pendingSectionApproval": "Pending Section Approval (Objective)",
-  "status.pendingDeptApproval": "Pending Department Approval (Objective)",
-  "status.pendingManagerApproval": "Pending Manager Approval (Objective)",
-  "status.approved": "Approved (Objective)",
-  "status.rejectedBySection": "Rejected by Section (Objective)",
-  "status.rejectedByDept": "Rejected by Department (Objective)",
-  "status.rejectedByManager": "Rejected by Manager (Objective)",
-  "status.unknown": "Unknown Status"
+  "status_array": {
+    "draft": "Draft ",
+    "submitted": "Submitted ",
+    "pendingSectionApproval": "Pending Section Approval ",
+    "pendingDeptApproval": "Pending Department Approval ",
+    "pendingManagerApproval": "Pending Manager Approval ",
+    "approved": "Approved ",
+    "rejectedBySection": "Rejected by Section ",
+    "rejectedByDept": "Rejected by Department ",
+    "rejectedByManager": "Rejected by Manager ",
+    "unknown": "Unknown Status"
+  },
+  "objectiveEvaluationStatus": {
+    "DRAFT": "Draft",
+    "SUBMITTED": "Submitted",
+    "PENDING_SECTION_APPROVAL": "Pending Section Approval",
+    "PENDING_DEPT_APPROVAL": "Pending Department Approval",
+    "PENDING_MANAGER_APPROVAL": "Pending Manager Approval",
+    "APPROVED": "Approved",
+    "REJECTED_BY_SECTION": "Rejected by Section",
+    "REJECTED_BY_DEPT": "Rejected by Department",
+    "REJECTED_BY_MANAGER": "Rejected by Manager",
+    "UNKNOWN": "Unknown Status"
+  },
+   "performanceObjectiveApprovalList": "Performance Objective Approval List"
 }

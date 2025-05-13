@@ -1,8 +1,4 @@
-/**
- * Enum for Performance Objective Evaluation Statuses.
- * Mirrors the enum in the backend.
- */
-export const ObjectiveEvaluationStatus = Object.freeze({
+export const ObjectiveEvaluationStatus = {
   PENDING_SECTION_APPROVAL: "PENDING_SECTION_APPROVAL",
   PENDING_DEPT_APPROVAL: "PENDING_DEPT_APPROVAL",
   PENDING_MANAGER_APPROVAL: "PENDING_MANAGER_APPROVAL",
@@ -10,49 +6,39 @@ export const ObjectiveEvaluationStatus = Object.freeze({
   REJECTED_BY_SECTION: "REJECTED_BY_SECTION",
   REJECTED_BY_DEPT: "REJECTED_BY_DEPT",
   REJECTED_BY_MANAGER: "REJECTED_BY_MANAGER",
+  // Thêm các trạng thái khác nếu có
+};
+
+export const ObjectiveEvaluationStatusColor = {
+  [ObjectiveEvaluationStatus.PENDING_SECTION_APPROVAL]: "orange",
+  [ObjectiveEvaluationStatus.PENDING_DEPT_APPROVAL]: "gold",
+  [ObjectiveEvaluationStatus.PENDING_MANAGER_APPROVAL]: "blue",
+  [ObjectiveEvaluationStatus.APPROVED]: "green",
+  [ObjectiveEvaluationStatus.REJECTED_BY_SECTION]: "red",
+  [ObjectiveEvaluationStatus.REJECTED_BY_DEPT]: "red",
+  [ObjectiveEvaluationStatus.REJECTED_BY_MANAGER]: "red",
+  default: "gray",
+};
+
+export const getObjectiveEvaluationStatusText = (t) => ({
+  [ObjectiveEvaluationStatus.PENDING_SECTION_APPROVAL]: t(
+    "status_array.pendingSectionApproval"
+  ),
+  [ObjectiveEvaluationStatus.PENDING_DEPT_APPROVAL]: t(
+    "status_array.pendingDeptApproval"
+  ),
+  [ObjectiveEvaluationStatus.PENDING_MANAGER_APPROVAL]: t(
+    "status_array.pendingManagerApproval"
+  ),
+  [ObjectiveEvaluationStatus.APPROVED]: t("status_array.approved"),
+  [ObjectiveEvaluationStatus.REJECTED_BY_SECTION]: t(
+    "status_array.rejectedBySection"
+  ),
+  [ObjectiveEvaluationStatus.REJECTED_BY_DEPT]: t(
+    "status_array.rejectedByDept"
+  ),
+  [ObjectiveEvaluationStatus.REJECTED_BY_MANAGER]: t(
+    "status_array.rejectedByManager"
+  ),
+  unknown: t("status_array.unknown"),
 });
-
-/**
- * Color mapping for ObjectiveEvaluationStatus for UI display (e.g., Ant Design Tags).
- */
-export const ObjectiveEvaluationStatusColor = Object.freeze({
-  [ObjectiveEvaluationStatus.PENDING_SECTION_APPROVAL]: "processing", // or 'blue'
-  [ObjectiveEvaluationStatus.PENDING_DEPT_APPROVAL]: "processing", // or 'geekblue'
-  [ObjectiveEvaluationStatus.PENDING_MANAGER_APPROVAL]: "processing", // or 'purple'
-  [ObjectiveEvaluationStatus.APPROVED]: "success", // or 'green'
-  [ObjectiveEvaluationStatus.REJECTED_BY_SECTION]: "error", // or 'red'
-  [ObjectiveEvaluationStatus.REJECTED_BY_DEPT]: "error", // or 'volcano'
-  [ObjectiveEvaluationStatus.REJECTED_BY_MANAGER]: "error", // or 'magenta'
-  default: "default",
-});
-
-/**
- * Returns a human-readable text for a given ObjectiveEvaluationStatus.
- * Uses a tFunction (from vue-i18n useI18n) for internationalization.
- * @param {function} tFunction - The translation function.
- * @returns {object} - An object mapping status keys to their translated text.
- */
-export const getObjectiveEvaluationStatusText = (tFunction) =>
-  Object.freeze({
-    [ObjectiveEvaluationStatus.PENDING_SECTION_APPROVAL]: tFunction("status.pendingSectionApproval"),
-    [ObjectiveEvaluationStatus.PENDING_DEPT_APPROVAL]: tFunction("status.pendingDeptApproval"),
-    [ObjectiveEvaluationStatus.PENDING_MANAGER_APPROVAL]: tFunction("status.pendingManagerApproval"),
-    [ObjectiveEvaluationStatus.APPROVED]: tFunction("status.approved"),
-    [ObjectiveEvaluationStatus.REJECTED_BY_SECTION]: tFunction("status.rejectedBySection"),
-    [ObjectiveEvaluationStatus.REJECTED_BY_DEPT]: tFunction("status.rejectedByDept"),
-    [ObjectiveEvaluationStatus.REJECTED_BY_MANAGER]: tFunction("status.rejectedByManager"),
-    unknown: tFunction("status.unknown"),
-  });
-
-// You might need to add these keys to your i18n translation files (e.g., en.json, vi.json)
-// Example for en.json:
-// "status": {
-//   "pendingSectionApproval": "Pending Section Approval",
-//   "pendingDeptApproval": "Pending Department Approval",
-//   "pendingManagerApproval": "Pending Manager Approval",
-//   "approved": "Approved",
-//   "rejectedBySection": "Rejected by Section",
-//   "rejectedByDept": "Rejected by Department",
-//   "rejectedByManager": "Rejected by Manager",
-//   "unknown": "Unknown Status"
-// }
