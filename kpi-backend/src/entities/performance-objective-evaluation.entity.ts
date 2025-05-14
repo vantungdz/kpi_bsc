@@ -20,7 +20,7 @@ export class PerformanceObjectiveEvaluation {
   id: number;
 
   @Column()
-  employee_id: number; 
+  employee_id: number;
 
   @ManyToOne(
     () => Employee,
@@ -30,14 +30,14 @@ export class PerformanceObjectiveEvaluation {
   employee: Employee;
 
   @Column()
-  evaluated_by_id: number; 
+  evaluated_by_id: number;
 
   @ManyToOne(() => Employee, (employee) => employee.objectiveEvaluationsDone)
   @JoinColumn({ name: 'evaluated_by_id' })
   evaluator: Employee;
 
   @Column({ nullable: true })
-  review_cycle_id: number;
+  review_cycle_id: string;
 
   @ManyToOne(() => ReviewCycle, (cycle) => cycle.objectiveEvaluations, {
     nullable: true,
@@ -52,10 +52,10 @@ export class PerformanceObjectiveEvaluation {
   })
   status: ObjectiveEvaluationStatus;
 
-  @Column('decimal', {nullable: true })
+  @Column('decimal', { nullable: true })
   total_weighted_score_supervisor: number;
 
-  @Column('decimal', {nullable: true })
+  @Column('decimal', { nullable: true })
   average_score_supervisor: number;
 
   @Column({ type: 'text', nullable: true })
@@ -78,7 +78,7 @@ export class PerformanceObjectiveEvaluation {
   updated_at: Date;
 
   @Column({ nullable: true })
-  updated_by: number; 
+  updated_by: number;
 
   @OneToMany(
     () => PerformanceObjectiveEvaluationDetail,

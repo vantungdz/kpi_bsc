@@ -11,23 +11,14 @@
       <a-row :gutter="16" style="margin-bottom: 20px">
         <a-col :xs="24" :sm="12" :md="8">
           <a-form-item :label="$t('selectTarget')">
-            <a-select
-              v-model:value="selectedTarget"
-              :placeholder="$t('selectTargetPlaceholder')"
-              show-search
-              :filter-option="filterOption"
-              @change="handleTargetChange"
-              :loading="isLoadingTargets"
-            >
-              <a-select-option
-                v-for="target in filteredReviewTargets"
-                :key="`${target.type}-${target.id}`"
-                :value="`${target.type}-${target.id}`"
-              >
+            <a-select v-model:value="selectedTarget" :placeholder="$t('selectTargetPlaceholder')" show-search
+              :filter-option="filterOption" @change="handleTargetChange" :loading="isLoadingTargets">
+              <a-select-option v-for="target in filteredReviewTargets" :key="`${target.type}-${target.id}`"
+                :value="`${target.type}-${target.id}`">
                 {{ target.name }} ({{
-                  target.type === "employee"
-                    ? $t("employee")
-                    : $t("departmentOrSection")
+                target.type === "employee"
+                ? $t("employee")
+                : $t("departmentOrSection")
                 }})
               </a-select-option>
             </a-select>
@@ -35,62 +26,34 @@
         </a-col>
         <a-col :xs="24" :sm="12" :md="8">
           <a-form-item :label="$t('selectCycle')">
-            <a-select
-              v-model:value="selectedCycle"
-              :placeholder="$t('selectCyclePlaceholder')"
-              @change="fetchKpisForReview"
-              :loading="isLoadingCycles"
-            >
-              <a-select-option
-                v-for="cycle in reviewCycles"
-                :key="cycle.id"
-                :value="cycle.id"
-              >
+            <a-select v-model:value="selectedCycle" :placeholder="$t('selectCyclePlaceholder')"
+              @change="fetchKpisForReview" :loading="isLoadingCycles">
+              <a-select-option v-for="cycle in reviewCycles" :key="cycle.id" :value="cycle.id">
                 {{ cycle.name }}
               </a-select-option>
             </a-select>
           </a-form-item>
         </a-col>
-        <a-col
-          :xs="24"
-          :sm="12"
-          :md="8"
-          style="display: flex; align-items: flex-end; padding-bottom: 24px"
-        >
-          <a-button
-            v-if="selectedTarget && selectedCycle"
-            type="dashed"
-            @click="viewTargetReviewHistory"
-          >
+        <a-col :xs="24" :sm="12" :md="8" style="display: flex; align-items: flex-end; padding-bottom: 24px">
+          <a-button v-if="selectedTarget && selectedCycle" type="dashed" @click="viewTargetReviewHistory">
             {{ $t("viewReviewHistory") }}
           </a-button>
         </a-col>
       </a-row>
 
       <a-spin :spinning="isLoadingKpis" :tip="$t('loadingKpis')">
-        <a-alert
-          v-if="loadingError"
-          type="error"
-          show-icon
-          closable
-          style="margin-bottom: 16px"
-          :message="loadingError"
-          @close="loadingError = null"
-        />
+        <a-alert v-if="loadingError" type="error" show-icon closable style="margin-bottom: 16px" :message="loadingError"
+          @close="loadingError = null" />
 
         <div v-if="!selectedTarget || !selectedCycle" class="empty-state">
           <a-empty :description="$t('selectTargetAndCycle')" />
         </div>
 
-        <div
-          v-else-if="
+        <div v-else-if="
             !isLoadingKpis && kpisToReview.length === 0 && !loadingError
-          "
-          class="empty-state"
-        >
+          " class="empty-state">
           <a-empty
-            :description="`${$t('noKpisToReview')} ${getSelectedTargetName()} ${$t('inCycle')} ${getSelectedCycleName()}.`"
-          />
+            :description="`${$t('noKpisToReview')} ${getSelectedTargetName()} ${$t('inCycle')} ${getSelectedCycleName()}.`" />
         </div>
 
         <div v-else-if="kpisToReview.length > 0">
@@ -101,21 +64,10 @@
             </a-tag>
           </div>
 
-          <a-form
-            layout="vertical"
-            @finish="submitReviewData"
-            @finishFailed="onFinishFailed"
-          >
-            <div
-              v-for="(kpiItem, index) in kpisToReview"
-              :key="kpiItem.assignmentId"
-              class="kpi-review-item"
-            >
+          <a-form layout="vertical" @finish="submitReviewData" @finishFailed="onFinishFailed">
+            <div v-for="(kpiItem, index) in kpisToReview" :key="kpiItem.assignmentId" class="kpi-review-item">
               <a-divider v-if="index > 0" />
-              <p
-                v-if="kpiItem.kpiDescription"
-                style="font-style: italic; color: #555; margin-bottom: 8px"
-              >
+              <p v-if="kpiItem.kpiDescription" style="font-style: italic; color: #555; margin-bottom: 8px">
                 <strong>{{ $t("kpiDescription") }}:</strong>
                 {{ kpiItem.kpiDescription }}
               </p>
@@ -138,65 +90,60 @@
                 <a-col :span="8">
                   <a-descriptions size="small" bordered :column="1">
                     <a-descriptions-item :label="$t('completionRate')">
-                      <a-progress
-                        :percent="
+                      <a-progress :percent="
                           calculateCompletionRate(
                             kpiItem.actualValue,
                             kpiItem.targetValue
                           )
-                        "
-                        :status="
+                        " :status="
                           getCompletionStatus(
                             calculateCompletionRate(
                               kpiItem.actualValue,
                               kpiItem.targetValue
                             )
                           )
-                        "
-                      />
+                        " />
+                    </a-descriptions-item>
+                  </a-descriptions>
+                </a-col>
+                <a-col :span="8">
+                  <a-descriptions size="small" bordered :column="1">
+                    <a-descriptions-item :label="$t('weight')">
+                      {{ kpiItem.weight }}
+                    </a-descriptions-item>
+                    <a-descriptions-item :label="$t('weightedScoreSupervisor')">
+                      {{ getWeightedScore(kpiItem) }}
                     </a-descriptions-item>
                   </a-descriptions>
                 </a-col>
               </a-row>
 
-              <a-form-item
-                :label="`${$t('managerCommentForKpi')} ${kpiItem.kpiName}`"
-                :name="['kpiItem', index, 'managerComment']"
-                style="margin-top: 10px"
-              >
-                <a-textarea
-                  v-model:value="kpiItem.managerComment"
-                  :placeholder="$t('managerCommentPlaceholder')"
-                  :rows="3"
-                  :disabled="
+              <a-form-item :label="`${$t('managerCommentForKpi')} ${kpiItem.kpiName}`"
+                :name="['kpiItem', index, 'managerComment']" style="margin-top: 10px">
+                <a-textarea v-model:value="kpiItem.managerComment" :placeholder="$t('managerCommentPlaceholder')"
+                  :rows="3" :disabled="
                     isLoadingKpis || overallReview.status === 'COMPLETED'
-                  "
-                />
+                  " />
               </a-form-item>
 
-              <a-form-item
-                :label="`${$t('managerScoreForKpi')} ${kpiItem.kpiName}`"
-                :name="['kpiItem', index, 'managerScore']"
-              >
+              <a-form-item :label="`${$t('managerScoreForKpi')} ${kpiItem.kpiName}`"
+                :name="['kpiItem', index, 'managerScore']">
                 <a-rate v-model:value="kpiItem.managerScore" />
               </a-form-item>
             </div>
 
             <a-divider />
-            <div
-              v-if="
+            <div style="text-align: right; margin-bottom: 16px">
+              <strong>{{ $t('totalWeightedScoreSupervisor') }}:</strong>
+              <span style="font-size: 1.2em; color: #1890ff">{{ totalWeightedScoreSupervisor }}</span>
+            </div>
+            <div v-if="
                 overallReview.employeeComment &&
                 (overallReview.status === 'EMPLOYEE_RESPONDED' ||
                   overallReview.status === 'COMPLETED')
-              "
-            >
+              ">
               <h3>{{ $t("employeeFeedback") }}</h3>
-              <a-descriptions
-                bordered
-                :column="1"
-                size="small"
-                style="margin-bottom: 16px"
-              >
+              <a-descriptions bordered :column="1" size="small" style="margin-bottom: 16px">
                 <a-descriptions-item :label="$t('feedbackDate')">
                   {{ formatDate(overallReview.employeeFeedbackDate) }}
                 </a-descriptions-item>
@@ -209,48 +156,29 @@
               <a-divider />
             </div>
 
-            <a-form-item
-              :label="$t('overallManagerComment')"
-              name="overallManagerComment"
-            >
-              <Input.TextArea
-                v-model:value="overallReview.managerComment"
-                :placeholder="$t('overallManagerCommentPlaceholder')"
-                :rows="5"
-              />
+            <a-form-item :label="$t('overallManagerComment')" name="overallManagerComment">
+              <Input.TextArea v-model:value="overallReview.managerComment"
+                :placeholder="$t('overallManagerCommentPlaceholder')" :rows="5" :disabled="isLoadingKpis || overallReview.status === 'COMPLETED'
+                  " />
             </a-form-item>
 
-            <a-form-item
-              :label="$t('overallManagerScore')"
-              name="overallManagerScore"
-            >
+            <a-form-item :label="$t('overallManagerScore')" name="overallManagerScore">
               <a-rate v-model:value="overallReview.managerScore" />
             </a-form-item>
 
             <a-form-item>
-              <a-button
-                type="primary"
-                html-type="button"
-                @click="handleSaveButtonClick"
-                :loading="isSubmitting"
+              <a-button type="primary" html-type="button" @click="handleSaveButtonClick" :loading="isSubmitting"
                 :disabled="
                   isLoadingKpis || overallReview.status === 'COMPLETED'
-                "
-              >
+                ">
                 {{ $t("saveReview") }}
               </a-button>
-              <a-button
-                v-if="
+              <a-button v-if="
                   overallReview.status === 'MANAGER_REVIEWED' ||
                   overallReview.status === 'EMPLOYEE_FEEDBACK_PENDING' ||
                   overallReview.status === 'EMPLOYEE_RESPONDED'
-                "
-                type="primary"
-                danger
-                @click="handleCompleteReview"
-                :loading="isCompletingReview"
-                style="margin-left: 8px"
-              >
+                " type="primary" danger @click="handleCompleteReview" :loading="isCompletingReview"
+                style="margin-left: 8px">
                 {{ $t("completeReview") }}
               </a-button>
             </a-form-item>
@@ -415,12 +343,16 @@ watch(
         newOverallReview.employeeComment || null;
       overallReview.value.employeeFeedbackDate =
         newOverallReview.employeeFeedbackDate || null;
+      // Gán thêm trường tổng weighted score supervisor nếu có
+      overallReview.value.totalWeightedScoreSupervisor =
+        newOverallReview.totalWeightedScoreSupervisor ?? null;
     } else {
       overallReview.value.managerComment = "";
       overallReview.value.managerScore = null;
       overallReview.value.status = null;
       overallReview.value.employeeComment = null;
       overallReview.value.employeeFeedbackDate = null;
+      overallReview.value.totalWeightedScoreSupervisor = null;
     }
   },
   { deep: true, immediate: true }
@@ -583,6 +515,17 @@ const getCompletionStatus = (rate) => {
   if (rate >= 70) return "normal";
   return "exception";
 };
+
+const getWeightedScore = (kpiItem) => {
+  if (!kpiItem.weight || !kpiItem.managerScore) return 0;
+  return Math.round((kpiItem.weight * kpiItem.managerScore) * 100) / 100;
+};
+
+const totalWeightedScoreSupervisor = computed(() => {
+  console.log('totalWeightedScoreSupervisor', overallReview.value)
+  if (!overallReview.value || !overallReview.value.totalWeightedScoreSupervisor) return 0;
+  return Number(overallReview.value.totalWeightedScoreSupervisor).toFixed(2);
+});
 
 const submitReviewData = async () => {
   try {

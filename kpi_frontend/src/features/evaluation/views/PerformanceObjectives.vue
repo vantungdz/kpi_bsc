@@ -6,27 +6,16 @@
       </a-breadcrumb-item>
       <a-breadcrumb-item>{{
         $t("performanceObjectivesTitle")
-      }}</a-breadcrumb-item>
+        }}</a-breadcrumb-item>
     </a-breadcrumb>
 
-    <a-card
-      :title="$t('performanceObjectivesEvaluation')"
-      class="rounded-xl shadow-md"
-    >
+    <a-card :title="$t('performanceObjectivesEvaluation')" class="rounded-xl shadow-md">
       <!-- Selection Row -->
       <a-row :gutter="16" style="margin-bottom: 20px">
         <a-col :xs="24" :sm="12" :md="8" v-if="isDivisionSelectionVisible">
           <a-form-item :label="$t('selectDivision')">
-            <a-select
-              v-model:value="selectedDivision"
-              :placeholder="$t('selectDivisionPlaceholder')"
-              allow-clear
-            >
-              <a-select-option
-                v-for="dept in departments"
-                :key="dept.id"
-                :value="dept.id"
-              >
+            <a-select v-model:value="selectedDivision" :placeholder="$t('selectDivisionPlaceholder')" allow-clear>
+              <a-select-option v-for="dept in departments" :key="dept.id" :value="dept.id">
                 {{ dept.name }}
               </a-select-option>
             </a-select>
@@ -34,13 +23,8 @@
         </a-col>
         <a-col :xs="24" :sm="12" :md="8">
           <a-form-item :label="$t('selectEmployee')">
-            <a-select
-              v-model:value="selectedEmployee"
-              :placeholder="$t('selectEmployeePlaceholder')"
-              @change="handleEmployeeChange"
-              :loading="isLoadingEmployees"
-              :disabled="
-                isLoadingEmployees ||
+            <a-select v-model:value="selectedEmployee" :placeholder="$t('selectEmployeePlaceholder')"
+              @change="handleEmployeeChange" :loading="isLoadingEmployees" :disabled="isLoadingEmployees ||
                 (isDivisionSelectionVisible && !selectedDivision) ||
                 (!isDivisionSelectionVisible &&
                   !(
@@ -50,35 +34,32 @@
                       (currentUser.role === 'department' &&
                         currentUser.departmentId))
                   ))
-              "
-              show-search
-              :filter-option="employeeFilterOption"
-              allow-clear
-            >
-              <a-select-option
-                v-for="emp in employeesToDisplay"
-                :key="emp.id"
-                :value="emp.id"
-              >
+                " show-search :filter-option="employeeFilterOption" allow-clear>
+              <a-select-option v-for="emp in employeesToDisplay" :key="emp.id" :value="emp.id">
                 {{ emp.first_name }} {{ emp.last_name }}
+              </a-select-option>
+            </a-select>
+          </a-form-item>
+        </a-col>
+        <a-col :xs="24" :sm="12" :md="6">
+          <a-form-item :label="$t('selectCycle')">
+            <a-select v-model:value="selectedCycle" :placeholder="$t('selectCyclePlaceholder')"
+              @change="handleCycleChange" :loading="isLoadingReviewCycles" allow-clear>
+              <a-select-option v-for="cycle in reviewCycles" :key="cycle.id" :value="cycle.id">
+                {{ cycle.name }}
               </a-select-option>
             </a-select>
           </a-form-item>
         </a-col>
       </a-row>
       <a-row class="mb-4" gutter="16" style="margin-bottom: 20px">
-        <a-col
-          :span="8"
-          v-if="
-            selectedEmployee &&
-            currentEvaluationStatus &&
-            objectivesData.length > 0
-          "
-        >
+        <a-col :span="8" v-if="
+          selectedEmployee &&
+          currentEvaluationStatus &&
+          objectivesData.length > 0
+        ">
           <strong>Status: </strong>
-          <a-tag
-            :color="getObjectiveEvaluationStatusColor(currentEvaluationStatus)"
-          >
+          <a-tag :color="getObjectiveEvaluationStatusColor(currentEvaluationStatus)">
             {{ $t("objectiveEvaluationStatus." + currentEvaluationStatus) }}
           </a-tag>
         </a-col>
@@ -88,36 +69,21 @@
         <div v-if="!selectedEmployee" class="empty-state">
           <a-empty :description="$t('selectEmployeeToViewObjectives')" />
         </div>
-        <div
-          v-else-if="
-            selectedEmployee &&
-            !isLoadingObjectives &&
-            processedTableData.length === 0
-          "
-          class="empty-state"
-        >
+        <div v-else-if="
+          selectedEmployee &&
+          !isLoadingObjectives &&
+          processedTableData.length === 0
+        " class="empty-state">
           <a-empty :description="$t('noObjectivesAssigned')" />
         </div>
 
-        <a-table
-          v-else
-          :columns="columns"
-          :data-source="processedTableData"
-          :pagination="false"
-          bordered
-          rowKey="key"
-          size="middle"
-          class="performance-objectives-table"
-        >
+        <a-table v-else :columns="columns" :data-source="processedTableData" :pagination="false" bordered rowKey="key"
+          size="middle" class="performance-objectives-table">
           <template #bodyCell="{ column, record }">
             <template v-if="!record.isGroup">
               <template v-if="column.key === 'supervisorEvalScore'">
-                <a-input-number
-                  v-model:value="record.supervisorEvalScore"
-                  style="width: 100%"
-                  :formatter="supervisorScoreFormatter"
-                  :parser="supervisorScoreParser"
-                  :disabled="isEvaluationClosed"
+                <a-input-number v-model:value="record.supervisorEvalScore" style="width: 100%"
+                  :formatter="supervisorScoreFormatter" :parser="supervisorScoreParser" :disabled="isEvaluationClosed"
                   @change="
                     () => {
                       console.log(
@@ -126,42 +92,33 @@
                       );
                       handleEvaluationChange(record.key);
                     }
-                  "
-                />
+                  " />
               </template>
 
               <!-- Note -->
               <template v-else-if="column.key === 'note'">
-                <a-textarea
-                  v-model:value="record.note"
-                  :rows="2"
-                  @change="() => handleEvaluationChange(record.key)"
-                  :disabled="isEvaluationClosed"
-                />
+                <a-textarea v-model:value="record.note" :rows="2" @change="() => handleEvaluationChange(record.key)"
+                  :disabled="isEvaluationClosed" />
               </template>
 
               <!-- Weight Score cho Supervisor -->
               <template v-else-if="column.key === 'weightedScoreSupervisor'">
                 <span>{{
                   calcWeightedScore(record.supervisorEvalScore, record.weight)
-                }}</span>
+                  }}</span>
               </template>
 
               <!-- Target -->
               <template v-else-if="column.key === 'target'">
-                <span
-                  >{{ formatNumberRef(record.target) }} ({{
-                    record.unit
-                  }})</span
-                >
+                <span>{{ formatNumberRef(record.target) }} ({{
+                  record.unit
+                  }})</span>
               </template>
 
               <template v-else-if="column.key === 'actualResult'">
-                <span
-                  >{{ formatNumberRef(record.actualResult) }} ({{
-                    record.unit
-                  }})</span
-                >
+                <span>{{ formatNumberRef(record.actualResult) }} ({{
+                  record.unit
+                  }})</span>
               </template>
 
               <!-- Mặc định (Objective Item, Actual Result, KPI Name) -->
@@ -173,10 +130,7 @@
         </a-table>
 
         <!-- Tổng kết & Save Button -->
-        <div
-          v-if="selectedEmployee && processedTableData.length > 0"
-          class="mt-4"
-        >
+        <div v-if="selectedEmployee && selectedCycle && processedTableData.length > 0" class="mt-4">
           <a-row justify="space-between" align="middle">
             <a-col>
               <p>
@@ -189,12 +143,7 @@
               </p>
             </a-col>
             <a-col>
-              <a-button
-                type="primary"
-                @click="saveEvaluation"
-                :loading="isSaving"
-                :disabled="isEvaluationClosed"
-              >
+              <a-button type="primary" @click="saveEvaluation" :loading="isSaving" :disabled="isEvaluationClosed">
                 {{ $t("saveEvaluation") }}
               </a-button>
             </a-col>
@@ -239,14 +188,17 @@ const isDivisionSelectionVisible = computed(() => {
 
 const selectedDivision = ref(null);
 const selectedEmployee = ref(null);
+const selectedCycle = ref(null);
 
 const departments = computed(
   () => store.getters["departments/departmentList"] || []
 );
 const allEmployees = computed(() => store.getters["employees/userList"] || []);
 const isLoadingEmployees = computed(() => store.getters["employees/isLoading"]);
+const isLoadingReviewCycles = computed(() => store.getters['kpiEvaluations/isLoadingReviewCycles']); // Lấy trạng thái loading chu kỳ
 
 const objectivesData = ref([]);
+const totalWeightedScoreSupervisor = ref(0);
 const isLoadingObjectives = computed(
   () => store.getters["kpiEvaluations/isLoadingAssignedPerformanceObjectives"]
 );
@@ -256,6 +208,8 @@ const isSaving = computed(
 const currentEvaluationStatus = computed(
   () => store.getters["kpiEvaluations/getCurrentPerformanceEvaluationStatus"]
 ); // Map status from store
+
+const reviewCycles = computed(() => store.getters["kpiEvaluations/getReviewCycles"] || []); // Thêm computed property cho review cycles
 
 const isEvaluationClosed = computed(() => {
   const closedStatuses = [
@@ -523,12 +477,6 @@ const calcWeightedScore = (score, weight) => {
   return 0;
 };
 
-const totalWeightedScoreSupervisor = computed(() => {
-  return objectivesData.value.reduce((sum, item) => {
-    return sum + calcWeightedScore(item.supervisorEvalScore, item.weight);
-  }, 0);
-});
-
 const averageScoreSupervisor = computed(() => {
   const scoredItems = objectivesData.value.filter(
     (item) =>
@@ -549,6 +497,10 @@ const handleEmployeeChange = () => {
   fetchObjectives();
 };
 
+const handleCycleChange = () => {
+  fetchObjectives(); // Tải lại mục tiêu khi chu kỳ thay đổi
+};
+
 const employeeFilterOption = (input, option) => {
   return option.children[0].children
     .toLowerCase()
@@ -561,28 +513,30 @@ const fetchInitialData = async () => {
 };
 
 const fetchObjectives = async () => {
-  if (selectedEmployee.value) {
-    // Removed selectedCycle condition
+  if (selectedEmployee.value && selectedCycle.value) {
     objectivesData.value = [];
     try {
-      const fetchedMappedObjectives = await store.dispatch(
+      // Gọi API mới, nhận về {objectives, totalWeightedScoreSupervisor, ...}
+      const response = await store.dispatch(
         "kpiEvaluations/fetchAssignedPerformanceObjectives",
         {
           employeeId: selectedEmployee.value,
-          // cycleId: selectedCycle.value, // Nếu bạn có selectedCycle, hãy truyền nó vào đây
+          cycleId: selectedCycle.value,
         }
       );
-
-      objectivesData.value = fetchedMappedObjectives || [];
+      objectivesData.value = response?.objectives || [];
+      totalWeightedScoreSupervisor.value = response?.totalWeightedScoreSupervisor || 0;
     } catch (error) {
       notification.error({
         message: $t("errorFetchingObjectives"),
         description: error.message,
       });
       objectivesData.value = [];
+      totalWeightedScoreSupervisor.value = 0;
     }
   } else {
     objectivesData.value = [];
+    totalWeightedScoreSupervisor.value = 0;
   }
 };
 
@@ -606,7 +560,7 @@ const handleEvaluationChange = (objectiveKey) => {
 };
 
 const saveEvaluation = async () => {
-  if (!selectedEmployee.value) {
+  if (!selectedEmployee.value || !selectedCycle.value) {
     // Removed selectedCycle condition
     notification.error({
       message: $t("error"),
@@ -617,6 +571,7 @@ const saveEvaluation = async () => {
 
   const evaluationPayload = {
     employeeId: selectedEmployee.value,
+    cycleId: selectedCycle.value, // Ensure cycleId is always included
     evaluations: objectivesData.value.map((obj) => ({
       objectiveId: obj.id,
       score: obj.supervisorEvalScore,
@@ -639,6 +594,7 @@ const saveEvaluation = async () => {
 
 onMounted(() => {
   fetchInitialData();
+  store.dispatch("kpiEvaluations/fetchReviewCycles"); // Fetch review cycles khi component mount
 });
 
 // Watcher for when selectedDivision changes (primarily for admin/manager)
@@ -664,6 +620,10 @@ watch(
 );
 
 watch(selectedEmployee, () => {
+  fetchObjectives();
+});
+
+watch(selectedCycle, () => {
   fetchObjectives();
 });
 

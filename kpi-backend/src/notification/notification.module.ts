@@ -7,14 +7,15 @@ import { NotificationService } from './notification.service';
 import { NotificationEventListener } from './notification.listener'; // Assuming you have this
 import { NotificationsController } from './notification.controller';
 import { EmployeesModule } from '../employees/employees.module'; // If NotificationEventListener or Service needs EmployeesService
+import { NotificationGateway } from './notification.gateway';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Notification, Employee]), // Add other entities if NotificationService interacts with them
     EmployeesModule, // Needed if NotificationEventListener injects EmployeesService
   ],
-  providers: [NotificationService, NotificationEventListener], // Add NotificationEventListener if it exists
+  providers: [NotificationService, NotificationEventListener, NotificationGateway], // Add NotificationEventListener if it exists
   controllers: [NotificationsController],
-  exports: [NotificationService], // Export if other modules need to directly use NotificationService
+  exports: [NotificationService, NotificationGateway], // Export if other modules need to directly use NotificationService
 })
 export class NotificationModule {}

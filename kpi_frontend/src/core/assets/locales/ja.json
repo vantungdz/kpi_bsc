@@ -122,7 +122,7 @@
   "employeeListTitle": "従業員リスト",
   "uploadEmployeeExcel": "従業員Excelをアップロード",
   "selectFile": "ファイルを選択",
-  "noData": "--",
+  "noData": "データなし",
   "reviewHistory": "レビュー履歴",
   "reviewHistoryTitle": "レビュー履歴",
   "reviewHistoryFor": "レビュー履歴（対象：",
@@ -134,12 +134,13 @@
   "employeeFeedbackDate": "従業員フィードバック日",
   "employeeFeedbackContent": "従業員フィードバック内容",
   "awaitingEmployeeFeedback": "従業員のフィードバック待ちです。",
+  "employeeFeedbackPendingStatus": "従業員のフィードバック待ち",
   "evaluation": "評価",
   "companyKpiList": "会社KPIリスト",
   "createNewKpi": "新規KPI作成",
   "search": "検索：",
   "kpiNamePlaceholder": "KPI名...",
-  "departmentLabel": "部門",
+  "departmentLabel": "部署",
   "department": "部門",
   "all": "すべて",
   "allDepartments": "すべての部門",
@@ -436,7 +437,7 @@
     "PENDING_DEPT_APPROVAL": "部門マネージャー",
     "PENDING_MANAGER_APPROVAL": "マネージャー"
   },
-  "employeeFullName": "氏名",
+  "employeeFullName": "従業員名",
   "role": "役割",
   "employees": "従業員",
   "profile": "プロフィール",
@@ -482,5 +483,8 @@
     "REJECTED_BY_MANAGER": "マネージャーにより却下",
     "UNKNOWN": "不明なステータス"
   },
-   "performanceObjectiveApprovalList": "業績目標承認リスト"
+  "performanceObjectiveApprovalList": "業績目標承認リスト",
+  "editAssignment": "割り当てを編集",
+  "deleteAssignment": "割り当てを削除",
+  "employeeKpiScoreList": "従業員KPIスコア集計"
 }

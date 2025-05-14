@@ -9,6 +9,38 @@ import router from "@/core/router"; // Vue Router
 import store from "@/core/store";
 import { watch } from "vue";
 import FlagIcon from "vue-flag-icon";
+import { connectNotificationSocket, disconnectNotificationSocket } from "@/core/services/socket";
+
+let notificationSocket = null;
+
+function setupNotificationSocket(store) {
+  // Lấy userId từ store
+  const user = store.getters["auth/user"];
+  if (!user || !user.id) return;
+  if (notificationSocket) return; // Đã kết nối rồi
+
+  notificationSocket = connectNotificationSocket(user.id);
+
+  notificationSocket.on("connect", () => {
+    // eslint-disable-next-line no-console
+    console.log("[Socket] Connected to notification server");
+  });
+
+  notificationSocket.on("notification", (data) => {
+    // Gửi vào store để xử lý realtime
+    store.dispatch("notifications/handleRealtimeNotification", data);
+  });
+
+  notificationSocket.on("disconnect", () => {
+    // eslint-disable-next-line no-console
+    console.log("[Socket] Disconnected from notification server");
+  });
+}
+
+function teardownNotificationSocket() {
+  disconnectNotificationSocket();
+  notificationSocket = null;
+}
 
 const app = createApp(App);
 app.component("ApexChart", VueApexCharts);
@@ -25,6 +57,22 @@ watch(
     app._container.__vue_app__.config.globalProperties.$forceUpdate();
   }
 );
+
+// Tự động kết nối khi user đăng nhập, ngắt khi logout
+const storeInstance = app.config.globalProperties.$store || app._context.provides.store || app.store;
+if (storeInstance) {
+  storeInstance.watch(
+    (state, getters) => getters["auth/isAuthenticated"],
+    (isAuthenticated) => {
+      if (isAuthenticated) {
+        setupNotificationSocket(storeInstance);
+      } else {
+        teardownNotificationSocket();
+      }
+    },
+    { immediate: true }
+  );
+}
 
 app.mount("#app");
 

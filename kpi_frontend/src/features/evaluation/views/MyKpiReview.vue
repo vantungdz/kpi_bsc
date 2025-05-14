@@ -108,16 +108,16 @@
                 {{ kpiItem.kpiDescription }}
               </p>
               <a-row :gutter="16" style="margin-bottom: 10px">
-                <a-col :span="8">
+                <a-col :span="6">
                   <strong>{{ $t("target") }}:</strong> {{ kpiItem.targetValue }}
                   {{ kpiItem.unit }}
                 </a-col>
-                <a-col :span="8">
+                <a-col :span="6">
                   <strong>{{ $t("actualResult") }}:</strong>
                   {{ kpiItem.actualValue }}
                   {{ kpiItem.unit }}
                 </a-col>
-                <a-col :span="8">
+                <a-col :span="6">
                   <strong>{{ $t("completionRate") }}:</strong>
                   <a-progress
                     :percent="
@@ -129,6 +129,13 @@
                     size="small"
                   />
                 </a-col>
+                <a-col :span="3">
+                  <strong>{{ $t("weight") }}:</strong> {{ kpiItem.weight }}
+                </a-col>
+                <a-col :span="3">
+                  <strong>{{ $t("weightedScoreSupervisor") }}:</strong>
+                  {{ getWeightedScore(kpiItem) }}
+                </a-col>
               </a-row>
               <p>
                 <strong>{{ $t("managerComment") }}:</strong>
@@ -138,6 +145,19 @@
                 <strong>{{ $t("managerScore") }}:</strong>
                 <a-rate :value="kpiItem.existingManagerScore" disabled />
               </p>
+            </div>
+            <a-divider />
+            <div
+              style="text-align: right; margin-bottom: 16px"
+              v-if="
+                reviewDetails.kpisReviewedByManager &&
+                reviewDetails.kpisReviewedByManager.length > 0
+              "
+            >
+              <strong>{{ $t("totalWeightedScoreSupervisor") }}:</strong>
+              <span style="font-size: 1.2em; color: #1890ff">
+                {{ totalWeightedScoreSupervisor }}
+              </span>
             </div>
           </div>
           <a-empty v-else :description="$t('noDetailedKpiReview')" />
@@ -212,7 +232,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from "vue";
+import { ref, computed, onMounted, watch, onUnmounted } from "vue";
 import { useStore } from "vuex";
 import { useI18n } from "vue-i18n";
 const { t: $t } = useI18n();
@@ -315,6 +335,16 @@ const calculateCompletionRate = (actual, target) => {
   return Math.round((actual / target) * 100);
 };
 
+const getWeightedScore = (kpiItem) => {
+  if (!kpiItem.weight || !kpiItem.existingManagerScore) return 0;
+  return Math.round((kpiItem.weight * kpiItem.existingManagerScore) * 100) / 100;
+};
+
+const totalWeightedScoreSupervisor = computed(() => {
+  if (!reviewDetails.value || !reviewDetails.value.totalWeightedScoreSupervisor) return 0;
+  return Number(reviewDetails.value.totalWeightedScoreSupervisor).toFixed(2);
+});
+
 const submitFeedback = async () => {
   if (!employeeFeedbackComment.value.trim()) {
     notification.error({
@@ -377,6 +407,22 @@ const clearMyReviewError = () => {
 const clearSubmitFeedbackError = () => {
   submitFeedbackError.value = null;
 };
+
+// Watch selectedCycle: reset reviewDetails if no cycle is selected
+watch(selectedCycle, (val) => {
+  if (!val) {
+    store.commit("kpiEvaluations/SET_EMPLOYEE_REVIEW_DETAILS", null);
+    if (myReviewError.value) myReviewError.value = null;
+  }
+});
+
+// Reset reviewDetails when leaving component
+onUnmounted(() => {
+  store.commit("kpiEvaluations/SET_EMPLOYEE_REVIEW_DETAILS", null);
+  selectedCycle.value = null;
+  myReviewError.value = null;
+  employeeFeedbackComment.value = "";
+});
 
 onMounted(async () => {
   if (myReviewError.value) {

@@ -93,6 +93,7 @@
   "employeeFeedbackDate": "Ngày Phản hồi của Nhân viên",
   "employeeFeedbackContent": "Nội dung Phản hồi của Nhân viên",
   "awaitingEmployeeFeedback": "Đang chờ nhân viên phản hồi.",
+  "employeeFeedbackPendingStatus": "Chờ phản hồi nhân viên",
   "evaluation": "Đánh giá",
   "companyKpiList": "Danh sách KPI công ty",
   "createNewKpi": "Tạo KPI mới",
@@ -471,5 +472,8 @@
     "REJECTED_BY_MANAGER": "Bị Quản Lý Từ Chối ",
     "UNKNOWN": "Trạng Thái Không Xác Định "
   },
-  "performanceObjectiveApprovalList": "Danh sách Phê duyệt Mục tiêu Hiệu suất"
+  "performanceObjectiveApprovalList": "Danh sách Phê duyệt Mục tiêu Hiệu suất",
+  "editAssignment": "Chỉnh sửa phân công",
+  "deleteAssignment": "Xóa phân công",
+  "employeeKpiScoreList": "Bảng tổng hợp điểm KPI nhân viên"
 }

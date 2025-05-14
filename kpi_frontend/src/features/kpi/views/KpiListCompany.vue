@@ -72,7 +72,9 @@
                   {{ record.assignedTo ? `${record.assignedTo.first_name || ''} ${record.assignedTo.last_name || ''}`.trim() : '--' }}
                 </template>
                 <template v-else-if="column.key === 'status'">
-                  <a-tag :color="getKpiDefinitionStatusColor(record.status)" style="margin-right: 8px">{{ getKpiDefinitionStatusText(record.status) }}</a-tag>
+                  <a-tag :color="getKpiDefinitionStatusColor(record.status)" style="margin-right: 8px">
+                    {{ $t('status_chart.' + record.status) || getKpiDefinitionStatusText(record.status) }}
+                  </a-tag>
                   <a-switch v-if="isManagerOrAdmin" :checked="record.status === KpiDefinitionStatus.APPROVED" :loading="isToggling && currentToggleKpiId === record.id" :disabled="isToggling && currentToggleKpiId !== record.id" :checked-children="$t('on')" :un-checked-children="$t('off')" size="small" @change="() => handleToggleStatus(record.id)" :title="$t('toggleStatus')" />
                 </template>
                 <template v-else-if="column.dataIndex === 'action'">
@@ -244,8 +246,9 @@ const columns = computed(() => [
     title: $t('status'),
     dataIndex: "status",
     key: "status",
-    width: "8%",
+    width: "10%",
     align: "center",
+    customRender: ({ text }) => $t(`status_chart.${text}`) || text,
   },
   {
     title: $t('action'),

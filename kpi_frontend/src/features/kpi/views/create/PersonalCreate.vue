@@ -204,8 +204,8 @@ const validateWeight = async (_rule, value) => {
   return Promise.resolve();
 };
 
-const formatToISOString = (dateValue) => {
-  return dateValue ? dayjs(dateValue).toISOString() : null;
+const formatToDateString = (dateValue) => {
+  return dateValue ? dayjs(dateValue).format('YYYY-MM-DD') : null;
 };
 
 const handleChangeCreate = async () => {
@@ -221,13 +221,12 @@ const handleChangeCreate = async () => {
       weight: Number(form.value.weight),
       frequency: form.value.frequency,
       perspective_id: form.value.perspective_id,
-      start_date: formatToISOString(form.value.start_date),
-      end_date: formatToISOString(form.value.end_date),
+      start_date: formatToDateString(form.value.start_date),
+      end_date: formatToDateString(form.value.end_date),
       description: form.value.description,
       assignments: {
         from: "employee",
-        to_employee:
-          form.value.assigned_to_id || store.getters["auth/user"]?.id || null,
+        assigned_to_employee: store.getters["auth/user"]?.id || null,
         target: Number(form.value.target),
         weight: Number(form.value.weight),
       },

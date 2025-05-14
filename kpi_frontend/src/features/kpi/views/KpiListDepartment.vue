@@ -210,7 +210,7 @@
                     :bordered="false"
                     :color="getStatusColor(record.status)"
                   >
-                    {{ record.status }}
+                    {{ $t('status_chart.' + record.status) || record.status }}
                   </a-tag>
                 </template>
 
@@ -363,6 +363,8 @@ const columns = computed(() => [
     dataIndex: "status",
     key: "status",
     width: "6%",
+    align: "center",
+    customRender: ({ text }) => $t(`status_chart.${text}`) || text,
   },
   {
     title: $t("action"),

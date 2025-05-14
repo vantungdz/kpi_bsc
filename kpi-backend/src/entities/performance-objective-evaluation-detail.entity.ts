@@ -8,6 +8,7 @@ import {
 import { PerformanceObjectiveEvaluation } from './performance-objective-evaluation.entity';
 import { Exclude } from 'class-transformer'; // Import Exclude
 import { Kpi } from './kpi.entity'; 
+import { KPIAssignment } from './kpi-assignment.entity'; // Import KPIAssignment
 
 @Entity('performance_objective_evaluation_details')
 export class PerformanceObjectiveEvaluationDetail {
@@ -31,6 +32,13 @@ export class PerformanceObjectiveEvaluationDetail {
   @ManyToOne(() => Kpi) 
   @JoinColumn({ name: 'performance_objective_id' })
   performanceObjective: Kpi; 
+
+  @Column()
+  assignment_id: number; // NEW: Link to KPIAssignment.id
+
+  @ManyToOne(() => KPIAssignment)
+  @JoinColumn({ name: 'assignment_id' })
+  assignment: KPIAssignment;
 
   @Column('decimal', { nullable: true })
   score: number | null; 

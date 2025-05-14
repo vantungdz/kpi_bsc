@@ -1131,12 +1131,24 @@ export class KpisService {
         if (createdByType === 'company') {
         }
 
+        // Ensure start_date and end_date are always 'YYYY-MM-DD' string
+        const formatDateString = (val: any) => {
+          if (!val) return null;
+          if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(val)) return val;
+          const d = new Date(val);
+          if (!isNaN(d.getTime())) {
+            // Always output as 'YYYY-MM-DD'
+            return d.toISOString().slice(0, 10);
+          }
+          return null;
+        };
+
         const kpiEntityToSave = manager.getRepository(Kpi).create({
           ...kpiData,
           calculation_type: kpiData.calculationType || kpiData.calculation_type,
           perspective_id: kpiData.perspectiveId || kpiData.perspective_id,
-          start_date: kpiData.startDate || kpiData.start_date,
-          end_date: kpiData.endDate || kpiData.end_date,
+          start_date: formatDateString(kpiData.startDate || kpiData.start_date),
+          end_date: formatDateString(kpiData.endDate || kpiData.end_date),
           memo: kpiData.description || kpiData.memo,
           created_by: creatorEntityId,
           created_by_type: createdByType,

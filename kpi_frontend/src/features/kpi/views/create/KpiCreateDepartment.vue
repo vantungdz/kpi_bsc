@@ -679,6 +679,10 @@ const goBack = () => {
   router.go(-1);
 };
 
+const formatToDateString = (dateValue) => {
+  return dateValue ? dayjs(dateValue).format('YYYY-MM-DD') : null;
+};
+
 const handleChangeCreate = async () => {
   loading.value = true;
   assignmentError.value = null;
@@ -755,12 +759,8 @@ const handleChangeCreate = async () => {
       }
     }
 
-    const formattedStartDate = form.value.start_date
-      ? dayjs(form.value.start_date).toISOString()
-      : null;
-    const formattedEndDate = form.value.end_date
-      ? dayjs(form.value.end_date).toISOString()
-      : null;
+    const formattedStartDate = formatToDateString(form.value.start_date);
+    const formattedEndDate = formatToDateString(form.value.end_date);
     const numericMainTarget =
       form.value.target !== null ? Number(form.value.target) : null;
     const numericMainWeight =

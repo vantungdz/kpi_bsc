@@ -895,10 +895,10 @@ const handleChangeCreate = async () => {
     }
 
     const formattedStartDate = form.value.start_date
-      ? dayjs(form.value.start_date).toISOString()
+      ? dayjs(form.value.start_date).format("YYYY-MM-DD")
       : null;
     const formattedEndDate = form.value.end_date
-      ? dayjs(form.value.end_date).toISOString()
+      ? dayjs(form.value.end_date).format("YYYY-MM-DD")
       : null;
     const numericMainTarget =
       form.value.target !== null &&
@@ -1140,4 +1140,3 @@ onMounted(async () => {
   cursor: not-allowed !important;
 }
 </style>
-``` 

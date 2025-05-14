@@ -102,7 +102,7 @@
   "employeeListTitle": "Employee List",
   "uploadEmployeeExcel": "Upload Employee Excel",
   "selectFile": "Select File",
-  "noData": "--",
+  "noData": "No data",
   "reviewHistory": "Review History",
   "reviewHistoryTitle": "Review History",
   "reviewHistoryFor": "Review history for",
@@ -393,6 +393,8 @@
   "filterBySection": "Filter by Section",
   "selectDepartmentOrSectionToLoadUsers": "Select a department or section to load users.",
   "noDirectUserAssignments": "No direct user assignments yet.",
+  "editAssignment": "Edit Assignment",
+  "deleteAssignment": "Delete Assignment",
   "kpiAwaitingApprovalByLevel": "KPIs Awaiting Approval by Level",
   "approvalLevel": "Approval Level",
   "kpiRejected": "KPIs Rejected",
@@ -420,7 +422,7 @@
   "progressPercentage": "Progress Percentage",
   "updateStatus": "Update Status",
   "noPendingItems": "No pending items.",
-  "employeeFullName": "Full Name",
+  "employeeFullName": "Employee Name",
   "role": "Role",
   "employees": "Employees",
   "profile": "Profile",
@@ -485,5 +487,6 @@
     "REJECTED_BY_MANAGER": "Rejected by Manager",
     "UNKNOWN": "Unknown Status"
   },
-   "performanceObjectiveApprovalList": "Performance Objective Approval List"
+  "performanceObjectiveApprovalList": "Performance Objective Approval List",
+  "employeeKpiScoreList": "Employee KPI Score Summary"
 }

@@ -268,7 +268,13 @@ const myPersonalKpiColumns = computed(() => [
   { title: $t('target'), key: "target", align: "right", width: "10%" },
   { title: $t('approvedValue'), key: "value", align: "right", width: "10%" },
   { title: $t('progressPercentage'), key: "progress", align: "center", width: "10%" },
-  { title: $t('updateStatus'), key: "status", align: "center", width: "18%" },
+  {
+    title: $t('updateStatus'),
+    key: "status",
+    align: "center",
+    width: "18%",
+    customRender: ({ text }) => $t(`status_chart.${text}`) || text,
+  },
   { title: $t('actions'), key: "actions", align: "center", width: "15%", fixed: 'right' },
 ]);
 

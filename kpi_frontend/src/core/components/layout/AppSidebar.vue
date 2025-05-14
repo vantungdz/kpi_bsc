@@ -75,6 +75,13 @@
         </router-link>
       </a-menu-item>
 
+      <a-menu-item key="employee-kpi-score-list" v-if="canViewObjectiveApprovals">
+        <router-link to="/employee-kpi-scores">
+          <bar-chart-outlined />
+          <span>{{ $t("employeeKpiScoreList") }}</span>
+        </router-link>
+      </a-menu-item>
+
       <a-menu-item key="personal-kpis" v-if="effectiveRole">
         <router-link to="/personal">
           <user-outlined />

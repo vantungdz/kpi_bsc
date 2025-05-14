@@ -20,7 +20,7 @@ export class KpiToReviewDto {
   targetValue: number | null;
   actualValue: number | null;
   unit: string | null;
-
+  weight?: number | null;
   existingManagerComment?: string | null;
   existingManagerScore?: number | null;
 }
@@ -31,6 +31,7 @@ export class ExistingOverallReviewDto {
   status?: string;
   employeeComment?: string | null;
   employeeFeedbackDate?: Date | null;
+  totalWeightedScoreSupervisor?: number | null;
 }
 
 export class SubmitKpiReviewDto {
@@ -60,6 +61,7 @@ export class CompleteReviewDto {
 export class EmployeeReviewResponseDto {
   kpisReviewedByManager: KpiToReviewDto[];
   overallReviewByManager: ExistingOverallReviewDto | null;
+  totalWeightedScoreSupervisor?: number | null;
 }
 
 export class SubmitEmployeeFeedbackDto {
@@ -95,6 +97,8 @@ export class PerformanceObjectiveItemDto {
   bscAspect: string; // Name of the BSC Perspective
   supervisorEvalScore?: number | null; // Supervisor's score for this objective
   note?: string | null; // Supervisor's note for this objective
+  start_date?: Date | null; // Start date of the assignment
+  end_date?: Date | null;   // End date of the assignment
 }
 
 export class PerformanceObjectivesResponseDto {
@@ -112,4 +116,11 @@ export class PerformanceObjectivesResponseDto {
       'The current evaluation status of the objectives for the employee and cycle.',
   })
   evaluationStatus: ObjectiveEvaluationStatus | null;
+}
+
+export class EmployeeKpiScoreDto {
+  employeeId: number;
+  fullName: string;
+  department: string;
+  totalWeightedScore: number;
 }

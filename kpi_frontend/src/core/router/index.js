@@ -24,6 +24,7 @@ import KpiReview from "../../features/evaluation/views/KpiReview.vue";
 import ReviewHistoryPage from "../../features/evaluation/views/ReviewHistoryPage.vue";
 import MyKpiReview from "../../features/evaluation/views/MyKpiReview.vue";
 import PerformanceObjectiveApprovalList from "../../features/evaluation/views/PerformanceObjectiveApprovalList.vue";
+import EmployeeKpiScoreList from "../../features/evaluation/views/EmployeeKpiScoreList.vue";
 
 const routes = [
   {
@@ -209,6 +210,15 @@ const routes = [
     name: "EmployeeList",
     component: EmployeeList,
     meta: { requiresAuth: true, roles: ["admin", "manager"] },
+  },
+  {
+    path: "/employee-kpi-scores",
+    name: "EmployeeKpiScoreList",
+    component: EmployeeKpiScoreList,
+    meta: {
+      requiresAuth: true,
+      roles: ["admin", "manager", "department"],
+    },
   },
 ];
 
