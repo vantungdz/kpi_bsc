@@ -43,6 +43,9 @@ export class OverallReview {
   @Column({ type: 'int', nullable: true })
   overallScore: number | null;
 
+  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
+  totalWeightedScore: string | null;
+
   @Column({ type: 'text', nullable: true })
   employeeComment: string | null;
 

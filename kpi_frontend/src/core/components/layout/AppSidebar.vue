@@ -9,63 +9,91 @@
     </div>
 
     <a-menu theme="light" mode="inline" class="menu-list">
-      <a-menu-item key="dashboard" v-if="canViewDashboard">
+      <a-menu-item
+        key="dashboard"
+        v-if="canViewDashboard"
+        :title="$t('dashboard')"
+      >
         <router-link to="/dashboard">
           <dashboard-outlined />
           <span>{{ $t("dashboard") }}</span>
         </router-link>
       </a-menu-item>
 
-      <a-menu-item key="performance" v-if="canViewObjectiveApprovals">
+      <!-- <a-menu-item key="performance" v-if="canViewObjectiveApprovals">
         <router-link to="/performance">
           <bar-chart-outlined />
           <span>{{ $t("performanceObjectives") }}</span>
         </router-link>
-      </a-menu-item>
+      </a-menu-item> -->
 
-      <a-menu-item key="employees" v-if="canViewDashboard">
+      <a-menu-item
+        key="employees"
+        v-if="canViewDashboard"
+        :title="$t('employeeList')"
+      >
         <router-link to="/employees">
           <team-outlined />
           <span>{{ $t("employeeList") }}</span>
         </router-link>
       </a-menu-item>
 
-      <a-menu-item key="evaluation" v-if="canViewObjectiveApprovals">
+      <a-menu-item
+        key="evaluation"
+        v-if="canViewObjectiveApprovals"
+        :title="$t('evaluation')"
+      >
         <router-link to="/kpi/review">
           <solution-outlined />
           <span>{{ $t("evaluation") }}</span>
         </router-link>
       </a-menu-item>
 
-      <a-menu-item key="kpis-company" v-if="canViewCompanyLevel">
+      <a-menu-item
+        key="kpis-company"
+        v-if="canViewCompanyLevel"
+        :title="$t('companyKpiList')"
+      >
         <router-link to="/kpis/company">
           <global-outlined />
           <span>{{ $t("companyKpiList") }}</span>
         </router-link>
       </a-menu-item>
 
-      <a-menu-item key="kpis-department" v-if="canViewDepartmentLevel">
+      <a-menu-item
+        key="kpis-department"
+        v-if="canViewDepartmentLevel"
+        :title="$t('departmentKpiList')"
+      >
         <router-link to="/kpis/department">
           <apartment-outlined />
           <span>{{ $t("departmentKpiList") }}</span>
         </router-link>
       </a-menu-item>
 
-      <a-menu-item key="kpis-section" v-if="canViewSectionLevel">
+      <a-menu-item
+        key="kpis-section"
+        v-if="canViewSectionLevel"
+        :title="$t('sectionKpiList')"
+      >
         <router-link to="/kpis/section">
           <cluster-outlined />
           <span>{{ $t("sectionKpiList") }}</span>
         </router-link>
       </a-menu-item>
 
-      <a-menu-item key="approvals" v-if="canViewApprovals">
+      <a-menu-item
+        key="approvals"
+        v-if="canViewApprovals"
+        :title="$t('kpiApproval')"
+      >
         <router-link to="/approvals">
           <check-square-outlined />
           <span>{{ $t("kpiApproval") }}</span>
         </router-link>
       </a-menu-item>
 
-      <a-menu-item
+      <!-- <a-menu-item
         key="performance-objective-approvals"
         v-if="canViewObjectiveApprovals"
       >
@@ -73,41 +101,53 @@
           <file-protect-outlined />
           <span>{{ $t("performanceObjectiveApprovalMenu") }}</span>
         </router-link>
-      </a-menu-item>
+      </a-menu-item> -->
 
-      <a-menu-item key="employee-kpi-score-list" v-if="canViewObjectiveApprovals">
+      <a-menu-item
+        key="employee-kpi-score-list"
+        v-if="canViewObjectiveApprovals"
+        :title="$t('employeeKpiScoreList')"
+      >
         <router-link to="/employee-kpi-scores">
           <bar-chart-outlined />
           <span>{{ $t("employeeKpiScoreList") }}</span>
         </router-link>
       </a-menu-item>
 
-      <a-menu-item key="personal-kpis" v-if="effectiveRole">
+      <a-menu-item
+        key="personal-kpis"
+        v-if="effectiveRole"
+        :title="$t('myPersonalKpis')"
+      >
         <router-link to="/personal">
           <user-outlined />
           <span>{{ $t("myPersonalKpis") }}</span>
         </router-link>
       </a-menu-item>
 
-      <a-menu-item key="my-review" v-if="effectiveRole">
+      <a-menu-item
+        key="my-review"
+        v-if="effectiveRole"
+        :title="$t('myKpiReview')"
+      >
         <router-link to="/my-kpi-review">
           <audit-outlined />
           <span>{{ $t("myKpiReview") }}</span>
         </router-link>
       </a-menu-item>
 
-      <a-sub-menu key="admin" v-if="isAdmin">
+      <a-sub-menu key="admin" v-if="isAdmin" :title="$t('administration')">
         <template #title>
           <span
             ><setting-outlined /><span>{{ $t("administration") }}</span></span
           >
         </template>
-        <a-menu-item key="admin-users">
+        <a-menu-item key="admin-users" :title="$t('userManagement')">
           <router-link to="/admin/users">{{
             $t("userManagement")
           }}</router-link>
         </a-menu-item>
-        <a-menu-item key="admin-roles">
+        <a-menu-item key="admin-roles" :title="$t('roleManagement')">
           <router-link to="/admin/roles">{{
             $t("roleManagement")
           }}</router-link>
@@ -141,7 +181,6 @@ import {
   CheckSquareOutlined,
   UserOutlined,
   AuditOutlined,
-  FileProtectOutlined, // Thêm icon mới
 } from "@ant-design/icons-vue";
 
 // Store instance

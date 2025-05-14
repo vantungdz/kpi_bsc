@@ -193,6 +193,7 @@
   "rejectedBySection": "Rejected by Section",
   "rejectedByDept": "Rejected by Department",
   "rejectedByManager": "Rejected by Manager",
+  "notSubmitted": "Not Submitted",
   "pendingReview": "Pending Review",
   "pageNotFound": "Page Not Found",
   "pageNotFoundDescription": "Sorry, the page you are looking for does not exist.",
@@ -486,6 +487,14 @@
     "REJECTED_BY_DEPT": "Rejected by Department",
     "REJECTED_BY_MANAGER": "Rejected by Manager",
     "UNKNOWN": "Unknown Status"
+  },
+  "review_status_evaluation": {
+    "PENDING_REVIEW": "Pending Review",
+    "MANAGER_REVIEWED": "Manager Reviewed",
+    "EMPLOYEE_FEEDBACK_PENDING": "Employee Feedback Pending",
+    "EMPLOYEE_RESPONDED": "Employee Responded",
+    "COMPLETED": "Completed",
+    "undefined": "Not Reviewed"
   },
   "performanceObjectiveApprovalList": "Performance Objective Approval List",
   "employeeKpiScoreList": "Employee KPI Score Summary"

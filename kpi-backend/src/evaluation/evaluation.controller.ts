@@ -44,8 +44,6 @@ import {
 } from './dto/evaluation.dto';
 import { OverallReview } from 'src/entities/overall-review.entity';
 import { SavePerformanceObjectivesDto } from './dto/save-performance-objectives.dto';
-// import { PerformanceObjectiveEvaluation } from '../entities/performance-objective-evaluation.entity';
-// import { RejectObjectiveEvaluationDto } from './dto/reject-objective-evaluation.dto';
 
 @ApiTags('Evaluation')
 @ApiBearerAuth()
@@ -146,7 +144,7 @@ export class EvaluationController {
   async submitKpiReview(
     @Req() req: Request & { user?: Employee },
     @Body() reviewData: SubmitKpiReviewDto,
-  ): Promise<OverallReview | null> {
+  ): Promise<KpisForReviewResponseDto> {
     const user = this.validateUser(req);
 
     if (
@@ -155,7 +153,14 @@ export class EvaluationController {
       throw new UnauthorizedException('Invalid targetType in review data.');
     }
 
-    return this.evaluationService.submitKpiReview(user, reviewData);
+    await this.evaluationService.submitKpiReview(user, reviewData);
+    // Sau khi lưu đánh giá, trả về lại dữ liệu review mới nhất (bao gồm tổng weighted score supervisor)
+    return this.evaluationService.getKpisForReview(
+      user,
+      reviewData.targetId,
+      reviewData.targetType,
+      reviewData.cycleId,
+    );
   }
 
   @Post('complete-review')
@@ -174,7 +179,7 @@ export class EvaluationController {
   async completeReview(
     @Req() req: Request & { user?: Employee },
     @Body() completeReviewDto: CompleteReviewDto,
-  ): Promise<{ message: string; updatedReview: OverallReview }> {
+  ): Promise<KpisForReviewResponseDto> {
     const user = this.validateUser(req);
     if (
       !['employee', 'section', 'department'].includes(
@@ -185,11 +190,14 @@ export class EvaluationController {
         'Invalid targetType in complete review data.',
       );
     }
-    const updatedReview = await this.evaluationService.completeOverallReview(
+    await this.evaluationService.completeOverallReview(user, completeReviewDto);
+    // Trả về lại dữ liệu review mới nhất (bao gồm tổng weighted score supervisor)
+    return this.evaluationService.getKpisForReview(
       user,
-      completeReviewDto,
+      completeReviewDto.targetId,
+      completeReviewDto.targetType,
+      completeReviewDto.cycleId,
     );
-    return { message: 'Review completed successfully', updatedReview };
   }
 
   @Get('my-review/:cycleId')
@@ -283,9 +291,16 @@ export class EvaluationController {
 
   @Get('employee-kpi-scores')
   @Roles('admin', 'manager', 'department')
-  @ApiOperation({ summary: 'Get list of employees and their total Weighted Score (Supervisor) for a review cycle' })
+  @ApiOperation({
+    summary:
+      'Get list of employees and their total Weighted Score (Supervisor) for a review cycle',
+  })
   @ApiQuery({ name: 'cycleId', required: true, type: String })
-  @ApiResponse({ status: 200, description: 'List of employees and their total Weighted Score', type: [EmployeeKpiScoreDto] })
+  @ApiResponse({
+    status: 200,
+    description: 'List of employees and their total Weighted Score',
+    type: [EmployeeKpiScoreDto],
+  })
   async getEmployeeKpiScores(
     @Req() req: Request & { user?: Employee },
     @Query('cycleId') cycleId: string,

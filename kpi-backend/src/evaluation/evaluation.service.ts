@@ -356,10 +356,15 @@ export class EvaluationService {
             kv.timestamp >= startDate &&
             kv.timestamp <= endDate,
         );
-        let filteredKpiValues = approvedInCycle.length > 0
-          ? approvedInCycle
-          : assignment.kpiValues.filter((kv) => kv.status === KpiValueStatus.APPROVED);
-        relevantKpiValue = filteredKpiValues.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())[0];
+        let filteredKpiValues =
+          approvedInCycle.length > 0
+            ? approvedInCycle
+            : assignment.kpiValues.filter(
+                (kv) => kv.status === KpiValueStatus.APPROVED,
+              );
+        relevantKpiValue = filteredKpiValues.sort(
+          (a, b) => b.timestamp.getTime() - a.timestamp.getTime(),
+        )[0];
       }
       const actualValue = relevantKpiValue ? relevantKpiValue.value : null;
 
@@ -392,11 +397,12 @@ export class EvaluationService {
     if (kpisToReview && Array.isArray(kpisToReview)) {
       for (const kpi of kpisToReview) {
         const score = Number(kpi.existingManagerScore);
-        const weight = Number(kpi.weight);
-     
+        const weight =
+          kpi.weight !== null && kpi.weight !== undefined
+            ? Number(kpi.weight)
+            : 1;
+
         if (!isNaN(score) && !isNaN(weight)) {
-          console.log('score', score);
-          console.log('weight', weight);
           totalWeightedScoreSupervisor += score * weight;
         }
       }
@@ -465,7 +471,8 @@ export class EvaluationService {
   async submitKpiReview(
     currentUser: Employee,
     reviewData: SubmitKpiReviewDto,
-  ): Promise<OverallReview | null> {
+  ): Promise<KpisForReviewResponseDto> {
+    // Đổi kiểu trả về
     const reviewableTargets = await this.getReviewableTargets(currentUser);
     const canReviewThisTarget = reviewableTargets.some(
       (rt) =>
@@ -569,6 +576,32 @@ export class EvaluationService {
           reviewData.overallComment !== undefined ||
           reviewData.overallScore !== undefined
         ) {
+          // Tính lại tổng weighted score cho overall review
+          let totalWeightedScore = 0;
+          const assignments = await transactionalEntityManager.find(
+            KPIAssignment,
+            {
+              where: {
+                assigned_to_employee: reviewData.targetId,
+                startDate: LessThanOrEqual(startDate),
+                endDate: MoreThanOrEqual(endDate),
+              },
+              relations: ['reviews'],
+            },
+          );
+          for (const assignment of assignments) {
+            const review = assignment.reviews?.find(
+              (r) =>
+                r.cycleId === reviewData.cycleId &&
+                r.managerScore !== null &&
+                r.managerScore !== undefined,
+            );
+            const score = Number(review ? review.managerScore : NaN);
+            const weight = Number(assignment.weight);
+            if (!isNaN(score) && !isNaN(weight)) {
+              totalWeightedScore += score * weight;
+            }
+          }
           let overallReviewRecord = await transactionalEntityManager.findOne(
             OverallReview,
             {
@@ -587,6 +620,10 @@ export class EvaluationService {
             overallReviewRecord.status =
               OverallReviewStatus.EMPLOYEE_FEEDBACK_PENDING;
             overallReviewRecord.overallScore = reviewData.overallScore ?? null;
+            overallReviewRecord.totalWeightedScore =
+              totalWeightedScore !== null
+                ? totalWeightedScore.toFixed(2)
+                : null;
           } else {
             overallReviewRecord = transactionalEntityManager.create(
               OverallReview,
@@ -598,6 +635,10 @@ export class EvaluationService {
                 overallComment: reviewData.overallComment ?? null,
                 overallScore: reviewData.overallScore ?? null,
                 status: OverallReviewStatus.EMPLOYEE_FEEDBACK_PENDING,
+                totalWeightedScore:
+                  totalWeightedScore !== null
+                    ? totalWeightedScore.toFixed(2)
+                    : null,
               },
             );
           }
@@ -623,13 +664,21 @@ export class EvaluationService {
         });
       }
     }
-    return savedOverallReview;
+
+    // Sau khi lưu xong, trả về lại dữ liệu giống getKpisForReview (bao gồm tổng weighted score)
+    return this.getKpisForReview(
+      currentUser,
+      reviewData.targetId,
+      reviewData.targetType,
+      reviewData.cycleId,
+    );
   }
 
   async completeOverallReview(
     currentUser: Employee,
     completeReviewDto: CompleteReviewDto,
   ): Promise<OverallReview> {
+    console.log('===> completeOverallReview called', completeReviewDto);
     const reviewableTargets = await this.getReviewableTargets(currentUser);
     const canReviewThisTarget = reviewableTargets.some(
       (rt) =>
@@ -655,6 +704,62 @@ export class EvaluationService {
     if (!overallReviewRecord) {
       throw new BadRequestException('Overall review record not found.');
     }
+
+    // Tính lại tổng weighted score khi hoàn tất review
+    const { startDate, endDate } = this.getDateRangeFromCycleId(
+      completeReviewDto.cycleId,
+    );
+    const assignments = await this.assignmentRepository.find({
+      where: {
+        assigned_to_employee: completeReviewDto.targetId,
+        startDate: LessThanOrEqual(endDate as Date),
+        endDate: MoreThanOrEqual(startDate as Date),
+      },
+      relations: ['reviews'],
+    });
+    console.log(
+      'Assignments for review:',
+      assignments.length,
+      assignments.map((a) => a.id),
+    );
+    let totalWeightedScore = 0;
+    for (const assignment of assignments) {
+      const review = assignment.reviews?.find(
+        (r) =>
+          r.cycleId === completeReviewDto.cycleId &&
+          r.managerScore !== null &&
+          r.managerScore !== undefined,
+      );
+      const score = review ? Number(review.managerScore) : null;
+      const weight =
+        assignment.weight !== undefined && assignment.weight !== null
+          ? Number(assignment.weight)
+          : null;
+      console.log(
+        'Assignment:',
+        assignment.id,
+        'Score:',
+        score,
+        'Weight:',
+        weight,
+      );
+      if (
+        score !== null &&
+        weight !== null &&
+        !isNaN(score) &&
+        !isNaN(weight)
+      ) {
+        console.log('Adding to total:', score * weight);
+        totalWeightedScore += score * weight;
+      }
+    }
+    overallReviewRecord.totalWeightedScore =
+      totalWeightedScore !== null ? totalWeightedScore.toFixed(2) : null;
+    console.log(
+      'Saving totalWeightedScore:',
+      overallReviewRecord.totalWeightedScore,
+    );
+    await this.overallReviewRepository.save(overallReviewRecord);
 
     const allowedPreviousStatuses = [
       OverallReviewStatus.MANAGER_REVIEWED,
@@ -731,11 +836,23 @@ export class EvaluationService {
 
     // Tính tổng weighted score supervisor
     let totalWeightedScoreSupervisor = 0;
-    if (reviewDataFromManagerPerspective.kpisToReview && Array.isArray(reviewDataFromManagerPerspective.kpisToReview)) {
+    if (
+      reviewDataFromManagerPerspective.kpisToReview &&
+      Array.isArray(reviewDataFromManagerPerspective.kpisToReview)
+    ) {
       for (const kpi of reviewDataFromManagerPerspective.kpisToReview) {
         const score = Number(kpi.existingManagerScore);
-        const weight = Number(kpi.weight);
-        if (!isNaN(score) && !isNaN(weight)) {
+        // Nếu weight null/undefined hoặc chưa review thì bỏ qua
+        const weight =
+          kpi.weight !== null && kpi.weight !== undefined
+            ? Number(kpi.weight)
+            : 1;
+        if (
+          !isNaN(score) &&
+          !isNaN(weight) &&
+          kpi.existingManagerScore !== null &&
+          kpi.existingManagerScore !== undefined
+        ) {
           totalWeightedScoreSupervisor += score * weight;
         }
       }
@@ -743,12 +860,13 @@ export class EvaluationService {
 
     const response: EmployeeReviewResponseDto = {
       kpisReviewedByManager: reviewDataFromManagerPerspective.kpisToReview,
-      overallReviewByManager: reviewDataFromManagerPerspective.existingOverallReview
-        ? {
-            ...reviewDataFromManagerPerspective.existingOverallReview,
-            totalWeightedScoreSupervisor,
-          }
-        : null,
+      overallReviewByManager:
+        reviewDataFromManagerPerspective.existingOverallReview
+          ? {
+              ...reviewDataFromManagerPerspective.existingOverallReview,
+              totalWeightedScoreSupervisor,
+            }
+          : null,
       totalWeightedScoreSupervisor,
     };
     return response;
@@ -871,11 +989,19 @@ export class EvaluationService {
         startDate: LessThanOrEqual(dateRange.endDate),
         endDate: MoreThanOrEqual(dateRange.startDate),
       },
-      relations: ['kpi', 'kpi.perspective', 'kpiValues', 'reviews', 'reviews.reviewedBy'],
+      relations: [
+        'kpi',
+        'kpi.perspective',
+        'kpiValues',
+        'reviews',
+        'reviews.reviewedBy',
+      ],
       order: { kpi: { perspective: { id: 'ASC' }, name: 'ASC' } },
     });
 
-    const filteredAssignments = assignments.filter(a => a.startDate && a.endDate);
+    const filteredAssignments = assignments.filter(
+      (a) => a.startDate && a.endDate,
+    );
 
     let evaluationStatus: ObjectiveEvaluationStatus | null = null;
     let totalWeightedScoreSupervisor = 0;
@@ -885,10 +1011,16 @@ export class EvaluationService {
       if (!assignment.kpi) continue;
       // Lấy review manager cho assignment này trong chu kỳ
       const review = assignment.reviews?.find(
-        (r) => r.cycleId === cycleId && r.managerScore !== null && r.managerScore !== undefined
+        (r) =>
+          r.cycleId === cycleId &&
+          r.managerScore !== null &&
+          r.managerScore !== undefined,
       );
       const supervisorScore = review ? Number(review.managerScore) : NaN;
-      const weight = assignment.weight !== undefined && assignment.weight !== null ? Number(assignment.weight) : NaN;
+      const weight =
+        assignment.weight !== undefined && assignment.weight !== null
+          ? Number(assignment.weight)
+          : NaN;
       if (!isNaN(supervisorScore) && !isNaN(weight)) {
         totalWeightedScoreSupervisor += supervisorScore * weight;
       }
@@ -931,38 +1063,44 @@ export class EvaluationService {
     saveData: SavePerformanceObjectivesDto,
   ): Promise<void> {
     const { employeeId, cycleId, evaluations } = saveData;
-    const employee = await this.employeeRepository.findOne({ where: { id: employeeId } });
+    const employee = await this.employeeRepository.findOne({
+      where: { id: employeeId },
+    });
     if (!employee) throw new Error('Employee not found');
-    if (!Array.isArray(evaluations)) throw new Error('Evaluations must be an array');
+    if (!Array.isArray(evaluations))
+      throw new Error('Evaluations must be an array');
     for (const evaluation of evaluations) {
-      if (!evaluation.objectiveId || typeof evaluation.score !== 'number') throw new Error('Invalid evaluation data');
-      const kpiAssignment = await this.assignmentRepository.findOne({ where: { assigned_to_employee: employeeId, kpi_id: evaluation.objectiveId } });
+      if (!evaluation.objectiveId || typeof evaluation.score !== 'number')
+        throw new Error('Invalid evaluation data');
+      const kpiAssignment = await this.assignmentRepository.findOne({
+        where: {
+          assigned_to_employee: employeeId,
+          kpi_id: evaluation.objectiveId,
+        },
+      });
       if (!kpiAssignment) continue;
-      await this.kpiValueRepository.save({ kpiAssignment, value: evaluation.score, note: evaluation.note });
+      await this.kpiValueRepository.save({
+        kpiAssignment,
+        value: evaluation.score,
+        note: evaluation.note,
+      });
     }
   }
 
-  // Đã loại bỏ submitObjectiveEvaluation: logic này không còn sử dụng entity cũ
-
-  // Đã loại bỏ getPendingObjectiveEvaluations: logic này không còn sử dụng entity cũ
-
-  // Đã loại bỏ findObjectiveEvaluationForWorkflow
-
-  // Đã loại bỏ checkPermissionForObjectiveEvaluation
-
-  // Đã loại bỏ processApprovalOrRejection
-
-  // Đã loại bỏ toàn bộ các hàm approve/reject objective evaluation các cấp
-  // Đã loại bỏ getObjectiveEvaluationHistory
-
-  // Đã loại bỏ logObjectiveEvaluationWorkflowHistory
-
-  async getEmployeeKpiScores(currentUser: Employee, cycleId: string): Promise<EmployeeKpiScoreDto[]> {
+  async getEmployeeKpiScores(
+    currentUser: Employee,
+    cycleId: string,
+  ): Promise<EmployeeKpiScoreDto[]> {
     // Lấy danh sách nhân viên thuộc quyền quản lý của user
     let employees: Employee[] = [];
     if (currentUser.role === 'admin') {
-      employees = await this.employeeRepository.find({ relations: ['department'] });
-    } else if (currentUser.role === 'manager' || currentUser.role === 'department') {
+      employees = await this.employeeRepository.find({
+        relations: ['department'],
+      });
+    } else if (
+      currentUser.role === 'manager' ||
+      currentUser.role === 'department'
+    ) {
       if (currentUser.departmentId) {
         employees = await this.employeeRepository.find({
           where: { departmentId: currentUser.departmentId },
@@ -970,37 +1108,33 @@ export class EvaluationService {
         });
       }
     }
-    // Tính tổng Weighted Score Supervisor cho từng nhân viên dựa trên review manager
     const results: EmployeeKpiScoreDto[] = [];
     for (const emp of employees) {
-      // Lấy tất cả assignment của nhân viên trong chu kỳ
-      const { startDate, endDate } = this.getDateRangeFromCycleId(cycleId);
-      const assignments = await this.assignmentRepository.find({
+      // Lấy trạng thái review tổng thể (OverallReviewStatus) cho nhân viên này trong chu kỳ
+      let reviewStatus: string | undefined = undefined;
+      let totalWeightedScore: number = 0;
+      const overallReview = await this.overallReviewRepository.findOne({
         where: {
-          assigned_to_employee: emp.id,
-          startDate: LessThanOrEqual(startDate as Date),
-          endDate: MoreThanOrEqual(endDate as Date),
+          targetId: emp.id,
+          targetType: 'employee',
+          cycleId: cycleId,
         },
-        relations: ['kpi', 'kpiValues', 'reviews', 'reviews.reviewedBy'],
       });
-      let totalWeightedScore = 0;
-      for (const assignment of assignments) {
-        // Lấy review đã duyệt của manager cho assignment này trong chu kỳ
-        const review = assignment.reviews?.find(
-          (r) => r.cycleId === cycleId && r.managerScore !== null && r.managerScore !== undefined
-        );
-        const score = Number(review ? review.managerScore : NaN);
-        const weight = Number(assignment.weight);
-        console.log('assignment', assignment.weight);
-        if (!isNaN(score) && !isNaN(weight)) {
-          totalWeightedScore += score * weight;
-        }
+      console.log('overallReview', overallReview);
+      if (overallReview) {
+        reviewStatus = overallReview.status;
+        totalWeightedScore =
+          overallReview.totalWeightedScore !== null &&
+          overallReview.totalWeightedScore !== undefined
+            ? Number(overallReview.totalWeightedScore)
+            : 0;
       }
       results.push({
         employeeId: emp.id,
         fullName: `${emp.first_name} ${emp.last_name}`.trim(),
         department: emp.department ? emp.department.name : '',
         totalWeightedScore,
+        reviewStatus,
       });
     }
     return results;

@@ -98,7 +98,7 @@ export class PerformanceObjectiveItemDto {
   supervisorEvalScore?: number | null; // Supervisor's score for this objective
   note?: string | null; // Supervisor's note for this objective
   start_date?: Date | null; // Start date of the assignment
-  end_date?: Date | null;   // End date of the assignment
+  end_date?: Date | null; // End date of the assignment
 }
 
 export class PerformanceObjectivesResponseDto {
@@ -123,4 +123,5 @@ export class EmployeeKpiScoreDto {
   fullName: string;
   department: string;
   totalWeightedScore: number;
+  reviewStatus?: string; // Add review status for UI distinction
 }

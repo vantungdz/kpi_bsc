@@ -214,6 +214,7 @@
   "rejectedBySection": "セクションで却下",
   "rejectedByDept": "部門で却下",
   "rejectedByManager": "マネージャーで却下",
+  "notSubmitted": "未提出",
   "pageNotFound": "ページが見つかりません",
   "pageNotFoundDescription": "申し訳ありませんが、お探しのページは存在しません。",
   "goToDashboard": "ダッシュボードへ",
@@ -486,5 +487,13 @@
   "performanceObjectiveApprovalList": "業績目標承認リスト",
   "editAssignment": "割り当てを編集",
   "deleteAssignment": "割り当てを削除",
-  "employeeKpiScoreList": "従業員KPIスコア集計"
+  "employeeKpiScoreList": "従業員KPIスコア集計",
+  "review_status_evaluation": {
+    "PENDING_REVIEW": "レビュー待ち",
+    "MANAGER_REVIEWED": "マネージャーレビュー済み",
+    "EMPLOYEE_FEEDBACK_PENDING": "従業員フィードバック待ち",
+    "EMPLOYEE_RESPONDED": "従業員が回答済み",
+    "COMPLETED": "完了",
+    "undefined": "未評価"
+  }
 }

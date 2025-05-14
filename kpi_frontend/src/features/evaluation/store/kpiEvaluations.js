@@ -31,7 +31,6 @@ const state = {
   reviewHistory: [],
   isLoadingReviewHistory: false,
   reviewHistoryError: null,
-
 };
 
 const getters = {
@@ -77,7 +76,6 @@ const getters = {
   getReviewHistory: (state) => state.reviewHistory,
   isLoadingReviewHistory: (state) => state.isLoadingReviewHistory,
   getReviewHistoryError: (state) => state.reviewHistoryError,
-
 };
 
 const actions = {
@@ -214,7 +212,23 @@ const actions = {
       );
 
       if (response.data) {
-        commit("SET_EXISTING_OVERALL_REVIEW", response.data);
+        // Đảm bảo cập nhật cả danh sách KPI và overallReview giống fetchKpisForReview
+        const kpisData = response.data.kpisToReview;
+        const overallReviewData = response.data.existingOverallReview;
+        if (Array.isArray(kpisData)) {
+          const kpisMapped = kpisData.map((kpi) => ({
+            ...kpi,
+            managerComment: kpi.existingManagerComment || "",
+            managerScore:
+              kpi.existingManagerScore === undefined
+                ? null
+                : kpi.existingManagerScore,
+          }));
+          commit("SET_KPIS_TO_REVIEW", kpisMapped);
+        } else {
+          commit("SET_KPIS_TO_REVIEW", []);
+        }
+        commit("SET_EXISTING_OVERALL_REVIEW", overallReviewData || null);
       }
     } catch (error) {
       const errorMsg =
@@ -236,9 +250,24 @@ const actions = {
         "/evaluation/complete-review",
         completeReviewDto
       );
-
-      if (response.data && response.data.updatedReview) {
-        commit("SET_EXISTING_OVERALL_REVIEW", response.data.updatedReview);
+      // API trả về KpisForReviewResponseDto (giống submitKpiReview)
+      if (response.data) {
+        const kpisData = response.data.kpisToReview;
+        const overallReviewData = response.data.existingOverallReview;
+        if (Array.isArray(kpisData)) {
+          const kpisMapped = kpisData.map((kpi) => ({
+            ...kpi,
+            managerComment: kpi.existingManagerComment || "",
+            managerScore:
+              kpi.existingManagerScore === undefined
+                ? null
+                : kpi.existingManagerScore,
+          }));
+          commit("SET_KPIS_TO_REVIEW", kpisMapped);
+        } else {
+          commit("SET_KPIS_TO_REVIEW", []);
+        }
+        commit("SET_EXISTING_OVERALL_REVIEW", overallReviewData || null);
       }
       return response.data;
     } catch (error) {
@@ -247,7 +276,6 @@ const actions = {
         error.message ||
         "Failed to complete KPI review.";
       commit("SET_COMPLETE_REVIEW_ERROR", errorMsg);
-
       throw error;
     } finally {
       commit("SET_IS_COMPLETING_REVIEW", false);
@@ -452,15 +480,16 @@ const actions = {
     }
   },
 
-
   async fetchEmployeeKpiScores(context, { cycleId }) {
     try {
-      const response = await apiClient.get(`/evaluation/employee-kpi-scores`, { params: { cycleId } });
+      const response = await apiClient.get(`/evaluation/employee-kpi-scores`, {
+        params: { cycleId },
+      });
       // Expected response: [{ employeeId, fullName, department, totalWeightedScore }]
       return response.data;
     } catch (error) {
       notification.error({
-        message: 'Lỗi tải tổng Weighted Score',
+        message: "Lỗi tải tổng Weighted Score",
         description: error.response?.data?.message || error.message,
       });
       return [];
@@ -576,7 +605,6 @@ const mutations = {
   SET_SAVE_PERFORMANCE_OBJECTIVE_EVALUATION_ERROR(state, error) {
     state.savePerformanceObjectiveEvaluationError = error;
   },
-
 };
 
 export default {

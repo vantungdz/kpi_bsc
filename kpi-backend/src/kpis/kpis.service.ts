@@ -1131,24 +1131,12 @@ export class KpisService {
         if (createdByType === 'company') {
         }
 
-        // Ensure start_date and end_date are always 'YYYY-MM-DD' string
-        const formatDateString = (val: any) => {
-          if (!val) return null;
-          if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(val)) return val;
-          const d = new Date(val);
-          if (!isNaN(d.getTime())) {
-            // Always output as 'YYYY-MM-DD'
-            return d.toISOString().slice(0, 10);
-          }
-          return null;
-        };
-
         const kpiEntityToSave = manager.getRepository(Kpi).create({
           ...kpiData,
           calculation_type: kpiData.calculationType || kpiData.calculation_type,
           perspective_id: kpiData.perspectiveId || kpiData.perspective_id,
-          start_date: formatDateString(kpiData.startDate || kpiData.start_date),
-          end_date: formatDateString(kpiData.endDate || kpiData.end_date),
+          start_date: kpiData.startDate || kpiData.start_date,
+          end_date: kpiData.endDate || kpiData.end_date,
           memo: kpiData.description || kpiData.memo,
           created_by: creatorEntityId,
           created_by_type: createdByType,
@@ -1309,15 +1297,6 @@ export class KpisService {
           assigned_to_department: null,
           assigned_to_section: null,
           assigned_to_team: null,
-          startDate: kpi.start_date,
-          endDate: kpi.end_date,
-          kpi_name: kpi.name,
-          calculation_type: kpi.calculation_type,
-          kpi_type: kpi.type,
-          unit: kpi.unit,
-          kpi_target: kpi.target,
-          frequency: kpi.frequency,
-          kpi_weight: kpi.weight,
         } as unknown as import('typeorm').DeepPartial<KPIAssignment>);
         assignmentsToSave.push(newAssignment);
 
@@ -1428,16 +1407,6 @@ export class KpisService {
             created_at: new Date(),
             updated_at: new Date(),
             assignedAt: new Date(),
-            startDate: kpi.start_date,
-            endDate: kpi.end_date,
-            // Copy thêm các trường thông tin KPI gốc nếu entity assignment có các trường này:
-            kpi_name: kpi.name,
-            calculation_type: kpi.calculation_type,
-            kpi_type: kpi.type,
-            unit: kpi.unit,
-            kpi_target: kpi.target,
-            frequency: kpi.frequency,
-            kpi_weight: kpi.weight,
           } as DeepPartial<KPIAssignment>);
           entitiesToSave.push(newAssignment);
         }

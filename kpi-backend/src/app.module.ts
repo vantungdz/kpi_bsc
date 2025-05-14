@@ -10,7 +10,6 @@ import { KpiValuesModule } from './kpi-values/kpi-values.module';
 import { PerspectiveModule } from './perspective/perspective.module';
 import { AuthModule } from './auth/auth.module';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { PerformanceEvaluationModule } from './performance-evaluation/performance-evaluation.module';
 import { KpiAssignmentsModule } from './kpi-assessments/kpi-assessments.module';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { RolesGuard } from './auth/guards/roles.guard';
@@ -53,7 +52,6 @@ import { EvaluationModule } from './evaluation/evaluation.module';
     KpiValuesModule,
     PerspectiveModule,
     AuthModule,
-    PerformanceEvaluationModule,
     KpiAssignmentsModule,
     EvaluationModule,
   ],

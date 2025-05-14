@@ -149,15 +149,16 @@
   "administration": "Quản trị",
   "userManagement": "Quản lý nhân viên",
   "roleManagement": "Quản lý vai trò",
-  "draft": "Bản chưa duyệt",
+  "draft": "Bản nháp",
   "submitted": "Đã gửi",
-  "pendingSectionApproval": "Chờ Section duyệt",
-  "pendingDeptApproval": "Chờ Department duyệt",
-  "pendingManagerApproval": "Chờ Manager duyệt",
+  "pendingSectionApproval": "Chờ Trưởng Bộ phận duyệt",
+  "pendingDeptApproval": "Chờ Trưởng phòng duyệt",
+  "pendingManagerApproval": "Chờ Quản lý duyệt",
   "approved": "Đã duyệt",
-  "rejectedBySection": "Bị Section từ chối",
-  "rejectedByDept": "Bị Department từ chối",
-  "rejectedByManager": "Bị Manager từ chối",
+  "rejectedBySection": "Bị Trưởng Bộ phận từ chối",
+  "rejectedByDept": "Bị Trưởng phòng từ chối",
+  "rejectedByManager": "Bị Quản lý từ chối",
+  "notSubmitted": "Chưa gửi",
   "pageNotFound": "Không tìm thấy trang",
   "pageNotFoundDescription": "Xin lỗi, trang bạn đang tìm không tồn tại.",
   "goToDashboard": "Đi đến bảng điều khiển",
@@ -475,5 +476,13 @@
   "performanceObjectiveApprovalList": "Danh sách Phê duyệt Mục tiêu Hiệu suất",
   "editAssignment": "Chỉnh sửa phân công",
   "deleteAssignment": "Xóa phân công",
-  "employeeKpiScoreList": "Bảng tổng hợp điểm KPI nhân viên"
+  "employeeKpiScoreList": "Bảng tổng hợp điểm KPI nhân viên",
+  "review_status_evaluation" : {
+    "PENDING_REVIEW" : "Chờ đánh giá",
+    "MANAGER_REVIEWED" :"Quản lý đã đánh giá",
+    "EMPLOYEE_FEEDBACK_PENDING": "Chờ phản hồi nhân viên",
+    "EMPLOYEE_RESPONDED" :"Nhân viên đã phản hồi",
+    "COMPLETED" :"Hoàn thành",
+    "undefined" :"Chưa đánh giá"
+  }
 }
