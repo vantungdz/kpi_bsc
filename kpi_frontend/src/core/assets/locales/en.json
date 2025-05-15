@@ -16,6 +16,9 @@
   "noRole": "No Role",
   "logoAlt": "Logo",
   "kpiSystemLogin": "KPI System Login",
+  "kpiSystemTitle": "KPI Management System IVC",
+  "homeWelcome": "Welcome to the IVC KPI management and evaluation system. The application supports managing objectives, performance evaluation, approval, and feedback for each individual, department, and the whole company.",
+  "versionText": "Version {version}",
   "username": "Username",
   "enterUsername": "Enter your username",
   "password": "Password",
@@ -497,5 +500,19 @@
     "undefined": "Not Reviewed"
   },
   "performanceObjectiveApprovalList": "Performance Objective Approval List",
-  "employeeKpiScoreList": "Employee KPI Score Summary"
+  "employeeKpiScoreList": "Employee KPI Score Summary",
+  "manageObjectives": "Manage Objectives & KPIs",
+  "managerReview": "KPI Review (Manager)",
+  "reportOptions": "Report Options",
+  "selectReportType": "Select report type",
+  "kpiSummary": "KPI Summary",
+  "kpiDetails": "KPI Details",
+  "kpiComparison": "KPI Comparison",
+  "customReport": "Custom Report",
+  "fileFormat": "File Format",
+  "dateRange": "Date Range",
+  "generateReport": "Generate Report",
+  "selectReportTypeFirst": "Please select a report type first!",
+  "reportGeneratedSuccessfully": "Report generated successfully!",
+  "reportGenerator": "Report Generator"
 }

@@ -484,5 +484,23 @@
     "EMPLOYEE_RESPONDED" :"Nhân viên đã phản hồi",
     "COMPLETED" :"Hoàn thành",
     "undefined" :"Chưa đánh giá"
-  }
+  },
+  "manageObjectives": "Quản lý mục tiêu & KPI",
+  "managerReview": "Đánh giá KPI (Quản lý)",
+  "kpiApproval": "Phê duyệt kết quả KPI",
+  "kpiSystemTitle": "Hệ thống Quản lý KPI IVC",
+  "homeWelcome": "Chào mừng bạn đến với hệ thống quản lý và đánh giá KPI IVC. Ứng dụng hỗ trợ quản lý mục tiêu, đánh giá hiệu suất, phê duyệt và phản hồi KPI cho từng cá nhân, phòng ban và toàn công ty.",
+  "versionText": "Phiên bản {version}",
+  "reportOptions": "Tùy chọn báo cáo",
+  "selectReportType": "Chọn loại báo cáo",
+  "kpiSummary": "Tổng quan KPI",
+  "kpiDetails": "Chi tiết KPI",
+  "kpiComparison": "So sánh KPI",
+  "customReport": "Báo cáo tùy chỉnh",
+  "fileFormat": "Định dạng file",
+  "dateRange": "Khoảng ngày",
+  "generateReport": "Xuất báo cáo",
+  "selectReportTypeFirst": "Vui lòng chọn loại báo cáo trước!",
+  "reportGeneratedSuccessfully": "Xuất báo cáo thành công!",
+  "reportGenerator": "Xuất báo cáo"
 }

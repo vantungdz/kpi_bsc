@@ -27,5 +27,6 @@ import { KPIAssignment } from 'src/entities/kpi-assignment.entity';
   ],
   providers: [KpisService],
   controllers: [KpisController],
+  exports: [KpisService],
 })
 export class KpisModule {}

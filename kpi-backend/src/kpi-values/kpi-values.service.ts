@@ -4,7 +4,6 @@ import {
   UnauthorizedException,
   BadRequestException,
   InternalServerErrorException,
-  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { EventEmitter2 } from '@nestjs/event-emitter';
@@ -17,7 +16,6 @@ import { Kpi, KpiDefinitionStatus } from '../entities/kpi.entity';
 
 @Injectable()
 export class KpiValuesService {
-  private readonly logger = new Logger(KpiValuesService.name);
   constructor(
     private dataSource: DataSource,
     @InjectRepository(KpiValue)
@@ -182,45 +180,20 @@ export class KpiValuesService {
 
         let initialStatusAfterSubmit: KpiValueStatus;
 
-        // Xác định trạng thái tiếp theo dựa trên vai trò của người submit
         switch (submitter.role) {
-          case 'admin': // Admin tự duyệt hoặc có quy trình riêng
-          case 'manager': // Manager submit thì có thể tự duyệt hoặc chuyển cho Admin khác nếu cần
-            initialStatusAfterSubmit = KpiValueStatus.APPROVED; // Hoặc PENDING_ADMIN_APPROVAL nếu có
-            this.logger.log(
-              `Submitter role is '${submitter.role}', KPI value is auto-approved or pending higher approval.`,
-            );
+          case 'admin':
+          case 'manager':
+            initialStatusAfterSubmit = KpiValueStatus.APPROVED;
             break;
           case 'department':
             initialStatusAfterSubmit = KpiValueStatus.PENDING_MANAGER_APPROVAL;
-            this.logger.log(
-              `Submitter role is 'department', next status: PENDING_MANAGER_APPROVAL`,
-            );
             break;
           case 'section':
             initialStatusAfterSubmit = KpiValueStatus.PENDING_DEPT_APPROVAL;
-            this.logger.log(
-              `Submitter role is 'section', next status: PENDING_DEPT_APPROVAL`,
-            );
             break;
           case 'employee':
-          default: // Mặc định cho 'employee' hoặc các vai trò không xác định khác
-            // Logic này giả định nhân viên bình thường sẽ cần section leader duyệt trước tiên nếu có sectionId
-            // Nếu không có sectionId nhưng có departmentId, thì cần department manager duyệt
-            // Nếu không có cả hai, thì cần manager/admin duyệt
+          default:
             initialStatusAfterSubmit = KpiValueStatus.PENDING_SECTION_APPROVAL;
-            this.logger.log(
-              `Submitter role is '${submitter.role}', default next status: PENDING_SECTION_APPROVAL (or higher if no section/dept)`,
-            );
-            // Bạn có thể tinh chỉnh thêm ở đây dựa trên cấu trúc phòng ban của nhân viên
-            // Ví dụ:
-            // if (submitter.sectionId) {
-            //   initialStatusAfterSubmit = KpiValueStatus.PENDING_SECTION_APPROVAL;
-            // } else if (submitter.departmentId) {
-            //   initialStatusAfterSubmit = KpiValueStatus.PENDING_DEPT_APPROVAL;
-            // } else {
-            //   initialStatusAfterSubmit = KpiValueStatus.PENDING_MANAGER_APPROVAL;
-            // }
             break;
         }
 
@@ -266,9 +239,7 @@ export class KpiValuesService {
         } as DeepPartial<KpiValueHistory>);
         await historyRepo.save(historyEntry);
 
-        // Emit event khi nhân viên submit và cần section duyệt
         if (assignment.kpi) {
-          // Ensure kpi is loaded
           if (
             savedKpiValue.status === KpiValueStatus.PENDING_SECTION_APPROVAL
           ) {
@@ -276,8 +247,8 @@ export class KpiValuesService {
               kpiValue: savedKpiValue,
               submitter: submitter,
               kpiName: assignment.kpi.name,
-              assignmentId: assignment.id, // Thêm assignmentId để dễ truy vấn
-              kpiId: assignment.kpi_id, // Thêm kpiId
+              assignmentId: assignment.id,
+              kpiId: assignment.kpi_id,
             });
           } else if (
             savedKpiValue.status === KpiValueStatus.PENDING_DEPT_APPROVAL
@@ -361,9 +332,6 @@ export class KpiValuesService {
       userId,
     );
     const savedValue = await this.kpiValuesRepository.save(kpiValue);
-    this.logger.log(
-      `[approveValueBySection] Saved KpiValue ID ${savedValue.id} with status ${savedValue.status}`,
-    );
 
     await this.logWorkflowHistory(
       savedValue,
@@ -380,19 +348,10 @@ export class KpiValuesService {
 
     if (savedValue.status === KpiValueStatus.APPROVED) {
       if (assignment && typeof assignment.kpi_id === 'number') {
-        this.logger.log(
-          `Emitting kpi_value.approved event for KPI ID: ${assignment.kpi_id}`,
-        );
-
         this.eventEmitter.emit('kpi_value.approved', {
           kpiId: assignment.kpi_id,
         });
-      } else {
-        this.logger.error(
-          `Cannot emit kpi_value.approved event: Missing assignment or kpi_id for KpiValue ID ${savedValue.id}`,
-        );
       }
-      // Thông báo cho người submit rằng KPI value của họ đã được duyệt (nếu người duyệt không phải là người submit)
       if (
         assignment &&
         assignment.employee_id &&
@@ -405,7 +364,6 @@ export class KpiValuesService {
         });
       }
     } else if (savedValue.status === KpiValueStatus.PENDING_DEPT_APPROVAL) {
-      // Emit event khi section đã duyệt và chuyển cho department duyệt
       const submitter = assignment?.employee_id
         ? await this.employeeRepository.findOneBy({
             id: assignment.employee_id,
@@ -413,7 +371,6 @@ export class KpiValuesService {
         : null;
       if (submitter && assignment?.kpi) {
         this.eventEmitter.emit('kpi_value.submitted_for_dept_approval', {
-          // Event mới
           kpiValue: savedValue,
           submitter,
           kpiName: assignment.kpi.name,
@@ -479,7 +436,6 @@ export class KpiValuesService {
       reason,
     );
     const rejectedValue = await this.kpiValuesRepository.save(kpiValue);
-    // Thông báo cho người submit rằng KPI value của họ đã bị từ chối
     const assignment =
       rejectedValue.kpiAssignment ??
       (await this.kpiAssignmentRepository.findOneBy({
@@ -547,9 +503,6 @@ export class KpiValuesService {
       userId,
     );
     const savedValue = await this.kpiValuesRepository.save(kpiValue);
-    this.logger.log(
-      `[approveValueByDepartment] Saved KpiValue ID ${savedValue.id} with status ${savedValue.status}`,
-    );
 
     await this.logWorkflowHistory(
       savedValue,
@@ -566,18 +519,10 @@ export class KpiValuesService {
 
     if (savedValue.status === KpiValueStatus.APPROVED) {
       if (assignment && typeof assignment.kpi_id === 'number') {
-        this.logger.log(
-          `Emitting kpi_value.approved event for KPI ID: ${assignment.kpi_id}`,
-        );
         this.eventEmitter.emit('kpi_value.approved', {
           kpiId: assignment.kpi_id,
         });
-      } else {
-        this.logger.error(
-          `Cannot emit kpi_value.approved event: Missing assignment or kpi_id for KpiValue ID ${savedValue.id}`,
-        );
       }
-      // Thông báo cho người submit rằng KPI value của họ đã được duyệt (nếu người duyệt không phải là người submit)
       if (
         assignment &&
         assignment.employee_id &&
@@ -590,7 +535,6 @@ export class KpiValuesService {
         });
       }
     } else if (savedValue.status === KpiValueStatus.PENDING_MANAGER_APPROVAL) {
-      // Emit event khi department đã duyệt và chuyển cho manager duyệt
       const submitter = assignment?.employee_id
         ? await this.employeeRepository.findOneBy({
             id: assignment.employee_id,
@@ -598,7 +542,6 @@ export class KpiValuesService {
         : null;
       if (submitter && assignment?.kpi) {
         this.eventEmitter.emit('kpi_value.submitted_for_manager_approval', {
-          // Event mới
           kpiValue: savedValue,
           submitter,
           kpiName: assignment.kpi.name,
@@ -670,7 +613,6 @@ export class KpiValuesService {
       reason,
     );
     const rejectedValue = await this.kpiValuesRepository.save(kpiValue);
-    // Thông báo cho người submit rằng KPI value của họ đã bị từ chối
     const assignment =
       rejectedValue.kpiAssignment ??
       (await this.kpiAssignmentRepository.findOneBy({
@@ -749,18 +691,10 @@ export class KpiValuesService {
         id: savedValue.kpi_assigment_id,
       }));
     if (assignment && typeof assignment.kpi_id === 'number') {
-      this.logger.log(
-        `Emitting kpi_value.approved event for KPI ID: ${assignment.kpi_id}`,
-      );
       this.eventEmitter.emit('kpi_value.approved', {
         kpiId: assignment.kpi_id,
       });
-    } else {
-      this.logger.error(
-        `Cannot emit kpi_value.approved event: Missing assignment or kpi_id for KpiValue ID ${savedValue.id}`,
-      );
     }
-    // Thông báo cho người submit rằng KPI value của họ đã được duyệt (nếu người duyệt không phải là người submit)
     if (
       assignment &&
       assignment.employee_id &&
@@ -828,7 +762,6 @@ export class KpiValuesService {
     );
     const rejectedValue = await this.kpiValuesRepository.save(kpiValue);
 
-    // Notify the submitter that their KPI value has been rejected
     const assignment =
       rejectedValue.kpiAssignment ??
       (await this.kpiAssignmentRepository.findOneBy({
@@ -941,7 +874,6 @@ export class KpiValuesService {
   ): Promise<boolean> {
     const user = await this.employeeRepository.findOneBy({ id: userId });
     if (!user) {
-      this.logger.warn(`User with ID ${userId} not found.`);
       return false;
     }
 
@@ -951,7 +883,6 @@ export class KpiValuesService {
     });
 
     if (!assignment) {
-      this.logger.warn(`Assignment with ID ${assignmentId} not found.`);
       return false;
     }
 
@@ -965,45 +896,30 @@ export class KpiValuesService {
     switch (action) {
       case 'SECTION_APPROVE':
       case 'SECTION_REJECT':
-        // Các vai trò được phép bởi controller: 'manager', 'admin', 'department', 'section'
         if (user.role === 'section') {
           hasRequiredRole = user.sectionId === effectiveTargetSectionId;
         } else if (user.role === 'department') {
-          // Trưởng phòng có thể hành động ở cấp section nếu section đó thuộc phòng của họ,
-          // hoặc nếu KPI được giao trực tiếp cho phòng của họ.
-          // Điều này giả định trưởng phòng có thể thực hiện hành động ở cấp section cho các section của mình.
-          // Cần xem xét kỹ logic này dựa trên quy tắc nghiệp vụ chính xác của bạn.
           hasRequiredRole =
             (assignment.section?.department.id === user.departmentId &&
               effectiveTargetSectionId === assignment.section.id) ||
             (user.departmentId === effectiveTargetDepartmentId &&
               assignment.assigned_to_department === user.departmentId);
         } else if (user.role === 'manager' || user.role === 'admin') {
-          hasRequiredRole = true; // Manager/Admin có thể thực hiện hành động ở cấp section
+          hasRequiredRole = true;
         }
         break;
       case 'DEPT_APPROVE':
       case 'DEPT_REJECT':
-        // Các vai trò được phép bởi controller: 'manager', 'admin', 'department'
         if (user.role === 'department') {
           hasRequiredRole = user.departmentId === effectiveTargetDepartmentId;
         } else if (user.role === 'manager' || user.role === 'admin') {
-          hasRequiredRole = true; // Manager/Admin có thể thực hiện hành động ở cấp department
+          hasRequiredRole = true;
         }
         break;
       case 'MANAGER_APPROVE':
       case 'MANAGER_REJECT':
-        // Các vai trò được phép bởi controller: 'manager', 'admin'
         hasRequiredRole = user.role === 'manager' || user.role === 'admin';
         break;
-      default:
-        this.logger.warn(`Unknown action '${action}' for permission check.`);
-    }
-
-    if (!hasRequiredRole) {
-      this.logger.warn(
-        `Access denied for UserID: ${userId}, Role: ${user.role}, Action: ${action}, TargetSection: ${effectiveTargetSectionId}, TargetDept: ${effectiveTargetDepartmentId}, UserSection: ${user.sectionId}, UserDept: ${user.departmentId}`,
-      );
     }
 
     return hasRequiredRole;
@@ -1043,12 +959,7 @@ export class KpiValuesService {
     );
     try {
       await this.kpiValueHistoryRepository.save(historyEntry);
-    } catch (historyError) {
-      console.error(
-        `Failed to save KPI Value history for value ID ${kpiValue.id}:`,
-        historyError,
-      );
-    }
+    } catch (historyError) {}
   }
 
   async getPendingApprovals(user: Employee): Promise<KpiValue[]> {
@@ -1073,7 +984,6 @@ export class KpiValuesService {
     const roleFilters: Record<string, () => void> = {
       section: () => {
         if (!user.sectionId) {
-          this.logger.warn('Leader user has no sectionId, returning empty array.');
           return [];
         }
         query
@@ -1092,7 +1002,6 @@ export class KpiValuesService {
       },
       department: () => {
         if (!user.departmentId) {
-          this.logger.warn('Department user has no departmentId, returning empty array.');
           return [];
         }
         query
@@ -1131,7 +1040,6 @@ export class KpiValuesService {
 
     const applyFilter = roleFilters[user.role];
     if (!applyFilter) {
-      this.logger.warn(`No pending approvals logic defined for role: ${user.role}`);
       return [];
     }
 
@@ -1140,13 +1048,9 @@ export class KpiValuesService {
     query.orderBy('kpiValue.timestamp', 'ASC');
 
     try {
-      this.logger.debug('Executing SQL Query:', query.getSql());
-      this.logger.debug('Query Parameters:', query.getParameters());
       const results = await query.getMany();
-      this.logger.debug(`Found ${results.length} pending approvals.`);
       return results;
     } catch (error) {
-      this.logger.error('Error executing getPendingApprovals query:', error);
       throw error;
     }
   }

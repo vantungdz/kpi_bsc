@@ -115,6 +115,17 @@
       </a-menu-item>
 
       <a-menu-item
+        key="report-generator"
+        v-if="canViewDashboard"
+        :title="$t('reportGenerator')"
+      >
+        <router-link to="/report-generator">
+          <bar-chart-outlined />
+          <span>{{ $t('reportGenerator') }}</span>
+        </router-link>
+      </a-menu-item>
+
+      <a-menu-item
         key="personal-kpis"
         v-if="effectiveRole"
         :title="$t('myPersonalKpis')"

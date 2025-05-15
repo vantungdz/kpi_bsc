@@ -9,6 +9,7 @@ import sections from "../../features/organization/store/sections";
 import auth from "../../features/auth/store/auth";
 import notifications from "../../features/notifications/store/notifications";
 import dashboard from "../../features/dashboard/store/dashboard"; 
+import reports from "../../features/reports/store/report";
 
 const store = createStore({
   modules: {
@@ -22,6 +23,7 @@ const store = createStore({
     employees,
     kpiEvaluations,
     kpiValues,
+    reports, // <-- Thêm module reports
   },
 });
 

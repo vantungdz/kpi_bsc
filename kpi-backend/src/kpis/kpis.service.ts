@@ -432,6 +432,32 @@ export class KpisService {
       .getMany();
   }
 
+  async getKpiComparisonData(): Promise<{ data: any[] }> {
+    // Lấy tất cả KPI có gán cho phòng ban
+    const kpis = await this.getAllKpiAssignedToDepartments();
+    const result: any[] = [];
+    for (const kpi of kpis) {
+      // Lấy tên phòng ban (ưu tiên assignment.department.name)
+      const departmentAssignment = (kpi.assignments || []).find(a => a.department && a.department.name);
+      const departmentName = departmentAssignment?.department?.name || 'N/A';
+      // Tính actual_value (giống findAll)
+      const activeAssignments = (kpi.assignments || []).filter(a => !a.deleted_at);
+      const allValues = activeAssignments.flatMap(a => a.kpiValues || []).map(v => Number(v.value) || 0);
+      const actual_value = kpi.calculation_type === 'sum'
+        ? allValues.reduce((sum, val) => sum + val, 0)
+        : allValues.length > 0
+          ? allValues.reduce((sum, val) => sum + val, 0) / allValues.length
+          : 0;
+      result.push({
+        department_name: departmentName,
+        kpi_name: kpi.name,
+        target: kpi.target,
+        actual_value
+      });
+    }
+    return { data: result };
+  }
+
   async getSectionKpis(
     sectionIdParam: number | string,
     filterDto: KpiFilterDto,

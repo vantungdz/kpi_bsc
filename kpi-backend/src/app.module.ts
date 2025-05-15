@@ -11,12 +11,11 @@ import { PerspectiveModule } from './perspective/perspective.module';
 import { AuthModule } from './auth/auth.module';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { KpiAssignmentsModule } from './kpi-assessments/kpi-assessments.module';
-import { JwtAuthGuard } from './auth/jwt-auth.guard';
-import { RolesGuard } from './auth/guards/roles.guard';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { NotificationModule } from './notification/notification.module';
 import { DashboardsModule } from './dashboard/dashboard.module';
 import { EvaluationModule } from './evaluation/evaluation.module';
+import { ReportsModule } from './reports/reports.module';
 
 @Module({
   imports: [
@@ -54,8 +53,8 @@ import { EvaluationModule } from './evaluation/evaluation.module';
     AuthModule,
     KpiAssignmentsModule,
     EvaluationModule,
+    ReportsModule,
   ],
   controllers: [],
-  // providers: [JwtAuthGuard, RolesGuard],
 })
 export class AppModule {}

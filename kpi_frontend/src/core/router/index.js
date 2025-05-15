@@ -24,8 +24,19 @@ import KpiReview from "../../features/evaluation/views/KpiReview.vue";
 import ReviewHistoryPage from "../../features/evaluation/views/ReviewHistoryPage.vue";
 import MyKpiReview from "../../features/evaluation/views/MyKpiReview.vue";
 import EmployeeKpiScoreList from "../../features/evaluation/views/EmployeeKpiScoreList.vue";
+import HomePage from "../../features/home/HomePage.vue";
+import ReportGenerator from "@/features/reports/views/ReportGenerator.vue";
 
 const routes = [
+  {
+    path: "/report-generator",
+    name: "ReportGenerator",
+    component: ReportGenerator,
+    meta: {
+      requiresAuth: true,
+      roles: ["manager", "admin", "department", "section"],
+    },
+  },
   {
     path: "/kpi/review",
     name: "KpiReview",
@@ -210,6 +221,12 @@ const routes = [
       roles: ["admin", "manager", "department", "section"],
     },
   },
+  {
+    path: "/home",
+    name: "HomePage",
+    component: HomePage,
+    meta: { requiresAuth: true },
+  },
 ];
 
 const router = createRouter({
@@ -223,7 +240,7 @@ router.beforeEach((to, from, next) => {
   const isAuthenticated = store.getters["auth/isAuthenticated"];
 
   if (isAuthenticated && to.path === "/") {
-    next({ path: "/performance" });
+    next({ path: "/home" });
     return;
   }
 

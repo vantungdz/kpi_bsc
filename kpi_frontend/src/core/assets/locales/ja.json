@@ -18,6 +18,9 @@
   "noRole": "役割なし",
   "logoAlt": "ロゴ",
   "kpiSystemLogin": "KPIシステムログイン",
+  "kpiSystemTitle": "KPI管理システムIVC",
+  "homeWelcome": "IVCのKPI管理・評価システムへようこそ。個人・部門・全社ごとに目標管理、パフォーマンス評価、承認、フィードバックをサポートします。",
+  "versionText": "バージョン {version}",
   "username": "ユーザー名",
   "enterUsername": "ユーザー名を入力してください",
   "password": "パスワード",
@@ -495,5 +498,19 @@
     "EMPLOYEE_RESPONDED": "従業員が回答済み",
     "COMPLETED": "完了",
     "undefined": "未評価"
-  }
+  },
+  "manageObjectives": "目標とKPIの管理",
+  "managerReview": "KPI評価（マネージャー）",
+  "reportOptions": "レポートオプション",
+  "selectReportType": "レポートタイプを選択",
+  "kpiSummary": "KPIサマリー",
+  "kpiDetails": "KPI詳細",
+  "kpiComparison": "KPI比較",
+  "customReport": "カスタムレポート",
+  "fileFormat": "ファイル形式",
+  "dateRange": "日付範囲",
+  "generateReport": "レポートを生成",
+  "selectReportTypeFirst": "先にレポートタイプを選択してください。",
+  "reportGeneratedSuccessfully": "レポートが正常に生成されました！",
+  "reportGenerator": "レポート出力"
 }

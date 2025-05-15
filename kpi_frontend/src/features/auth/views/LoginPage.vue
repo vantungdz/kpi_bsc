@@ -106,8 +106,8 @@ const handleLogin = async (values) => {
   });
 
   if (success) {
-    console.log("Login successful, redirecting to /performance");
-    router.push("/performance");
+    console.log("Login successful, redirecting to /home");
+    router.push("/home");
   } else {
     console.error("Login failed (handled by action).");
     formData.password = "";

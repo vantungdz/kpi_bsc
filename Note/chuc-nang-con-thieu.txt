@@ -1,0 +1,43 @@
+Chức năng có thể còn thiếu:
+
+Quản lý chu kỳ đánh giá (Review Cycle):
+Hiện tại, chu kỳ đánh giá có vẻ được tạo thủ công. Cần có chức năng cho phép tạo, chỉnh sửa và quản lý các chu kỳ đánh giá một cách linh hoạt hơn (ví dụ: thiết lập thời gian bắt đầu, kết thúc, tần suất, v.v.).
+Quản lý mục tiêu cá nhân (Personal Objectives):
+Có vẻ như hệ thống đã hỗ trợ KPI cá nhân, nhưng có thể mở rộng thêm chức năng quản lý mục tiêu cá nhân (ví dụ: thiết lập mục tiêu SMART, theo dõi tiến độ, v.v.).
+
+Báo cáo và phân tích nâng cao:
+Hệ thống hiện tại có một số báo cáo cơ bản, nhưng có thể bổ sung thêm các báo cáo và phân tích nâng cao hơn (ví dụ: so sánh hiệu suất giữa các phòng ban, phân tích xu hướng theo thời gian, v.v.).
+
+Tích hợp với các hệ thống khác:
+Có thể tích hợp hệ thống KPI với các hệ thống khác trong tổ chức (ví dụ: hệ thống quản lý nhân sự, hệ thống quản lý dự án, v.v.) để tự động hóa việc thu thập dữ liệu và cải thiện tính chính xác.
+
+Workflow phê duyệt linh hoạt:
+Workflow phê duyệt hiện tại có vẻ khá cứng nhắc (Section -> Department -> Manager). Cần có cơ chế để tùy chỉnh workflow phê duyệt cho phù hợp với từng loại KPI hoặc từng phòng ban.
+Phân tích nguyên nhân gốc rễ (Root Cause Analysis):
+Khi KPI không đạt mục tiêu, cần có công cụ để phân tích nguyên nhân gốc rễ và đề xuất các hành động khắc phục.
+
+Cảnh báo và thông báo:
+Hệ thống có vẻ đã có thông báo cơ bản, nhưng có thể cải thiện để gửi cảnh báo khi KPI sắp hết hạn, khi giá trị KPI vượt quá ngưỡng cho phép, v.v.
+
+
+
+Chức năng cần chỉnh sửa:
+
+Giao diện người dùng:
+Một số component có CSS inline hoặc sử dụng các style không nhất quán. Cần chuẩn hóa lại CSS để đảm bảo tính nhất quán và dễ bảo trì.
+Một số component có logic khá phức tạp (ví dụ: KpiValueApprovalList.vue). Cần xem xét tách nhỏ các component này để dễ quản lý và tái sử dụng.
+
+Quản lý trạng thái:
+Một số component sử dụng cả Vuex và các biến reactive cục bộ để quản lý trạng thái. Cần xem xét thống nhất cách quản lý trạng thái để tránh nhầm lẫn và giảm độ phức tạp.
+
+Xử lý lỗi:
+Một số component chưa xử lý lỗi một cách triệt để (ví dụ: chỉ log lỗi ra console mà không hiển thị thông báo cho người dùng). Cần cải thiện việc xử lý lỗi để đảm bảo tính ổn định và dễ sử dụng của hệ thống.
+
+Kiểm tra quyền:
+Việc kiểm tra quyền hiện tại dựa vào effectiveRole lấy từ Vuex. Cần đảm bảo rằng việc kiểm tra quyền này được thực hiện một cách nhất quán ở cả frontend và backend để tránh các lỗ hổng bảo mật.
+
+Tính toán giá trị KPI:
+Logic tính toán giá trị KPI (ví dụ: actual_value trong KpisService) có vẻ khá phức tạp và có thể gây khó khăn cho việc bảo trì. Cần xem xét đơn giản hóa logic này hoặc tách ra thành các hàm riêng biệt để dễ kiểm tra và tái sử dụng.
+
+Phân trang:
+Một số API endpoint chưa hỗ trợ phân trang (ví dụ: fetchAllKpisForSelect). Cần bổ sung phân trang cho các API này để cải thiện hiệu suất và trải nghiệm người dùng.
