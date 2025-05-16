@@ -26,7 +26,7 @@ import MyKpiReview from "../../features/evaluation/views/MyKpiReview.vue";
 import EmployeeKpiScoreList from "../../features/evaluation/views/EmployeeKpiScoreList.vue";
 import HomePage from "../../features/home/HomePage.vue";
 import ReportGenerator from "@/features/reports/views/ReportGenerator.vue";
-
+import PerformanceObjectiveApprovalList from "@/features/evaluation/views/PerformanceObjectiveApprovalList.vue";
 const routes = [
   {
     path: "/report-generator",
@@ -189,6 +189,15 @@ const routes = [
     path: "/approvals",
     name: "PendingApprovals",
     component: KpiValueApprovalList,
+    meta: {
+      requiresAuth: true,
+      roles: ["admin", "manager", "department", "section"],
+    },
+  },
+  {
+    path: "/performance-objective-approvals",
+    name: "PerformanceObjectiveApprovalList",
+    component: PerformanceObjectiveApprovalList,
     meta: {
       requiresAuth: true,
       roles: ["admin", "manager", "department", "section"],

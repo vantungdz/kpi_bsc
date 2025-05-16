@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { ObjectiveEvaluationStatus } from '../../entities/objective-evaluation-status.enum';
+import { IsNotEmpty, IsString } from 'class-validator';
 
 export class ReviewableTargetDto {
   id: number;
@@ -44,6 +45,15 @@ export class SubmitKpiReviewDto {
     assignmentId: number;
     managerComment?: string | null;
     managerScore?: number | null;
+  }[];
+}
+
+export class SubmitSelfKpiReviewDto {
+  cycleId: string;
+  kpiReviews: {
+    assignmentId: number;
+    selfScore: number | null;
+    selfComment: string | null;
   }[];
 }
 
@@ -102,20 +112,14 @@ export class PerformanceObjectiveItemDto {
 }
 
 export class PerformanceObjectivesResponseDto {
-  // Đảm bảo có 'export'
-  @ApiProperty({
-    type: () => [PerformanceObjectiveItemDto],
-    description: 'List of performance objectives for the employee.',
-  })
+  @ApiProperty({ type: [PerformanceObjectiveItemDto] })
   objectives: PerformanceObjectiveItemDto[];
 
-  @ApiProperty({
-    enum: ObjectiveEvaluationStatus,
-    nullable: true,
-    description:
-      'The current evaluation status of the objectives for the employee and cycle.',
-  })
+  @ApiProperty({ enum: ObjectiveEvaluationStatus, nullable: true })
   evaluationStatus: ObjectiveEvaluationStatus | null;
+
+  @ApiProperty({ type: 'number', nullable: true })
+  totalWeightedScoreSupervisor?: number;
 }
 
 export class EmployeeKpiScoreDto {
@@ -124,4 +128,104 @@ export class EmployeeKpiScoreDto {
   department: string;
   totalWeightedScore: number;
   reviewStatus?: string; // Add review status for UI distinction
+}
+
+export class RejectObjectiveEvaluationPayloadDto {
+  @ApiProperty({
+    description: 'Reason for rejection',
+    example: 'Targets not clearly defined.',
+  })
+  @IsNotEmpty()
+  @IsString()
+  reason: string;
+}
+
+export class ObjectiveEvaluationHistoryItemDto {
+  @ApiProperty()
+  id: number;
+
+  @ApiProperty({ enum: ObjectiveEvaluationStatus })
+  oldStatus: ObjectiveEvaluationStatus;
+
+  @ApiProperty({ enum: ObjectiveEvaluationStatus })
+  newStatus: ObjectiveEvaluationStatus;
+
+  @ApiProperty({ nullable: true })
+  reason: string | null;
+
+  @ApiProperty({
+    type: 'object',
+    properties: {
+      id: { type: 'number' },
+      first_name: { type: 'string' },
+      last_name: { type: 'string' },
+      username: { type: 'string' },
+    },
+    nullable: true,
+  })
+  changedBy: {
+    id: number;
+    first_name: string;
+    last_name: string;
+    username: string;
+  } | null;
+
+  @ApiProperty()
+  timestamp: Date;
+}
+
+export class ObjectiveEvaluationListItemDto {
+  @ApiProperty()
+  id: number;
+
+  @ApiProperty({
+    type: 'object',
+    properties: {
+      id: { type: 'number' },
+      first_name: { type: 'string' },
+      last_name: { type: 'string' },
+      username: { type: 'string' },
+    },
+    nullable: true,
+  })
+  employee: {
+    id: number;
+    first_name: string;
+    last_name: string;
+    username: string;
+  } | null;
+
+  @ApiProperty({
+    type: 'object',
+    properties: {
+      id: { type: 'number' },
+      first_name: { type: 'string' },
+      last_name: { type: 'string' },
+      username: { type: 'string' },
+    },
+    nullable: true,
+  })
+  evaluator: {
+    id: number;
+    first_name: string;
+    last_name: string;
+    username: string;
+  } | null;
+
+  @ApiProperty()
+  cycleId: string;
+
+  @ApiProperty({ nullable: true })
+  totalWeightedScoreSupervisor?: number;
+
+  @ApiProperty({ nullable: true })
+  averageScoreSupervisor?: number;
+
+  @ApiProperty({ enum: ObjectiveEvaluationStatus })
+  status: ObjectiveEvaluationStatus;
+
+  @ApiProperty()
+  updated_at: Date;
+
+  // Add other fields if needed by the frontend list
 }

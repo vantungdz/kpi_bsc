@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { EvaluationService } from './evaluation.service';
+import { ObjectiveEvaluationHistory } from '../entities/objective-evaluation-history.entity'; // + Import history entity
+import { ObjectiveEvaluation } from '../entities/objective-evaluation.entity'; // + Import new entity
 import { EvaluationController } from './evaluation.controller';
 import { Employee } from '../entities/employee.entity';
 import { Section } from '../entities/section.entity';
@@ -23,6 +25,8 @@ import { OverallReview } from '../entities/overall-review.entity';
       KpiValue,
       KpiReview,
       OverallReview,
+      ObjectiveEvaluationHistory,
+      ObjectiveEvaluation,
     ]),
   ],
   controllers: [EvaluationController],

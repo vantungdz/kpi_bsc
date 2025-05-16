@@ -31,6 +31,17 @@ const state = {
   reviewHistory: [],
   isLoadingReviewHistory: false,
   reviewHistoryError: null,
+
+  pendingObjectiveEvaluations: [],
+  isLoadingPendingObjectiveEvaluations: false,
+  pendingObjectiveEvaluationsError: null,
+
+  isProcessingObjectiveEvalApproval: false,
+  objectiveEvalApprovalError: null,
+
+  objectiveEvaluationHistory: [],
+  isLoadingObjectiveEvaluationHistory: false,
+  objectiveEvaluationHistoryError: null,
 };
 
 const getters = {
@@ -76,6 +87,22 @@ const getters = {
   getReviewHistory: (state) => state.reviewHistory,
   isLoadingReviewHistory: (state) => state.isLoadingReviewHistory,
   getReviewHistoryError: (state) => state.reviewHistoryError,
+
+  pendingObjectiveEvaluations: (state) => state.pendingObjectiveEvaluations,
+  isLoadingPendingObjectiveEvaluations: (state) =>
+    state.isLoadingPendingObjectiveEvaluations,
+  getPendingObjectiveEvaluationsError: (state) =>
+    state.pendingObjectiveEvaluationsError,
+
+  isProcessingObjectiveEvalApproval: (state) =>
+    state.isProcessingObjectiveEvalApproval,
+  getObjectiveEvalApprovalError: (state) => state.objectiveEvalApprovalError,
+
+  objectiveEvaluationHistory: (state) => state.objectiveEvaluationHistory,
+  isLoadingObjectiveEvaluationHistory: (state) =>
+    state.isLoadingObjectiveEvaluationHistory,
+  getObjectiveEvaluationHistoryError: (state) =>
+    state.objectiveEvaluationHistoryError,
 };
 
 const actions = {
@@ -331,6 +358,29 @@ const actions = {
     }
   },
 
+  async submitSelfKpiReview({ commit }, { cycleId, kpiReviews }) {
+    commit("SET_IS_SUBMITTING_EMPLOYEE_FEEDBACK", true);
+    commit("SET_SUBMIT_EMPLOYEE_FEEDBACK_ERROR", null);
+    try {
+      const response = await apiClient.post(
+        "/evaluation/my-review/submit-self-review",
+        { cycleId, kpiReviews }
+      );
+      // Sau khi gửi thành công, có thể cập nhật lại employeeReviewDetails nếu cần
+      commit("SET_EMPLOYEE_REVIEW_DETAILS", response.data);
+      return response.data;
+    } catch (error) {
+      const errorMsg =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to submit self KPI review.";
+      commit("SET_SUBMIT_EMPLOYEE_FEEDBACK_ERROR", errorMsg);
+      throw error;
+    } finally {
+      commit("SET_IS_SUBMITTING_EMPLOYEE_FEEDBACK", false);
+    }
+  },
+
   async fetchReviewHistory({ commit }, { targetId, targetType }) {
     commit("SET_IS_LOADING_REVIEW_HISTORY", true);
     commit("SET_REVIEW_HISTORY", []);
@@ -495,6 +545,244 @@ const actions = {
       return [];
     }
   },
+
+  async fetchPendingObjectiveEvaluations({ commit }) {
+    commit("SET_IS_LOADING_PENDING_OBJECTIVE_EVALUATIONS", true);
+    commit("SET_PENDING_OBJECTIVE_EVALUATIONS_ERROR", null);
+    try {
+      const response = await apiClient.get(
+        "/evaluation/objective-evaluations/pending"
+      );
+      commit("SET_PENDING_OBJECTIVE_EVALUATIONS", response.data);
+      return response.data; // Return data for component to use if needed
+    } catch (error) {
+      const errorMessage =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to fetch pending objective evaluations.";
+      commit("SET_PENDING_OBJECTIVE_EVALUATIONS_ERROR", errorMessage);
+      notification.error({
+        message: "Error",
+        description: errorMessage,
+      });
+      throw error; // Re-throw to allow component to catch
+    } finally {
+      commit("SET_IS_LOADING_PENDING_OBJECTIVE_EVALUATIONS", false);
+    }
+  },
+
+  async approveObjectiveEvaluationSection(
+    { commit, dispatch },
+    { evaluationId }
+  ) {
+    commit("SET_IS_PROCESSING_OBJECTIVE_EVAL_APPROVAL", true);
+    commit("SET_OBJECTIVE_EVAL_APPROVAL_ERROR", null);
+    try {
+      await apiClient.post(
+        `/evaluation/objective-evaluations/${evaluationId}/approve-section`
+      );
+      notification.success({
+        message: "Success",
+        description: "Objective evaluation approved at section level.",
+      });
+      // Refetch the list to update the UI
+      await dispatch("fetchPendingObjectiveEvaluations");
+    } catch (error) {
+      const errorMessage =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to approve objective evaluation at section level.";
+      commit("SET_OBJECTIVE_EVAL_APPROVAL_ERROR", errorMessage);
+      notification.error({
+        message: "Error",
+        description: errorMessage,
+      });
+      throw error;
+    } finally {
+      commit("SET_IS_PROCESSING_OBJECTIVE_EVAL_APPROVAL", false);
+    }
+  },
+
+  async rejectObjectiveEvaluationSection(
+    { commit, dispatch },
+    { evaluationId, reason }
+  ) {
+    commit("SET_IS_PROCESSING_OBJECTIVE_EVAL_APPROVAL", true);
+    commit("SET_OBJECTIVE_EVAL_APPROVAL_ERROR", null);
+    try {
+      await apiClient.post(
+        `/evaluation/objective-evaluations/${evaluationId}/reject-section`,
+        { reason }
+      );
+      notification.success({
+        message: "Success",
+        description: "Objective evaluation rejected at section level.",
+      });
+      // Refetch the list to update the UI
+      await dispatch("fetchPendingObjectiveEvaluations");
+    } catch (error) {
+      const errorMessage =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to reject objective evaluation at section level.";
+      commit("SET_OBJECTIVE_EVAL_APPROVAL_ERROR", errorMessage);
+      notification.error({
+        message: "Error",
+        description: errorMessage,
+      });
+      throw error;
+    } finally {
+      commit("SET_IS_PROCESSING_OBJECTIVE_EVAL_APPROVAL", false);
+    }
+  },
+
+  async approveObjectiveEvaluationDept({ commit, dispatch }, { evaluationId }) {
+    commit("SET_IS_PROCESSING_OBJECTIVE_EVAL_APPROVAL", true);
+    commit("SET_OBJECTIVE_EVAL_APPROVAL_ERROR", null);
+    try {
+      await apiClient.post(
+        `/evaluation/objective-evaluations/${evaluationId}/approve-dept`
+      );
+      notification.success({
+        message: "Success",
+        description: "Objective evaluation approved at department level.",
+      });
+      await dispatch("fetchPendingObjectiveEvaluations");
+    } catch (error) {
+      const errorMessage =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to approve objective evaluation at department level.";
+      commit("SET_OBJECTIVE_EVAL_APPROVAL_ERROR", errorMessage);
+      notification.error({
+        message: "Error",
+        description: errorMessage,
+      });
+      throw error;
+    } finally {
+      commit("SET_IS_PROCESSING_OBJECTIVE_EVAL_APPROVAL", false);
+    }
+  },
+
+  async rejectObjectiveEvaluationDept(
+    { commit, dispatch },
+    { evaluationId, reason }
+  ) {
+    commit("SET_IS_PROCESSING_OBJECTIVE_EVAL_APPROVAL", true);
+    commit("SET_OBJECTIVE_EVAL_APPROVAL_ERROR", null);
+    try {
+      await apiClient.post(
+        `/evaluation/objective-evaluations/${evaluationId}/reject-dept`,
+        { reason }
+      );
+      notification.success({
+        message: "Success",
+        description: "Objective evaluation rejected at department level.",
+      });
+      await dispatch("fetchPendingObjectiveEvaluations");
+    } catch (error) {
+      const errorMessage =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to reject objective evaluation at department level.";
+      commit("SET_OBJECTIVE_EVAL_APPROVAL_ERROR", errorMessage);
+      notification.error({
+        message: "Error",
+        description: errorMessage,
+      });
+      throw error;
+    } finally {
+      commit("SET_IS_PROCESSING_OBJECTIVE_EVAL_APPROVAL", false);
+    }
+  },
+
+  async approveObjectiveEvaluationManager(
+    { commit, dispatch },
+    { evaluationId }
+  ) {
+    commit("SET_IS_PROCESSING_OBJECTIVE_EVAL_APPROVAL", true);
+    commit("SET_OBJECTIVE_EVAL_APPROVAL_ERROR", null);
+    try {
+      await apiClient.post(
+        `/evaluation/objective-evaluations/${evaluationId}/approve-manager`
+      );
+      notification.success({
+        message: "Success",
+        description: "Objective evaluation approved at manager level.",
+      });
+      await dispatch("fetchPendingObjectiveEvaluations");
+    } catch (error) {
+      const errorMessage =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to approve objective evaluation at manager level.";
+      commit("SET_OBJECTIVE_EVAL_APPROVAL_ERROR", errorMessage);
+      notification.error({
+        message: "Error",
+        description: errorMessage,
+      });
+      throw error;
+    } finally {
+      commit("SET_IS_PROCESSING_OBJECTIVE_EVAL_APPROVAL", false);
+    }
+  },
+
+  async rejectObjectiveEvaluationManager(
+    { commit, dispatch },
+    { evaluationId, reason }
+  ) {
+    commit("SET_IS_PROCESSING_OBJECTIVE_EVAL_APPROVAL", true);
+    commit("SET_OBJECTIVE_EVAL_APPROVAL_ERROR", null);
+    try {
+      await apiClient.post(
+        `/evaluation/objective-evaluations/${evaluationId}/reject-manager`,
+        { reason }
+      );
+      notification.success({
+        message: "Success",
+        description: "Objective evaluation rejected at manager level.",
+      });
+      await dispatch("fetchPendingObjectiveEvaluations");
+    } catch (error) {
+      const errorMessage =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to reject objective evaluation at manager level.";
+      commit("SET_OBJECTIVE_EVAL_APPROVAL_ERROR", errorMessage);
+      notification.error({
+        message: "Error",
+        description: errorMessage,
+      });
+      throw error;
+    } finally {
+      commit("SET_IS_PROCESSING_OBJECTIVE_EVAL_APPROVAL", false);
+    }
+  },
+
+  async fetchObjectiveEvaluationHistory({ commit }, { evaluationId }) {
+    commit("SET_IS_LOADING_OBJECTIVE_EVALUATION_HISTORY", true);
+    commit("SET_OBJECTIVE_EVALUATION_HISTORY_ERROR", null);
+    try {
+      const response = await apiClient.get(
+        `/evaluation/objective-evaluations/${evaluationId}/history`
+      );
+      commit("SET_OBJECTIVE_EVALUATION_HISTORY", response.data);
+      return response.data;
+    } catch (error) {
+      const errorMessage =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to fetch objective evaluation history.";
+      commit("SET_OBJECTIVE_EVALUATION_HISTORY_ERROR", errorMessage);
+      notification.error({
+        message: "Error",
+        description: errorMessage,
+      });
+      throw error;
+    } finally {
+      commit("SET_IS_LOADING_OBJECTIVE_EVALUATION_HISTORY", false);
+    }
+  },
 };
 
 const mutations = {
@@ -604,6 +892,33 @@ const mutations = {
   },
   SET_SAVE_PERFORMANCE_OBJECTIVE_EVALUATION_ERROR(state, error) {
     state.savePerformanceObjectiveEvaluationError = error;
+  },
+
+  SET_PENDING_OBJECTIVE_EVALUATIONS(state, evaluations) {
+    state.pendingObjectiveEvaluations = evaluations;
+  },
+  SET_IS_LOADING_PENDING_OBJECTIVE_EVALUATIONS(state, isLoading) {
+    state.isLoadingPendingObjectiveEvaluations = isLoading;
+  },
+  SET_PENDING_OBJECTIVE_EVALUATIONS_ERROR(state, error) {
+    state.pendingObjectiveEvaluationsError = error;
+  },
+
+  SET_IS_PROCESSING_OBJECTIVE_EVAL_APPROVAL(state, isProcessing) {
+    state.isProcessingObjectiveEvalApproval = isProcessing;
+  },
+  SET_OBJECTIVE_EVAL_APPROVAL_ERROR(state, error) {
+    state.objectiveEvalApprovalError = error;
+  },
+
+  SET_OBJECTIVE_EVALUATION_HISTORY(state, history) {
+    state.objectiveEvaluationHistory = history;
+  },
+  SET_IS_LOADING_OBJECTIVE_EVALUATION_HISTORY(state, isLoading) {
+    state.isLoadingObjectiveEvaluationHistory = isLoading;
+  },
+  SET_OBJECTIVE_EVALUATION_HISTORY_ERROR(state, error) {
+    state.objectiveEvaluationHistoryError = error;
   },
 };
 

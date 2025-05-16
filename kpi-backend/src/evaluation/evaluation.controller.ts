@@ -32,6 +32,7 @@ import {
   ReviewCycleDto,
   KpiToReviewDto,
   SubmitKpiReviewDto,
+  SubmitSelfKpiReviewDto, // + Import
   KpisForReviewResponseDto,
   CompleteReviewDto,
   EmployeeReviewResponseDto,
@@ -41,10 +42,13 @@ import {
   PerformanceObjectiveItemDto,
   PerformanceObjectivesResponseDto,
   EmployeeKpiScoreDto,
+  ObjectiveEvaluationListItemDto, // + Import
+  RejectObjectiveEvaluationPayloadDto, // + Import
+  ObjectiveEvaluationHistoryItemDto,
 } from './dto/evaluation.dto';
 import { OverallReview } from 'src/entities/overall-review.entity';
 import { SavePerformanceObjectivesDto } from './dto/save-performance-objectives.dto';
-
+import { ObjectiveEvaluation } from 'src/entities/objective-evaluation.entity'; // + Import
 @ApiTags('Evaluation')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -220,6 +224,17 @@ export class EvaluationController {
     return this.evaluationService.submitEmployeeFeedback(user, feedbackDto);
   }
 
+  @Post('my-review/submit-self-review')
+  @Roles('employee', 'section', 'department')
+  @ApiOperation({ summary: 'Nhân viên gửi selfScore/selfComment cho từng KPI' })
+  async submitSelfKpiReview(
+    @Req() req: Request & { user?: Employee },
+    @Body() dto: SubmitSelfKpiReviewDto,
+  ): Promise<EmployeeReviewResponseDto> {
+    const user = this.validateUser(req);
+    return this.evaluationService.submitSelfKpiReview(user, dto);
+  }
+
   @Get('review-history/:targetId')
   @Roles('admin', 'manager', 'employee')
   @ApiOperation({
@@ -287,7 +302,6 @@ export class EvaluationController {
       cycleId,
     );
   }
-  // Đã loại bỏ toàn bộ route liên quan đến performance-objective-evaluations (entity cũ)
 
   @Get('employee-kpi-scores')
   @Roles('admin', 'manager', 'department')
@@ -308,4 +322,198 @@ export class EvaluationController {
     const user = this.validateUser(req);
     return this.evaluationService.getEmployeeKpiScores(user, cycleId);
   }
+
+  @Get('objective-evaluations/:id/history')
+  @Roles('admin', 'manager', 'department', 'section', 'employee') // Employee can view their own history
+  @ApiOperation({ summary: 'Get history of an objective evaluation' })
+  @ApiResponse({
+    status: 200,
+    description: 'History of the objective evaluation.',
+    type: [ObjectiveEvaluationHistoryItemDto],
+  })
+  async getObjectiveEvaluationHistory(
+    @Req() req: Request & { user?: Employee },
+    @Param('id', ParseIntPipe) evaluationId: number,
+  ): Promise<ObjectiveEvaluationHistoryItemDto[]> {
+    const user = this.validateUser(req);
+    return this.evaluationService.getObjectiveEvaluationHistory(
+      evaluationId,
+      user,
+    );
+  }
+
+  // --- New Endpoints for Objective Evaluation Approval ---
+
+  @Get('objective-evaluations/pending')
+  @Roles('admin', 'manager', 'department', 'section')
+  @ApiOperation({
+    summary: 'Get pending objective evaluations for the current approver',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'List of pending objective evaluations.',
+    type: [ObjectiveEvaluationListItemDto],
+  })
+  async getPendingObjectiveEvaluations(
+    @Req() req: Request & { user?: Employee },
+  ): Promise<ObjectiveEvaluationListItemDto[]> {
+    const user = this.validateUser(req);
+    return this.evaluationService.getPendingObjectiveEvaluationsForApprover(
+      user,
+    );
+  }
+
+  @Post('objective-evaluations/:id/approve-section')
+  @Roles('admin', 'manager', 'section') // Section head, or manager/admin if they also have section scope
+  @ApiOperation({
+    summary: 'Approve an objective evaluation at the section level',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Evaluation approved at section level.',
+    type: ObjectiveEvaluation,
+  })
+  async approveObjectiveEvaluationSection(
+    @Req() req: Request & { user?: Employee },
+    @Param('id', ParseIntPipe) evaluationId: number,
+  ): Promise<ObjectiveEvaluation> {
+    const user = this.validateUser(req);
+    return this.evaluationService.approveObjectiveEvaluationByLevel(
+      evaluationId,
+      user,
+      'section',
+    );
+  }
+
+  @Post('objective-evaluations/:id/reject-section')
+  @Roles('admin', 'manager', 'section')
+  @ApiOperation({
+    summary: 'Reject an objective evaluation at the section level',
+  })
+  @ApiBody({ type: RejectObjectiveEvaluationPayloadDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Evaluation rejected at section level.',
+    type: ObjectiveEvaluation,
+  })
+  async rejectObjectiveEvaluationSection(
+    @Req() req: Request & { user?: Employee },
+    @Param('id', ParseIntPipe) evaluationId: number,
+    @Body() payload: RejectObjectiveEvaluationPayloadDto,
+  ): Promise<ObjectiveEvaluation> {
+    const user = this.validateUser(req);
+    return this.evaluationService.rejectObjectiveEvaluationByLevel(
+      evaluationId,
+      user,
+      payload.reason,
+      'section',
+    );
+  }
+
+  @Post('objective-evaluations/:id/approve-dept')
+  @Roles('admin', 'manager', 'department') // Department head
+  @ApiOperation({
+    summary: 'Approve an objective evaluation at the department level',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Evaluation approved at department level.',
+    type: ObjectiveEvaluation,
+  })
+  async approveObjectiveEvaluationDept(
+    @Req() req: Request & { user?: Employee },
+    @Param('id', ParseIntPipe) evaluationId: number,
+  ): Promise<ObjectiveEvaluation> {
+    const user = this.validateUser(req);
+    return this.evaluationService.approveObjectiveEvaluationByLevel(
+      evaluationId,
+      user,
+      'dept',
+    );
+  }
+
+  @Post('objective-evaluations/:id/reject-dept')
+  @Roles('admin', 'manager', 'department')
+  @ApiOperation({
+    summary: 'Reject an objective evaluation at the department level',
+  })
+  @ApiBody({ type: RejectObjectiveEvaluationPayloadDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Evaluation rejected at department level.',
+    type: ObjectiveEvaluation,
+  })
+  async rejectObjectiveEvaluationDept(
+    @Req() req: Request & { user?: Employee },
+    @Param('id', ParseIntPipe) evaluationId: number,
+    @Body() payload: RejectObjectiveEvaluationPayloadDto,
+  ): Promise<ObjectiveEvaluation> {
+    const user = this.validateUser(req);
+    return this.evaluationService.rejectObjectiveEvaluationByLevel(
+      evaluationId,
+      user,
+      payload.reason,
+      'dept',
+    );
+  }
+
+  @Post('objective-evaluations/:id/approve-manager')
+  @Roles('admin', 'manager') // Final approver (e.g. General Manager or Admin)
+  @ApiOperation({
+    summary: 'Approve an objective evaluation at the manager/final level',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Evaluation approved at manager/final level.',
+    type: ObjectiveEvaluation,
+  })
+  async approveObjectiveEvaluationManager(
+    @Req() req: Request & { user?: Employee },
+    @Param('id', ParseIntPipe) evaluationId: number,
+  ): Promise<ObjectiveEvaluation> {
+    const user = this.validateUser(req);
+    return this.evaluationService.approveObjectiveEvaluationByLevel(
+      evaluationId,
+      user,
+      'manager',
+    );
+  }
+
+  @Post('objective-evaluations/:id/reject-manager')
+  @Roles('admin', 'manager')
+  @ApiOperation({
+    summary: 'Reject an objective evaluation at the manager/final level',
+  })
+  @ApiBody({ type: RejectObjectiveEvaluationPayloadDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Evaluation rejected at manager/final level.',
+    type: ObjectiveEvaluation,
+  })
+  async rejectObjectiveEvaluationManager(
+    @Req() req: Request & { user?: Employee },
+    @Param('id', ParseIntPipe) evaluationId: number,
+    @Body() payload: RejectObjectiveEvaluationPayloadDto,
+  ): Promise<ObjectiveEvaluation> {
+    const user = this.validateUser(req);
+    return this.evaluationService.rejectObjectiveEvaluationByLevel(
+      evaluationId,
+      user,
+      payload.reason,
+      'manager',
+    );
+  }
+
+  // Placeholder for history - implement if needed
+  // @Get('objective-evaluations/:id/history')
+  // @Roles('admin', 'manager', 'department', 'section')
+  // @ApiOperation({ summary: 'Get history of an objective evaluation' })
+  // async getObjectiveEvaluationHistory(
+  //   @Req() req: Request & { user?: Employee },
+  //   @Param('id', ParseIntPipe) evaluationId: number,
+  // ) {
+  //   const user = this.validateUser(req);
+  //   // return this.evaluationService.getObjectiveEvaluationHistory(evaluationId, user);
+  //   throw new BadRequestException('History endpoint not yet implemented.');
+  // }
 }

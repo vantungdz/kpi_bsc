@@ -5,14 +5,16 @@ import {
   OneToMany,
   ManyToOne,
   JoinColumn,
+  OneToOne,
 } from 'typeorm';
 import { KpiValue } from './kpi-value.entity';
 import { KpiEvaluation } from './kpi-evaluation.entity';
 import { Department } from './department.entity';
 import { Section } from './section.entity';
 import { Team } from './team.entity';
-import { Notification } from './notification.entity'; 
-import { KpiReview } from './kpi-review.entity'; 
+import { Notification } from './notification.entity';
+import { KpiReview } from './kpi-review.entity';
+import { ObjectiveEvaluation } from './objective-evaluation.entity'; // + Import ObjectiveEvaluation
 
 @Entity('employees')
 export class Employee {
@@ -31,7 +33,7 @@ export class Employee {
   @Column({
     type: 'varchar',
     length: 50,
-    enum: ['admin', 'manager', 'department','section', 'employee'],
+    enum: ['admin', 'manager', 'department', 'section', 'employee'],
   })
   role: string;
 
@@ -40,6 +42,18 @@ export class Employee {
 
   @Column({ nullable: true })
   last_name: string;
+
+  @OneToMany(
+    () => ObjectiveEvaluation,
+    (objectiveEvaluation) => objectiveEvaluation.employee,
+  )
+  objectiveEvaluationsAsSubject: ObjectiveEvaluation[]; // Evaluations where this employee is the one being evaluated
+
+  @OneToMany(
+    () => ObjectiveEvaluation,
+    (objectiveEvaluation) => objectiveEvaluation.evaluator,
+  )
+  objectiveEvaluationsAsEvaluator: ObjectiveEvaluation[]; // Evaluations submitted by this employee (as a manager/evaluator)
 
   @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
   created_at: Date;
@@ -51,7 +65,7 @@ export class Employee {
   departmentId: number;
 
   @OneToMany(() => Notification, (notification) => notification.user)
-  notifications: Notification[]; 
+  notifications: Notification[];
 
   @ManyToOne(() => Department, (department) => department.employees)
   @JoinColumn({ name: 'departmentId' })
@@ -71,6 +85,6 @@ export class Employee {
   @JoinColumn({ name: 'teamId' })
   team?: Team;
 
-  @OneToMany(() => KpiReview, (review) => review.reviewedBy) 
+  @OneToMany(() => KpiReview, (review) => review.reviewedBy)
   kpiReviews: KpiReview[];
 }

@@ -9,6 +9,7 @@ import {
   LessThanOrEqual,
   MoreThanOrEqual,
   Repository,
+  Brackets, // + Import Brackets
   EntityManager,
 } from 'typeorm';
 import { EventEmitter2 } from '@nestjs/event-emitter';
@@ -32,12 +33,17 @@ import {
   ReviewHistoryResponseDto,
   PerformanceObjectiveItemDto,
   EmployeeKpiScoreDto,
+  ObjectiveEvaluationListItemDto, // + Import DTO
+  ObjectiveEvaluationHistoryItemDto, // + Import History DTO
+  SubmitSelfKpiReviewDto, // + Import SubmitSelfKpiReviewDto
 } from './dto/evaluation.dto';
 import { SavePerformanceObjectivesDto } from './dto/save-performance-objectives.dto';
 import { OverallReviewStatus } from '../entities/overall-review.entity';
-import { RejectObjectiveEvaluationDto } from './dto/reject-objective-evaluation.dto';
+// import { RejectObjectiveEvaluationDto } from './dto/reject-objective-evaluation.dto'; // This DTO might be old or replaced
 import { KpiValueStatus } from '../entities/kpi-value.entity';
 import { ObjectiveEvaluationStatus } from '../entities/objective-evaluation-status.enum';
+import { ObjectiveEvaluation } from '../entities/objective-evaluation.entity'; // + Import Entity
+import { ObjectiveEvaluationHistory } from '../entities/objective-evaluation-history.entity'; // + Import History Entity
 
 @Injectable()
 export class EvaluationService {
@@ -56,6 +62,10 @@ export class EvaluationService {
     private readonly kpiReviewRepository: Repository<KpiReview>,
     @InjectRepository(OverallReview)
     private readonly overallReviewRepository: Repository<OverallReview>,
+    @InjectRepository(ObjectiveEvaluation) // + Inject ObjectiveEvaluationRepository
+    private readonly objectiveEvaluationRepository: Repository<ObjectiveEvaluation>,
+    @InjectRepository(ObjectiveEvaluationHistory) // + Inject ObjectiveEvaluationHistoryRepository
+    private readonly objectiveEvaluationHistoryRepository: Repository<ObjectiveEvaluationHistory>,
     private readonly entityManager: EntityManager,
     private readonly eventEmitter: EventEmitter2,
   ) {}
@@ -64,6 +74,15 @@ export class EvaluationService {
     currentUser: Employee,
   ): Promise<ReviewableTargetDto[]> {
     const reviewableTargets: ReviewableTargetDto[] = [];
+
+    // Bổ sung: Nếu là employee thì luôn cho phép review KPI của chính mình
+    if (currentUser.role === 'employee') {
+      reviewableTargets.push({
+        id: currentUser.id,
+        name: `${currentUser.first_name} ${currentUser.last_name}`.trim(),
+        type: 'employee',
+      });
+    }
 
     if (currentUser.role === 'admin') {
       const employees = await this.employeeRepository.find({
@@ -189,82 +208,17 @@ export class EvaluationService {
     const cycles: ReviewCycleDto[] = [];
     const today = new Date();
     const currentYear = today.getFullYear();
-    const currentMonth = today.getMonth();
-    const currentQuarter = Math.floor(currentMonth / 3) + 1;
 
-    cycles.push({
-      id: `${currentYear}-Q${currentQuarter}`,
-      name: `Quý ${currentQuarter} - ${currentYear}`,
-    });
-
-    let prevQYear = currentYear;
-    let prevQuarter = currentQuarter - 1;
-    if (prevQuarter === 0) {
-      prevQuarter = 4;
-      prevQYear--;
+    // Chỉ trả về các năm hiện tại và 2 năm trước đó
+    for (let i = 0; i < 3; i++) {
+      const year = currentYear - i;
+      cycles.push({
+        id: `${year}-Year`,
+        name: `Năm ${year}`,
+      });
     }
-    cycles.push({
-      id: `${prevQYear}-Q${prevQuarter}`,
-      name: `Quý ${prevQuarter} - ${prevQYear}`,
-    });
 
-    let prevPrevQYear = prevQYear;
-    let prevPrevQuarter = prevQuarter - 1;
-    if (prevPrevQuarter === 0) {
-      prevPrevQuarter = 4;
-      prevPrevQYear--;
-    }
-    cycles.push({
-      id: `${prevPrevQYear}-Q${prevPrevQuarter}`,
-      name: `Quý ${prevPrevQuarter} - ${prevPrevQYear}`,
-    });
-
-    cycles.push({ id: `${currentYear}-Year`, name: `Năm ${currentYear}` });
-
-    const previousYearVal = currentYear - 1;
-    cycles.push({
-      id: `${previousYearVal}-Year`,
-      name: `Năm ${previousYearVal}`,
-    });
-
-    cycles.push({
-      id: `${previousYearVal}-Q4`,
-      name: `Quý 4 - ${previousYearVal}`,
-    });
-
-    cycles.push({
-      id: `${previousYearVal}-Q3`,
-      name: `Quý 3 - ${previousYearVal}`,
-    });
-
-    const uniqueCycleMap = new Map<string, ReviewCycleDto>();
-    cycles.forEach((cycle) => {
-      if (!uniqueCycleMap.has(cycle.id)) {
-        uniqueCycleMap.set(cycle.id, cycle);
-      }
-    });
-
-    return Array.from(uniqueCycleMap.values()).sort((a, b) => {
-      const [yearA, periodTypeA] = a.id.split('-');
-      const [yearB, periodTypeB] = b.id.split('-');
-      const numYearA = parseInt(yearA);
-      const numYearB = parseInt(yearB);
-
-      if (numYearA !== numYearB) return numYearB - numYearA;
-
-      const isQ_A = periodTypeA.startsWith('Q');
-      const isQ_B = periodTypeB.startsWith('Q');
-
-      if (isQ_A && !isQ_B) return -1;
-      if (!isQ_A && isQ_B) return 1;
-
-      if (isQ_A && isQ_B) {
-        const qNumA = parseInt(periodTypeA.substring(1));
-        const qNumB = parseInt(periodTypeB.substring(1));
-        return qNumB - qNumA;
-      }
-      return 0;
-    });
+    return cycles;
   }
 
   async getKpisForReview(
@@ -273,16 +227,24 @@ export class EvaluationService {
     targetType: 'employee' | 'section' | 'department',
     cycleId: string,
   ): Promise<KpisForReviewResponseDto> {
-    const reviewableTargetsForCurrentUser =
-      await this.getReviewableTargets(currentUser);
-    const isAllowedToReviewTarget = reviewableTargetsForCurrentUser.some(
-      (rt) => rt.id === targetId && rt.type === targetType,
-    );
-
-    if (!isAllowedToReviewTarget) {
-      throw new UnauthorizedException(
-        'You are not authorized to review KPIs for this target.',
+    // Nếu là employee và target là chính mình thì luôn cho phép
+    if (
+      !(
+        currentUser.role === 'employee' &&
+        targetType === 'employee' &&
+        targetId === currentUser.id
+      )
+    ) {
+      const reviewableTargetsForCurrentUser =
+        await this.getReviewableTargets(currentUser);
+      const isAllowedToReviewTarget = reviewableTargetsForCurrentUser.some(
+        (rt) => rt.id === targetId && rt.type === targetType,
       );
+      if (!isAllowedToReviewTarget) {
+        throw new UnauthorizedException(
+          'You are not authorized to review KPIs for this target.',
+        );
+      }
     }
     let assignments: KPIAssignment[] = [];
 
@@ -665,6 +627,74 @@ export class EvaluationService {
     );
   }
 
+  async submitSelfKpiReview(
+    currentUser: Employee,
+    dto: SubmitSelfKpiReviewDto,
+  ): Promise<EmployeeReviewResponseDto> {
+    // Lấy các assignment hợp lệ cho user trong cycle
+    const { startDate, endDate } = this.getDateRangeFromCycleId(dto.cycleId);
+    if (!startDate || !endDate) {
+      throw new BadRequestException('Invalid review cycle.');
+    }
+    const assignments = await this.assignmentRepository.find({
+      where: {
+        assigned_to_employee: currentUser.id,
+        startDate: LessThanOrEqual(endDate),
+        endDate: MoreThanOrEqual(startDate),
+      },
+      relations: ['reviews'],
+    });
+    const validAssignmentIds = new Set(assignments.map((a) => a.id));
+    await this.kpiReviewRepository.manager.transaction(async (em) => {
+      for (const item of dto.kpiReviews) {
+        if (!validAssignmentIds.has(item.assignmentId)) continue;
+        let review = await em.findOne(KpiReview, {
+          where: {
+            assignment: { id: item.assignmentId },
+            reviewedBy: { id: currentUser.id },
+            cycleId: dto.cycleId,
+          },
+        });
+        if (review) {
+          review.selfScore = item.selfScore;
+          review.selfComment = item.selfComment;
+        } else {
+          review = em.create(KpiReview, {
+            assignment: { id: item.assignmentId },
+            reviewedBy: { id: currentUser.id },
+            cycleId: dto.cycleId,
+            selfScore: item.selfScore,
+            selfComment: item.selfComment,
+          });
+        }
+        await em.save(KpiReview, review);
+      }
+      // Bổ sung: Đảm bảo có OverallReview với status PENDING_REVIEW
+      let overallReview = await em.findOne(OverallReview, {
+        where: {
+          targetId: currentUser.id,
+          targetType: 'employee',
+          cycleId: dto.cycleId,
+        },
+      });
+      if (!overallReview) {
+        overallReview = em.create(OverallReview, {
+          targetId: currentUser.id,
+          targetType: 'employee',
+          cycleId: dto.cycleId,
+          reviewedById: currentUser.id,
+          status: OverallReviewStatus.PENDING_REVIEW,
+        });
+        await em.save(OverallReview, overallReview);
+      } else if (overallReview.status !== OverallReviewStatus.PENDING_REVIEW) {
+        overallReview.status = OverallReviewStatus.PENDING_REVIEW;
+        await em.save(OverallReview, overallReview);
+      }
+    });
+    // Trả về lại dữ liệu review mới nhất cho nhân viên
+    return this.getEmployeeReviewDetails(currentUser, dto.cycleId);
+  }
+
   async completeOverallReview(
     currentUser: Employee,
     completeReviewDto: CompleteReviewDto,
@@ -772,11 +802,71 @@ export class EvaluationService {
     });
 
     if (!overallReviewRecord) {
-      const emptyResponse: EmployeeReviewResponseDto = {
-        kpisReviewedByManager: [],
+      // Nếu chưa có review tổng thể, vẫn trả về danh sách KPI assignment hợp lệ cho nhân viên trong cycle
+      const { startDate, endDate } = this.getDateRangeFromCycleId(cycleId);
+      // Đảm bảo startDate/endDate là Date, không phải null
+      if (!startDate || !endDate) {
+        return {
+          kpisReviewedByManager: [],
+          overallReviewByManager: null,
+          totalWeightedScoreSupervisor: 0,
+        };
+      }
+      const assignments = await this.assignmentRepository.find({
+        where: {
+          assigned_to_employee: employee.id,
+          startDate: LessThanOrEqual(endDate as Date),
+          endDate: MoreThanOrEqual(startDate as Date),
+        },
+        relations: ['kpi', 'kpiValues', 'reviews', 'reviews.reviewedBy'],
+      });
+      const kpisReviewedByManager = assignments.map((assignment) => {
+        // Tìm review self của nhân viên cho assignment này (nếu có)
+        const selfReview = assignment.reviews?.find(
+          (r) => r.reviewedBy?.id === employee.id && r.cycleId === cycleId,
+        );
+        // Lấy actualValue từ kpiValues (giá trị APPROVED gần nhất trong chu kỳ)
+        let actualValue: number | null = null;
+        if (assignment.kpiValues && assignment.kpiValues.length > 0) {
+          const approvedInCycle = assignment.kpiValues.filter(
+            (kv) =>
+              kv.status === KpiValueStatus.APPROVED &&
+              kv.timestamp >= startDate &&
+              kv.timestamp <= endDate,
+          );
+          let filteredKpiValues =
+            approvedInCycle.length > 0
+              ? approvedInCycle
+              : assignment.kpiValues.filter(
+                  (kv) => kv.status === KpiValueStatus.APPROVED,
+                );
+          if (filteredKpiValues.length > 0) {
+            const latest = filteredKpiValues.sort(
+              (a, b) => b.timestamp.getTime() - a.timestamp.getTime(),
+            )[0];
+            actualValue = latest ? latest.value : null;
+          }
+        }
+        return {
+          assignmentId: assignment.id,
+          kpiId: assignment.kpi.id,
+          kpiName: assignment.kpi.name,
+          kpiDescription: assignment.kpi.description,
+          targetValue: assignment.targetValue,
+          actualValue: actualValue,
+          unit: assignment.kpi.unit,
+          weight: assignment.weight,
+          selfScore: selfReview?.selfScore ?? null,
+          selfComment: selfReview?.selfComment ?? null,
+          existingManagerComment: null,
+          existingManagerScore: null,
+        };
+      });
+      return {
+        kpisReviewedByManager,
         overallReviewByManager: null,
+        totalWeightedScoreSupervisor: 0,
       };
-      return emptyResponse;
     }
 
     const managerWhoReviewedId = overallReviewRecord.reviewedById;
@@ -1101,5 +1191,317 @@ export class EvaluationService {
       });
     }
     return results;
+  }
+
+  async getPendingObjectiveEvaluationsForApprover(
+    currentUser: Employee,
+  ): Promise<ObjectiveEvaluationListItemDto[]> {
+    const queryBuilder = this.objectiveEvaluationRepository
+      .createQueryBuilder('objEval')
+      .leftJoinAndSelect('objEval.employee', 'employee')
+      .leftJoinAndSelect('employee.department', 'empDepartment')
+      .leftJoinAndSelect('employee.section', 'empSection')
+      .leftJoinAndSelect('objEval.evaluator', 'evaluator')
+      .orderBy('objEval.updated_at', 'DESC');
+
+    const conditions: Brackets[] = [];
+
+    if (currentUser.role === 'admin') {
+      conditions.push(
+        new Brackets((qb) => {
+          qb.where('objEval.status = :statusManager', {
+            statusManager: ObjectiveEvaluationStatus.PENDING_MANAGER_APPROVAL,
+          });
+        }),
+      );
+    } else if (currentUser.role === 'manager') {
+      conditions.push(
+        new Brackets((qb) => {
+          if (currentUser.departmentId) {
+            qb.orWhere(
+              '(objEval.status = :statusDept AND empDepartment.id = :deptId)',
+              {
+                statusDept: ObjectiveEvaluationStatus.PENDING_DEPT_APPROVAL,
+                deptId: currentUser.departmentId,
+              },
+            );
+          }
+          if (currentUser.sectionId) {
+            qb.orWhere(
+              '(objEval.status = :statusSection AND empSection.id = :sectionId)',
+              {
+                statusSection:
+                  ObjectiveEvaluationStatus.PENDING_SECTION_APPROVAL,
+                sectionId: currentUser.sectionId,
+              },
+            );
+          }
+          // Manager can also see PENDING_MANAGER_APPROVAL if they are not the original evaluator
+          qb.orWhere(
+            'objEval.status = :statusManager AND objEval.evaluatorId != :currentUserId',
+            {
+              statusManager: ObjectiveEvaluationStatus.PENDING_MANAGER_APPROVAL,
+              currentUserId: currentUser.id,
+            },
+          );
+        }),
+      );
+    } else if (currentUser.role === 'department' && currentUser.departmentId) {
+      conditions.push(
+        new Brackets((qb) => {
+          qb.where(
+            'objEval.status = :statusDept AND empDepartment.id = :deptId',
+            {
+              statusDept: ObjectiveEvaluationStatus.PENDING_DEPT_APPROVAL,
+              deptId: currentUser.departmentId,
+            },
+          );
+        }),
+      );
+    } else if (currentUser.role === 'section' && currentUser.sectionId) {
+      conditions.push(
+        new Brackets((qb) => {
+          qb.where(
+            'objEval.status = :statusSection AND empSection.id = :sectionId',
+            {
+              statusSection: ObjectiveEvaluationStatus.PENDING_SECTION_APPROVAL,
+              sectionId: currentUser.sectionId,
+            },
+          );
+        }),
+      );
+    }
+
+    if (conditions.length > 0) {
+      queryBuilder.andWhere(
+        new Brackets((qb) => {
+          conditions.forEach((condition) => qb.orWhere(condition));
+        }),
+      );
+    } else {
+      // If no conditions match (e.g., a role without approval duties), return empty
+      return [];
+    }
+
+    const evaluations = await queryBuilder.getMany();
+
+    return evaluations.map((e) => ({
+      id: e.id,
+      employee: e.employee
+        ? {
+            id: e.employee.id,
+            first_name: e.employee.first_name,
+            last_name: e.employee.last_name,
+            username: e.employee.username,
+          }
+        : null,
+      evaluator: e.evaluator
+        ? {
+            id: e.evaluator.id,
+            first_name: e.evaluator.first_name,
+            last_name: e.evaluator.last_name,
+            username: e.evaluator.username,
+          }
+        : null,
+      cycleId: e.cycleId,
+      totalWeightedScoreSupervisor: e.totalWeightedScoreSupervisor
+        ? parseFloat(e.totalWeightedScoreSupervisor.toString())
+        : undefined,
+      averageScoreSupervisor: e.averageScoreSupervisor
+        ? parseFloat(e.averageScoreSupervisor.toString())
+        : undefined,
+      status: e.status,
+      updated_at: e.updated_at,
+    }));
+  }
+
+  private async updateObjectiveEvaluationStatus(
+    evaluationId: number,
+    currentUser: Employee,
+    newStatus: ObjectiveEvaluationStatus,
+    rejectionReason: string | undefined,
+    oldStatusCheck: ObjectiveEvaluationStatus,
+  ): Promise<ObjectiveEvaluation> {
+    const evaluation = await this.objectiveEvaluationRepository.findOne({
+      where: { id: evaluationId },
+      relations: [
+        'employee',
+        'employee.department',
+        'employee.section',
+        'evaluator',
+      ],
+    });
+
+    if (!evaluation) {
+      throw new NotFoundException(
+        `Objective evaluation with ID ${evaluationId} not found.`,
+      );
+    }
+    if (evaluation.status !== oldStatusCheck) {
+      throw new BadRequestException(
+        `Evaluation is not in ${oldStatusCheck} status. Current status: ${evaluation.status}`,
+      );
+    }
+
+    const employee = evaluation.employee;
+    let canApproveOrReject = false;
+    if (
+      currentUser.role === 'admin' &&
+      oldStatusCheck === ObjectiveEvaluationStatus.PENDING_MANAGER_APPROVAL
+    )
+      canApproveOrReject = true;
+    if (currentUser.role === 'manager') {
+      if (
+        oldStatusCheck === ObjectiveEvaluationStatus.PENDING_DEPT_APPROVAL &&
+        employee?.department?.id === currentUser.departmentId
+      )
+        canApproveOrReject = true;
+      if (
+        oldStatusCheck === ObjectiveEvaluationStatus.PENDING_SECTION_APPROVAL &&
+        employee?.section?.id === currentUser.sectionId
+      )
+        canApproveOrReject = true;
+      if (oldStatusCheck === ObjectiveEvaluationStatus.PENDING_MANAGER_APPROVAL)
+        canApproveOrReject = true; // Manager can be final approver
+    }
+    if (
+      currentUser.role === 'department' &&
+      oldStatusCheck === ObjectiveEvaluationStatus.PENDING_DEPT_APPROVAL &&
+      employee?.department?.id === currentUser.departmentId
+    )
+      canApproveOrReject = true;
+    if (
+      currentUser.role === 'section' &&
+      oldStatusCheck === ObjectiveEvaluationStatus.PENDING_SECTION_APPROVAL &&
+      employee?.section?.id === currentUser.sectionId
+    )
+      canApproveOrReject = true;
+
+    if (!canApproveOrReject) {
+      throw new UnauthorizedException(
+        'You do not have permission to perform this action on this evaluation.',
+      );
+    }
+
+    evaluation.status = newStatus;
+    if (rejectionReason) {
+      evaluation.currentRejectionReason = rejectionReason;
+    }
+    const savedEvaluation =
+      await this.objectiveEvaluationRepository.save(evaluation);
+
+    // Log history
+    await this.objectiveEvaluationHistoryRepository.save({
+      evaluationId: savedEvaluation.id,
+      oldStatus: oldStatusCheck,
+      newStatus: newStatus,
+      reason: rejectionReason || null,
+      changedById: currentUser.id,
+    });
+    await this.objectiveEvaluationRepository.save(evaluation);
+    // TODO: Emit event for notification
+    this.eventEmitter.emit('objective_evaluation.status_changed', {
+      evaluation: savedEvaluation,
+      actor: currentUser,
+      previousStatus: oldStatusCheck,
+    });
+    return savedEvaluation;
+  }
+
+  async approveObjectiveEvaluationByLevel(
+    evaluationId: number,
+    currentUser: Employee,
+    level: 'section' | 'dept' | 'manager',
+  ): Promise<ObjectiveEvaluation> {
+    let oldStatus: ObjectiveEvaluationStatus;
+    let newStatus: ObjectiveEvaluationStatus;
+
+    switch (level) {
+      case 'section':
+        oldStatus = ObjectiveEvaluationStatus.PENDING_SECTION_APPROVAL;
+        newStatus = ObjectiveEvaluationStatus.PENDING_DEPT_APPROVAL;
+        break;
+      case 'dept':
+        oldStatus = ObjectiveEvaluationStatus.PENDING_DEPT_APPROVAL;
+        newStatus = ObjectiveEvaluationStatus.PENDING_MANAGER_APPROVAL;
+        break;
+      case 'manager':
+        oldStatus = ObjectiveEvaluationStatus.PENDING_MANAGER_APPROVAL;
+        newStatus = ObjectiveEvaluationStatus.APPROVED;
+        break;
+      default:
+        throw new BadRequestException('Invalid approval level');
+    }
+    return this.updateObjectiveEvaluationStatus(
+      evaluationId,
+      currentUser,
+      newStatus,
+      undefined,
+      oldStatus,
+    );
+  }
+
+  async rejectObjectiveEvaluationByLevel(
+    evaluationId: number,
+    currentUser: Employee,
+    reason: string,
+    level: 'section' | 'dept' | 'manager',
+  ): Promise<ObjectiveEvaluation> {
+    let oldStatus: ObjectiveEvaluationStatus;
+    let newStatus: ObjectiveEvaluationStatus;
+    switch (level) {
+      case 'section':
+        oldStatus = ObjectiveEvaluationStatus.PENDING_SECTION_APPROVAL;
+        newStatus = ObjectiveEvaluationStatus.REJECTED_BY_SECTION;
+        break;
+      case 'dept':
+        oldStatus = ObjectiveEvaluationStatus.PENDING_DEPT_APPROVAL;
+        newStatus = ObjectiveEvaluationStatus.REJECTED_BY_DEPT;
+        break;
+      case 'manager':
+        oldStatus = ObjectiveEvaluationStatus.PENDING_MANAGER_APPROVAL;
+        newStatus = ObjectiveEvaluationStatus.REJECTED_BY_MANAGER;
+        break;
+      default:
+        throw new BadRequestException('Invalid rejection level');
+    }
+    return this.updateObjectiveEvaluationStatus(
+      evaluationId,
+      currentUser,
+      newStatus,
+      reason,
+      oldStatus,
+    );
+  }
+
+  async getObjectiveEvaluationHistory(
+    evaluationId: number,
+    currentUser: Employee, // Assuming only users with approval roles or the employee themselves can view history
+  ): Promise<ObjectiveEvaluationHistoryItemDto[]> {
+    // TODO: Implement permission check here based on currentUser role and the evaluation's employee/department/section
+    // For now, assuming anyone with access to the list can view history.
+    // A more robust check would involve loading the evaluation and checking if currentUser has scope over the employee.
+
+    const history = await this.objectiveEvaluationHistoryRepository.find({
+      where: { evaluationId: evaluationId },
+      relations: ['changedBy'],
+      order: { timestamp: 'ASC' },
+    });
+
+    return history.map((item) => ({
+      id: item.id,
+      oldStatus: item.oldStatus,
+      newStatus: item.newStatus,
+      reason: item.reason,
+      changedBy: item.changedBy
+        ? {
+            id: item.changedBy.id,
+            first_name: item.changedBy.first_name,
+            last_name: item.changedBy.last_name,
+            username: item.changedBy.username,
+          }
+        : null,
+      timestamp: item.timestamp,
+    }));
   }
 }

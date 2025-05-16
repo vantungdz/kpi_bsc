@@ -31,6 +31,12 @@ export class KpiReview {
   @Column({ type: 'numeric', nullable: true })
   managerScore: number | null;
 
+  @Column({ type: 'text', nullable: true })
+  selfComment: string | null;
+
+  @Column({ type: 'numeric', nullable: true })
+  selfScore: number | null;
+
   @Column()
   reviewedById: number;
 

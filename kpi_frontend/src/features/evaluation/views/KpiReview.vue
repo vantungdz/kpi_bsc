@@ -169,27 +169,69 @@
                 </a-col>
               </a-row>
 
-              <a-form-item
-                :label="`${$t('managerCommentForKpi')} ${kpiItem.kpiName}`"
-                :name="['kpiItem', index, 'managerComment']"
-                style="margin-top: 10px"
-              >
-                <a-textarea
-                  v-model:value="kpiItem.managerComment"
-                  :placeholder="$t('managerCommentPlaceholder')"
-                  :rows="3"
-                  :disabled="
-                    isLoadingKpis || overallReview.status === 'COMPLETED'
-                  "
-                />
-              </a-form-item>
+              <!-- Nếu là nhân viên: nhập selfComment/selfScore -->
+              <template v-if="currentUser.role === 'employee'">
+                <a-form-item
+                  :label="`${$t('selfCommentForKpi')} ${kpiItem.kpiName}`"
+                  :name="['kpiItem', index, 'selfComment']"
+                  style="margin-top: 10px"
+                >
+                  <a-textarea
+                    v-model:value="kpiItem.selfComment"
+                    :placeholder="$t('selfCommentPlaceholder')"
+                    :rows="3"
+                    :disabled="
+                      isLoadingKpis || overallReview.status === 'COMPLETED'
+                    "
+                  />
+                </a-form-item>
+                <a-form-item
+                  :label="`${$t('selfScoreForKpi')} ${kpiItem.kpiName}`"
+                  :name="['kpiItem', index, 'selfScore']"
+                >
+                  <a-rate v-model:value="kpiItem.selfScore" />
+                </a-form-item>
+              </template>
 
-              <a-form-item
-                :label="`${$t('managerScoreForKpi')} ${kpiItem.kpiName}`"
-                :name="['kpiItem', index, 'managerScore']"
-              >
-                <a-rate v-model:value="kpiItem.managerScore" />
-              </a-form-item>
+              <!-- Nếu là quản lý: chỉ xem self, nhập manager -->
+              <template v-else>
+                <a-form-item
+                  :label="`${$t('selfCommentForKpi')} ${kpiItem.kpiName}`"
+                  :name="['kpiItem', index, 'selfComment']"
+                  style="margin-top: 10px"
+                >
+                  <a-textarea
+                    v-model:value="kpiItem.selfComment"
+                    :rows="3"
+                    disabled
+                  />
+                </a-form-item>
+                <a-form-item
+                  :label="`${$t('selfScoreForKpi')} ${kpiItem.kpiName}`"
+                  :name="['kpiItem', index, 'selfScore']"
+                >
+                  <a-rate v-model:value="kpiItem.selfScore" disabled />
+                </a-form-item>
+                <a-form-item
+                  :label="`${$t('managerCommentForKpi')} ${kpiItem.kpiName}`"
+                  :name="['kpiItem', index, 'managerComment']"
+                >
+                  <a-textarea
+                    v-model:value="kpiItem.managerComment"
+                    :placeholder="$t('managerCommentPlaceholder')"
+                    :rows="3"
+                    :disabled="
+                      isLoadingKpis || overallReview.status === 'COMPLETED'
+                    "
+                  />
+                </a-form-item>
+                <a-form-item
+                  :label="`${$t('managerScoreForKpi')} ${kpiItem.kpiName}`"
+                  :name="['kpiItem', index, 'managerScore']"
+                >
+                  <a-rate v-model:value="kpiItem.managerScore" />
+                </a-form-item>
+              </template>
             </div>
 
             <a-divider />
