@@ -280,14 +280,6 @@
                 "
               />
             </a-form-item>
-
-            <a-form-item
-              :label="$t('overallManagerScore')"
-              name="overallManagerScore"
-            >
-              <a-rate v-model:value="overallReview.managerScore" />
-            </a-form-item>
-
             <a-form-item>
               <a-button
                 type="primary"
@@ -316,6 +308,47 @@
               </a-button>
             </a-form-item>
           </a-form>
+
+          <!-- Multi-level review action buttons -->
+          <div v-if="overallReview.status && overallReviewId">
+            <a-divider />
+            <div style="margin-bottom: 16px">
+              <template v-if="overallReview.status === 'SECTION_REVIEW_PENDING' && (currentUser.role === 'section' || currentUser.role === 'admin' || currentUser.role === 'manager')">
+                <a-button type="primary" :loading="isProcessingOverallReview" @click="approveSectionReview(overallReviewId)">
+                  {{ $t('approveSection') }}
+                </a-button>
+                <a-button danger :loading="isProcessingOverallReview" @click="showRejectSectionModal = true" style="margin-left: 8px">
+                  {{ $t('rejectSection') }}
+                </a-button>
+              </template>
+              <template v-if="overallReview.status === 'DEPARTMENT_REVIEW_PENDING' && (currentUser.role === 'department' || currentUser.role === 'admin' || currentUser.role === 'manager')">
+                <a-button type="primary" :loading="isProcessingOverallReview" @click="approveDeptReview(overallReviewId)">
+                  {{ $t('approveDept') }}
+                </a-button>
+                <a-button danger :loading="isProcessingOverallReview" @click="showRejectDeptModal = true" style="margin-left: 8px">
+                  {{ $t('rejectDept') }}
+                </a-button>
+              </template>
+              <template v-if="overallReview.status === 'MANAGER_REVIEW_PENDING' && (currentUser.role === 'manager' || currentUser.role === 'admin')">
+                <a-button type="primary" :loading="isProcessingOverallReview" @click="approveManagerReview(overallReviewId)">
+                  {{ $t('approveManager') }}
+                </a-button>
+                <a-button danger :loading="isProcessingOverallReview" @click="showRejectManagerModal = true" style="margin-left: 8px">
+                  {{ $t('rejectManager') }}
+                </a-button>
+              </template>
+            </div>
+          </div>
+          <!-- Reject modals for each level -->
+          <a-modal v-model:visible="showRejectSectionModal" :title="$t('rejectSection')" @ok="handleRejectSection" @cancel="showRejectSectionModal = false" :confirmLoading="isProcessingOverallReview">
+            <a-textarea v-model:value="rejectSectionComment" :placeholder="$t('enterRejectReason')" rows="4" />
+          </a-modal>
+          <a-modal v-model:visible="showRejectDeptModal" :title="$t('rejectDept')" @ok="handleRejectDept" @cancel="showRejectDeptModal = false" :confirmLoading="isProcessingOverallReview">
+            <a-textarea v-model:value="rejectDeptComment" :placeholder="$t('enterRejectReason')" rows="4" />
+          </a-modal>
+          <a-modal v-model:visible="showRejectManagerModal" :title="$t('rejectManager')" @ok="handleRejectManager" @cancel="showRejectManagerModal = false" :confirmLoading="isProcessingOverallReview">
+            <a-textarea v-model:value="rejectManagerComment" :placeholder="$t('enterRejectReason')" rows="4" />
+          </a-modal>
         </div>
       </a-spin>
     </a-card>
@@ -348,6 +381,8 @@ import {
   Breadcrumb as ABreadcrumb,
   Rate as ARate,
   BreadcrumbItem as ABreadcrumbItem,
+  Modal as AModal,
+  Textarea as ATextarea,
 } from "ant-design-vue";
 import { useI18n } from "vue-i18n";
 
@@ -431,6 +466,15 @@ const isCompletingReview = computed(
   () => store.getters["kpiEvaluations/isCompletingKpiReview"]
 );
 
+const showRejectSectionModal = ref(false);
+const showRejectDeptModal = ref(false);
+const showRejectManagerModal = ref(false);
+const rejectSectionComment = ref("");
+const rejectDeptComment = ref("");
+const rejectManagerComment = ref("");
+
+const overallReviewId = computed(() => existingOverallReviewFromStore.value && existingOverallReviewFromStore.value.id ? existingOverallReviewFromStore.value.id : null);
+
 watch(
   kpisFromStore,
   (newKpis) => {
@@ -501,14 +545,19 @@ const pageTitle = computed(() => {
 
 const reviewStatusText = computed(() => {
   const statusMap = {
-    PENDING_REVIEW: $t("pendingReview"),
-    MANAGER_REVIEWED: $t("managerReviewedStatus", "Manager Reviewed"),
-    EMPLOYEE_FEEDBACK_PENDING: $t(
-      "employeeFeedbackPendingStatus",
-      "Awaiting Employee Feedback"
-    ),
-    EMPLOYEE_RESPONDED: $t("employeeRespondedStatus", "Employee Responded"),
-    COMPLETED: $t("completedStatus", "Completed"),
+    DRAFT: $t("draft", "Nháp"),
+    PENDING_REVIEW: $t("pendingReview", "Chờ review"),
+    SECTION_REVIEW_PENDING: $t("sectionReviewPending", "Chờ trưởng bộ phận review"),
+    SECTION_REVIEWED: $t("sectionReviewed", "Trưởng bộ phận đã review"),
+    SECTION_REVISE_REQUIRED: $t("sectionReviseRequired", "Trưởng bộ phận yêu cầu chỉnh sửa"),
+    DEPARTMENT_REVIEW_PENDING: $t("departmentReviewPending", "Chờ trưởng phòng review"),
+    DEPARTMENT_REVIEWED: $t("departmentReviewed", "Trưởng phòng đã review"),
+    DEPARTMENT_REVISE_REQUIRED: $t("departmentReviseRequired", "Trưởng phòng yêu cầu chỉnh sửa"),
+    MANAGER_REVIEW_PENDING: $t("managerReviewPending", "Chờ quản lý review"),
+    MANAGER_REVIEWED: $t("managerReviewedStatus", "Quản lý đã review"),
+    EMPLOYEE_FEEDBACK_PENDING: $t("employeeFeedbackPendingStatus", "Chờ bạn phản hồi"),
+    EMPLOYEE_RESPONDED: $t("employeeRespondedStatus", "Bạn đã phản hồi"),
+    COMPLETED: $t("completedStatus", "Hoàn tất"),
   };
   return (
     statusMap[overallReview.value.status] ||
@@ -789,6 +838,94 @@ const viewTargetReviewHistory = () => {
 const formatDate = (dateString) => {
   if (!dateString) return "";
   return dayjs(dateString).format("DD/MM/YYYY HH:mm");
+};
+
+// Multi-level review actions for section/department/manager
+const isProcessingOverallReview = computed(() => store.getters["kpiEvaluations/isProcessingObjectiveEvalApproval"]);
+
+// Example: Approve/Reject at Section Level
+const approveSectionReview = async (reviewId) => {
+  try {
+    await store.dispatch("kpiEvaluations/approveOverallReviewSection", { reviewId });
+    notification.success({ message: $t("approveSectionSuccess") });
+    fetchKpisForReview(); // Refresh data
+  } catch (error) {
+    notification.error({ message: $t("approveSectionError"), description: error.message });
+  }
+};
+const rejectSectionReview = async (reviewId, comment) => {
+  try {
+    await store.dispatch("kpiEvaluations/rejectOverallReviewSection", { reviewId, comment });
+    notification.success({ message: $t("rejectSectionSuccess") });
+    fetchKpisForReview();
+  } catch (error) {
+    notification.error({ message: $t("rejectSectionError"), description: error.message });
+  }
+};
+// Tương tự cho approve/reject department, manager
+const approveDeptReview = async (reviewId) => {
+  try {
+    await store.dispatch("kpiEvaluations/approveOverallReviewDept", { reviewId });
+    notification.success({ message: $t("approveDeptSuccess") });
+    fetchKpisForReview();
+  } catch (error) {
+    notification.error({ message: $t("approveDeptError"), description: error.message });
+  }
+};
+const rejectDeptReview = async (reviewId, comment) => {
+  try {
+    await store.dispatch("kpiEvaluations/rejectOverallReviewDept", { reviewId, comment });
+    notification.success({ message: $t("rejectDeptSuccess") });
+    fetchKpisForReview();
+  } catch (error) {
+    notification.error({ message: $t("rejectDeptError"), description: error.message });
+  }
+};
+const approveManagerReview = async (reviewId) => {
+  try {
+    await store.dispatch("kpiEvaluations/approveOverallReviewManager", { reviewId });
+    notification.success({ message: $t("approveManagerSuccess") });
+    fetchKpisForReview();
+  } catch (error) {
+    notification.error({ message: $t("approveManagerError"), description: error.message });
+  }
+};
+const rejectManagerReview = async (reviewId, comment) => {
+  try {
+    await store.dispatch("kpiEvaluations/rejectOverallReviewManager", { reviewId, comment });
+    notification.success({ message: $t("rejectManagerSuccess") });
+    fetchKpisForReview();
+  } catch (error) {
+    notification.error({ message: $t("rejectManagerError"), description: error.message });
+  }
+};
+
+const handleRejectSection = async () => {
+  if (!rejectSectionComment.value.trim()) {
+    notification.error({ message: $t('error'), description: $t('enterRejectReason') });
+    return;
+  }
+  await rejectSectionReview(overallReviewId.value, rejectSectionComment.value);
+  showRejectSectionModal.value = false;
+  rejectSectionComment.value = "";
+};
+const handleRejectDept = async () => {
+  if (!rejectDeptComment.value.trim()) {
+    notification.error({ message: $t('error'), description: $t('enterRejectReason') });
+    return;
+  }
+  await rejectDeptReview(overallReviewId.value, rejectDeptComment.value);
+  showRejectDeptModal.value = false;
+  rejectDeptComment.value = "";
+};
+const handleRejectManager = async () => {
+  if (!rejectManagerComment.value.trim()) {
+    notification.error({ message: $t('error'), description: $t('enterRejectReason') });
+    return;
+  }
+  await rejectManagerReview(overallReviewId.value, rejectManagerComment.value);
+  showRejectManagerModal.value = false;
+  rejectManagerComment.value = "";
 };
 
 onMounted(() => {

@@ -11,6 +11,7 @@ import {
   Repository,
   Brackets, // + Import Brackets
   EntityManager,
+  In,
 } from 'typeorm';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Employee } from '../entities/employee.entity';
@@ -38,7 +39,7 @@ import {
   SubmitSelfKpiReviewDto, // + Import SubmitSelfKpiReviewDto
 } from './dto/evaluation.dto';
 import { SavePerformanceObjectivesDto } from './dto/save-performance-objectives.dto';
-import { OverallReviewStatus } from '../entities/overall-review.entity';
+import { OverallReviewStatus } from '../entities/objective-evaluation-status.enum';
 // import { RejectObjectiveEvaluationDto } from './dto/reject-objective-evaluation.dto'; // This DTO might be old or replaced
 import { KpiValueStatus } from '../entities/kpi-value.entity';
 import { ObjectiveEvaluationStatus } from '../entities/objective-evaluation-status.enum';
@@ -75,14 +76,12 @@ export class EvaluationService {
   ): Promise<ReviewableTargetDto[]> {
     const reviewableTargets: ReviewableTargetDto[] = [];
 
-    // Bổ sung: Nếu là employee thì luôn cho phép review KPI của chính mình
-    if (currentUser.role === 'employee') {
-      reviewableTargets.push({
-        id: currentUser.id,
-        name: `${currentUser.first_name} ${currentUser.last_name}`.trim(),
-        type: 'employee',
-      });
-    }
+    // Cho phép bất kỳ ai cũng có thể review KPI của chính mình
+    reviewableTargets.push({
+      id: currentUser.id,
+      name: `${currentUser.first_name} ${currentUser.last_name}`.trim(),
+      type: 'employee',
+    });
 
     if (currentUser.role === 'admin') {
       const employees = await this.employeeRepository.find({
@@ -227,25 +226,7 @@ export class EvaluationService {
     targetType: 'employee' | 'section' | 'department',
     cycleId: string,
   ): Promise<KpisForReviewResponseDto> {
-    // Nếu là employee và target là chính mình thì luôn cho phép
-    if (
-      !(
-        currentUser.role === 'employee' &&
-        targetType === 'employee' &&
-        targetId === currentUser.id
-      )
-    ) {
-      const reviewableTargetsForCurrentUser =
-        await this.getReviewableTargets(currentUser);
-      const isAllowedToReviewTarget = reviewableTargetsForCurrentUser.some(
-        (rt) => rt.id === targetId && rt.type === targetType,
-      );
-      if (!isAllowedToReviewTarget) {
-        throw new UnauthorizedException(
-          'You are not authorized to review KPIs for this target.',
-        );
-      }
-    }
+    // Nếu là tự review bản thân thì luôn cho phép (KHÔNG kiểm tra role/quyền)
     let assignments: KPIAssignment[] = [];
 
     const { startDate, endDate } = this.getDateRangeFromCycleId(cycleId);
@@ -331,6 +312,21 @@ export class EvaluationService {
           review.cycleId === cycleId,
       );
 
+      // Luôn tìm self review của nhân viên được giao KPI này (không phụ thuộc currentUser hay targetType)
+      let selfScoreInner: number | null = null;
+      let selfCommentInner: string | null = null;
+      const assignedEmployeeId = assignment.assigned_to_employee;
+      if (assignedEmployeeId) {
+        const selfReview = assignment.reviews?.find(
+          (review) =>
+            review.reviewedBy?.id === assignedEmployeeId &&
+            review.cycleId === cycleId,
+        );
+
+        selfScoreInner = selfReview?.selfScore ?? null;
+        selfCommentInner = selfReview?.selfComment ?? null;
+      }
+
       kpisToReview.push({
         assignmentId: assignment.id,
         kpiId: assignment.kpi.id,
@@ -346,8 +342,61 @@ export class EvaluationService {
         existingManagerScore: existingReview
           ? existingReview.managerScore
           : null,
+        selfScore: selfScoreInner,
+        selfComment: selfCommentInner,
       });
     }
+
+    console.log('kpisToReview 1 final', kpisToReview);
+
+    // Sau khi tạo kpisToReview xong, nếu là tự xem KPI của mình thì bổ sung selfScore/selfComment
+    if (
+      targetType === 'employee' &&
+      targetId === currentUser.id &&
+      kpisToReview.length > 0
+    ) {
+      const assignmentIds = kpisToReview.map((k) => k.assignmentId);
+      const selfReviews = await this.kpiReviewRepository.find({
+        where: {
+          assignment: { id: In(assignmentIds) },
+          reviewedBy: { id: currentUser.id },
+          cycleId: cycleId,
+        },
+      });
+      const selfReviewMap = new Map<
+        number,
+        { selfScore: number | null; selfComment: string | null }
+      >();
+      selfReviews.forEach((r) => {
+        if (r.assignment && typeof r.assignment.id === 'number') {
+          selfReviewMap.set(r.assignment.id, {
+            selfScore: r.selfScore,
+            selfComment: r.selfComment,
+          });
+        }
+      });
+      for (const kpi of kpisToReview) {
+        // Chỉ ghi đè selfScore/selfComment nếu selfReviewMap có dữ liệu thực sự (không phải undefined/null)
+        const selfReview = selfReviewMap.get(kpi.assignmentId);
+        if (selfReview) {
+          if (
+            selfReview.selfScore !== undefined &&
+            selfReview.selfScore !== null
+          ) {
+            kpi.selfScore = selfReview.selfScore;
+          }
+          if (
+            selfReview.selfComment !== undefined &&
+            selfReview.selfComment !== null
+          ) {
+            kpi.selfComment = selfReview.selfComment;
+          }
+        }
+        // Nếu không có selfReviewMap thì giữ nguyên giá trị đã lấy từ assignment.reviews
+      }
+    }
+
+    console.log('kpisToReview 2 final', kpisToReview);
 
     let totalWeightedScoreSupervisor = 0;
     if (kpisToReview && Array.isArray(kpisToReview)) {
@@ -370,20 +419,30 @@ export class EvaluationService {
         targetId: targetId,
         targetType: targetType,
         cycleId: cycleId,
-        reviewedById: currentUser.id,
+        reviewedById: currentUser.id, // Ensure reviewer-specific record
       },
     });
 
     if (overallReviewRecord) {
       existingOverallReviewData = {
         overallComment: overallReviewRecord.overallComment,
-        overallScore: overallReviewRecord.overallScore,
         status: overallReviewRecord.status,
         employeeComment: overallReviewRecord.employeeComment,
         employeeFeedbackDate: overallReviewRecord.employeeFeedbackDate,
         totalWeightedScoreSupervisor,
       };
+    } else {
+      // Nếu chưa có overallReviewRecord, trả về status PENDING_REVIEW
+      existingOverallReviewData = {
+        overallComment: null,
+        status: OverallReviewStatus.PENDING_REVIEW,
+        employeeComment: null,
+        employeeFeedbackDate: null,
+        totalWeightedScoreSupervisor,
+      };
     }
+
+    console.log('kpisToReview 3 final', kpisToReview);
 
     return {
       kpisToReview: kpisToReview,
@@ -527,10 +586,7 @@ export class EvaluationService {
           await transactionalEntityManager.save(KpiReview, reviewRecord);
         }
 
-        if (
-          reviewData.overallComment !== undefined ||
-          reviewData.overallScore !== undefined
-        ) {
+        if (reviewData.overallComment !== undefined) {
           let totalWeightedScore = 0;
           const assignments = await transactionalEntityManager.find(
             KPIAssignment,
@@ -573,7 +629,6 @@ export class EvaluationService {
               reviewData.overallComment ?? null;
             overallReviewRecord.status =
               OverallReviewStatus.EMPLOYEE_FEEDBACK_PENDING;
-            overallReviewRecord.overallScore = reviewData.overallScore ?? null;
             overallReviewRecord.totalWeightedScore =
               totalWeightedScore !== null
                 ? totalWeightedScore.toFixed(2)
@@ -587,7 +642,6 @@ export class EvaluationService {
                 cycleId: reviewData.cycleId,
                 reviewedById: currentUser.id,
                 overallComment: reviewData.overallComment ?? null,
-                overallScore: reviewData.overallScore ?? null,
                 status: OverallReviewStatus.EMPLOYEE_FEEDBACK_PENDING,
                 totalWeightedScore:
                   totalWeightedScore !== null
@@ -669,7 +723,7 @@ export class EvaluationService {
         }
         await em.save(KpiReview, review);
       }
-      // Bổ sung: Đảm bảo có OverallReview với status PENDING_REVIEW
+      // Bổ sung: Đảm bảo có OverallReview với status DRAFT khi khởi tạo lần đầu
       let overallReview = await em.findOne(OverallReview, {
         where: {
           targetId: currentUser.id,
@@ -683,10 +737,12 @@ export class EvaluationService {
           targetType: 'employee',
           cycleId: dto.cycleId,
           reviewedById: currentUser.id,
-          status: OverallReviewStatus.PENDING_REVIEW,
+          status: OverallReviewStatus.DRAFT,
         });
         await em.save(OverallReview, overallReview);
-      } else if (overallReview.status !== OverallReviewStatus.PENDING_REVIEW) {
+      }
+      // Khi submit self review, nếu đang là DRAFT thì chuyển sang PENDING_REVIEW
+      if (overallReview.status === OverallReviewStatus.DRAFT) {
         overallReview.status = OverallReviewStatus.PENDING_REVIEW;
         await em.save(OverallReview, overallReview);
       }
@@ -808,7 +864,13 @@ export class EvaluationService {
       if (!startDate || !endDate) {
         return {
           kpisReviewedByManager: [],
-          overallReviewByManager: null,
+          overallReviewByManager: {
+            overallComment: null,
+            status: OverallReviewStatus.PENDING_REVIEW,
+            employeeComment: null,
+            employeeFeedbackDate: null,
+            totalWeightedScoreSupervisor: 0,
+          },
           totalWeightedScoreSupervisor: 0,
         };
       }
@@ -820,75 +882,72 @@ export class EvaluationService {
         },
         relations: ['kpi', 'kpiValues', 'reviews', 'reviews.reviewedBy'],
       });
-      const kpisReviewedByManager = assignments.map((assignment) => {
-        // Tìm review self của nhân viên cho assignment này (nếu có)
-        const selfReview = assignment.reviews?.find(
-          (r) => r.reviewedBy?.id === employee.id && r.cycleId === cycleId,
-        );
-        // Lấy actualValue từ kpiValues (giá trị APPROVED gần nhất trong chu kỳ)
-        let actualValue: number | null = null;
-        if (assignment.kpiValues && assignment.kpiValues.length > 0) {
-          const approvedInCycle = assignment.kpiValues.filter(
-            (kv) =>
-              kv.status === KpiValueStatus.APPROVED &&
-              kv.timestamp >= startDate &&
-              kv.timestamp <= endDate,
+      const kpisReviewedByManager = (assignments || [])
+        .filter((assignment) => assignment.kpi)
+        .map((assignment) => {
+          // Tìm review self của nhân viên cho assignment này (nếu có)
+          const selfReview = assignment.reviews?.find(
+            (r) => r.reviewedBy?.id === employee.id && r.cycleId === cycleId,
           );
-          let filteredKpiValues =
-            approvedInCycle.length > 0
-              ? approvedInCycle
-              : assignment.kpiValues.filter(
-                  (kv) => kv.status === KpiValueStatus.APPROVED,
-                );
-          if (filteredKpiValues.length > 0) {
-            const latest = filteredKpiValues.sort(
-              (a, b) => b.timestamp.getTime() - a.timestamp.getTime(),
-            )[0];
-            actualValue = latest ? latest.value : null;
+          // Lấy actualValue từ kpiValues (giá trị APPROVED gần nhất trong chu kỳ)
+          let actualValue: number | null = null;
+          if (assignment.kpiValues && assignment.kpiValues.length > 0) {
+            const approvedInCycle = assignment.kpiValues.filter(
+              (kv) =>
+                kv.status === KpiValueStatus.APPROVED &&
+                kv.timestamp >= startDate &&
+                kv.timestamp <= endDate,
+            );
+            let filteredKpiValues =
+              approvedInCycle.length > 0
+                ? approvedInCycle
+                : assignment.kpiValues.filter(
+                    (kv) => kv.status === KpiValueStatus.APPROVED,
+                  );
+            if (filteredKpiValues.length > 0) {
+              const latest = filteredKpiValues.sort(
+                (a, b) => b.timestamp.getTime() - a.timestamp.getTime(),
+              )[0];
+              actualValue = latest ? latest.value : null;
+            }
           }
-        }
-        return {
-          assignmentId: assignment.id,
-          kpiId: assignment.kpi.id,
-          kpiName: assignment.kpi.name,
-          kpiDescription: assignment.kpi.description,
-          targetValue: assignment.targetValue,
-          actualValue: actualValue,
-          unit: assignment.kpi.unit,
-          weight: assignment.weight,
-          selfScore: selfReview?.selfScore ?? null,
-          selfComment: selfReview?.selfComment ?? null,
-          existingManagerComment: null,
-          existingManagerScore: null,
-        };
-      });
+          return {
+            assignmentId: assignment.id,
+            kpiId: assignment.kpi.id,
+            kpiName: assignment.kpi.name,
+            kpiDescription: assignment.kpi.description,
+            targetValue: assignment.targetValue,
+            actualValue: actualValue,
+            unit: assignment.kpi.unit,
+            status: assignment.status,
+            weight: assignment.weight,
+            selfScore: selfReview?.selfScore ?? null,
+            selfComment: selfReview?.selfComment ?? null,
+            existingManagerComment: null,
+            existingManagerScore: null,
+          };
+        });
       return {
         kpisReviewedByManager,
-        overallReviewByManager: null,
+        overallReviewByManager: {
+          overallComment: null,
+          status: OverallReviewStatus.PENDING_REVIEW,
+          employeeComment: null,
+          employeeFeedbackDate: null,
+          totalWeightedScoreSupervisor: 0,
+        },
         totalWeightedScoreSupervisor: 0,
       };
     }
 
-    const managerWhoReviewedId = overallReviewRecord.reviewedById;
-
-    const managerWhoReviewed = await this.employeeRepository.findOne({
-      where: { id: managerWhoReviewedId },
-    });
-
-    if (!managerWhoReviewed) {
-      const errorIndicatingResponse: EmployeeReviewResponseDto = {
-        kpisReviewedByManager: [],
-        overallReviewByManager: {
-          overallComment: `Error: Could not load review details because the reviewing manager (ID: ${managerWhoReviewedId}) was not found.`,
-          status: OverallReviewStatus.PENDING_REVIEW,
-          overallScore: null,
-        },
-      };
-      return errorIndicatingResponse;
+    // Always use the actual status from overallReviewRecord for the employee/cycle
+    let managerWhoReviewed: Employee | null = null;
+    if (overallReviewRecord.reviewedById) {
+      managerWhoReviewed = await this.employeeRepository.findOne({ where: { id: overallReviewRecord.reviewedById } });
     }
-
+    // If not found, fallback to employee (should not happen, but for type safety)
     const reviewDataFromManagerPerspective = await this.getKpisForReview(
-      managerWhoReviewed,
+      managerWhoReviewed || employee,
       employee.id,
       'employee',
       cycleId,
@@ -916,15 +975,47 @@ export class EvaluationService {
       }
     }
 
-    const response: EmployeeReviewResponseDto = {
-      kpisReviewedByManager: reviewDataFromManagerPerspective.kpisToReview,
-      overallReviewByManager:
-        reviewDataFromManagerPerspective.existingOverallReview
-          ? {
-              ...reviewDataFromManagerPerspective.existingOverallReview,
-              totalWeightedScoreSupervisor,
+    const kpisReviewedByManager = await Promise.all(
+      reviewDataFromManagerPerspective.kpisToReview.map(async (kpi) => {
+        // Ưu tiên lấy từ selfReviewMap, nếu không có thì fallback sang assignment.reviews (nếu có)
+        let selfScore: number | null = null;
+        let selfComment: string | null = null;
+        if (kpi.assignmentId) {
+          const assignment = await this.assignmentRepository.findOne({
+            where: { id: kpi.assignmentId },
+            relations: ['reviews', 'reviews.reviewedBy'],
+          });
+          if (assignment && assignment.reviews) {
+            const selfReview = assignment.reviews.find(
+              (r) =>
+                r.reviewedBy?.id === employee.id && r.cycleId === cycleId,
+            );
+            if (selfReview) {
+              if (selfScore === null)
+                selfScore = selfReview.selfScore !== undefined ? selfReview.selfScore : null;
+              if (selfComment === null)
+                selfComment = selfReview.selfComment !== undefined ? selfReview.selfComment : null;
             }
-          : null,
+          }
+        }
+        return {
+          ...kpi,
+          selfScore,
+          selfComment,
+        };
+      }),
+    );
+
+    // Always return the actual status from overallReviewRecord
+    const response: EmployeeReviewResponseDto = {
+      kpisReviewedByManager,
+      overallReviewByManager: {
+        overallComment: overallReviewRecord.overallComment,
+        status: overallReviewRecord.status,
+        employeeComment: overallReviewRecord.employeeComment,
+        employeeFeedbackDate: overallReviewRecord.employeeFeedbackDate,
+        totalWeightedScoreSupervisor,
+      },
       totalWeightedScoreSupervisor,
     };
     return response;
@@ -1012,7 +1103,6 @@ export class EvaluationService {
       overallReviewId: or.id,
       cycleId: or.cycleId,
       overallComment: or.overallComment,
-      overallScore: or.overallScore,
       status: or.status,
       reviewedByUsername: or.reviewedBy?.username || '',
       reviewedAt: or.updatedAt,
@@ -1504,4 +1594,177 @@ export class EvaluationService {
       timestamp: item.timestamp,
     }));
   }
+
+   // ========================================== approvele/reject section/department/manager review
+
+  async approveSectionReview(
+    overallReviewId: number,
+    currentUser: Employee,
+  ): Promise<OverallReview> {
+    const review = await this.overallReviewRepository.findOne({
+      where: { id: overallReviewId },
+    });
+    if (!review) throw new NotFoundException('Overall review not found');
+    if (review.status !== OverallReviewStatus.SECTION_REVIEW_PENDING) {
+      throw new BadRequestException('Review is not pending section approval');
+    }
+    // Only section head or admin/manager can approve
+    if (
+      !['section', 'admin', 'manager'].includes(currentUser.role) ||
+      (currentUser.role === 'section' &&
+        currentUser.sectionId !== undefined &&
+        currentUser.sectionId !== null &&
+        currentUser.sectionId !== review.targetId)
+    ) {
+      throw new UnauthorizedException(
+        'You do not have permission to approve this review at section level',
+      );
+    }
+    review.status = OverallReviewStatus.SECTION_REVIEWED;
+    await this.overallReviewRepository.save(review);
+    // Next: department review pending
+    review.status = OverallReviewStatus.DEPARTMENT_REVIEW_PENDING;
+    return this.overallReviewRepository.save(review);
+  }
+
+  async rejectSectionReview(
+    overallReviewId: number,
+    currentUser: Employee,
+    reason?: string,
+  ): Promise<OverallReview> {
+    const review = await this.overallReviewRepository.findOne({
+      where: { id: overallReviewId },
+    });
+    if (!review) throw new NotFoundException('Overall review not found');
+    if (review.status !== OverallReviewStatus.SECTION_REVIEW_PENDING) {
+      throw new BadRequestException('Review is not pending section approval');
+    }
+    if (
+      !['section', 'admin', 'manager'].includes(currentUser.role) ||
+      (currentUser.role === 'section' &&
+        currentUser.sectionId !== undefined &&
+        currentUser.sectionId !== null &&
+        currentUser.sectionId !== review.targetId)
+    ) {
+      throw new UnauthorizedException(
+        'You do not have permission to reject this review at section level',
+      );
+    }
+    review.status = OverallReviewStatus.SECTION_REVISE_REQUIRED;
+    // Optionally log reason
+    if (reason)
+      review.overallComment = `[SECTION REJECTED]: ${reason}\n${review.overallComment || ''}`;
+    return this.overallReviewRepository.save(review);
+  }
+
+  async approveDepartmentReview(
+    overallReviewId: number,
+    currentUser: Employee,
+  ): Promise<OverallReview> {
+    const review = await this.overallReviewRepository.findOne({
+      where: { id: overallReviewId },
+    });
+    if (!review) throw new NotFoundException('Overall review not found');
+    if (review.status !== OverallReviewStatus.DEPARTMENT_REVIEW_PENDING) {
+      throw new BadRequestException(
+        'Review is not pending department approval',
+      );
+    }
+    if (
+      !['department', 'admin', 'manager'].includes(currentUser.role) ||
+      (currentUser.role === 'department' &&
+        currentUser.departmentId !== undefined &&
+        currentUser.departmentId !== null &&
+        currentUser.departmentId !== review.targetId)
+    ) {
+      throw new UnauthorizedException(
+        'You do not have permission to approve this review at department level',
+      );
+    }
+    review.status = OverallReviewStatus.DEPARTMENT_REVIEWED;
+    await this.overallReviewRepository.save(review);
+    // Next: manager review pending
+    review.status = OverallReviewStatus.MANAGER_REVIEW_PENDING;
+    return this.overallReviewRepository.save(review);
+  }
+
+  async rejectDepartmentReview(
+    overallReviewId: number,
+    currentUser: Employee,
+    reason?: string,
+  ): Promise<OverallReview> {
+    const review = await this.overallReviewRepository.findOne({
+      where: { id: overallReviewId },
+    });
+    if (!review) throw new NotFoundException('Overall review not found');
+    if (review.status !== OverallReviewStatus.DEPARTMENT_REVIEW_PENDING) {
+      throw new BadRequestException(
+        'Review is not pending department approval',
+      );
+    }
+    if (
+      !['department', 'admin', 'manager'].includes(currentUser.role) ||
+      (currentUser.role === 'department' &&
+        currentUser.departmentId !== undefined &&
+        currentUser.departmentId !== null &&
+        currentUser.departmentId !== review.targetId)
+    ) {
+      throw new UnauthorizedException(
+        'You do not have permission to reject this review at department level',
+      );
+    }
+    review.status = OverallReviewStatus.DEPARTMENT_REVISE_REQUIRED;
+    if (reason)
+      review.overallComment = `[DEPARTMENT REJECTED]: ${reason}\n${review.overallComment || ''}`;
+    return this.overallReviewRepository.save(review);
+  }
+
+  async approveManagerReview(
+    overallReviewId: number,
+    currentUser: Employee,
+  ): Promise<OverallReview> {
+    const review = await this.overallReviewRepository.findOne({
+      where: { id: overallReviewId },
+    });
+    if (!review) throw new NotFoundException('Overall review not found');
+    if (review.status !== OverallReviewStatus.MANAGER_REVIEW_PENDING) {
+      throw new BadRequestException('Review is not pending manager approval');
+    }
+    if (!['manager', 'admin'].includes(currentUser.role)) {
+      throw new UnauthorizedException(
+        'You do not have permission to approve this review at manager level',
+      );
+    }
+    review.status = OverallReviewStatus.MANAGER_REVIEWED;
+    await this.overallReviewRepository.save(review);
+    // Next: employee feedback pending
+    review.status = OverallReviewStatus.EMPLOYEE_FEEDBACK_PENDING;
+    return this.overallReviewRepository.save(review);
+  }
+
+  async rejectManagerReview(
+    overallReviewId: number,
+    currentUser: Employee,
+    reason?: string,
+  ): Promise<OverallReview> {
+    const review = await this.overallReviewRepository.findOne({
+      where: { id: overallReviewId },
+    });
+    if (!review) throw new NotFoundException('Overall review not found');
+    if (review.status !== OverallReviewStatus.MANAGER_REVIEW_PENDING) {
+      throw new BadRequestException('Review is not pending manager approval');
+    }
+    if (!['manager', 'admin'].includes(currentUser.role)) {
+      throw new UnauthorizedException(
+        'You do not have permission to reject this review at manager level',
+      );
+    }
+    review.status = OverallReviewStatus.DEPARTMENT_REVISE_REQUIRED; // Manager reject trả về cho department sửa lại
+    if (reason)
+      review.overallComment = `[MANAGER REJECTED]: ${reason}\n${review.overallComment || ''}`;
+    return this.overallReviewRepository.save(review);
+  }
+
 }
+
+

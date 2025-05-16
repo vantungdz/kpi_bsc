@@ -258,7 +258,7 @@ const actions = {
         commit("SET_EXISTING_OVERALL_REVIEW", overallReviewData || null);
       }
     } catch (error) {
-      const errorMsg =
+      let errorMsg =
         error.response?.data?.message ||
         error.message ||
         "Failed to submit KPI review.";
@@ -298,7 +298,7 @@ const actions = {
       }
       return response.data;
     } catch (error) {
-      const errorMsg =
+      let errorMsg =
         error.response?.data?.message ||
         error.message ||
         "Failed to complete KPI review.";
@@ -318,7 +318,7 @@ const actions = {
       commit("SET_EMPLOYEE_REVIEW_DETAILS", response.data);
       return response.data;
     } catch (error) {
-      const errorMsg =
+      let errorMsg =
         error.response?.data?.message ||
         error.message ||
         "Failed to fetch your review details.";
@@ -347,7 +347,7 @@ const actions = {
       }
       return response.data;
     } catch (error) {
-      const errorMsg =
+      let errorMsg =
         error.response?.data?.message ||
         error.message ||
         "Failed to submit your feedback.";
@@ -370,7 +370,7 @@ const actions = {
       commit("SET_EMPLOYEE_REVIEW_DETAILS", response.data);
       return response.data;
     } catch (error) {
-      const errorMsg =
+      let errorMsg =
         error.response?.data?.message ||
         error.message ||
         "Failed to submit self KPI review.";
@@ -399,7 +399,7 @@ const actions = {
       commit("SET_REVIEW_HISTORY", response.data || []);
       return response.data;
     } catch (error) {
-      const errorMsg =
+      let errorMsg =
         error.response?.data?.message ||
         error.message ||
         "Failed to fetch review history.";
@@ -515,7 +515,7 @@ const actions = {
 
       return response.data;
     } catch (error) {
-      const errorMsg =
+      let errorMsg =
         error.response?.data?.message ||
         error.message ||
         "Failed to save performance objective evaluation.";
@@ -556,7 +556,7 @@ const actions = {
       commit("SET_PENDING_OBJECTIVE_EVALUATIONS", response.data);
       return response.data; // Return data for component to use if needed
     } catch (error) {
-      const errorMessage =
+      let errorMessage =
         error.response?.data?.message ||
         error.message ||
         "Failed to fetch pending objective evaluations.";
@@ -588,7 +588,7 @@ const actions = {
       // Refetch the list to update the UI
       await dispatch("fetchPendingObjectiveEvaluations");
     } catch (error) {
-      const errorMessage =
+      let errorMessage =
         error.response?.data?.message ||
         error.message ||
         "Failed to approve objective evaluation at section level.";
@@ -621,7 +621,7 @@ const actions = {
       // Refetch the list to update the UI
       await dispatch("fetchPendingObjectiveEvaluations");
     } catch (error) {
-      const errorMessage =
+      let errorMessage =
         error.response?.data?.message ||
         error.message ||
         "Failed to reject objective evaluation at section level.";
@@ -650,7 +650,7 @@ const actions = {
       await dispatch("fetchPendingObjectiveEvaluations");
     } catch (error) {
       const errorMessage =
-        error.response?.data?.message ||
+       error.response?.data?.message ||
         error.message ||
         "Failed to approve objective evaluation at department level.";
       commit("SET_OBJECTIVE_EVAL_APPROVAL_ERROR", errorMessage);
@@ -682,7 +682,7 @@ const actions = {
       await dispatch("fetchPendingObjectiveEvaluations");
     } catch (error) {
       const errorMessage =
-        error.response?.data?.message ||
+       error.response?.data?.message ||
         error.message ||
         "Failed to reject objective evaluation at department level.";
       commit("SET_OBJECTIVE_EVAL_APPROVAL_ERROR", errorMessage);
@@ -713,7 +713,7 @@ const actions = {
       await dispatch("fetchPendingObjectiveEvaluations");
     } catch (error) {
       const errorMessage =
-        error.response?.data?.message ||
+       error.response?.data?.message ||
         error.message ||
         "Failed to approve objective evaluation at manager level.";
       commit("SET_OBJECTIVE_EVAL_APPROVAL_ERROR", errorMessage);
@@ -745,7 +745,7 @@ const actions = {
       await dispatch("fetchPendingObjectiveEvaluations");
     } catch (error) {
       const errorMessage =
-        error.response?.data?.message ||
+       error.response?.data?.message ||
         error.message ||
         "Failed to reject objective evaluation at manager level.";
       commit("SET_OBJECTIVE_EVAL_APPROVAL_ERROR", errorMessage);
@@ -769,7 +769,7 @@ const actions = {
       commit("SET_OBJECTIVE_EVALUATION_HISTORY", response.data);
       return response.data;
     } catch (error) {
-      const errorMessage =
+      let errorMessage =
         error.response?.data?.message ||
         error.message ||
         "Failed to fetch objective evaluation history.";
@@ -781,6 +781,74 @@ const actions = {
       throw error;
     } finally {
       commit("SET_IS_LOADING_OBJECTIVE_EVALUATION_HISTORY", false);
+    }
+  },
+
+  // Multi-level Overall Review Actions
+  async approveOverallReviewSection({ commit }, { reviewId }) {
+    commit("SET_IS_PROCESSING_OBJECTIVE_EVAL_APPROVAL", true);
+    commit("SET_OBJECTIVE_EVAL_APPROVAL_ERROR", null);
+    try {
+      await apiClient.post(`/evaluation/overall-reviews/${reviewId}/approve-section`);
+    } catch (error) {
+      commit("SET_OBJECTIVE_EVAL_APPROVAL_ERROR", error);
+    } finally {
+      commit("SET_IS_PROCESSING_OBJECTIVE_EVAL_APPROVAL", false);
+    }
+  },
+  async rejectOverallReviewSection({ commit }, { reviewId, comment }) {
+    commit("SET_IS_PROCESSING_OBJECTIVE_EVAL_APPROVAL", true);
+    commit("SET_OBJECTIVE_EVAL_APPROVAL_ERROR", null);
+    try {
+      await apiClient.post(`/evaluation/overall-reviews/${reviewId}/reject-section`, { comment });
+    } catch (error) {
+      commit("SET_OBJECTIVE_EVAL_APPROVAL_ERROR", error);
+    } finally {
+      commit("SET_IS_PROCESSING_OBJECTIVE_EVAL_APPROVAL", false);
+    }
+  },
+  async approveOverallReviewDept({ commit }, { reviewId }) {
+    commit("SET_IS_PROCESSING_OBJECTIVE_EVAL_APPROVAL", true);
+    commit("SET_OBJECTIVE_EVAL_APPROVAL_ERROR", null);
+    try {
+      await apiClient.post(`/evaluation/overall-reviews/${reviewId}/approve-dept`);
+    } catch (error) {
+      commit("SET_OBJECTIVE_EVAL_APPROVAL_ERROR", error);
+    } finally {
+      commit("SET_IS_PROCESSING_OBJECTIVE_EVAL_APPROVAL", false);
+    }
+  },
+  async rejectOverallReviewDept({ commit }, { reviewId, comment }) {
+    commit("SET_IS_PROCESSING_OBJECTIVE_EVAL_APPROVAL", true);
+    commit("SET_OBJECTIVE_EVAL_APPROVAL_ERROR", null);
+    try {
+      await apiClient.post(`/evaluation/overall-reviews/${reviewId}/reject-dept`, { comment });
+    } catch (error) {
+      commit("SET_OBJECTIVE_EVAL_APPROVAL_ERROR", error);
+    } finally {
+      commit("SET_IS_PROCESSING_OBJECTIVE_EVAL_APPROVAL", false);
+    }
+  },
+  async approveOverallReviewManager({ commit }, { reviewId }) {
+    commit("SET_IS_PROCESSING_OBJECTIVE_EVAL_APPROVAL", true);
+    commit("SET_OBJECTIVE_EVAL_APPROVAL_ERROR", null);
+    try {
+      await apiClient.post(`/evaluation/overall-reviews/${reviewId}/approve-manager`);
+    } catch (error) {
+      commit("SET_OBJECTIVE_EVAL_APPROVAL_ERROR", error);
+    } finally {
+      commit("SET_IS_PROCESSING_OBJECTIVE_EVAL_APPROVAL", false);
+    }
+  },
+  async rejectOverallReviewManager({ commit }, { reviewId, comment }) {
+    commit("SET_IS_PROCESSING_OBJECTIVE_EVAL_APPROVAL", true);
+    commit("SET_OBJECTIVE_EVAL_APPROVAL_ERROR", null);
+    try {
+      await apiClient.post(`/evaluation/overall-reviews/${reviewId}/reject-manager`, { comment });
+    } catch (error) {
+      commit("SET_OBJECTIVE_EVAL_APPROVAL_ERROR", error);
+    } finally {
+      commit("SET_IS_PROCESSING_OBJECTIVE_EVAL_APPROVAL", false);
     }
   },
 };

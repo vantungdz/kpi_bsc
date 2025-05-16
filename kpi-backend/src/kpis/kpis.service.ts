@@ -1323,6 +1323,8 @@ export class KpisService {
           assigned_to_department: null,
           assigned_to_section: null,
           assigned_to_team: null,
+          startDate: kpi.start_date,
+          endDate: kpi.end_date,
         } as unknown as import('typeorm').DeepPartial<KPIAssignment>);
         assignmentsToSave.push(newAssignment);
 

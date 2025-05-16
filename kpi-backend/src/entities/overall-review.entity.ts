@@ -10,14 +10,7 @@ import {
 } from 'typeorm';
 import { Employee } from './employee.entity';
 
-export enum OverallReviewStatus {
-  PENDING_REVIEW = 'PENDING_REVIEW',
-  MANAGER_REVIEWED = 'MANAGER_REVIEWED',
-  EMPLOYEE_FEEDBACK_PENDING = 'EMPLOYEE_FEEDBACK_PENDING',
-  EMPLOYEE_RESPONDED = 'EMPLOYEE_RESPONDED',
-  COMPLETED = 'COMPLETED',
-}
-
+import { OverallReviewStatus } from './objective-evaluation-status.enum';
 @Entity('overall_reviews')
 @Index(['targetId', 'targetType', 'cycleId', 'reviewedById'], { unique: true })
 export class OverallReview {
@@ -40,9 +33,6 @@ export class OverallReview {
   @Column({ type: 'text', nullable: true })
   overallComment: string | null;
 
-  @Column({ type: 'int', nullable: true })
-  overallScore: number | null;
-
   @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
   totalWeightedScore: string | null;
 
@@ -57,16 +47,10 @@ export class OverallReview {
 
   @Column({
     type: 'enum',
-    enum: [
-      'PENDING_REVIEW',
-      'MANAGER_REVIEWED',
-      'EMPLOYEE_FEEDBACK_PENDING',
-      'EMPLOYEE_RESPONDED',
-      'COMPLETED',
-    ],
-    default: 'PENDING_REVIEW',
+    enum: OverallReviewStatus,
+    default: OverallReviewStatus.DRAFT,
   })
-  status: string;
+  status: OverallReviewStatus;
 
   @ManyToOne(() => Employee, { nullable: false })
   @JoinColumn({ name: 'reviewedById' })

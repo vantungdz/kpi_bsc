@@ -24,11 +24,12 @@ export class KpiToReviewDto {
   weight?: number | null;
   existingManagerComment?: string | null;
   existingManagerScore?: number | null;
+  selfScore?: number | null;
+  selfComment?: string | null;
 }
 
 export class ExistingOverallReviewDto {
   overallComment?: string | null;
-  overallScore?: number | null;
   status?: string;
   employeeComment?: string | null;
   employeeFeedbackDate?: Date | null;
@@ -40,7 +41,6 @@ export class SubmitKpiReviewDto {
   targetType: 'employee' | 'section' | 'department';
   cycleId: string;
   overallComment?: string | null;
-  overallScore?: number | null;
   kpiReviews: {
     assignmentId: number;
     managerComment?: string | null;
@@ -83,17 +83,13 @@ export class ReviewHistoryItemDto {
   overallReviewId: number;
   cycleId: string;
   overallComment?: string | null;
-  overallScore?: number | null;
   status: string; // OverallReviewStatus
   reviewedByUsername: string; // Username of the manager
   reviewedAt: Date; // Date of the overall review
   employeeComment?: string | null;
   employeeFeedbackDate?: Date | null;
-  // Optionally, include detailed KPI reviews for this cycle
-  // kpiReviews?: KpiToReviewDto[]; // This might make the payload large, consider a separate API if needed
 }
 
-// DTO for the response of review history API
 export type ReviewHistoryResponseDto = ReviewHistoryItemDto[];
 
 export class PerformanceObjectiveItemDto {

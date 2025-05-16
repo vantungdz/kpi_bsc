@@ -54,14 +54,6 @@
                   {{ reviewItem.overallComment || $t('noComment') }}
                 </p>
               </a-descriptions-item>
-              <a-descriptions-item :label="$t('overallManagerScore')">
-                <a-rate
-                  :value="reviewItem.overallScore"
-                  disabled
-                  v-if="reviewItem.overallScore !== null"
-                />
-                <span v-else>{{ $t('noScore') }}</span>
-              </a-descriptions-item>
 
               <template v-if="reviewItem.employeeComment">
                 <a-descriptions-item :label="$t('employeeFeedbackDate')">
@@ -101,7 +93,6 @@ import {
   Descriptions as ADescriptions,
   DescriptionsItem as ADescriptionsItem,
   Tag as ATag,
-  Rate as ARate,
   Breadcrumb as ABreadcrumb,
   BreadcrumbItem as ABreadcrumbItem,
   notification,

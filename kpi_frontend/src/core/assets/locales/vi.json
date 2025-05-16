@@ -505,5 +505,7 @@
   "generateReport": "Xuất báo cáo",
   "selectReportTypeFirst": "Vui lòng chọn loại báo cáo trước!",
   "reportGeneratedSuccessfully": "Xuất báo cáo thành công!",
-  "reportGenerator": "Xuất báo cáo"
+  "reportGenerator": "Xuất báo cáo",
+  "selfScore": "Điểm nhân viên tự đánh giá",
+  "selfComment": "Nhận xét nhân viên tự đánh giá"
 }

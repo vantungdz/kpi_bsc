@@ -515,5 +515,7 @@
   "generateReport": "レポートを生成",
   "selectReportTypeFirst": "先にレポートタイプを選択してください。",
   "reportGeneratedSuccessfully": "レポートが正常に生成されました！",
-  "reportGenerator": "レポート出力"
+  "reportGenerator": "レポート出力",
+  "selfScore": "従業員自己評価スコア",
+  "selfComment": "従業員の自己評価コメント"
 }

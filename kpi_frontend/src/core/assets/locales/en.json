@@ -517,5 +517,7 @@
   "generateReport": "Generate Report",
   "selectReportTypeFirst": "Please select a report type first!",
   "reportGeneratedSuccessfully": "Report generated successfully!",
-  "reportGenerator": "Report Generator"
+  "reportGenerator": "Report Generator",
+  "selfScore": "Employee self-assessment score",
+  "selfComment": "Employee self-assessment comments"
 }

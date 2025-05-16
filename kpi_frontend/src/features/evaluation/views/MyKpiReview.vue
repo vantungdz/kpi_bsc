@@ -45,12 +45,10 @@
         </div>
 
         <div
-          v-else-if="!isLoadingMyReview && !reviewDetails && !myReviewError"
+          v-else-if="!isLoadingMyReview && (!reviewDetails || (reviewDetails.kpisReviewedByManager && reviewDetails.kpisReviewedByManager.length === 0)) && !myReviewError"
           class="empty-state"
         >
-          <a-empty
-            :description="`${$t('noReviewFoundForCycle')} ${getSelectedCycleName()}.`"
-          />
+          <a-empty :description="$t('noDetailedKpiReview')" />
         </div>
 
         <div
@@ -67,86 +65,88 @@
               :key="kpiItem.assignmentId"
               class="kpi-review-item-employee"
             >
-              <a-divider v-if="index > 0" />
-              <h4>{{ index + 1 }}. {{ kpiItem.kpiName }}</h4>
-              <p
-                v-if="kpiItem.kpiDescription"
-                style="font-style: italic; color: #555; margin-bottom: 8px"
-              >
-                <strong>{{ $t("kpiDescription") }}:</strong>
-                {{ kpiItem.kpiDescription }}
-              </p>
-              <a-row :gutter="16" style="margin-bottom: 10px">
-                <a-col :span="6">
-                  <strong>{{ $t("target") }}:</strong> {{ kpiItem.targetValue }}
-                  {{ kpiItem.unit }}
-                </a-col>
-                <a-col :span="6">
-                  <strong>{{ $t("actualResult") }}:</strong>
-                  {{ kpiItem.actualValue }}
-                  {{ kpiItem.unit }}
-                </a-col>
-                <a-col :span="6">
-                  <strong>{{ $t("completionRate") }}:</strong>
-                  <a-progress
-                    :percent="
-                      calculateCompletionRate(
-                        kpiItem.actualValue,
-                        kpiItem.targetValue
-                      )
-                    "
-                    size="small"
-                  />
-                </a-col>
-                <a-col :span="3">
-                  <strong>{{ $t("weight") }}:</strong> {{ kpiItem.weight }}
-                </a-col>
-                <a-col :span="3">
-                  <strong>{{ $t("weightedScoreSupervisor") }}:</strong>
-                  {{ getWeightedScore(kpiItem) }}
-                </a-col>
-              </a-row>
-              <div
-                v-if="
-                  !reviewDetails.overallReviewByManager ||
-                  (reviewDetails.overallReviewByManager &&
-                    reviewDetails.overallReviewByManager.status ===
-                      'PENDING_REVIEW')
-                "
-              >
-                <a-form-item :label="$t('selfComment')">
-                  <Input.TextArea
-                    v-model:value="selfKpiReviews[index].selfComment"
-                    :rows="3"
-                    :placeholder="$t('selfCommentPlaceholder')"
-                    :disabled="!canEditSelfReview || isSubmittingSelfReview"
-                  />
-                </a-form-item>
-                <a-form-item :label="$t('selfScore')">
-                  <a-rate
-                    v-model:value="selfKpiReviews[index].selfScore"
-                    :disabled="!canEditSelfReview || isSubmittingSelfReview"
-                  />
-                </a-form-item>
-              </div>
-              <div v-else>
-                <p>
-                  <strong>{{ $t("selfComment") }}:</strong>
-                  {{ kpiItem.selfComment || $t("noComment") }}
+              <template v-if="kpiItem && kpiItem.assignmentId && kpiItem.kpiName">
+                <a-divider v-if="index > 0" />
+                <h4>{{ index + 1 }}. {{ kpiItem.kpiName }}</h4>
+                <p
+                  v-if="kpiItem.kpiDescription"
+                  style="font-style: italic; color: #555; margin-bottom: 8px"
+                >
+                  <strong>{{ $t("kpiDescription") }}:</strong>
+                  {{ kpiItem.kpiDescription }}
                 </p>
+                <a-row :gutter="16" style="margin-bottom: 10px">
+                  <a-col :span="6">
+                    <strong>{{ $t("target") }}:</strong> {{ kpiItem.targetValue }}
+                    {{ kpiItem.unit }}
+                  </a-col>
+                  <a-col :span="6">
+                    <strong>{{ $t("actualResult") }}:</strong>
+                    {{ kpiItem.actualValue }}
+                    {{ kpiItem.unit }}
+                  </a-col>
+                  <a-col :span="6">
+                    <strong>{{ $t("completionRate") }}:</strong>
+                    <a-progress
+                      :percent="
+                        calculateCompletionRate(
+                          kpiItem.actualValue,
+                          kpiItem.targetValue
+                        )
+                      "
+                      size="small"
+                    />
+                  </a-col>
+                  <a-col :span="3">
+                    <strong>{{ $t("weight") }}:</strong> {{ kpiItem.weight }}
+                  </a-col>
+                  <a-col :span="3">
+                    <strong>{{ $t("weightedScoreSupervisor") }}:</strong>
+                    {{ getWeightedScore(kpiItem) }}
+                  </a-col>
+                </a-row>
+                <div v-if="canEditSelfReview">
+                  <a-form-item :label="$t('selfComment')">
+                    <Input.TextArea
+                      v-model:value="selfKpiReviews[index].selfComment"
+                      :rows="3"
+                      :placeholder="$t('selfCommentPlaceholder')"
+                      :disabled="isSubmittingSelfReview"
+                    />
+                  </a-form-item>
+                  <a-form-item :label="$t('selfScore')">
+                    <a-rate
+                      v-model:value="selfKpiReviews[index].selfScore"
+                      :disabled="isSubmittingSelfReview"
+                    />
+                  </a-form-item>
+                </div>
+                <div v-else>
+                  <p>
+                    <strong>{{ $t("selfComment") }}:</strong>
+                    {{ kpiItem.selfComment || $t("noComment") }}
+                  </p>
+                  <p>
+                    <strong>{{ $t("selfScore") }}:</strong>
+                    <a-rate :value="kpiItem.selfScore" disabled />
+                  </p>
+                </div>
                 <p>
-                  <strong>{{ $t("selfScore") }}:</strong>
-                  <a-rate :value="kpiItem.selfScore" disabled />
+                  <strong>{{ $t("managerComment") }}:</strong>
+                  {{ kpiItem.existingManagerComment || $t("noComment") }}
                 </p>
-              </div>
-              <p>
-                <strong>{{ $t("managerComment") }}:</strong>
-                {{ kpiItem.existingManagerComment || $t("noComment") }}
-              </p>
-              <p v-if="kpiItem.existingManagerScore !== null">
-                <strong>{{ $t("managerScore") }}:</strong>
-                <a-rate :value="kpiItem.existingManagerScore" disabled />
-              </p>
+                <p v-if="kpiItem.existingManagerScore !== null">
+                  <strong>{{ $t("managerScore") }}:</strong>
+                  <a-rate :value="kpiItem.existingManagerScore" disabled />
+                </p>
+              </template>
+              <template v-else>
+                <a-alert
+                  type="warning"
+                  :message="$t('invalidKpiAssignmentData')"
+                  show-icon
+                />
+              </template>
             </div>
             <a-divider />
             <div
@@ -161,19 +161,12 @@
                 {{ totalWeightedScoreSupervisor }}
               </span>
             </div>
-            <div
-              v-if="
-                !reviewDetails.overallReviewByManager ||
-                (reviewDetails.overallReviewByManager &&
-                  reviewDetails.overallReviewByManager.status ===
-                    'PENDING_REVIEW')
-              "
-            >
+            <div v-if="canEditSelfReview">
               <a-button
                 type="primary"
                 @click="submitSelfReview"
                 :loading="isSubmittingSelfReview"
-                :disabled="!canEditSelfReview || isSubmittingSelfReview"
+                :disabled="isSubmittingSelfReview"
               >
                 {{ $t("submitSelfReview") }}
               </a-button>
@@ -216,63 +209,72 @@
               :key="kpiItem.assignmentId"
               class="kpi-review-item-employee"
             >
-              <a-divider v-if="index > 0" />
-              <h4>{{ index + 1 }}. {{ kpiItem.kpiName }}</h4>
-              <p
-                v-if="kpiItem.kpiDescription"
-                style="font-style: italic; color: #555; margin-bottom: 8px"
-              >
-                <strong>{{ $t("kpiDescription") }}:</strong>
-                {{ kpiItem.kpiDescription }}
-              </p>
-              <a-row :gutter="16" style="margin-bottom: 10px">
-                <a-col :span="6">
-                  <strong>{{ $t("target") }}:</strong> {{ kpiItem.targetValue }}
-                  {{ kpiItem.unit }}
-                </a-col>
-                <a-col :span="6">
-                  <strong>{{ $t("actualResult") }}:</strong>
-                  {{ kpiItem.actualValue }}
-                  {{ kpiItem.unit }}
-                </a-col>
-                <a-col :span="6">
-                  <strong>{{ $t("completionRate") }}:</strong>
-                  <a-progress
-                    :percent="
-                      calculateCompletionRate(
-                        kpiItem.actualValue,
-                        kpiItem.targetValue
-                      )
-                    "
-                    size="small"
-                  />
-                </a-col>
-                <a-col :span="3">
-                  <strong>{{ $t("weight") }}:</strong> {{ kpiItem.weight }}
-                </a-col>
-                <a-col :span="3">
-                  <strong>{{ $t("weightedScoreSupervisor") }}:</strong>
-                  {{ getWeightedScore(kpiItem) }}
-                </a-col>
-              </a-row>
-              <div>
-                <p>
-                  <strong>{{ $t("selfComment") }}:</strong>
-                  {{ kpiItem.selfComment || $t("noComment") }}
+              <template v-if="kpiItem && kpiItem.assignmentId && kpiItem.kpiName">
+                <a-divider v-if="index > 0" />
+                <h4>{{ index + 1 }}. {{ kpiItem.kpiName }}</h4>
+                <p
+                  v-if="kpiItem.kpiDescription"
+                  style="font-style: italic; color: #555; margin-bottom: 8px"
+                >
+                  <strong>{{ $t("kpiDescription") }}:</strong>
+                  {{ kpiItem.kpiDescription }}
                 </p>
+                <a-row :gutter="16" style="margin-bottom: 10px">
+                  <a-col :span="6">
+                    <strong>{{ $t("target") }}:</strong> {{ kpiItem.targetValue }}
+                    {{ kpiItem.unit }}
+                  </a-col>
+                  <a-col :span="6">
+                    <strong>{{ $t("actualResult") }}:</strong>
+                    {{ kpiItem.actualValue }}
+                    {{ kpiItem.unit }}
+                  </a-col>
+                  <a-col :span="6">
+                    <strong>{{ $t("completionRate") }}:</strong>
+                    <a-progress
+                      :percent="
+                        calculateCompletionRate(
+                          kpiItem.actualValue,
+                          kpiItem.targetValue
+                        )
+                      "
+                      size="small"
+                    />
+                  </a-col>
+                  <a-col :span="3">
+                    <strong>{{ $t("weight") }}:</strong> {{ kpiItem.weight }}
+                  </a-col>
+                  <a-col :span="3">
+                    <strong>{{ $t("weightedScoreSupervisor") }}:</strong>
+                    {{ getWeightedScore(kpiItem) }}
+                  </a-col>
+                </a-row>
+                <div>
+                  <p>
+                    <strong>{{ $t("selfComment") }}:</strong>
+                    {{ kpiItem.selfComment || $t("noComment") }}
+                  </p>
+                  <p>
+                    <strong>{{ $t("selfScore") }}:</strong>
+                    <a-rate :value="kpiItem.selfScore" disabled />
+                  </p>
+                </div>
                 <p>
-                  <strong>{{ $t("selfScore") }}:</strong>
-                  <a-rate :value="kpiItem.selfScore" disabled />
+                  <strong>{{ $t("managerComment") }}:</strong>
+                  {{ kpiItem.existingManagerComment || $t("noComment") }}
                 </p>
-              </div>
-              <p>
-                <strong>{{ $t("managerComment") }}:</strong>
-                {{ kpiItem.existingManagerComment || $t("noComment") }}
-              </p>
-              <p v-if="kpiItem.existingManagerScore !== null">
-                <strong>{{ $t("managerScore") }}:</strong>
-                <a-rate :value="kpiItem.existingManagerScore" disabled />
-              </p>
+                <p v-if="kpiItem.existingManagerScore !== null">
+                  <strong>{{ $t("managerScore") }}:</strong>
+                  <a-rate :value="kpiItem.existingManagerScore" disabled />
+                </p>
+              </template>
+              <template v-else>
+                <a-alert
+                  type="warning"
+                  :message="$t('invalidKpiAssignmentData')"
+                  show-icon
+                />
+              </template>
             </div>
             <a-divider />
             <div style="text-align: right; margin-bottom: 16px">
@@ -297,83 +299,84 @@
             </div>
           </template>
         </div>
-        <a-empty v-else :description="$t('noDetailedKpiReview')" />
 
-        <a-divider />
-        <h3>{{ $t("yourFeedback") }}</h3>
-        <div
-          v-if="
-            reviewDetails &&
-            reviewDetails.overallReviewByManager &&
-            reviewDetails.overallReviewByManager.status ===
-              'EMPLOYEE_FEEDBACK_PENDING'
-          "
-        >
-          <a-form-item :label="$t('enterYourFeedback')">
-            <Input.TextArea
-              v-model:value="employeeFeedbackComment"
-              :rows="4"
-              :placeholder="$t('feedbackPlaceholder')"
-            />
-          </a-form-item>
-          <a-button
-            type="primary"
-            @click="submitFeedback"
-            :loading="isSubmittingFeedback"
-          >
-            {{ $t("submitFeedback") }}
-          </a-button>
-        </div>
-        <div
-          v-else-if="
-            reviewDetails &&
-            reviewDetails.overallReviewByManager &&
-            reviewDetails.overallReviewByManager.employeeComment
-          "
-        >
-          <p>
-            <strong>
-              {{ $t("yourFeedbackSentOn") }}
-              {{
-                formatDate(
-                  reviewDetails.overallReviewByManager.employeeFeedbackDate
-                )
-              }}:
-            </strong>
-          </p>
-          <p style="white-space: pre-wrap">
-            {{ reviewDetails.overallReviewByManager.employeeComment }}
-          </p>
-        </div>
-        <div
-          v-else-if="
-            reviewDetails &&
-            reviewDetails.overallReviewByManager &&
-            (reviewDetails.overallReviewByManager.status === 'COMPLETED' ||
+        <div v-if="selectedCycle && reviewDetails && reviewDetails.overallReviewByManager">
+          <a-divider />
+          <h3>{{ $t("yourFeedback") }}</h3>
+          <div
+            v-if="
+              reviewDetails &&
+              reviewDetails.overallReviewByManager &&
               reviewDetails.overallReviewByManager.status ===
-                'MANAGER_REVIEWED')
-          "
-        >
-          <p>{{ $t("reviewCompletedOrReviewed") }}</p>
+                'EMPLOYEE_FEEDBACK_PENDING'
+            "
+          >
+            <a-form-item :label="$t('enterYourFeedback')">
+              <Input.TextArea
+                v-model:value="employeeFeedbackComment"
+                :rows="4"
+                :placeholder="$t('feedbackPlaceholder')"
+              />
+            </a-form-item>
+            <a-button
+              type="primary"
+              @click="submitFeedback"
+              :loading="isSubmittingFeedback"
+            >
+              {{ $t("submitFeedback") }}
+            </a-button>
+          </div>
+          <div
+            v-else-if="
+              reviewDetails &&
+              reviewDetails.overallReviewByManager &&
+              reviewDetails.overallReviewByManager.employeeComment
+            "
+          >
+            <p>
+              <strong>
+                {{ $t("yourFeedbackSentOn") }}
+                {{
+                  formatDate(
+                    reviewDetails.overallReviewByManager.employeeFeedbackDate
+                  )
+                }}:
+              </strong>
+            </p>
+            <p style="white-space: pre-wrap">
+              {{ reviewDetails.overallReviewByManager.employeeComment }}
+            </p>
+          </div>
+          <div
+            v-else-if="
+              reviewDetails &&
+              reviewDetails.overallReviewByManager &&
+              (reviewDetails.overallReviewByManager.status === 'COMPLETED' ||
+                reviewDetails.overallReviewByManager.status ===
+                  'MANAGER_REVIEWED')
+            "
+          >
+            <p>{{ $t("reviewCompletedOrReviewed") }}</p>
+          </div>
+          <div
+            v-else-if="
+              reviewDetails &&
+              reviewDetails.overallReviewByManager &&
+              reviewDetails.overallReviewByManager.status === 'EMPLOYEE_RESPONDED'
+            "
+          >
+            <p>{{ $t("feedbackAlreadySent") }}</p>
+          </div>
+          <a-alert
+            v-if="submitFeedbackError"
+            type="error"
+            show-icon
+            closable
+            style="margin-top: 16px"
+            :message="submitFeedbackError"
+            @close="clearSubmitFeedbackError"
+          />
         </div>
-        <div
-          v-else-if="
-            reviewDetails &&
-            reviewDetails.overallReviewByManager &&
-            reviewDetails.overallReviewByManager.status === 'EMPLOYEE_RESPONDED'
-          "
-        >
-          <p>{{ $t("feedbackAlreadySent") }}</p>
-        </div>
-        <a-alert
-          v-if="submitFeedbackError"
-          type="error"
-          show-icon
-          closable
-          style="margin-top: 16px"
-          :message="submitFeedbackError"
-          @close="clearSubmitFeedbackError"
-        />
       </a-spin>
     </a-card>
   </div>
@@ -537,9 +540,10 @@ watch(
 );
 
 const canEditSelfReview = computed(() => {
-  if (!reviewDetails.value) return false;
+  // Nếu chưa có overallReviewByManager (null) => cho phép tự đánh giá
+  if (!reviewDetails.value || !reviewDetails.value.kpisReviewedByManager) return false;
   if (!reviewDetails.value.overallReviewByManager) return true;
-  return reviewDetails.value.overallReviewByManager.status === "PENDING_REVIEW";
+  return reviewDetails.value.overallReviewByManager.status === "DRAFT";
 });
 
 const submitSelfReview = async () => {
@@ -586,7 +590,15 @@ const currentReviewStatusText = computed(() => {
   if (!reviewDetails.value || !reviewDetails.value.overallReviewByManager)
     return "Không xác định";
   const statusMap = {
+    DRAFT: "Nháp",
     PENDING_REVIEW: "Chờ Review",
+    SECTION_REVIEW_PENDING: "Chờ Trưởng Bộ phận Review",
+    SECTION_REVIEWED: "Trưởng Bộ phận đã Review",
+    SECTION_REVISE_REQUIRED: "Trưởng Bộ phận yêu cầu chỉnh sửa",
+    DEPARTMENT_REVIEW_PENDING: "Chờ Trưởng Phòng Review",
+    DEPARTMENT_REVIEWED: "Trưởng Phòng đã Review",
+    DEPARTMENT_REVISE_REQUIRED: "Trưởng Phòng yêu cầu chỉnh sửa",
+    MANAGER_REVIEW_PENDING: "Chờ Quản lý Review",
     MANAGER_REVIEWED: "Quản lý Đã Review",
     EMPLOYEE_FEEDBACK_PENDING: "Chờ Bạn Phản hồi",
     EMPLOYEE_RESPONDED: "Bạn Đã Phản hồi",
@@ -627,7 +639,6 @@ watch(selectedCycle, (val) => {
     if (myReviewError.value) myReviewError.value = null;
   }
 });
-
 onUnmounted(() => {
   store.commit("kpiEvaluations/SET_EMPLOYEE_REVIEW_DETAILS", null);
   selectedCycle.value = null;
