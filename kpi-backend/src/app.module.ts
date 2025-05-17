@@ -35,7 +35,7 @@ import { ReportsModule } from './reports/reports.module';
           database: 'kpi_management',
           entities: [__dirname + '/**/*.entity{.ts,.js}'],
           synchronize: true,
-          logging: false,
+          logging: true,
         };
       },
       inject: [ConfigService],

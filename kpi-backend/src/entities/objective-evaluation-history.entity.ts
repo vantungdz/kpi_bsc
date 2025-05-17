@@ -8,7 +8,6 @@ import {
 } from 'typeorm';
 import { ObjectiveEvaluation } from './objective-evaluation.entity';
 import { Employee } from './employee.entity';
-import { ObjectiveEvaluationStatus } from './objective-evaluation-status.enum';
 
 @Entity('objective_evaluation_history')
 export class ObjectiveEvaluationHistory {
@@ -23,18 +22,6 @@ export class ObjectiveEvaluationHistory {
   })
   @JoinColumn({ name: 'evaluationId' })
   evaluation: ObjectiveEvaluation;
-
-  @Column({
-    type: 'enum',
-    enum: ObjectiveEvaluationStatus,
-  })
-  oldStatus: ObjectiveEvaluationStatus;
-
-  @Column({
-    type: 'enum',
-    enum: ObjectiveEvaluationStatus,
-  })
-  newStatus: ObjectiveEvaluationStatus;
 
   @Column({ type: 'text', nullable: true })
   reason: string | null; // Reason for rejection

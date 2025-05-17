@@ -456,13 +456,19 @@
   "errorDuringRejection": "Đã xảy ra lỗi trong quá trình từ chối.",
   "errorLoadingHistory": "Lỗi khi tải lịch sử.",
   "status_array": {
-    "pendingSectionApproval": "Chờ Trưởng Bộ Phận Duyệt ",
+    "pendingSectionApproval": "Chờ Trưởng Bộ phận Duyệt ",
     "pendingDeptApproval": "Chờ Trưởng Phòng Duyệt ",
     "pendingManagerApproval": "Chờ Quản Lý Duyệt ",
     "approved": "Đã Duyệt ",
     "rejectedBySection": "Bị Trưởng Bộ Phận Từ Chối ",
     "rejectedByDept": "Bị Trưởng Phòng Từ Chối ",
     "rejectedByManager": "Bị Quản Lý Từ Chối ",
+    "PENDING_REVIEW": "Chờ đánh giá",
+    "MANAGER_REVIEWED": "Quản lý đã đánh giá",
+    "EMPLOYEE_FEEDBACK_PENDING": "Chờ phản hồi nhân viên",
+    "EMPLOYEE_RESPONDED": "Nhân viên đã phản hồi",
+    "COMPLETED": "Hoàn thành",
+    "undefined": "Chưa đánh giá",
     "unknown": "Trạng Thái Không Xác Định"
   },
   "objectiveEvaluationStatus": {
@@ -507,5 +513,6 @@
   "reportGeneratedSuccessfully": "Xuất báo cáo thành công!",
   "reportGenerator": "Xuất báo cáo",
   "selfScore": "Điểm nhân viên tự đánh giá",
-  "selfComment": "Nhận xét nhân viên tự đánh giá"
+  "selfComment": "Nhận xét nhân viên tự đánh giá",
+  "reviewer": "Người đánh giá"
 }

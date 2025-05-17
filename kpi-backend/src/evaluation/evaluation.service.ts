@@ -9,9 +9,10 @@ import {
   LessThanOrEqual,
   MoreThanOrEqual,
   Repository,
-  Brackets, // + Import Brackets
+  Brackets,
   EntityManager,
   In,
+  Not,
 } from 'typeorm';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Employee } from '../entities/employee.entity';
@@ -34,17 +35,14 @@ import {
   ReviewHistoryResponseDto,
   PerformanceObjectiveItemDto,
   EmployeeKpiScoreDto,
-  ObjectiveEvaluationListItemDto, // + Import DTO
-  ObjectiveEvaluationHistoryItemDto, // + Import History DTO
-  SubmitSelfKpiReviewDto, // + Import SubmitSelfKpiReviewDto
+  ObjectiveEvaluationHistoryItemDto,
+  SubmitSelfKpiReviewDto,
 } from './dto/evaluation.dto';
 import { SavePerformanceObjectivesDto } from './dto/save-performance-objectives.dto';
 import { OverallReviewStatus } from '../entities/objective-evaluation-status.enum';
-// import { RejectObjectiveEvaluationDto } from './dto/reject-objective-evaluation.dto'; // This DTO might be old or replaced
 import { KpiValueStatus } from '../entities/kpi-value.entity';
-import { ObjectiveEvaluationStatus } from '../entities/objective-evaluation-status.enum';
-import { ObjectiveEvaluation } from '../entities/objective-evaluation.entity'; // + Import Entity
-import { ObjectiveEvaluationHistory } from '../entities/objective-evaluation-history.entity'; // + Import History Entity
+// Removed ObjectiveEvaluationStatus and related imports as objective evaluation is deprecated.
+
 
 @Injectable()
 export class EvaluationService {
@@ -63,13 +61,28 @@ export class EvaluationService {
     private readonly kpiReviewRepository: Repository<KpiReview>,
     @InjectRepository(OverallReview)
     private readonly overallReviewRepository: Repository<OverallReview>,
-    @InjectRepository(ObjectiveEvaluation) // + Inject ObjectiveEvaluationRepository
-    private readonly objectiveEvaluationRepository: Repository<ObjectiveEvaluation>,
-    @InjectRepository(ObjectiveEvaluationHistory) // + Inject ObjectiveEvaluationHistoryRepository
-    private readonly objectiveEvaluationHistoryRepository: Repository<ObjectiveEvaluationHistory>,
+    // Removed ObjectiveEvaluation and ObjectiveEvaluationHistory repositories
     private readonly entityManager: EntityManager,
     private readonly eventEmitter: EventEmitter2,
   ) {}
+
+  /**
+   * Helper: Luôn lấy bản ghi OverallReview mới nhất cho 1 employee/cycle
+   */
+  private async findLatestOverallReview(
+    targetId: number,
+    targetType: string,
+    cycleId: string
+  ): Promise<OverallReview | null> {
+    return this.overallReviewRepository.findOne({
+      where: {
+        targetId,
+        targetType: targetType as 'employee' | 'section' | 'department',
+        cycleId,
+      },
+      order: { updatedAt: 'DESC' },
+    });
+  }
 
   async getReviewableTargets(
     currentUser: Employee,
@@ -849,24 +862,22 @@ export class EvaluationService {
     employee: Employee,
     cycleId: string,
   ): Promise<EmployeeReviewResponseDto> {
-    const overallReviewRecord = await this.overallReviewRepository.findOne({
-      where: {
-        targetId: employee.id,
-        targetType: 'employee',
-        cycleId: cycleId,
-      },
-    });
+    // Sử dụng helper để lấy bản ghi OverallReview mới nhất
+    const overallReviewRecord = await this.findLatestOverallReview(
+      employee.id,
+      'employee',
+      cycleId,
+    );
 
     if (!overallReviewRecord) {
       // Nếu chưa có review tổng thể, vẫn trả về danh sách KPI assignment hợp lệ cho nhân viên trong cycle
       const { startDate, endDate } = this.getDateRangeFromCycleId(cycleId);
-      // Đảm bảo startDate/endDate là Date, không phải null
       if (!startDate || !endDate) {
         return {
           kpisReviewedByManager: [],
           overallReviewByManager: {
             overallComment: null,
-            status: OverallReviewStatus.PENDING_REVIEW,
+            status: OverallReviewStatus.DRAFT, // Sửa về DRAFT
             employeeComment: null,
             employeeFeedbackDate: null,
             totalWeightedScoreSupervisor: 0,
@@ -885,11 +896,9 @@ export class EvaluationService {
       const kpisReviewedByManager = (assignments || [])
         .filter((assignment) => assignment.kpi)
         .map((assignment) => {
-          // Tìm review self của nhân viên cho assignment này (nếu có)
           const selfReview = assignment.reviews?.find(
             (r) => r.reviewedBy?.id === employee.id && r.cycleId === cycleId,
           );
-          // Lấy actualValue từ kpiValues (giá trị APPROVED gần nhất trong chu kỳ)
           let actualValue: number | null = null;
           if (assignment.kpiValues && assignment.kpiValues.length > 0) {
             const approvedInCycle = assignment.kpiValues.filter(
@@ -931,7 +940,7 @@ export class EvaluationService {
         kpisReviewedByManager,
         overallReviewByManager: {
           overallComment: null,
-          status: OverallReviewStatus.PENDING_REVIEW,
+          status: OverallReviewStatus.DRAFT, // Sửa về DRAFT
           employeeComment: null,
           employeeFeedbackDate: null,
           totalWeightedScoreSupervisor: 0,
@@ -940,12 +949,10 @@ export class EvaluationService {
       };
     }
 
-    // Always use the actual status from overallReviewRecord for the employee/cycle
     let managerWhoReviewed: Employee | null = null;
     if (overallReviewRecord.reviewedById) {
       managerWhoReviewed = await this.employeeRepository.findOne({ where: { id: overallReviewRecord.reviewedById } });
     }
-    // If not found, fallback to employee (should not happen, but for type safety)
     const reviewDataFromManagerPerspective = await this.getKpisForReview(
       managerWhoReviewed || employee,
       employee.id,
@@ -977,7 +984,6 @@ export class EvaluationService {
 
     const kpisReviewedByManager = await Promise.all(
       reviewDataFromManagerPerspective.kpisToReview.map(async (kpi) => {
-        // Ưu tiên lấy từ selfReviewMap, nếu không có thì fallback sang assignment.reviews (nếu có)
         let selfScore: number | null = null;
         let selfComment: string | null = null;
         if (kpi.assignmentId) {
@@ -1006,7 +1012,6 @@ export class EvaluationService {
       }),
     );
 
-    // Always return the actual status from overallReviewRecord
     const response: EmployeeReviewResponseDto = {
       kpisReviewedByManager,
       overallReviewByManager: {
@@ -1025,13 +1030,12 @@ export class EvaluationService {
     employee: Employee,
     feedbackDto: SubmitEmployeeFeedbackDto,
   ): Promise<OverallReview> {
-    const overallReviewRecord = await this.overallReviewRepository.findOne({
-      where: {
-        targetId: employee.id,
-        targetType: 'employee',
-        cycleId: feedbackDto.cycleId,
-      },
-    });
+    // Sử dụng helper để lấy bản ghi OverallReview mới nhất
+    const overallReviewRecord = await this.findLatestOverallReview(
+      employee.id,
+      'employee',
+      feedbackDto.cycleId,
+    );
 
     if (!overallReviewRecord) {
       throw new BadRequestException(
@@ -1116,7 +1120,6 @@ export class EvaluationService {
     cycleId?: string,
   ): Promise<{
     objectives: PerformanceObjectiveItemDto[];
-    evaluationStatus: ObjectiveEvaluationStatus | null;
     totalWeightedScoreSupervisor?: number;
   }> {
     let dateRange;
@@ -1150,7 +1153,6 @@ export class EvaluationService {
       (a) => a.startDate && a.endDate,
     );
 
-    let evaluationStatus: ObjectiveEvaluationStatus | null = null;
     let totalWeightedScoreSupervisor = 0;
     const objectives: PerformanceObjectiveItemDto[] = [];
 
@@ -1195,11 +1197,8 @@ export class EvaluationService {
       });
     }
 
-    evaluationStatus = null;
-
     return {
       objectives,
-      evaluationStatus,
       totalWeightedScoreSupervisor,
     };
   }
@@ -1283,320 +1282,6 @@ export class EvaluationService {
     return results;
   }
 
-  async getPendingObjectiveEvaluationsForApprover(
-    currentUser: Employee,
-  ): Promise<ObjectiveEvaluationListItemDto[]> {
-    const queryBuilder = this.objectiveEvaluationRepository
-      .createQueryBuilder('objEval')
-      .leftJoinAndSelect('objEval.employee', 'employee')
-      .leftJoinAndSelect('employee.department', 'empDepartment')
-      .leftJoinAndSelect('employee.section', 'empSection')
-      .leftJoinAndSelect('objEval.evaluator', 'evaluator')
-      .orderBy('objEval.updated_at', 'DESC');
-
-    const conditions: Brackets[] = [];
-
-    if (currentUser.role === 'admin') {
-      conditions.push(
-        new Brackets((qb) => {
-          qb.where('objEval.status = :statusManager', {
-            statusManager: ObjectiveEvaluationStatus.PENDING_MANAGER_APPROVAL,
-          });
-        }),
-      );
-    } else if (currentUser.role === 'manager') {
-      conditions.push(
-        new Brackets((qb) => {
-          if (currentUser.departmentId) {
-            qb.orWhere(
-              '(objEval.status = :statusDept AND empDepartment.id = :deptId)',
-              {
-                statusDept: ObjectiveEvaluationStatus.PENDING_DEPT_APPROVAL,
-                deptId: currentUser.departmentId,
-              },
-            );
-          }
-          if (currentUser.sectionId) {
-            qb.orWhere(
-              '(objEval.status = :statusSection AND empSection.id = :sectionId)',
-              {
-                statusSection:
-                  ObjectiveEvaluationStatus.PENDING_SECTION_APPROVAL,
-                sectionId: currentUser.sectionId,
-              },
-            );
-          }
-          // Manager can also see PENDING_MANAGER_APPROVAL if they are not the original evaluator
-          qb.orWhere(
-            'objEval.status = :statusManager AND objEval.evaluatorId != :currentUserId',
-            {
-              statusManager: ObjectiveEvaluationStatus.PENDING_MANAGER_APPROVAL,
-              currentUserId: currentUser.id,
-            },
-          );
-        }),
-      );
-    } else if (currentUser.role === 'department' && currentUser.departmentId) {
-      conditions.push(
-        new Brackets((qb) => {
-          qb.where(
-            'objEval.status = :statusDept AND empDepartment.id = :deptId',
-            {
-              statusDept: ObjectiveEvaluationStatus.PENDING_DEPT_APPROVAL,
-              deptId: currentUser.departmentId,
-            },
-          );
-        }),
-      );
-    } else if (currentUser.role === 'section' && currentUser.sectionId) {
-      conditions.push(
-        new Brackets((qb) => {
-          qb.where(
-            'objEval.status = :statusSection AND empSection.id = :sectionId',
-            {
-              statusSection: ObjectiveEvaluationStatus.PENDING_SECTION_APPROVAL,
-              sectionId: currentUser.sectionId,
-            },
-          );
-        }),
-      );
-    }
-
-    if (conditions.length > 0) {
-      queryBuilder.andWhere(
-        new Brackets((qb) => {
-          conditions.forEach((condition) => qb.orWhere(condition));
-        }),
-      );
-    } else {
-      // If no conditions match (e.g., a role without approval duties), return empty
-      return [];
-    }
-
-    const evaluations = await queryBuilder.getMany();
-
-    return evaluations.map((e) => ({
-      id: e.id,
-      employee: e.employee
-        ? {
-            id: e.employee.id,
-            first_name: e.employee.first_name,
-            last_name: e.employee.last_name,
-            username: e.employee.username,
-          }
-        : null,
-      evaluator: e.evaluator
-        ? {
-            id: e.evaluator.id,
-            first_name: e.evaluator.first_name,
-            last_name: e.evaluator.last_name,
-            username: e.evaluator.username,
-          }
-        : null,
-      cycleId: e.cycleId,
-      totalWeightedScoreSupervisor: e.totalWeightedScoreSupervisor
-        ? parseFloat(e.totalWeightedScoreSupervisor.toString())
-        : undefined,
-      averageScoreSupervisor: e.averageScoreSupervisor
-        ? parseFloat(e.averageScoreSupervisor.toString())
-        : undefined,
-      status: e.status,
-      updated_at: e.updated_at,
-    }));
-  }
-
-  private async updateObjectiveEvaluationStatus(
-    evaluationId: number,
-    currentUser: Employee,
-    newStatus: ObjectiveEvaluationStatus,
-    rejectionReason: string | undefined,
-    oldStatusCheck: ObjectiveEvaluationStatus,
-  ): Promise<ObjectiveEvaluation> {
-    const evaluation = await this.objectiveEvaluationRepository.findOne({
-      where: { id: evaluationId },
-      relations: [
-        'employee',
-        'employee.department',
-        'employee.section',
-        'evaluator',
-      ],
-    });
-
-    if (!evaluation) {
-      throw new NotFoundException(
-        `Objective evaluation with ID ${evaluationId} not found.`,
-      );
-    }
-    if (evaluation.status !== oldStatusCheck) {
-      throw new BadRequestException(
-        `Evaluation is not in ${oldStatusCheck} status. Current status: ${evaluation.status}`,
-      );
-    }
-
-    const employee = evaluation.employee;
-    let canApproveOrReject = false;
-    if (
-      currentUser.role === 'admin' &&
-      oldStatusCheck === ObjectiveEvaluationStatus.PENDING_MANAGER_APPROVAL
-    )
-      canApproveOrReject = true;
-    if (currentUser.role === 'manager') {
-      if (
-        oldStatusCheck === ObjectiveEvaluationStatus.PENDING_DEPT_APPROVAL &&
-        employee?.department?.id === currentUser.departmentId
-      )
-        canApproveOrReject = true;
-      if (
-        oldStatusCheck === ObjectiveEvaluationStatus.PENDING_SECTION_APPROVAL &&
-        employee?.section?.id === currentUser.sectionId
-      )
-        canApproveOrReject = true;
-      if (oldStatusCheck === ObjectiveEvaluationStatus.PENDING_MANAGER_APPROVAL)
-        canApproveOrReject = true; // Manager can be final approver
-    }
-    if (
-      currentUser.role === 'department' &&
-      oldStatusCheck === ObjectiveEvaluationStatus.PENDING_DEPT_APPROVAL &&
-      employee?.department?.id === currentUser.departmentId
-    )
-      canApproveOrReject = true;
-    if (
-      currentUser.role === 'section' &&
-      oldStatusCheck === ObjectiveEvaluationStatus.PENDING_SECTION_APPROVAL &&
-      employee?.section?.id === currentUser.sectionId
-    )
-      canApproveOrReject = true;
-
-    if (!canApproveOrReject) {
-      throw new UnauthorizedException(
-        'You do not have permission to perform this action on this evaluation.',
-      );
-    }
-
-    evaluation.status = newStatus;
-    if (rejectionReason) {
-      evaluation.currentRejectionReason = rejectionReason;
-    }
-    const savedEvaluation =
-      await this.objectiveEvaluationRepository.save(evaluation);
-
-    // Log history
-    await this.objectiveEvaluationHistoryRepository.save({
-      evaluationId: savedEvaluation.id,
-      oldStatus: oldStatusCheck,
-      newStatus: newStatus,
-      reason: rejectionReason || null,
-      changedById: currentUser.id,
-    });
-    await this.objectiveEvaluationRepository.save(evaluation);
-    // TODO: Emit event for notification
-    this.eventEmitter.emit('objective_evaluation.status_changed', {
-      evaluation: savedEvaluation,
-      actor: currentUser,
-      previousStatus: oldStatusCheck,
-    });
-    return savedEvaluation;
-  }
-
-  async approveObjectiveEvaluationByLevel(
-    evaluationId: number,
-    currentUser: Employee,
-    level: 'section' | 'dept' | 'manager',
-  ): Promise<ObjectiveEvaluation> {
-    let oldStatus: ObjectiveEvaluationStatus;
-    let newStatus: ObjectiveEvaluationStatus;
-
-    switch (level) {
-      case 'section':
-        oldStatus = ObjectiveEvaluationStatus.PENDING_SECTION_APPROVAL;
-        newStatus = ObjectiveEvaluationStatus.PENDING_DEPT_APPROVAL;
-        break;
-      case 'dept':
-        oldStatus = ObjectiveEvaluationStatus.PENDING_DEPT_APPROVAL;
-        newStatus = ObjectiveEvaluationStatus.PENDING_MANAGER_APPROVAL;
-        break;
-      case 'manager':
-        oldStatus = ObjectiveEvaluationStatus.PENDING_MANAGER_APPROVAL;
-        newStatus = ObjectiveEvaluationStatus.APPROVED;
-        break;
-      default:
-        throw new BadRequestException('Invalid approval level');
-    }
-    return this.updateObjectiveEvaluationStatus(
-      evaluationId,
-      currentUser,
-      newStatus,
-      undefined,
-      oldStatus,
-    );
-  }
-
-  async rejectObjectiveEvaluationByLevel(
-    evaluationId: number,
-    currentUser: Employee,
-    reason: string,
-    level: 'section' | 'dept' | 'manager',
-  ): Promise<ObjectiveEvaluation> {
-    let oldStatus: ObjectiveEvaluationStatus;
-    let newStatus: ObjectiveEvaluationStatus;
-    switch (level) {
-      case 'section':
-        oldStatus = ObjectiveEvaluationStatus.PENDING_SECTION_APPROVAL;
-        newStatus = ObjectiveEvaluationStatus.REJECTED_BY_SECTION;
-        break;
-      case 'dept':
-        oldStatus = ObjectiveEvaluationStatus.PENDING_DEPT_APPROVAL;
-        newStatus = ObjectiveEvaluationStatus.REJECTED_BY_DEPT;
-        break;
-      case 'manager':
-        oldStatus = ObjectiveEvaluationStatus.PENDING_MANAGER_APPROVAL;
-        newStatus = ObjectiveEvaluationStatus.REJECTED_BY_MANAGER;
-        break;
-      default:
-        throw new BadRequestException('Invalid rejection level');
-    }
-    return this.updateObjectiveEvaluationStatus(
-      evaluationId,
-      currentUser,
-      newStatus,
-      reason,
-      oldStatus,
-    );
-  }
-
-  async getObjectiveEvaluationHistory(
-    evaluationId: number,
-    currentUser: Employee, // Assuming only users with approval roles or the employee themselves can view history
-  ): Promise<ObjectiveEvaluationHistoryItemDto[]> {
-    // TODO: Implement permission check here based on currentUser role and the evaluation's employee/department/section
-    // For now, assuming anyone with access to the list can view history.
-    // A more robust check would involve loading the evaluation and checking if currentUser has scope over the employee.
-
-    const history = await this.objectiveEvaluationHistoryRepository.find({
-      where: { evaluationId: evaluationId },
-      relations: ['changedBy'],
-      order: { timestamp: 'ASC' },
-    });
-
-    return history.map((item) => ({
-      id: item.id,
-      oldStatus: item.oldStatus,
-      newStatus: item.newStatus,
-      reason: item.reason,
-      changedBy: item.changedBy
-        ? {
-            id: item.changedBy.id,
-            first_name: item.changedBy.first_name,
-            last_name: item.changedBy.last_name,
-            username: item.changedBy.username,
-          }
-        : null,
-      timestamp: item.timestamp,
-    }));
-  }
-
-   // ========================================== approvele/reject section/department/manager review
-
   async approveSectionReview(
     overallReviewId: number,
     currentUser: Employee,
@@ -1608,7 +1293,6 @@ export class EvaluationService {
     if (review.status !== OverallReviewStatus.SECTION_REVIEW_PENDING) {
       throw new BadRequestException('Review is not pending section approval');
     }
-    // Only section head or admin/manager can approve
     if (
       !['section', 'admin', 'manager'].includes(currentUser.role) ||
       (currentUser.role === 'section' &&
@@ -1622,7 +1306,6 @@ export class EvaluationService {
     }
     review.status = OverallReviewStatus.SECTION_REVIEWED;
     await this.overallReviewRepository.save(review);
-    // Next: department review pending
     review.status = OverallReviewStatus.DEPARTMENT_REVIEW_PENDING;
     return this.overallReviewRepository.save(review);
   }
@@ -1651,7 +1334,6 @@ export class EvaluationService {
       );
     }
     review.status = OverallReviewStatus.SECTION_REVISE_REQUIRED;
-    // Optionally log reason
     if (reason)
       review.overallComment = `[SECTION REJECTED]: ${reason}\n${review.overallComment || ''}`;
     return this.overallReviewRepository.save(review);
@@ -1683,7 +1365,6 @@ export class EvaluationService {
     }
     review.status = OverallReviewStatus.DEPARTMENT_REVIEWED;
     await this.overallReviewRepository.save(review);
-    // Next: manager review pending
     review.status = OverallReviewStatus.MANAGER_REVIEW_PENDING;
     return this.overallReviewRepository.save(review);
   }
@@ -1737,7 +1418,6 @@ export class EvaluationService {
     }
     review.status = OverallReviewStatus.MANAGER_REVIEWED;
     await this.overallReviewRepository.save(review);
-    // Next: employee feedback pending
     review.status = OverallReviewStatus.EMPLOYEE_FEEDBACK_PENDING;
     return this.overallReviewRepository.save(review);
   }
@@ -1759,12 +1439,96 @@ export class EvaluationService {
         'You do not have permission to reject this review at manager level',
       );
     }
-    review.status = OverallReviewStatus.DEPARTMENT_REVISE_REQUIRED; // Manager reject trả về cho department sửa lại
+    review.status = OverallReviewStatus.DEPARTMENT_REVISE_REQUIRED;
     if (reason)
       review.overallComment = `[MANAGER REJECTED]: ${reason}\n${review.overallComment || ''}`;
     return this.overallReviewRepository.save(review);
   }
 
+  /**
+   * Returns a list of all employee KPI reviews and feedbacks for a manager in a given cycle.
+   */
+  async getEmployeeReviewsListForManager(
+    manager: Employee,
+    cycleId: string,
+  ): Promise<EmployeeReviewResponseDto[]> {
+    // Get employees managed by this manager (same department)
+    let employees: Employee[] = [];
+    if (manager.role === 'admin') {
+      employees = await this.employeeRepository.find();
+    } else if (manager.role === 'manager' && manager.departmentId) {
+      employees = await this.employeeRepository.find({
+        where: { departmentId: manager.departmentId },
+      });
+    } else {
+      return [];
+    }
+    // For each employee, get their review details for the cycle
+    const results: EmployeeReviewResponseDto[] = [];
+    for (const emp of employees) {
+      // Skip the manager themselves
+      if (emp.id === manager.id) continue;
+      try {
+        const review = await this.getEmployeeReviewDetails(emp, cycleId);
+        // Attach employee info
+        (review as any).employee = {
+          id: emp.id,
+          fullName: `${emp.first_name} ${emp.last_name}`.trim(),
+          department: emp.departmentId,
+        };
+        results.push(review);
+      } catch (e) {
+        // Ignore errors for employees with no review data
+      }
+    }
+    return results;
+  }
+
+  /**
+   * Lấy tất cả các bản OverallReview của nhân viên do user hiện tại quản lý,
+   * bao gồm các trạng thái cần duyệt hoặc đã có feedback.
+   */
+  async getManagedEmployeeOverallReviews(
+    currentUser: Employee,
+    statusList?: string[], // optional: lọc theo trạng thái nếu cần
+  ) {
+    // Lấy danh sách nhân viên do user này quản lý
+    let employees: Employee[] = [];
+    if (currentUser.role === 'admin') {
+      employees = await this.employeeRepository.find();
+    } else if (currentUser.role === 'manager' && currentUser.departmentId) {
+      employees = await this.employeeRepository.find({
+        where: { departmentId: currentUser.departmentId },
+      });
+    } else if (currentUser.role === 'department' && currentUser.departmentId) {
+      employees = await this.employeeRepository.find({
+        where: { departmentId: currentUser.departmentId },
+      });
+    } else if (currentUser.role === 'section' && currentUser.sectionId) {
+      employees = await this.employeeRepository.find({
+        where: { sectionId: currentUser.sectionId },
+      });
+    }
+    const employeeIds = employees.map(e => e.id);
+    if (employeeIds.length === 0) return [];
+    // Lấy tất cả OverallReview của các nhân viên này
+    const where: any = {
+      targetId: employeeIds.length === 1 ? employeeIds[0] : In(employeeIds),
+      targetType: 'employee',
+    };
+    if (statusList && statusList.length > 0) {
+      where.status = statusList.length === 1 ? statusList[0] : statusList;
+    } else {
+      // Nếu không truyền statusList, loại bỏ COMPLETED mặc định
+      where.status = Not('COMPLETED');
+    }
+    const reviews = await this.overallReviewRepository.find({
+      where,
+      order: { updatedAt: 'DESC' },
+      relations: ['reviewedBy'],
+    });
+    return reviews;
+  }
 }
 
 

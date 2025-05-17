@@ -180,16 +180,14 @@
                     v-model:value="kpiItem.selfComment"
                     :placeholder="$t('selfCommentPlaceholder')"
                     :rows="3"
-                    :disabled="
-                      isLoadingKpis || overallReview.status === 'COMPLETED'
-                    "
+                    :disabled="isLoadingKpis || overallReview.status !== 'DRAFT'"
                   />
                 </a-form-item>
                 <a-form-item
                   :label="`${$t('selfScoreForKpi')} ${kpiItem.kpiName}`"
                   :name="['kpiItem', index, 'selfScore']"
                 >
-                  <a-rate v-model:value="kpiItem.selfScore" />
+                  <a-rate v-model:value="kpiItem.selfScore" :disabled="isLoadingKpis || overallReview.status !== 'DRAFT'" />
                 </a-form-item>
               </template>
 
@@ -286,9 +284,7 @@
                 html-type="button"
                 @click="handleSaveButtonClick"
                 :loading="isSubmitting"
-                :disabled="
-                  isLoadingKpis || overallReview.status === 'COMPLETED'
-                "
+                :disabled="isLoadingKpis || !canEditManagerReview"
               >
                 {{ $t("saveReview") }}
               </a-button>
@@ -388,7 +384,6 @@ import { useI18n } from "vue-i18n";
 
 const { t: $t } = useI18n();
 import dayjs from "dayjs";
-import { cloneDeep } from "lodash-es";
 
 const store = useStore();
 const router = useRouter();
@@ -475,31 +470,21 @@ const rejectManagerComment = ref("");
 
 const overallReviewId = computed(() => existingOverallReviewFromStore.value && existingOverallReviewFromStore.value.id ? existingOverallReviewFromStore.value.id : null);
 
+// Đảm bảo dữ liệu kpisToReview luôn có selfComment/selfScore mặc định
 watch(
   kpisFromStore,
   (newKpis) => {
-    console.log(
-      "KpiReview.vue: kpisFromStore watcher triggered. newKpis:",
-      newKpis
-    );
-
     if (newKpis && Array.isArray(newKpis)) {
-      kpisToReview.value = cloneDeep(newKpis).map((kpi) => ({
+      kpisToReview.value = newKpis.map((kpi) => ({
         ...kpi,
-
-        managerComment: kpi.existingManagerComment || "",
-        managerScore:
-          kpi.existingManagerScore === undefined
-            ? null
-            : kpi.existingManagerScore,
+        selfComment: kpi.selfComment ?? '',
+        selfScore: kpi.selfScore ?? null,
+        managerComment: kpi.existingManagerComment || '',
+        managerScore: kpi.existingManagerScore === undefined ? null : kpi.existingManagerScore,
       }));
     } else {
       kpisToReview.value = [];
     }
-    console.log(
-      "KpiReview.vue: local kpisToReview.value updated:",
-      kpisToReview.value
-    );
   },
   { deep: true, immediate: true }
 );
@@ -715,6 +700,7 @@ const totalWeightedScoreSupervisor = computed(() => {
   return Number(overallReview.value.totalWeightedScoreSupervisor).toFixed(2);
 });
 
+// Đảm bảo submit lấy đúng selfComment/selfScore
 const submitReviewData = async () => {
   try {
     console.log("[KpiReview.vue] submitReviewData called.");
@@ -744,6 +730,8 @@ const submitReviewData = async () => {
       overallScore: overallReview.value.managerScore,
       kpiReviews: kpisToReview.value.map((kpi) => ({
         assignmentId: kpi.assignmentId,
+        selfComment: kpi.selfComment,
+        selfScore: kpi.selfScore,
         managerComment: kpi.managerComment,
         managerScore: kpi.managerScore,
       })),
@@ -928,15 +916,80 @@ const handleRejectManager = async () => {
   rejectManagerComment.value = "";
 };
 
+const canEditManagerReview = computed(() => {
+  const status = overallReview.value.status;
+  const role = currentUser.value?.role;
+  if (!status || !role) return false;
+  if (role === 'employee') {
+    return status === 'DRAFT';
+  }
+  // admin, manager, section, department
+  return [
+    'DRAFT',
+    'PENDING_REVIEW',
+    'SECTION_REVIEW_PENDING',
+    'DEPARTMENT_REVIEW_PENDING',
+    'MANAGER_REVIEW_PENDING'
+  ].includes(status);
+});
+
 onMounted(() => {
   fetchReviewTargets();
   fetchReviewCycles();
 
-  // Auto-select target/cycle if present in query
-  const { targetType, targetId, cycleId } = router.currentRoute.value.query;
-  if (targetType && targetId && cycleId) {
-    selectedTarget.value = `${targetType}-${targetId}`;
-    selectedCycle.value = cycleId;
+  // Helper để set target/cycle khi có dữ liệu
+  const setTargetAndCycle = () => {
+    const targets = reviewTargets.value;
+    const cycles = reviewCycles.value;
+    const { params, query } = router.currentRoute.value;
+    // 1. Lấy employeeId/cycleId từ path hoặc query
+    const employeeId = params.employeeId || query.targetId;
+    const cycleId = params.cycleId || query.cycleId;
+    // 2. Xác định targetType (ưu tiên path, nếu không có thì mặc định 'employee')
+    let targetType = params.targetType || query.targetType || 'employee';
+    // 3. Set selectedTarget nếu có employeeId
+    if (employeeId && targets && Array.isArray(targets)) {
+      let found = targets.find(t => String(t.id) === String(employeeId) && t.type === targetType);
+      if (!found) found = targets.find(t => String(t.id) === String(employeeId));
+      if (found) {
+        selectedTarget.value = `${found.type}-${found.id}`;
+      } else {
+        // Nếu không tìm thấy, thử mặc định là employee
+        selectedTarget.value = `employee-${employeeId}`;
+      }
+    }
+    // 4. Set selectedCycle nếu có cycleId
+    if (cycleId && cycles && Array.isArray(cycles)) {
+      let foundCycle = cycles.find(c => String(c.id) === String(cycleId) || c.name === cycleId);
+      if (foundCycle) {
+        selectedCycle.value = foundCycle.id;
+      } else {
+        selectedCycle.value = cycleId;
+      }
+    }
+    // 5. Nếu đã có đủ, load data
+    if (selectedTarget.value && selectedCycle.value) fetchKpisForReview();
+  };
+  // Nếu targets và cycles đã có thì set luôn, nếu chưa thì watch cả hai
+  if (reviewTargets.value && reviewTargets.value.length > 0 && reviewCycles.value && reviewCycles.value.length > 0) {
+    setTargetAndCycle();
+  } else {
+    const stop = watch([reviewTargets, reviewCycles], ([val1, val2]) => {
+      if (val1 && val1.length > 0 && val2 && val2.length > 0) {
+        setTargetAndCycle();
+        stop();
+      }
+    });
+  }
+  // Watch route thay đổi để tự động cập nhật dropdown
+  watch(() => router.currentRoute.value.fullPath, () => {
+    setTargetAndCycle();
+  });
+});
+
+// Đảm bảo luôn load data khi chọn đủ target và cycle
+watch([selectedTarget, selectedCycle], ([target, cycle]) => {
+  if (target && cycle) {
     fetchKpisForReview();
   }
 });

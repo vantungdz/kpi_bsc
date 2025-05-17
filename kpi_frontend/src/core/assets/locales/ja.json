@@ -471,13 +471,19 @@
   "errorDuringRejection": "却下中にエラーが発生しました。",
   "errorLoadingHistory": "履歴の読み込みエラー。",
   "status_array": {
-    "pendingSectionApproval": "セクション承認待ち",
-    "pendingDeptApproval": "部門承認待ち",
-    "pendingManagerApproval": "マネージャー承認待ち",
+    "pendingSectionApproval": "部門長の承認待ち",
+    "pendingDeptApproval": "部の承認待ち",
+    "pendingManagerApproval": "マネージャーの承認待ち",
     "approved": "承認済み",
-    "rejectedBySection": "セクションにより却下",
-    "rejectedByDept": "部門により却下",
-    "rejectedByManager": "マネージャーにより却下",
+    "rejectedBySection": "部門長による却下",
+    "rejectedByDept": "部による却下",
+    "rejectedByManager": "マネージャーによる却下",
+    "PENDING_REVIEW": "レビュー待ち",
+    "MANAGER_REVIEWED": "マネージャーレビュー済み",
+    "EMPLOYEE_FEEDBACK_PENDING": "従業員のフィードバック待ち",
+    "EMPLOYEE_RESPONDED": "従業員が回答済み",
+    "COMPLETED": "完了",
+    "undefined": "未レビュー",
     "unknown": "不明なステータス"
   },
   "objectiveEvaluationStatus": {
@@ -517,5 +523,6 @@
   "reportGeneratedSuccessfully": "レポートが正常に生成されました！",
   "reportGenerator": "レポート出力",
   "selfScore": "従業員自己評価スコア",
-  "selfComment": "従業員の自己評価コメント"
+  "selfComment": "従業員の自己評価コメント",
+  "reviewer": "評価者"
 }

@@ -58,95 +58,74 @@
             reviewDetails.kpisReviewedByManager.length > 0
           "
         >
-          <template v-if="!reviewDetails.overallReviewByManager">
+          <template v-if="canEditSelfReview">
             <h3>{{ $t("detailedKpiReview") }}</h3>
             <div
               v-for="(kpiItem, index) in reviewDetails.kpisReviewedByManager"
               :key="kpiItem.assignmentId"
               class="kpi-review-item-employee"
             >
-              <template v-if="kpiItem && kpiItem.assignmentId && kpiItem.kpiName">
-                <a-divider v-if="index > 0" />
-                <h4>{{ index + 1 }}. {{ kpiItem.kpiName }}</h4>
-                <p
-                  v-if="kpiItem.kpiDescription"
-                  style="font-style: italic; color: #555; margin-bottom: 8px"
-                >
-                  <strong>{{ $t("kpiDescription") }}:</strong>
-                  {{ kpiItem.kpiDescription }}
-                </p>
-                <a-row :gutter="16" style="margin-bottom: 10px">
-                  <a-col :span="6">
-                    <strong>{{ $t("target") }}:</strong> {{ kpiItem.targetValue }}
-                    {{ kpiItem.unit }}
-                  </a-col>
-                  <a-col :span="6">
-                    <strong>{{ $t("actualResult") }}:</strong>
-                    {{ kpiItem.actualValue }}
-                    {{ kpiItem.unit }}
-                  </a-col>
-                  <a-col :span="6">
-                    <strong>{{ $t("completionRate") }}:</strong>
-                    <a-progress
-                      :percent="
-                        calculateCompletionRate(
-                          kpiItem.actualValue,
-                          kpiItem.targetValue
-                        )
-                      "
-                      size="small"
-                    />
-                  </a-col>
-                  <a-col :span="3">
-                    <strong>{{ $t("weight") }}:</strong> {{ kpiItem.weight }}
-                  </a-col>
-                  <a-col :span="3">
-                    <strong>{{ $t("weightedScoreSupervisor") }}:</strong>
-                    {{ getWeightedScore(kpiItem) }}
-                  </a-col>
-                </a-row>
-                <div v-if="canEditSelfReview">
-                  <a-form-item :label="$t('selfComment')">
-                    <Input.TextArea
-                      v-model:value="selfKpiReviews[index].selfComment"
-                      :rows="3"
-                      :placeholder="$t('selfCommentPlaceholder')"
-                      :disabled="isSubmittingSelfReview"
-                    />
-                  </a-form-item>
-                  <a-form-item :label="$t('selfScore')">
-                    <a-rate
-                      v-model:value="selfKpiReviews[index].selfScore"
-                      :disabled="isSubmittingSelfReview"
-                    />
-                  </a-form-item>
-                </div>
-                <div v-else>
-                  <p>
-                    <strong>{{ $t("selfComment") }}:</strong>
-                    {{ kpiItem.selfComment || $t("noComment") }}
-                  </p>
-                  <p>
-                    <strong>{{ $t("selfScore") }}:</strong>
-                    <a-rate :value="kpiItem.selfScore" disabled />
-                  </p>
-                </div>
-                <p>
-                  <strong>{{ $t("managerComment") }}:</strong>
-                  {{ kpiItem.existingManagerComment || $t("noComment") }}
-                </p>
-                <p v-if="kpiItem.existingManagerScore !== null">
-                  <strong>{{ $t("managerScore") }}:</strong>
-                  <a-rate :value="kpiItem.existingManagerScore" disabled />
-                </p>
-              </template>
-              <template v-else>
-                <a-alert
-                  type="warning"
-                  :message="$t('invalidKpiAssignmentData')"
-                  show-icon
+              <a-divider v-if="index > 0" />
+              <h4>{{ index + 1 }}. {{ kpiItem.kpiName }}</h4>
+              <p
+                v-if="kpiItem.kpiDescription"
+                style="font-style: italic; color: #555; margin-bottom: 8px"
+              >
+                <strong>{{ $t("kpiDescription") }}:</strong>
+                {{ kpiItem.kpiDescription }}
+              </p>
+              <a-row :gutter="16" style="margin-bottom: 10px">
+                <a-col :span="6">
+                  <strong>{{ $t("target") }}:</strong> {{ kpiItem.targetValue }}
+                  {{ kpiItem.unit }}
+                </a-col>
+                <a-col :span="6">
+                  <strong>{{ $t("actualResult") }}:</strong>
+                  {{ kpiItem.actualValue }}
+                  {{ kpiItem.unit }}
+                </a-col>
+                <a-col :span="6">
+                  <strong>{{ $t("completionRate") }}:</strong>
+                  <a-progress
+                    :percent="
+                      calculateCompletionRate(
+                        kpiItem.actualValue,
+                        kpiItem.targetValue
+                      )
+                    "
+                    size="small"
+                  />
+                </a-col>
+                <a-col :span="3">
+                  <strong>{{ $t("weight") }}:</strong> {{ kpiItem.weight }}
+                </a-col>
+                <a-col :span="3">
+                  <strong>{{ $t("weightedScoreSupervisor") }}:</strong>
+                  {{ getWeightedScore(kpiItem) }}
+                </a-col>
+              </a-row>
+              <a-form-item :label="$t('selfComment')">
+                <Input.TextArea
+                  v-model:value="selfKpiReviews[index].selfComment"
+                  :rows="3"
+                  :placeholder="$t('selfCommentPlaceholder')"
+                  :disabled="isSubmittingSelfReview || !canEditSelfReview"
                 />
-              </template>
+              </a-form-item>
+              <a-form-item :label="$t('selfScore')">
+                <a-rate
+                  v-model:value="selfKpiReviews[index].selfScore"
+                  :disabled="isSubmittingSelfReview || !canEditSelfReview"
+                />
+              </a-form-item>
+              <p>
+                <strong>{{ $t("managerComment") }}:</strong>
+                {{ kpiItem.existingManagerComment || $t("noComment") }}
+              </p>
+              <p v-if="kpiItem.existingManagerScore !== null">
+                <strong>{{ $t("managerScore") }}:</strong>
+                <a-rate :value="kpiItem.existingManagerScore" disabled />
+              </p>
             </div>
             <a-divider />
             <div
@@ -161,12 +140,12 @@
                 {{ totalWeightedScoreSupervisor }}
               </span>
             </div>
-            <div v-if="canEditSelfReview">
+            <div style="text-align: right; margin-top: 24px">
               <a-button
                 type="primary"
                 @click="submitSelfReview"
                 :loading="isSubmittingSelfReview"
-                :disabled="isSubmittingSelfReview"
+                :disabled="isSubmittingSelfReview || !canEditSelfReview"
               >
                 {{ $t("submitSelfReview") }}
               </a-button>
@@ -282,20 +261,6 @@
               <span style="font-size: 1.2em; color: #1890ff">
                 {{ totalWeightedScoreSupervisor }}
               </span>
-            </div>
-            <div
-              v-if="
-                reviewDetails.overallReviewByManager &&
-                reviewDetails.overallReviewByManager.status === 'PENDING_REVIEW'
-              "
-            >
-              <a-button
-                type="primary"
-                @click="submitSelfReview"
-                :loading="isSubmittingSelfReview"
-              >
-                {{ $t("submitSelfReview") }}
-              </a-button>
             </div>
           </template>
         </div>
@@ -513,6 +478,9 @@ const submitFeedback = async () => {
       employeeComment: employeeFeedbackComment.value,
     });
     notification.success({ message: "Gửi phản hồi thành công!" });
+    // Sau khi gửi feedback, fetch lại reviewDetails để cập nhật trạng thái và feedback mới nhất
+    await fetchMyReview();
+    // Chỉ clear comment khi submit thành công
     employeeFeedbackComment.value = "";
   } catch (error) {
     const errorMsg =
@@ -525,22 +493,28 @@ const submitFeedback = async () => {
 
 const selfKpiReviews = ref([]);
 
+// Thêm biến này để kiểm soát việc sync selfKpiReviews khi đang submit
+const isSyncingSelfKpiReviews = ref(false);
+
 watch(
   () => reviewDetails.value,
   (val) => {
-    if (val && val.kpisReviewedByManager && !isSubmittingSelfReview.value) {
+    // Chỉ sync selfKpiReviews nếu không trong lúc submit hoặc đang sync lại
+    if (val && val.kpisReviewedByManager && !isSubmittingSelfReview.value && !isSyncingSelfKpiReviews.value) {
       selfKpiReviews.value = val.kpisReviewedByManager.map((kpi) => ({
         assignmentId: kpi.assignmentId,
         selfScore: kpi.selfScore ?? null,
         selfComment: kpi.selfComment ?? "",
       }));
+      // Log trạng thái và dữ liệu selfKpiReviews để debug
+      console.log('[MyKpiReview] overallReviewByManager.status:', val.overallReviewByManager?.status);
+      console.log('[MyKpiReview] selfKpiReviews:', JSON.parse(JSON.stringify(selfKpiReviews.value)));
     }
   },
   { immediate: true, deep: true }
 );
 
 const canEditSelfReview = computed(() => {
-  // Nếu chưa có overallReviewByManager (null) => cho phép tự đánh giá
   if (!reviewDetails.value || !reviewDetails.value.kpisReviewedByManager) return false;
   if (!reviewDetails.value.overallReviewByManager) return true;
   return reviewDetails.value.overallReviewByManager.status === "DRAFT";
@@ -575,7 +549,10 @@ const submitSelfReview = async () => {
       })),
     });
     notification.success({ message: $t("submitSelfReviewSuccess") });
+    // Đảm bảo fetch lại reviewDetails và sync lại selfKpiReviews
+    isSyncingSelfKpiReviews.value = true;
     await fetchMyReview();
+    isSyncingSelfKpiReviews.value = false;
   } catch (error) {
     notification.error({
       message: $t("error"),

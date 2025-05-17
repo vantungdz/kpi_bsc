@@ -196,8 +196,8 @@
   "pendingDeptApproval": "Pending Department Approval",
   "pendingManagerApproval": "Pending Manager Approval",
   "approved": "Approved",
-  "rejectedBySection": "Rejected by Section",
-  "rejectedByDept": "Rejected by Department",
+  "rejectedBySection": "Rejected by Section Head",
+  "rejectedByDept": "Rejected by Department Head",
   "rejectedByManager": "Rejected by Manager",
   "notSubmitted": "Not Submitted",
   "pendingReview": "Pending Review",
@@ -471,15 +471,19 @@
   "errorDuringRejection": "An error occurred during rejection.",
   "errorLoadingHistory": "Error loading history.",
   "status_array": {
-    "draft": "Draft ",
-    "submitted": "Submitted ",
-    "pendingSectionApproval": "Pending Section Approval ",
-    "pendingDeptApproval": "Pending Department Approval ",
-    "pendingManagerApproval": "Pending Manager Approval ",
-    "approved": "Approved ",
-    "rejectedBySection": "Rejected by Section ",
-    "rejectedByDept": "Rejected by Department ",
-    "rejectedByManager": "Rejected by Manager ",
+    "pendingSectionApproval": "Pending Section Approval",
+    "pendingDeptApproval": "Pending Department Approval",
+    "pendingManagerApproval": "Pending Manager Approval",
+    "approved": "Approved",
+    "rejectedBySection": "Rejected by Section Head",
+    "rejectedByDept": "Rejected by Department Head",
+    "rejectedByManager": "Rejected by Manager",
+    "PENDING_REVIEW": "Pending Review",
+    "MANAGER_REVIEWED": "Manager Reviewed",
+    "EMPLOYEE_FEEDBACK_PENDING": "Employee Feedback Pending",
+    "EMPLOYEE_RESPONDED": "Employee Responded",
+    "COMPLETED": "Completed",
+    "undefined": "Not Reviewed",
     "unknown": "Unknown Status"
   },
   "objectiveEvaluationStatus": {
@@ -519,5 +523,6 @@
   "reportGeneratedSuccessfully": "Report generated successfully!",
   "reportGenerator": "Report Generator",
   "selfScore": "Employee self-assessment score",
-  "selfComment": "Employee self-assessment comments"
+  "selfComment": "Employee self-assessment comments",
+  "reviewer": "Reviewer"
 }

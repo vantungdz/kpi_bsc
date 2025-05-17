@@ -1,5 +1,4 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { ObjectiveEvaluationStatus } from '../../entities/objective-evaluation-status.enum';
 import { IsNotEmpty, IsString } from 'class-validator';
 
 export class ReviewableTargetDto {
@@ -111,9 +110,6 @@ export class PerformanceObjectivesResponseDto {
   @ApiProperty({ type: [PerformanceObjectiveItemDto] })
   objectives: PerformanceObjectiveItemDto[];
 
-  @ApiProperty({ enum: ObjectiveEvaluationStatus, nullable: true })
-  evaluationStatus: ObjectiveEvaluationStatus | null;
-
   @ApiProperty({ type: 'number', nullable: true })
   totalWeightedScoreSupervisor?: number;
 }
@@ -139,12 +135,6 @@ export class RejectObjectiveEvaluationPayloadDto {
 export class ObjectiveEvaluationHistoryItemDto {
   @ApiProperty()
   id: number;
-
-  @ApiProperty({ enum: ObjectiveEvaluationStatus })
-  oldStatus: ObjectiveEvaluationStatus;
-
-  @ApiProperty({ enum: ObjectiveEvaluationStatus })
-  newStatus: ObjectiveEvaluationStatus;
 
   @ApiProperty({ nullable: true })
   reason: string | null;
@@ -216,9 +206,6 @@ export class ObjectiveEvaluationListItemDto {
 
   @ApiProperty({ nullable: true })
   averageScoreSupervisor?: number;
-
-  @ApiProperty({ enum: ObjectiveEvaluationStatus })
-  status: ObjectiveEvaluationStatus;
 
   @ApiProperty()
   updated_at: Date;

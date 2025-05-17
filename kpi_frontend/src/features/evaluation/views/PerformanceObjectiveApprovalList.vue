@@ -22,9 +22,9 @@
         />
 
         <a-table
-          v-if="!loadingError && pendingObjectiveEvaluations.length > 0"
+          v-if="!loadingError && managedOverallReviews.length > 0"
           :columns="columns"
-          :data-source="pendingObjectiveEvaluations"
+          :data-source="managedOverallReviews"
           :row-key="'id'"
           bordered
           size="small"
@@ -33,64 +33,43 @@
           <template #bodyCell="{ column, record }">
             <template v-if="column.key === 'employeeName'">
               <span>
-                {{ record.employee?.first_name || "" }}
-                {{ record.employee?.last_name || "" }}
-                ({{ record.employee?.username || $t("unknown") }})
+                {{ record.reviewedBy?.first_name || "" }}
+                {{ record.reviewedBy?.last_name || "" }}
               </span>
             </template>
-            <template v-else-if="column.key === 'evaluatorName'">
+            <template v-else-if="column.key === 'reviewerName'">
               <span>
-                {{ record.evaluator?.first_name || "" }}
-                {{ record.evaluator?.last_name || "" }}
-                ({{ record.evaluator?.username || $t("unknown") }})
+                {{ record.reviewer?.first_name || "" }}
+                {{ record.reviewer?.last_name || "" }}
+                ({{ record.reviewer?.username || $t("unknown") }})
               </span>
             </template>
             <template v-else-if="column.key === 'totalWeightedScoreSupervisor'">
-              {{ record.total_weighted_score_supervisor?.toFixed(2) ?? "N/A" }}
-            </template>
-            <template v-else-if="column.key === 'averageScoreSupervisor'">
-              {{ record.average_score_supervisor?.toFixed(2) ?? "N/A" }}
+              {{
+                typeof record.totalWeightedScore === 'number' && !isNaN(record.totalWeightedScore)
+                  ? Number(record.totalWeightedScore).toFixed(2)
+                  : (record.totalWeightedScore && !isNaN(Number(record.totalWeightedScore)))
+                    ? Number(record.totalWeightedScore).toFixed(2)
+                    : "0"
+              }}
             </template>
             <template v-else-if="column.key === 'status'">
-              <a-tag :color="getObjectiveEvaluationStatusColor(record.status)">
-                {{ getObjectiveEvaluationStatusText(record.status) }}
+              <a-tag :color="getOverallReviewStatusColor(record.status)">
+                {{ getOverallReviewStatusText(record.status) }}
               </a-tag>
             </template>
-            <template v-else-if="column.key === 'updated_at'">
-              {{ formatDate(record.updated_at) }}
+            <template v-else-if="column.key === 'updatedAt'">
+              {{ formatDate(record.updatedAt) }}
             </template>
             <template v-else-if="column.key === 'actions'">
               <a-space>
                 <a-button
                   type="link"
                   size="small"
-                  @click="openDetailModal(record)"
+                  @click="goToKpiReview(record)"
                   :title="$t('viewDetailsAndHistory')"
                 >
                   <eye-outlined /> {{ $t("details") }}
-                </a-button>
-                <a-button
-                  type="primary"
-                  size="small"
-                  @click="handleApprove(record)"
-                  :loading="
-                    isProcessingApproval && currentActionItemId === record.id
-                  "
-                  :disabled="
-                    isProcessingApproval && currentActionItemId !== record.id
-                  "
-                  :title="$t('approve')"
-                >
-                  <check-outlined /> {{ $t("approve") }}
-                </a-button>
-                <a-button
-                  danger
-                  size="small"
-                  @click="openRejectModal(record)"
-                  :disabled="isProcessingApproval"
-                  :title="$t('reject')"
-                >
-                  <close-outlined /> {{ $t("reject") }}
                 </a-button>
               </a-space>
             </template>
@@ -100,7 +79,7 @@
         <a-empty
           v-if="
             !loadingError &&
-            pendingObjectiveEvaluations.length === 0 &&
+            managedOverallReviews.length === 0 &&
             !isLoading
           "
           :description="$t('noPendingObjectiveEvaluations')"
@@ -154,19 +133,74 @@
       :open="isDetailModalVisible"
       :title="$t('objectiveEvaluationDetailsAndHistory')"
       @cancel="closeDetailModal"
-      :width="1000"
+      :width="900"
       :footer="null"
       destroyOnClose
       @afterClose="resetDetailModalState"
     >
-      <p>{{ $t("detailsWillBeShownHere") }}</p>
-      <!-- Nội dung chi tiết và lịch sử sẽ được thêm vào đây -->
+      <template v-if="selectedReview">
+        <h4>{{ $t('employeeName') }}: {{ selectedReview.employee?.first_name }} {{ selectedReview.employee?.last_name }} ({{ selectedReview.employee?.username }})</h4>
+        <a-descriptions bordered :column="1" size="small" style="margin-bottom: 16px">
+          <a-descriptions-item :label="$t('status')">
+            <a-tag :color="getOverallReviewStatusColor(selectedReview.status)">
+              {{ getOverallReviewStatusText(selectedReview.status) }}
+            </a-tag>
+          </a-descriptions-item>
+          <a-descriptions-item :label="$t('totalWeightedScoreSupervisor')">
+            {{ selectedReview.totalWeightedScore ? Number(selectedReview.totalWeightedScore).toFixed(2) : 'N/A' }}
+          </a-descriptions-item>
+          <a-descriptions-item :label="$t('lastUpdated')">
+            {{ formatDate(selectedReview.updatedAt) }}
+          </a-descriptions-item>
+        </a-descriptions>
+        <h4 v-if="selectedReview.kpis">{{ $t('kpiReviewList') }}</h4>
+        <a-table
+          v-if="selectedReview.kpis"
+          :columns="kpiColumns"
+          :data-source="selectedReview.kpis"
+          :row-key="'assignmentId'"
+          size="small"
+          bordered
+          :pagination="false"
+          style="margin-bottom: 16px"
+        >
+          <template #bodyCell="{ column, record }">
+            <template v-if="column.key === 'kpiName'">
+              {{ record.kpiName }}
+            </template>
+            <template v-else-if="column.key === 'selfComment'">
+              {{ record.selfComment || $t('noComment') }}
+            </template>
+            <template v-else-if="column.key === 'selfScore'">
+              <a-rate :value="record.selfScore" disabled />
+            </template>
+            <template v-else-if="column.key === 'managerComment'">
+              {{ record.managerComment || $t('noComment') }}
+            </template>
+            <template v-else-if="column.key === 'managerScore'">
+              <a-rate :value="record.managerScore" disabled />
+            </template>
+          </template>
+        </a-table>
+        <h4 v-if="selectedReview.employeeComment">{{ $t('employeeFeedback') }}</h4>
+        <a-descriptions v-if="selectedReview.employeeComment" bordered :column="1" size="small">
+          <a-descriptions-item :label="$t('feedbackDate')">
+            {{ formatDate(selectedReview.employeeFeedbackDate) }}
+          </a-descriptions-item>
+          <a-descriptions-item :label="$t('feedbackContent')">
+            <p style="white-space: pre-wrap">{{ selectedReview.employeeComment }}</p>
+          </a-descriptions-item>
+        </a-descriptions>
+      </template>
+      <template v-else>
+        <a-empty :description="$t('noData')" />
+      </template>
     </a-modal>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from "vue";
+import { onMounted, ref, computed, h } from "vue";
 import { useStore } from "vuex";
 import { useI18n } from "vue-i18n";
 import {
@@ -187,46 +221,68 @@ import {
 } from "ant-design-vue";
 import {
   EyeOutlined,
-  CheckOutlined,
-  CloseOutlined,
 } from "@ant-design/icons-vue";
 import dayjs from "dayjs";
-import {
-  ObjectiveEvaluationStatus,
-  ObjectiveEvaluationStatusColor,
-  getObjectiveEvaluationStatusText as getStatusTextMap, // Renamed for clarity
-} from "@/core/constants/objectiveEvaluationStatus"; // Corrected path if needed, or ensure this constant file exists and is correct
+import { useRouter } from 'vue-router';
 
 const { t: $t } = useI18n();
 const store = useStore();
+const router = useRouter();
 
-const pendingObjectiveEvaluations = ref([]);
-const isLoading = computed(
-  () => store.getters["kpiEvaluations/isLoadingPendingObjectiveEvaluations"]
-);
+const managedOverallReviews = ref([]);
+const isLoading = ref(false);
 const loadingError = ref(null);
-const isProcessingApproval = computed(
-  () => store.getters["kpiEvaluations/isProcessingObjectiveEvalApproval"]
-);
-const currentUser = computed(() => store.getters["auth/user"]);
+const isProcessingApproval = computed(() => store.getters["kpiEvaluations/isProcessingObjectiveEvalApproval"]);
 const currentActionItemId = ref(null);
 
-// Reject Modal State
+// Modal State
 const isRejectModalVisible = ref(false);
 const itemToReject = ref(null);
 const rejectionReason = ref("");
 const rejectError = ref(null);
-
-// Detail Modal State
 const isDetailModalVisible = ref(false);
-const selectedEvaluation = ref(null);
-const evaluationHistory = ref([]);
-const isLoadingHistory = ref(false);
-const historyError = ref(null);
+const selectedReview = ref(null);
 
-const cardTitle = computed(() => $t("performanceObjectiveApprovalList")); // Placeholder, can be dynamic based on role
+const cardTitle = computed(() => $t("performanceObjectiveApprovalList"));
 
-const statusTextMap = computed(() => getStatusTextMap($t));
+// Define OverallReviewStatus and color/text helpers (replace with import if available)
+const OverallReviewStatus = {
+  SECTION_REVIEW_PENDING: "SECTION_REVIEW_PENDING",
+  DEPARTMENT_REVIEW_PENDING: "DEPARTMENT_REVIEW_PENDING",
+  MANAGER_REVIEW_PENDING: "MANAGER_REVIEW_PENDING",
+  MANAGER_REVIEWED: "MANAGER_REVIEWED",
+  EMPLOYEE_FEEDBACK_PENDING: "EMPLOYEE_FEEDBACK_PENDING",
+  EMPLOYEE_RESPONDED: "EMPLOYEE_RESPONDED",
+  COMPLETED: "COMPLETED",
+  REJECTED_BY_SECTION: "REJECTED_BY_SECTION",
+  REJECTED_BY_DEPARTMENT: "REJECTED_BY_DEPARTMENT",
+  REJECTED_BY_MANAGER: "REJECTED_BY_MANAGER",
+};
+const OverallReviewStatusColor = {
+  SECTION_REVIEW_PENDING: "orange",
+  DEPARTMENT_REVIEW_PENDING: "gold",
+  MANAGER_REVIEW_PENDING: "blue",
+  MANAGER_REVIEWED: "green",
+  EMPLOYEE_FEEDBACK_PENDING: "purple",
+  EMPLOYEE_RESPONDED: "cyan",
+  COMPLETED: "green",
+  REJECTED_BY_SECTION: "red",
+  REJECTED_BY_DEPARTMENT: "red",
+  REJECTED_BY_MANAGER: "red",
+  default: "gray",
+};
+const getOverallReviewStatusText = (status) => {
+  const map = {
+    MANAGER_REVIEWED: $t("status_array.MANAGER_REVIEWED"),
+    EMPLOYEE_FEEDBACK_PENDING: $t("status_array.EMPLOYEE_FEEDBACK_PENDING"),
+    EMPLOYEE_RESPONDED: $t("status_array.EMPLOYEE_RESPONDED"),
+    COMPLETED: $t("status_array.COMPLETED"),
+    PENDING_REVIEW: $t("status_array.PENDING_REVIEW"),
+    unknown: $t("status_array.unknown"),
+  };
+  return map[status] || map.unknown;
+};
+const getOverallReviewStatusColor = (status) => OverallReviewStatusColor[status] || OverallReviewStatusColor.default;
 
 const columns = computed(() => [
   {
@@ -234,35 +290,43 @@ const columns = computed(() => [
     key: "employeeName",
     width: 200,
     ellipsis: true,
+    customRender: ({ record }) => {
+      return record.reviewedBy
+        ? `${record.reviewedBy.first_name} ${record.reviewedBy.last_name}`
+        : $t("unknown");
+    },
   },
-  { title: $t("evaluator"), key: "evaluatorName", width: 200, ellipsis: true },
+  {
+    title: $t("reviewer"),
+    key: "reviewerName",
+    width: 200,
+    ellipsis: true,
+    customRender: ({ record }) => record.reviewedBy
+      ? `${record.reviewedBy.first_name || ''} ${record.reviewedBy.last_name || ''} (${record.reviewedBy.username || $t('unknown')})`
+      : $t('unknown'),
+  },
   {
     title: $t("totalWeightedScoreSupervisor"),
-    dataIndex: "total_weighted_score_supervisor",
     key: "totalWeightedScoreSupervisor",
     align: "right",
     width: 150,
-  },
-  {
-    title: $t("averageScoreSupervisor"),
-    dataIndex: "average_score_supervisor",
-    key: "averageScoreSupervisor",
-    align: "right",
-    width: 150,
+    customRender: ({ record }) => record.totalWeightedScore && !isNaN(Number(record.totalWeightedScore))
+      ? Number(record.totalWeightedScore).toFixed(2)
+      : "N/A",
   },
   {
     title: $t("status"),
-    dataIndex: "status",
     key: "status",
-    width: 180,
     align: "center",
+    width: 180,
+    customRender: ({ record }) =>
+      h(ATag, { color: getOverallReviewStatusColor(record.status) }, () => getOverallReviewStatusText(record.status)),
   },
   {
     title: $t("lastUpdated"),
-    dataIndex: "updated_at",
-    key: "updated_at",
+    key: "updatedAt",
     width: 150,
-    sorter: (a, b) => dayjs(a.updated_at).unix() - dayjs(b.updated_at).unix(),
+    customRender: ({ record }) => formatDate(record.updatedAt),
   },
   {
     title: $t("actions"),
@@ -270,82 +334,40 @@ const columns = computed(() => [
     align: "center",
     width: 220,
     fixed: "right",
+    customRender: ({ record }) =>
+      h(ASpace, null, [
+        h(AButton, {
+          type: "link",
+          size: "small",
+          onClick: () => goToKpiReview(record),
+          title: $t("viewDetailsAndHistory"),
+        }, [h(EyeOutlined), " ", $t("details")]),
+      ]),
   },
 ]);
 
-// Placeholder functions - to be implemented
-const getObjectiveEvaluationStatusColor = (status) => {
-  return (
-    ObjectiveEvaluationStatusColor[status] ||
-    ObjectiveEvaluationStatusColor.default
-  );
-};
-const getObjectiveEvaluationStatusText = (status) => {
-  return statusTextMap.value[status] || statusTextMap.value.unknown;
-};
-const formatDate = (dateString) =>
-  dateString ? dayjs(dateString).format("YYYY-MM-DD HH:mm") : "";
+const formatDate = (dateString) => dateString ? dayjs(dateString).format("YYYY-MM-DD HH:mm") : "";
+
+// Lọc bỏ các bản review đã hoàn thành (status === 'COMPLETED')
+// const filteredOverallReviews = computed(() =>
+//   managedOverallReviews.value.filter(r => r.status !== 'COMPLETED')
+// );
 
 const fetchData = async () => {
-  if (!currentUser.value || !currentUser.value.id) {
-    loadingError.value = $t("cannotIdentifyUser");
-    return;
-  }
+  isLoading.value = true;
   loadingError.value = null;
   try {
-    const data = await store.dispatch(
-      "kpiEvaluations/fetchPendingObjectiveEvaluations"
-    );
-    pendingObjectiveEvaluations.value = data || [];
+    // Call the new API to get all managed employees' OverallReview records
+    const response = await store.dispatch("kpiEvaluations/fetchManagedEmployeeOverallReviews");
+    managedOverallReviews.value = response || [];
   } catch (error) {
-    loadingError.value =
-      store.getters["kpiEvaluations/getPendingObjectiveEvaluationsError"] ||
-      $t("errorLoadingApprovalList");
-    pendingObjectiveEvaluations.value = [];
-  }
-};
-
-const handleApprove = async (record) => {
-  if (!record || !record.id) return;
-  currentActionItemId.value = record.id;
-
-  let actionName = null;
-  const status = record.status;
-
-  // Determine the correct Vuex action based on the current status
-  // This logic assumes the backend determines the next approver level
-  // The frontend just needs to call the correct "approve" action for the current pending level.
-  if (status === ObjectiveEvaluationStatus.PENDING_SECTION_APPROVAL) {
-    actionName = "kpiEvaluations/approveObjectiveEvaluationSection";
-  } else if (status === ObjectiveEvaluationStatus.PENDING_DEPT_APPROVAL) {
-    actionName = "kpiEvaluations/approveObjectiveEvaluationDept";
-  } else if (status === ObjectiveEvaluationStatus.PENDING_MANAGER_APPROVAL) {
-    actionName = "kpiEvaluations/approveObjectiveEvaluationManager";
-  } else {
-    notification.error({
-      message: $t("error"),
-      description: $t("invalidStatusForApproval", {
-        status: getObjectiveEvaluationStatusText(status),
-      }),
-    });
-    currentActionItemId.value = null;
-    return;
-  }
-
-  try {
-    await store.dispatch(actionName, { evaluationId: record.id });
-    // fetchData will be called automatically by the action if successful (due to dispatch('fetchPendingObjectiveEvaluations') in store)
-  } catch (error) {
-    // Notification is handled by the Vuex action
-    console.error(`Error during ${actionName}:`, error);
+    loadingError.value = $t("errorLoadingApprovalList");
+    managedOverallReviews.value = [];
   } finally {
-    currentActionItemId.value = null;
+    isLoading.value = false;
   }
 };
-const openRejectModal = (record) => {
-  itemToReject.value = record;
-  isRejectModalVisible.value = true;
-};
+
 const handleReject = async () => {
   if (!itemToReject.value || !itemToReject.value.id) return;
   if (!rejectionReason.value || rejectionReason.value.trim() === "") {
@@ -354,45 +376,35 @@ const handleReject = async () => {
   }
   currentActionItemId.value = itemToReject.value.id;
   rejectError.value = null;
-
   let actionName = null;
-  const status = itemToReject.value.status;
-
-  if (status === ObjectiveEvaluationStatus.PENDING_SECTION_APPROVAL) {
-    actionName = "kpiEvaluations/rejectObjectiveEvaluationSection";
-  } else if (status === ObjectiveEvaluationStatus.PENDING_DEPT_APPROVAL) {
-    actionName = "kpiEvaluations/rejectObjectiveEvaluationDept";
-  } else if (status === ObjectiveEvaluationStatus.PENDING_MANAGER_APPROVAL) {
-    actionName = "kpiEvaluations/rejectObjectiveEvaluationManager";
-  } else {
-    notification.error({
-      message: $t("error"),
-      description: $t("invalidStatusForRejection", {
-        status: getObjectiveEvaluationStatusText(status),
-      }),
-    });
-    currentActionItemId.value = null;
-    return;
-  }
-
-  try {
-    await store.dispatch(actionName, {
-      evaluationId: itemToReject.value.id,
-      reason: rejectionReason.value,
-    });
-    closeRejectModal(); // fetchData will be called by the action
-  } catch (error) {
-    rejectError.value =
-      store.getters["kpiEvaluations/getObjectiveEvalApprovalError"] ||
-      $t("errorDuringRejection");
-  } finally {
-    if (!rejectError.value) {
-      // Only reset if no error, otherwise keep modal open with error
+  switch (itemToReject.value.status) {
+    case OverallReviewStatus.SECTION_REVIEW_PENDING:
+      actionName = "kpiEvaluations/rejectOverallReviewSection";
+      break;
+    case OverallReviewStatus.DEPARTMENT_REVIEW_PENDING:
+      actionName = "kpiEvaluations/rejectOverallReviewDept";
+      break;
+    case OverallReviewStatus.MANAGER_REVIEW_PENDING:
+      actionName = "kpiEvaluations/rejectOverallReviewManager";
+      break;
+    default:
+      notification.error({
+        message: $t("error"),
+        description: $t("invalidStatusForRejection", { status: getOverallReviewStatusText(itemToReject.value.status) }),
+      });
       currentActionItemId.value = null;
-    }
+      return;
+  }
+  try {
+    await store.dispatch(actionName, { reviewId: itemToReject.value.id, comment: rejectionReason.value });
+    closeRejectModal();
+    fetchData();
+  } catch (error) {
+    rejectError.value = $t("errorDuringRejection");
+  } finally {
+    if (!rejectError.value) currentActionItemId.value = null;
   }
 };
-
 const closeRejectModal = () => {
   isRejectModalVisible.value = false;
 };
@@ -401,35 +413,17 @@ const resetRejectModalState = () => {
   rejectionReason.value = "";
   rejectError.value = null;
 };
-const openDetailModal = async (record) => {
-  if (!record || !record.id) return;
-  selectedEvaluation.value = record;
-  isDetailModalVisible.value = true;
-  isLoadingHistory.value = true;
-  historyError.value = null;
-  try {
-    const historyData = await store.dispatch(
-      "kpiEvaluations/fetchObjectiveEvaluationHistory",
-      { evaluationId: record.id }
-    );
-    evaluationHistory.value = historyData || [];
-  } catch (error) {
-    historyError.value =
-      store.getters["kpiEvaluations/getObjectiveEvaluationHistoryError"] ||
-      $t("errorLoadingHistory");
-    evaluationHistory.value = [];
-  } finally {
-    isLoadingHistory.value = false;
-  }
-};
+
 const closeDetailModal = () => {
   isDetailModalVisible.value = false;
 };
 const resetDetailModalState = () => {
-  selectedEvaluation.value = null;
-  evaluationHistory.value = [];
-  isLoadingHistory.value = false;
-  historyError.value = null;
+  selectedReview.value = null;
+};
+// Thêm hàm chuyển trang sang KpiReview
+const goToKpiReview = (record) => {
+  if (!record || !record.reviewedBy || !record.cycleId) return;
+  router.push(`/kpi-review/${record.reviewedBy.id}/${record.cycleId}`);
 };
 
 onMounted(() => {

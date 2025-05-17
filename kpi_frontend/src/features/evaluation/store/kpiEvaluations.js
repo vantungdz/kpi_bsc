@@ -851,6 +851,31 @@ const actions = {
       commit("SET_IS_PROCESSING_OBJECTIVE_EVAL_APPROVAL", false);
     }
   },
+
+  // Fetch all managed employees' OverallReview records
+  async fetchManagedEmployeeOverallReviews({ commit }) {
+    commit("SET_IS_LOADING_PENDING_OBJECTIVE_EVALUATIONS", true);
+    commit("SET_PENDING_OBJECTIVE_EVALUATIONS_ERROR", null);
+    try {
+      const response = await apiClient.get("/evaluation/overall-reviews/managed");
+      // The response is an array of OverallReview records
+      commit("SET_PENDING_OBJECTIVE_EVALUATIONS", response.data);
+      return response.data;
+    } catch (error) {
+      let errorMessage =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to fetch managed employee overall reviews.";
+      commit("SET_PENDING_OBJECTIVE_EVALUATIONS_ERROR", errorMessage);
+      notification.error({
+        message: "Error",
+        description: errorMessage,
+      });
+      throw error;
+    } finally {
+      commit("SET_IS_LOADING_PENDING_OBJECTIVE_EVALUATIONS", false);
+    }
+  },
 };
 
 const mutations = {

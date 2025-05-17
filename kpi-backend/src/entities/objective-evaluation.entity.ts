@@ -10,7 +10,6 @@ import {
   Index,
 } from 'typeorm';
 import { Employee } from './employee.entity';
-import { ObjectiveEvaluationStatus } from './objective-evaluation-status.enum';
 import { ObjectiveEvaluationHistory } from './objective-evaluation-history.entity';
 
 @Entity('objective_evaluations')
@@ -51,14 +50,6 @@ export class ObjectiveEvaluation {
 
   @Column('decimal', { precision: 10, scale: 2, nullable: true })
   averageScoreSupervisor: number;
-
-  @Index()
-  @Column({
-    type: 'enum',
-    enum: ObjectiveEvaluationStatus,
-    default: ObjectiveEvaluationStatus.SUBMITTED, // Default when a manager submits
-  })
-  status: ObjectiveEvaluationStatus;
 
   @Column({ type: 'text', nullable: true })
   currentRejectionReason: string;

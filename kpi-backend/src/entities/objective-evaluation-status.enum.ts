@@ -1,15 +1,3 @@
-export enum ObjectiveEvaluationStatus {
-  DRAFT = 'DRAFT',
-  SUBMITTED = 'SUBMITTED', // Initial state after evaluator (e.g., manager) submits
-  PENDING_SECTION_APPROVAL = 'PENDING_SECTION_APPROVAL',
-  PENDING_DEPT_APPROVAL = 'PENDING_DEPT_APPROVAL',
-  PENDING_MANAGER_APPROVAL = 'PENDING_MANAGER_APPROVAL', // Final admin/manager approval
-  APPROVED = 'APPROVED',
-  REJECTED_BY_SECTION = 'REJECTED_BY_SECTION',
-  REJECTED_BY_DEPT = 'REJECTED_BY_DEPT',
-  REJECTED_BY_MANAGER = 'REJECTED_BY_MANAGER',
-}
-
 export enum OverallReviewStatus {
   DRAFT = 'DRAFT', // Nhân viên tự đánh giá, chưa gửi
   PENDING_REVIEW = 'PENDING_REVIEW', // Nhân viên đã submit, chờ section/department review
