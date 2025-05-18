@@ -637,11 +637,20 @@ export class EvaluationService {
             },
           );
 
+          // Xác định status mới dựa vào vai trò
+          let newStatus = OverallReviewStatus.PENDING_REVIEW;
+          if (currentUser.role === 'section') {
+            newStatus = OverallReviewStatus.DEPARTMENT_REVIEW_PENDING;
+          } else if (currentUser.role === 'department') {
+            newStatus = OverallReviewStatus.MANAGER_REVIEW_PENDING;
+          } else if (currentUser.role === 'manager' || currentUser.role === 'admin') {
+            newStatus = OverallReviewStatus.EMPLOYEE_FEEDBACK_PENDING;
+          }
+
           if (overallReviewRecord) {
             overallReviewRecord.overallComment =
               reviewData.overallComment ?? null;
-            overallReviewRecord.status =
-              OverallReviewStatus.EMPLOYEE_FEEDBACK_PENDING;
+            overallReviewRecord.status = newStatus;
             overallReviewRecord.totalWeightedScore =
               totalWeightedScore !== null
                 ? totalWeightedScore.toFixed(2)
@@ -655,7 +664,7 @@ export class EvaluationService {
                 cycleId: reviewData.cycleId,
                 reviewedById: currentUser.id,
                 overallComment: reviewData.overallComment ?? null,
-                status: OverallReviewStatus.EMPLOYEE_FEEDBACK_PENDING,
+                status: newStatus,
                 totalWeightedScore:
                   totalWeightedScore !== null
                     ? totalWeightedScore.toFixed(2)

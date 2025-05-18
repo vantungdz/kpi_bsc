@@ -12,7 +12,10 @@
       name="perspective_id"
       :rules="[{ required: true, message: $t('pleaseSelectPerspective') }]"
     >
-      <a-select v-model:value="form.perspective_id" :placeholder="$t('perspective')">
+      <a-select
+        v-model:value="form.perspective_id"
+        :placeholder="$t('perspective')"
+      >
         <a-select-option
           v-for="perspective in perspectiveList"
           :key="perspective.id"
@@ -40,8 +43,12 @@
           :rules="[{ required: true, message: $t('pleaseEnterTypeKpi') }]"
         >
           <a-select v-model:value="form.type" :placeholder="$t('typeKpi')">
-            <a-select-option value="efficiency">{{ $t('efficiency') }}</a-select-option>
-            <a-select-option value="qualitative">{{ $t('qualitative') }}</a-select-option>
+            <a-select-option value="efficiency">{{
+              $t("efficiency")
+            }}</a-select-option>
+            <a-select-option value="qualitative">{{
+              $t("qualitative")
+            }}</a-select-option>
           </a-select>
         </a-form-item>
       </a-col>
@@ -104,11 +111,13 @@
       :rules="[{ required: true, message: $t('pleaseSelectFrequency') }]"
     >
       <a-select v-model:value="form.frequency" :placeholder="$t('frequency')">
-        <a-select-option value="daily">{{ $t('daily') }}</a-select-option>
-        <a-select-option value="weekly">{{ $t('weekly') }}</a-select-option>
-        <a-select-option value="monthly">{{ $t('monthly') }}</a-select-option>
-        <a-select-option value="quarterly">{{ $t('quarterly') }}</a-select-option>
-        <a-select-option value="yearly">{{ $t('yearly') }}</a-select-option>
+        <a-select-option value="daily">{{ $t("daily") }}</a-select-option>
+        <a-select-option value="weekly">{{ $t("weekly") }}</a-select-option>
+        <a-select-option value="monthly">{{ $t("monthly") }}</a-select-option>
+        <a-select-option value="quarterly">{{
+          $t("quarterly")
+        }}</a-select-option>
+        <a-select-option value="yearly">{{ $t("yearly") }}</a-select-option>
       </a-select>
     </a-form-item>
 
@@ -140,11 +149,11 @@
           html-type="submit"
           :loading="loading"
         >
-          {{ $t('saveKpi') }}
+          {{ $t("saveKpi") }}
         </a-button>
-        <a-button type="default" @click="$router.push('/personal')"
-          >{{ $t('back') }}</a-button
-        >
+        <a-button type="default" @click="$router.push('/personal')">{{
+          $t("back")
+        }}</a-button>
       </a-row>
     </a-form-item>
   </a-form>
@@ -183,15 +192,16 @@ const perspectiveList = computed(
 );
 
 const handleNumericInput = (field, event) => {
-  let value = event.target.value;
-
-  value = value.replace(/[^0-9.]/g, "");
+  let value = event.target.value.replace(/[^0-9.]/g, "");
   const parts = value.split(".");
   if (parts.length > 2) {
     value = parts[0] + "." + parts.slice(1).join("");
   }
-
-  form.value[field] = value;
+  // Format phần nguyên với dấu phẩy
+  const [intPart, decPart] = value.split(".");
+  let formatted = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  if (decPart !== undefined) formatted += "." + decPart;
+  form.value[field] = formatted;
 };
 
 const validateWeight = async (_rule, value) => {
@@ -205,7 +215,7 @@ const validateWeight = async (_rule, value) => {
 };
 
 const formatToDateString = (dateValue) => {
-  return dateValue ? dayjs(dateValue).format('YYYY-MM-DD') : null;
+  return dateValue ? dayjs(dateValue).format("YYYY-MM-DD") : null;
 };
 
 const handleChangeCreate = async () => {

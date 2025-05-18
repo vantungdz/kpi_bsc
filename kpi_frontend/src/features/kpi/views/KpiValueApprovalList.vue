@@ -24,9 +24,18 @@
           <template #bodyCell="{ column, record }">
             <template v-if="column.key === 'kpiName'">
               <!-- Bỏ comment dòng log dưới đây để kiểm tra dữ liệu của từng record trong console -->
-              {{ console.log('KPI Name cell record:', record, 'Attempted KPI Name:', record.kpiAssignment?.kpi?.name) }}
+              {{
+                console.log(
+                  "KPI Name cell record:",
+                  record,
+                  "Attempted KPI Name:",
+                  record.kpiAssignment?.kpi?.name
+                )
+              }}
               <a-tooltip :title="record.kpiAssignment?.kpi?.name">
-                <span>{{ record.kpiAssignment?.kpi?.name || $t("unknownKpiName") }}</span>
+                <span>{{
+                  record.kpiAssignment?.kpi?.name || $t("unknownKpiName")
+                }}</span>
               </a-tooltip>
             </template>
 
@@ -52,7 +61,7 @@
                   record.kpiAssignment?.targetValue !== undefined
                 "
               >
-                {{ record.kpiAssignment.targetValue?.toLocaleString() }}
+                {{ Number(record.kpiAssignment.targetValue)?.toLocaleString() }}
                 <span v-if="record.kpiAssignment?.kpi?.unit">
                   {{ record.kpiAssignment.kpi.unit }}</span
                 >
@@ -399,7 +408,7 @@ const cardTitle = computed(() => {
 // Table columns definitions extracted outside component logic
 const columns = computed(() => [
   {
-    title: $t('kpiName'),
+    title: $t("kpiName"),
     dataIndex: ["kpiAssignment", "kpi", "name"],
     key: "kpiName",
     width: 200,

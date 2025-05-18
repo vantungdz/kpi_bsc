@@ -99,7 +99,7 @@ export class EvaluationController {
   }
 
   @Get('kpis-for-review')
-  @Roles('admin', 'manager')
+  @Roles('admin', 'manager', 'section', 'department')
   @ApiOperation({
     summary: 'Get list of KPIs to review for a specific target and cycle',
   })
@@ -137,7 +137,7 @@ export class EvaluationController {
   }
 
   @Post('submit-review')
-  @Roles('admin', 'manager')
+  @Roles('admin', 'manager', 'section', 'department')
   @ApiOperation({ summary: 'Submit KPI review results' })
   @ApiResponse({ status: 200, description: 'Review submitted successfully.' })
   @ApiResponse({ status: 400, description: 'Invalid input.' })

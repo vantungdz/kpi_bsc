@@ -124,14 +124,16 @@
                 <a-col :span="8">
                   <a-descriptions size="small" bordered :column="1">
                     <a-descriptions-item :label="$t('target')">
-                      {{ kpiItem.targetValue }} {{ kpiItem.unit }}
+                      {{ Number(kpiItem.targetValue).toLocaleString() }}
+                      {{ kpiItem.unit }}
                     </a-descriptions-item>
                   </a-descriptions>
                 </a-col>
                 <a-col :span="8">
                   <a-descriptions size="small" bordered :column="1">
                     <a-descriptions-item :label="$t('actualResult')">
-                      {{ kpiItem.actualValue }} {{ kpiItem.unit }}
+                      {{ Number(kpiItem.actualValue).toLocaleString() }}
+                      {{ kpiItem.unit }}
                     </a-descriptions-item>
                   </a-descriptions>
                 </a-col>
@@ -180,14 +182,21 @@
                     v-model:value="kpiItem.selfComment"
                     :placeholder="$t('selfCommentPlaceholder')"
                     :rows="3"
-                    :disabled="isLoadingKpis || overallReview.status !== 'DRAFT'"
+                    :disabled="
+                      isLoadingKpis || overallReview.status !== 'DRAFT'
+                    "
                   />
                 </a-form-item>
                 <a-form-item
                   :label="`${$t('selfScoreForKpi')} ${kpiItem.kpiName}`"
                   :name="['kpiItem', index, 'selfScore']"
                 >
-                  <a-rate v-model:value="kpiItem.selfScore" :disabled="isLoadingKpis || overallReview.status !== 'DRAFT'" />
+                  <a-rate
+                    v-model:value="kpiItem.selfScore"
+                    :disabled="
+                      isLoadingKpis || overallReview.status !== 'DRAFT'
+                    "
+                  />
                 </a-form-item>
               </template>
 
@@ -290,9 +299,11 @@
               </a-button>
               <a-button
                 v-if="
-                  overallReview.status === 'MANAGER_REVIEWED' ||
-                  overallReview.status === 'EMPLOYEE_FEEDBACK_PENDING' ||
-                  overallReview.status === 'EMPLOYEE_RESPONDED'
+                  (overallReview.status === 'MANAGER_REVIEWED' ||
+                    overallReview.status === 'EMPLOYEE_FEEDBACK_PENDING' ||
+                    overallReview.status === 'EMPLOYEE_RESPONDED') &&
+                  (currentUser.role === 'manager' ||
+                    currentUser.role === 'admin')
                 "
                 type="primary"
                 danger
@@ -309,41 +320,118 @@
           <div v-if="overallReview.status && overallReviewId">
             <a-divider />
             <div style="margin-bottom: 16px">
-              <template v-if="overallReview.status === 'SECTION_REVIEW_PENDING' && (currentUser.role === 'section' || currentUser.role === 'admin' || currentUser.role === 'manager')">
-                <a-button type="primary" :loading="isProcessingOverallReview" @click="approveSectionReview(overallReviewId)">
-                  {{ $t('approveSection') }}
+              <template
+                v-if="
+                  overallReview.status === 'SECTION_REVIEW_PENDING' &&
+                  (currentUser.role === 'section' ||
+                    currentUser.role === 'admin' ||
+                    currentUser.role === 'manager')
+                "
+              >
+                <a-button
+                  type="primary"
+                  :loading="isProcessingOverallReview"
+                  @click="approveSectionReview(overallReviewId)"
+                >
+                  {{ $t("approveSection") }}
                 </a-button>
-                <a-button danger :loading="isProcessingOverallReview" @click="showRejectSectionModal = true" style="margin-left: 8px">
-                  {{ $t('rejectSection') }}
+                <a-button
+                  danger
+                  :loading="isProcessingOverallReview"
+                  @click="showRejectSectionModal = true"
+                  style="margin-left: 8px"
+                >
+                  {{ $t("rejectSection") }}
                 </a-button>
               </template>
-              <template v-if="overallReview.status === 'DEPARTMENT_REVIEW_PENDING' && (currentUser.role === 'department' || currentUser.role === 'admin' || currentUser.role === 'manager')">
-                <a-button type="primary" :loading="isProcessingOverallReview" @click="approveDeptReview(overallReviewId)">
-                  {{ $t('approveDept') }}
+              <template
+                v-if="
+                  overallReview.status === 'DEPARTMENT_REVIEW_PENDING' &&
+                  (currentUser.role === 'department' ||
+                    currentUser.role === 'admin' ||
+                    currentUser.role === 'manager')
+                "
+              >
+                <a-button
+                  type="primary"
+                  :loading="isProcessingOverallReview"
+                  @click="approveDeptReview(overallReviewId)"
+                >
+                  {{ $t("approveDept") }}
                 </a-button>
-                <a-button danger :loading="isProcessingOverallReview" @click="showRejectDeptModal = true" style="margin-left: 8px">
-                  {{ $t('rejectDept') }}
+                <a-button
+                  danger
+                  :loading="isProcessingOverallReview"
+                  @click="showRejectDeptModal = true"
+                  style="margin-left: 8px"
+                >
+                  {{ $t("rejectDept") }}
                 </a-button>
               </template>
-              <template v-if="overallReview.status === 'MANAGER_REVIEW_PENDING' && (currentUser.role === 'manager' || currentUser.role === 'admin')">
-                <a-button type="primary" :loading="isProcessingOverallReview" @click="approveManagerReview(overallReviewId)">
-                  {{ $t('approveManager') }}
+              <template
+                v-if="
+                  overallReview.status === 'MANAGER_REVIEW_PENDING' &&
+                  (currentUser.role === 'manager' ||
+                    currentUser.role === 'admin')
+                "
+              >
+                <a-button
+                  type="primary"
+                  :loading="isProcessingOverallReview"
+                  @click="approveManagerReview(overallReviewId)"
+                >
+                  {{ $t("approveManager") }}
                 </a-button>
-                <a-button danger :loading="isProcessingOverallReview" @click="showRejectManagerModal = true" style="margin-left: 8px">
-                  {{ $t('rejectManager') }}
+                <a-button
+                  danger
+                  :loading="isProcessingOverallReview"
+                  @click="showRejectManagerModal = true"
+                  style="margin-left: 8px"
+                >
+                  {{ $t("rejectManager") }}
                 </a-button>
               </template>
             </div>
           </div>
           <!-- Reject modals for each level -->
-          <a-modal v-model:visible="showRejectSectionModal" :title="$t('rejectSection')" @ok="handleRejectSection" @cancel="showRejectSectionModal = false" :confirmLoading="isProcessingOverallReview">
-            <a-textarea v-model:value="rejectSectionComment" :placeholder="$t('enterRejectReason')" rows="4" />
+          <a-modal
+            v-model:visible="showRejectSectionModal"
+            :title="$t('rejectSection')"
+            @ok="handleRejectSection"
+            @cancel="showRejectSectionModal = false"
+            :confirmLoading="isProcessingOverallReview"
+          >
+            <a-textarea
+              v-model:value="rejectSectionComment"
+              :placeholder="$t('enterRejectReason')"
+              rows="4"
+            />
           </a-modal>
-          <a-modal v-model:visible="showRejectDeptModal" :title="$t('rejectDept')" @ok="handleRejectDept" @cancel="showRejectDeptModal = false" :confirmLoading="isProcessingOverallReview">
-            <a-textarea v-model:value="rejectDeptComment" :placeholder="$t('enterRejectReason')" rows="4" />
+          <a-modal
+            v-model:visible="showRejectDeptModal"
+            :title="$t('rejectDept')"
+            @ok="handleRejectDept"
+            @cancel="showRejectDeptModal = false"
+            :confirmLoading="isProcessingOverallReview"
+          >
+            <a-textarea
+              v-model:value="rejectDeptComment"
+              :placeholder="$t('enterRejectReason')"
+              rows="4"
+            />
           </a-modal>
-          <a-modal v-model:visible="showRejectManagerModal" :title="$t('rejectManager')" @ok="handleRejectManager" @cancel="showRejectManagerModal = false" :confirmLoading="isProcessingOverallReview">
-            <a-textarea v-model:value="rejectManagerComment" :placeholder="$t('enterRejectReason')" rows="4" />
+          <a-modal
+            v-model:visible="showRejectManagerModal"
+            :title="$t('rejectManager')"
+            @ok="handleRejectManager"
+            @cancel="showRejectManagerModal = false"
+            :confirmLoading="isProcessingOverallReview"
+          >
+            <a-textarea
+              v-model:value="rejectManagerComment"
+              :placeholder="$t('enterRejectReason')"
+              rows="4"
+            />
           </a-modal>
         </div>
       </a-spin>
@@ -468,7 +556,12 @@ const rejectSectionComment = ref("");
 const rejectDeptComment = ref("");
 const rejectManagerComment = ref("");
 
-const overallReviewId = computed(() => existingOverallReviewFromStore.value && existingOverallReviewFromStore.value.id ? existingOverallReviewFromStore.value.id : null);
+const overallReviewId = computed(() =>
+  existingOverallReviewFromStore.value &&
+  existingOverallReviewFromStore.value.id
+    ? existingOverallReviewFromStore.value.id
+    : null
+);
 
 // Đảm bảo dữ liệu kpisToReview luôn có selfComment/selfScore mặc định
 watch(
@@ -477,10 +570,13 @@ watch(
     if (newKpis && Array.isArray(newKpis)) {
       kpisToReview.value = newKpis.map((kpi) => ({
         ...kpi,
-        selfComment: kpi.selfComment ?? '',
+        selfComment: kpi.selfComment ?? "",
         selfScore: kpi.selfScore ?? null,
-        managerComment: kpi.existingManagerComment || '',
-        managerScore: kpi.existingManagerScore === undefined ? null : kpi.existingManagerScore,
+        managerComment: kpi.existingManagerComment || "",
+        managerScore:
+          kpi.existingManagerScore === undefined
+            ? null
+            : kpi.existingManagerScore,
       }));
     } else {
       kpisToReview.value = [];
@@ -530,19 +626,19 @@ const pageTitle = computed(() => {
 
 const reviewStatusText = computed(() => {
   const statusMap = {
-    DRAFT: $t("draft", "Nháp"),
-    PENDING_REVIEW: $t("pendingReview", "Chờ review"),
-    SECTION_REVIEW_PENDING: $t("sectionReviewPending", "Chờ trưởng bộ phận review"),
-    SECTION_REVIEWED: $t("sectionReviewed", "Trưởng bộ phận đã review"),
-    SECTION_REVISE_REQUIRED: $t("sectionReviseRequired", "Trưởng bộ phận yêu cầu chỉnh sửa"),
-    DEPARTMENT_REVIEW_PENDING: $t("departmentReviewPending", "Chờ trưởng phòng review"),
-    DEPARTMENT_REVIEWED: $t("departmentReviewed", "Trưởng phòng đã review"),
-    DEPARTMENT_REVISE_REQUIRED: $t("departmentReviseRequired", "Trưởng phòng yêu cầu chỉnh sửa"),
-    MANAGER_REVIEW_PENDING: $t("managerReviewPending", "Chờ quản lý review"),
-    MANAGER_REVIEWED: $t("managerReviewedStatus", "Quản lý đã review"),
-    EMPLOYEE_FEEDBACK_PENDING: $t("employeeFeedbackPendingStatus", "Chờ bạn phản hồi"),
-    EMPLOYEE_RESPONDED: $t("employeeRespondedStatus", "Bạn đã phản hồi"),
-    COMPLETED: $t("completedStatus", "Hoàn tất"),
+    DRAFT: $t("draft", "Chưa đánh giá"),
+    PENDING_REVIEW: $t("status_array.PENDING_REVIEW"),
+    SECTION_REVIEW_PENDING: $t("status_array.SECTION_REVIEW_PENDING"),
+    SECTION_REVIEWED: $t("status_array.SECTION_REVIEWED"),
+    SECTION_REVISE_REQUIRED: $t("status_array.SECTION_REVISE_REQUIRED"),
+    DEPARTMENT_REVIEW_PENDING: $t("status_array.DEPARTMENT_REVIEW_PENDING"),
+    DEPARTMENT_REVIEWED: $t("status_array.DEPARTMENT_REVIEWED"),
+    DEPARTMENT_REVISE_REQUIRED: $t("status_array.DEPARTMENT_REVISE_REQUIRED"),
+    MANAGER_REVIEW_PENDING: $t("status_array.MANAGER_REVIEW_PENDING"),
+    MANAGER_REVIEWED: $t("status_array.MANAGER_REVIEWED"),
+    EMPLOYEE_FEEDBACK_PENDING: $t("status_array.EMPLOYEE_FEEDBACK_PENDING"),
+    EMPLOYEE_RESPONDED: $t("status_array.EMPLOYEE_RESPONDED"),
+    COMPLETED: $t("status_array.COMPLETED"),
   };
   return (
     statusMap[overallReview.value.status] ||
@@ -829,68 +925,106 @@ const formatDate = (dateString) => {
 };
 
 // Multi-level review actions for section/department/manager
-const isProcessingOverallReview = computed(() => store.getters["kpiEvaluations/isProcessingObjectiveEvalApproval"]);
+const isProcessingOverallReview = computed(
+  () => store.getters["kpiEvaluations/isProcessingObjectiveEvalApproval"]
+);
 
 // Example: Approve/Reject at Section Level
 const approveSectionReview = async (reviewId) => {
   try {
-    await store.dispatch("kpiEvaluations/approveOverallReviewSection", { reviewId });
+    await store.dispatch("kpiEvaluations/approveOverallReviewSection", {
+      reviewId,
+    });
     notification.success({ message: $t("approveSectionSuccess") });
     fetchKpisForReview(); // Refresh data
   } catch (error) {
-    notification.error({ message: $t("approveSectionError"), description: error.message });
+    notification.error({
+      message: $t("approveSectionError"),
+      description: error.message,
+    });
   }
 };
 const rejectSectionReview = async (reviewId, comment) => {
   try {
-    await store.dispatch("kpiEvaluations/rejectOverallReviewSection", { reviewId, comment });
+    await store.dispatch("kpiEvaluations/rejectOverallReviewSection", {
+      reviewId,
+      comment,
+    });
     notification.success({ message: $t("rejectSectionSuccess") });
     fetchKpisForReview();
   } catch (error) {
-    notification.error({ message: $t("rejectSectionError"), description: error.message });
+    notification.error({
+      message: $t("rejectSectionError"),
+      description: error.message,
+    });
   }
 };
 // Tương tự cho approve/reject department, manager
 const approveDeptReview = async (reviewId) => {
   try {
-    await store.dispatch("kpiEvaluations/approveOverallReviewDept", { reviewId });
+    await store.dispatch("kpiEvaluations/approveOverallReviewDept", {
+      reviewId,
+    });
     notification.success({ message: $t("approveDeptSuccess") });
     fetchKpisForReview();
   } catch (error) {
-    notification.error({ message: $t("approveDeptError"), description: error.message });
+    notification.error({
+      message: $t("approveDeptError"),
+      description: error.message,
+    });
   }
 };
 const rejectDeptReview = async (reviewId, comment) => {
   try {
-    await store.dispatch("kpiEvaluations/rejectOverallReviewDept", { reviewId, comment });
+    await store.dispatch("kpiEvaluations/rejectOverallReviewDept", {
+      reviewId,
+      comment,
+    });
     notification.success({ message: $t("rejectDeptSuccess") });
     fetchKpisForReview();
   } catch (error) {
-    notification.error({ message: $t("rejectDeptError"), description: error.message });
+    notification.error({
+      message: $t("rejectDeptError"),
+      description: error.message,
+    });
   }
 };
 const approveManagerReview = async (reviewId) => {
   try {
-    await store.dispatch("kpiEvaluations/approveOverallReviewManager", { reviewId });
+    await store.dispatch("kpiEvaluations/approveOverallReviewManager", {
+      reviewId,
+    });
     notification.success({ message: $t("approveManagerSuccess") });
     fetchKpisForReview();
   } catch (error) {
-    notification.error({ message: $t("approveManagerError"), description: error.message });
+    notification.error({
+      message: $t("approveManagerError"),
+      description: error.message,
+    });
   }
 };
 const rejectManagerReview = async (reviewId, comment) => {
   try {
-    await store.dispatch("kpiEvaluations/rejectOverallReviewManager", { reviewId, comment });
+    await store.dispatch("kpiEvaluations/rejectOverallReviewManager", {
+      reviewId,
+      comment,
+    });
     notification.success({ message: $t("rejectManagerSuccess") });
     fetchKpisForReview();
   } catch (error) {
-    notification.error({ message: $t("rejectManagerError"), description: error.message });
+    notification.error({
+      message: $t("rejectManagerError"),
+      description: error.message,
+    });
   }
 };
 
 const handleRejectSection = async () => {
   if (!rejectSectionComment.value.trim()) {
-    notification.error({ message: $t('error'), description: $t('enterRejectReason') });
+    notification.error({
+      message: $t("error"),
+      description: $t("enterRejectReason"),
+    });
     return;
   }
   await rejectSectionReview(overallReviewId.value, rejectSectionComment.value);
@@ -899,7 +1033,10 @@ const handleRejectSection = async () => {
 };
 const handleRejectDept = async () => {
   if (!rejectDeptComment.value.trim()) {
-    notification.error({ message: $t('error'), description: $t('enterRejectReason') });
+    notification.error({
+      message: $t("error"),
+      description: $t("enterRejectReason"),
+    });
     return;
   }
   await rejectDeptReview(overallReviewId.value, rejectDeptComment.value);
@@ -908,7 +1045,10 @@ const handleRejectDept = async () => {
 };
 const handleRejectManager = async () => {
   if (!rejectManagerComment.value.trim()) {
-    notification.error({ message: $t('error'), description: $t('enterRejectReason') });
+    notification.error({
+      message: $t("error"),
+      description: $t("enterRejectReason"),
+    });
     return;
   }
   await rejectManagerReview(overallReviewId.value, rejectManagerComment.value);
@@ -920,16 +1060,16 @@ const canEditManagerReview = computed(() => {
   const status = overallReview.value.status;
   const role = currentUser.value?.role;
   if (!status || !role) return false;
-  if (role === 'employee') {
-    return status === 'DRAFT';
+  if (role === "employee") {
+    return status === "DRAFT";
   }
   // admin, manager, section, department
   return [
-    'DRAFT',
-    'PENDING_REVIEW',
-    'SECTION_REVIEW_PENDING',
-    'DEPARTMENT_REVIEW_PENDING',
-    'MANAGER_REVIEW_PENDING'
+    "DRAFT",
+    "PENDING_REVIEW",
+    "SECTION_REVIEW_PENDING",
+    "DEPARTMENT_REVIEW_PENDING",
+    "MANAGER_REVIEW_PENDING",
   ].includes(status);
 });
 
@@ -946,11 +1086,14 @@ onMounted(() => {
     const employeeId = params.employeeId || query.targetId;
     const cycleId = params.cycleId || query.cycleId;
     // 2. Xác định targetType (ưu tiên path, nếu không có thì mặc định 'employee')
-    let targetType = params.targetType || query.targetType || 'employee';
+    let targetType = params.targetType || query.targetType || "employee";
     // 3. Set selectedTarget nếu có employeeId
     if (employeeId && targets && Array.isArray(targets)) {
-      let found = targets.find(t => String(t.id) === String(employeeId) && t.type === targetType);
-      if (!found) found = targets.find(t => String(t.id) === String(employeeId));
+      let found = targets.find(
+        (t) => String(t.id) === String(employeeId) && t.type === targetType
+      );
+      if (!found)
+        found = targets.find((t) => String(t.id) === String(employeeId));
       if (found) {
         selectedTarget.value = `${found.type}-${found.id}`;
       } else {
@@ -960,7 +1103,9 @@ onMounted(() => {
     }
     // 4. Set selectedCycle nếu có cycleId
     if (cycleId && cycles && Array.isArray(cycles)) {
-      let foundCycle = cycles.find(c => String(c.id) === String(cycleId) || c.name === cycleId);
+      let foundCycle = cycles.find(
+        (c) => String(c.id) === String(cycleId) || c.name === cycleId
+      );
       if (foundCycle) {
         selectedCycle.value = foundCycle.id;
       } else {
@@ -971,7 +1116,12 @@ onMounted(() => {
     if (selectedTarget.value && selectedCycle.value) fetchKpisForReview();
   };
   // Nếu targets và cycles đã có thì set luôn, nếu chưa thì watch cả hai
-  if (reviewTargets.value && reviewTargets.value.length > 0 && reviewCycles.value && reviewCycles.value.length > 0) {
+  if (
+    reviewTargets.value &&
+    reviewTargets.value.length > 0 &&
+    reviewCycles.value &&
+    reviewCycles.value.length > 0
+  ) {
     setTargetAndCycle();
   } else {
     const stop = watch([reviewTargets, reviewCycles], ([val1, val2]) => {
@@ -982,9 +1132,12 @@ onMounted(() => {
     });
   }
   // Watch route thay đổi để tự động cập nhật dropdown
-  watch(() => router.currentRoute.value.fullPath, () => {
-    setTargetAndCycle();
-  });
+  watch(
+    () => router.currentRoute.value.fullPath,
+    () => {
+      setTargetAndCycle();
+    }
+  );
 });
 
 // Đảm bảo luôn load data khi chọn đủ target và cycle

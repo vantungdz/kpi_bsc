@@ -482,6 +482,8 @@
     "MANAGER_REVIEWED": "マネージャーレビュー済み",
     "EMPLOYEE_FEEDBACK_PENDING": "従業員のフィードバック待ち",
     "EMPLOYEE_RESPONDED": "従業員が回答済み",
+    "DEPARTMENT_REVISE_REQUIRED": "部門修正が必要です",
+    "SECTION_REVISE_REQUIRED": "セクション修正が必要です",
     "COMPLETED": "完了",
     "undefined": "未レビュー",
     "unknown": "不明なステータス"
@@ -524,5 +526,12 @@
   "reportGenerator": "レポート出力",
   "selfScore": "従業員自己評価スコア",
   "selfComment": "従業員の自己評価コメント",
-  "reviewer": "評価者"
+  "reviewer": "評価者",
+  "inactiveKpiList": "未有効化KPI一覧",
+  "noInactiveKpi": "未有効化KPIがありません。",
+  "viewDetail": "詳細を見る",
+  "createdBy": "作成者",
+  "createdAt": "作成日",
+  "departmentAlreadyAssigned": "この部門は既に割り当てられています。",
+  "selectDepartmentRequired": "部門を選択してください。"
 }

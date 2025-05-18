@@ -482,6 +482,8 @@
     "MANAGER_REVIEWED": "Manager Reviewed",
     "EMPLOYEE_FEEDBACK_PENDING": "Employee Feedback Pending",
     "EMPLOYEE_RESPONDED": "Employee Responded",
+    "DEPARTMENT_REVISE_REQUIRED": "Department revise required",
+    "SECTION_REVISE_REQUIRED": "Section revise required",
     "COMPLETED": "Completed",
     "undefined": "Not Reviewed",
     "unknown": "Unknown Status"
@@ -524,5 +526,12 @@
   "reportGenerator": "Report Generator",
   "selfScore": "Employee self-assessment score",
   "selfComment": "Employee self-assessment comments",
-  "reviewer": "Reviewer"
+  "reviewer": "Reviewer",
+  "inactiveKpiList": "Inactive KPI List",
+  "noInactiveKpi": "No inactive KPIs found.",
+  "viewDetail": "View Detail",
+  "createdBy": "Created By",
+  "createdAt": "Created At",
+  "departmentAlreadyAssigned": "This department has already been assigned.",
+  "selectDepartmentRequired": "Please select a department."
 }

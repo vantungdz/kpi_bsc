@@ -1405,11 +1405,51 @@ export class KpisService {
             }
           }
         } else {
+          // If both department and section are present, create two assignments
           if (
             assignmentData.assigned_to_department &&
             assignmentData.assigned_to_section
           ) {
-            assignmentData.assigned_to_department = null;
+            // 1. Department assignment (department only)
+            const deptAssignment = assignmentRepo.create({
+              kpi: { id: kpiId } as Kpi,
+              assignedFrom: kpi.created_by_type,
+              assignedBy: userId,
+              targetValue: assignmentData.targetValue,
+              status: kpi.status,
+              assigned_to_department: assignmentData.assigned_to_department,
+              assigned_to_section: null,
+              assigned_to_team: null,
+              assigned_to_employee: null,
+              employee_id: null,
+              startDate: kpi.start_date,
+              endDate: kpi.end_date,
+              created_at: new Date(),
+              updated_at: new Date(),
+              assignedAt: new Date(),
+            } as DeepPartial<KPIAssignment>);
+            entitiesToSave.push(deptAssignment);
+
+            // 2. Section assignment (section + department)
+            const sectionAssignment = assignmentRepo.create({
+              kpi: { id: kpiId } as Kpi,
+              assignedFrom: kpi.created_by_type,
+              assignedBy: userId,
+              targetValue: assignmentData.targetValue,
+              status: kpi.status,
+              assigned_to_department: assignmentData.assigned_to_department,
+              assigned_to_section: assignmentData.assigned_to_section,
+              assigned_to_team: null,
+              assigned_to_employee: null,
+              employee_id: null,
+              startDate: kpi.start_date,
+              endDate: kpi.end_date,
+              created_at: new Date(),
+              updated_at: new Date(),
+              assignedAt: new Date(),
+            } as DeepPartial<KPIAssignment>);
+            entitiesToSave.push(sectionAssignment);
+            continue;
           }
           if (
             !assignmentData.assigned_to_department &&
@@ -1432,6 +1472,8 @@ export class KpisService {
             assigned_to_team: null,
             assigned_to_employee: null,
             employee_id: null,
+            startDate: kpi.start_date,
+            endDate: kpi.end_date,
             created_at: new Date(),
             updated_at: new Date(),
             assignedAt: new Date(),

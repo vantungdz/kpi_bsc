@@ -10,10 +10,7 @@
     >
       <a-row :gutter="12">
         <a-col :span="12">
-          <a-form-item
-            :label="$t('useExistingKpiTemplate')"
-            name="templateKpi"
-          >
+          <a-form-item :label="$t('useExistingKpiTemplate')" name="templateKpi">
             <a-select
               v-model:value="selectedTemplateKpiId"
               :placeholder="$t('selectKpiTemplate')"
@@ -31,8 +28,15 @@
           </a-form-item>
         </a-col>
       </a-row>
-      <a-form-item class="textLabel" :label="$t('perspective')" name="perspective_id">
-        <a-select v-model:value="form.perspective_id" :placeholder="$t('selectPerspective')">
+      <a-form-item
+        class="textLabel"
+        :label="$t('perspective')"
+        name="perspective_id"
+      >
+        <a-select
+          v-model:value="form.perspective_id"
+          :placeholder="$t('selectPerspective')"
+        >
           <a-select-option
             v-for="perspective in perspectiveList"
             :key="perspective.id"
@@ -44,7 +48,10 @@
       <a-row :gutter="12">
         <a-col :span="12">
           <a-form-item class="textLabel" :label="$t('kpiName')" name="name">
-            <a-input v-model:value="form.name" :placeholder="$t('enterKpiName')" />
+            <a-input
+              v-model:value="form.name"
+              :placeholder="$t('enterKpiName')"
+            />
           </a-form-item>
         </a-col>
         <a-col :span="12">
@@ -73,8 +80,12 @@
         <a-col :span="12">
           <a-form-item class="textLabel" :label="$t('type')" name="type">
             <a-select v-model:value="form.type" :placeholder="$t('selectType')">
-              <a-select-option value="efficiency"> {{ $t('efficiency') }} </a-select-option>
-              <a-select-option value="qualitative"> {{ $t('qualitative') }} </a-select-option>
+              <a-select-option value="efficiency">
+                {{ $t("efficiency") }}
+              </a-select-option>
+              <a-select-option value="qualitative">
+                {{ $t("qualitative") }}
+              </a-select-option>
             </a-select>
           </a-form-item>
         </a-col>
@@ -117,18 +128,29 @@
       </a-row>
 
       <a-form-item class="textLabel" :label="$t('frequency')" name="frequency">
-        <a-select v-model:value="form.frequency" :placeholder="$t('selectFrequency')">
-          <a-select-option value="daily"> {{ $t('daily') }} </a-select-option>
-          <a-select-option value="weekly"> {{ $t('weekly') }} </a-select-option>
-          <a-select-option value="monthly"> {{ $t('monthly') }} </a-select-option>
-          <a-select-option value="quarterly"> {{ $t('quarterly') }} </a-select-option>
-          <a-select-option value="yearly"> {{ $t('yearly') }} </a-select-option>
+        <a-select
+          v-model:value="form.frequency"
+          :placeholder="$t('selectFrequency')"
+        >
+          <a-select-option value="daily"> {{ $t("daily") }} </a-select-option>
+          <a-select-option value="weekly"> {{ $t("weekly") }} </a-select-option>
+          <a-select-option value="monthly">
+            {{ $t("monthly") }}
+          </a-select-option>
+          <a-select-option value="quarterly">
+            {{ $t("quarterly") }}
+          </a-select-option>
+          <a-select-option value="yearly"> {{ $t("yearly") }} </a-select-option>
         </a-select>
       </a-form-item>
 
       <a-row :gutter="12">
         <a-col :span="6">
-          <a-form-item class="textLabel" :label="$t('dateStart')" name="start_date">
+          <a-form-item
+            class="textLabel"
+            :label="$t('dateStart')"
+            name="start_date"
+          >
             <a-date-picker
               v-model:value="form.start_date"
               style="width: 100%"
@@ -153,7 +175,11 @@
         </a-col>
       </a-row>
 
-      <a-form-item class="textLabel" :label="$t('description')" name="description">
+      <a-form-item
+        class="textLabel"
+        :label="$t('description')"
+        name="description"
+      >
         <a-textarea
           v-model:value="form.description"
           :placeholder="$t('enterDescription')"
@@ -203,9 +229,7 @@
         :label="$t('assignToDepartment')"
         name="section_id_table"
         :help="$t('assignToDepartmentHelp')"
-        :extra="
-          form.assigned_user_id ? $t('directUserAssignmentCleared') : ''
-        "
+        :extra="form.assigned_user_id ? $t('directUserAssignmentCleared') : ''"
       >
         <a-alert
           v-if="assignmentError"
@@ -282,7 +306,7 @@
       <a-form-item>
         <a-row justify="end" style="margin-top: 10px">
           <a-button style="margin-right: 10px" @click="resetForm(true)">
-            {{ $t('clearForm') }}
+            {{ $t("clearForm") }}
           </a-button>
 
           <a-button
@@ -291,9 +315,9 @@
             html-type="submit"
             :loading="loading"
           >
-            {{ $t('saveKpi') }}
+            {{ $t("saveKpi") }}
           </a-button>
-          <a-button type="default" @click="goBack"> {{ $t('back') }} </a-button>
+          <a-button type="default" @click="goBack"> {{ $t("back") }} </a-button>
         </a-row>
       </a-form-item>
     </a-form>
@@ -308,7 +332,7 @@
     />
 
     <a-button type="default" style="margin-top: 15px" @click="goBack">
-      {{ $t('back') }}
+      {{ $t("back") }}
     </a-button>
   </div>
 </template>
@@ -744,13 +768,16 @@ const handleTargetChange = (key, value) => {
 };
 
 const handleNumericInput = (field, event) => {
-  let value = event.target.value;
-  value = value.replace(/[^0-9.]/g, "");
+  let value = event.target.value.replace(/[^0-9.]/g, "");
   const parts = value.split(".");
   if (parts.length > 2) {
     value = parts[0] + "." + parts.slice(1).join("");
   }
-  form.value[field] = value;
+  // Format phần nguyên với dấu phẩy
+  const [intPart, decPart] = value.split(".");
+  let formatted = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  if (decPart !== undefined) formatted += "." + decPart;
+  form.value[field] = formatted;
 };
 
 const validateWeight = async (_rule, value) => {

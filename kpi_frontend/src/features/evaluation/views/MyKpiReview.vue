@@ -45,7 +45,13 @@
         </div>
 
         <div
-          v-else-if="!isLoadingMyReview && (!reviewDetails || (reviewDetails.kpisReviewedByManager && reviewDetails.kpisReviewedByManager.length === 0)) && !myReviewError"
+          v-else-if="
+            !isLoadingMyReview &&
+            (!reviewDetails ||
+              (reviewDetails.kpisReviewedByManager &&
+                reviewDetails.kpisReviewedByManager.length === 0)) &&
+            !myReviewError
+          "
           class="empty-state"
         >
           <a-empty :description="$t('noDetailedKpiReview')" />
@@ -76,7 +82,8 @@
               </p>
               <a-row :gutter="16" style="margin-bottom: 10px">
                 <a-col :span="6">
-                  <strong>{{ $t("target") }}:</strong> {{ kpiItem.targetValue }}
+                  <strong>{{ $t("target") }}:</strong>
+                  {{ Number(kpiItem.targetValue).toLocaleString() }}
                   {{ kpiItem.unit }}
                 </a-col>
                 <a-col :span="6">
@@ -188,7 +195,9 @@
               :key="kpiItem.assignmentId"
               class="kpi-review-item-employee"
             >
-              <template v-if="kpiItem && kpiItem.assignmentId && kpiItem.kpiName">
+              <template
+                v-if="kpiItem && kpiItem.assignmentId && kpiItem.kpiName"
+              >
                 <a-divider v-if="index > 0" />
                 <h4>{{ index + 1 }}. {{ kpiItem.kpiName }}</h4>
                 <p
@@ -200,7 +209,8 @@
                 </p>
                 <a-row :gutter="16" style="margin-bottom: 10px">
                   <a-col :span="6">
-                    <strong>{{ $t("target") }}:</strong> {{ kpiItem.targetValue }}
+                    <strong>{{ $t("target") }}:</strong>
+                    {{ Number(kpiItem.targetValue).toLocaleString() }}
                     {{ kpiItem.unit }}
                   </a-col>
                   <a-col :span="6">
@@ -265,7 +275,13 @@
           </template>
         </div>
 
-        <div v-if="selectedCycle && reviewDetails && reviewDetails.overallReviewByManager">
+        <div
+          v-if="
+            selectedCycle &&
+            reviewDetails &&
+            reviewDetails.overallReviewByManager
+          "
+        >
           <a-divider />
           <h3>{{ $t("yourFeedback") }}</h3>
           <div
@@ -327,7 +343,8 @@
             v-else-if="
               reviewDetails &&
               reviewDetails.overallReviewByManager &&
-              reviewDetails.overallReviewByManager.status === 'EMPLOYEE_RESPONDED'
+              reviewDetails.overallReviewByManager.status ===
+                'EMPLOYEE_RESPONDED'
             "
           >
             <p>{{ $t("feedbackAlreadySent") }}</p>
@@ -500,22 +517,34 @@ watch(
   () => reviewDetails.value,
   (val) => {
     // Chỉ sync selfKpiReviews nếu không trong lúc submit hoặc đang sync lại
-    if (val && val.kpisReviewedByManager && !isSubmittingSelfReview.value && !isSyncingSelfKpiReviews.value) {
+    if (
+      val &&
+      val.kpisReviewedByManager &&
+      !isSubmittingSelfReview.value &&
+      !isSyncingSelfKpiReviews.value
+    ) {
       selfKpiReviews.value = val.kpisReviewedByManager.map((kpi) => ({
         assignmentId: kpi.assignmentId,
         selfScore: kpi.selfScore ?? null,
         selfComment: kpi.selfComment ?? "",
       }));
       // Log trạng thái và dữ liệu selfKpiReviews để debug
-      console.log('[MyKpiReview] overallReviewByManager.status:', val.overallReviewByManager?.status);
-      console.log('[MyKpiReview] selfKpiReviews:', JSON.parse(JSON.stringify(selfKpiReviews.value)));
+      console.log(
+        "[MyKpiReview] overallReviewByManager.status:",
+        val.overallReviewByManager?.status
+      );
+      console.log(
+        "[MyKpiReview] selfKpiReviews:",
+        JSON.parse(JSON.stringify(selfKpiReviews.value))
+      );
     }
   },
   { immediate: true, deep: true }
 );
 
 const canEditSelfReview = computed(() => {
-  if (!reviewDetails.value || !reviewDetails.value.kpisReviewedByManager) return false;
+  if (!reviewDetails.value || !reviewDetails.value.kpisReviewedByManager)
+    return false;
   if (!reviewDetails.value.overallReviewByManager) return true;
   return reviewDetails.value.overallReviewByManager.status === "DRAFT";
 });

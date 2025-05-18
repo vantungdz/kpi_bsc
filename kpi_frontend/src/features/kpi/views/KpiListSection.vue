@@ -1,10 +1,10 @@
 <template>
   <div class="kpi-section-list-page">
     <div class="list-header">
-      <h2>{{ $t('sectionKpiList') }}</h2>
+      <h2>{{ $t("sectionKpiList") }}</h2>
       <div class="action-buttons">
         <a-button type="primary" @click="goToCreateKpi" style="float: bottom">
-          <plus-outlined /> {{ $t('createNewKpi') }}
+          <plus-outlined /> {{ $t("createNewKpi") }}
         </a-button>
       </div>
     </div>
@@ -13,15 +13,40 @@
       <a-row :gutter="[22]">
         <a-col :span="6">
           <a-form-item :label="$t('search')">
-            <a-input v-model:value="localFilters.name" :placeholder="$t('kpiNamePlaceholder')" @pressEnter="applyFilters" />
+            <a-input
+              v-model:value="localFilters.name"
+              :placeholder="$t('kpiNamePlaceholder')"
+              @pressEnter="applyFilters"
+            />
           </a-form-item>
         </a-col>
 
         <a-col :span="5" v-if="!isSectionUser">
           <a-form-item :label="$t('department')">
-            <a-select v-model:value="localFilters.departmentId" style="width: 100%" @change="handleDepartmentChange" :disabled="(isSectionUser && !!currentUser?.departmentId) || isDepartmentUser">
-              <a-select-option v-if="!((isSectionUser && !!currentUser?.departmentId) || isDepartmentUser)" :value="null">{{ $t('allDepartments') }}</a-select-option>
-              <a-select-option v-for="department in departmentList" :key="department.id" :value="department.id">
+            <a-select
+              v-model:value="localFilters.departmentId"
+              style="width: 100%"
+              @change="handleDepartmentChange"
+              :disabled="
+                (isSectionUser && !!currentUser?.departmentId) ||
+                isDepartmentUser
+              "
+            >
+              <a-select-option
+                v-if="
+                  !(
+                    (isSectionUser && !!currentUser?.departmentId) ||
+                    isDepartmentUser
+                  )
+                "
+                :value="null"
+                >{{ $t("allDepartments") }}</a-select-option
+              >
+              <a-select-option
+                v-for="department in departmentList"
+                :key="department.id"
+                :value="department.id"
+              >
                 {{ department.name }}
               </a-select-option>
             </a-select>
@@ -30,9 +55,19 @@
 
         <a-col :span="4">
           <a-form-item :label="$t('section')">
-            <a-select v-model:value="localFilters.sectionId" style="width: 100%" :disabled="isSectionUser">
-              <a-select-option v-if="!isSectionUser" :value="0">{{ $t('allSections') }}</a-select-option>
-              <a-select-option v-for="section in selectSectionList" :key="section.id" :value="section.id">
+            <a-select
+              v-model:value="localFilters.sectionId"
+              style="width: 100%"
+              :disabled="isSectionUser"
+            >
+              <a-select-option v-if="!isSectionUser" :value="0">{{
+                $t("allSections")
+              }}</a-select-option>
+              <a-select-option
+                v-for="section in selectSectionList"
+                :key="section.id"
+                :value="section.id"
+              >
                 {{ section.name }}
               </a-select-option>
             </a-select>
@@ -41,55 +76,117 @@
 
         <a-col :span="4">
           <a-form-item :label="$t('startDate')">
-            <a-date-picker v-model:value="localFilters.startDate" style="width: 100%" @change="applyFilters" />
+            <a-date-picker
+              v-model:value="localFilters.startDate"
+              style="width: 100%"
+              @change="applyFilters"
+            />
           </a-form-item>
         </a-col>
 
         <a-col :span="4">
           <a-form-item :label="$t('endDate')">
-            <a-date-picker v-model:value="localFilters.endDate" style="width: 100%" @change="applyFilters" />
+            <a-date-picker
+              v-model:value="localFilters.endDate"
+              style="width: 100%"
+              @change="applyFilters"
+            />
           </a-form-item>
         </a-col>
 
         <a-col :span="5" style="text-align: right">
           <a-button type="primary" :loading="loading" @click="applyFilters">
-            <template #icon><filter-outlined /></template> {{ $t('apply') }}
+            <template #icon><filter-outlined /></template> {{ $t("apply") }}
           </a-button>
-          <a-button style="margin-left: 8px" :loading="loading" @click="resetFilters">
-            <template #icon><reload-outlined /></template> {{ $t('reset') }}
+          <a-button
+            style="margin-left: 8px"
+            :loading="loading"
+            @click="resetFilters"
+          >
+            <template #icon><reload-outlined /></template> {{ $t("reset") }}
           </a-button>
         </a-col>
       </a-row>
     </div>
 
     <div style="margin-top: 20px; margin-bottom: 20px">
-      <a-alert v-if="loading" :message="$t('loadingKpis')" type="info" show-icon>
+      <a-alert
+        v-if="loading"
+        :message="$t('loadingKpis')"
+        type="info"
+        show-icon
+      >
         <template #icon> <a-spin /> </template>
       </a-alert>
 
-      <a-alert v-else-if="error" :message="error" type="error" show-icon closable />
+      <a-alert
+        v-else-if="error"
+        :message="error"
+        type="error"
+        show-icon
+        closable
+      />
 
-      <a-alert v-else-if="isDisplayResult && sectionGroups.length === 0" :message="$t('noKpisFound')" type="warning" show-icon closable />
+      <a-alert
+        v-else-if="isDisplayResult && sectionGroups.length === 0"
+        :message="$t('noKpisFound')"
+        type="warning"
+        show-icon
+        closable
+      />
 
-      <a-alert v-if="deletedKpiName" :message="$t('kpiDeleted', { name: deletedKpiName })" type="success" closable @close="deletedKpiName = null" show-icon />
+      <a-alert
+        v-if="deletedKpiName"
+        :message="$t('kpiDeleted', { name: deletedKpiName })"
+        type="success"
+        closable
+        @close="deletedKpiName = null"
+        show-icon
+      />
     </div>
 
     <div v-if="isDisplayResult" class="data-container">
-      <div v-for="(sectionGroup, sectionIndex) in sectionGroups" :key="'sec-' + sectionIndex" class="mb-8">
-        <h4 class="text-lg font-bold mb-2" style="margin-top: 10px; margin-bottom: 10px">
-          {{ $t('sectionHeader', { name: sectionGroup.section }) }}
+      <div
+        v-for="(sectionGroup, sectionIndex) in sectionGroups"
+        :key="'sec-' + sectionIndex"
+        class="mb-8"
+      >
+        <h4
+          class="text-lg font-bold mb-2"
+          style="margin-top: 10px; margin-bottom: 10px"
+        >
+          {{ $t("sectionHeader", { name: sectionGroup.section }) }}
         </h4>
 
-        <a-collapse v-model:activeKey="activePanelKeys" expandIconPosition="end">
-          <a-collapse-panel v-for="(perspectiveGroupRows, perspectiveKey) in sectionGroup.data" :key="'pers-' + sectionIndex + '-' + perspectiveKey" :header="perspectiveKey.split('. ')[1] || perspectiveKey">
-            <a-table :columns="columns" :dataSource="tableData(perspectiveGroupRows)" :pagination="false" rowKey="key" :rowClassName="rowClassName" size="small" bordered>
+        <a-collapse
+          v-model:activeKey="activePanelKeys"
+          expandIconPosition="end"
+        >
+          <a-collapse-panel
+            v-for="(perspectiveGroupRows, perspectiveKey) in sectionGroup.data"
+            :key="'pers-' + sectionIndex + '-' + perspectiveKey"
+            :header="perspectiveKey.split('. ')[1] || perspectiveKey"
+          >
+            <a-table
+              :columns="columns"
+              :dataSource="tableData(perspectiveGroupRows)"
+              :pagination="false"
+              rowKey="key"
+              :rowClassName="rowClassName"
+              size="small"
+              bordered
+            >
               <template #bodyCell="{ column, record }">
                 <template v-if="column.dataIndex === 'kpiName'">
                   <span>{{ record.kpiName }}</span>
                 </template>
 
                 <template v-else-if="column.dataIndex === 'chart'">
-                  <apexchart type="donut" width="80%" height="80" :options="{
+                  <apexchart
+                    type="donut"
+                    width="80%"
+                    height="80"
+                    :options="{
                       chart: { height: 80, type: 'donut' },
                       labels: [$t('actual'), $t('remaining')],
                       plotOptions: {
@@ -105,13 +202,16 @@
                         },
                       },
                       legend: { show: false },
-                    }" :series="[
+                    }"
+                    :series="[
                       parseFloat(record.actual) || 0,
                       Math.max(
-                        (parseFloat(record.target) || 0) - (parseFloat(record.actual) || 0), 
+                        (parseFloat(record.target) || 0) -
+                          (parseFloat(record.actual) || 0),
                         0
                       ),
-                    ]" />
+                    ]"
+                  />
                 </template>
 
                 <template v-else-if="column.dataIndex === 'assignTo'">
@@ -131,41 +231,61 @@
                 </template>
 
                 <template v-else-if="column.dataIndex === 'target'">
-                  <span>{{ `${record.target} ${record.unit}` }}</span>
+                  <span>{{
+                    `${Number(record.target).toLocaleString()} ${record.unit}`
+                  }}</span>
                 </template>
 
                 <template v-else-if="column.dataIndex === 'actual'">
-                  <span>{{ `${record.actual} ${record.unit}` }}</span>
+                  <span>{{
+                    `${Number(record.actual).toLocaleString()} ${record.unit}`
+                  }}</span>
                 </template>
 
                 <template v-else-if="column.dataIndex === 'status'">
-                  <a-tag :bordered="false" :color="getStatusColor(record.status)">
+                  <a-tag
+                    :bordered="false"
+                    :color="getStatusColor(record.status)"
+                  >
                     {{ record.status }}
                   </a-tag>
                 </template>
 
                 <template v-else-if="column.dataIndex === 'action'">
                   <a-tooltip :title="$t('viewDetails')">
-                    <a-button type="default" class="kpi-actions-button" @click="
+                    <a-button
+                      type="default"
+                      class="kpi-actions-button"
+                      @click="
                         $router.push({
                           name: 'KpiDetail',
                           params: { id: record.kpiId },
                           query: { contextSectionId: sectionGroup.sectionId },
                         })
-                      ">
-                      <schedule-outlined /> {{ $t('details') }}
+                      "
+                    >
+                      <schedule-outlined /> {{ $t("details") }}
                     </a-button>
                   </a-tooltip>
                   <a-tooltip :title="$t('copyKpi')">
-                    <a-button type="dashed" class="kpi-actions-button" size="small" @click="handleCopyKpi(record)">
-                      <copy-outlined /> {{ $t('copy') }}
+                    <a-button
+                      type="dashed"
+                      class="kpi-actions-button"
+                      size="small"
+                      @click="handleCopyKpi(record)"
+                    >
+                      <copy-outlined /> {{ $t("copy") }}
                     </a-button>
                   </a-tooltip>
                   <a-tooltip :title="$t('deleteKpi')">
-                    <a-button danger class="kpi-actions-button" @click="
+                    <a-button
+                      danger
+                      class="kpi-actions-button"
+                      @click="
                         showConfirmDeleteDialog(record.kpiId, record.kpiName)
-                      ">
-                      <delete-outlined /> {{ $t('delete') }}
+                      "
+                    >
+                      <delete-outlined /> {{ $t("delete") }}
                     </a-button>
                   </a-tooltip>
                 </template>
@@ -176,8 +296,14 @@
       </div>
     </div>
 
-    <a-modal danger v-model:open="isDeleteModalVisible" :title="$t('confirmDialog')" @ok="handleDeleteKpi" @cancel="isDeleteModalVisible = false">
-      <p>{{ $t('confirmDelete', { name: selectedKpiName }) }}</p>
+    <a-modal
+      danger
+      v-model:open="isDeleteModalVisible"
+      :title="$t('confirmDialog')"
+      @ok="handleDeleteKpi"
+      @cancel="isDeleteModalVisible = false"
+    >
+      <p>{{ $t("confirmDelete", { name: selectedKpiName }) }}</p>
     </a-modal>
   </div>
 </template>
@@ -186,7 +312,7 @@
 import { reactive, computed, onMounted, ref, watch } from "vue";
 import { useStore } from "vuex";
 import { useRouter } from "vue-router";
-import { useI18n } from 'vue-i18n';
+import { useI18n } from "vue-i18n";
 import {
   PlusOutlined,
   FilterOutlined,
@@ -215,8 +341,8 @@ const sectionKpiList = computed(
 
 const selectSectionList = ref([]);
 
-const isSectionUser = computed(() => effectiveRole.value === 'section');
-const isDepartmentUser = computed(() => effectiveRole.value === 'department');
+const isSectionUser = computed(() => effectiveRole.value === "section");
+const isDepartmentUser = computed(() => effectiveRole.value === "department");
 
 const isDeleteModalVisible = ref(false);
 const selectedKpiId = ref(null);
@@ -228,16 +354,14 @@ const activePanelKeys = ref([]);
 const localFilters = reactive({
   name: "",
   departmentId: null, // Sẽ được đặt trong onMounted
-  sectionId: null,    // Sẽ được đặt trong onMounted, 0 có thể có nghĩa là "All" cho admin/manager
+  sectionId: null, // Sẽ được đặt trong onMounted, 0 có thể có nghĩa là "All" cho admin/manager
   startDate: "",
   endDate: "",
 });
 
-
 const sectionGroups = computed(() => {
-  const groupedData = {}; 
+  const groupedData = {};
 
-  
   const displayData = Array.isArray(sectionKpiList.value?.data)
     ? sectionKpiList.value.data
     : Array.isArray(sectionKpiList.value)
@@ -253,9 +377,7 @@ const sectionGroups = computed(() => {
   }
 
   displayData.forEach((kpi) => {
-    
     if (!kpi || !kpi.assignments) {
-      
       return;
     }
 
@@ -265,20 +387,18 @@ const sectionGroups = computed(() => {
       kpiUnit: kpi.unit || "",
       kpiStartDate: kpi.start_date,
       kpiEndDate: kpi.end_date,
-      kpiWeight: kpi.weight, 
-      kpiStatus: kpi.status, 
-      kpiTarget: kpi.target, 
+      kpiWeight: kpi.weight,
+      kpiStatus: kpi.status,
+      kpiTarget: kpi.target,
       perspectiveId: kpi.perspective_id,
       perspectiveName: kpi.perspective ? kpi.perspective.name : "Uncategorized",
     };
 
-    
-    
     const sectionsForThisKpi = new Map();
 
     kpi.assignments.forEach((assignment) => {
       let targetSectionId = null;
-      let departmentIdOfSection = null; 
+      let departmentIdOfSection = null;
 
       const sectionInfoFromAssignment = allSections.find(
         (s) =>
@@ -301,10 +421,9 @@ const sectionGroups = computed(() => {
             assignment.assigned_to_section &&
             Number(assignment.assigned_to_section) === targetSectionId
           ) {
-            
             details = {
               target: assignment.targetValue,
-              weight: assignment.weight, 
+              weight: assignment.weight,
               status: assignment.status,
               startDate: assignment.start_date || kpiDetails.kpiStartDate,
               endDate: assignment.end_date || kpiDetails.kpiEndDate,
@@ -319,7 +438,6 @@ const sectionGroups = computed(() => {
           Number(assignment.assigned_to_section) === targetSectionId &&
           !sectionsForThisKpi.get(targetSectionId).sectionAssignmentDetails
         ) {
-          
           sectionsForThisKpi.get(targetSectionId).sectionAssignmentDetails = {
             target: assignment.targetValue,
             weight: assignment.weight,
@@ -330,14 +448,13 @@ const sectionGroups = computed(() => {
         }
       }
 
-      if (targetSectionId === null) return; 
+      if (targetSectionId === null) return;
 
-      
       if (
         currentFilterDepartmentId &&
         Number(departmentIdOfSection) !== Number(currentFilterDepartmentId)
       ) {
-        sectionsForThisKpi.delete(targetSectionId); 
+        sectionsForThisKpi.delete(targetSectionId);
         return;
       }
       if (
@@ -345,12 +462,11 @@ const sectionGroups = computed(() => {
         currentFilterSectionId !== 0 &&
         targetSectionId !== Number(currentFilterSectionId)
       ) {
-        sectionsForThisKpi.delete(targetSectionId); 
+        sectionsForThisKpi.delete(targetSectionId);
         return;
       }
     });
 
-    
     sectionsForThisKpi.forEach((sectionData, sectionId) => {
       const perspectiveKey = `${kpiDetails.perspectiveId}. ${kpiDetails.perspectiveName}`;
 
@@ -366,17 +482,16 @@ const sectionGroups = computed(() => {
       }
 
       let displayTarget = kpiDetails.kpiTarget;
-      const displayWeight = kpiDetails.kpiWeight; 
+      const displayWeight = kpiDetails.kpiWeight;
       let displayStatus = kpiDetails.kpiStatus;
       let displayStartDate = kpiDetails.kpiStartDate;
       let displayEndDate = kpiDetails.kpiEndDate;
-      let displayAssignTo = sectionData.sectionName; 
+      let displayAssignTo = sectionData.sectionName;
 
       if (sectionData.sectionAssignmentDetails) {
-        
         displayTarget =
           sectionData.sectionAssignmentDetails.target ?? displayTarget;
-        
+
         displayStatus =
           sectionData.sectionAssignmentDetails.status ?? displayStatus;
         displayStartDate =
@@ -384,7 +499,6 @@ const sectionGroups = computed(() => {
         displayEndDate =
           sectionData.sectionAssignmentDetails.endDate ?? displayEndDate;
       } else {
-        
         const hasEmployeeAssignmentsInThisSectionForKpi = kpi.assignments.some(
           (assign) =>
             assign.assigned_to_employee &&
@@ -399,10 +513,10 @@ const sectionGroups = computed(() => {
         kpi.actuals_by_section_id &&
         kpi.actuals_by_section_id[sectionId] !== undefined
           ? kpi.actuals_by_section_id[sectionId]
-          : undefined; 
+          : undefined;
 
       const rowData = {
-        key: `kpi-${kpi.id}-section-${sectionId}`, 
+        key: `kpi-${kpi.id}-section-${sectionId}`,
         kpiId: kpiDetails.kpiId,
         kpiName: kpiDetails.kpiName,
         perspectiveName: kpiDetails.perspectiveName,
@@ -413,31 +527,35 @@ const sectionGroups = computed(() => {
         target: displayTarget,
         actual: (() => {
           let numericValue = null;
-          if (sectionSpecificActual !== undefined && sectionSpecificActual !== null) {
-            
-            
-            
-            if (typeof sectionSpecificActual === 'object' && Object.prototype.hasOwnProperty.call(sectionSpecificActual, 'actual_value_field')) {
+          if (
+            sectionSpecificActual !== undefined &&
+            sectionSpecificActual !== null
+          ) {
+            if (
+              typeof sectionSpecificActual === "object" &&
+              Object.prototype.hasOwnProperty.call(
+                sectionSpecificActual,
+                "actual_value_field"
+              )
+            ) {
               numericValue = sectionSpecificActual.actual_value_field;
-            } else if (!isNaN(parseFloat(sectionSpecificActual))) { 
+            } else if (!isNaN(parseFloat(sectionSpecificActual))) {
               numericValue = sectionSpecificActual;
             }
           }
           return numericValue !== null ? numericValue.toString() : "0";
         })(),
         unit: kpiDetails.kpiUnit,
-        status: displayStatus, 
+        status: displayStatus,
       };
       groupedData[sectionId].data[perspectiveKey].push(rowData);
     });
   });
 
-  
   const finalGroupedArray = Object.values(groupedData).map((sectionGroup) => {
     const sortedPerspectives = Object.keys(sectionGroup.data)
-      .sort() 
+      .sort()
       .reduce((sortedMap, perspectiveKey) => {
-        
         sortedMap[perspectiveKey] = sectionGroup.data[perspectiveKey].sort(
           (a, b) => a.kpiName.localeCompare(b.kpiName)
         );
@@ -451,7 +569,6 @@ const sectionGroups = computed(() => {
     };
   });
 
-  
   finalGroupedArray.sort((a, b) => a.section.localeCompare(b.section));
   return finalGroupedArray;
 });
@@ -461,14 +578,18 @@ const applyFilters = async () => {
   error.value = null;
   isDisplayResult.value = false;
 
-  const departmentId = (localFilters.departmentId === null || Number.isNaN(Number(localFilters.departmentId)))
-    ? null
-    : Number(localFilters.departmentId);
+  const departmentId =
+    localFilters.departmentId === null ||
+    Number.isNaN(Number(localFilters.departmentId))
+      ? null
+      : Number(localFilters.departmentId);
 
   // Ensure sectionIdForApi is null if localFilters.sectionId is 0 (All Sections), null, or NaN-producing, otherwise use the number.
-  const sectionIdForPath = (localFilters.sectionId === null || Number.isNaN(Number(localFilters.sectionId)))
-    ? 0 // Mặc định là 0 nếu không hợp lệ, vì 0 có nghĩa là "all" trong ngữ cảnh này cho department
-    : Number(localFilters.sectionId);
+  const sectionIdForPath =
+    localFilters.sectionId === null ||
+    Number.isNaN(Number(localFilters.sectionId))
+      ? 0 // Mặc định là 0 nếu không hợp lệ, vì 0 có nghĩa là "all" trong ngữ cảnh này cho department
+      : Number(localFilters.sectionId);
 
   try {
     const filtersToSend = {
@@ -492,13 +613,18 @@ const applyFilters = async () => {
 const handleDepartmentChange = async () => {
   if (isDepartmentUser.value && currentUser.value?.departmentId) {
     localFilters.departmentId = currentUser.value.departmentId; // Gán phòng ban cố định
-    notification.info({ message: "Thông báo", description: "Bạn chỉ có thể xem các bộ phận trong phòng ban của mình." });
+    notification.info({
+      message: "Thông báo",
+      description: "Bạn chỉ có thể xem các bộ phận trong phòng ban của mình.",
+    });
     return;
   }
 
   try {
     if (localFilters.departmentId) {
-      await store.dispatch("sections/fetchSections", { department_id: localFilters.departmentId });
+      await store.dispatch("sections/fetchSections", {
+        department_id: localFilters.departmentId,
+      });
     } else {
       await store.dispatch("sections/fetchSections");
     }
@@ -508,7 +634,10 @@ const handleDepartmentChange = async () => {
       localFilters.sectionId = selectSectionList.value.length > 0 ? 0 : null;
     }
   } catch (err) {
-    notification.error({ message: "Lỗi tải bộ phận", description: err.message || "Failed to fetch sections." });
+    notification.error({
+      message: "Lỗi tải bộ phận",
+      description: err.message || "Failed to fetch sections.",
+    });
   }
 };
 
@@ -564,52 +693,52 @@ const handleDeleteKpi = () => {
 
 const columns = computed(() => [
   {
-    title: $t('kpiName'),
+    title: $t("kpiName"),
     dataIndex: "kpiName",
     key: "kpiName",
     width: "15%",
   },
   {
-    title: $t('progress'), 
+    title: $t("progress"),
     dataIndex: "chart",
     key: "chart",
-    width: "10%", 
-    align: "center", 
+    width: "10%",
+    align: "center",
   },
   {
-    title: $t('assignTo'),
+    title: $t("assignTo"),
     dataIndex: "assignTo",
     key: "assignTo",
     width: "12%",
   },
   {
-    title: $t('startDate'),
+    title: $t("startDate"),
     dataIndex: "startDate",
     key: "startDate",
     width: "10%",
   },
-  { title: $t('endDate'), dataIndex: "endDate", key: "endDate", width: "10%" },
-  { title: $t('weight'), dataIndex: "weight", key: "weight", width: "10%" },
+  { title: $t("endDate"), dataIndex: "endDate", key: "endDate", width: "10%" },
+  { title: $t("weight"), dataIndex: "weight", key: "weight", width: "10%" },
   {
-    title: $t('target'),
+    title: $t("target"),
     dataIndex: "target",
     key: "target",
     width: "10%",
   },
   {
-    title: $t('actual'),
+    title: $t("actual"),
     dataIndex: "actual",
     key: "actual",
     width: "10%",
   },
   {
-    title: $t('status'),
+    title: $t("status"),
     dataIndex: "status",
     key: "status",
     width: "8%",
   },
   {
-    title: $t('action'),
+    title: $t("action"),
     dataIndex: "action",
     key: "action",
     width: "15%",
@@ -617,10 +746,9 @@ const columns = computed(() => [
   },
 ]);
 
-watch(
-  () => [localFilters.departmentId, localFilters.sectionId],
-  { immediate: true }
-);
+watch(() => [localFilters.departmentId, localFilters.sectionId], {
+  immediate: true,
+});
 
 const resetFilters = () => {
   localFilters.name = "";
@@ -670,7 +798,9 @@ onMounted(async () => {
       localFilters.departmentId = currentUser.value.departmentId || null;
 
       // Tải danh sách sections thuộc phòng ban
-      await store.dispatch("sections/fetchSections", { department_id: currentUser.value.departmentId });
+      await store.dispatch("sections/fetchSections", {
+        department_id: currentUser.value.departmentId,
+      });
 
       // Mặc định "All Sections" trong phòng ban
       localFilters.sectionId = 0;
@@ -678,12 +808,16 @@ onMounted(async () => {
       // Logic cho role section user
       localFilters.sectionId = currentUser.value.sectionId || null;
       localFilters.departmentId = currentUser.value.departmentId || null;
-      await store.dispatch("sections/fetchSections", { department_id: currentUser.value.departmentId });
+      await store.dispatch("sections/fetchSections", {
+        department_id: currentUser.value.departmentId,
+      });
     } else {
       // Logic cho admin/manager
       if (departmentList.value.length > 0) {
         localFilters.departmentId = departmentList.value[0].id;
-        await store.dispatch("sections/fetchSections", { department_id: localFilters.departmentId });
+        await store.dispatch("sections/fetchSections", {
+          department_id: localFilters.departmentId,
+        });
         localFilters.sectionId = 0;
       } else {
         await store.dispatch("sections/fetchSections");

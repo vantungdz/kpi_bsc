@@ -27,6 +27,7 @@ import EmployeeKpiScoreList from "../../features/evaluation/views/EmployeeKpiSco
 import HomePage from "../../features/home/HomePage.vue";
 import ReportGenerator from "@/features/reports/views/ReportGenerator.vue";
 import PerformanceObjectiveApprovalList from "@/features/evaluation/views/PerformanceObjectiveApprovalList.vue";
+import KpiInactiveList from "../../features/kpi/components/KpiInactiveList.vue";
 const routes = [
   {
     path: "/report-generator",
@@ -235,6 +236,12 @@ const routes = [
     name: "HomePage",
     component: HomePage,
     meta: { requiresAuth: true },
+  },
+  {
+    path: "/kpis/inactive",
+    name: "KpiInactiveList",
+    component: KpiInactiveList,
+    meta: { requiresAuth: true, roles: ["admin", "manager", "department", "section"] },
   },
 ];
 

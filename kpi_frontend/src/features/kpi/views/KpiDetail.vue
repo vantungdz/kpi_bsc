@@ -49,7 +49,8 @@
             {{ kpiDetailData.unit || "" }}
           </a-descriptions-item>
           <a-descriptions-item :label="$t('target')">
-            {{ kpiDetailData.target?.toLocaleString() ?? "" }}
+            {{ Number(kpiDetailData.target).toLocaleString() }}
+            <span v-if="kpiDetailData.unit"></span>
           </a-descriptions-item>
           <a-descriptions-item :label="$t('weight')">
             {{ kpiDetailData.weight ?? "" }}
@@ -162,13 +163,14 @@
                 <span v-else></span>
               </template>
               <template v-else-if="column.key === 'targetValue'">
-                {{ record.targetValue?.toLocaleString() ?? "-" }}
+                {{ Number(record.targetValue).toLocaleString() ?? "-" }}
                 <span v-if="kpiDetailData?.unit">
                   {{ kpiDetailData.unit }}</span
                 >
               </template>
               <template v-else-if="column.key === 'actual'">
                 {{ record.latest_actual_value?.toLocaleString() ?? "-" }}
+                {{ kpiDetailData.unit }}
               </template>
               <template v-else-if="column.key === 'status'">
                 <a-tag :color="getAssignmentStatusColor(record.status)">
@@ -250,13 +252,14 @@
                 <span v-else></span>
               </template>
               <template v-else-if="column.key === 'targetValue'">
-                {{ record.targetValue?.toLocaleString() ?? "-" }}
+                {{ Number(record.targetValue).toLocaleString() ?? "-" }}
                 <span v-if="kpiDetailData?.unit">
                   {{ kpiDetailData.unit }}</span
                 >
               </template>
               <template v-else-if="column.key === 'actual'">
                 {{ record.latest_actual_value?.toLocaleString() ?? "-" }}
+                {{ kpiDetailData.unit }}
               </template>
               <template v-else-if="column.key === 'status'">
                 <a-tag :color="getAssignmentStatusColor(record.status)">
@@ -342,15 +345,12 @@
                 </span>
               </template>
               <template v-else-if="column.key === 'target'">
-                {{
-                  record.target?.toLocaleString() ??
-                  record.targetValue?.toLocaleString() ??
-                  ""
-                }}
+                {{ Number(record.targetValue).toLocaleString() }}
                 {{ kpiDetailData?.unit || "" }}
               </template>
               <template v-else-if="column.key === 'actual'">
                 {{ record.latest_actual_value?.toLocaleString() ?? "" }}
+                {{ kpiDetailData?.unit || "" }}
               </template>
               <template v-else-if="column.key === 'status'">
                 <a-tag :color="getAssignmentStatusColor(record.status)">
@@ -543,14 +543,12 @@
                 }})
               </template>
               <template v-else-if="column.key === 'target'">
-                {{ record.target?.toLocaleString() ?? "" }}
+                {{ Number(record.targetValue).toLocaleString() }}
                 {{ kpiDetailData?.unit || "" }}
-              </template>
-              <template v-else-if="column.key === 'weight'">
-                {{ record.weight ?? "" }} %
               </template>
               <template v-else-if="column.key === 'actual'">
                 {{ record.latest_actual_value?.toLocaleString() ?? "" }}
+                {{ kpiDetailData?.unit || "" }}
               </template>
               <template v-else-if="column.key === 'status'">
                 <a-tag :color="getAssignmentStatusColor(record.status)">
@@ -585,12 +583,11 @@
             </template>
           </a-table>
           <a-empty
-            v-show="
-              filteredDirectUserAssignments.length === 0 &&
-              !loadingUserAssignments &&
-              !userAssignmentError
+            v-if="
+              companyOverviewUserAssignments.length === 0 &&
+              !loadingUserAssignments
             "
-            :description="$t('noDirectUserAssignmentsYet')"
+            :description="$t('noDirectUserAssignments')"
           />
         </a-skeleton>
       </a-card>
@@ -650,11 +647,15 @@
                 }})
               </template>
               <template v-else-if="column.key === 'target'">
-                {{ record.targetValue?.toLocaleString() ?? "" }}
+                {{
+                  record.target?.toLocaleString() ??
+                  record.targetValue?.toLocaleString() ??
+                  ""
+                }}
                 {{ kpiDetailData?.unit || "" }}
               </template>
               <template v-else-if="column.key === 'actual'">
-                {{ record.latest_actual_value?.toLocaleString() ?? 0 }}
+                {{ record.latest_actual_value?.toLocaleString() ?? "" }}
               </template>
               <template v-else-if="column.key === 'status'">
                 <a-tag :color="getAssignmentStatusColor(record.status)">
@@ -689,11 +690,7 @@
             </template>
           </a-table>
           <a-empty
-            v-show="
-              filteredSectionUserAssignments.length === 0 &&
-              !loadingUserAssignments &&
-              !userAssignmentError
-            "
+            v-show="filteredSectionUserAssignments.length === 0"
             :description="$t('noSectionUserAssignmentsYet')"
           />
         </a-skeleton>
@@ -872,12 +869,11 @@
               {{ record.name }}
             </template>
             <template v-if="column.key === 'target'">
-              <a-input-number
+              <a-input
                 v-model:value="userAssignmentDetails[record.userId].target"
                 :placeholder="$t('target')"
                 style="width: 100%"
-                :min="0"
-                :step="1"
+                @input="(event) => handleNumericInput('targetValue', event)"
               />
             </template>
           </template>
@@ -989,12 +985,11 @@
           </a-form-item>
 
           <a-form-item :label="$t('target')" required name="targetValue">
-            <a-input-number
+            <a-input
               v-model:value="departmentSectionAssignmentForm.targetValue"
               :placeholder="$t('target')"
               style="width: 100%"
-              :min="0"
-              :step="1"
+              @input="(event) => handleNumericInput('targetValue', event)"
             />
           </a-form-item>
 
@@ -1066,7 +1061,6 @@ import {
   Tooltip as ATooltip,
   Modal as AModal,
   Select as ASelect,
-  InputNumber as AInputNumber,
   Form as AForm,
   FormItem as AFormItem,
   Alert as AAlert,
@@ -2096,14 +2090,36 @@ const handleDeleteDepartmentSectionAssignment = async () => {
 
 const handleSaveDepartmentSectionAssignment = async () => {
   const isEditing = !!editingDepartmentSectionAssignment.value;
-  const hasContext = !!contextDepartmentId.value;
+  // const hasContext = !!contextDepartmentId.value;
 
+  // Kiểm tra trùng assignment phòng ban (không có section)
   if (
-    hasContext &&
-    !isEditing &&
+    departmentSectionAssignmentForm.assigned_to_department &&
     !departmentSectionAssignmentForm.assigned_to_section
   ) {
-    departmentSectionAssignmentError.value = $t("selectSectionToAssign");
+    const assignments = kpiDetailData.value?.assignments || [];
+    const deptId = departmentSectionAssignmentForm.assigned_to_department;
+    // Nếu đang edit thì bỏ qua chính assignment đang edit
+    const duplicate = assignments.find(
+      (a) =>
+        a.assigned_to_department == deptId &&
+        (!a.assigned_to_section || a.assigned_to_section === null) &&
+        (!isEditing || a.id !== departmentSectionAssignmentForm.assignmentId)
+    );
+    if (duplicate) {
+      departmentSectionAssignmentError.value = $t("departmentAlreadyAssigned");
+      submittingDepartmentSectionAssignment.value = false;
+      notification.error({
+        message: $t("error"),
+        description: $t("departmentAlreadyAssigned"),
+      });
+      return;
+    }
+  }
+
+  if (!departmentSectionAssignmentForm.assigned_to_department) {
+    departmentSectionAssignmentError.value = $t("selectDepartmentRequired");
+    submittingDepartmentSectionAssignment.value = false;
     return;
   }
 
@@ -2129,23 +2145,12 @@ const handleSaveDepartmentSectionAssignment = async () => {
       targetValue: Number(departmentSectionAssignmentForm.targetValue),
     };
 
-    if (isEditing) {
-      assignmentPayload.assigned_to_department =
-        editingDepartmentSectionAssignment.value.assigned_to_department;
-      assignmentPayload.assigned_to_section =
-        editingDepartmentSectionAssignment.value.assigned_to_section;
-    } else if (hasContext) {
-      assignmentPayload.assigned_to_department = contextDepartmentId.value;
-      assignmentPayload.assigned_to_section =
-        departmentSectionAssignmentForm.assigned_to_section;
-      assignmentPayload.status = kpiDetailData.value?.status;
-    } else {
-      assignmentPayload.assigned_to_department =
-        departmentSectionAssignmentForm.assigned_to_department || null;
-      assignmentPayload.assigned_to_section =
-        departmentSectionAssignmentForm.assigned_to_section || null;
-      assignmentPayload.status = kpiDetailData.value?.status;
-    }
+    // Sửa logic: Nếu chọn cả phòng ban và section thì đều phải gán vào payload
+    assignmentPayload.assigned_to_department =
+      departmentSectionAssignmentForm.assigned_to_department || null;
+    assignmentPayload.assigned_to_section =
+      departmentSectionAssignmentForm.assigned_to_section || null;
+    assignmentPayload.status = kpiDetailData.value?.status;
     if (
       !assignmentPayload.assigned_to_department &&
       !assignmentPayload.assigned_to_section
@@ -2199,6 +2204,19 @@ const handleDepartmentSelectInModal = (departmentId) => {
   if (departmentId) {
     store.dispatch("sections/fetchSectionsByDepartment", departmentId);
   }
+};
+
+const handleNumericInput = (field, event) => {
+  let value = event.target.value.replace(/[^0-9.]/g, "");
+  const parts = value.split(".");
+  if (parts.length > 2) {
+    value = parts[0] + "." + parts.slice(1).join("");
+  }
+  // Format phần nguyên với dấu phẩy
+  const [intPart, decPart] = value.split(".");
+  let formatted = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  if (decPart !== undefined) formatted += "." + decPart;
+  departmentSectionAssignmentForm[field] = formatted;
 };
 
 const ensureUserAssignmentDetail = (

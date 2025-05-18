@@ -467,6 +467,8 @@
     "MANAGER_REVIEWED": "Quản lý đã đánh giá",
     "EMPLOYEE_FEEDBACK_PENDING": "Chờ phản hồi nhân viên",
     "EMPLOYEE_RESPONDED": "Nhân viên đã phản hồi",
+    "DEPARTMENT_REVISE_REQUIRED": "Yêu cầu chỉnh sửa từ trưởng phòng",
+    "SECTION_REVISE_REQUIRED": "Yêu cầu chỉnh sửa từ trưởng bộ phận",
     "COMPLETED": "Hoàn thành",
     "undefined": "Chưa đánh giá",
     "unknown": "Trạng Thái Không Xác Định"
@@ -514,5 +516,12 @@
   "reportGenerator": "Xuất báo cáo",
   "selfScore": "Điểm nhân viên tự đánh giá",
   "selfComment": "Nhận xét nhân viên tự đánh giá",
-  "reviewer": "Người đánh giá"
+  "reviewer": "Người đánh giá",
+  "inactiveKpiList": "Danh sách KPI chưa kích hoạt",
+  "noInactiveKpi": "Không có KPI chưa kích hoạt nào.",
+  "viewDetail": "Xem chi tiết",
+  "createdBy": "Người tạo",
+  "createdAt": "Ngày tạo",
+  "departmentAlreadyAssigned": "Phòng ban này đã được phân công rồi.",
+  "selectDepartmentRequired": "Vui lòng chọn phòng ban."
 }

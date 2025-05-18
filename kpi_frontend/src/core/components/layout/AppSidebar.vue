@@ -97,6 +97,16 @@
             <span>{{ $t("sectionKpiList") }}</span>
           </router-link>
         </a-menu-item>
+        <a-menu-item
+          key="kpis-inactive"
+          v-if="canViewSectionLevel"
+          :title="$t('inactiveKpiList')"
+        >
+          <router-link to="/kpis/inactive">
+            <appstore-outlined />
+            <span>{{ $t("inactiveKpiList") }}</span>
+          </router-link>
+        </a-menu-item>
       </a-sub-menu>
 
       <!-- 4. Approvals & Reviews (Sub-menu) -->

@@ -180,11 +180,6 @@
                     ]"
                   />
                 </template>
-
-                <template v-else-if="column.dataIndex === 'assignTo'">
-                  <span>{{ record.assignTo }}</span>
-                </template>
-
                 <template v-else-if="column.dataIndex === 'startDate'">
                   <span>{{ record.startDate }}</span>
                 </template>
@@ -198,11 +193,15 @@
                 </template>
 
                 <template v-else-if="column.dataIndex === 'target'">
-                  <span>{{ `${record.target} ${record.unit}` }}</span>
+                  <span>{{
+                    `${Number(record.target).toLocaleString()} ${record.unit}`
+                  }}</span>
                 </template>
 
                 <template v-else-if="column.dataIndex === 'actual'">
-                  <span>{{ `${record.actual} ${record.unit}` }}</span>
+                  <span>{{
+                    `${Number(record.actual).toLocaleString()} ${record.unit}`
+                  }}</span>
                 </template>
 
                 <template v-else-if="column.dataIndex === 'status'">
@@ -210,7 +209,7 @@
                     :bordered="false"
                     :color="getStatusColor(record.status)"
                   >
-                    {{ $t('status_chart.' + record.status) || record.status }}
+                    {{ $t("status_chart." + record.status) || record.status }}
                   </a-tag>
                 </template>
 
@@ -333,12 +332,6 @@ const columns = computed(() => [
     width: "10%",
   },
   {
-    title: $t("assignedTo"),
-    dataIndex: "assignTo",
-    key: "assignTo",
-    width: "10%",
-  },
-  {
     title: $t("startDate"),
     dataIndex: "startDate",
     key: "startDate",
@@ -350,13 +343,13 @@ const columns = computed(() => [
     title: $t("target"),
     dataIndex: "target",
     key: "target",
-    width: "6%",
+    width: "11%",
   },
   {
     title: $t("actual"),
     dataIndex: "actual",
     key: "actual",
-    width: "6%",
+    width: "11%",
   },
   {
     title: $t("status"),

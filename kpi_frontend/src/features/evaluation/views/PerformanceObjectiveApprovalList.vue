@@ -423,7 +423,26 @@ const resetDetailModalState = () => {
 // Thêm hàm chuyển trang sang KpiReview
 const goToKpiReview = (record) => {
   if (!record || !record.reviewedBy || !record.cycleId) return;
-  router.push(`/kpi-review/${record.reviewedBy.id}/${record.cycleId}`);
+  // Hỗ trợ cả router.push({ name, params }) và router.push(path)
+  if (router.resolve({ name: "KpiReview", params: { employeeId: record.reviewedBy.id, cycleId: record.cycleId } }).href !== `/kpi/review`) {
+    // Nếu route có dạng /kpi-review/:employeeId/:cycleId
+    router.push({
+      name: "KpiReview",
+      params: {
+        employeeId: record.reviewedBy.id,
+        cycleId: record.cycleId,
+      },
+    });
+  } else {
+    // Nếu chỉ có /kpi/review thì fallback sang truyền query
+    router.push({
+      name: "KpiReview",
+      query: {
+        targetId: record.reviewedBy.id,
+        cycleId: record.cycleId,
+      },
+    });
+  }
 };
 
 onMounted(() => {
