@@ -14,9 +14,13 @@ export class NotificationEventListener {
   private readonly logger = new Logger(NotificationEventListener.name);
   constructor(
     private readonly notificationService: NotificationService,
-    private readonly employeeService: EmployeesService,
+    private readonly employeeService: EmployeesService, // Các hàm service này phải trả về user với role là entity, không dùng string
     private readonly notificationGateway: NotificationGateway, // Inject gateway
   ) {}
+
+  // Lưu ý: KHÔNG kiểm tra role dạng string ở bất kỳ đâu trong listener này.
+  // Nếu cần gửi thông báo cho nhóm role (admin, manager, leader...), phải gọi các hàm service đã chuẩn hóa entity role,
+  // ví dụ: findAllAdmins, findLeaderOfSection, findManagerOfDepartment, ...
 
   @OnEvent('kpi.assigned')
   async handleKpiAssigned(payload: {
@@ -50,6 +54,7 @@ export class NotificationEventListener {
     let notifiedSectionLeaderId: number | null = null;
 
     if (payload.submitter.sectionId) {
+      // Hàm findLeaderOfSection phải trả về leader với role là entity
       const sectionLeader = await this.employeeService.findLeaderOfSection(
         payload.submitter.sectionId,
       );
@@ -70,6 +75,7 @@ export class NotificationEventListener {
       }
     }
 
+    // Hàm findAllAdmins phải trả về danh sách admin với role là entity
     const adminUsers = await this.employeeService.findAllAdmins();
     if (adminUsers && adminUsers.length > 0) {
       for (const admin of adminUsers) {
@@ -149,6 +155,7 @@ export class NotificationEventListener {
       payload.submitter.departmentId;
 
     if (departmentId) {
+      // Hàm findManagerOfDepartment phải trả về manager với role là entity
       const departmentManager =
         await this.employeeService.findManagerOfDepartment(departmentId);
       if (departmentManager) {
@@ -184,6 +191,7 @@ export class NotificationEventListener {
       `Caught event: kpi_value.submitted_for_manager_approval for KPI: ${payload.kpiName} by ${payload.submitter.username}`,
     );
 
+    // Hàm findAllAdmins phải trả về danh sách admin với role là entity
     const adminUsers = await this.employeeService.findAllAdmins();
     if (adminUsers && adminUsers.length > 0) {
       for (const admin of adminUsers) {

@@ -57,18 +57,6 @@
             />
           </a-form-item>
         </a-col>
-        <a-col :span="5" style="text-align: right">
-          <a-button type="primary" @click="applyFilters" :loading="loading">
-            <template #icon><filter-outlined /></template> {{ $t("apply") }}
-          </a-button>
-          <a-button
-            @click="resetFilters"
-            :loading="loading"
-            style="margin-left: 8px"
-          >
-            <template #icon><reload-outlined /></template> {{ $t("reset") }}
-          </a-button>
-        </a-col>
       </a-row>
     </div>
 
@@ -251,8 +239,6 @@ import {
 } from "ant-design-vue";
 import {
   PlusOutlined,
-  FilterOutlined,
-  ReloadOutlined,
   ScheduleOutlined,
   CopyOutlined,
   DeleteOutlined,
@@ -304,21 +290,17 @@ const groupedKpis = computed(() => {
 });
 
 const effectiveRole = computed(() => store.getters["auth/effectiveRole"]);
-const isToggling = computed(() => store.getters["kpis/isTogglingKpiStatus"]); // Getter for toggle loading
-const toggleStatusError = computed(
-  () => store.getters["kpis/toggleKpiStatusError"]
-); // Getter for toggle error
-const isManagerOrAdmin = computed(() => {
-  return ["manager", "admin"].includes(effectiveRole.value);
-});
-
+const isManagerOrAdmin = computed(() =>
+  ["manager", "admin"].includes(effectiveRole.value)
+);
 const canCreateCompanyKpi = computed(() =>
   ["admin", "manager"].includes(effectiveRole.value)
 );
-
 const canDeleteCompanyKpi = computed(() =>
   ["admin", "manager"].includes(effectiveRole.value)
 );
+
+const isToggling = computed(() => store.getters["kpis/isTogglingKpiStatus"]);
 
 const columns = computed(() => [
   {
@@ -402,14 +384,6 @@ const loadKpis = (page = 1) => {
 };
 
 const applyFilters = () => {
-  loadKpis(1);
-};
-const resetFilters = () => {
-  localFilters.name = "";
-  localFilters.departmentId = "";
-  localFilters.status = "";
-  localFilters.startDate = null;
-  localFilters.endDate = null;
   loadKpis(1);
 };
 

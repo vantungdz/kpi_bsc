@@ -224,7 +224,7 @@
         v-if="canAssignDirectlyToUser"
         class="textLabel"
         :label="$t('assignToUser')"
-        name="assigned_user_id"
+        name="assigned_users"
       >
         <a-alert
           v-if="assignmentError"
@@ -234,18 +234,26 @@
           style="margin-bottom: 10px"
         />
         <a-select
-          v-model:value="form.assigned_user_id"
+          mode="multiple"
+          v-model:value="form.assigned_usersIds"
+          :options="sectionUserOptions"
           :placeholder="$t('selectUser')"
           show-search
           allow-clear
-          :options="sectionUserOptions"
-          :filter-option="
-            (input, option) =>
-              option.label.toLowerCase().includes(input.toLowerCase())
-          "
+          :filter-option="(input, option) => option.label.toLowerCase().includes(input.toLowerCase())"
           :loading="loadingSectionUsers"
           style="width: 100%"
+          @change="handleAssignedUsersChange"
         />
+        <div v-for="user in form.assigned_users" :key="user.id" style="margin-top: 8px;">
+          <span>{{ sectionUserOptions.find(u => u.value === user.id)?.label || user.id }}</span>
+          <a-input
+            v-model:value="user.target"
+            style="width: 120px; margin-left: 8px;"
+            :placeholder="$t('enterTarget')"
+            @input="(e) => handleAssignedUserTargetChange(user.id, e.target.value)"
+          />
+        </div>
       </a-form-item>
       <a-form-item>
         <a-row justify="end" style="margin-top: 10px">
@@ -326,8 +334,7 @@ const form = ref({
   department_id: null,
   start_date: null,
   end_date: null,
-  assigned_user_id: null,
-  assigned_user_target: null,
+  assigned_users: [], // [{ id: number, target: string }]
   description: "",
 });
 
@@ -382,16 +389,8 @@ const sectionUserOptions = computed(() =>
 );
 
 const effectiveRole = computed(() => store.getters["auth/effectiveRole"]);
-const canAccessCreatePage = computed(() => {
-  const allowedRoles = ["admin", "manager", "section"];
-
-  return allowedRoles.includes(effectiveRole.value);
-});
-
-const canAssignDirectlyToUser = computed(() => {
-  const allowedRolesForUserAssignment = ["admin", "manager", "section"];
-  return allowedRolesForUserAssignment.includes(effectiveRole.value);
-});
+const canAccessCreatePage = computed(() => ["admin", "manager", "section"].includes(effectiveRole.value));
+const canAssignDirectlyToUser = computed(() => ["admin", "manager", "section"].includes(effectiveRole.value));
 
 const resetForm = (clearTemplateSelection = false) => {
   formRef.value?.resetFields();
@@ -406,7 +405,7 @@ const resetForm = (clearTemplateSelection = false) => {
     perspective_id: null,
     start_date: null,
     end_date: null,
-    assigned_user_id: null,
+    assigned_users: [],
     description: "",
   };
   assignmentError.value = null;
@@ -444,7 +443,7 @@ const loadKpiTemplate = async (selectedId) => {
         ? dayjs(kpiDetail.end_date)
         : null;
 
-      form.value.assigned_user_id = null;
+      form.value.assigned_users = [];
 
       notification.success({
         message: `Loaded data from KPI: ${kpiDetail.name}`,
@@ -484,14 +483,31 @@ const validateWeight = async (_, value) => {
   return Promise.resolve();
 };
 
-const validateAssignment = async (_, value) => {
-  if (value === null || value === "") return Promise.resolve();
-  if (canAssignDirectlyToUser.value && form.value.assigned_user_id === null) {
-    assignmentError.value =
-      "Assignment Required: Please select a user to assign this KPI.";
-    return Promise.reject("No user selected for assignment.");
-  }
+const handleAssignedUsersChange = (userIds) => {
+  const prev = form.value.assigned_users || [];
+  form.value.assigned_users = userIds.map((id) => {
+    const found = prev.find((u) => u.id === id);
+    return found ? found : { id, target: '' };
+  });
+};
 
+const handleAssignedUserTargetChange = (id, value) => {
+  const user = form.value.assigned_users.find((u) => u.id === id);
+  if (user) user.target = value;
+};
+
+const validateAssignment = async () => {
+  if (!form.value.assigned_users || form.value.assigned_users.length === 0) {
+    assignmentError.value =
+      'Assignment Required: Please select at least one user to assign this KPI.';
+    return Promise.reject('No user selected for assignment.');
+  }
+  for (const u of form.value.assigned_users) {
+    if (!u.target || isNaN(Number(u.target))) {
+      assignmentError.value = `Please enter a valid target for user ID ${u.id}`;
+      return Promise.reject(assignmentError.value);
+    }
+  }
   assignmentError.value = null;
   return Promise.resolve();
 };
@@ -514,38 +530,48 @@ const handleChangeCreate = async () => {
   try {
     await formRef.value?.validate();
 
-    const assignmentsPayload = {
-      from: creationScope,
-      assigned_to_employee: [],
-      to_sections: [],
-      to_departments: [],
-    };
+    // Build assignments array for users
+    const userAssignments = (form.value.assigned_users || [])
+      .filter(u => u.id && u.target !== undefined && u.target !== null && !isNaN(Number(u.target)))
+      .map(u => ({ id: u.id, target: Number(u.target) }));
 
-    let hasValidAssignment = false;
-
-    if (canAssignDirectlyToUser.value && form.value.assigned_user_id !== null) {
-      assignmentsPayload.assigned_to_employee = form.value.assigned_user_id;
-      hasValidAssignment = true;
-    }
-
-    // Add the selected section as to_sections with target equal to main target
+    // Section and department assignments (if any)
+    const sectionAssignments = [];
     if (form.value.section_id !== null && form.value.section_id !== undefined) {
-      assignmentsPayload.to_sections.push({
+      sectionAssignments.push({
         id: form.value.section_id,
         target: form.value.target !== null ? Number(form.value.target) : null,
       });
-      hasValidAssignment = true;
     }
-
-    // Add the selected department as to_departments with target equal to main target
-    if (
-      form.value.department_id !== null &&
-      form.value.department_id !== undefined
-    ) {
-      assignmentsPayload.to_departments.push({
+    const departmentAssignments = [];
+    if (form.value.department_id !== null && form.value.department_id !== undefined) {
+      departmentAssignments.push({
         id: form.value.department_id,
         target: form.value.target !== null ? Number(form.value.target) : null,
       });
+    }
+
+    // Chuẩn hóa assignments object
+    let assignments = {
+      from: creationScope,
+      to_employees: null,
+      to_departments: [],
+      to_sections: []
+    };
+    let hasValidAssignment = false;
+    if (userAssignments.length === 1) {
+      assignments.to_employees = { id: userAssignments[0].user_id, target: userAssignments[0].target };
+      hasValidAssignment = true;
+    } else if (userAssignments.length > 1) {
+      assignments.to_employees = userAssignments;
+      hasValidAssignment = true;
+    }
+    if (sectionAssignments.length > 0) {
+      assignments.to_sections = sectionAssignments;
+      hasValidAssignment = true;
+    }
+    if (departmentAssignments.length > 0) {
+      assignments.to_departments = departmentAssignments;
       hasValidAssignment = true;
     }
 
@@ -574,10 +600,9 @@ const handleChangeCreate = async () => {
       description: form.value.description,
       start_date: formattedStartDate,
       end_date: formattedEndDate,
-
       section_id: form.value.section_id,
       department_id: form.value.department_id,
-      assignments: assignmentsPayload,
+      assignments,
     };
 
     console.log("Submitting KPI Data (Final Structure):", kpiData);
@@ -615,7 +640,7 @@ const onFinishFailed = (errorInfo) => {
   let errorMessages = "Please check required fields and input formats.";
   if (errorInfo?.errorFields?.length > 0) {
     const nonAssignmentErrors = errorInfo.errorFields.filter(
-      (field) => field.name[0] !== "assigned_user_id"
+      (field) => field.name[0] !== "assigned_users"
     );
     if (nonAssignmentErrors.length > 0) {
       const firstErrorField = nonAssignmentErrors[0];
@@ -628,7 +653,7 @@ const onFinishFailed = (errorInfo) => {
       errorMessages = `Error in field '${fieldName}': ${errors}`;
     } else if (
       errorInfo.errorFields.some(
-        (field) => field.name[0] === "assigned_user_id"
+        (field) => field.name[0] === "assigned_users"
       )
     ) {
       if (assignmentError.value) {
@@ -746,7 +771,7 @@ const formRules = reactive({
     },
   ],
 
-  assigned_user_id: [
+  assigned_users: [
     {
       validator: validateAssignment,
       required: computed(() => canAssignDirectlyToUser.value),
@@ -757,13 +782,13 @@ const formRules = reactive({
 });
 
 watch(
-  () => form.value.assigned_user_id,
+  () => form.value.assigned_users,
   (newVal) => {
-    if (!(canAssignDirectlyToUser.value && newVal === null)) {
+    if (!(canAssignDirectlyToUser.value && newVal.length === 0)) {
       assignmentError.value = null;
     }
 
-    formRef.value?.validateFields(["assigned_user_id"]).catch(() => {});
+    formRef.value?.validateFields(["assigned_users"]).catch(() => {});
   },
   { immediate: true }
 );

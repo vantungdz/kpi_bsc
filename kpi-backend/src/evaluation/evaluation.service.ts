@@ -41,8 +41,6 @@ import {
 import { SavePerformanceObjectivesDto } from './dto/save-performance-objectives.dto';
 import { OverallReviewStatus } from '../entities/objective-evaluation-status.enum';
 import { KpiValueStatus } from '../entities/kpi-value.entity';
-// Removed ObjectiveEvaluationStatus and related imports as objective evaluation is deprecated.
-
 
 @Injectable()
 export class EvaluationService {
@@ -61,14 +59,10 @@ export class EvaluationService {
     private readonly kpiReviewRepository: Repository<KpiReview>,
     @InjectRepository(OverallReview)
     private readonly overallReviewRepository: Repository<OverallReview>,
-    // Removed ObjectiveEvaluation and ObjectiveEvaluationHistory repositories
     private readonly entityManager: EntityManager,
     private readonly eventEmitter: EventEmitter2,
   ) {}
 
-  /**
-   * Helper: Luôn lấy bản ghi OverallReview mới nhất cho 1 employee/cycle
-   */
   private async findLatestOverallReview(
     targetId: number,
     targetType: string,
@@ -88,15 +82,15 @@ export class EvaluationService {
     currentUser: Employee,
   ): Promise<ReviewableTargetDto[]> {
     const reviewableTargets: ReviewableTargetDto[] = [];
+    const roleName = typeof currentUser.role === 'string' ? currentUser.role : currentUser.role?.name;
 
-    // Cho phép bất kỳ ai cũng có thể review KPI của chính mình
     reviewableTargets.push({
       id: currentUser.id,
       name: `${currentUser.first_name} ${currentUser.last_name}`.trim(),
       type: 'employee',
     });
 
-    if (currentUser.role === 'admin') {
+    if (roleName === 'admin') {
       const employees = await this.employeeRepository.find({
         order: { first_name: 'ASC', last_name: 'ASC' },
       });
@@ -120,7 +114,7 @@ export class EvaluationService {
       departments.forEach((d) =>
         reviewableTargets.push({ id: d.id, name: d.name, type: 'department' }),
       );
-    } else if (currentUser.role === 'manager') {
+    } else if (roleName === 'manager') {
       if (currentUser.departmentId) {
         const managedDepartment = await this.departmentRepository.findOne({
           where: { id: currentUser.departmentId },
@@ -153,7 +147,7 @@ export class EvaluationService {
           reviewableTargets.push({ id: s.id, name: s.name, type: 'section' }),
         );
       }
-    } else if (currentUser.role === 'department') {
+    } else if (roleName === 'department') {
       if (currentUser.departmentId) {
         const ownDepartment = await this.departmentRepository.findOne({
           where: { id: currentUser.departmentId },
@@ -186,7 +180,7 @@ export class EvaluationService {
           reviewableTargets.push({ id: s.id, name: s.name, type: 'section' }),
         );
       }
-    } else if (currentUser.role === 'section') {
+    } else if (roleName === 'section') {
       if (currentUser.sectionId) {
         const ownSection = await this.sectionRepository.findOne({
           where: { id: currentUser.sectionId },
@@ -221,7 +215,6 @@ export class EvaluationService {
     const today = new Date();
     const currentYear = today.getFullYear();
 
-    // Chỉ trả về các năm hiện tại và 2 năm trước đó
     for (let i = 0; i < 3; i++) {
       const year = currentYear - i;
       cycles.push({
@@ -239,7 +232,6 @@ export class EvaluationService {
     targetType: 'employee' | 'section' | 'department',
     cycleId: string,
   ): Promise<KpisForReviewResponseDto> {
-    // Nếu là tự review bản thân thì luôn cho phép (KHÔNG kiểm tra role/quyền)
     let assignments: KPIAssignment[] = [];
 
     const { startDate, endDate } = this.getDateRangeFromCycleId(cycleId);
@@ -325,7 +317,6 @@ export class EvaluationService {
           review.cycleId === cycleId,
       );
 
-      // Luôn tìm self review của nhân viên được giao KPI này (không phụ thuộc currentUser hay targetType)
       let selfScoreInner: number | null = null;
       let selfCommentInner: string | null = null;
       const assignedEmployeeId = assignment.assigned_to_employee;
@@ -360,9 +351,6 @@ export class EvaluationService {
       });
     }
 
-    console.log('kpisToReview 1 final', kpisToReview);
-
-    // Sau khi tạo kpisToReview xong, nếu là tự xem KPI của mình thì bổ sung selfScore/selfComment
     if (
       targetType === 'employee' &&
       targetId === currentUser.id &&
@@ -389,7 +377,6 @@ export class EvaluationService {
         }
       });
       for (const kpi of kpisToReview) {
-        // Chỉ ghi đè selfScore/selfComment nếu selfReviewMap có dữ liệu thực sự (không phải undefined/null)
         const selfReview = selfReviewMap.get(kpi.assignmentId);
         if (selfReview) {
           if (
@@ -405,11 +392,8 @@ export class EvaluationService {
             kpi.selfComment = selfReview.selfComment;
           }
         }
-        // Nếu không có selfReviewMap thì giữ nguyên giá trị đã lấy từ assignment.reviews
       }
     }
-
-    console.log('kpisToReview 2 final', kpisToReview);
 
     let totalWeightedScoreSupervisor = 0;
     if (kpisToReview && Array.isArray(kpisToReview)) {
@@ -432,7 +416,7 @@ export class EvaluationService {
         targetId: targetId,
         targetType: targetType,
         cycleId: cycleId,
-        reviewedById: currentUser.id, // Ensure reviewer-specific record
+        reviewedById: currentUser.id,
       },
     });
 
@@ -445,7 +429,6 @@ export class EvaluationService {
         totalWeightedScoreSupervisor,
       };
     } else {
-      // Nếu chưa có overallReviewRecord, trả về status PENDING_REVIEW
       existingOverallReviewData = {
         overallComment: null,
         status: OverallReviewStatus.PENDING_REVIEW,
@@ -454,8 +437,6 @@ export class EvaluationService {
         totalWeightedScoreSupervisor,
       };
     }
-
-    console.log('kpisToReview 3 final', kpisToReview);
 
     return {
       kpisToReview: kpisToReview,
@@ -637,13 +618,13 @@ export class EvaluationService {
             },
           );
 
-          // Xác định status mới dựa vào vai trò
           let newStatus = OverallReviewStatus.PENDING_REVIEW;
-          if (currentUser.role === 'section') {
+          const roleName = typeof currentUser.role === 'string' ? currentUser.role : currentUser.role?.name;
+          if (roleName === 'section') {
             newStatus = OverallReviewStatus.DEPARTMENT_REVIEW_PENDING;
-          } else if (currentUser.role === 'department') {
+          } else if (roleName === 'department') {
             newStatus = OverallReviewStatus.MANAGER_REVIEW_PENDING;
-          } else if (currentUser.role === 'manager' || currentUser.role === 'admin') {
+          } else if (roleName === 'manager' || roleName === 'admin') {
             newStatus = OverallReviewStatus.EMPLOYEE_FEEDBACK_PENDING;
           }
 
@@ -707,7 +688,6 @@ export class EvaluationService {
     currentUser: Employee,
     dto: SubmitSelfKpiReviewDto,
   ): Promise<EmployeeReviewResponseDto> {
-    // Lấy các assignment hợp lệ cho user trong cycle
     const { startDate, endDate } = this.getDateRangeFromCycleId(dto.cycleId);
     if (!startDate || !endDate) {
       throw new BadRequestException('Invalid review cycle.');
@@ -745,7 +725,6 @@ export class EvaluationService {
         }
         await em.save(KpiReview, review);
       }
-      // Bổ sung: Đảm bảo có OverallReview với status DRAFT khi khởi tạo lần đầu
       let overallReview = await em.findOne(OverallReview, {
         where: {
           targetId: currentUser.id,
@@ -763,13 +742,11 @@ export class EvaluationService {
         });
         await em.save(OverallReview, overallReview);
       }
-      // Khi submit self review, nếu đang là DRAFT thì chuyển sang PENDING_REVIEW
       if (overallReview.status === OverallReviewStatus.DRAFT) {
         overallReview.status = OverallReviewStatus.PENDING_REVIEW;
         await em.save(OverallReview, overallReview);
       }
     });
-    // Trả về lại dữ liệu review mới nhất cho nhân viên
     return this.getEmployeeReviewDetails(currentUser, dto.cycleId);
   }
 
@@ -871,7 +848,6 @@ export class EvaluationService {
     employee: Employee,
     cycleId: string,
   ): Promise<EmployeeReviewResponseDto> {
-    // Sử dụng helper để lấy bản ghi OverallReview mới nhất
     const overallReviewRecord = await this.findLatestOverallReview(
       employee.id,
       'employee',
@@ -879,14 +855,13 @@ export class EvaluationService {
     );
 
     if (!overallReviewRecord) {
-      // Nếu chưa có review tổng thể, vẫn trả về danh sách KPI assignment hợp lệ cho nhân viên trong cycle
       const { startDate, endDate } = this.getDateRangeFromCycleId(cycleId);
       if (!startDate || !endDate) {
         return {
           kpisReviewedByManager: [],
           overallReviewByManager: {
             overallComment: null,
-            status: OverallReviewStatus.DRAFT, // Sửa về DRAFT
+            status: OverallReviewStatus.DRAFT,
             employeeComment: null,
             employeeFeedbackDate: null,
             totalWeightedScoreSupervisor: 0,
@@ -949,7 +924,7 @@ export class EvaluationService {
         kpisReviewedByManager,
         overallReviewByManager: {
           overallComment: null,
-          status: OverallReviewStatus.DRAFT, // Sửa về DRAFT
+          status: OverallReviewStatus.DRAFT,
           employeeComment: null,
           employeeFeedbackDate: null,
           totalWeightedScoreSupervisor: 0,
@@ -1039,7 +1014,6 @@ export class EvaluationService {
     employee: Employee,
     feedbackDto: SubmitEmployeeFeedbackDto,
   ): Promise<OverallReview> {
-    // Sử dụng helper để lấy bản ghi OverallReview mới nhất
     const overallReviewRecord = await this.findLatestOverallReview(
       employee.id,
       'employee',
@@ -1081,9 +1055,10 @@ export class EvaluationService {
     targetType: 'employee' | 'section' | 'department',
   ): Promise<ReviewHistoryResponseDto> {
     let canViewHistory = false;
+    const roleName = typeof currentUser.role === 'string' ? currentUser.role : currentUser.role?.name;
     if (targetType === 'employee' && currentUser.id === targetId) {
       canViewHistory = true;
-    } else if (['admin', 'manager'].includes(currentUser.role)) {
+    } else if (['admin', 'manager'].includes(roleName)) {
       const reviewableTargets = await this.getReviewableTargets(currentUser);
       canViewHistory = reviewableTargets.some(
         (rt) => rt.id === targetId && rt.type === targetType,
@@ -1246,14 +1221,12 @@ export class EvaluationService {
     cycleId: string,
   ): Promise<EmployeeKpiScoreDto[]> {
     let employees: Employee[] = [];
-    if (currentUser.role === 'admin') {
+    const roleName = typeof currentUser.role === 'string' ? currentUser.role : currentUser.role?.name;
+    if (roleName === 'admin') {
       employees = await this.employeeRepository.find({
         relations: ['department'],
       });
-    } else if (
-      currentUser.role === 'manager' ||
-      currentUser.role === 'department'
-    ) {
+    } else if (roleName === 'manager' || roleName === 'department') {
       if (currentUser.departmentId) {
         employees = await this.employeeRepository.find({
           where: { departmentId: currentUser.departmentId },
@@ -1302,9 +1275,10 @@ export class EvaluationService {
     if (review.status !== OverallReviewStatus.SECTION_REVIEW_PENDING) {
       throw new BadRequestException('Review is not pending section approval');
     }
+    const roleName = typeof currentUser.role === 'string' ? currentUser.role : currentUser.role?.name;
     if (
-      !['section', 'admin', 'manager'].includes(currentUser.role) ||
-      (currentUser.role === 'section' &&
+      !['section', 'admin', 'manager'].includes(roleName) ||
+      (roleName === 'section' &&
         currentUser.sectionId !== undefined &&
         currentUser.sectionId !== null &&
         currentUser.sectionId !== review.targetId)
@@ -1331,9 +1305,10 @@ export class EvaluationService {
     if (review.status !== OverallReviewStatus.SECTION_REVIEW_PENDING) {
       throw new BadRequestException('Review is not pending section approval');
     }
+    const roleName = typeof currentUser.role === 'string' ? currentUser.role : currentUser.role?.name;
     if (
-      !['section', 'admin', 'manager'].includes(currentUser.role) ||
-      (currentUser.role === 'section' &&
+      !['section', 'admin', 'manager'].includes(roleName) ||
+      (roleName === 'section' &&
         currentUser.sectionId !== undefined &&
         currentUser.sectionId !== null &&
         currentUser.sectionId !== review.targetId)
@@ -1361,9 +1336,10 @@ export class EvaluationService {
         'Review is not pending department approval',
       );
     }
+    const roleName = typeof currentUser.role === 'string' ? currentUser.role : currentUser.role?.name;
     if (
-      !['department', 'admin', 'manager'].includes(currentUser.role) ||
-      (currentUser.role === 'department' &&
+      !['department', 'admin', 'manager'].includes(roleName) ||
+      (roleName === 'department' &&
         currentUser.departmentId !== undefined &&
         currentUser.departmentId !== null &&
         currentUser.departmentId !== review.targetId)
@@ -1392,9 +1368,10 @@ export class EvaluationService {
         'Review is not pending department approval',
       );
     }
+    const roleName = typeof currentUser.role === 'string' ? currentUser.role : currentUser.role?.name;
     if (
-      !['department', 'admin', 'manager'].includes(currentUser.role) ||
-      (currentUser.role === 'department' &&
+      !['department', 'admin', 'manager'].includes(roleName) ||
+      (roleName === 'department' &&
         currentUser.departmentId !== undefined &&
         currentUser.departmentId !== null &&
         currentUser.departmentId !== review.targetId)
@@ -1420,7 +1397,8 @@ export class EvaluationService {
     if (review.status !== OverallReviewStatus.MANAGER_REVIEW_PENDING) {
       throw new BadRequestException('Review is not pending manager approval');
     }
-    if (!['manager', 'admin'].includes(currentUser.role)) {
+    const roleName = typeof currentUser.role === 'string' ? currentUser.role : currentUser.role?.name;
+    if (!['manager', 'admin'].includes(roleName)) {
       throw new UnauthorizedException(
         'You do not have permission to approve this review at manager level',
       );
@@ -1443,7 +1421,8 @@ export class EvaluationService {
     if (review.status !== OverallReviewStatus.MANAGER_REVIEW_PENDING) {
       throw new BadRequestException('Review is not pending manager approval');
     }
-    if (!['manager', 'admin'].includes(currentUser.role)) {
+    const roleName = typeof currentUser.role === 'string' ? currentUser.role : currentUser.role?.name;
+    if (!['manager', 'admin'].includes(roleName)) {
       throw new UnauthorizedException(
         'You do not have permission to reject this review at manager level',
       );
@@ -1454,32 +1433,26 @@ export class EvaluationService {
     return this.overallReviewRepository.save(review);
   }
 
-  /**
-   * Returns a list of all employee KPI reviews and feedbacks for a manager in a given cycle.
-   */
   async getEmployeeReviewsListForManager(
     manager: Employee,
     cycleId: string,
   ): Promise<EmployeeReviewResponseDto[]> {
-    // Get employees managed by this manager (same department)
     let employees: Employee[] = [];
-    if (manager.role === 'admin') {
+    const roleName = typeof manager.role === 'string' ? manager.role : manager.role?.name;
+    if (roleName === 'admin') {
       employees = await this.employeeRepository.find();
-    } else if (manager.role === 'manager' && manager.departmentId) {
+    } else if (roleName === 'manager' && manager.departmentId) {
       employees = await this.employeeRepository.find({
         where: { departmentId: manager.departmentId },
       });
     } else {
       return [];
     }
-    // For each employee, get their review details for the cycle
     const results: EmployeeReviewResponseDto[] = [];
     for (const emp of employees) {
-      // Skip the manager themselves
       if (emp.id === manager.id) continue;
       try {
         const review = await this.getEmployeeReviewDetails(emp, cycleId);
-        // Attach employee info
         (review as any).employee = {
           id: emp.id,
           fullName: `${emp.first_name} ${emp.last_name}`.trim(),
@@ -1487,56 +1460,77 @@ export class EvaluationService {
         };
         results.push(review);
       } catch (e) {
-        // Ignore errors for employees with no review data
       }
     }
     return results;
   }
 
-  /**
-   * Lấy tất cả các bản OverallReview của nhân viên do user hiện tại quản lý,
-   * bao gồm các trạng thái cần duyệt hoặc đã có feedback.
-   */
   async getManagedEmployeeOverallReviews(
     currentUser: Employee,
-    statusList?: string[], // optional: lọc theo trạng thái nếu cần
+    statusList?: string[],
   ) {
-    // Lấy danh sách nhân viên do user này quản lý
-    let employees: Employee[] = [];
-    if (currentUser.role === 'admin') {
-      employees = await this.employeeRepository.find();
-    } else if (currentUser.role === 'manager' && currentUser.departmentId) {
-      employees = await this.employeeRepository.find({
-        where: { departmentId: currentUser.departmentId },
-      });
-    } else if (currentUser.role === 'department' && currentUser.departmentId) {
-      employees = await this.employeeRepository.find({
-        where: { departmentId: currentUser.departmentId },
-      });
-    } else if (currentUser.role === 'section' && currentUser.sectionId) {
-      employees = await this.employeeRepository.find({
-        where: { sectionId: currentUser.sectionId },
-      });
-    }
-    const employeeIds = employees.map(e => e.id);
-    if (employeeIds.length === 0) return [];
-    // Lấy tất cả OverallReview của các nhân viên này
-    const where: any = {
-      targetId: employeeIds.length === 1 ? employeeIds[0] : In(employeeIds),
-      targetType: 'employee',
-    };
+    const qb = this.overallReviewRepository.createQueryBuilder('review')
+      .leftJoinAndSelect('review.reviewedBy', 'reviewedBy');
+
     if (statusList && statusList.length > 0) {
-      where.status = statusList.length === 1 ? statusList[0] : statusList;
-    } else {
-      // Nếu không truyền statusList, loại bỏ COMPLETED mặc định
-      where.status = Not('COMPLETED');
+      qb.andWhere('review.status IN (:...statusList)', { statusList });
     }
-    const reviews = await this.overallReviewRepository.find({
-      where,
-      order: { updatedAt: 'DESC' },
-      relations: ['reviewedBy'],
+    qb.andWhere('review.status != :completedStatus', { completedStatus: 'COMPLETED' });
+    qb.andWhere(qb2 => {
+      const subQuery = qb2.subQuery()
+        .select('MAX(subReview.updatedAt)')
+        .from('overall_reviews', 'subReview')
+        .where('subReview.targetId = review.targetId')
+        .andWhere('subReview.targetType = review.targetType')
+        .andWhere('subReview.cycleId = review.cycleId')
+        .getQuery();
+      return 'review.updatedAt = ' + subQuery;
     });
-    return reviews;
+    const overallReviews = await qb.getMany();
+
+    // Filter: Only return OverallReview if ALL assignments in the cycle have at least one APPROVED KpiValue
+    const filtered: OverallReview[] = [];
+    for (const review of overallReviews) {
+      // Find all assignments for this review's target in the cycle
+      let assignments: KPIAssignment[] = [];
+      if (review.targetType === 'employee') {
+        assignments = await this.assignmentRepository.find({
+          where: {
+            assigned_to_employee: review.targetId,
+            startDate: LessThanOrEqual(new Date(review.updatedAt)),
+            endDate: MoreThanOrEqual(new Date(review.updatedAt)),
+          },
+          relations: ['kpiValues'],
+        });
+      } else if (review.targetType === 'section') {
+        assignments = await this.assignmentRepository.find({
+          where: {
+            assigned_to_section: review.targetId,
+            startDate: LessThanOrEqual(new Date(review.updatedAt)),
+            endDate: MoreThanOrEqual(new Date(review.updatedAt)),
+          },
+          relations: ['kpiValues'],
+        });
+      } else if (review.targetType === 'department') {
+        assignments = await this.assignmentRepository.find({
+          where: {
+            assigned_to_department: review.targetId,
+            startDate: LessThanOrEqual(new Date(review.updatedAt)),
+            endDate: MoreThanOrEqual(new Date(review.updatedAt)),
+          },
+          relations: ['kpiValues'],
+        });
+      }
+      // If there are no assignments, skip
+      if (!assignments.length) continue;
+      // All assignments must have at least one APPROVED KpiValue
+      const allHaveApproved = assignments.every(a =>
+        Array.isArray(a.kpiValues) &&
+        a.kpiValues.some(kv => kv.status === KpiValueStatus.APPROVED)
+      );
+      if (allHaveApproved) filtered.push(review);
+    }
+    return filtered;
   }
 }
 

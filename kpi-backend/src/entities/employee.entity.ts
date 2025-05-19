@@ -15,6 +15,9 @@ import { Team } from './team.entity';
 import { Notification } from './notification.entity';
 import { KpiReview } from './kpi-review.entity';
 import { ObjectiveEvaluation } from './objective-evaluation.entity'; // + Import ObjectiveEvaluation
+import { Permission } from './permission.entity';
+import { Policy } from './policy.entity';
+import { Role } from './role.entity';
 
 @Entity('employees')
 export class Employee {
@@ -30,12 +33,12 @@ export class Employee {
   @Column({ unique: true })
   email: string;
 
-  @Column({
-    type: 'varchar',
-    length: 50,
-    enum: ['admin', 'manager', 'department', 'section', 'employee'],
-  })
-  role: string;
+  @ManyToOne(() => Role, { nullable: true })
+  @JoinColumn({ name: 'role_id' })
+  role: Role;
+
+  @Column({ nullable: true })
+  role_id?: number;
 
   @Column({ nullable: true })
   first_name: string;

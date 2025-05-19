@@ -8,7 +8,8 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Logger } from '@nestjs/common'; // Import Logger
 import { Employee } from 'src/entities/employee.entity';
-import { Repository, FindManyOptions, DeepPartial, DataSource } from 'typeorm';
+import { Role } from 'src/entities/role.entity';
+import { Repository, FindManyOptions, DeepPartial, DataSource, IsNull, Equal } from 'typeorm';
 import * as XLSX from 'xlsx';
 import * as bcrypt from 'bcrypt';
 
@@ -29,7 +30,7 @@ export class EmployeesService {
   ) {}
 
   async create(createEmployeeDto: Partial<Employee>): Promise<Employee> {
-    const { username, email, password, ...restOfDto } = createEmployeeDto;
+    const { username, email, password, role: roleName, ...restOfDto } = createEmployeeDto;
 
     if (!username) {
       throw new BadRequestException('Username is required.');
@@ -52,12 +53,20 @@ export class EmployeesService {
       throw new ConflictException(`Email '${email}' already exists.`);
     }
 
+    // Lấy role entity (fix lỗi: roleName có thể là undefined/null, ép kiểu về string)
+    let roleEntity: Role | undefined = undefined;
+    if (roleName) {
+      const foundRole = await this.dataSource.getRepository(Role).findOne({ where: { name: String(roleName) } });
+      if (!foundRole) throw new BadRequestException(`Role '${roleName}' does not exist.`);
+      roleEntity = foundRole;
+    }
+
     const employee = this.employeeRepository.create({
       username,
       email,
       password,
       ...restOfDto,
-      role: createEmployeeDto.role || 'employee',
+      role: roleEntity,
     } as DeepPartial<Employee>);
     return this.employeeRepository.save(employee);
   }
@@ -68,33 +77,27 @@ export class EmployeesService {
   ): Promise<Employee[]> {
     const findOptions: FindManyOptions<Employee> = {
       where: {},
-      relations: ['department', 'section', 'team'],
+      relations: ['department', 'section', 'team', 'role'],
     };
 
-    if (loggedInUser && loggedInUser.role === 'section') {
+    const getRoleName = (roleObj: any) => typeof roleObj === 'string' ? roleObj : roleObj?.name;
+
+    if (loggedInUser && getRoleName(loggedInUser.role) === 'section') {
         if (!loggedInUser.sectionId) {
             this.logger.warn(`Section user ${loggedInUser.id} has no sectionId, returning no employees.`);
             return [];
         }
-        // Force filter by user's sectionId
         (findOptions.where as any).sectionId = loggedInUser.sectionId;
-
-        // If departmentId is passed and it's different from the user's department, log a warning.
-        // The sectionId filter will take precedence for data retrieval.
         if (filterOptions.departmentId && loggedInUser.departmentId && filterOptions.departmentId !== loggedInUser.departmentId) {
             this.logger.warn(`Section user ${loggedInUser.id} (dept ${loggedInUser.departmentId}) tried to filter by department ${filterOptions.departmentId}. Query will be restricted to user's section ${loggedInUser.sectionId}.`);
         }
-        // Remove other potentially conflicting filters if a section user is making the request
-        // delete filterOptions.departmentId; // Or ensure it matches loggedInUser.departmentId if set
     } else {
-        // For admin, manager, or other roles, apply filters as they come
         if (
           filterOptions.departmentId !== undefined &&
           filterOptions.departmentId !== null
         ) {
           (findOptions.where as any).departmentId = filterOptions.departmentId;
         }
-
         if (
           filterOptions.sectionId !== undefined &&
           filterOptions.sectionId !== null
@@ -102,7 +105,6 @@ export class EmployeesService {
           (findOptions.where as any).sectionId = filterOptions.sectionId;
         }
     }
-    // Apply teamId filter regardless of role, if provided
     if (filterOptions.teamId !== undefined && filterOptions.teamId !== null) {
       (findOptions.where as any).teamId = filterOptions.teamId;
     }
@@ -110,13 +112,18 @@ export class EmployeesService {
   }
 
   async findOne(id: number): Promise<Employee> {
-    const user = await this.employeeRepository.findOne({
+    let user = await this.employeeRepository.findOne({
       where: { id },
-      relations: ['department', 'section', 'team'],
+      relations: ['department', 'section', 'team', 'role'],
     });
-
     if (!user) {
       throw new NotFoundException(`Employee with ID ${id} not found`);
+    }
+    // Nếu user.role vẫn null nhưng có role_id, truy vấn lại role entity
+    if (!user.role && user.role_id) {
+      const roleRepo = this.dataSource.getRepository(Role);
+      const roleEntity = await roleRepo.findOneBy({ id: user.role_id });
+      if (roleEntity) user.role = roleEntity;
     }
     return user;
   }
@@ -157,13 +164,14 @@ export class EmployeesService {
     return this.employeeRepository.findOne({
       where: {
         section: { id: sectionId },
-        role: 'section',
+        role: Equal('section'),
       },
+      relations: ['role'],
     });
   }
 
   async findAllAdmins(): Promise<Employee[]> {
-    return this.employeeRepository.find({ where: { role: 'admin' } });
+    return this.employeeRepository.find({ where: { role: Equal('admin') }, relations: ['role'] });
   }
 
   async findManagerOfDepartment(
@@ -176,8 +184,9 @@ export class EmployeesService {
     return this.employeeRepository.findOne({
       where: {
         department: { id: departmentId },
-        role: 'manager',
+        role: Equal('manager'),
       },
+      relations: ['role'],
     });
   }
 
@@ -198,7 +207,7 @@ export class EmployeesService {
         const username = row['Username']?.trim();
         const email = row['Email']?.trim();
         const password = row['Password']?.trim();
-        const role = row['Role']?.toLowerCase() || 'employee';
+        const roleName = row['Role']?.toLowerCase() || 'employee';
         const firstName = row['First Name']?.trim();
         const lastName = row['Last Name']?.trim();
         const departmentId = row['Department ID'];
@@ -240,11 +249,19 @@ export class EmployeesService {
 
           const hashedPassword = await bcrypt.hash(password ? password : 'default_password', 10);
 
+          // Lấy role entity
+          let roleEntity: Role | undefined = undefined;
+          if (roleName) {
+            const foundRole = await transactionalEntityManager.getRepository(Role).findOneBy({ name: roleName });
+            if (!foundRole) throw new BadRequestException(`Role '${roleName}' does not exist.`);
+            roleEntity = foundRole;
+          }
+
           const employeeData: DeepPartial<Employee> = {
             username,
             email,
             password: hashedPassword,
-            role,
+            role: roleEntity,
             first_name: firstName,
             last_name: lastName,
             departmentId,
@@ -254,10 +271,8 @@ export class EmployeesService {
 
           const newEmployee = employeeRepo.create(employeeData);
           await employeeRepo.save(newEmployee);
-          console.log('Employee saved:', newEmployee);
           results.successCount++;
         } catch (error) {
-          console.error('Error saving employee:', error.message || error);
           results.errors.push({
             rowNumber: index + 2,
             rowData: row,
@@ -289,5 +304,49 @@ export class EmployeesService {
       successCount: results.successCount,
       errors: results.errors,
     };
+  }
+
+  async updateRole(id: number, roleName: string): Promise<Employee> {
+    const employee = await this.employeeRepository.findOneBy({ id });
+    if (!employee) throw new NotFoundException('Employee not found');
+    const roleEntity = await this.dataSource.getRepository(Role).findOneBy({ name: roleName });
+    if (!roleEntity) throw new NotFoundException('Role not found');
+    employee.role = roleEntity;
+    await this.employeeRepository.save(employee);
+    return employee;
+  }
+
+  async resetPassword(id: number, newPassword?: string): Promise<Employee> {
+    const employee = await this.employeeRepository.findOneBy({ id });
+    if (!employee) throw new NotFoundException('Employee not found');
+    // Nếu không truyền newPassword thì tạo random hoặc dùng mặc định
+    const password = newPassword || Math.random().toString(36).slice(-8);
+    const hashed = await bcrypt.hash(password, 10);
+    employee.password = hashed;
+    await this.employeeRepository.save(employee);
+    return employee;
+  }
+
+  async updateEmployee(id: number, updateDto: Partial<Employee>): Promise<Employee> {
+    const employee = await this.employeeRepository.findOneBy({ id });
+    if (!employee) throw new NotFoundException('Employee not found');
+    // Không cho update username/email trùng
+    if (updateDto.username && updateDto.username !== employee.username) {
+      const exist = await this.employeeRepository.findOneBy({ username: updateDto.username });
+      if (exist) throw new ConflictException('Username already exists');
+    }
+    if (updateDto.email && updateDto.email !== employee.email) {
+      const exist = await this.employeeRepository.findOneBy({ email: updateDto.email });
+      if (exist) throw new ConflictException('Email already exists');
+    }
+    // Nếu có password mới thì hash lại
+    if (updateDto.password) {
+      updateDto.password = await bcrypt.hash(updateDto.password, 10);
+    } else {
+      delete updateDto.password;
+    }
+    Object.assign(employee, updateDto);
+    await this.employeeRepository.save(employee);
+    return employee;
   }
 }

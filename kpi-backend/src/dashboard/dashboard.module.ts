@@ -20,5 +20,6 @@ import { KPIAssignment } from 'src/entities/kpi-assignment.entity';
   ],
   providers: [DashboardsService],
   controllers: [DashboardsController],
+  exports: [DashboardsService],
 })
 export class DashboardsModule {}

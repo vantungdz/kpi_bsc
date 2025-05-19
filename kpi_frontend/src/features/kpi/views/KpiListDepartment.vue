@@ -28,11 +28,8 @@
               v-model:value="localFilters.departmentId"
               style="width: 100%"
               @change="applyFilters"
-              :disabled="isDepartmentUser"
             >
-              <a-select-option v-if="!isDepartmentUser" :value="null">{{
-                $t("allDepartments")
-              }}</a-select-option>
+              <a-select-option :value="null">{{ $t('allDepartments') }}</a-select-option>
               <a-select-option
                 v-for="department in departmentList"
                 :key="department.id"
@@ -62,22 +59,6 @@
               @change="applyFilters"
             />
           </a-form-item>
-        </a-col>
-
-        <a-col :span="5" style="text-align: right">
-          <a-button type="primary" :loading="loading" @click="applyFilters">
-            <template #icon><filter-outlined /></template>
-            {{ $t("apply") }}
-          </a-button>
-
-          <a-button
-            style="margin-left: 8px"
-            :loading="loading"
-            @click="resetFilters"
-          >
-            <template #icon><reload-outlined /></template>
-            {{ $t("reset") }}
-          </a-button>
         </a-col>
       </a-row>
     </div>
@@ -154,7 +135,7 @@
                 </template>
 
                 <template v-else-if="column.dataIndex === 'chart'">
-                  <apexchart
+                  <ApexChart
                     type="donut"
                     width="120px"
                     height="100"
@@ -277,8 +258,6 @@ import { useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 import {
   PlusOutlined,
-  FilterOutlined,
-  ReloadOutlined,
   ScheduleOutlined,
   DeleteOutlined,
   CopyOutlined,
@@ -291,6 +270,7 @@ const router = useRouter();
 const { t: $t } = useI18n();
 
 const effectiveRole = computed(() => store.getters["auth/effectiveRole"]);
+
 const currentUser = computed(() => store.getters["auth/currentUser"]);
 const loading = computed(() => store.getters["kpis/isLoading"]);
 const error = computed(() => store.getters["kpis/error"]);

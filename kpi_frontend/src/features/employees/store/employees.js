@@ -191,6 +191,70 @@ const actions = {
       commit("SET_LOADING", false);
     }
   },
+
+  async updateUserRole({ commit, dispatch }, { id, role }) {
+    commit('SET_LOADING', true);
+    commit('SET_ERROR', null);
+    try {
+      // role là entity name
+      await apiClient.patch(`/employees/${id}/role`, { role });
+      await dispatch('fetchUsers', { force: true });
+      return true;
+    } catch (error) {
+      commit('SET_ERROR', error);
+      throw error;
+    } finally {
+      commit('SET_LOADING', false);
+    }
+  },
+
+  async resetPassword({ commit, dispatch }, { id, newPassword } = {}) {
+    if (!id) throw new Error("User ID is required to reset password.");
+    commit("SET_LOADING", true);
+    commit("SET_ERROR", null);
+    try {
+      const response = await apiClient.patch(`/employees/${id}/reset-password`, newPassword ? { newPassword } : {});
+      await dispatch("fetchUsers", { force: true });
+      return response.data; // Trả về employee đã reset
+    } catch (error) {
+      commit("SET_ERROR", error);
+      throw error;
+    } finally {
+      commit("SET_LOADING", false);
+    }
+  },
+
+  async deleteEmployee({ commit, dispatch }, id) {
+    if (!id) throw new Error("User ID is required to delete employee.");
+    commit("SET_LOADING", true);
+    commit("SET_ERROR", null);
+    try {
+      await apiClient.delete(`/employees/${id}`);
+      await dispatch("fetchUsers", { force: true });
+      return true;
+    } catch (error) {
+      commit("SET_ERROR", error);
+      throw error;
+    } finally {
+      commit("SET_LOADING", false);
+    }
+  },
+
+  async updateEmployee({ commit, dispatch }, updateDto) {
+    if (!updateDto || !updateDto.id) throw new Error("User ID is required to update employee.");
+    commit("SET_LOADING", true);
+    commit("SET_ERROR", null);
+    try {
+      const response = await apiClient.patch(`/employees/${updateDto.id}`, updateDto);
+      await dispatch("fetchUsers", { force: true });
+      return response.data;
+    } catch (error) {
+      commit("SET_ERROR", error);
+      throw error;
+    } finally {
+      commit("SET_LOADING", false);
+    }
+  },
 };
 
 export default {

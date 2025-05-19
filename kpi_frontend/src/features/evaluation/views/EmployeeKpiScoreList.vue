@@ -108,6 +108,8 @@ const reviewStatusColorMap = {
   COMPLETED: "green",
 };
 
+// Đảm bảo mọi logic kiểm tra role đều dùng user.role?.name nếu có
+
 const columns = computed(() => [
   { title: $t("employeeFullName"), dataIndex: "fullName", key: "fullName" },
   { title: $t("departmentLabel"), dataIndex: "department", key: "department" },

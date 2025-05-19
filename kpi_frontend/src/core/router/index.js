@@ -243,6 +243,12 @@ const routes = [
     component: KpiInactiveList,
     meta: { requiresAuth: true, roles: ["admin", "manager", "department", "section"] },
   },
+  {
+    path: "/user-role-manager",
+    name: "UserRoleManagerPage",
+    component: () => import("@/features/employees/views/UserRoleManagerPage.vue"),
+    meta: { requiresAuth: true, roles: ["admin", "manager"] },
+  },
 ];
 
 const router = createRouter({
@@ -252,7 +258,6 @@ const router = createRouter({
 
 router.beforeEach((to, from, next) => {
   const requiresAuth = to.matched.some((record) => record.meta.requiresAuth);
-
   const isAuthenticated = store.getters["auth/isAuthenticated"];
 
   if (isAuthenticated && to.path === "/") {
@@ -263,21 +268,19 @@ router.beforeEach((to, from, next) => {
   if (requiresAuth && !isAuthenticated) {
     next({ name: "LoginPage", query: { redirect: to.fullPath } });
   } else {
+    // RBAC động: kiểm tra role entity (user.role?.name)
     const allowedRoles = to.meta.roles;
-
+    // TODO: Nếu muốn kiểm tra permission động (action/resource), hãy lấy permission từ backend và kiểm tra ở đây
     if (
       allowedRoles &&
       Array.isArray(allowedRoles) &&
       allowedRoles.length > 0
     ) {
+      // effectiveRole đã trả về user.role?.name (role entity)
       const userEffectiveRole = store.getters["auth/effectiveRole"];
-
       if (!userEffectiveRole || !allowedRoles.includes(userEffectiveRole)) {
-        console.warn(
-          `User role '${userEffectiveRole}' not authorized for route ${to.name}`
-        );
-
-        next(false);
+        // Có thể chuyển hướng về trang không đủ quyền hoặc trang chủ
+        next({ name: "HomePage" });
       } else {
         next();
       }

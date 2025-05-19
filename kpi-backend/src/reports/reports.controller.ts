@@ -1,16 +1,21 @@
 // /e/project/kpi-backend/src/reports/reports.controller.ts
-import { Controller, Get, Res, Query } from '@nestjs/common';
+import { Controller, Get, Res, Query, UseGuards } from '@nestjs/common';
 import { ReportsService } from './reports.service';
 import { Response } from 'express';
+import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
+import { RolesGuard } from 'src/auth/guards/roles.guard';
+import { Roles } from 'src/auth/guards/roles.decorator';
 
 @Controller('reports')
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class ReportsController {
   constructor(private readonly reportsService: ReportsService) {}
 
   @Get('generate')
+  @Roles('admin', 'manager')
   async generateReport(
     @Query('reportType') reportType: string,
-    @Query('fileFormat') fileFormat: string, // <-- nhận thêm fileFormat
+    @Query('fileFormat') fileFormat: string,
     @Query('startDate') startDate: Date,
     @Query('endDate') endDate: Date,
     @Res() res: Response,
@@ -30,7 +35,7 @@ export class ReportsController {
       reportType,
       startDate,
       endDate,
-      fileFormat, // <-- truyền fileFormat vào service
+      fileFormat,
     );
     res.send(buffer);
   }

@@ -28,7 +28,7 @@ export class AuthService {
     const payload = {
       id: user.id,
       username: user.username,
-      role: user.role,
+      role: typeof user.role === 'string' ? user.role : user.role?.name, // Chỉ truyền tên role vào JWT
     };
 
     return {

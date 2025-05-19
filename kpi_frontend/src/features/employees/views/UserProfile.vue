@@ -56,7 +56,7 @@ import {
 const store = useStore();
 
 const user = computed(() => store.getters['auth/user']);
-const effectiveRole = computed(() => store.getters['auth/effectiveRole']);
+const effectiveRole = computed(() => user.value?.role?.name || null);
 
 const fullName = computed(() => {
   if (!user.value) return '';

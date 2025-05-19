@@ -182,7 +182,7 @@ const currentUser = computed(() => store.getters["auth/user"]);
 const isDivisionSelectionVisible = computed(() => {
   return (
     currentUser.value &&
-    (currentUser.value.role === "admin" || currentUser.value.role === "manager")
+    (["admin", "manager"].includes(currentUser.value.role?.name))
   );
 });
 

@@ -348,10 +348,7 @@ const columns = computed(() => [
 
 const formatDate = (dateString) => dateString ? dayjs(dateString).format("YYYY-MM-DD HH:mm") : "";
 
-// Lọc bỏ các bản review đã hoàn thành (status === 'COMPLETED')
-// const filteredOverallReviews = computed(() =>
-//   managedOverallReviews.value.filter(r => r.status !== 'COMPLETED')
-// );
+// Nếu có logic kiểm tra role, hãy dùng user.role?.name thay vì string cứng
 
 const fetchData = async () => {
   isLoading.value = true;

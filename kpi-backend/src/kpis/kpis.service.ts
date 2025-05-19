@@ -211,25 +211,11 @@ export class KpisService {
     const { page = 1, limit = 15 } = filterDto;
     let effectiveDepartmentId: number | null = departmentId;
 
-    if (loggedInUser.role === 'department') {
-      if (!loggedInUser.departmentId)
-        throw new UnauthorizedException(
-          'Department user has no assigned department.',
-        );
+    const roleName = typeof loggedInUser.role === 'string' ? loggedInUser.role : loggedInUser.role?.name ?? '';
+    if (roleName === 'department') {
       effectiveDepartmentId = loggedInUser.departmentId;
-
-      this.logger.log(
-        `Department user ${loggedInUser.id} viewing KPIs for their department ${effectiveDepartmentId}. Original filter departmentId ${departmentId} ignored.`,
-      );
-    } else if (loggedInUser.role === 'section') {
-      if (!loggedInUser.departmentId)
-        throw new UnauthorizedException(
-          'Section user is not part of any department to view department KPIs.',
-        );
-      effectiveDepartmentId = loggedInUser.departmentId;
-      this.logger.log(
-        `Section user ${loggedInUser.id} viewing KPIs for their department ${effectiveDepartmentId}. Original filter departmentId ${departmentId} ignored.`,
-      );
+    } else if (roleName === 'section') {
+      effectiveDepartmentId = loggedInUser.department?.id || null;
     }
 
     const query = this.kpisRepository
@@ -266,11 +252,11 @@ export class KpisService {
         }),
       );
     } else if (
-      loggedInUser.role !== 'admin' &&
-      loggedInUser.role !== 'manager'
+      roleName !== 'admin' &&
+      roleName !== 'manager'
     ) {
       this.logger.warn(
-        `User role ${loggedInUser.role} (ID: ${loggedInUser.id}) attempted to view all department KPIs. Returning empty.`,
+        `User role ${roleName} (ID: ${loggedInUser.id}) attempted to view all department KPIs. Returning empty.`,
       );
       return {
         data: [],
@@ -475,26 +461,12 @@ export class KpisService {
     let effectiveSectionId: number | null = Number(sectionIdParam);
     let effectiveDepartmentId: number | null = filterDto.departmentId ?? null;
 
-    if (loggedInUser.role === 'section') {
-      if (!loggedInUser.sectionId)
-        throw new UnauthorizedException(
-          'Section user has no assigned section.',
-        );
+    const roleName = typeof loggedInUser.role === 'string' ? loggedInUser.role : loggedInUser.role?.name ?? '';
+    if (roleName === 'section') {
       effectiveSectionId = loggedInUser.sectionId;
-      effectiveDepartmentId = loggedInUser.departmentId || null;
-      this.logger.log(
-        `Section user ${loggedInUser.id} viewing KPIs for their section ${effectiveSectionId} in department ${effectiveDepartmentId}. Original filters sectionId ${sectionIdParam}, departmentId ${filterDto.departmentId} ignored/overridden.`,
-      );
-    } else if (loggedInUser.role === 'department') {
-      if (!loggedInUser.departmentId)
-        throw new UnauthorizedException(
-          'Department user has no assigned department.',
-        );
       effectiveDepartmentId = loggedInUser.departmentId;
-
-      this.logger.log(
-        `Department user ${loggedInUser.id} viewing KPIs for department ${effectiveDepartmentId}. Section filter: ${effectiveSectionId}. Original department filter ${filterDto.departmentId} ignored.`,
-      );
+    } else if (roleName === 'department') {
+      effectiveDepartmentId = loggedInUser.departmentId;
     }
 
     const query = this.kpisRepository
@@ -537,9 +509,9 @@ export class KpisService {
       );
     } else {
       if (
-        loggedInUser.role === 'admin' ||
-        loggedInUser.role === 'manager' ||
-        loggedInUser.role === 'department'
+        roleName === 'admin' ||
+        roleName === 'manager' ||
+        roleName === 'department'
       ) {
         query.andWhere(
           new Brackets((qb) => {
@@ -548,9 +520,9 @@ export class KpisService {
             );
           }),
         );
-      } else if (loggedInUser.role !== 'section') {
+      } else if (roleName !== 'section') {
         this.logger.warn(
-          `User role ${loggedInUser.role} (ID: ${loggedInUser.id}) attempted to view all section KPIs without admin/manager/department rights. Returning empty.`,
+          `User role ${roleName} (ID: ${loggedInUser.id}) attempted to view all section KPIs without admin/manager/department rights. Returning empty.`,
         );
         return {
           data: [],
@@ -680,7 +652,7 @@ export class KpisService {
     const pagination = {
       currentPage: page,
       totalPages: Math.ceil(totalItems / limit),
-      totalItems,
+      totalItems: totalItems,
       itemsPerPage: limit,
     };
 
@@ -1011,7 +983,8 @@ export class KpisService {
       }
 
       const user = await employeeRepo.findOneBy({ id: userId });
-      if (!user || !['manager', 'admin'].includes(user.role)) {
+      const userRoleName = typeof user?.role === 'string' ? user.role : user?.role?.name ?? '';
+      if (!user || !['manager', 'admin'].includes(userRoleName)) {
         throw new UnauthorizedException(
           'User does not have permission to change KPI status.',
         );
@@ -1228,6 +1201,22 @@ export class KpisService {
           assignmentEntities.push(employeeAssignment);
         }
 
+        // Xử lý assign cho nhiều nhân viên với key mới: to_employees
+        if (assignments?.to_employees && Array.isArray(assignments.to_employees)) {
+          for (const userAssignment of assignments.to_employees) {
+            if (!userAssignment.id) continue;
+            const employeeAssignment = new KPIAssignment();
+            employeeAssignment.kpi = { id: savedKpiObject.id } as Kpi;
+            employeeAssignment.assignedFrom = assignments?.from || createdByType;
+            employeeAssignment.assigned_to_employee = userAssignment.id;
+            employeeAssignment.employee_id = userAssignment.id;
+            employeeAssignment.targetValue = Number(userAssignment.target);
+            employeeAssignment.assignedBy = assignedByUserId;
+            employeeAssignment.status = savedKpiObject.status;
+            assignmentEntities.push(employeeAssignment);
+          }
+        }
+
         if (assignmentEntities.length > 0) {
           await manager.getRepository(KPIAssignment).save(assignmentEntities);
         }
@@ -1280,7 +1269,8 @@ export class KpisService {
     const assignmentsToSave: KPIAssignment[] = [];
 
     for (const incomingAssignment of assignments) {
-      if (loggedInUser.role === 'section') {
+      const roleName = typeof loggedInUser.role === 'string' ? loggedInUser.role : loggedInUser.role?.name ?? '';
+      if (roleName === 'section') {
         if (!loggedInUser.sectionId) {
           throw new UnauthorizedException(
             'You are not assigned to a section and cannot assign KPIs.',

@@ -32,10 +32,10 @@
               size="small" bordered :scroll="{ x: 'max-content' }">
               <template #bodyCell="{ column, record }">
                 <template v-if="column.key === 'name'">
-                    <a @click="$router.push({ name: 'KpiDetail', params: { id: record.id } })"
-                      style="cursor: pointer; color: #1890ff">
-                      {{ record.name }}
-                    </a>
+                  <a @click="$router.push({ name: 'KpiDetail', params: { id: record.id } })"
+                    style="cursor: pointer; color: #1890ff">
+                    {{ record.name }}
+                  </a>
                 </template>
                 <template v-else-if="column.key === 'level'">
                   <a-tag :color="getKpiLevelColor(record.created_by_type)">
@@ -121,7 +121,9 @@
                   style="margin-bottom: 0">
                   <a-input-number v-model:value="project.projectValue"
                     :placeholder="`${$t('value')} (${currentSubmittingAssignment?.unit || ''})`"
-                    style="width: 100%; height: 36px" :min="0" />
+                    style="width: 100%; height: 36px" :min="0"
+                    :formatter="value => value ? value.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',') : ''"
+                    :parser="value => value ? value.replace(/\\s?|(,*)/g, '') : ''" />
                 </a-form-item>
               </a-col>
               <a-col :span="4" style="display: flex; align-items: center; justify-content: center;">
@@ -140,8 +142,8 @@
         </a-form-item>
       </a-form>
     </a-modal>
-    <a-modal :open="isHistoryModalVisible" :title="$t('updateApprovalHistory')" @cancel="closeHistoryModal" :width="1000"
-      :footer="null" destroyOnClose>
+    <a-modal :open="isHistoryModalVisible" :title="$t('updateApprovalHistory')" @cancel="closeHistoryModal"
+      :width="1000" :footer="null" destroyOnClose>
       <a-spin :spinning="isLoadingHistory" :tip="$t('loadingHistory')">
         <a-alert v-if="historyError" type="error" show-icon :message="historyError" style="margin-bottom: 10px" />
         <a-table v-if="!historyError && kpiValueHistory.length > 0" :columns="historyColumns"
@@ -183,7 +185,7 @@
                 {{ $t('id') }}: {{ record.changed_by }}
               </span>
               <span v-else>
-                
+
               </span>
             </template>
           </template>

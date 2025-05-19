@@ -17,7 +17,8 @@ export class RolesGuard implements CanActivate {
         if (!user) {
             return false;
         }
-        // Kiểm tra nếu role của user khớp với requiredRoles
-        return requiredRoles.includes(user.role);
+        // Nếu role là object (entity), kiểm tra user.role.name
+        const userRole = typeof user.role === 'string' ? user.role : user.role?.name;
+        return requiredRoles.includes(userRole);
     }
 }

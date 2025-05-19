@@ -45,12 +45,18 @@ const isLoading = ref(false);
 const isProcessing = ref(false);
 const currentActionItemId = ref(null);
 
-const columns = computed(() => [
+// Lấy effectiveRole từ store RBAC entity
+const effectiveRole = computed(() => store.getters["auth/effectiveRole"]);
+
+// Nếu cần kiểm tra quyền nâng cao, có thể mở rộng như sau:
+const canApprove = computed(() => ["admin", "manager"].includes(effectiveRole.value));
+
+const columns = [
   { title: "Review ID", dataIndex: "id", key: "id" },
   { title: "Reviewer", dataIndex: "reviewer", key: "reviewer" },
   { title: "Status", dataIndex: "status", key: "status" },
-  { title: "Actions", key: "actions", scopedSlots: { customRender: "actions" } },
-]);
+  { title: "Actions", key: "actions", slots: { customRender: "actions" } },
+];
 
 const fetchReviews = async () => {
   isLoading.value = true;

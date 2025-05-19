@@ -429,20 +429,13 @@ const kpiTemplateOptions = computed(() =>
 );
 
 const effectiveRole = computed(() => store.getters["auth/effectiveRole"]);
-const canAccessCreatePage = computed(() => {
-  const allowedRoles = ["admin", "manager", "department"];
-
-  return allowedRoles.includes(effectiveRole.value);
-});
-
-const canAssignDirectlyToUser = computed(() => {
-  return false;
-});
-
-const canAssignToSections = computed(() => {
-  const allowedRolesForSections = ["admin", "manager", "department"];
-  return allowedRolesForSections.includes(effectiveRole.value);
-});
+const canAccessCreatePage = computed(() =>
+  ["admin", "manager", "department"].includes(effectiveRole.value)
+);
+const canAssignDirectlyToUser = computed(() => false);
+const canAssignToSections = computed(() =>
+  ["admin", "manager", "department"].includes(effectiveRole.value)
+);
 
 const columns = [
   {

@@ -395,10 +395,11 @@ const isProcessing = computed(
   () => store.getters["kpiValues/isProcessingApproval"]
 );
 const currentUser = computed(() => store.getters["auth/user"]);
+const effectiveRole = computed(() => store.getters["auth/effectiveRole"]);
 
 // Computed card title based on user role
 const cardTitle = computed(() => {
-  const role = currentUser.value?.role;
+  const role = effectiveRole.value;
   if (role === "admin") return $t("adminApprovalTitle");
   if (role === "manager") return $t("managerApprovalTitle");
   if (role === "leader") return $t("leaderApprovalTitle");

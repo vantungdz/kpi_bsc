@@ -78,7 +78,7 @@ function formatDate(date) {
 }
 
 function getKpiStatusText(status) {
-  return $t(`kpiStatus.${status}`);
+  return $t(`status_chart.${status}`);
 }
 
 function getKpiStatusColor(status) {

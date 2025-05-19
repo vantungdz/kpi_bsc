@@ -19,7 +19,8 @@ const getters = {
   authStatus: (state) => state.status,
   user: (state) => state.user,
   token: (state) => state.token,
-  effectiveRole: (state) => state.user?.role || null, // Luôn trả về vai trò thực của người dùng
+  // Chuẩn hóa: trả về user.role?.name (role entity)
+  effectiveRole: (state) => state.user?.role?.name || null,
   authError: (state) => state.error,
 };
 

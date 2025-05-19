@@ -18,7 +18,7 @@
           </a-avatar>
           <span class="user-name">
             {{ displayName }}
-            <span class="role-display"> ({{ userRole || $t("noRole") }})</span>
+            <span class="role-display"> ({{ userRoleDisplay }})</span>
           </span>
           <down-outlined class="user-arrow" />
         </div>
@@ -108,7 +108,23 @@ const isUserAuthenticated = computed(
 );
 const actualUser = computed(() => store.getters["auth/user"]);
 
-const userRole = computed(() => store.getters["auth/effectiveRole"]);
+const userRole = computed(() => {
+  // Ưu tiên lấy từ store (đã chuẩn hóa), fallback lấy từ actualUser nếu backend trả về role entity
+  const roleFromStore = store.getters["auth/effectiveRole"];
+  if (roleFromStore) return roleFromStore;
+  if (actualUser.value && typeof actualUser.value.role === 'object' && actualUser.value.role?.name) {
+    return actualUser.value.role.name;
+  }
+  return null;
+});
+const roleLabelMap = computed(() => ({
+  admin: $t('roleAdmin'),
+  manager: $t('roleManager'),
+  department: $t('roleDepartment'),
+  section: $t('roleSection'),
+  employee: $t('roleEmployee'),
+}));
+const userRoleDisplay = computed(() => userRole.value ? (roleLabelMap.value[userRole.value] || userRole.value) : $t('noRole'));
 
 const displayName = computed(() => {
   if (!actualUser.value) return $t("user");

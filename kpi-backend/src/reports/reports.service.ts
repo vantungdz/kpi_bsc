@@ -6,12 +6,15 @@ import * as fs from 'fs';
 import { Kpi, KpiDefinitionStatus } from 'src/entities/kpi.entity';
 import { KpisService } from '../kpis/kpis.service';
 import { EmployeesService } from 'src/employees/employees.service';
+import { renderKpiPerformancePieChart } from './kpi-performance-chart.util';
+import { DashboardsService } from '../dashboard/dashboard.service';
 
 @Injectable()
 export class ReportsService {
   constructor(
     private readonly kpisService: KpisService,
     private readonly employeesService: EmployeesService,
+    private readonly dashboardsService: DashboardsService, // Inject DashboardsService
   ) {}
 
   async generateKpiReport(reportType: string, startDate?: Date, endDate?: Date, fileFormat: string = 'excel'): Promise<Buffer> {
@@ -206,6 +209,167 @@ export class ReportsService {
             y = 40;
           }
         });
+      }
+
+      if (reportType === 'dashboard-multi') {
+        // Lấy user admin đầu tiên để truyền vào DashboardsService
+        const adminUser = await this.employeesService[
+          'employeeRepository'
+        ].findOne({
+          where: { role: { name: 'admin' } },
+          relations: ['role'],
+        });
+        if (!adminUser) {
+          throw new Error('No admin user found for dashboard report.');
+        }
+        // 1. KPI chờ duyệt
+        const awaitingStats = await this.dashboardsService.getKpiAwaitingApprovalStats(adminUser);
+        doc.addPage();
+        doc.fontSize(18).text('THỐNG KÊ KPI CHỜ DUYỆT', { align: 'center' });
+        doc.moveDown();
+        doc.fontSize(12).text(`Tổng số KPI chờ duyệt: ${awaitingStats.total}`);
+        doc.moveDown(0.5);
+        if (awaitingStats.byLevel && awaitingStats.byLevel.length > 0) {
+          const tableColWidths = [200, 120, 220]; // Tăng width các cột
+          const colPadding = 10; // Padding giữa các cột
+          let y = doc.y;
+          const headers = ['Cấp duyệt', 'Số lượng', 'Trạng thái'];
+          let x = doc.x;
+          headers.forEach((header, i) => {
+            doc.font('dejavu').fontSize(11).fillColor('#0050b3').text(header, x, y, { width: tableColWidths[i], align: i === 1 ? 'right' : 'left' });
+            x += tableColWidths[i] + colPadding;
+          });
+          y += 18;
+          const chartLabels: string[] = [];
+          const chartData: number[] = [];
+          awaitingStats.byLevel.forEach((row) => {
+            x = doc.x;
+            const cells = [row.name, row.count, row.status];
+            let maxCellHeight = 0;
+            cells.forEach((cell, i) => {
+              const cellHeight = doc.heightOfString(cell ? cell.toString() : '', { width: tableColWidths[i], align: i === 1 ? 'right' : 'left' });
+              if (cellHeight > maxCellHeight) maxCellHeight = cellHeight;
+            });
+            x = doc.x;
+            cells.forEach((cell, i) => {
+              doc.font('dejavu').fontSize(10).fillColor('black').text(cell.toString(), x, y, { width: tableColWidths[i], align: i === 1 ? 'right' : 'left' });
+              x += tableColWidths[i] + colPadding;
+            });
+            chartLabels.push(row.name);
+            chartData.push(row.count);
+            y += maxCellHeight + 4; // padding 4px
+            doc.x = 40;
+            doc.y = y;
+            if (y > doc.page.height - 60) {
+              doc.addPage();
+              y = doc.y;
+            }
+          });
+          // Sau bảng, đảm bảo xuống dòng
+          y += 10;
+          doc.x = 40;
+          doc.y = y;
+          // Thêm biểu đồ Bar chart cho KPI chờ duyệt
+          if (chartData.some((v) => v > 0)) {
+            const { ChartJSNodeCanvas } = require('chartjs-node-canvas');
+            const chartJSNodeCanvas = new ChartJSNodeCanvas({ width: 500, height: 250, backgroundColour: 'white' });
+            const chartConfig = {
+              type: 'bar',
+              data: {
+                labels: chartLabels,
+                datasets: [{
+                  label: 'Số lượng KPI chờ duyệt',
+                  data: chartData,
+                  backgroundColor: ['#1890ff', '#faad14', '#cf1322'],
+                }],
+              },
+              options: {
+                plugins: { legend: { display: false } },
+                scales: { y: { beginAtZero: true } },
+              },
+            };
+            const barBuffer = await chartJSNodeCanvas.renderToBuffer(chartConfig);
+            doc.moveDown(1);
+            doc.fontSize(12).text('Biểu đồ số lượng KPI chờ duyệt theo cấp duyệt:', { align: 'left' });
+            doc.moveDown(0.2);
+            doc.image(barBuffer, { fit: [400, 180], align: 'center', valign: 'center' });
+            doc.moveDown(2); // Tạo khoảng cách lớn hơn trước section tiếp theo
+          } else {
+            doc.moveDown(2);
+          }
+        } else {
+          doc.moveDown(2);
+        }
+        // 2. KPI đã duyệt/từ chối 7 ngày qua
+        const statusStats = await this.dashboardsService.getKpiStatusOverTimeStats(adminUser, 7);
+        doc.addPage();
+        doc.fontSize(18).text('THỐNG KÊ KPI ĐÃ DUYỆT/TỪ CHỐI (7 ngày qua)', { align: 'center' });
+        doc.moveDown();
+        doc.fontSize(12).fillColor('#3f8600').text(`KPI đã duyệt: ${statusStats.approvedLastXDays}`);
+        doc.fontSize(12).fillColor('#cf1322').text(`KPI bị từ chối: ${statusStats.rejectedLastXDays}`);
+        doc.fillColor('black');
+        // Thêm biểu đồ Pie chart cho KPI đã duyệt/từ chối
+        const { ChartJSNodeCanvas } = require('chartjs-node-canvas');
+        const chartJSNodeCanvas2 = new ChartJSNodeCanvas({ width: 400, height: 220, backgroundColour: 'white' });
+        const pieConfig = {
+          type: 'pie',
+          data: {
+            labels: ['Đã duyệt', 'Từ chối'],
+            datasets: [{
+              data: [statusStats.approvedLastXDays, statusStats.rejectedLastXDays],
+              backgroundColor: ['#52c41a', '#f5222d'],
+            }],
+          },
+          options: {
+            plugins: { legend: { position: 'top' } },
+          },
+        };
+        const pieBuffer = await chartJSNodeCanvas2.renderToBuffer(pieConfig);
+        doc.moveDown(1);
+        doc.fontSize(12).text('Biểu đồ KPI đã duyệt/từ chối:', { align: 'left' });
+        doc.moveDown(0.2);
+        doc.image(pieBuffer, { fit: [300, 150], align: 'center', valign: 'center' });
+        doc.moveDown(2);
+        // 3. Thời gian duyệt trung bình
+        const avgTimeStats = await this.dashboardsService.getAverageApprovalTimeStats(adminUser);
+        doc.addPage();
+        doc.fontSize(18).text('THỐNG KÊ THỜI GIAN DUYỆT KPI TRUNG BÌNH', { align: 'center' });
+        doc.moveDown();
+        doc.fontSize(12).text(`Thời gian duyệt trung bình (tất cả cấp): ${avgTimeStats.totalAverageTime ?? 'N/A'} ngày`);
+        doc.moveDown(0.5);
+        if (avgTimeStats.byLevel && avgTimeStats.byLevel.length > 0) {
+          const tableColWidths = [220, 120];
+          let y = doc.y;
+          const headers = ['Cấp duyệt', 'Thời gian trung bình (ngày)'];
+          let x = doc.x;
+          headers.forEach((header, i) => {
+            doc.font('dejavu').fontSize(11).fillColor('#0050b3').text(header, x, y, { width: tableColWidths[i], align: 'center' });
+            x += tableColWidths[i];
+          });
+          y += 18;
+          avgTimeStats.byLevel.forEach((row) => {
+            x = doc.x;
+            const cells = [row.name, row.averageTime ?? 'N/A'];
+            cells.forEach((cell, i) => {
+              doc.font('dejavu').fontSize(10).fillColor('black').text(cell.toString(), x, y, { width: tableColWidths[i], align: 'center' });
+              x += tableColWidths[i];
+            });
+            y += 16;
+            doc.x = 40;
+            doc.y = y;
+            if (y > doc.page.height - 60) {
+              doc.addPage();
+              y = doc.y;
+            }
+          });
+          // Sau bảng cuối cùng, tạo khoảng cách cuối section
+          y += 10;
+          doc.x = 40;
+          doc.y = y;
+          doc.moveDown(2);
+        } else {
+          doc.moveDown(2);
+        }
       }
 
       doc.end();

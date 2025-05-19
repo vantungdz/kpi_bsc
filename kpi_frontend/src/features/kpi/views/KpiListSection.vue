@@ -20,28 +20,18 @@
             />
           </a-form-item>
         </a-col>
-
         <a-col :span="5" v-if="!isSectionUser">
           <a-form-item :label="$t('department')">
             <a-select
               v-model:value="localFilters.departmentId"
               style="width: 100%"
               @change="handleDepartmentChange"
-              :disabled="
-                (isSectionUser && !!currentUser?.departmentId) ||
-                isDepartmentUser
-              "
+              :disabled="(isSectionUser && !!currentUser?.departmentId) || isDepartmentUser"
             >
               <a-select-option
-                v-if="
-                  !(
-                    (isSectionUser && !!currentUser?.departmentId) ||
-                    isDepartmentUser
-                  )
-                "
+                v-if="!((isSectionUser && !!currentUser?.departmentId) || isDepartmentUser)"
                 :value="null"
-                >{{ $t("allDepartments") }}</a-select-option
-              >
+              >{{ $t('allDepartments') }}</a-select-option>
               <a-select-option
                 v-for="department in departmentList"
                 :key="department.id"
@@ -52,7 +42,6 @@
             </a-select>
           </a-form-item>
         </a-col>
-
         <a-col :span="4">
           <a-form-item :label="$t('section')">
             <a-select
@@ -60,9 +49,7 @@
               style="width: 100%"
               :disabled="isSectionUser"
             >
-              <a-select-option v-if="!isSectionUser" :value="0">{{
-                $t("allSections")
-              }}</a-select-option>
+              <a-select-option v-if="!isSectionUser" :value="0">{{ $t('allSections') }}</a-select-option>
               <a-select-option
                 v-for="section in selectSectionList"
                 :key="section.id"
@@ -73,7 +60,6 @@
             </a-select>
           </a-form-item>
         </a-col>
-
         <a-col :span="4">
           <a-form-item :label="$t('startDate')">
             <a-date-picker
@@ -83,7 +69,6 @@
             />
           </a-form-item>
         </a-col>
-
         <a-col :span="4">
           <a-form-item :label="$t('endDate')">
             <a-date-picker
@@ -92,19 +77,6 @@
               @change="applyFilters"
             />
           </a-form-item>
-        </a-col>
-
-        <a-col :span="5" style="text-align: right">
-          <a-button type="primary" :loading="loading" @click="applyFilters">
-            <template #icon><filter-outlined /></template> {{ $t("apply") }}
-          </a-button>
-          <a-button
-            style="margin-left: 8px"
-            :loading="loading"
-            @click="resetFilters"
-          >
-            <template #icon><reload-outlined /></template> {{ $t("reset") }}
-          </a-button>
         </a-col>
       </a-row>
     </div>
@@ -182,7 +154,7 @@
                 </template>
 
                 <template v-else-if="column.dataIndex === 'chart'">
-                  <apexchart
+                  <ApexChart
                     type="donut"
                     width="80%"
                     height="80"
@@ -315,8 +287,6 @@ import { useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 import {
   PlusOutlined,
-  FilterOutlined,
-  ReloadOutlined,
   ScheduleOutlined,
   DeleteOutlined,
   CopyOutlined,
@@ -328,7 +298,6 @@ const store = useStore();
 const router = useRouter();
 const { t: $t } = useI18n();
 
-const effectiveRole = computed(() => store.getters["auth/effectiveRole"]);
 const currentUser = computed(() => store.getters["auth/currentUser"]);
 const loading = computed(() => store.getters["kpis/isLoading"]);
 const error = computed(() => store.getters["kpis/error"]);
@@ -338,6 +307,8 @@ const departmentList = computed(
 const sectionKpiList = computed(
   () => store.getters["kpis/sectionKpiList"] || []
 );
+
+const effectiveRole = computed(() => store.getters["auth/effectiveRole"]);
 
 const selectSectionList = ref([]);
 
@@ -621,17 +592,20 @@ const handleDepartmentChange = async () => {
   }
 
   try {
-    if (localFilters.departmentId) {
-      await store.dispatch("sections/fetchSections", {
-        department_id: localFilters.departmentId,
-      });
+    if (localFilters.departmentId && localFilters.departmentId !== null) {
+      await store.dispatch("sections/fetchSectionsByDepartment", localFilters.departmentId);
+      selectSectionList.value = store.getters["sections/sectionsByDepartment"](localFilters.departmentId) || [];
+      // Nếu section hiện tại không thuộc department mới, reset về 0 (All)
+      if (
+        localFilters.sectionId &&
+        !selectSectionList.value.some((s) => s.id === localFilters.sectionId)
+      ) {
+        localFilters.sectionId = 0;
+      }
     } else {
       await store.dispatch("sections/fetchSections");
-    }
-
-    selectSectionList.value = store.getters["sections/sectionList"] || [];
-    if (!isSectionUser.value) {
-      localFilters.sectionId = selectSectionList.value.length > 0 ? 0 : null;
+      selectSectionList.value = store.getters["sections/sectionList"] || [];
+      localFilters.sectionId = 0;
     }
   } catch (err) {
     notification.error({
@@ -750,14 +724,6 @@ watch(() => [localFilters.departmentId, localFilters.sectionId], {
   immediate: true,
 });
 
-const resetFilters = () => {
-  localFilters.name = "";
-  localFilters.departmentId = 1;
-  localFilters.sectionId = 0; // Mặc định "All"
-  localFilters.startDate = null;
-  localFilters.endDate = "";
-};
-
 const rowClassName = (record) => {
   return record.isParent ? "row-parent" : "";
 };
@@ -792,40 +758,28 @@ watch(
 onMounted(async () => {
   try {
     await store.dispatch("departments/fetchDepartments");
-
     if (isDepartmentUser.value && currentUser.value) {
-      // Gán phòng ban của người dùng
       localFilters.departmentId = currentUser.value.departmentId || null;
-
-      // Tải danh sách sections thuộc phòng ban
-      await store.dispatch("sections/fetchSections", {
-        department_id: currentUser.value.departmentId,
-      });
-
-      // Mặc định "All Sections" trong phòng ban
+      await store.dispatch("sections/fetchSectionsByDepartment", localFilters.departmentId);
+      selectSectionList.value = store.getters["sections/sectionsByDepartment"](localFilters.departmentId) || [];
       localFilters.sectionId = 0;
     } else if (isSectionUser.value && currentUser.value) {
-      // Logic cho role section user
       localFilters.sectionId = currentUser.value.sectionId || null;
       localFilters.departmentId = currentUser.value.departmentId || null;
-      await store.dispatch("sections/fetchSections", {
-        department_id: currentUser.value.departmentId,
-      });
+      await store.dispatch("sections/fetchSectionsByDepartment", localFilters.departmentId);
+      selectSectionList.value = store.getters["sections/sectionsByDepartment"](localFilters.departmentId) || [];
     } else {
-      // Logic cho admin/manager
       if (departmentList.value.length > 0) {
         localFilters.departmentId = departmentList.value[0].id;
-        await store.dispatch("sections/fetchSections", {
-          department_id: localFilters.departmentId,
-        });
+        await store.dispatch("sections/fetchSectionsByDepartment", localFilters.departmentId);
+        selectSectionList.value = store.getters["sections/sectionsByDepartment"](localFilters.departmentId) || [];
         localFilters.sectionId = 0;
       } else {
         await store.dispatch("sections/fetchSections");
+        selectSectionList.value = store.getters["sections/sectionList"] || [];
         localFilters.sectionId = 0;
       }
     }
-
-    selectSectionList.value = store.getters["sections/sectionList"] || [];
     await applyFilters(); // Tải dữ liệu KPI ban đầu
   } catch (err) {
     error.value = err.message || "Failed to fetch initial data.";

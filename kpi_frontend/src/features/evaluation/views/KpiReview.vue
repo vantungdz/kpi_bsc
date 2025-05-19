@@ -490,21 +490,19 @@ const filteredReviewTargets = computed(() => {
   if (!reviewTargets.value || !Array.isArray(reviewTargets.value)) return [];
   const user = currentUser.value;
   if (!user) return reviewTargets.value;
-
-  if (user.role === "admin") return reviewTargets.value;
-
-  if (user.role === "manager" || user.role === "department") {
+  // Chuẩn hóa: kiểm tra role entity
+  const roleName = user.role?.name;
+  if (roleName === "admin") return reviewTargets.value;
+  if (roleName === "manager" || roleName === "department") {
     return reviewTargets.value.filter(
       (t) => t.type === "employee" || t.type === "section"
     );
   }
-
-  if (user.role === "section") {
+  if (roleName === "section") {
     return reviewTargets.value.filter(
       (t) => t.type === "employee" || t.type === "section"
     );
   }
-
   return reviewTargets.value;
 });
 

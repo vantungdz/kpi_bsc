@@ -180,7 +180,8 @@ export class KpiValuesService {
 
         let initialStatusAfterSubmit: KpiValueStatus;
 
-        switch (submitter.role) {
+        const roleName = typeof submitter.role === 'string' ? submitter.role : submitter.role?.name ?? '';
+        switch (roleName) {
           case 'admin':
           case 'manager':
             initialStatusAfterSubmit = KpiValueStatus.APPROVED;
@@ -315,8 +316,9 @@ export class KpiValuesService {
       );
     }
 
+    const roleName = typeof user.role === 'string' ? user.role : user.role?.name ?? '';
     const newStatus =
-      user.role === 'manager' || user.role === 'admin'
+      roleName === 'manager' || roleName === 'admin'
         ? KpiValueStatus.APPROVED
         : KpiValueStatus.PENDING_DEPT_APPROVAL;
 
@@ -414,8 +416,8 @@ export class KpiValuesService {
 
     let newStatus: KpiValueStatus;
     let logAction: string;
-
-    if (user.role === 'admin' || user.role === 'manager') {
+    const roleName = typeof user.role === 'string' ? user.role : user.role?.name ?? '';
+    if (roleName === 'admin' || roleName === 'manager') {
       newStatus = KpiValueStatus.REJECTED_BY_MANAGER;
       logAction = 'REJECT_MANAGER';
     } else {
@@ -486,8 +488,9 @@ export class KpiValuesService {
       );
     }
 
+    const roleName = typeof user.role === 'string' ? user.role : user.role?.name ?? '';
     const newStatus =
-      user.role === 'manager' || user.role === 'admin'
+      roleName === 'manager' || roleName === 'admin'
         ? KpiValueStatus.APPROVED
         : KpiValueStatus.PENDING_MANAGER_APPROVAL;
 
@@ -591,8 +594,8 @@ export class KpiValuesService {
 
     let newStatus: KpiValueStatus;
     let logAction: string;
-
-    if (user.role === 'admin' || user.role === 'manager') {
+    const roleName = typeof user.role === 'string' ? user.role : user.role?.name ?? '';
+    if (roleName === 'admin' || roleName === 'manager') {
       newStatus = KpiValueStatus.REJECTED_BY_MANAGER;
       logAction = 'REJECT_MANAGER';
     } else {
@@ -895,31 +898,37 @@ export class KpiValuesService {
 
     switch (action) {
       case 'SECTION_APPROVE':
-      case 'SECTION_REJECT':
-        if (user.role === 'section') {
+      case 'SECTION_REJECT': {
+        const userRoleName = typeof user.role === 'string' ? user.role : user.role?.name ?? '';
+        if (userRoleName === 'section') {
           hasRequiredRole = user.sectionId === effectiveTargetSectionId;
-        } else if (user.role === 'department') {
+        } else if (userRoleName === 'department') {
           hasRequiredRole =
             (assignment.section?.department.id === user.departmentId &&
               effectiveTargetSectionId === assignment.section.id) ||
             (user.departmentId === effectiveTargetDepartmentId &&
               assignment.assigned_to_department === user.departmentId);
-        } else if (user.role === 'manager' || user.role === 'admin') {
+        } else if (userRoleName === 'manager' || userRoleName === 'admin') {
           hasRequiredRole = true;
         }
         break;
+      }
       case 'DEPT_APPROVE':
-      case 'DEPT_REJECT':
-        if (user.role === 'department') {
+      case 'DEPT_REJECT': {
+        const userRoleName = typeof user.role === 'string' ? user.role : user.role?.name ?? '';
+        if (userRoleName === 'department') {
           hasRequiredRole = user.departmentId === effectiveTargetDepartmentId;
-        } else if (user.role === 'manager' || user.role === 'admin') {
+        } else if (userRoleName === 'manager' || userRoleName === 'admin') {
           hasRequiredRole = true;
         }
         break;
+      }
       case 'MANAGER_APPROVE':
-      case 'MANAGER_REJECT':
-        hasRequiredRole = user.role === 'manager' || user.role === 'admin';
+      case 'MANAGER_REJECT': {
+        const userRoleName = typeof user.role === 'string' ? user.role : user.role?.name ?? '';
+        hasRequiredRole = userRoleName === 'manager' || userRoleName === 'admin';
         break;
+      }
     }
 
     return hasRequiredRole;
@@ -981,6 +990,7 @@ export class KpiValuesService {
       .leftJoinAndSelect('assignedEmployee.department', 'employeeDepartment')
       .leftJoinAndSelect('kpi.perspective', 'perspective');
 
+    const roleName = typeof user.role === 'string' ? user.role : user.role?.name ?? '';
     const roleFilters: Record<string, () => void> = {
       section: () => {
         if (!user.sectionId) {
@@ -1038,7 +1048,7 @@ export class KpiValuesService {
       },
     };
 
-    const applyFilter = roleFilters[user.role];
+    const applyFilter = roleFilters[roleName];
     if (!applyFilter) {
       return [];
     }
