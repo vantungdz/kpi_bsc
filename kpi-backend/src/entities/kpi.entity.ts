@@ -9,6 +9,7 @@ import {
 } from 'typeorm';
 import { Perspective } from './perspective.entity';
 import { KPIAssignment } from './kpi-assignment.entity';
+import { Employee } from './employee.entity';
 
 export enum KpiDefinitionStatus {
   DRAFT = 'DRAFT',
@@ -96,6 +97,10 @@ export class Kpi {
 
   @Column({ nullable: true })
   created_by: number;
+
+  @ManyToOne(() => Employee, { nullable: true, eager: false })
+  @JoinColumn({ name: 'created_by' })
+  createdBy?: Employee;
 
   @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
   created_at: Date;

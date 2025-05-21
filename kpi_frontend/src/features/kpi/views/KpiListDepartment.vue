@@ -3,7 +3,7 @@
     <div class="list-header">
       <h2>{{ $t("departmentKpiList") }}</h2>
 
-      <div class="action-buttons">
+      <div class="action-buttons" v-if="canCreateDepartmentKpi">
         <a-button type="primary" style="float: bottom" @click="goToCreateKpi">
           <plus-outlined /> {{ $t("createNewKpi") }}
         </a-button>
@@ -215,6 +215,7 @@
                       type="dashed"
                       size="small"
                       @click="handleCopyKpi(record)"
+                      v-if="canCopyDepartmentKpi"
                     >
                       <copy-outlined /> {{ $t("copy") }}
                     </a-button>
@@ -226,6 +227,7 @@
                       @click="
                         showConfirmDeleteDialog(record.key, record.kpiName)
                       "
+                      v-if="canDeleteDepartmentKpi"
                     >
                       <delete-outlined /> {{ $t("delete") }}
                     </a-button>
@@ -264,6 +266,7 @@ import {
 } from "@ant-design/icons-vue";
 import { notification } from "ant-design-vue";
 import { KpiDefinitionStatus } from "@/core/constants/kpiStatus";
+import { RBAC_ACTIONS, RBAC_RESOURCES } from "@/core/constants/rbac.constants";
 
 const store = useStore();
 const router = useRouter();
@@ -281,6 +284,16 @@ const departmentKpiList = computed(
   () => store.getters["kpis/departmentKpiList"] || []
 );
 
+const userPermissions = computed(() => store.getters["auth/user"]?.permissions || []);
+function hasPermission(action, resource) {
+  return userPermissions.value?.some(
+    (p) => p.action === action && p.resource === resource
+  );
+}
+const canCreateDepartmentKpi = computed(() => hasPermission(RBAC_ACTIONS.CREATE, RBAC_RESOURCES.KPI_DEPARTMENT));
+const canCopyDepartmentKpi = computed(() => hasPermission(RBAC_ACTIONS.COPY_TEMPLATE, RBAC_RESOURCES.KPI));
+const canDeleteDepartmentKpi = computed(() => hasPermission(RBAC_ACTIONS.DELETE, RBAC_RESOURCES.KPI_DEPARTMENT));
+
 const isDepartmentUser = computed(() => effectiveRole.value === "department");
 
 const activePanelKeys = ref([]);
@@ -292,7 +305,7 @@ const isDisplayResult = ref(false);
 
 const localFilters = reactive({
   name: "",
-  departmentId: null, // Sẽ được đặt trong onMounted
+  departmentId: null,
   status: "",
   startDate: "",
   endDate: "",

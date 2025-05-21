@@ -245,7 +245,12 @@ const actions = {
     commit("SET_LOADING", true);
     commit("SET_ERROR", null);
     try {
-      const response = await apiClient.patch(`/employees/${updateDto.id}`, updateDto);
+      // Đảm bảo chỉ truyền role là entity name (string)
+      let payload = { ...updateDto };
+      if (payload.role && typeof payload.role === 'object') {
+        payload.role = payload.role.name;
+      }
+      const response = await apiClient.patch(`/employees/${payload.id}`, payload);
       await dispatch("fetchUsers", { force: true });
       return response.data;
     } catch (error) {
@@ -253,6 +258,35 @@ const actions = {
       throw error;
     } finally {
       commit("SET_LOADING", false);
+    }
+  },
+
+  // --- RBAC Role/Permission Management ---
+  async fetchRolesWithPermissions({ commit }) {
+    try {
+      const res = await apiClient.get('/roles/with-permissions');
+      return res.data;
+    } catch (error) {
+      commit('SET_ERROR', error);
+      throw error;
+    }
+  },
+  async fetchAllPermissions({ commit }) {
+    try {
+      const res = await apiClient.get('/roles/permissions');
+      return res.data;
+    } catch (error) {
+      commit('SET_ERROR', error);
+      throw error;
+    }
+  },
+  async updateRolePermissions({ commit }, { roleId, permissionIds }) {
+    try {
+      await apiClient.patch(`/roles/${roleId}/permissions`, { permissionIds });
+      return true;
+    } catch (error) {
+      commit('SET_ERROR', error);
+      throw error;
     }
   },
 };

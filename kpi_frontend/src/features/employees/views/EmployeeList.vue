@@ -1,17 +1,17 @@
 <template>
-  <div class="employee-list">
+  <div class="employee-list" v-if="canViewEmployee">
     <div class="header">
       <h2>{{ $t("employeeListTitle") }}</h2>
       <div>
         <a-input-search v-model:value="searchText" :placeholder="$t('searchEmployeePlaceholder')"
           style="width: 220px; margin-right: 8px;" @search="onSearch" allow-clear />
-        <a-button type="primary" @click="openAddModal">
+        <a-button type="primary" @click="openAddModal" v-if="canCreateEmployee">
           {{ $t("addEmployee") }}
         </a-button>
-        <a-button style="margin-left:8px" @click="openUploadModal">
+        <a-button style="margin-left:8px" @click="openUploadModal" v-if="canCreateEmployee">
           {{ $t("uploadEmployeeExcel") }}
         </a-button>
-        <a-button style="margin-left:8px" @click="exportExcel">
+        <a-button style="margin-left:8px" @click="exportExcel" v-if="canCreateEmployee">
           {{ $t("exportExcel") }}
         </a-button>
       </div>
@@ -87,20 +87,20 @@
           {{ record.section?.name || $t('noData') }}
         </template>
         <template v-else-if="column.dataIndex === 'role'">
-          {{ $t(record.role) || $t('noData') }}
+          {{ $t(record.role?.name || 'employee') || $t('noData') }}
         </template>
         <template v-else-if="column.key === 'actions'">
           <a-space>
             <a-button type="link" size="small" @click="viewDetail(record)">
               <eye-outlined /> {{ $t('viewDetail') }}
             </a-button>
-            <a-button type="link" size="small" @click="openEditModal(record)">
+            <a-button type="link" size="small" @click="openEditModal(record)" v-if="canEditEmployee">
               <edit-outlined /> {{ $t('edit') }}
             </a-button>
-            <a-button type="link" size="small" danger @click="confirmDelete(record)">
+            <a-button type="link" size="small" danger @click="confirmDelete(record)" v-if="canDeleteEmployee">
               <delete-outlined /> {{ $t('delete') }}
             </a-button>
-            <a-button type="link" size="small" @click="openResetPasswordModal(record)">
+            <a-button type="link" size="small" @click="openResetPasswordModal(record)" v-if="canResetPassword">
               <key-outlined /> {{ $t('resetPassword') }}
             </a-button>
             <a-button type="link" size="small" @click="viewReviewHistory(record)">
@@ -128,7 +128,7 @@
             <idcard-outlined style="margin-right:4px" />{{ detailEmployee.first_name }} {{ detailEmployee.last_name }}
           </a-descriptions-item>
           <a-descriptions-item :label="$t('role')">
-            <safety-certificate-outlined style="margin-right:4px" />{{ $t(detailEmployee.role) }}
+            <safety-certificate-outlined style="margin-right:4px" />{{ $t(detailEmployee.role?.name || 'employee') }}
           </a-descriptions-item>
           <a-descriptions-item :label="$t('departmentLabel')">
             <apartment-outlined style="margin-right:4px" />{{ detailEmployee.department?.name || $t('noData') }}
@@ -179,10 +179,23 @@ import {
 } from "ant-design-vue";
 import { UploadOutlined, HistoryOutlined, EyeOutlined, EditOutlined, DeleteOutlined, KeyOutlined, UserOutlined, MailOutlined, IdcardOutlined, SafetyCertificateOutlined, ApartmentOutlined, ClusterOutlined, CalendarOutlined } from "@ant-design/icons-vue";
 import { useRouter } from "vue-router";
+import { RBAC_ACTIONS, RBAC_RESOURCES } from "@/core/constants/rbac.constants";
 
 const { t: $t } = useI18n();
 const store = useStore();
 const router = useRouter();
+const userPermissions = computed(() => store.getters["auth/user"]?.permissions || []);
+function hasPermission(action, resource) {
+  return userPermissions.value?.some(
+    (p) => p.action?.trim() === action && p.resource?.trim() === resource
+  );
+}
+const canCreateEmployee = computed(() => hasPermission(RBAC_ACTIONS.CREATE, RBAC_RESOURCES.EMPLOYEE));
+const canEditEmployee = computed(() => hasPermission(RBAC_ACTIONS.EDIT, RBAC_RESOURCES.EMPLOYEE));
+const canDeleteEmployee = computed(() => hasPermission(RBAC_ACTIONS.DELETE, RBAC_RESOURCES.EMPLOYEE));
+const canResetPassword = computed(() => hasPermission(RBAC_ACTIONS.EDIT, RBAC_RESOURCES.EMPLOYEE));
+const canViewEmployee = computed(() => hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.EMPLOYEE));
+
 const employees = computed(() => store.getters["employees/userList"]);
 const departmentList = computed(() => store.getters["departments/departmentList"] || []);
 const sectionList = computed(() => {
@@ -342,11 +355,16 @@ const closeAddEditModal = () => {
 const handleAddEditEmployee = async () => {
   savingEmployee.value = true;
   try {
+    // Đảm bảo role là entity name (string)
+    const formData = { ...employeeForm.value };
+    if (formData.role && typeof formData.role === 'object') {
+      formData.role = formData.role.name;
+    }
     if (editEmployee.value) {
-      await store.dispatch("employees/updateEmployee", { ...employeeForm.value, id: editEmployee.value.id });
+      await store.dispatch("employees/updateEmployee", { ...formData, id: editEmployee.value.id });
       notification.success({ message: $t("updateEmployeeSuccess") });
     } else {
-      await store.dispatch("employees/createEmployee", { ...employeeForm.value });
+      await store.dispatch("employees/createEmployee", { ...formData });
       notification.success({ message: $t("addEmployeeSuccess") });
     }
     await store.dispatch("employees/fetchUsers", { force: true });
@@ -412,7 +430,7 @@ const exportExcel = async () => {
     Email: e.email,
     "First Name": e.first_name,
     "Last Name": e.last_name,
-    Role: $t(e.role),
+    Role: $t(e.role?.name || 'employee'),
     Department: e.department?.name || "",
     Section: e.section?.name || "",
   }));
@@ -542,7 +560,7 @@ const columns = computed(() => [
   { title: $t("email"), dataIndex: "email", key: "email", sorter: (a, b) => a.email.localeCompare(b.email) },
   { title: $t("departmentLabel"), dataIndex: "department", key: "department", sorter: (a, b) => (a.department?.name || "").localeCompare(b.department?.name || "") },
   { title: $t("section"), dataIndex: "section", key: "section", sorter: (a, b) => (a.section?.name || "").localeCompare(b.section?.name || "") },
-  { title: $t("role"), dataIndex: "role", key: "role", sorter: (a, b) => (a.role || "").localeCompare(b.role || "") },
+  { title: $t("role"), dataIndex: "role", key: "role", sorter: (a, b) => (a.role?.name || "").localeCompare(b.role?.name || "") },
   { title: $t("actions"), dataIndex: "actions", key: "actions", align: "center" },
 ]);
 </script>

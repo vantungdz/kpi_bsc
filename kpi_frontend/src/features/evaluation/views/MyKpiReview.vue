@@ -7,7 +7,7 @@
       <a-breadcrumb-item>{{ $t("myKpiReviewTitle") }}</a-breadcrumb-item>
     </a-breadcrumb>
 
-    <a-card :title="pageTitle" :bordered="false">
+    <a-card v-if="canViewMyKpiReview" :title="pageTitle" :bordered="false">
       <a-row :gutter="16" style="margin-bottom: 20px">
         <a-col :xs="24" :sm="12" :md="8">
           <a-form-item :label="$t('selectCycle')">
@@ -64,7 +64,7 @@
             reviewDetails.kpisReviewedByManager.length > 0
           "
         >
-          <template v-if="canEditSelfReview">
+          <template v-if="canEditSelfReview && canEditMyKpiReview">
             <h3>{{ $t("detailedKpiReview") }}</h3>
             <div
               v-for="(kpiItem, index) in reviewDetails.kpisReviewedByManager"
@@ -152,7 +152,7 @@
                 type="primary"
                 @click="submitSelfReview"
                 :loading="isSubmittingSelfReview"
-                :disabled="isSubmittingSelfReview || !canEditSelfReview"
+                :disabled="isSubmittingSelfReview || !canEditSelfReview || !canEditMyKpiReview"
               >
                 {{ $t("submitSelfReview") }}
               </a-button>
@@ -392,6 +392,7 @@ import {
   BreadcrumbItem as ABreadcrumbItem,
 } from "ant-design-vue";
 import dayjs from "dayjs";
+import { RBAC_ACTIONS, RBAC_RESOURCES } from '@/core/constants/rbac.constants';
 
 const store = useStore();
 
@@ -548,6 +549,15 @@ const canEditSelfReview = computed(() => {
   if (!reviewDetails.value.overallReviewByManager) return true;
   return reviewDetails.value.overallReviewByManager.status === "DRAFT";
 });
+
+const userPermissions = computed(() => store.getters['auth/user']?.permissions || []);
+function hasPermission(action, resource) {
+  return userPermissions.value?.some(
+    (p) => p.action === action && p.resource === resource
+  );
+}
+const canViewMyKpiReview = computed(() => hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.MY_KPI_REVIEW));
+const canEditMyKpiReview = computed(() => hasPermission(RBAC_ACTIONS.EDIT, RBAC_RESOURCES.MY_KPI_REVIEW));
 
 const submitSelfReview = async () => {
   if (!reviewDetails.value || !reviewDetails.value.kpisReviewedByManager)

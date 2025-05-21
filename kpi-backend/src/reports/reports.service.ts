@@ -18,9 +18,19 @@ export class ReportsService {
   ) {}
 
   async generateKpiReport(reportType: string, startDate?: Date, endDate?: Date, fileFormat: string = 'excel'): Promise<Buffer> {
+    // Always fetch admin user for permissioned KPI queries
+    const adminUser = await this.employeesService['employeeRepository'].findOne({
+      where: { role: { name: 'admin' } },
+      relations: ['role'],
+    });
+    if (!adminUser) {
+      throw new Error('No admin user found for KPI report.');
+    }
+    const adminUserId = adminUser.id;
+
     if (fileFormat === 'pdf') {
       // Lấy dữ liệu KPI
-      const kpiSummaryData = await this.kpisService.findAll({});
+      const kpiSummaryData = await this.kpisService.findAll({}, adminUserId);
       // Tạo PDF
       const doc = new PDFDocument({ size: 'A4', margin: 40 });
       const buffers: Buffer[] = [];
@@ -112,7 +122,7 @@ export class ReportsService {
         });
         let y = tableTop + 20;
         const rowPadding = 4;
-        const kpiDetailsData = await this.kpisService.findAll({});
+        const kpiDetailsData = await this.kpisService.findAll({}, adminUserId);
         kpiDetailsData.data.forEach((kpi: any) => {
           x = 40;
           const row = [
@@ -167,10 +177,10 @@ export class ReportsService {
         // Luôn đảm bảo comparisonData là { data: any[] }
         let comparisonData: { data: any[] } = { data: [] };
         if (typeof (this.kpisService as any).getKpiComparisonData === 'function') {
-          comparisonData = await (this.kpisService as any).getKpiComparisonData();
+          comparisonData = await (this.kpisService as any).getKpiComparisonData(adminUserId);
         } else {
           // Dùng dữ liệu tổng quan để giả lập
-          const kpiSummaryData = await this.kpisService.findAll({});
+          const kpiSummaryData = await this.kpisService.findAll({}, adminUserId);
           comparisonData.data = (kpiSummaryData.data || []).map((k: any) => ({
             department_name: k.department_name || 'Phòng ban A',
             kpi_name: k.name,
@@ -392,7 +402,7 @@ export class ReportsService {
         'Tỷ lệ hoàn thành',
         'Trạng thái',
       ]);
-      const kpiSummaryData = await this.kpisService.findAll({});
+      const kpiSummaryData = await this.kpisService.findAll({}, adminUserId);
       kpiSummaryData.data.forEach((kpi: Kpi) => {
         const formatNumber = (val: any) => {
           if (val === null || val === undefined || val === '') return '';
@@ -434,7 +444,7 @@ export class ReportsService {
         'Giá trị thực tế',
         'Trạng thái',
       ]);
-      const kpiDetailsData = await this.kpisService.findAll({});
+      const kpiDetailsData = await this.kpisService.findAll({}, adminUserId);
       kpiDetailsData.data.forEach((kpi: Kpi) => {
         const formatNumber = (val: any) => {
           if (val === null || val === undefined || val === '') return '';
@@ -473,10 +483,10 @@ export class ReportsService {
       // Luôn đảm bảo comparisonData là { data: any[] }
       let comparisonData: { data: any[] } = { data: [] };
       if (typeof (this.kpisService as any).getKpiComparisonData === 'function') {
-        comparisonData = await (this.kpisService as any).getKpiComparisonData();
+        comparisonData = await (this.kpisService as any).getKpiComparisonData(adminUserId);
       } else {
         // Dùng dữ liệu tổng quan để giả lập
-        const kpiSummaryData = await this.kpisService.findAll({});
+        const kpiSummaryData = await this.kpisService.findAll({}, adminUserId);
         comparisonData.data = (kpiSummaryData.data || []).map((k: any) => ({
           department_name: k.department_name || 'Phòng ban A',
           kpi_name: k.name,

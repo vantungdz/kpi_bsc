@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from "vue-router";
 import store from "../store";
+import { RBAC_ACTIONS, RBAC_RESOURCES } from "@/core/constants/rbac.constants";
 import PerformanceObjectives from "../../features/evaluation/views/PerformanceObjectives.vue";
 import KpiListCompany from "../../features/kpi/views/KpiListCompany.vue";
 import KpiListDepartment from "../../features/kpi/views/KpiListDepartment.vue";
@@ -28,6 +29,8 @@ import HomePage from "../../features/home/HomePage.vue";
 import ReportGenerator from "@/features/reports/views/ReportGenerator.vue";
 import PerformanceObjectiveApprovalList from "@/features/evaluation/views/PerformanceObjectiveApprovalList.vue";
 import KpiInactiveList from "../../features/kpi/components/KpiInactiveList.vue";
+import RolePermissionManager from "@/features/employees/components/RolePermissionManager.vue";
+
 const routes = [
   {
     path: "/report-generator",
@@ -35,7 +38,7 @@ const routes = [
     component: ReportGenerator,
     meta: {
       requiresAuth: true,
-      roles: ["manager", "admin", "department", "section"],
+      permissions: [{ action: RBAC_ACTIONS.VIEW, resource: RBAC_RESOURCES.REPORT_GENERATOR }],
     },
   },
   {
@@ -44,7 +47,7 @@ const routes = [
     component: KpiReview,
     meta: {
       requiresAuth: true,
-      roles: ["manager", "admin", "department", "section"],
+      permissions: [{ action: RBAC_ACTIONS.VIEW, resource: RBAC_RESOURCES.KPI_REVIEW }],
     },
   },
   {
@@ -56,17 +59,15 @@ const routes = [
       requiresAuth: true,
     },
   },
-
   {
     path: "/my-kpi-review",
     name: "MyKpiReview",
     component: MyKpiReview,
     meta: {
       requiresAuth: true,
-      roles: ["employee", "section", "department", "manager", "admin"],
+      permissions: [{ action: RBAC_ACTIONS.VIEW, resource: RBAC_RESOURCES.MY_KPI_REVIEW }],
     },
   },
-
   {
     path: "/",
     name: "LoginPage",
@@ -77,31 +78,34 @@ const routes = [
     path: "/dashboard",
     name: "DashBoard",
     component: DashBoard,
-    meta: { requiresAuth: true, roles: ["admin", "manager"] },
+    meta: {
+      requiresAuth: true,
+      permissions: [{ action: RBAC_ACTIONS.VIEW, resource: RBAC_RESOURCES.DASHBOARD }],
+    },
   },
   {
     path: "/dashboard/kpi-process-stats",
     name: "KpiProcessStats",
     component: KpiProcessStatistics,
-    meta: { requiresAuth: true, roles: ["admin", "manager"] },
+    meta: { requiresAuth: true },
   },
   {
     path: "/dashboard/kpi-inventory-stats",
     name: "KpiInventoryStatistics",
     component: KpiInventoryStatistics,
-    meta: { requiresAuth: true, roles: ["admin", "manager"] },
+    meta: { requiresAuth: true },
   },
   {
     path: "/dashboard/user-activity-stats",
     name: "UserActivityStatistics",
     component: UserActivityStatistics,
-    meta: { requiresAuth: true, roles: ["admin", "manager"] },
+    meta: { requiresAuth: true },
   },
   {
     path: "/dashboard/kpi-performance-overview",
     name: "KpiPerformanceOverview",
     component: KpiPerformanceOverview,
-    meta: { requiresAuth: true, roles: ["admin", "manager"] },
+    meta: { requiresAuth: true },
   },
   {
     path: "/profile",
@@ -121,7 +125,6 @@ const routes = [
     component: PerformanceObjectives,
     meta: {
       requiresAuth: true,
-      roles: ["admin", "manager", "department", "section"],
     },
   },
   {
@@ -133,20 +136,26 @@ const routes = [
         path: "company",
         name: "KpiListCompany",
         component: KpiListCompany,
-        meta: { requiresAuth: true, roles: ["admin", "manager"] },
+        meta: {
+          requiresAuth: true,
+          permissions: [{ action: RBAC_ACTIONS.VIEW, resource: RBAC_RESOURCES.KPI_COMPANY }],
+        },
       },
       {
         path: "department",
         name: "KpiListDepartment",
         component: KpiListDepartment,
-        meta: { requiresAuth: true, roles: ["admin", "manager", "department"] },
+        meta: {
+          requiresAuth: true,
+          permissions: [{ action: RBAC_ACTIONS.VIEW, resource: RBAC_RESOURCES.KPI_DEPARTMENT }],
+        },
       },
       {
         path: "department-create",
         name: "KpiCreateDepartment",
         component: KpiCreateDepartment,
         props: true,
-        meta: { requiresAuth: true, roles: ["admin", "manager", "department"] },
+        meta: { requiresAuth: true },
       },
       {
         path: "section",
@@ -154,7 +163,7 @@ const routes = [
         component: KpiListSection,
         meta: {
           requiresAuth: true,
-          roles: ["admin", "manager", "department", "section"],
+          permissions: [{ action: RBAC_ACTIONS.VIEW, resource: RBAC_RESOURCES.KPI_SECTION }],
         },
       },
       {
@@ -162,27 +171,21 @@ const routes = [
         name: "KpiCreateSection",
         component: KpiCreateSection,
         props: true,
-        meta: {
-          requiresAuth: true,
-          roles: ["admin", "manager", "department", "section"],
-        },
+        meta: { requiresAuth: true },
       },
       {
         path: "create",
         name: "KpiCreateCompany",
         component: KpiCreateCompany,
         props: (route) => ({ scope: route.query.scope }),
-        meta: { requiresAuth: true, roles: ["admin", "manager"] },
+        meta: { requiresAuth: true },
       },
       {
         path: ":id",
         name: "KpiDetail",
         component: KpiDetail,
         props: true,
-        meta: {
-          requiresAuth: true,
-          roles: ["admin", "manager", "department", "section"],
-        },
+        meta: { requiresAuth: true },
       },
     ],
   },
@@ -192,7 +195,7 @@ const routes = [
     component: KpiValueApprovalList,
     meta: {
       requiresAuth: true,
-      roles: ["admin", "manager", "department", "section"],
+      permissions: [{ action: RBAC_ACTIONS.VIEW, resource: RBAC_RESOURCES.APPROVAL }],
     },
   },
   {
@@ -201,7 +204,7 @@ const routes = [
     component: PerformanceObjectiveApprovalList,
     meta: {
       requiresAuth: true,
-      roles: ["admin", "manager", "department", "section"],
+      permissions: [{ action: RBAC_ACTIONS.VIEW, resource: RBAC_RESOURCES.PERFORMANCE_OBJECTIVE_APPROVAL }],
     },
   },
   {
@@ -214,13 +217,19 @@ const routes = [
     path: "/personal",
     name: "KpiPersonal",
     component: KpiPersonal,
-    meta: { requiresAuth: true },
+    meta: {
+      requiresAuth: true,
+      permissions: [{ action: RBAC_ACTIONS.VIEW, resource: RBAC_RESOURCES.KPI_PERSONAL }],
+    },
   },
   {
     path: "/employees",
     name: "EmployeeList",
     component: EmployeeList,
-    meta: { requiresAuth: true, roles: ["admin", "manager"] },
+    meta: {
+      requiresAuth: true,
+      permissions: [{ action: RBAC_ACTIONS.VIEW, resource: RBAC_RESOURCES.EMPLOYEE }],
+    },
   },
   {
     path: "/employee-kpi-scores",
@@ -228,7 +237,7 @@ const routes = [
     component: EmployeeKpiScoreList,
     meta: {
       requiresAuth: true,
-      roles: ["admin", "manager", "department", "section"],
+      permissions: [{ action: RBAC_ACTIONS.VIEW, resource: RBAC_RESOURCES.EMPLOYEE_KPI_SCORES }],
     },
   },
   {
@@ -241,15 +250,23 @@ const routes = [
     path: "/kpis/inactive",
     name: "KpiInactiveList",
     component: KpiInactiveList,
-    meta: { requiresAuth: true, roles: ["admin", "manager", "department", "section"] },
+    meta: {
+      requiresAuth: true,
+    },
   },
   {
     path: "/user-role-manager",
-    name: "UserRoleManagerPage",
-    component: () => import("@/features/employees/views/UserRoleManagerPage.vue"),
-    meta: { requiresAuth: true, roles: ["admin", "manager"] },
+    name: "RolePermissionManager",
+    component: RolePermissionManager,
+    meta: { requiresAuth: true },
   },
 ];
+
+function hasPermission(userPermissions, action, resource) {
+  return userPermissions?.some(
+    (p) => p.action?.trim() === action && p.resource?.trim() === resource
+  );
+}
 
 const router = createRouter({
   history: createWebHistory(process.env.BASE_URL),
@@ -268,25 +285,19 @@ router.beforeEach((to, from, next) => {
   if (requiresAuth && !isAuthenticated) {
     next({ name: "LoginPage", query: { redirect: to.fullPath } });
   } else {
-    // RBAC động: kiểm tra role entity (user.role?.name)
-    const allowedRoles = to.meta.roles;
-    // TODO: Nếu muốn kiểm tra permission động (action/resource), hãy lấy permission từ backend và kiểm tra ở đây
-    if (
-      allowedRoles &&
-      Array.isArray(allowedRoles) &&
-      allowedRoles.length > 0
-    ) {
-      // effectiveRole đã trả về user.role?.name (role entity)
-      const userEffectiveRole = store.getters["auth/effectiveRole"];
-      if (!userEffectiveRole || !allowedRoles.includes(userEffectiveRole)) {
-        // Có thể chuyển hướng về trang không đủ quyền hoặc trang chủ
+    // Kiểm tra permission động nếu có
+    const userPermissions = store.getters["auth/user"]?.permissions || [];
+    const requiredPermissions = to.meta.permissions;
+    if (requiredPermissions && Array.isArray(requiredPermissions) && requiredPermissions.length > 0) {
+      const ok = requiredPermissions.every((perm) =>
+        hasPermission(userPermissions, perm.action, perm.resource)
+      );
+      if (!ok) {
         next({ name: "HomePage" });
-      } else {
-        next();
+        return;
       }
-    } else {
-      next();
     }
+    next();
   }
 });
 

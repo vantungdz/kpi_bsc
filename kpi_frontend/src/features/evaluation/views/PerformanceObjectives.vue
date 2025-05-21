@@ -1,156 +1,161 @@
 <template>
-  <div class="performance-objectives-page">
-    <a-breadcrumb style="margin-bottom: 16px">
-      <a-breadcrumb-item>
-        <router-link to="/dashboard">{{ $t("dashboard") }}</router-link>
-      </a-breadcrumb-item>
-      <a-breadcrumb-item>{{
-        $t("performanceObjectivesTitle")
-        }}</a-breadcrumb-item>
-    </a-breadcrumb>
+  <div>
+    <div v-if="canViewPerformanceObjectives" class="performance-objectives-page">
+      <a-breadcrumb style="margin-bottom: 16px">
+        <a-breadcrumb-item>
+          <router-link to="/dashboard">{{ $t("dashboard") }}</router-link>
+        </a-breadcrumb-item>
+        <a-breadcrumb-item>{{
+          $t("performanceObjectivesTitle")
+          }}</a-breadcrumb-item>
+      </a-breadcrumb>
 
-    <a-card :title="$t('performanceObjectivesEvaluation')" class="rounded-xl shadow-md">
-      <!-- Selection Row -->
-      <a-row :gutter="16" style="margin-bottom: 20px">
-        <a-col :xs="24" :sm="12" :md="8" v-if="isDivisionSelectionVisible">
-          <a-form-item :label="$t('selectDivision')">
-            <a-select v-model:value="selectedDivision" :placeholder="$t('selectDivisionPlaceholder')" allow-clear>
-              <a-select-option v-for="dept in departments" :key="dept.id" :value="dept.id">
-                {{ dept.name }}
-              </a-select-option>
-            </a-select>
-          </a-form-item>
-        </a-col>
-        <a-col :xs="24" :sm="12" :md="8">
-          <a-form-item :label="$t('selectEmployee')">
-            <a-select v-model:value="selectedEmployee" :placeholder="$t('selectEmployeePlaceholder')"
-              @change="handleEmployeeChange" :loading="isLoadingEmployees" :disabled="isLoadingEmployees ||
-                (isDivisionSelectionVisible && !selectedDivision) ||
-                (!isDivisionSelectionVisible &&
-                  !(
-                    currentUser &&
-                    ((currentUser.role === 'section' &&
-                      currentUser.sectionId) ||
-                      (currentUser.role === 'department' &&
-                        currentUser.departmentId))
-                  ))
-                " show-search :filter-option="employeeFilterOption" allow-clear>
-              <a-select-option v-for="emp in employeesToDisplay" :key="emp.id" :value="emp.id">
-                {{ emp.first_name }} {{ emp.last_name }}
-              </a-select-option>
-            </a-select>
-          </a-form-item>
-        </a-col>
-        <a-col :xs="24" :sm="12" :md="6">
-          <a-form-item :label="$t('selectCycle')">
-            <a-select v-model:value="selectedCycle" :placeholder="$t('selectCyclePlaceholder')"
-              @change="handleCycleChange" :loading="isLoadingReviewCycles" allow-clear>
-              <a-select-option v-for="cycle in reviewCycles" :key="cycle.id" :value="cycle.id">
-                {{ cycle.name }}
-              </a-select-option>
-            </a-select>
-          </a-form-item>
-        </a-col>
-      </a-row>
-      <a-row class="mb-4" gutter="16" style="margin-bottom: 20px">
-        <a-col :span="8" v-if="
-          selectedEmployee &&
-          currentEvaluationStatus &&
-          objectivesData.length > 0
-        ">
-          <strong>Status: </strong>
-          <a-tag :color="getObjectiveEvaluationStatusColor(currentEvaluationStatus)">
-            {{ $t("objectiveEvaluationStatus." + currentEvaluationStatus) }}
-          </a-tag>
-        </a-col>
-      </a-row>
+      <a-card :title="$t('performanceObjectivesEvaluation')" class="rounded-xl shadow-md">
+        <!-- Selection Row -->
+        <a-row :gutter="16" style="margin-bottom: 20px">
+          <a-col :xs="24" :sm="12" :md="8" v-if="isDivisionSelectionVisible">
+            <a-form-item :label="$t('selectDivision')">
+              <a-select v-model:value="selectedDivision" :placeholder="$t('selectDivisionPlaceholder')" allow-clear>
+                <a-select-option v-for="dept in departments" :key="dept.id" :value="dept.id">
+                  {{ dept.name }}
+                </a-select-option>
+              </a-select>
+            </a-form-item>
+          </a-col>
+          <a-col :xs="24" :sm="12" :md="8">
+            <a-form-item :label="$t('selectEmployee')">
+              <a-select v-model:value="selectedEmployee" :placeholder="$t('selectEmployeePlaceholder')"
+                @change="handleEmployeeChange" :loading="isLoadingEmployees" :disabled="isLoadingEmployees ||
+                  (isDivisionSelectionVisible && !selectedDivision) ||
+                  (!isDivisionSelectionVisible &&
+                    !(
+                      currentUser &&
+                      ((currentUser.role === 'section' &&
+                        currentUser.sectionId) ||
+                        (currentUser.role === 'department' &&
+                          currentUser.departmentId))
+                    ))
+                  " show-search :filter-option="employeeFilterOption" allow-clear>
+                <a-select-option v-for="emp in employeesToDisplay" :key="emp.id" :value="emp.id">
+                  {{ emp.first_name }} {{ emp.last_name }}
+                </a-select-option>
+              </a-select>
+            </a-form-item>
+          </a-col>
+          <a-col :xs="24" :sm="12" :md="6">
+            <a-form-item :label="$t('selectCycle')">
+              <a-select v-model:value="selectedCycle" :placeholder="$t('selectCyclePlaceholder')"
+                @change="handleCycleChange" :loading="isLoadingReviewCycles" allow-clear>
+                <a-select-option v-for="cycle in reviewCycles" :key="cycle.id" :value="cycle.id">
+                  {{ cycle.name }}
+                </a-select-option>
+              </a-select>
+            </a-form-item>
+          </a-col>
+        </a-row>
+        <a-row class="mb-4" gutter="16" style="margin-bottom: 20px">
+          <a-col :span="8" v-if="
+            selectedEmployee &&
+            currentEvaluationStatus &&
+            objectivesData.length > 0
+          ">
+            <strong>Status: </strong>
+            <a-tag :color="getObjectiveEvaluationStatusColor(currentEvaluationStatus)">
+              {{ $t("objectiveEvaluationStatus." + currentEvaluationStatus) }}
+            </a-tag>
+          </a-col>
+        </a-row>
 
-      <a-spin :spinning="isLoadingObjectives">
-        <div v-if="!selectedEmployee" class="empty-state">
-          <a-empty :description="$t('selectEmployeeToViewObjectives')" />
-        </div>
-        <div v-else-if="
-          selectedEmployee &&
-          !isLoadingObjectives &&
-          processedTableData.length === 0
-        " class="empty-state">
-          <a-empty :description="$t('noObjectivesAssigned')" />
-        </div>
+        <a-spin :spinning="isLoadingObjectives">
+          <div v-if="!selectedEmployee" class="empty-state">
+            <a-empty :description="$t('selectEmployeeToViewObjectives')" />
+          </div>
+          <div v-else-if="
+            selectedEmployee &&
+            !isLoadingObjectives &&
+            processedTableData.length === 0
+          " class="empty-state">
+            <a-empty :description="$t('noObjectivesAssigned')" />
+          </div>
 
-        <a-table v-else :columns="columns" :data-source="processedTableData" :pagination="false" bordered rowKey="key"
-          size="middle" class="performance-objectives-table">
-          <template #bodyCell="{ column, record }">
-            <template v-if="!record.isGroup">
-              <template v-if="column.key === 'supervisorEvalScore'">
-                <a-input-number v-model:value="record.supervisorEvalScore" style="width: 100%"
-                  :formatter="supervisorScoreFormatter" :parser="supervisorScoreParser" :disabled="isEvaluationClosed"
-                  @change="
-                    () => {
-                      console.log(
-                        '[TPL DEBUG] supervisorEvalScore @change. Current record.supervisorEvalScore:',
-                        record.supervisorEvalScore
-                      );
-                      handleEvaluationChange(record.key);
-                    }
-                  " />
-              </template>
+          <a-table v-else :columns="columns" :data-source="processedTableData" :pagination="false" bordered rowKey="key"
+            size="middle" class="performance-objectives-table">
+            <template #bodyCell="{ column, record }">
+              <template v-if="!record.isGroup">
+                <template v-if="column.key === 'supervisorEvalScore'">
+                  <a-input-number v-model:value="record.supervisorEvalScore" style="width: 100%"
+                    :formatter="supervisorScoreFormatter" :parser="supervisorScoreParser" :disabled="isEvaluationClosed"
+                    @change="
+                      () => {
+                        console.log(
+                          '[TPL DEBUG] supervisorEvalScore @change. Current record.supervisorEvalScore:',
+                          record.supervisorEvalScore
+                        );
+                        handleEvaluationChange(record.key);
+                      }
+                    " />
+                </template>
 
-              <!-- Note -->
-              <template v-else-if="column.key === 'note'">
-                <a-textarea v-model:value="record.note" :rows="2" @change="() => handleEvaluationChange(record.key)"
-                  :disabled="isEvaluationClosed" />
-              </template>
+                <!-- Note -->
+                <template v-else-if="column.key === 'note'">
+                  <a-textarea v-model:value="record.note" :rows="2" @change="() => handleEvaluationChange(record.key)"
+                    :disabled="isEvaluationClosed" />
+                </template>
 
-              <!-- Weight Score cho Supervisor -->
-              <template v-else-if="column.key === 'weightedScoreSupervisor'">
-                <span>{{
-                  calcWeightedScore(record.supervisorEvalScore, record.weight)
-                  }}</span>
-              </template>
+                <!-- Weight Score cho Supervisor -->
+                <template v-else-if="column.key === 'weightedScoreSupervisor'">
+                  <span>{{
+                    calcWeightedScore(record.supervisorEvalScore, record.weight)
+                    }}</span>
+                </template>
 
-              <!-- Target -->
-              <template v-else-if="column.key === 'target'">
-                <span>{{ formatNumberRef(record.target) }} ({{
-                  record.unit
-                  }})</span>
-              </template>
+                <!-- Target -->
+                <template v-else-if="column.key === 'target'">
+                  <span>{{ formatNumberRef(record.target) }} ({{
+                    record.unit
+                    }})</span>
+                </template>
 
-              <template v-else-if="column.key === 'actualResult'">
-                <span>{{ formatNumberRef(record.actualResult) }} ({{
-                  record.unit
-                  }})</span>
-              </template>
+                <template v-else-if="column.key === 'actualResult'">
+                  <span>{{ formatNumberRef(record.actualResult) }} ({{
+                    record.unit
+                    }})</span>
+                </template>
 
-              <!-- Mặc định (Objective Item, Actual Result, KPI Name) -->
-              <template v-else>
-                {{ record[column.dataIndex] }}
+                <!-- Mặc định (Objective Item, Actual Result, KPI Name) -->
+                <template v-else>
+                  {{ record[column.dataIndex] }}
+                </template>
               </template>
             </template>
-          </template>
-        </a-table>
+          </a-table>
 
-        <!-- Tổng kết & Save Button -->
-        <div v-if="selectedEmployee && selectedCycle && processedTableData.length > 0" class="mt-4">
-          <a-row justify="space-between" align="middle">
-            <a-col>
-              <p>
-                <strong>{{ $t("totalWeightedScoreSupervisor") }}:</strong>
-                {{ totalWeightedScoreSupervisor.toFixed(2) }}
-              </p>
-              <p>
-                <strong>{{ $t("averageScoreSupervisor") }}:</strong>
-                {{ averageScoreSupervisor.toFixed(2) }}
-              </p>
-            </a-col>
-            <a-col>
-              <a-button type="primary" @click="saveEvaluation" :loading="isSaving" :disabled="isEvaluationClosed">
-                {{ $t("saveEvaluation") }}
-              </a-button>
-            </a-col>
-          </a-row>
-        </div>
-      </a-spin>
-    </a-card>
+          <!-- Tổng kết & Save Button -->
+          <div v-if="selectedEmployee && selectedCycle && processedTableData.length > 0" class="mt-4">
+            <a-row justify="space-between" align="middle">
+              <a-col>
+                <p>
+                  <strong>{{ $t("totalWeightedScoreSupervisor") }}:</strong>
+                  {{ totalWeightedScoreSupervisor.toFixed(2) }}
+                </p>
+                <p>
+                  <strong>{{ $t("averageScoreSupervisor") }}:</strong>
+                  {{ averageScoreSupervisor.toFixed(2) }}
+                </p>
+              </a-col>
+              <a-col>
+                <a-button type="primary" @click="saveEvaluation" :loading="isSaving" :disabled="isEvaluationClosed">
+                  {{ $t("saveEvaluation") }}
+                </a-button>
+              </a-col>
+            </a-row>
+          </div>
+        </a-spin>
+      </a-card>
+    </div>
+    <div v-else class="no-permission" style="text-align:center; padding: 60px 0;">
+      <a-empty :description="$t('noPermission', 'Bạn không có quyền truy cập trang này.')" />
+    </div>
   </div>
 </template>
 
@@ -169,6 +174,8 @@ import {
   InputNumber as AInputNumber,
   Textarea as ATextarea,
 } from "ant-design-vue";
+
+import { RBAC_ACTIONS, RBAC_RESOURCES } from "@/core/constants/rbac.constants";
 
 const { t: $t } = useI18n();
 const store = useStore();
@@ -229,6 +236,14 @@ const getObjectiveEvaluationStatusColor = (status) => {
     "default"
   );
 };
+
+const userPermissions = computed(() => store.getters["auth/user"]?.permissions || []);
+function hasPermission(action, resource) {
+  return userPermissions.value?.some(
+    (p) => p.action?.trim() === action && p.resource?.trim() === resource
+  );
+}
+const canViewPerformanceObjectives = computed(() => hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.OBJECTIVE_APPROVAL));
 
 const employeesToDisplay = computed(() => {
   if (!allEmployees.value || allEmployees.value.length === 0) return [];

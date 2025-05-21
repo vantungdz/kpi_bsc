@@ -3,7 +3,7 @@
     <div class="list-header">
       <h2>Individual KPI List</h2>
       <div class="action-buttons">
-        <a-button type="primary" @click="goToCreateKpi" style="float: bottom;">
+        <a-button type="primary" @click="goToCreateKpi" style="float: bottom;" v-if="canCreateKpiPersonal">
           <plus-outlined /> Create New KPI
         </a-button>
       </div>
@@ -137,7 +137,7 @@
                     @click="$router.push({ name: 'KpiDetail', params: { id: record.id } })">
                     <schedule-outlined /> Details
                   </a-button>
-                  <a-button danger class="kpi-actions-button" @click="showConfirmDeleteDialog(record.id, record.name)">
+                  <a-button danger class="kpi-actions-button" @click="showConfirmDeleteDialog(record.id, record.name)" v-if="canDeleteKpiPersonal">
                     <delete-outlined /> Delete
                   </a-button>
                 </template>
@@ -165,6 +165,7 @@ import { useStore } from 'vuex';
 import { useRouter } from 'vue-router'
 import { PlusOutlined, FilterOutlined, ReloadOutlined, ScheduleOutlined, DeleteOutlined } from '@ant-design/icons-vue';
 import { KpiDefinitionStatus } from '@/core/constants/kpiStatus';
+import { RBAC_ACTIONS, RBAC_RESOURCES } from '@/core/constants/rbac.constants';
 
 // --- Store  ---
 const store = useStore();
@@ -226,10 +227,15 @@ const groupedKpis = computed(() => {
   return grouped;
 });
 
-// const currentUserRole = computed(() => store.getters['auth/userRole']); // Lấy role user hiện tại
+const userPermissions = computed(() => store.getters['auth/user']?.permissions || []);
+function hasPermission(action, resource) {
+  return userPermissions.value?.some(
+    (p) => p.action === action && p.resource === resource
+  );
+}
+const canCreateKpiPersonal = computed(() => hasPermission(RBAC_ACTIONS.CREATE, RBAC_RESOURCES.KPI_PERSONAL));
+const canDeleteKpiPersonal = computed(() => hasPermission(RBAC_ACTIONS.DELETE, RBAC_RESOURCES.KPI_PERSONAL));
 
-// Quyền tạo KPI (ví dụ đơn giản)
-// const canCreateKpi = computed(() => ['admin', 'manager', 'leader'].includes(currentUserRole.value));
 const canCreateKpi = 1; // computed(() => ['admin', 'manager', 'leader'].includes('admin'));
 const isDeleteModalVisible = ref(false);
 const selectedKpiId = ref(null);

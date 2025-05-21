@@ -21,13 +21,13 @@
             <span>{{ $t("myArea") }}</span>
           </span>
         </template>
-        <a-menu-item key="personal-kpis" v-if="effectiveRole" :title="$t('myPersonalKpis')">
+        <a-menu-item key="personal-kpis" v-if="hasPermission('view', 'kpi_personal')" :title="$t('myPersonalKpis')">
           <router-link to="/personal">
             <profile-outlined />
             <span>{{ $t("myPersonalKpis") }}</span>
           </router-link>
         </a-menu-item>
-        <a-menu-item key="my-review" v-if="effectiveRole" :title="$t('myKpiReview')">
+        <a-menu-item key="my-review" v-if="hasPermission('view', 'my_kpi_review')" :title="$t('myKpiReview')">
           <router-link to="/my-kpi-review">
             <form-outlined />
             <span>{{ $t("myKpiReview") }}</span>
@@ -83,20 +83,20 @@
             <span>{{ $t("kpiApproval") }}</span>
           </router-link>
         </a-menu-item>
-        <a-menu-item key="performance-objective-approvals" v-if="canViewObjectiveApprovals"
+        <a-menu-item key="performance-objective-approvals" v-if="canViewPerformanceObjectiveApprovals"
           :title="$t('performanceObjectiveApprovalMenu')">
           <router-link to="/performance-objective-approvals">
             <file-protect-outlined />
             <span>{{ $t("performanceObjectiveApprovalMenu") }}</span>
           </router-link>
         </a-menu-item>
-        <a-menu-item key="evaluation" v-if="canViewObjectiveApprovals" :title="$t('evaluation')">
+        <a-menu-item key="evaluation" v-if="canViewKpiReview" :title="$t('evaluation')">
           <router-link to="/kpi/review">
             <solution-outlined />
             <span>{{ $t("evaluation") }}</span>
           </router-link>
         </a-menu-item>
-        <a-menu-item key="employee-kpi-score-list" v-if="canViewObjectiveApprovals" :title="$t('employeeKpiScoreList')">
+        <a-menu-item key="employee-kpi-score-list" v-if="canViewEmployeeKpiScores" :title="$t('employeeKpiScoreList')">
           <router-link to="/employee-kpi-scores">
             <bar-chart-outlined />
             <span>{{ $t("employeeKpiScoreList") }}</span>
@@ -105,7 +105,7 @@
       </a-sub-menu>
 
       <!-- 5. Employees -->
-      <a-menu-item key="employees" v-if="canViewDashboard" :title="$t('employeeList')">
+      <a-menu-item key="employees" v-if="canViewEmployeeList" :title="$t('employeeList')">
         <router-link to="/employees">
           <team-outlined />
           <span>{{ $t("employeeList") }}</span>
@@ -113,22 +113,14 @@
       </a-menu-item>
 
       <!-- 6. Report Generator -->
-      <a-menu-item key="report-generator" v-if="canViewDashboard" :title="$t('reportGenerator')">
+      <a-menu-item key="report-generator" v-if="canViewReport" :title="$t('reportGenerator')">
         <router-link to="/report-generator">
           <bar-chart-outlined />
           <span>{{ $t("reportGenerator") }}</span>
         </router-link>
       </a-menu-item>
 
-      <!-- Commented out item, can be removed or placed if needed -->
-      <!-- <a-menu-item key="performance" v-if="canViewObjectiveApprovals">
-        <router-link to="/performance">
-          <bar-chart-outlined />
-          <span>{{ $t("performanceObjectives") }}</span>
-        </router-link>
-      </a-menu-item> -->
-
-      <a-sub-menu key="admin" v-if="isAdmin" :title="$t('administration')">
+      <a-sub-menu key="admin" v-if="canViewAdminMenu" :title="$t('administration')">
         <template #title>
           <span><setting-outlined /><span>{{ $t("administration") }}</span></span>
         </template>
@@ -152,11 +144,11 @@
 </template>
 
 <script setup>
-// Vue core imports
+
 import { computed } from "vue";
-// Vuex store
+
 import { useStore } from "vuex";
-// Ant Design Vue components and icons
+
 import {
   LayoutSider as ALayoutSider,
   Menu as AMenu,
@@ -176,57 +168,46 @@ import {
   UserOutlined,
   AuditOutlined,
   FileProtectOutlined,
-  AppstoreOutlined, // Added for KPI Management sub-menu icon
-  ProfileOutlined, // Added for Personal KPIs icon
-  FormOutlined, // Added for My KPI Review icon
-  UsergroupAddOutlined, // Added for User Management icon
-  KeyOutlined, // Added for Role Management icon
+  AppstoreOutlined, 
+  ProfileOutlined, 
+  FormOutlined, 
+  UsergroupAddOutlined, 
+  KeyOutlined, 
 } from "@ant-design/icons-vue";
 
-// Store instance
+import { RBAC_ACTIONS, RBAC_RESOURCES } from '@/core/constants/rbac.constants';
+
 const store = useStore();
 
-// Computed property for user role
-const effectiveRole = computed(() => store.getters["auth/effectiveRole"]);
 
-// Computed property for isAdmin
-const isAdmin = computed(() => effectiveRole.value === "admin");
-
-// Permission for viewing Dashboard (example: admin and manager)
-const canViewDashboard = computed(() =>
-  ["admin", "manager"].includes(effectiveRole.value)
-);
-
-// Permissions for viewing different KPI levels
-const canViewCompanyLevel = computed(() =>
-  ["admin", "manager"].includes(effectiveRole.value)
-);
-const canViewDepartmentLevel = computed(() =>
-  ["admin", "manager", "department"].includes(effectiveRole.value)
-);
-const canViewSectionLevel = computed(() =>
-  ["admin", "manager", "department", "section"].includes(effectiveRole.value)
-);
-
-// Permission for viewing approvals
-const canViewApprovals = computed(() => {
-  if (!effectiveRole.value) return false;
-  return ["manager", "admin", "department", "section", "employee"].includes(
-    effectiveRole.value
+const userPermissions = computed(() => store.getters["auth/user"]?.permissions || []);
+function hasPermission(action, resource) {
+  return userPermissions.value?.some(
+    (p) => p.action?.trim() === action && p.resource?.trim() === resource
   );
-});
+}
 
-// Permission for viewing performance objective approvals
-const canViewObjectiveApprovals = computed(() => {
-  if (!effectiveRole.value) return false;
-  // Các vai trò này nên khớp với meta.roles của route PerformanceObjectiveApprovalList
-  return ["admin", "manager", "department", "section"].includes(
-    effectiveRole.value
-  );
-});
 
-// New computed properties for sub-menu visibility
-const canViewMyAreaSubMenu = computed(() => !!effectiveRole.value);
+const canViewDashboard = computed(() => hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.DASHBOARD));
+const canViewCompanyLevel = computed(() => hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.KPI_COMPANY));
+const canViewDepartmentLevel = computed(() => hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.KPI_DEPARTMENT));
+const canViewSectionLevel = computed(() => hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.KPI_SECTION));
+const canViewEmployeeList = computed(() => hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.EMPLOYEE));
+const canViewApprovals = computed(() => hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.APPROVAL));
+const canViewObjectiveApprovals = computed(() => hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.OBJECTIVE_APPROVAL));
+const canViewReport = computed(() => hasPermission('export', RBAC_RESOURCES.REPORT_GENERATOR));
+const canViewPerformanceObjectiveApprovals = computed(() => hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.PERFORMANCE_OBJECTIVE_APPROVAL));
+const canViewKpiReview = computed(() => hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.KPI_REVIEW));
+const canViewEmployeeKpiScores = computed(() => hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.EMPLOYEE_KPI_SCORES));
+const canViewMyAreaSubMenu = computed(() =>
+  hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.KPI_PERSONAL) || hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.MY_KPI_REVIEW)
+);
+
+const canViewAdminMenu = computed(() =>
+  hasPermission(RBAC_ACTIONS.MANAGE, RBAC_RESOURCES.ADMIN) ||
+  hasPermission(RBAC_ACTIONS.MANAGE, 'role') ||
+  hasPermission(RBAC_ACTIONS.MANAGE, 'user')
+);
 
 const canViewKpiManagementSubMenu = computed(
   () =>
@@ -238,6 +219,7 @@ const canViewKpiManagementSubMenu = computed(
 const canViewApprovalsReviewSubMenu = computed(
   () => canViewApprovals.value || canViewObjectiveApprovals.value
 );
+
 </script>
 
 <style scoped>

@@ -64,6 +64,9 @@ export class Employee {
   @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
   updated_at: Date;
 
+  @Column({ default: false })
+  isDeleted: boolean;
+
   @Column({ nullable: true, name: 'departmentId' })
   departmentId: number;
 

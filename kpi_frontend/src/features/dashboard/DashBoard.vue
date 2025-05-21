@@ -1,5 +1,5 @@
 <template>
-  <div class="dashboard-overview-container">
+  <div class="dashboard-overview-container" v-if="canViewDashboard">
     <h1>{{ $t('dashboardOverview') }}</h1>
     <a-row :gutter="[16, 24]">
       <a-col :xs="24" :sm="12" :md="8" :lg="6">
@@ -68,6 +68,18 @@
 
 <script setup>
 import { LineChartOutlined, UserSwitchOutlined, BarChartOutlined, AppstoreOutlined } from "@ant-design/icons-vue";
+import { computed } from 'vue';
+import { useStore } from 'vuex';
+import { RBAC_ACTIONS, RBAC_RESOURCES } from '@/core/constants/rbac.constants';
+
+const store = useStore();
+const userPermissions = computed(() => store.getters['auth/user']?.permissions || []);
+function hasPermission(action, resource) {
+  return userPermissions.value?.some(
+    (p) => p.action === action && p.resource === resource
+  );
+}
+const canViewDashboard = computed(() => hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.DASHBOARD));
 </script>
 
 <style scoped>

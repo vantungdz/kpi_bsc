@@ -25,6 +25,8 @@ export class EmployeesService {
   constructor(
     @InjectRepository(Employee)
     private readonly employeeRepository: Repository<Employee>,
+    @InjectRepository(Role)
+    private readonly roleRepository: Repository<Role>,
     private readonly dataSource: DataSource,
 
   ) {}
@@ -76,7 +78,7 @@ export class EmployeesService {
     loggedInUser?: Employee,
   ): Promise<Employee[]> {
     const findOptions: FindManyOptions<Employee> = {
-      where: {},
+      where: { isDeleted: false },
       relations: ['department', 'section', 'team', 'role'],
     };
 
@@ -113,7 +115,7 @@ export class EmployeesService {
 
   async findOne(id: number): Promise<Employee> {
     let user = await this.employeeRepository.findOne({
-      where: { id },
+      where: { id, isDeleted: false },
       relations: ['department', 'section', 'team', 'role'],
     });
     if (!user) {
@@ -126,6 +128,27 @@ export class EmployeesService {
       if (roleEntity) user.role = roleEntity;
     }
     return user;
+  }
+
+  async findOneWithPermissions(id: number): Promise<any> {
+    const user = await this.employeeRepository.findOne({
+      where: { id },
+      relations: ['role', 'department', 'section', 'team'],
+    });
+    if (!user) return null;
+    let permissions: Array<{ action: string; resource: string }> = [];
+    if (user.role && user.role.id) {
+      const role = await this.roleRepository.findOne({
+        where: { id: user.role.id },
+        relations: ['permissions'],
+      });
+      permissions = (role?.permissions || []).map((p) => ({
+        action: p.action,
+        resource: p.resource,
+      }));
+    }
+    // Trả về user kèm permissions (không gán trực tiếp vào entity)
+    return { ...user, permissions };
   }
 
   async findOneByUsernameOrEmailForAuth(
@@ -151,10 +174,12 @@ export class EmployeesService {
   }
 
   async remove(id: number): Promise<void> {
-    const result = await this.employeeRepository.delete(id);
-    if (result.affected === 0) {
+    const employee = await this.employeeRepository.findOneBy({ id });
+    if (!employee) {
       throw new NotFoundException(`Employee with ID ${id} not found`);
     }
+    employee.isDeleted = true;
+    await this.employeeRepository.save(employee);
   }
 
   async findLeaderOfSection(sectionId: number): Promise<Employee | null> {
@@ -345,6 +370,21 @@ export class EmployeesService {
     } else {
       delete updateDto.password;
     }
+    // Nếu có trường role (string hoặc object), lấy entity role
+    if (updateDto.role) {
+      let roleName = typeof updateDto.role === 'string' ? updateDto.role : (updateDto.role as any)?.name;
+      if (roleName) {
+        const roleEntity = await this.dataSource.getRepository(Role).findOneBy({ name: roleName });
+        if (!roleEntity) throw new NotFoundException('Role not found');
+        updateDto.role = roleEntity;
+      } else {
+        delete updateDto.role;
+      }
+    }
+    // Xóa các trường object department, section, team nếu có trong payload
+    delete (updateDto as any).department;
+    delete (updateDto as any).section;
+    delete (updateDto as any).team;
     Object.assign(employee, updateDto);
     await this.employeeRepository.save(employee);
     return employee;

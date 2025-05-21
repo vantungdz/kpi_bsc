@@ -306,6 +306,7 @@ import {
 } from "ant-design-vue";
 import dayjs from "dayjs";
 import { KpiUnits } from "@/core/constants/kpiConstants.js";
+import { RBAC_ACTIONS, RBAC_RESOURCES } from "@/core/constants/rbac.constants.js";
 
 const router = useRouter();
 const route = useRoute();
@@ -335,7 +336,7 @@ const form = ref({
   start_date: null,
   end_date: null,
   assigned_users: [], // [{ id: number, target: string }]
-  description: "",
+  description: ""
 });
 
 const formulaList = ref([
@@ -388,9 +389,13 @@ const sectionUserOptions = computed(() =>
   }))
 );
 
-const effectiveRole = computed(() => store.getters["auth/effectiveRole"]);
-const canAccessCreatePage = computed(() => ["admin", "manager", "section"].includes(effectiveRole.value));
-const canAssignDirectlyToUser = computed(() => ["admin", "manager", "section"].includes(effectiveRole.value));
+const userPermissions = computed(() => store.getters["auth/user"]?.permissions || []);
+const canAccessCreatePage = computed(() =>
+  userPermissions.value.some(p => p.action?.trim() === RBAC_ACTIONS.CREATE && p.resource?.trim() === RBAC_RESOURCES.KPI)
+);
+const canAssignDirectlyToUser = computed(() =>
+  userPermissions.value.some(p => p.action?.trim() === RBAC_ACTIONS.ASSIGN_DIRECT_USER && p.resource?.trim() === RBAC_RESOURCES.KPI)
+);
 
 const resetForm = (clearTemplateSelection = false) => {
   formRef.value?.resetFields();

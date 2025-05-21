@@ -340,6 +340,7 @@ import {
 } from "ant-design-vue";
 import dayjs from "dayjs";
 import { KpiUnits } from "@/core/constants/kpiConstants.js";
+import { RBAC_ACTIONS, RBAC_RESOURCES } from "@/core/constants/rbac.constants.js";
 
 const router = useRouter();
 const store = useStore();
@@ -428,13 +429,13 @@ const kpiTemplateOptions = computed(() =>
   }))
 );
 
-const effectiveRole = computed(() => store.getters["auth/effectiveRole"]);
+const userPermissions = computed(() => store.getters["auth/user"]?.permissions || []);
 const canAccessCreatePage = computed(() =>
-  ["admin", "manager", "department"].includes(effectiveRole.value)
+  userPermissions.value.some(p => p.action?.trim() === RBAC_ACTIONS.CREATE && p.resource?.trim() === RBAC_RESOURCES.KPI)
 );
 const canAssignDirectlyToUser = computed(() => false);
 const canAssignToSections = computed(() =>
-  ["admin", "manager", "department"].includes(effectiveRole.value)
+  userPermissions.value.some(p => p.action?.trim() === RBAC_ACTIONS.ASSIGN_SECTION && p.resource?.trim() === RBAC_RESOURCES.KPI)
 );
 
 const columns = [

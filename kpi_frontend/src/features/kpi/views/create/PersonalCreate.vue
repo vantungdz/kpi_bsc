@@ -1,162 +1,175 @@
 <template>
-  <a-form
-    ref="formRef"
-    :model="form"
-    @finish="handleChangeCreate"
-    @finishFailed="onFinishFailed"
-    layout="vertical"
-  >
-    <a-form-item
-      class="textLabel"
-      :label="$t('perspective')"
-      name="perspective_id"
-      :rules="[{ required: true, message: $t('pleaseSelectPerspective') }]"
+  <div v-if="canAccessCreatePage">
+    <a-form
+      ref="formRef"
+      :model="form"
+      @finish="handleChangeCreate"
+      @finishFailed="onFinishFailed"
+      layout="vertical"
     >
-      <a-select
-        v-model:value="form.perspective_id"
-        :placeholder="$t('perspective')"
+      <a-form-item
+        class="textLabel"
+        :label="$t('perspective')"
+        name="perspective_id"
+        :rules="[{ required: true, message: $t('pleaseSelectPerspective') }]"
       >
-        <a-select-option
-          v-for="perspective in perspectiveList"
-          :key="perspective.id"
-          :value="perspective.id"
+        <a-select
+          v-model:value="form.perspective_id"
+          :placeholder="$t('perspective')"
         >
-          {{ perspective.name }}
-        </a-select-option>
-      </a-select>
-    </a-form-item>
+          <a-select-option
+            v-for="perspective in perspectiveList"
+            :key="perspective.id"
+            :value="perspective.id"
+          >
+            {{ perspective.name }}
+          </a-select-option>
+        </a-select>
+      </a-form-item>
 
-    <a-form-item
-      class="textLabel"
-      :label="$t('kpiName')"
-      name="name"
-      :rules="[{ required: true, message: $t('pleaseEnterKpiName') }]"
-    >
-      <a-input v-model:value="form.name" :placeholder="$t('kpiName')" />
-    </a-form-item>
-    <a-row :gutter="12">
-      <a-col :span="12">
-        <a-form-item
-          class="textLabel"
-          :label="$t('type')"
-          name="type"
-          :rules="[{ required: true, message: $t('pleaseEnterTypeKpi') }]"
-        >
-          <a-select v-model:value="form.type" :placeholder="$t('typeKpi')">
-            <a-select-option value="efficiency">{{
-              $t("efficiency")
-            }}</a-select-option>
-            <a-select-option value="qualitative">{{
-              $t("qualitative")
-            }}</a-select-option>
-          </a-select>
-        </a-form-item>
-      </a-col>
-      <a-col :span="12">
-        <a-form-item
-          class="textLabel"
-          :label="$t('unit')"
-          name="unit"
-          :rules="[{ required: true, message: $t('pleaseEnterUnit') }]"
-        >
-          <a-select v-model:value="form.unit" :placeholder="$t('unit')">
-            <a-select-option
-              v-for="(unitValue, unitKey) in KpiUnits"
-              :key="unitKey"
-              :value="unitValue"
-            >
-              {{ unitKey }}
-            </a-select-option>
-          </a-select>
-        </a-form-item>
-      </a-col>
-    </a-row>
-    <a-row :gutter="12">
-      <a-col :span="12">
-        <a-form-item
-          class="textLabel"
-          :label="$t('target')"
-          name="target"
-          :rules="[{ required: true, message: $t('pleaseEnterTarget') }]"
-        >
-          <a-input
-            v-model:value="form.target"
-            :placeholder="$t('target')"
-            @input="(event) => handleNumericInput('target', event)"
-          />
-        </a-form-item>
-      </a-col>
-      <a-col :span="12">
-        <a-form-item
-          class="textLabel"
-          :label="$t('weight')"
-          name="weight"
-          :rules="[
-            { required: true, message: $t('pleaseEnterWeight') },
-            { validator: validateWeight },
-          ]"
-        >
-          <a-input
-            v-model:value="form.weight"
-            :placeholder="$t('weight')"
-            @input="(event) => handleNumericInput('weight', event)"
-          />
-        </a-form-item>
-      </a-col>
-    </a-row>
-    <a-form-item
-      class="textLabel"
-      :label="$t('frequency')"
-      name="frequency"
-      :rules="[{ required: true, message: $t('pleaseSelectFrequency') }]"
-    >
-      <a-select v-model:value="form.frequency" :placeholder="$t('frequency')">
-        <a-select-option value="daily">{{ $t("daily") }}</a-select-option>
-        <a-select-option value="weekly">{{ $t("weekly") }}</a-select-option>
-        <a-select-option value="monthly">{{ $t("monthly") }}</a-select-option>
-        <a-select-option value="quarterly">{{
-          $t("quarterly")
-        }}</a-select-option>
-        <a-select-option value="yearly">{{ $t("yearly") }}</a-select-option>
-      </a-select>
-    </a-form-item>
-
-    <a-row :gutter="12">
-      <a-col :span="6">
-        <a-form-item :label="$t('dateStart')" name="start_date">
-          <a-date-picker v-model:value="form.start_date" style="width: 100%" />
-        </a-form-item>
-      </a-col>
-      <a-col :span="6">
-        <a-form-item :label="$t('dateEnd')" name="end_date">
-          <a-date-picker v-model:value="form.end_date" style="width: 100%" />
-        </a-form-item>
-      </a-col>
-    </a-row>
-    <a-form-item :label="$t('description')" name="description">
-      <a-textarea
-        v-model:value="form.description"
-        :placeholder="$t('description')"
-        allow-clear
-      />
-    </a-form-item>
-
-    <a-form-item>
-      <a-row justify="end" style="margin-top: 10px">
-        <a-button
-          style="margin-right: 10px"
-          type="primary"
-          html-type="submit"
-          :loading="loading"
-        >
-          {{ $t("saveKpi") }}
-        </a-button>
-        <a-button type="default" @click="$router.push('/personal')">{{
-          $t("back")
-        }}</a-button>
+      <a-form-item
+        class="textLabel"
+        :label="$t('kpiName')"
+        name="name"
+        :rules="[{ required: true, message: $t('pleaseEnterKpiName') }]"
+      >
+        <a-input v-model:value="form.name" :placeholder="$t('kpiName')" />
+      </a-form-item>
+      <a-row :gutter="12">
+        <a-col :span="12">
+          <a-form-item
+            class="textLabel"
+            :label="$t('type')"
+            name="type"
+            :rules="[{ required: true, message: $t('pleaseEnterTypeKpi') }]"
+          >
+            <a-select v-model:value="form.type" :placeholder="$t('typeKpi')">
+              <a-select-option value="efficiency">{{
+                $t("efficiency")
+              }}</a-select-option>
+              <a-select-option value="qualitative">{{
+                $t("qualitative")
+              }}</a-select-option>
+            </a-select>
+          </a-form-item>
+        </a-col>
+        <a-col :span="12">
+          <a-form-item
+            class="textLabel"
+            :label="$t('unit')"
+            name="unit"
+            :rules="[{ required: true, message: $t('pleaseEnterUnit') }]"
+          >
+            <a-select v-model:value="form.unit" :placeholder="$t('unit')">
+              <a-select-option
+                v-for="(unitValue, unitKey) in KpiUnits"
+                :key="unitKey"
+                :value="unitValue"
+              >
+                {{ unitKey }}
+              </a-select-option>
+            </a-select>
+          </a-form-item>
+        </a-col>
       </a-row>
-    </a-form-item>
-  </a-form>
+      <a-row :gutter="12">
+        <a-col :span="12">
+          <a-form-item
+            class="textLabel"
+            :label="$t('target')"
+            name="target"
+            :rules="[{ required: true, message: $t('pleaseEnterTarget') }]"
+          >
+            <a-input
+              v-model:value="form.target"
+              :placeholder="$t('target')"
+              @input="(event) => handleNumericInput('target', event)"
+            />
+          </a-form-item>
+        </a-col>
+        <a-col :span="12">
+          <a-form-item
+            class="textLabel"
+            :label="$t('weight')"
+            name="weight"
+            :rules="[
+              { required: true, message: $t('pleaseEnterWeight') },
+              { validator: validateWeight },
+            ]"
+          >
+            <a-input
+              v-model:value="form.weight"
+              :placeholder="$t('weight')"
+              @input="(event) => handleNumericInput('weight', event)"
+            />
+          </a-form-item>
+        </a-col>
+      </a-row>
+      <a-form-item
+        class="textLabel"
+        :label="$t('frequency')"
+        name="frequency"
+        :rules="[{ required: true, message: $t('pleaseSelectFrequency') }]"
+      >
+        <a-select v-model:value="form.frequency" :placeholder="$t('frequency')">
+          <a-select-option value="daily">{{ $t("daily") }}</a-select-option>
+          <a-select-option value="weekly">{{ $t("weekly") }}</a-select-option>
+          <a-select-option value="monthly">{{ $t("monthly") }}</a-select-option>
+          <a-select-option value="quarterly">{{
+            $t("quarterly")
+          }}</a-select-option>
+          <a-select-option value="yearly">{{ $t("yearly") }}</a-select-option>
+        </a-select>
+      </a-form-item>
+
+      <a-row :gutter="12">
+        <a-col :span="6">
+          <a-form-item :label="$t('dateStart')" name="start_date">
+            <a-date-picker v-model:value="form.start_date" style="width: 100%" />
+          </a-form-item>
+        </a-col>
+        <a-col :span="6">
+          <a-form-item :label="$t('dateEnd')" name="end_date">
+            <a-date-picker v-model:value="form.end_date" style="width: 100%" />
+          </a-form-item>
+        </a-col>
+      </a-row>
+      <a-form-item :label="$t('description')" name="description">
+        <a-textarea
+          v-model:value="form.description"
+          :placeholder="$t('description')"
+          allow-clear
+        />
+      </a-form-item>
+
+      <a-form-item>
+        <a-row justify="end" style="margin-top: 10px">
+          <a-button
+            style="margin-right: 10px"
+            type="primary"
+            html-type="submit"
+            :loading="loading"
+          >
+            {{ $t("saveKpi") }}
+          </a-button>
+          <a-button type="default" @click="$router.push('/personal')">{{
+            $t("back")
+          }}</a-button>
+        </a-row>
+      </a-form-item>
+    </a-form>
+  </div>
+  <div v-else>
+    <a-alert
+      :message="$t('accessDenied')"
+      :description="$t('accessDeniedDescription')"
+      type="error"
+      show-icon
+    />
+    <a-button type="default" style="margin-top: 15px" @click="$router.push('/personal')">
+      {{ $t('back') }}
+    </a-button>
+  </div>
 </template>
 
 <script setup>
@@ -166,11 +179,20 @@ import { useStore } from "vuex";
 import { notification } from "ant-design-vue";
 import dayjs from "dayjs";
 import { KpiUnits } from "@/core/constants/kpiConstants.js";
+import { RBAC_ACTIONS, RBAC_RESOURCES } from "@/core/constants/rbac.constants.js";
 
 const router = useRouter();
 const store = useStore();
 const loading = ref(false);
 const formRef = ref(null);
+
+const userPermissions = computed(() => store.getters["auth/user"]?.permissions || []);
+const canAccessCreatePage = computed(() =>
+  userPermissions.value.some(p =>
+    p.action?.trim() === RBAC_ACTIONS.CREATE &&
+    (p.resource?.trim() === RBAC_RESOURCES.KPI_PERSONAL || p.resource?.trim() === RBAC_RESOURCES.KPI)
+  )
+);
 
 const form = ref({
   name: "",

@@ -106,6 +106,7 @@
                   :loading="isProcessing && currentActionItemId === record.id"
                   :disabled="isProcessing && currentActionItemId !== record.id"
                   :title="$t('approve')"
+                  v-if="canApproveKpiValue"
                 >
                   <check-outlined /> {{ $t("approve") }}
                 </a-button>
@@ -115,6 +116,7 @@
                   @click="openRejectModal(record)"
                   :disabled="isProcessing"
                   :title="$t('reject')"
+                  v-if="canRejectKpiValue"
                 >
                   <close-outlined /> {{ $t("reject") }}
                 </a-button>
@@ -366,6 +368,7 @@ import {
 } from "@/core/constants/kpiStatus";
 import { getKpiValueStatusText } from "@/core/constants/kpiStatus";
 import { useI18n } from "vue-i18n";
+import { RBAC_ACTIONS, RBAC_RESOURCES } from "@/core/constants/rbac.constants";
 
 const { t: $t } = useI18n();
 const KpiValueStatusText = getKpiValueStatusText($t);
@@ -405,6 +408,16 @@ const cardTitle = computed(() => {
   if (role === "leader") return $t("leaderApprovalTitle");
   return $t("defaultApprovalTitle");
 });
+
+// Permission-related computed properties
+const userPermissions = computed(() => currentUser.value?.permissions || []);
+function hasPermission(action, resource) {
+  return userPermissions.value?.some(
+    (p) => p.action === action && p.resource === resource
+  );
+}
+const canApproveKpiValue = computed(() => hasPermission(RBAC_ACTIONS.APPROVE, RBAC_RESOURCES.KPI_VALUE));
+const canRejectKpiValue = computed(() => hasPermission(RBAC_ACTIONS.REJECT, RBAC_RESOURCES.KPI_VALUE));
 
 // Table columns definitions extracted outside component logic
 const columns = computed(() => [

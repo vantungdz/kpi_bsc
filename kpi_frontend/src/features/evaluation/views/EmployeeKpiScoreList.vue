@@ -60,7 +60,7 @@
           <span v-else>-</span>
         </template>
         <template v-else-if="column.key === 'actions'">
-          <a-button type="link" @click.stop="goToKpiReview(record)">
+          <a-button v-if="canViewKpiReview" type="link" @click.stop="goToKpiReview(record)">
             {{ $t("viewDetails") }}
           </a-button>
         </template>
@@ -84,6 +84,7 @@ import {
   Tag,
   Button,
 } from "ant-design-vue";
+import { RBAC_ACTIONS, RBAC_RESOURCES } from "@/core/constants/rbac.constants";
 
 const { t: $t } = useI18n();
 const store = useStore();
@@ -108,7 +109,13 @@ const reviewStatusColorMap = {
   COMPLETED: "green",
 };
 
-// Đảm bảo mọi logic kiểm tra role đều dùng user.role?.name nếu có
+const userPermissions = computed(() => store.getters["auth/user"]?.permissions || []);
+function hasPermission(action, resource) {
+  return userPermissions.value?.some(
+    (p) => p.action?.trim() === action && p.resource?.trim() === resource
+  );
+}
+const canViewKpiReview = computed(() => hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.KPI_REVIEW));
 
 const columns = computed(() => [
   { title: $t("employeeFullName"), dataIndex: "fullName", key: "fullName" },
@@ -147,7 +154,7 @@ const columns = computed(() => [
     title: $t("actions"),
     key: "actions",
     customRender: ({ record }) =>
-      h(
+      canViewKpiReview.value ? h(
         Button,
         {
           type: "link",
@@ -157,7 +164,7 @@ const columns = computed(() => [
           },
         },
         () => $t("viewDetails")
-      ),
+      ) : null,
   },
 ]);
 

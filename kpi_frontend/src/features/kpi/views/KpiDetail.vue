@@ -19,7 +19,7 @@
             >
               <span>{{ $t("kpiInformation") }}</span>
               <a-button
-                v-if="kpiDetailData?.id"
+                v-if="kpiDetailData?.id && canCopyTemplate"
                 @click="copyKpiAsTemplate"
                 :disabled="loadingKpi"
               >
@@ -64,7 +64,7 @@
               {{ getKpiDefinitionStatusText(kpiDetailData.status) }}</a-tag
             >
             <a-switch
-              v-if="isManagerOrAdmin && kpiDetailData?.id"
+              v-if="canToggleStatus && kpiDetailData?.id"
               :checked="kpiDetailData.status === KpiDefinitionStatus.APPROVED"
               :loading="isToggling"
               :disabled="isToggling || loadingKpi"
@@ -1079,6 +1079,7 @@ import {
   KpiDefinitionStatusText,
   KpiDefinitionStatusColor,
 } from "@/core/constants/kpiStatus";
+import { RBAC_ACTIONS, RBAC_RESOURCES } from "@/core/constants/rbac.constants";
 
 const router = useRouter();
 const store = useStore();
@@ -1149,9 +1150,22 @@ const allDepartments = computed(
 );
 const allSections = computed(() => store.getters["sections/sectionList"] || []);
 
-const isManagerOrAdmin = computed(() => {
-  return ["manager", "admin"].includes(effectiveRole.value);
-});
+const userPermissions = computed(() => store.getters["auth/user"]?.permissions || []);
+const canToggleStatus = computed(() =>
+  userPermissions.value.some(
+    (p) => p.action === RBAC_ACTIONS.TOGGLE_STATUS && p.resource === RBAC_RESOURCES.KPI
+  )
+);
+const canManageAssignments = computed(() =>
+  userPermissions.value.some(
+    (p) => p.action === RBAC_ACTIONS.MANAGE_ASSIGNMENT && p.resource === RBAC_RESOURCES.KPI
+  )
+);
+const canCopyTemplate = computed(() =>
+  userPermissions.value.some(
+    (p) => p.action === RBAC_ACTIONS.COPY_TEMPLATE && p.resource === RBAC_RESOURCES.KPI
+  )
+);
 
 const sectionNameFromContext = computed(() => {
   const currentSectionId = contextSectionId.value;
@@ -1620,14 +1634,6 @@ const shouldShowAssignmentStats = computed(() => {
       kpi.created_by_type === "department") &&
     (kpi.assignments?.length > 0 || overallTargetValueDetail.value > 0)
   );
-});
-
-const canManageAssignments = computed(() => {
-  if (!kpiDetailData.value) return false;
-  const result = ["admin", "manager", "department", "section"].includes(
-    effectiveRole.value
-  );
-  return result;
 });
 
 const handleToggleStatus = async (kpiId) => {

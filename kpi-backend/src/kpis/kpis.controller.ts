@@ -32,7 +32,6 @@ import { Employee } from 'src/entities/employee.entity';
 export class KpisController {
   constructor(private readonly kpisService: KpisService) {}
 
-  // Endpoint này phù hợp để người dùng tự lấy KPI của mình
   @Get('my-kpis')
   @ApiOperation({ summary: "Get the logged-in user's KPIs" })
   @ApiResponse({ status: 200, description: "List of the current user's KPIs", type: [Kpi] })
@@ -43,34 +42,35 @@ export class KpisController {
       throw new UnauthorizedException('User not authenticated or user ID not found in token.');
     }
 
-    // Gọi service để lấy KPI dựa trên ID của người dùng đã đăng nhập
-    return this.kpisService.getKpisByEmployeeId(loggedInUser.id);
+    return this.kpisService.getKpisByEmployeeId(loggedInUser.id, loggedInUser.id);
   }
 
   @Get('/departments')
   @ApiOperation({ summary: 'Get all departments from KPI assignments' })
-  @Roles('admin', 'manager', 'department', 'section') // Thêm 'section' nếu cần
+  @Roles('admin', 'manager', 'department', 'section')
   @ApiResponse({
     status: 200,
     description: 'List of departments',
     type: [Department],
   })
-  async getKpisAssignedToDepartments() {
-    const data = await this.kpisService.getAllKpiAssignedToDepartments();
+  async getKpisAssignedToDepartments(@Req() req: Request & { user?: { id: number } }) {
+    if (!req.user?.id) throw new UnauthorizedException('User not authenticated.');
+    const data = await this.kpisService.getAllKpiAssignedToDepartments(req.user.id);
     return { data };
   }
 
   @Roles('admin', 'manager', 'department', 'section')
   @Get('/sections')
   @ApiOperation({ summary: 'Get all section from KPI assignments' })
-  @UseGuards(JwtAuthGuard, RolesGuard) // Kiểm tra JWT và quyền truy cập
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @ApiResponse({
     status: 200,
     description: 'List of Sections',
     type: [Section],
   })
-  async getKpisAssignedToSections() {
-    const data = await this.kpisService.getAllKpiAssignedToSections();
+  async getKpisAssignedToSections(@Req() req: Request & { user?: { id: number } }) {
+    if (!req.user?.id) throw new UnauthorizedException('User not authenticated.');
+    const data = await this.kpisService.getAllKpiAssignedToSections(req.user.id);
     return { data };
   }
 
@@ -93,16 +93,9 @@ export class KpisController {
   @ApiQuery({ name: 'sortBy', required: false, type: String })
   @ApiQuery({ name: 'sortOrder', required: false, enum: ['ASC', 'DESC'] })
   @ApiResponse({ status: 200, description: 'Danh sách KPI', type: [Kpi] })
-  findAll(@Query() filterDto: KpiFilterDto): Promise<{
-    data: Kpi[];
-    pagination: {
-      currentPage: number;
-      totalPages: number;
-      totalItems: number;
-      itemsPerPage: number;
-    };
-  }> {
-    return this.kpisService.findAll(filterDto);
+  findAll(@Query() filterDto: KpiFilterDto, @Req() req: Request & { user?: { id: number } }) {
+    if (!req.user?.id) throw new UnauthorizedException('User not authenticated.');
+    return this.kpisService.findAll(filterDto, req.user.id);
   }
 
   @Roles('admin', 'manager', 'department')
@@ -117,45 +110,21 @@ export class KpisController {
     @Param('departmentId') departmentId: number,
     @Query() filterDto: KpiFilterDto,
     @Req() req: Request & { user?: Employee },
-  ): Promise<{
-    data: Kpi[];
-    pagination: {
-      currentPage: number;
-      totalPages: number;
-      totalItems: number;
-      itemsPerPage: number;
-    };
-  }> {
-    if (!req.user) {
-      throw new UnauthorizedException('User not available in request.');
-    }
+  ) {
+    if (!req.user) throw new UnauthorizedException('User not available in request.');
     return this.kpisService.getDepartmentKpis(departmentId, filterDto, req.user);
   }
 
   @Roles('admin', 'manager', 'department', 'section')
   @Get('/sections/:sectionId')
   @ApiOperation({ summary: 'Get KPIs of a section' })
-  @ApiResponse({
-    status: 200,
-    description: 'List of KPIs with details',
-    type: [Kpi],
-  })
+  @ApiResponse({ status: 200, description: 'List of KPIs with details', type: [Kpi] })
   async getSectionKpis(
     @Param('sectionId') sectionId: number,
     @Query() filterDto: KpiFilterDto,
     @Req() req: Request & { user?: Employee },
-  ): Promise<{
-    data: Kpi[];
-    pagination: {
-      currentPage: number;
-      totalPages: number;
-      totalItems: number;
-      itemsPerPage: number;
-    };
-  }> {
-    if (!req.user) {
-      throw new UnauthorizedException('User not available in request.');
-    }
+  ): Promise<any> { // Fix: use any to avoid type export error
+    if (!req.user) throw new UnauthorizedException('User not available in request.');
     return this.kpisService.getSectionKpis(sectionId, filterDto, req.user);
   }
 
@@ -169,29 +138,19 @@ export class KpisController {
   async getEmployeeKpis(
     @Param('employeeId') employeeId: number,
     @Query() filterDto: KpiFilterDto,
-    @Req() req: Request & { user?: Employee } // Added req.user for consistency, service might use it
-  ): Promise<{
-    data: Kpi[];
-    pagination: {
-      currentPage: number;
-      totalPages: number;
-      totalItems: number;
-      itemsPerPage: number;
-    };
-  }> {
-    // Assuming getEmployeeKpis service method might also need user context in future
-    if (!req.user) {
-      throw new UnauthorizedException('User not available in request.');
-    }
-    return this.kpisService.getEmployeeKpis(employeeId, filterDto /*, req.user */);
+    @Req() req: Request & { user?: Employee }
+  ) {
+    if (!req.user?.id) throw new UnauthorizedException('User not available in request.');
+    return this.kpisService.getEmployeeKpis(employeeId, filterDto, req.user.id);
   }
 
   @Get(':id/assignments')
   @Roles('admin', 'manager', 'department', 'section')
   @ApiOperation({ summary: 'Get KPI assignments by KPI ID' })
   @ApiResponse({ status: 200, description: 'List of KPI assignments' })
-  async getKpiAssignments(@Param('id', ParseIntPipe) kpiId: number) {
-    return this.kpisService.getKpiAssignments(kpiId);
+  async getKpiAssignments(@Param('id', ParseIntPipe) kpiId: number, @Req() req: Request & { user?: { id: number } }) {
+    if (!req.user?.id) throw new UnauthorizedException('User not authenticated.');
+    return this.kpisService.getKpiAssignments(kpiId, req.user.id);
   }
 
   @Get(':id')
@@ -199,8 +158,9 @@ export class KpisController {
   @ApiResponse({ status: 200, description: 'KPI details', type: Kpi })
   @ApiResponse({ status: 404, description: 'KPI not found' })
   @ApiResponse({ status: 403, description: 'Access denied' })
-  async findOne(@Param('id', ParseIntPipe) id: number): Promise<Kpi> {
-    return this.kpisService.findOne(id);
+  async findOne(@Param('id', ParseIntPipe) id: number, @Req() req: Request & { user?: { id: number } }): Promise<Kpi> {
+    if (!req.user?.id) throw new UnauthorizedException('User not authenticated.');
+    return this.kpisService.findOne(id, req.user.id);
   }
 
   @Patch(':id/toggle-status')
@@ -220,9 +180,9 @@ export class KpisController {
   }
 
   @Post('/createKpi')
-  create(@Body() body: any): Promise<Kpi> {
-    console.log('createKpi', body);
-    return this.kpisService.create(body);
+  async create(@Body() body: any, @Req() req: Request & { user?: { id: number } }): Promise<Kpi> {
+    if (!req.user?.id) throw new UnauthorizedException('User not authenticated.');
+    return this.kpisService.create(body, req.user.id);
   }
 
   @Patch(':id')
@@ -236,14 +196,22 @@ export class KpisController {
   @ApiResponse({ status: 400, description: 'Dữ liệu không hợp lệ' })
   @ApiResponse({ status: 403, description: 'Không có quyền chỉnh sửa' })
   @ApiResponse({ status: 404, description: 'Đánh giá không tồn tại' })
-  update(@Param('id') id: string, @Body() update: Partial<Kpi>): Promise<Kpi> {
-    return this.kpisService.update(+id, update);
+  async update(@Param('id') id: string, @Body() update: Partial<Kpi>, @Req() req: Request & { user?: { id: number } }): Promise<Kpi> {
+    if (!req.user?.id) throw new UnauthorizedException('User not authenticated.');
+    return this.kpisService.update(+id, update, req.user.id);
   }
 
   @Delete(':id')
   @Roles('admin', 'manager')
-  delete(@Param('id') id: string): Promise<void> {
-    return this.kpisService.softDelete(+id);
+  async delete(@Param('id') id: string, @Req() req: Request & { user?: { id: number } }): Promise<void> {
+    if (!req.user?.id) throw new UnauthorizedException('User not authenticated.');
+    // Lấy loại KPI trước khi xóa
+    const kpi = await this.kpisService['kpisRepository'].findOne({ where: { id: +id } });
+    let kpiType: 'company' | 'department' | 'section' | 'employee' = 'company';
+    if (kpi && ['company', 'department', 'section', 'personal', 'employee'].includes(kpi.type)) {
+      kpiType = kpi.type === 'personal' ? 'employee' : (kpi.type as 'company' | 'department' | 'section' | 'employee');
+    }
+    return this.kpisService.softDelete(+id, req.user.id, kpiType);
   }
 
   @Post(':id/sections/assignments')
@@ -259,10 +227,13 @@ export class KpisController {
         assignmentId?: number;
       }[];
     },
+    @Req() req: Request & { user?: { id: number } },
   ): Promise<void> {
+    if (!req.user?.id) throw new UnauthorizedException('User not authenticated.');
     return this.kpisService.saveDepartmentAndSectionAssignments(
       kpiId,
       body.assignments,
+      req.user.id,
     );
   }
 
@@ -276,18 +247,18 @@ export class KpisController {
     },
     @Req() req: Request & { user?: Employee },
   ) {
-    if (!req.user) {
-        throw new UnauthorizedException('User not authenticated.');
-    }
+    if (!req.user) throw new UnauthorizedException('User not authenticated.');
     return this.kpisService.saveUserAssignments(kpiId, body.assignments, req.user);
   }
 
   @Delete(':kpiId/sections/:sectionId')
-  @Roles('admin', 'manager') // Chỉ admin và manager được phép xóa
+  @Roles('admin', 'manager')
   async deleteSectionAssignment(
     @Param('kpiId') kpiId: number,
     @Param('sectionId') sectionId: number,
+    @Req() req: Request & { user?: { id: number } },
   ): Promise<void> {
-    return this.kpisService.deleteSectionAssignment(kpiId, sectionId);
+    if (!req.user?.id) throw new UnauthorizedException('User not authenticated.');
+    return this.kpisService.deleteSectionAssignment(kpiId, sectionId, req.user.id);
   }
 }

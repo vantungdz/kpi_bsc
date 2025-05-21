@@ -20,12 +20,12 @@ export class AuthController {
 
   @UseGuards(AuthGuard('jwt'))
   @Get('profile')
-  async getProfile(@Req() req: Request): Promise<Employee> {
+  async getProfile(@Req() req: Request): Promise<any> {
     const userId = (req.user as any)?.id;
     if (!userId) {
       throw new UnauthorizedException('User not authenticated');
     }
-    // Lấy user kèm relations: role, department, section, team
-    return await this.employeesService.findOne(userId);
+    // Lấy user kèm role, department, section, team, và permissions
+    return await this.employeesService.findOneWithPermissions(userId);
   }
 }

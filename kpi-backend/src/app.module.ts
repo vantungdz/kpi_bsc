@@ -16,6 +16,9 @@ import { NotificationModule } from './notification/notification.module';
 import { DashboardsModule } from './dashboard/dashboard.module';
 import { EvaluationModule } from './evaluation/evaluation.module';
 import { ReportsModule } from './reports/reports.module';
+import { RolesController } from './roles.controller';
+import { Role } from './entities/role.entity';
+import { Permission } from './entities/permission.entity';
 
 @Module({
   imports: [
@@ -54,7 +57,8 @@ import { ReportsModule } from './reports/reports.module';
     KpiAssignmentsModule,
     EvaluationModule,
     ReportsModule,
+    TypeOrmModule.forFeature([Role, Permission]),
   ],
-  controllers: [],
+  controllers: [RolesController],
 })
 export class AppModule {}

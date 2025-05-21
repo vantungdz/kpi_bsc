@@ -5,7 +5,7 @@
         {{ $t('myAssignedKpis') }}
       </template>
       <template #extra>
-        <a-button type="primary" @click="goToCreatePersonalKpi">
+        <a-button type="primary" @click="goToCreatePersonalKpi" v-if="canCreatePersonalKpi">
           <plus-outlined />
           {{ $t('createPersonalKpi') }}
         </a-button>
@@ -211,12 +211,21 @@ import { PlusOutlined, MinusCircleOutlined, InfoCircleOutlined, HistoryOutlined 
 import dayjs from 'dayjs';
 import { KpiValueStatus, getKpiValueStatusText, KpiValueStatusColor, KpiDefinitionStatus } from '@/core/constants/kpiStatus';
 import { useI18n } from 'vue-i18n';
+import { RBAC_ACTIONS, RBAC_RESOURCES } from "@/core/constants/rbac.constants";
 
 const { t: $t } = useI18n();
 
 const store = useStore();
 const router = useRouter();
 const actualUser = computed(() => store.getters["auth/user"]);
+
+const userPermissions = computed(() => actualUser.value?.permissions || []);
+function hasPermission(action, resource) {
+  return userPermissions.value?.some(
+    (p) => p.action === action && p.resource === resource
+  );
+}
+const canCreatePersonalKpi = computed(() => hasPermission(RBAC_ACTIONS.CREATE, RBAC_RESOURCES.KPI_PERSONAL));
 
 const loadingMyAssignments = ref(false);
 const myAssignmentsError = ref(null);

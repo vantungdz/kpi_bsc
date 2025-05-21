@@ -3,7 +3,12 @@
     <div class="list-header">
       <h2>{{ $t("sectionKpiList") }}</h2>
       <div class="action-buttons">
-        <a-button type="primary" @click="goToCreateKpi" style="float: bottom">
+        <a-button
+          v-if="canCreateSectionKpiSection"
+          type="primary"
+          @click="goToCreateKpi"
+          style="float: bottom"
+        >
           <plus-outlined /> {{ $t("createNewKpi") }}
         </a-button>
       </div>
@@ -239,7 +244,7 @@
                       <schedule-outlined /> {{ $t("details") }}
                     </a-button>
                   </a-tooltip>
-                  <a-tooltip :title="$t('copyKpi')">
+                  <a-tooltip v-if="canCopySectionKpi" :title="$t('copyKpi')">
                     <a-button
                       type="dashed"
                       class="kpi-actions-button"
@@ -249,7 +254,7 @@
                       <copy-outlined /> {{ $t("copy") }}
                     </a-button>
                   </a-tooltip>
-                  <a-tooltip :title="$t('deleteKpi')">
+                  <a-tooltip v-if="canDeleteSectionKpiSection" :title="$t('deleteKpi')">
                     <a-button
                       danger
                       class="kpi-actions-button"
@@ -293,6 +298,7 @@ import {
 } from "@ant-design/icons-vue";
 import { KpiDefinitionStatus } from "@/core/constants/kpiStatus";
 import { notification } from "ant-design-vue";
+import { RBAC_ACTIONS, RBAC_RESOURCES } from "@/core/constants/rbac.constants";
 
 const store = useStore();
 const router = useRouter();
@@ -309,6 +315,17 @@ const sectionKpiList = computed(
 );
 
 const effectiveRole = computed(() => store.getters["auth/effectiveRole"]);
+
+const userPermissions = computed(() => store.getters["auth/user"]?.permissions || []);
+function hasPermission(action, resource) {
+  return userPermissions.value?.some(
+    (p) => p.action === action && p.resource === resource
+  );
+}
+// Chỉ giữ lại các biến kiểm tra quyền động thực sự sử dụng trên UI
+const canCopySectionKpi = computed(() => hasPermission(RBAC_ACTIONS.COPY_TEMPLATE, RBAC_RESOURCES.KPI));
+const canCreateSectionKpiSection = computed(() => hasPermission(RBAC_ACTIONS.CREATE, RBAC_RESOURCES.KPI_SECTION));
+const canDeleteSectionKpiSection = computed(() => hasPermission(RBAC_ACTIONS.DELETE, RBAC_RESOURCES.KPI_SECTION));
 
 const selectSectionList = ref([]);
 

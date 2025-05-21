@@ -173,7 +173,7 @@ export class KpiValuesService {
 
         const submitter = await transactionalEntityManager
           .getRepository(Employee)
-          .findOneBy({ id: userId });
+          .findOne({ where: { id: userId }, relations: ['role'] });
         if (!submitter) {
           throw new UnauthorizedException('Submitter information not found.');
         }
@@ -293,7 +293,7 @@ export class KpiValuesService {
   ): Promise<KpiValue> {
     const kpiValue = await this.findKpiValueForWorkflow(valueId);
     const statusBefore = kpiValue.status;
-    const user = await this.employeeRepository.findOneBy({ id: userId });
+    const user = await this.employeeRepository.findOne({ where: { id: userId }, relations: ['role'] });
 
     if (!user) {
       throw new UnauthorizedException('Approving user not found.');
@@ -367,8 +367,8 @@ export class KpiValuesService {
       }
     } else if (savedValue.status === KpiValueStatus.PENDING_DEPT_APPROVAL) {
       const submitter = assignment?.employee_id
-        ? await this.employeeRepository.findOneBy({
-            id: assignment.employee_id,
+        ? await this.employeeRepository.findOne({
+            where: { id: assignment.employee_id },
           })
         : null;
       if (submitter && assignment?.kpi) {
@@ -391,16 +391,35 @@ export class KpiValuesService {
   ): Promise<KpiValue> {
     const kpiValue = await this.findKpiValueForWorkflow(valueId);
     const statusBefore = kpiValue.status;
-    const user = await this.employeeRepository.findOneBy({ id: userId });
+    const user = await this.employeeRepository.findOne({ where: { id: userId }, relations: ['role'] });
 
-    if (!user) throw new UnauthorizedException('Rejecting user not found.');
+    // Log thông tin user và role
+    console.log('[KPI REJECT][Section] User:', {
+      id: user?.id,
+      username: user?.username,
+      role: user?.role,
+      sectionId: user?.sectionId,
+      departmentId: user?.departmentId,
+    });
 
+    // Log assignment liên quan
+    console.log('[KPI REJECT][Section] Assignment:', {
+      assignmentId: kpiValue.kpi_assigment_id,
+    });
+
+    // Log kết quả checkPermission
     const canReject = await this.checkPermission(
       userId,
       kpiValue.kpi_assigment_id,
       'SECTION_REJECT',
     );
+    console.log('[KPI REJECT][Section] checkPermission result:', canReject);
     if (!canReject) {
+      console.error('[KPI REJECT][Section] User does not have permission to reject at Section level.', {
+        userId,
+        assignmentId: kpiValue.kpi_assigment_id,
+        role: user?.role,
+      });
       throw new UnauthorizedException(
         'User does not have permission to reject at Section level.',
       );
@@ -416,7 +435,10 @@ export class KpiValuesService {
 
     let newStatus: KpiValueStatus;
     let logAction: string;
-    const roleName = typeof user.role === 'string' ? user.role : user.role?.name ?? '';
+    let roleName = '';
+    if (user) {
+      roleName = typeof user.role === 'string' ? user.role : user.role?.name ?? '';
+    }
     if (roleName === 'admin' || roleName === 'manager') {
       newStatus = KpiValueStatus.REJECTED_BY_MANAGER;
       logAction = 'REJECT_MANAGER';
@@ -460,7 +482,7 @@ export class KpiValuesService {
   ): Promise<KpiValue> {
     const kpiValue = await this.findKpiValueForWorkflow(valueId);
     const statusBefore = kpiValue.status;
-    const user = await this.employeeRepository.findOneBy({ id: userId });
+    const user = await this.employeeRepository.findOne({ where: { id: userId }, relations: ['role'] });
 
     if (!user) {
       throw new UnauthorizedException('Approving user not found.');
@@ -539,8 +561,8 @@ export class KpiValuesService {
       }
     } else if (savedValue.status === KpiValueStatus.PENDING_MANAGER_APPROVAL) {
       const submitter = assignment?.employee_id
-        ? await this.employeeRepository.findOneBy({
-            id: assignment.employee_id,
+        ? await this.employeeRepository.findOne({
+            where: { id: assignment.employee_id },
           })
         : null;
       if (submitter && assignment?.kpi) {
@@ -563,7 +585,7 @@ export class KpiValuesService {
   ): Promise<KpiValue> {
     const kpiValue = await this.findKpiValueForWorkflow(valueId);
     const statusBefore = kpiValue.status;
-    const user = await this.employeeRepository.findOneBy({ id: userId });
+    const user = await this.employeeRepository.findOne({ where: { id: userId }, relations: ['role'] });
 
     if (!user) throw new UnauthorizedException('Rejecting user not found.');
 
@@ -638,7 +660,7 @@ export class KpiValuesService {
   ): Promise<KpiValue> {
     const kpiValue = await this.findKpiValueForWorkflow(valueId);
     const statusBefore = kpiValue.status;
-    const user = await this.employeeRepository.findOneBy({ id: userId });
+    const user = await this.employeeRepository.findOne({ where: { id: userId }, relations: ['role'] });
 
     if (!user) {
       throw new UnauthorizedException('Approving user not found.');
@@ -719,7 +741,7 @@ export class KpiValuesService {
   ): Promise<KpiValue> {
     const kpiValue = await this.findKpiValueForWorkflow(valueId);
     const statusBefore = kpiValue.status;
-    const user = await this.employeeRepository.findOneBy({ id: userId });
+    const user = await this.employeeRepository.findOne({ where: { id: userId }, relations: ['role'] });
 
     if (!user) throw new UnauthorizedException('Rejecting user not found.');
 
@@ -875,7 +897,7 @@ export class KpiValuesService {
     assignmentId: number,
     action: string,
   ): Promise<boolean> {
-    const user = await this.employeeRepository.findOneBy({ id: userId });
+    const user = await this.employeeRepository.findOne({ where: { id: userId }, relations: ['role'] });
     if (!user) {
       return false;
     }

@@ -22,7 +22,7 @@
         />
 
         <a-table
-          v-if="!loadingError && managedOverallReviews.length > 0"
+          v-if="canViewPerformanceObjectiveApproval && !loadingError && managedOverallReviews.length > 0"
           :columns="columns"
           :data-source="managedOverallReviews"
           :row-key="'id'"
@@ -64,6 +64,7 @@
             <template v-else-if="column.key === 'actions'">
               <a-space>
                 <a-button
+                  v-if="canEditPerformanceObjectiveApproval"
                   type="link"
                   size="small"
                   @click="goToKpiReview(record)"
@@ -77,13 +78,10 @@
         </a-table>
 
         <a-empty
-          v-if="
-            !loadingError &&
-            managedOverallReviews.length === 0 &&
-            !isLoading
-          "
+          v-if="canViewPerformanceObjectiveApproval && !loadingError && managedOverallReviews.length === 0 && !isLoading"
           :description="$t('noPendingObjectiveEvaluations')"
         />
+        <a-alert v-else-if="!canViewPerformanceObjectiveApproval" type="warning" :message="$t('noPermissionViewObjectiveApproval')" show-icon />
       </a-spin>
     </a-card>
 
@@ -224,6 +222,7 @@ import {
 } from "@ant-design/icons-vue";
 import dayjs from "dayjs";
 import { useRouter } from 'vue-router';
+import { RBAC_ACTIONS, RBAC_RESOURCES } from "@/core/constants/rbac.constants";
 
 const { t: $t } = useI18n();
 const store = useStore();
@@ -244,6 +243,15 @@ const isDetailModalVisible = ref(false);
 const selectedReview = ref(null);
 
 const cardTitle = computed(() => $t("performanceObjectiveApprovalList"));
+
+const userPermissions = computed(() => store.getters["auth/user"]?.permissions || []);
+function hasPermission(action, resource) {
+  return userPermissions.value?.some(
+    (p) => p.action?.trim() === action && p.resource?.trim() === resource
+  );
+}
+const canViewPerformanceObjectiveApproval = computed(() => hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.PERFORMANCE_OBJECTIVE_APPROVAL));
+const canEditPerformanceObjectiveApproval = computed(() => hasPermission(RBAC_ACTIONS.EDIT, RBAC_RESOURCES.PERFORMANCE_OBJECTIVE_APPROVAL));
 
 // Define OverallReviewStatus and color/text helpers (replace with import if available)
 const OverallReviewStatus = {
@@ -348,13 +356,10 @@ const columns = computed(() => [
 
 const formatDate = (dateString) => dateString ? dayjs(dateString).format("YYYY-MM-DD HH:mm") : "";
 
-// Nếu có logic kiểm tra role, hãy dùng user.role?.name thay vì string cứng
-
 const fetchData = async () => {
   isLoading.value = true;
   loadingError.value = null;
   try {
-    // Call the new API to get all managed employees' OverallReview records
     const response = await store.dispatch("kpiEvaluations/fetchManagedEmployeeOverallReviews");
     managedOverallReviews.value = response || [];
   } catch (error) {
@@ -417,12 +422,10 @@ const closeDetailModal = () => {
 const resetDetailModalState = () => {
   selectedReview.value = null;
 };
-// Thêm hàm chuyển trang sang KpiReview
+
 const goToKpiReview = (record) => {
   if (!record || !record.reviewedBy || !record.cycleId) return;
-  // Hỗ trợ cả router.push({ name, params }) và router.push(path)
   if (router.resolve({ name: "KpiReview", params: { employeeId: record.reviewedBy.id, cycleId: record.cycleId } }).href !== `/kpi/review`) {
-    // Nếu route có dạng /kpi-review/:employeeId/:cycleId
     router.push({
       name: "KpiReview",
       params: {
@@ -431,7 +434,6 @@ const goToKpiReview = (record) => {
       },
     });
   } else {
-    // Nếu chỉ có /kpi/review thì fallback sang truyền query
     router.push({
       name: "KpiReview",
       query: {

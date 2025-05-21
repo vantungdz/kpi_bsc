@@ -214,19 +214,23 @@ const mutations = {
   UPDATE_KPI(state, updatedKpi) {
     if (!updatedKpi) return;
 
+    // Cập nhật trong danh sách chính
     const index = state.kpis.findIndex((k) => k.id === updatedKpi.id);
-    if (index !== -1) state.kpis.splice(index, 1, updatedKpi);
+    if (index !== -1) {
+      state.kpis.splice(index, 1, { ...state.kpis[index], ...updatedKpi });
+    }
 
-    const indexAll = state.kpisAllForSelect.findIndex(
-      (k) => k.id === updatedKpi.id
-    );
-    if (indexAll !== -1)
+    // Cập nhật trong danh sách select
+    const indexAll = state.kpisAllForSelect.findIndex((k) => k.id === updatedKpi.id);
+    if (indexAll !== -1) {
       state.kpisAllForSelect.splice(indexAll, 1, {
         id: updatedKpi.id,
         name: updatedKpi.name,
         path: updatedKpi.path,
       });
+    }
 
+    // Cập nhật chi tiết nếu đang xem
     if (state.currentKpi && state.currentKpi.id === updatedKpi.id) {
       state.currentKpi = { ...state.currentKpi, ...updatedKpi };
     }

@@ -1,5 +1,5 @@
 <template>
-    <div class="kpi-performance-overview-container">
+    <div class="kpi-performance-overview-container" v-if="canViewDashboard">
         <a-breadcrumb style="margin-bottom: 16px">
             <a-breadcrumb-item><router-link to="/dashboard">{{ $t('dashboardOverview') }}</router-link></a-breadcrumb-item>
             <a-breadcrumb-item>{{ $t('kpiPerformanceOverview') }}</a-breadcrumb-item>
@@ -135,6 +135,7 @@ import {
     Progress as AProgress,
 } from 'ant-design-vue';
 import PieChart from "@/core/components/common/PieChart.vue"; 
+import { RBAC_ACTIONS, RBAC_RESOURCES } from '@/core/constants/rbac.constants';
 
 const { t: $t } = useI18n();
 const store = useStore(); 
@@ -142,6 +143,14 @@ const store = useStore();
 const kpiOverviewStats = computed(() => store.getters["dashboard/getKpiPerformanceOverviewStats"]);
 const isLoadingOverview = computed(() => store.getters["dashboard/isLoadingKpiPerformanceOverview"]);
 const loadingError = computed(() => store.getters["dashboard/getKpiPerformanceOverviewError"]);
+
+const userPermissions = computed(() => store.getters['auth/user']?.permissions || []);
+function hasPermission(action, resource) {
+  return userPermissions.value?.some(
+    (p) => p.action === action && p.resource === resource
+  );
+}
+const canViewDashboard = computed(() => hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.DASHBOARD));
 
 const performanceByRoleColumns = ref([
     { title: $t('department'), dataIndex: 'roleName', key: 'roleName', sorter: (a, b) => a.roleName.localeCompare(b.roleName), defaultSortOrder: 'ascend' },

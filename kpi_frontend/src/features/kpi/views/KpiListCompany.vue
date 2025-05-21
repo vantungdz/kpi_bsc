@@ -7,7 +7,7 @@
           type="primary"
           @click="goToCreateKpi"
           style="float: bottom"
-          v-if="canCreateCompanyKpi"
+          v-if="canCreateCompanyKpiCompany"
         >
           <plus-outlined /> {{ $t("createNewKpi") }}
         </a-button>
@@ -148,7 +148,7 @@
                     }}
                   </a-tag>
                   <a-switch
-                    v-if="isManagerOrAdmin"
+                    v-if="canToggleStatusKpiCompany"
                     :checked="record.status === KpiDefinitionStatus.APPROVED"
                     :loading="isToggling && currentToggleKpiId === record.id"
                     :disabled="isToggling && currentToggleKpiId !== record.id"
@@ -176,6 +176,7 @@
                         type="dashed"
                         size="small"
                         @click="handleCopyKpi(record)"
+                        v-if="canCopyCompanyKpi"
                       >
                         <copy-outlined /> {{ $t("copy") }}
                       </a-button>
@@ -185,7 +186,7 @@
                         danger
                         size="small"
                         class="kpi-actions-button"
-                        v-if="canDeleteCompanyKpi"
+                        v-if="canDeleteCompanyKpiCompany"
                         @click="showConfirmDeleteDialog(record.id, record.name)"
                         ><delete-outlined /> {{ $t("delete") }}</a-button
                       >
@@ -250,6 +251,7 @@ import {
   KpiDefinitionStatusText,
   KpiDefinitionStatusColor,
 } from "@/core/constants/kpiStatus";
+import { RBAC_ACTIONS, RBAC_RESOURCES } from "@/core/constants/rbac.constants";
 
 const store = useStore();
 const router = useRouter();
@@ -268,6 +270,17 @@ const selectedKpiName = ref(null);
 const deletedKpiName = ref(null);
 const activePanelKeys = ref([]);
 const currentToggleKpiId = ref(null);
+
+const userPermissions = computed(() => store.getters["auth/user"]?.permissions || []);
+function hasPermission(action, resource) {
+  return userPermissions.value?.some(
+    (p) => p.action === action && p.resource === resource
+  );
+}
+const canCreateCompanyKpiCompany = computed(() => hasPermission(RBAC_ACTIONS.CREATE, RBAC_RESOURCES.KPI_COMPANY));
+const canDeleteCompanyKpiCompany = computed(() => hasPermission(RBAC_ACTIONS.DELETE, RBAC_RESOURCES.KPI_COMPANY));
+const canCopyCompanyKpi = computed(() => hasPermission(RBAC_ACTIONS.COPY_TEMPLATE, RBAC_RESOURCES.KPI));
+const canToggleStatusKpiCompany = computed(() => hasPermission(RBAC_ACTIONS.TOGGLE_STATUS, RBAC_RESOURCES.KPI));
 
 const loading = computed(() => store.getters["kpis/isLoading"]);
 const error = computed(() => store.getters["kpis/error"]);
@@ -288,17 +301,6 @@ const groupedKpis = computed(() => {
   });
   return grouped;
 });
-
-const effectiveRole = computed(() => store.getters["auth/effectiveRole"]);
-const isManagerOrAdmin = computed(() =>
-  ["manager", "admin"].includes(effectiveRole.value)
-);
-const canCreateCompanyKpi = computed(() =>
-  ["admin", "manager"].includes(effectiveRole.value)
-);
-const canDeleteCompanyKpi = computed(() =>
-  ["admin", "manager"].includes(effectiveRole.value)
-);
 
 const isToggling = computed(() => store.getters["kpis/isTogglingKpiStatus"]);
 

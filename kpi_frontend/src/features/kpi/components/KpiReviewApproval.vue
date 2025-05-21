@@ -15,7 +15,7 @@
             size="small"
             @click="approveReview(record.id)"
             :loading="isProcessing && currentActionItemId === record.id"
-            :disabled="isProcessing && currentActionItemId !== record.id"
+            :disabled="!canApprove || (isProcessing && currentActionItemId !== record.id)"
           >
             {{ $t("approve") }}
           </a-button>
@@ -24,7 +24,7 @@
             size="small"
             @click="rejectReview(record.id)"
             :loading="isProcessing && currentActionItemId === record.id"
-            :disabled="isProcessing && currentActionItemId !== record.id"
+            :disabled="!canReject || (isProcessing && currentActionItemId !== record.id)"
           >
             {{ $t("reject") }}
           </a-button>
@@ -38,6 +38,7 @@
 import { ref, computed, onMounted } from "vue";
 import { useStore } from "vuex";
 import { notification } from "ant-design-vue";
+import { RBAC_ACTIONS, RBAC_RESOURCES } from "@/core/constants/rbac.constants";
 
 const store = useStore();
 const reviews = ref([]);
@@ -48,8 +49,15 @@ const currentActionItemId = ref(null);
 // Lấy effectiveRole từ store RBAC entity
 const effectiveRole = computed(() => store.getters["auth/effectiveRole"]);
 
-// Nếu cần kiểm tra quyền nâng cao, có thể mở rộng như sau:
-const canApprove = computed(() => ["admin", "manager"].includes(effectiveRole.value));
+// RBAC entity: lấy permission động
+const userPermissions = computed(() => store.getters["auth/user"]?.permissions || []);
+function hasPermission(action, resource) {
+  return userPermissions.value?.some(
+    (p) => p.action?.trim() === action && p.resource?.trim() === resource
+  );
+}
+const canApprove = computed(() => hasPermission(RBAC_ACTIONS.APPROVE, RBAC_RESOURCES.KPI_REVIEW));
+const canReject = computed(() => hasPermission(RBAC_ACTIONS.REJECT, RBAC_RESOURCES.KPI_REVIEW));
 
 const columns = [
   { title: "Review ID", dataIndex: "id", key: "id" },

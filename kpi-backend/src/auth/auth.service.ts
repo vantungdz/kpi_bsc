@@ -25,6 +25,9 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
+    // Lấy user kèm permissions (RBAC entity)
+    const userWithPermissions = await this.usersService.findOneWithPermissions(user.id);
+
     const payload = {
       id: user.id,
       username: user.username,
@@ -33,6 +36,7 @@ export class AuthService {
 
     return {
       access_token: this.jwtService.sign(payload),
+      user: userWithPermissions,
     };
   }
 }

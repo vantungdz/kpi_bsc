@@ -19,7 +19,7 @@
           <span v-if="record.unit">{{ record.unit }}</span>
         </template>
         <template v-else-if="column.key === 'createdBy'">
-          {{ record.created_by?.first_name }} {{ record.created_by?.last_name }}
+          {{ record.createdBy?.first_name }} {{ record.createdBy?.last_name }}
         </template>
         <template v-else-if="column.key === 'createdAt'">
           {{ formatDate(record.created_at) }}
@@ -43,7 +43,7 @@
 </template>
 
 <script setup>
-import { computed } from "vue";
+import { computed, onMounted } from "vue";
 import { useStore } from "vuex";
 import { useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
@@ -68,6 +68,10 @@ const columns = computed(() => [
   { title: $t("status"), dataIndex: "status", key: "status" },
   { title: "", key: "actions" },
 ]);
+
+onMounted(() => {
+  store.dispatch("kpis/fetchKpis");
+});
 
 function goToDetail(id) {
   router.push({ name: "KpiDetail", params: { id } });

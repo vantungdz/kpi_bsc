@@ -361,6 +361,7 @@ import {
 } from "ant-design-vue";
 import dayjs from "dayjs";
 import { KpiUnits } from "@/core/constants/kpiConstants.js";
+import { RBAC_ACTIONS, RBAC_RESOURCES } from "@/core/constants/rbac.constants.js";
 
 const router = useRouter();
 const route = useRoute();
@@ -510,23 +511,16 @@ const kpiTemplateOptions = computed(() =>
   }))
 );
 
-const effectiveRole = computed(() => store.getters["auth/effectiveRole"]);
+const userPermissions = computed(() => store.getters["auth/user"]?.permissions || []);
 const canAccessCreatePage = computed(() =>
-  ["admin", "manager", "department", "section"].includes(effectiveRole.value)
+  userPermissions.value.some(p => p.action?.trim() === RBAC_ACTIONS.CREATE && p.resource?.trim() === RBAC_RESOURCES.KPI)
 );
-const canAssignDirectlyToUser = computed(() => {
-  if (effectiveRole.value === "admin") return creationScope.value !== "company";
-  return (
-    ["department", "section"].includes(effectiveRole.value) &&
-    creationScope.value === effectiveRole.value
-  );
-});
-const canAssignToUnits = computed(() => {
-  return (
-    ["admin", "manager"].includes(effectiveRole.value) &&
-    creationScope.value === "company"
-  );
-});
+const canAssignDirectlyToUser = computed(() =>
+  userPermissions.value.some(p => p.action?.trim() === RBAC_ACTIONS.ASSIGN_DIRECT_USER && p.resource?.trim() === RBAC_RESOURCES.KPI)
+);
+const canAssignToUnits = computed(() =>
+  userPermissions.value.some(p => p.action?.trim() === RBAC_ACTIONS.ASSIGN_UNIT && p.resource?.trim() === RBAC_RESOURCES.KPI)
+);
 
 const columns = [
   {
