@@ -6,6 +6,7 @@ import {
   JoinColumn,
   CreateDateColumn,
   UpdateDateColumn,
+  Index,
 } from 'typeorm';
 import { KPIAssignment } from './kpi-assignment.entity';
 import { Employee } from './employee.entity';
@@ -15,9 +16,10 @@ export class KpiReview {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column({ type: 'varchar', length: 50, nullable: false })
+  @Column({ type: 'varchar', length: 32 })
   cycleId: string;
 
+  @Index()
   @Column()
   assignmentId: number;
 
@@ -28,15 +30,16 @@ export class KpiReview {
   @Column({ type: 'text', nullable: true })
   managerComment: string | null;
 
-  @Column({ type: 'numeric', nullable: true })
+  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
   managerScore: number | null;
 
   @Column({ type: 'text', nullable: true })
   selfComment: string | null;
 
-  @Column({ type: 'numeric', nullable: true })
+  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
   selfScore: number | null;
 
+  @Index()
   @Column()
   reviewedById: number;
 

@@ -2,48 +2,36 @@ import {
   Entity,
   PrimaryGeneratedColumn,
   Column,
-  ManyToOne,
   CreateDateColumn,
   UpdateDateColumn,
   Index,
-  JoinColumn,
 } from 'typeorm';
-import { Employee } from './employee.entity';
-
 import { OverallReviewStatus } from './objective-evaluation-status.enum';
+
 @Entity('overall_reviews')
-@Index(['targetId', 'targetType', 'cycleId', 'reviewedById'], { unique: true })
 export class OverallReview {
   @PrimaryGeneratedColumn()
   id: number;
 
+  @Index()
   @Column()
-  targetId: number;
+  targetId: number; // ID của nhân viên, section hoặc department được review
 
-  @Column({
-    type: 'varchar',
-    length: 50,
-    enum: ['employee', 'section', 'department'],
-  })
+  @Column({ type: 'varchar', length: 32 })
   targetType: 'employee' | 'section' | 'department';
 
-  @Column({ type: 'varchar', length: 50 })
-  cycleId: string;
+  @Index()
+  @Column()
+  reviewedById: number; // Người thực hiện review ở cấp hiện tại
 
-  @Column({ type: 'text', nullable: true })
-  overallComment: string | null;
+  @Column({ type: 'varchar', length: 32 })
+  cycleId: string; // Chu kỳ review (quý/năm...)
 
   @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
-  totalWeightedScore: string | null;
+  overallScore: number;
 
   @Column({ type: 'text', nullable: true })
-  employeeComment: string | null;
-
-  @Column({ type: 'timestamp', nullable: true })
-  employeeFeedbackDate: Date | null;
-
-  @Column()
-  reviewedById: number;
+  overallComment: string;
 
   @Column({
     type: 'enum',
@@ -52,9 +40,14 @@ export class OverallReview {
   })
   status: OverallReviewStatus;
 
-  @ManyToOne(() => Employee, { nullable: false })
-  @JoinColumn({ name: 'reviewedById' })
-  reviewedBy: Employee;
+  @Column({ type: 'text', nullable: true })
+  employeeComment: string;
+
+  @Column({ type: 'timestamp', nullable: true })
+  employeeFeedbackDate: Date;
+
+  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
+  totalWeightedScore: number;
 
   @CreateDateColumn()
   createdAt: Date;
