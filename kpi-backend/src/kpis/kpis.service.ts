@@ -982,12 +982,16 @@ export class KpisService {
       return {
         ...assignment,
         latest_actual_value: calculatedActualValue,
+        startDate: assignment.startDate
+          ? new Date(assignment.startDate).toISOString().split('T')[0]
+          : null,
+        endDate: assignment.endDate
+          ? new Date(assignment.endDate).toISOString().split('T')[0]
+          : null,
       } as AssignmentWithLatestValue;
     });
 
-    kpi.assignments = processedAssignments;
-
-    return kpi as KpiDetailWithProcessedAssignments;
+    return { ...kpi, assignments: processedAssignments };
   }
 
   async getKpiAssignments(
@@ -1032,14 +1036,16 @@ export class KpisService {
 
         if (latestKpiValue) {
           latestValue = latestKpiValue.value;
-          latestTimestamp =
-            latestKpiValue.timestamp || latestKpiValue.updated_at;
+          latestTimestamp = latestKpiValue.timestamp;
         }
       }
+
       const result: AssignmentWithLatestValue = {
         ...assignment,
         latest_actual_value: latestValue,
         latest_value_timestamp: latestTimestamp,
+        startDate: assignment.startDate ? new Date(assignment.startDate) : null,
+        endDate: assignment.endDate ? new Date(assignment.endDate) : null,
       };
 
       return result;
@@ -1271,6 +1277,8 @@ export class KpisService {
         const assignmentEntities: KPIAssignment[] = [];
         const assignedByUserId = authenticatedUserId;
 
+      console.log('kpiData',kpiData)
+
         if (assignments?.toDepartments) {
           for (const targetDepartment of assignments.toDepartments) {
             const assignment = new KPIAssignment();
@@ -1281,6 +1289,13 @@ export class KpisService {
               Number(targetDepartment.target) ?? Number(kpiData.target);
             assignment.assignedBy = assignedByUserId;
             assignment.status = savedKpiObject.status;
+            assignment.startDate = kpiData.startDate
+              ? new Date(kpiData.startDate.split('T')[0])
+              : null;
+            assignment.endDate = kpiData.endDate
+              ? new Date(kpiData.endDate.split('T')[0])
+              : null;
+            assignment.weight = kpiData.weight;
             assignmentEntities.push(assignment);
           }
         }
@@ -1295,6 +1310,13 @@ export class KpisService {
               Number(targetSection.target) ?? Number(kpiData.target);
             assignment.assignedBy = assignedByUserId;
             assignment.status = savedKpiObject.status;
+            assignment.startDate = kpiData.startDate
+              ? new Date(kpiData.startDate.split('T')[0])
+              : null;
+            assignment.endDate = kpiData.endDate
+              ? new Date(kpiData.endDate.split('T')[0])
+              : null;
+            assignment.weight = kpiData.weight;
             assignmentEntities.push(assignment);
           }
         }
@@ -1309,6 +1331,13 @@ export class KpisService {
           employeeAssignment.targetValue = Number(kpiData.target);
           employeeAssignment.assignedBy = assignedByUserId;
           employeeAssignment.status = savedKpiObject.status;
+          employeeAssignment.startDate = kpiData.startDate
+            ? new Date(kpiData.startDate.split('T')[0])
+            : null;
+          employeeAssignment.endDate = kpiData.endDate
+            ? new Date(kpiData.endDate.split('T')[0])
+            : null;
+          employeeAssignment.weight = kpiData.weight;
           assignmentEntities.push(employeeAssignment);
         }
 
@@ -1327,6 +1356,9 @@ export class KpisService {
             employeeAssignment.targetValue = Number(userAssignment.target);
             employeeAssignment.assignedBy = assignedByUserId;
             employeeAssignment.status = savedKpiObject.status;
+            employeeAssignment.startDate = kpiData.startDate || kpiData.start_date;
+            employeeAssignment.endDate = kpiData.endDate || kpiData.end_date;
+            employeeAssignment.weight = userAssignment.weight || null;
             assignmentEntities.push(employeeAssignment);
           }
         }

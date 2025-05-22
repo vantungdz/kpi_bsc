@@ -178,6 +178,11 @@ const actions = {
         const kpisData = response.data.kpisToReview;
         const overallReviewData = response.data.existingOverallReview;
 
+        console.log(
+          "[Vuex kpiEvaluations/fetchKpisForReview] overallReviewData:",
+          overallReviewData
+        );
+
         if (Array.isArray(kpisData)) {
           const kpisMapped = kpisData.map((kpi) => ({
             ...kpi,

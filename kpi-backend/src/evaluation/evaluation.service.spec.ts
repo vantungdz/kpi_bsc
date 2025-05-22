@@ -95,5 +95,83 @@ describe('EvaluationService', () => {
       expect(result.kpisToReview[0].actualValue).toBe(10); // in cycle
       expect(result.kpisToReview[1].actualValue).toBe(30); // fallback to latest APPROVED
     });
+
+    it('should set DEPARTMENT_REVIEW_PENDING if section reviews exist', async () => {
+      jest.spyOn(service, 'getReviewableTargets').mockResolvedValue([
+        { id: 10, name: 'Test Department', type: 'department' },
+      ]);
+      const startDate = new Date('2024-10-01');
+      const endDate = new Date('2024-12-31');
+      jest.spyOn<any, any>(service, 'getDateRangeFromCycleId').mockReturnValue({ startDate, endDate });
+      assignmentRepository.find.mockResolvedValue([
+        {
+          id: 1,
+          kpi: { id: 100, name: 'KPI 1', description: 'desc', unit: 'unit' },
+          targetValue: 50,
+          kpiValues: [],
+          reviews: [
+            {
+              reviewedBy: { id: 2, role: { name: 'section' } },
+              cycleId: '2024-Q4',
+              managerComment: 'Section review comment',
+              managerScore: 80,
+            },
+          ],
+        },
+      ]);
+      overallReviewRepository.findOne.mockResolvedValue(null);
+
+      const result = await service.getKpisForReview(
+        { id: 1, role: 'manager' } as any,
+        10,
+        'department',
+        '2024-Q4',
+      );
+
+      expect(result.existingOverallReview).not.toBeNull();
+      expect(result.existingOverallReview!.status).toBe('DEPARTMENT_REVIEW_PENDING');
+    });
+
+    it('should retain DEPARTMENT_REVIEW_PENDING when department selects the same employee and cycle', async () => {
+      jest.spyOn(service, 'getReviewableTargets').mockResolvedValue([
+        { id: 10, name: 'Test Department', type: 'department' },
+      ]);
+      const startDate = new Date('2024-10-01');
+      const endDate = new Date('2024-12-31');
+      jest.spyOn<any, any>(service, 'getDateRangeFromCycleId').mockReturnValue({ startDate, endDate });
+      assignmentRepository.find.mockResolvedValue([
+        {
+          id: 1,
+          kpi: { id: 100, name: 'KPI 1', description: 'desc', unit: 'unit' },
+          targetValue: 50,
+          kpiValues: [],
+          reviews: [
+            {
+              reviewedBy: { id: 2, role: { name: 'section' } },
+              cycleId: '2024-Q4',
+              managerComment: 'Section review comment',
+              managerScore: 80,
+            },
+          ],
+        },
+      ]);
+      overallReviewRepository.findOne.mockResolvedValue({
+        overallComment: 'Existing comment',
+        status: 'PENDING_REVIEW',
+        employeeComment: null,
+        employeeFeedbackDate: null,
+      });
+
+      const result = await service.getKpisForReview(
+        { id: 1, role: 'manager' } as any,
+        10,
+        'department',
+        '2024-Q4',
+      );
+
+      expect(result.existingOverallReview).not.toBeNull();
+      expect(result.existingOverallReview!.status).toBe('DEPARTMENT_REVIEW_PENDING');
+      console.log('Test result:', result.existingOverallReview);
+    });
   });
 });

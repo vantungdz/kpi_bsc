@@ -41,6 +41,12 @@ import {
 import { SavePerformanceObjectivesDto } from './dto/save-performance-objectives.dto';
 import { OverallReviewStatus } from '../entities/objective-evaluation-status.enum';
 import { KpiValueStatus } from '../entities/kpi-value.entity';
+import {
+  RBAC_ACTIONS,
+  RBAC_RESOURCES,
+  RBAC_PERMISSION_PAIRS,
+  ROLES,
+} from '../common/rbac/rbac.constants';
 
 @Injectable()
 export class EvaluationService {
@@ -297,41 +303,40 @@ export class EvaluationService {
           (kv) =>
             kv.status === KpiValueStatus.APPROVED &&
             kv.timestamp >= startDate &&
-            kv.timestamp <= endDate,
+            kv.timestamp <= endDate
         );
         let filteredKpiValues =
           approvedInCycle.length > 0
             ? approvedInCycle
             : assignment.kpiValues.filter(
-                (kv) => kv.status === KpiValueStatus.APPROVED,
+                (kv) => kv.status === KpiValueStatus.APPROVED
               );
         relevantKpiValue = filteredKpiValues.sort(
-          (a, b) => b.timestamp.getTime() - a.timestamp.getTime(),
+          (a, b) => b.timestamp.getTime() - a.timestamp.getTime()
         )[0];
       }
       const actualValue = relevantKpiValue ? relevantKpiValue.value : null;
 
+      // Tìm review của manager (section/department/manager)
       const existingReview = assignment.reviews?.find(
         (review) =>
           review.reviewedBy?.id === currentUser.id &&
-          review.cycleId === cycleId,
+          review.cycleId === cycleId
       );
 
-      let selfScoreInner: number | null = null;
-      let selfCommentInner: string | null = null;
-      const assignedEmployeeId = assignment.assigned_to_employee;
-      if (assignedEmployeeId) {
-        const selfReview = assignment.reviews?.find(
-          (review) =>
-            review.reviewedBy?.id === assignedEmployeeId &&
-            review.cycleId === cycleId,
-        );
+      // Tìm review của employee (self review)
+      const employeeReview = assignment.reviews?.find(
+        (review) =>
+          review.reviewedBy?.id === assignment.assigned_to_employee &&
+          review.cycleId === cycleId
+      );
 
-        selfScoreInner = selfReview?.selfScore ?? null;
-        selfCommentInner = selfReview?.selfComment ?? null;
-      }
+      // Tìm review của section
+      const sectionReview = assignment.reviews?.find(
+        (review) => review.reviewedBy?.role?.name === 'section' && review.cycleId === cycleId
+      );
 
-      kpisToReview.push({
+      const kpiToReview = {
         assignmentId: assignment.id,
         kpiId: assignment.kpi.id,
         kpiName: assignment.kpi.name,
@@ -346,53 +351,13 @@ export class EvaluationService {
         existingManagerScore: existingReview
           ? existingReview.managerScore
           : null,
-        selfScore: selfScoreInner,
-        selfComment: selfCommentInner,
-      });
-    }
+        sectionComment: sectionReview?.managerComment || null,
+        sectionScore: sectionReview?.managerScore || null,
+        selfScore: employeeReview?.selfScore ?? null,
+        selfComment: employeeReview?.selfComment ?? null,
+      };
 
-    if (
-      targetType === 'employee' &&
-      targetId === currentUser.id &&
-      kpisToReview.length > 0
-    ) {
-      const assignmentIds = kpisToReview.map((k) => k.assignmentId);
-      const selfReviews = await this.kpiReviewRepository.find({
-        where: {
-          assignment: { id: In(assignmentIds) },
-          reviewedBy: { id: currentUser.id },
-          cycleId: cycleId,
-        },
-      });
-      const selfReviewMap = new Map<
-        number,
-        { selfScore: number | null; selfComment: string | null }
-      >();
-      selfReviews.forEach((r) => {
-        if (r.assignment && typeof r.assignment.id === 'number') {
-          selfReviewMap.set(r.assignment.id, {
-            selfScore: r.selfScore,
-            selfComment: r.selfComment,
-          });
-        }
-      });
-      for (const kpi of kpisToReview) {
-        const selfReview = selfReviewMap.get(kpi.assignmentId);
-        if (selfReview) {
-          if (
-            selfReview.selfScore !== undefined &&
-            selfReview.selfScore !== null
-          ) {
-            kpi.selfScore = selfReview.selfScore;
-          }
-          if (
-            selfReview.selfComment !== undefined &&
-            selfReview.selfComment !== null
-          ) {
-            kpi.selfComment = selfReview.selfComment;
-          }
-        }
-      }
+      kpisToReview.push(kpiToReview);
     }
 
     let totalWeightedScoreSupervisor = 0;
@@ -410,33 +375,101 @@ export class EvaluationService {
       }
     }
 
-    let existingOverallReviewData: ExistingOverallReviewDto | null = null;
+    let existingOverallReviewData: ExistingOverallReviewDto | null = {
+      overallComment: null,
+      status: OverallReviewStatus.PENDING_REVIEW,
+      employeeComment: null,
+      employeeFeedbackDate: null,
+      totalWeightedScoreSupervisor: 0,
+    };
+
+    if (targetType === 'department') {
+      // Check if there are any section reviews
+      const hasSectionReviews = assignments.some((assignment) =>
+        assignment.reviews?.some((review) =>
+          review.reviewedBy?.role?.name === 'section' && review.cycleId === cycleId
+        )
+      );
+
+      console.log("[getKpisForReview] Section reviews detected for department:", hasSectionReviews);
+
+      if (hasSectionReviews) {
+        existingOverallReviewData.status = OverallReviewStatus.DEPARTMENT_REVIEW_PENDING;
+      } else {
+        existingOverallReviewData.status = OverallReviewStatus.PENDING_REVIEW;
+      }
+    }
+
+    if (currentUser.role?.name === 'department') {
+      // Ensure the status is DEPARTMENT_REVIEW_PENDING if section reviews exist
+      const hasSectionReviews = assignments.some((assignment) =>
+        assignment.reviews?.some((review) =>
+          review.reviewedBy?.role?.name === 'section' && review.cycleId === cycleId
+        )
+      );
+
+      console.log("[getKpisForReview] Department role detected. Section reviews exist:", hasSectionReviews);
+
+      if (hasSectionReviews) {
+        existingOverallReviewData.status = OverallReviewStatus.DEPARTMENT_REVIEW_PENDING;
+      } else {
+        existingOverallReviewData.status = OverallReviewStatus.PENDING_REVIEW;
+      }
+    }
+
+    console.log("[getKpisForReview] Final status for department role:", existingOverallReviewData.status);
+
     const overallReviewRecord = await this.overallReviewRepository.findOne({
       where: {
         targetId: targetId,
-        targetType: targetType,
-        cycleId: cycleId,
         reviewedById: currentUser.id,
       },
     });
 
+    console.log("[getKpisForReview] Retrieved overallReviewRecord:", overallReviewRecord);
+
+    if (!overallReviewRecord && targetType === 'department') {
+      // Debugging: Log assignments and section reviews
+      console.log("[getKpisForReview] Checking for section reviews in assignments:", assignments);
+
+      // Ensure the status is set to DEPARTMENT_REVIEW_PENDING if section reviews exist
+      const hasSectionReviews = assignments.some((assignment) =>
+        assignment.reviews?.some((review) =>
+          review.reviewedBy?.role?.name === 'section' && review.cycleId === cycleId
+        )
+      );
+
+      console.log("[getKpisForReview] Section reviews detected:", hasSectionReviews);
+
+      if (hasSectionReviews) {
+        console.log("[getKpisForReview] Setting status to DEPARTMENT_REVIEW_PENDING due to section reviews.");
+        existingOverallReviewData.status = OverallReviewStatus.DEPARTMENT_REVIEW_PENDING;
+      } else {
+        console.log("[getKpisForReview] No section reviews found. Keeping status as PENDING_REVIEW.");
+        existingOverallReviewData.status = OverallReviewStatus.PENDING_REVIEW;
+      }
+    }
+
     if (overallReviewRecord) {
+      console.log("[getKpisForReview] Found overallReviewRecord with status:", overallReviewRecord.status);
       existingOverallReviewData = {
         overallComment: overallReviewRecord.overallComment,
-        status: overallReviewRecord.status,
+        status: existingOverallReviewData.status === OverallReviewStatus.DEPARTMENT_REVIEW_PENDING
+          ? OverallReviewStatus.DEPARTMENT_REVIEW_PENDING
+          : (overallReviewRecord?.status || OverallReviewStatus.PENDING_REVIEW),
         employeeComment: overallReviewRecord.employeeComment,
         employeeFeedbackDate: overallReviewRecord.employeeFeedbackDate,
         totalWeightedScoreSupervisor,
       };
     } else {
-      existingOverallReviewData = {
-        overallComment: null,
-        status: OverallReviewStatus.PENDING_REVIEW,
-        employeeComment: null,
-        employeeFeedbackDate: null,
-        totalWeightedScoreSupervisor,
-      };
+      console.log("[getKpisForReview] No overallReviewRecord found. Current status:", existingOverallReviewData.status);
+      // Ensure the status remains DEPARTMENT_REVIEW_PENDING if applicable
+      if (existingOverallReviewData.status === OverallReviewStatus.DEPARTMENT_REVIEW_PENDING) {
+        existingOverallReviewData.status = OverallReviewStatus.DEPARTMENT_REVIEW_PENDING;
+      }
     }
+
+    console.log("[getKpisForReview] existingOverallReviewData.status:", existingOverallReviewData.status);
 
     return {
       kpisToReview: kpisToReview,
@@ -565,10 +598,15 @@ export class EvaluationService {
             },
           );
 
-          if (reviewRecord) {
-            reviewRecord.managerComment = kpiReviewItem.managerComment ?? null;
-            reviewRecord.managerScore = kpiReviewItem.managerScore ?? null;
-          } else {
+          // Ensure no new reviews are created in KpiReview
+          if (!reviewRecord && reviewData.targetType !== 'employee') {
+            throw new UnauthorizedException(
+              'Creating new KPI reviews is not allowed in KpiReview.'
+            );
+          }
+
+          // Allow creating new reviews only for MyKpiReview (targetType: 'employee')
+          if (!reviewRecord && reviewData.targetType === 'employee') {
             reviewRecord = transactionalEntityManager.create(KpiReview, {
               assignment: { id: kpiReviewItem.assignmentId },
               reviewedBy: { id: currentUser.id },
@@ -577,7 +615,43 @@ export class EvaluationService {
               managerScore: kpiReviewItem.managerScore ?? null,
             });
           }
-          await transactionalEntityManager.save(KpiReview, reviewRecord);
+
+          if (reviewData.targetType === 'section' && currentUser.role?.name === 'section') {
+            if (!reviewRecord) {
+              reviewRecord = transactionalEntityManager.create(KpiReview, {
+                assignment: { id: kpiReviewItem.assignmentId },
+                reviewedBy: { id: currentUser.id },
+                cycleId: reviewData.cycleId,
+                managerComment: kpiReviewItem.managerComment ?? null,
+                managerScore: kpiReviewItem.managerScore ?? null,
+              });
+            } else {
+              reviewRecord.managerComment = kpiReviewItem.managerComment ?? null;
+              reviewRecord.managerScore = kpiReviewItem.managerScore ?? null;
+            }
+          
+            // Update the status to indicate the review is forwarded to the department
+            let overallReviewRecord = await transactionalEntityManager.findOne(OverallReview, {
+              where: {
+                targetId: reviewData.targetId,
+                targetType: 'section',
+                cycleId: reviewData.cycleId,
+              },
+            });
+          
+            if (overallReviewRecord) {
+              overallReviewRecord.status = OverallReviewStatus.DEPARTMENT_REVIEW_PENDING;
+              await transactionalEntityManager.save(OverallReview, overallReviewRecord);
+            }
+          }
+
+          if (reviewRecord) {
+            reviewRecord.managerComment = kpiReviewItem.managerComment ?? null;
+            reviewRecord.managerScore = kpiReviewItem.managerScore ?? null;
+          }
+          if (reviewRecord) {
+            await transactionalEntityManager.save(KpiReview, reviewRecord);
+          }
         }
 
         if (reviewData.overallComment !== undefined) {
@@ -618,40 +692,83 @@ export class EvaluationService {
             },
           );
 
+          // Check if an existing overall review from 'section' can be reused
+          if (!overallReviewRecord && reviewData.targetType === 'department') {
+            overallReviewRecord = await transactionalEntityManager.findOne(
+              OverallReview,
+              {
+                where: {
+                  targetId: reviewData.targetId,
+                  targetType: 'section',
+                  cycleId: reviewData.cycleId,
+                },
+              },
+            );
+
+            if (overallReviewRecord) {
+              console.log("[submitKpiReview] Reusing overall review from section for department.");
+              overallReviewRecord.reviewedById = currentUser.id;
+              overallReviewRecord.targetType = 'department';
+            }
+          }
+
           let newStatus = OverallReviewStatus.PENDING_REVIEW;
           const roleName = typeof currentUser.role === 'string' ? currentUser.role : currentUser.role?.name;
           if (roleName === 'section') {
             newStatus = OverallReviewStatus.DEPARTMENT_REVIEW_PENDING;
           } else if (roleName === 'department') {
-            newStatus = OverallReviewStatus.MANAGER_REVIEW_PENDING;
+            const sectionReviewsExist = await transactionalEntityManager.count(KpiReview, {
+              where: {
+                assignment: { id: reviewData.targetId },
+                cycleId: reviewData.cycleId,
+                reviewedBy: { role: { name: 'section' } },
+              },
+            });
+
+            console.log("[submitKpiReview] Section reviews exist:", sectionReviewsExist);
+
+            if (sectionReviewsExist > 0) {
+              newStatus = OverallReviewStatus.DEPARTMENT_REVIEW_PENDING;
+            } else {
+              newStatus = OverallReviewStatus.MANAGER_REVIEW_PENDING;
+            }
           } else if (roleName === 'manager' || roleName === 'admin') {
             newStatus = OverallReviewStatus.EMPLOYEE_FEEDBACK_PENDING;
           }
 
           if (overallReviewRecord) {
-            overallReviewRecord.overallComment =
-              reviewData.overallComment ?? null;
+            // Ensure DEPARTMENT_REVIEW_PENDING is retained if section reviews exist
+            if (
+              newStatus === OverallReviewStatus.MANAGER_REVIEW_PENDING &&
+              overallReviewRecord.status === OverallReviewStatus.DEPARTMENT_REVIEW_PENDING
+            ) {
+              const sectionReviewsExist = await transactionalEntityManager.count(KpiReview, {
+                where: {
+                  assignment: { id: reviewData.targetId },
+                  cycleId: reviewData.cycleId,
+                },
+              });
+
+              if (sectionReviewsExist > 0) {
+                newStatus = OverallReviewStatus.DEPARTMENT_REVIEW_PENDING;
+              }
+            }
+
+            overallReviewRecord.overallComment = reviewData.overallComment ?? null;
             overallReviewRecord.status = newStatus;
             overallReviewRecord.totalWeightedScore =
-              totalWeightedScore !== null
-                ? totalWeightedScore.toFixed(2)
-                : null;
+              totalWeightedScore !== null ? totalWeightedScore.toFixed(2) : null;
           } else {
-            overallReviewRecord = transactionalEntityManager.create(
-              OverallReview,
-              {
-                targetId: reviewData.targetId,
-                targetType: reviewData.targetType,
-                cycleId: reviewData.cycleId,
-                reviewedById: currentUser.id,
-                overallComment: reviewData.overallComment ?? null,
-                status: newStatus,
-                totalWeightedScore:
-                  totalWeightedScore !== null
-                    ? totalWeightedScore.toFixed(2)
-                    : null,
-              },
-            );
+            overallReviewRecord = transactionalEntityManager.create(OverallReview, {
+              targetId: reviewData.targetId,
+              targetType: reviewData.targetType,
+              cycleId: reviewData.cycleId,
+              reviewedById: currentUser.id,
+              overallComment: reviewData.overallComment ?? null,
+              status: newStatus,
+              totalWeightedScore:
+                totalWeightedScore !== null ? totalWeightedScore.toFixed(2) : null,
+            });
           }
           savedOverallReview = await transactionalEntityManager.save(
             OverallReview,
@@ -848,166 +965,125 @@ export class EvaluationService {
     employee: Employee,
     cycleId: string,
   ): Promise<EmployeeReviewResponseDto> {
-    const overallReviewRecord = await this.findLatestOverallReview(
-      employee.id,
-      'employee',
-      cycleId,
-    );
+    const { startDate, endDate } = this.getDateRangeFromCycleId(cycleId);
+    if (!startDate || !endDate) {
+      throw new BadRequestException('Invalid review cycle for validation.');
+    }
 
-    if (!overallReviewRecord) {
-      const { startDate, endDate } = this.getDateRangeFromCycleId(cycleId);
-      if (!startDate || !endDate) {
-        return {
-          kpisReviewedByManager: [],
-          overallReviewByManager: {
-            overallComment: null,
-            status: OverallReviewStatus.DRAFT,
-            employeeComment: null,
-            employeeFeedbackDate: null,
-            totalWeightedScoreSupervisor: 0,
-          },
-          totalWeightedScoreSupervisor: 0,
-        };
-      }
-      const assignments = await this.assignmentRepository.find({
-        where: {
-          assigned_to_employee: employee.id,
-          startDate: LessThanOrEqual(endDate as Date),
-          endDate: MoreThanOrEqual(startDate as Date),
-        },
-        relations: ['kpi', 'kpiValues', 'reviews', 'reviews.reviewedBy'],
-      });
-      const kpisReviewedByManager = (assignments || [])
-        .filter((assignment) => assignment.kpi)
-        .map((assignment) => {
-          const selfReview = assignment.reviews?.find(
-            (r) => r.reviewedBy?.id === employee.id && r.cycleId === cycleId,
-          );
-          let actualValue: number | null = null;
-          if (assignment.kpiValues && assignment.kpiValues.length > 0) {
-            const approvedInCycle = assignment.kpiValues.filter(
-              (kv) =>
-                kv.status === KpiValueStatus.APPROVED &&
-                kv.timestamp >= startDate &&
-                kv.timestamp <= endDate,
-            );
-            let filteredKpiValues =
-              approvedInCycle.length > 0
-                ? approvedInCycle
-                : assignment.kpiValues.filter(
-                    (kv) => kv.status === KpiValueStatus.APPROVED,
-                  );
-            if (filteredKpiValues.length > 0) {
-              const latest = filteredKpiValues.sort(
-                (a, b) => b.timestamp.getTime() - a.timestamp.getTime(),
-              )[0];
-              actualValue = latest ? latest.value : null;
-            }
+    const assignments = await this.assignmentRepository.find({
+      where: {
+        assigned_to_employee: employee.id,
+        startDate: LessThanOrEqual(endDate),
+        endDate: MoreThanOrEqual(startDate),
+      },
+      relations: [
+        'kpi',
+        'kpiValues',
+        'reviews',
+        'reviews.reviewedBy',
+        'reviews.reviewedBy.role', // Ensure the role relation is loaded
+      ],
+    });
+
+    const kpisReviewedByManager = assignments
+      .filter((assignment) => assignment.kpi)
+      .map((assignment) => {
+        const approvedKpiValues = assignment.kpiValues.filter(
+          (kv) => kv.status === KpiValueStatus.APPROVED
+        );
+
+        const latestApprovedValue = approvedKpiValues.sort(
+          (a, b) => b.timestamp.getTime() - a.timestamp.getTime(),
+        )[0];
+
+        // Log toàn bộ dữ liệu của assignment.reviews trước khi lọc
+        console.log('All Reviews for Assignment:', assignment.reviews);
+
+        // Cập nhật logic xác định Manager Review
+        const managerReview = assignment.reviews.find((review) => {
+          const hasPermission = this.hasPermissionToReview(review.reviewedBy, employee);
+          const hasValidComment = review.managerComment !== null && review.managerComment !== undefined;
+          const hasValidScore = review.managerScore !== null && review.managerScore !== undefined;
+
+          if (!hasPermission) {
+            console.warn(`Reviewer ${review.reviewedBy.id} does not have permission to review employee ${employee.id}`);
           }
-          return {
-            assignmentId: assignment.id,
-            kpiId: assignment.kpi.id,
-            kpiName: assignment.kpi.name,
-            kpiDescription: assignment.kpi.description,
-            targetValue: assignment.targetValue,
-            actualValue: actualValue,
-            unit: assignment.kpi.unit,
-            status: assignment.status,
-            weight: assignment.weight,
-            selfScore: selfReview?.selfScore ?? null,
-            selfComment: selfReview?.selfComment ?? null,
-            existingManagerComment: null,
-            existingManagerScore: null,
-          };
+
+          return hasPermission && hasValidComment && hasValidScore;
         });
-      return {
-        kpisReviewedByManager,
-        overallReviewByManager: {
-          overallComment: null,
-          status: OverallReviewStatus.DRAFT,
-          employeeComment: null,
-          employeeFeedbackDate: null,
-          totalWeightedScoreSupervisor: 0,
-        },
-        totalWeightedScoreSupervisor: 0,
-      };
-    }
 
-    let managerWhoReviewed: Employee | null = null;
-    if (overallReviewRecord.reviewedById) {
-      managerWhoReviewed = await this.employeeRepository.findOne({ where: { id: overallReviewRecord.reviewedById } });
-    }
-    const reviewDataFromManagerPerspective = await this.getKpisForReview(
-      managerWhoReviewed || employee,
-      employee.id,
-      'employee',
-      cycleId,
-    );
-
-    let totalWeightedScoreSupervisor = 0;
-    if (
-      reviewDataFromManagerPerspective.kpisToReview &&
-      Array.isArray(reviewDataFromManagerPerspective.kpisToReview)
-    ) {
-      for (const kpi of reviewDataFromManagerPerspective.kpisToReview) {
-        const score = Number(kpi.existingManagerScore);
-        const weight =
-          kpi.weight !== null && kpi.weight !== undefined
-            ? Number(kpi.weight)
-            : 1;
-        if (
-          !isNaN(score) &&
-          !isNaN(weight) &&
-          kpi.existingManagerScore !== null &&
-          kpi.existingManagerScore !== undefined
-        ) {
-          totalWeightedScoreSupervisor += score * weight;
+        if (!managerReview) {
+          console.warn(
+            `No valid manager review found for assignmentId: ${assignment.id}, employeeId: ${employee.id}`
+          );
+        } else {
+          console.log(
+            `Manager Review Found: Comment - ${managerReview.managerComment}, Score - ${managerReview.managerScore}`
+          );
         }
-      }
-    }
 
-    const kpisReviewedByManager = await Promise.all(
-      reviewDataFromManagerPerspective.kpisToReview.map(async (kpi) => {
-        let selfScore: number | null = null;
-        let selfComment: string | null = null;
-        if (kpi.assignmentId) {
-          const assignment = await this.assignmentRepository.findOne({
-            where: { id: kpi.assignmentId },
-            relations: ['reviews', 'reviews.reviewedBy'],
-          });
-          if (assignment && assignment.reviews) {
-            const selfReview = assignment.reviews.find(
-              (r) =>
-                r.reviewedBy?.id === employee.id && r.cycleId === cycleId,
-            );
-            if (selfReview) {
-              if (selfScore === null)
-                selfScore = selfReview.selfScore !== undefined ? selfReview.selfScore : null;
-              if (selfComment === null)
-                selfComment = selfReview.selfComment !== undefined ? selfReview.selfComment : null;
-            }
-          }
-        }
+        // Log dữ liệu của selfReview
+        const selfReview = assignment.reviews.find(
+          (review) => review.reviewedBy.id === employee.id
+        );
+        console.log('Self Review Found:', selfReview);
+
         return {
-          ...kpi,
-          selfScore,
-          selfComment,
+          assignmentId: assignment.id,
+          kpiId: assignment.kpi.id,
+          kpiName: assignment.kpi.name,
+          kpiDescription: assignment.kpi.description,
+          targetValue: assignment.targetValue,
+          actualValue: latestApprovedValue ? latestApprovedValue.value : null,
+          unit: assignment.kpi.unit,
+          weight: assignment.weight,
+          existingManagerComment: managerReview?.managerComment || null,
+          existingManagerScore: managerReview?.managerScore || null,
+          selfScore: selfReview?.selfScore || null,
+          selfComment: selfReview?.selfComment || null,
         };
-      }),
-    );
+      })
+      .filter((kpi) => kpi.actualValue !== null);
 
-    const response: EmployeeReviewResponseDto = {
+    const overallReview = await this.overallReviewRepository.findOne({
+      where: {
+        targetId: employee.id,
+        targetType: 'employee',
+        cycleId,
+      },
+    });
+
+    return {
       kpisReviewedByManager,
       overallReviewByManager: {
-        overallComment: overallReviewRecord.overallComment,
-        status: overallReviewRecord.status,
-        employeeComment: overallReviewRecord.employeeComment,
-        employeeFeedbackDate: overallReviewRecord.employeeFeedbackDate,
-        totalWeightedScoreSupervisor,
+        overallComment: overallReview?.overallComment || null,
+        status: overallReview?.status || OverallReviewStatus.DRAFT,
+        employeeComment: overallReview?.employeeComment || null,
+        employeeFeedbackDate: overallReview?.employeeFeedbackDate || null,
+        totalWeightedScoreSupervisor: overallReview?.totalWeightedScore ? parseFloat(overallReview.totalWeightedScore) : 0,
       },
-      totalWeightedScoreSupervisor,
     };
-    return response;
+  }
+
+  private hasPermissionToReview(reviewer: Employee, employee: Employee): boolean {
+    // Ensure the role is loaded
+    if (!reviewer.role) {
+      console.warn(`Reviewer ${reviewer.id} does not have a role loaded.`);
+      return false;
+    }
+
+    // Check if the reviewer has permission to view KPI reviews
+    const hasPermission = RBAC_PERMISSION_PAIRS.some(
+      (pair) =>
+        pair.action === RBAC_ACTIONS.VIEW &&
+        pair.resource === RBAC_RESOURCES.KPI_REVIEW &&
+        reviewer.role.name === pair.resource
+    );
+
+    // Allow self-review for admin and manager roles
+    const isSelfReview = reviewer.id === employee.id && [ROLES.ADMIN, ROLES.MANAGER].includes(reviewer.role.name);
+
+    return hasPermission || isSelfReview;
   }
 
   async submitEmployeeFeedback(

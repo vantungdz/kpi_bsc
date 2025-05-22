@@ -39,7 +39,7 @@
               <a-select
                 v-model:value="selectedCycle"
                 :placeholder="$t('selectCyclePlaceholder')"
-                @change="fetchKpisForReview"
+                @change="fetchKpisForReview" :disabled="currentUser.role?.name === 'employee'"
                 :loading="isLoadingCycles"
               >
                 <a-select-option
@@ -303,8 +303,8 @@
                     (overallReview.status === 'MANAGER_REVIEWED' ||
                       overallReview.status === 'EMPLOYEE_FEEDBACK_PENDING' ||
                       overallReview.status === 'EMPLOYEE_RESPONDED') &&
-                    (currentUser.role === 'manager' ||
-                      currentUser.role === 'admin')
+                    (currentUser.role.name === 'manager' ||
+                      currentUser.role.name === 'admin')
                   "
                   type="primary"
                   danger
@@ -445,7 +445,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from "vue";
+import { ref, computed, onMounted, watch, watchEffect } from "vue";
 import { useStore } from "vuex";
 import { useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
@@ -500,24 +500,48 @@ const isLoadingTargets = computed(
 
 const currentUser = computed(() => store.getters["auth/user"]);
 
-const filteredReviewTargets = computed(() => {
-  if (!reviewTargets.value || !Array.isArray(reviewTargets.value)) return [];
+const filteredReviewTargets = ref([]);
+
+watchEffect(async () => {
+  console.log("Original reviewTargets:", reviewTargets.value);
+
+  if (!reviewTargets.value || !Array.isArray(reviewTargets.value)) {
+    filteredReviewTargets.value = [];
+    return;
+  }
+
   const user = currentUser.value;
-  if (!user) return reviewTargets.value;
-  // Chuẩn hóa: kiểm tra role entity
+  if (!user) {
+    filteredReviewTargets.value = [];
+    return;
+  }
+
   const roleName = user.role?.name;
-  if (roleName === "admin") return reviewTargets.value;
-  if (roleName === "manager" || roleName === "department") {
-    return reviewTargets.value.filter(
-      (t) => t.type === "employee" || t.type === "section"
+  console.log("User role:", roleName);
+  console.log("User sectionId:", user.sectionId);
+  console.log("User departmentId:", user.departmentId);
+
+  let targets = [];
+
+  try {
+    if (roleName === "section") {
+      // Fetch employees by section
+      targets = await store.dispatch("employees/fetchUsersBySection", user.sectionId);
+    } else if (roleName === "department") {
+      // Fetch employees by department
+      targets = await store.dispatch("employees/fetchUsersByDepartment", user.departmentId);
+    }
+
+    // Filter only employees from reviewTargets
+    filteredReviewTargets.value = reviewTargets.value.filter(
+      (t) => t.type === "employee" && targets.some((e) => e.id === t.id)
     );
+
+    console.log("Filtered reviewTargets:", filteredReviewTargets.value);
+  } catch (error) {
+    console.error("Error fetching filtered targets:", error);
+    filteredReviewTargets.value = [];
   }
-  if (roleName === "section") {
-    return reviewTargets.value.filter(
-      (t) => t.type === "employee" || t.type === "section"
-    );
-  }
-  return reviewTargets.value;
 });
 
 const selectedCycle = ref(null);
@@ -589,6 +613,8 @@ watch(
           kpi.existingManagerScore === undefined
             ? null
             : kpi.existingManagerScore,
+        sectionComment: kpi.sectionComment || "",
+        sectionScore: kpi.sectionScore || null,
       }));
     } else {
       kpisToReview.value = [];
@@ -601,30 +627,20 @@ watch(
   existingOverallReviewFromStore,
   (newOverallReview) => {
     if (newOverallReview) {
-      overallReview.value.managerComment =
-        newOverallReview.overallComment || "";
-      overallReview.value.managerScore =
-        newOverallReview.overallScore === undefined
-          ? null
-          : newOverallReview.overallScore;
       overallReview.value.status = newOverallReview.status || null;
-      overallReview.value.employeeComment =
-        newOverallReview.employeeComment || null;
-      overallReview.value.employeeFeedbackDate =
-        newOverallReview.employeeFeedbackDate || null;
-      // Gán thêm trường tổng weighted score supervisor nếu có
-      overallReview.value.totalWeightedScoreSupervisor =
-        newOverallReview.totalWeightedScoreSupervisor ?? null;
+      overallReview.value.managerComment = newOverallReview.overallComment || "";
+      overallReview.value.managerScore = newOverallReview.overallScore || null;
+      overallReview.value.employeeComment = newOverallReview.employeeComment || null;
+      overallReview.value.employeeFeedbackDate = newOverallReview.employeeFeedbackDate || null;
     } else {
+      overallReview.value.status = null;
       overallReview.value.managerComment = "";
       overallReview.value.managerScore = null;
-      overallReview.value.status = null;
       overallReview.value.employeeComment = null;
       overallReview.value.employeeFeedbackDate = null;
-      overallReview.value.totalWeightedScoreSupervisor = null;
     }
   },
-  { deep: true, immediate: true }
+  { immediate: true, deep: true }
 );
 
 const pageTitle = computed(() => {
@@ -1056,6 +1072,17 @@ const canEditManagerReview = computed(() => {
     "DEPARTMENT_REVIEW_PENDING",
     "MANAGER_REVIEW_PENDING",
   ].includes(status);
+});
+
+console.log('Button visibility check:', {
+  status: overallReview.value.status,
+  role: currentUser.value.role,
+  isVisible:
+    (overallReview.value.status === 'MANAGER_REVIEWED' ||
+      overallReview.value.status === 'EMPLOYEE_FEEDBACK_PENDING' ||
+      overallReview.value.status === 'EMPLOYEE_RESPONDED') &&
+    (currentUser.value.role === 'manager' ||
+      currentUser.value.role === 'admin'),
 });
 
 onMounted(() => {

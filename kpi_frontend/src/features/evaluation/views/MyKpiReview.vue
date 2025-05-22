@@ -59,15 +59,13 @@
 
         <div
           v-if="
-            reviewDetails &&
-            reviewDetails.kpisReviewedByManager &&
-            reviewDetails.kpisReviewedByManager.length > 0
+            filteredKpisReviewedByManager.length > 0
           "
         >
-          <template v-if="canEditSelfReview && canEditMyKpiReview">
+          <template v-if="canEditSelfReview">
             <h3>{{ $t("detailedKpiReview") }}</h3>
             <div
-              v-for="(kpiItem, index) in reviewDetails.kpisReviewedByManager"
+              v-for="(kpiItem, index) in filteredKpisReviewedByManager"
               :key="kpiItem.assignmentId"
               class="kpi-review-item-employee"
             >
@@ -138,8 +136,7 @@
             <div
               style="text-align: right; margin-bottom: 16px"
               v-if="
-                reviewDetails.kpisReviewedByManager &&
-                reviewDetails.kpisReviewedByManager.length > 0
+                filteredKpisReviewedByManager.length > 0
               "
             >
               <strong>{{ $t("totalWeightedScoreSupervisor") }}:</strong>
@@ -152,7 +149,7 @@
                 type="primary"
                 @click="submitSelfReview"
                 :loading="isSubmittingSelfReview"
-                :disabled="isSubmittingSelfReview || !canEditSelfReview || !canEditMyKpiReview"
+                :disabled="isSubmittingSelfReview || !canEditSelfReview"
               >
                 {{ $t("submitSelfReview") }}
               </a-button>
@@ -177,16 +174,6 @@
                   reviewDetails.overallReviewByManager.overallComment ||
                   $t("noComment")
                 }}
-              </a-descriptions-item>
-              <a-descriptions-item :label="$t('overallScore')">
-                <a-rate
-                  :value="reviewDetails.overallReviewByManager.overallScore"
-                  disabled
-                  v-if="
-                    reviewDetails.overallReviewByManager.overallScore !== null
-                  "
-                />
-                <span v-else>{{ $t("noScore") }}</span>
               </a-descriptions-item>
             </a-descriptions>
             <h3>{{ $t("detailedKpiReview") }}</h3>
@@ -557,7 +544,6 @@ function hasPermission(action, resource) {
   );
 }
 const canViewMyKpiReview = computed(() => hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.MY_KPI_REVIEW));
-const canEditMyKpiReview = computed(() => hasPermission(RBAC_ACTIONS.EDIT, RBAC_RESOURCES.MY_KPI_REVIEW));
 
 const submitSelfReview = async () => {
   if (!reviewDetails.value || !reviewDetails.value.kpisReviewedByManager)
@@ -591,6 +577,14 @@ const submitSelfReview = async () => {
     // Đảm bảo fetch lại reviewDetails và sync lại selfKpiReviews
     isSyncingSelfKpiReviews.value = true;
     await fetchMyReview();
+    // Đồng bộ lại selfKpiReviews sau khi fetch dữ liệu mới
+    if (reviewDetails.value && reviewDetails.value.kpisReviewedByManager) {
+      selfKpiReviews.value = reviewDetails.value.kpisReviewedByManager.map((kpi) => ({
+        assignmentId: kpi.assignmentId,
+        selfScore: kpi.selfScore ?? null,
+        selfComment: kpi.selfComment ?? "",
+      }));
+    }
     isSyncingSelfKpiReviews.value = false;
   } catch (error) {
     notification.error({
@@ -648,6 +642,15 @@ const clearMyReviewError = () => {
 const clearSubmitFeedbackError = () => {
   submitFeedbackError.value = null;
 };
+
+const filteredKpisReviewedByManager = computed(() => {
+  if (!reviewDetails.value || !reviewDetails.value.kpisReviewedByManager) {
+    return [];
+  }
+  return reviewDetails.value.kpisReviewedByManager.filter(
+    (kpi) => kpi.actualValue !== null
+  );
+});
 
 watch(selectedCycle, (val) => {
   if (!val) {

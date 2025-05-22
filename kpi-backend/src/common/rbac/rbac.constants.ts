@@ -36,6 +36,14 @@ export const RBAC_RESOURCES = {
   ADMIN: 'admin',
 };
 
+export const ROLES = {
+  ADMIN: 'admin',
+  MANAGER: 'manager',
+  DEPARTMENT: 'department',
+  SECTION: 'section',
+  EMPLOYEE: 'employee',
+};
+
 // Danh sách đầy đủ các cặp action/resource sử dụng trong hệ thống FE
 export const RBAC_PERMISSION_PAIRS = [
   // KPI chung
@@ -90,8 +98,14 @@ export const RBAC_PERMISSION_PAIRS = [
   // Objective Approval / Performance Objective Approval
   { action: RBAC_ACTIONS.VIEW, resource: RBAC_RESOURCES.OBJECTIVE_APPROVAL },
   { action: RBAC_ACTIONS.EDIT, resource: RBAC_RESOURCES.OBJECTIVE_APPROVAL },
-  { action: RBAC_ACTIONS.VIEW, resource: RBAC_RESOURCES.PERFORMANCE_OBJECTIVE_APPROVAL },
-  { action: RBAC_ACTIONS.EDIT, resource: RBAC_RESOURCES.PERFORMANCE_OBJECTIVE_APPROVAL },
+  {
+    action: RBAC_ACTIONS.VIEW,
+    resource: RBAC_RESOURCES.PERFORMANCE_OBJECTIVE_APPROVAL,
+  },
+  {
+    action: RBAC_ACTIONS.EDIT,
+    resource: RBAC_RESOURCES.PERFORMANCE_OBJECTIVE_APPROVAL,
+  },
 
   // Dashboard
   { action: RBAC_ACTIONS.VIEW, resource: RBAC_RESOURCES.DASHBOARD },
