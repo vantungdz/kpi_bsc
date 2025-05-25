@@ -3,27 +3,27 @@ import kpis from "../../features/kpi/store/kpis";
 import departments from "../../features/organization/store/departments";
 import perspectives from "../../features/kpi/store/perspectives";
 import employees from "../../features/employees/store/employees";
-import kpiEvaluations from "../../features/evaluation/store/kpiEvaluations";
 import kpiValues from "../../features/kpi/store/kpiValues";
 import sections from "../../features/organization/store/sections";
 import auth from "../../features/auth/store/auth";
 import notifications from "../../features/notifications/store/notifications";
-import dashboard from "../../features/dashboard/store/dashboard"; 
+import dashboard from "../../features/dashboard/store/dashboard";
 import reports from "../../features/reports/store/report";
+import myKpiReviews from "@/features/evaluation/store/myKpiReviews";
 
 const store = createStore({
   modules: {
     auth,
-    dashboard, 
+    dashboard,
     notifications,
     kpis,
     departments,
     sections,
     perspectives,
     employees,
-    kpiEvaluations,
     kpiValues,
     reports, // <-- Thêm module reports
+    myKpiReviews,
   },
 });
 

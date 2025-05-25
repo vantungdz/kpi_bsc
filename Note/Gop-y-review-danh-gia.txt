@@ -32,7 +32,7 @@ Thông tin chung về KPI:
 Tên KPI.
 Mô tả KPI.
 Người/Bộ phận được giao.
-Chu kỳ đánh giá (ví dụ: Tháng 5/2025, Quý 2/2025).
+Chu kỳ đánh giá (2025, 2024, 2023).
 Mục tiêu (Target):
 Giá trị mục tiêu đã đặt ra.
 Đơn vị tính.
@@ -49,7 +49,7 @@ Kế hoạch hành động (Action Plan - tùy chọn): Những bước cụ th�
 Phần phản hồi của Nhân viên (tùy chọn, có thể là một bước sau):
 Sau khi quản lý review, nhân viên có thể có cơ hội xem và đưa ra phản hồi/ý kiến của mình về đánh giá đó.
 Trạng thái Review:
-Ví dụ: "Chưa Review", "Đã Review", "Đã Thảo luận với Nhân viên", "Hoàn tất".
+    tuân theo workflow , employee -> section -> department -> manager
 Chức năng cần có:
 
 Tải danh sách KPI cần review:

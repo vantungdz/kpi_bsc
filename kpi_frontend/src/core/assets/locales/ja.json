@@ -653,5 +653,6 @@
     "assign": "割り当て",
     "other": "その他"
   },
-  "cannotDisableAdminManager": "管理者またはマネージャーの役割を無効にすることはできません。"
+  "cannotDisableAdminManager": "管理者またはマネージャーの役割を無効にすることはできません。",
+  "reviewCycleManagement": "レビューサイクル管理"
 }

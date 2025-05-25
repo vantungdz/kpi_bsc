@@ -125,7 +125,10 @@
       <a-row :gutter="12">
         <a-col :span="6">
           <a-form-item :label="$t('dateStart')" name="start_date">
-            <a-date-picker v-model:value="form.start_date" style="width: 100%" />
+            <a-date-picker
+              v-model:value="form.start_date"
+              style="width: 100%"
+            />
           </a-form-item>
         </a-col>
         <a-col :span="6">
@@ -166,8 +169,12 @@
       type="error"
       show-icon
     />
-    <a-button type="default" style="margin-top: 15px" @click="$router.push('/personal')">
-      {{ $t('back') }}
+    <a-button
+      type="default"
+      style="margin-top: 15px"
+      @click="$router.push('/personal')"
+    >
+      {{ $t("back") }}
     </a-button>
   </div>
 </template>
@@ -179,18 +186,25 @@ import { useStore } from "vuex";
 import { notification } from "ant-design-vue";
 import dayjs from "dayjs";
 import { KpiUnits } from "@/core/constants/kpiConstants.js";
-import { RBAC_ACTIONS, RBAC_RESOURCES } from "@/core/constants/rbac.constants.js";
+import {
+  RBAC_ACTIONS,
+  RBAC_RESOURCES,
+} from "@/core/constants/rbac.constants.js";
 
 const router = useRouter();
 const store = useStore();
 const loading = ref(false);
 const formRef = ref(null);
 
-const userPermissions = computed(() => store.getters["auth/user"]?.permissions || []);
+const userPermissions = computed(
+  () => store.getters["auth/user"]?.permissions || []
+);
 const canAccessCreatePage = computed(() =>
-  userPermissions.value.some(p =>
-    p.action?.trim() === RBAC_ACTIONS.CREATE &&
-    (p.resource?.trim() === RBAC_RESOURCES.KPI_PERSONAL || p.resource?.trim() === RBAC_RESOURCES.KPI)
+  userPermissions.value.some(
+    (p) =>
+      p.action?.trim() === RBAC_ACTIONS.CREATE &&
+      (p.resource?.trim() === RBAC_RESOURCES.KPI_PERSONAL ||
+        p.resource?.trim() === RBAC_RESOURCES.KPI)
   )
 );
 
@@ -226,6 +240,15 @@ const handleNumericInput = (field, event) => {
   form.value[field] = formatted;
 };
 
+const parseNumber = (value) => {
+  if (typeof value === "number") return value;
+  if (!value || value === "") return 0;
+  // Loại bỏ dấu phẩy, khoảng trắng, ký tự không phải số hoặc dấu chấm
+  const cleaned = String(value).replace(/[^\d.]/g, "");
+  const num = Number(cleaned);
+  return isNaN(num) ? 0 : num;
+};
+
 const validateWeight = async (_rule, value) => {
   if (value === null || value === "") return Promise.resolve();
   const numValue = parseFloat(value);
@@ -245,12 +268,15 @@ const handleChangeCreate = async () => {
   try {
     await formRef.value?.validate();
 
+    const targetValue = parseNumber(form.value.target);
+    const weightValue = parseNumber(form.value.weight);
+
     const payload = {
       name: form.value.name,
       type: form.value.type,
       unit: form.value.unit,
-      target: Number(form.value.target),
-      weight: Number(form.value.weight),
+      target: targetValue,
+      weight: weightValue,
       frequency: form.value.frequency,
       perspective_id: form.value.perspective_id,
       start_date: formatToDateString(form.value.start_date),
@@ -259,8 +285,8 @@ const handleChangeCreate = async () => {
       assignments: {
         from: "employee",
         assigned_to_employee: store.getters["auth/user"]?.id || null,
-        target: Number(form.value.target),
-        weight: Number(form.value.weight),
+        target: targetValue,
+        weight: weightValue,
       },
     };
 
@@ -277,8 +303,8 @@ const handleChangeCreate = async () => {
     payload.assignments = {
       from: "employee",
       assigned_to_employee: currentUserId,
-      target: Number(form.value.target),
-      weight: Number(form.value.weight),
+      target: targetValue,
+      weight: weightValue,
     };
 
     console.log("Submitting Personal KPI Data:", payload);

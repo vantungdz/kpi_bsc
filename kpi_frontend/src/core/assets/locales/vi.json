@@ -650,5 +650,6 @@
   "manager": "Quản lý",
   "department_head": "Trưởng phòng",
   "section_head": "Trưởng bộ phận",
-  "cannotDisableAdminManager": "Không thể tắt quyền quản trị viên cho người dùng này."
+  "cannotDisableAdminManager": "Không thể tắt quyền quản trị viên cho người dùng này.",
+  "reviewCycleManagement": "Quản lý chu kỳ đánh giá KPI"
 }

@@ -1,7 +1,6 @@
 import { createRouter, createWebHistory } from "vue-router";
 import store from "../store";
 import { RBAC_ACTIONS, RBAC_RESOURCES } from "@/core/constants/rbac.constants";
-import PerformanceObjectives from "../../features/evaluation/views/PerformanceObjectives.vue";
 import KpiListCompany from "../../features/kpi/views/KpiListCompany.vue";
 import KpiListDepartment from "../../features/kpi/views/KpiListDepartment.vue";
 import KpiListSection from "../../features/kpi/views/KpiListSection.vue";
@@ -21,15 +20,12 @@ import DashBoard from "../../features/dashboard/DashBoard.vue";
 import KpiProcessStatistics from "../../features/dashboard/views/KpiProcessStatistics.vue";
 import UserActivityStatistics from "../../features/dashboard/views/UserActivityStatistics.vue";
 import KpiInventoryStatistics from "@/features/dashboard/views/KpiInventoryStatistics.vue";
-import KpiReview from "../../features/evaluation/views/KpiReview.vue";
-import ReviewHistoryPage from "../../features/evaluation/views/ReviewHistoryPage.vue";
-import MyKpiReview from "../../features/evaluation/views/MyKpiReview.vue";
-import EmployeeKpiScoreList from "../../features/evaluation/views/EmployeeKpiScoreList.vue";
-import HomePage from "../../features/home/HomePage.vue";
 import ReportGenerator from "@/features/reports/views/ReportGenerator.vue";
-import PerformanceObjectiveApprovalList from "@/features/evaluation/views/PerformanceObjectiveApprovalList.vue";
 import KpiInactiveList from "../../features/kpi/components/KpiInactiveList.vue";
 import RolePermissionManager from "@/features/employees/components/RolePermissionManager.vue";
+import HomePage from "../../features/home/HomePage.vue";
+import MyKpiSelfReview from "../../features/evaluation/views/MyKpiSelfReview.vue";
+import ReviewCycleCreate from "../../features/evaluation/views/ReviewCycleCreate.vue";
 
 const routes = [
   {
@@ -38,34 +34,12 @@ const routes = [
     component: ReportGenerator,
     meta: {
       requiresAuth: true,
-      permissions: [{ action: RBAC_ACTIONS.VIEW, resource: RBAC_RESOURCES.REPORT_GENERATOR }],
-    },
-  },
-  {
-    path: "/kpi/review",
-    name: "KpiReview",
-    component: KpiReview,
-    meta: {
-      requiresAuth: true,
-      permissions: [{ action: RBAC_ACTIONS.VIEW, resource: RBAC_RESOURCES.KPI_REVIEW }],
-    },
-  },
-  {
-    path: "/review-history/:targetType/:targetId",
-    name: "ReviewHistory",
-    component: ReviewHistoryPage,
-    props: true,
-    meta: {
-      requiresAuth: true,
-    },
-  },
-  {
-    path: "/my-kpi-review",
-    name: "MyKpiReview",
-    component: MyKpiReview,
-    meta: {
-      requiresAuth: true,
-      permissions: [{ action: RBAC_ACTIONS.VIEW, resource: RBAC_RESOURCES.MY_KPI_REVIEW }],
+      permissions: [
+        {
+          action: RBAC_ACTIONS.VIEW,
+          resource: RBAC_RESOURCES.REPORT_GENERATOR,
+        },
+      ],
     },
   },
   {
@@ -80,7 +54,9 @@ const routes = [
     component: DashBoard,
     meta: {
       requiresAuth: true,
-      permissions: [{ action: RBAC_ACTIONS.VIEW, resource: RBAC_RESOURCES.DASHBOARD }],
+      permissions: [
+        { action: RBAC_ACTIONS.VIEW, resource: RBAC_RESOURCES.DASHBOARD },
+      ],
     },
   },
   {
@@ -120,14 +96,6 @@ const routes = [
     meta: { requiresAuth: false },
   },
   {
-    path: "/performance",
-    name: "PerformanceObjectives",
-    component: PerformanceObjectives,
-    meta: {
-      requiresAuth: true,
-    },
-  },
-  {
     path: "/kpis",
     name: "Kpis",
     meta: { requiresAuth: true },
@@ -138,7 +106,9 @@ const routes = [
         component: KpiListCompany,
         meta: {
           requiresAuth: true,
-          permissions: [{ action: RBAC_ACTIONS.VIEW, resource: RBAC_RESOURCES.KPI_COMPANY }],
+          permissions: [
+            { action: RBAC_ACTIONS.VIEW, resource: RBAC_RESOURCES.KPI_COMPANY },
+          ],
         },
       },
       {
@@ -147,7 +117,12 @@ const routes = [
         component: KpiListDepartment,
         meta: {
           requiresAuth: true,
-          permissions: [{ action: RBAC_ACTIONS.VIEW, resource: RBAC_RESOURCES.KPI_DEPARTMENT }],
+          permissions: [
+            {
+              action: RBAC_ACTIONS.VIEW,
+              resource: RBAC_RESOURCES.KPI_DEPARTMENT,
+            },
+          ],
         },
       },
       {
@@ -163,7 +138,9 @@ const routes = [
         component: KpiListSection,
         meta: {
           requiresAuth: true,
-          permissions: [{ action: RBAC_ACTIONS.VIEW, resource: RBAC_RESOURCES.KPI_SECTION }],
+          permissions: [
+            { action: RBAC_ACTIONS.VIEW, resource: RBAC_RESOURCES.KPI_SECTION },
+          ],
         },
       },
       {
@@ -195,16 +172,9 @@ const routes = [
     component: KpiValueApprovalList,
     meta: {
       requiresAuth: true,
-      permissions: [{ action: RBAC_ACTIONS.VIEW, resource: RBAC_RESOURCES.APPROVAL }],
-    },
-  },
-  {
-    path: "/performance-objective-approvals",
-    name: "PerformanceObjectiveApprovalList",
-    component: PerformanceObjectiveApprovalList,
-    meta: {
-      requiresAuth: true,
-      permissions: [{ action: RBAC_ACTIONS.VIEW, resource: RBAC_RESOURCES.PERFORMANCE_OBJECTIVE_APPROVAL }],
+      permissions: [
+        { action: RBAC_ACTIONS.VIEW, resource: RBAC_RESOURCES.APPROVAL },
+      ],
     },
   },
   {
@@ -219,7 +189,9 @@ const routes = [
     component: KpiPersonal,
     meta: {
       requiresAuth: true,
-      permissions: [{ action: RBAC_ACTIONS.VIEW, resource: RBAC_RESOURCES.KPI_PERSONAL }],
+      permissions: [
+        { action: RBAC_ACTIONS.VIEW, resource: RBAC_RESOURCES.KPI_PERSONAL },
+      ],
     },
   },
   {
@@ -228,16 +200,9 @@ const routes = [
     component: EmployeeList,
     meta: {
       requiresAuth: true,
-      permissions: [{ action: RBAC_ACTIONS.VIEW, resource: RBAC_RESOURCES.EMPLOYEE }],
-    },
-  },
-  {
-    path: "/employee-kpi-scores",
-    name: "EmployeeKpiScoreList",
-    component: EmployeeKpiScoreList,
-    meta: {
-      requiresAuth: true,
-      permissions: [{ action: RBAC_ACTIONS.VIEW, resource: RBAC_RESOURCES.EMPLOYEE_KPI_SCORES }],
+      permissions: [
+        { action: RBAC_ACTIONS.VIEW, resource: RBAC_RESOURCES.EMPLOYEE },
+      ],
     },
   },
   {
@@ -259,6 +224,29 @@ const routes = [
     name: "RolePermissionManager",
     component: RolePermissionManager,
     meta: { requiresAuth: true },
+  },
+  {
+    path: "/my-kpi-self-review",
+    name: "MyKpiSelfReview",
+    component: MyKpiSelfReview,
+    meta: { requiresAuth: true },
+  },
+  {
+    path: "/review-cycle/create",
+    name: "ReviewCycleCreate",
+    component: ReviewCycleCreate,
+    meta: { requiresAuth: true },
+  },
+  {
+    path: "/kpi-review",
+    name: "KpiReviewList",
+    component: () => import("@/features/evaluation/views/KpiReviewList.vue"),
+    meta: {
+      requiresAuth: true,
+      permissions: [
+        { action: RBAC_ACTIONS.VIEW, resource: RBAC_RESOURCES.KPI_REVIEW },
+      ],
+    },
   },
 ];
 
@@ -288,7 +276,11 @@ router.beforeEach((to, from, next) => {
     // Kiểm tra permission động nếu có
     const userPermissions = store.getters["auth/user"]?.permissions || [];
     const requiredPermissions = to.meta.permissions;
-    if (requiredPermissions && Array.isArray(requiredPermissions) && requiredPermissions.length > 0) {
+    if (
+      requiredPermissions &&
+      Array.isArray(requiredPermissions) &&
+      requiredPermissions.length > 0
+    ) {
       const ok = requiredPermissions.every((perm) =>
         hasPermission(userPermissions, perm.action, perm.resource)
       );

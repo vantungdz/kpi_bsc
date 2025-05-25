@@ -28,7 +28,7 @@ export class OverallReview {
   cycleId: string; // Chu kỳ review (quý/năm...)
 
   @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
-  overallScore: number;
+  overallScore: number | null;
 
   @Column({ type: 'text', nullable: true })
   overallComment: string;
@@ -47,7 +47,7 @@ export class OverallReview {
   employeeFeedbackDate: Date;
 
   @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
-  totalWeightedScore: number;
+  totalWeightedScore: number | null;
 
   @CreateDateColumn()
   createdAt: Date;

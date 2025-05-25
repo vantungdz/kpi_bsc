@@ -653,5 +653,6 @@
   "manager": "Manager",
   "department_head": "Department Head",
   "section_head": "Section Head",
-  "cannotDisableAdminManage": "You cannot disable 'Manage admin' permission for the Administrator role."
+  "cannotDisableAdminManage": "You cannot disable 'Manage admin' permission for the Administrator role.",
+  "reviewCycleManagement": "Review Cycle Management"
 }
