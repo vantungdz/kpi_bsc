@@ -203,8 +203,7 @@ const canAccessCreatePage = computed(() =>
   userPermissions.value.some(
     (p) =>
       p.action?.trim() === RBAC_ACTIONS.CREATE &&
-      (p.resource?.trim() === RBAC_RESOURCES.KPI_PERSONAL ||
-        p.resource?.trim() === RBAC_RESOURCES.KPI)
+      p.resource?.trim() === RBAC_RESOURCES.KPI_EMPLOYEE
   )
 );
 

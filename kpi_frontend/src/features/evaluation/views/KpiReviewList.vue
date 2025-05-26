@@ -1,6 +1,6 @@
 <template>
-  <div class="kpi-review-list">
-    <h2 class="kpi-title">{{ $t('kpiReviewListTitle') }}</h2>
+  <div class="kpi-review-list" v-if="canViewKpiReview">
+    <h2 class="kpi-title">{{ $t("kpiReviewListTitle") }}</h2>
     <div class="filters">
       <a-select
         v-model="selectedCycle"
@@ -20,7 +20,7 @@
         style="width: 250px"
       />
       <a-button type="primary" @click="fetchReviews" style="margin-left: 16px">
-        {{ $t('search') }}
+        {{ $t("search") }}
       </a-button>
     </div>
     <div class="modern-table-wrapper">
@@ -35,12 +35,31 @@
         :pagination="{ pageSize: 10, showSizeChanger: true }"
       >
         <template #bodyCell="slotProps">
-          <template v-if="slotProps.column && slotProps.column.key === 'actions'">
-            <a-button type="primary" size="small" @click="openReviewForm(slotProps.record.raw)" class="action-btn">{{ $t('review') }}</a-button>
-            <a-button type="default" size="small" @click="viewHistory(slotProps.record.raw)" class="action-btn">{{ $t('reviewHistory') }}</a-button>
+          <template
+            v-if="slotProps.column && slotProps.column.key === 'actions'"
+          >
+            <a-button
+              type="primary"
+              size="small"
+              @click="openReviewForm(slotProps.record.raw)"
+              class="action-btn"
+              v-if="canReview"
+              >{{ $t("review") }}</a-button
+            >
+            <a-button
+              type="default"
+              size="small"
+              @click="viewHistory(slotProps.record.raw)"
+              class="action-btn"
+              >{{ $t("reviewHistory") }}</a-button
+            >
           </template>
-          <template v-else-if="slotProps.column && slotProps.column.key === 'status'">
-            <span :class="['status-tag', slotProps.record.status.toLowerCase()]">
+          <template
+            v-else-if="slotProps.column && slotProps.column.key === 'status'"
+          >
+            <span
+              :class="['status-tag', slotProps.record.status.toLowerCase()]"
+            >
               {{ $t(slotProps.record.status.toLowerCase()) }}
             </span>
           </template>
@@ -50,7 +69,10 @@
         </template>
       </a-table>
     </div>
-    <a-empty v-if="!normalizedReviews.length && !loading" :description="$t('noDataMatch')" />
+    <a-empty
+      v-if="!normalizedReviews.length && !loading"
+      :description="$t('noDataMatch')"
+    />
     <ReviewFormModal
       v-if="showReviewForm"
       :review="selectedReview"
@@ -71,10 +93,15 @@
 
 <script setup>
 import { ref, computed, onMounted } from "vue";
-import { getKpiReviewList, getReviewCycles } from "@/core/services/kpiReviewApi";
+import {
+  getKpiReviewList,
+  getReviewCycles,
+} from "@/core/services/kpiReviewApi";
 import ReviewFormModal from "./ReviewFormModal.vue";
 import ReviewHistoryModal from "./ReviewHistoryModal.vue";
-import { useI18n } from 'vue-i18n';
+import { useI18n } from "vue-i18n";
+import { useStore } from "vuex";
+import { RBAC_ACTIONS, RBAC_RESOURCES } from "@/core/constants/rbac.constants";
 
 const { t } = useI18n();
 
@@ -88,22 +115,22 @@ const showHistory = ref(false);
 const selectedReview = ref(null);
 const cycleOptions = ref([]);
 const statusOptions = [
-  { label: t('all'), value: '' },
-  { label: t('pendingReview'), value: 'PENDING' },
-  { label: t('managerReviewed'), value: 'MANAGER_REVIEWED' },
-  { label: t('awaitingEmployeeFeedback'), value: 'EMPLOYEE_FEEDBACK' },
-  { label: t('completed'), value: 'COMPLETED' },
+  { label: t("all"), value: "" },
+  { label: t("pendingReview"), value: "PENDING" },
+  { label: t("managerReviewed"), value: "MANAGER_REVIEWED" },
+  { label: t("awaitingEmployeeFeedback"), value: "EMPLOYEE_FEEDBACK" },
+  { label: t("completed"), value: "COMPLETED" },
 ];
 
 const columns = computed(() => [
-  { title: t('kpiName'), key: 'kpiName', dataIndex: 'kpiName' },
-  { title: t('employee'), key: 'employee', dataIndex: 'employee' },
-  { title: t('cycle'), key: 'cycle', dataIndex: 'cycle' },
-  { title: t('target'), key: 'targetValue', dataIndex: 'targetValue' },
-  { title: t('actualResult'), key: 'actualValue', dataIndex: 'actualValue' },
-  { title: t('status'), key: 'status', dataIndex: 'status' },
-  { title: t('score'), key: 'score', dataIndex: 'score' },
-  { title: t('actions'), key: 'actions' },
+  { title: t("kpiName"), key: "kpiName", dataIndex: "kpiName" },
+  { title: t("employee"), key: "employee", dataIndex: "employee" },
+  { title: t("cycle"), key: "cycle", dataIndex: "cycle" },
+  { title: t("target"), key: "targetValue", dataIndex: "targetValue" },
+  { title: t("actualResult"), key: "actualValue", dataIndex: "actualValue" },
+  { title: t("status"), key: "status", dataIndex: "status" },
+  { title: t("score"), key: "score", dataIndex: "score" },
+  { title: t("actions"), key: "actions" },
 ]);
 
 const filteredReviews = computed(() => {
@@ -176,6 +203,28 @@ const closeHistory = () => {
   selectedReview.value = null;
 };
 
+const store = useStore();
+const userPermissions = computed(
+  () => store.getters["auth/user"]?.permissions || []
+);
+function hasPermission(action, resource) {
+  return userPermissions.value?.some(
+    (p) => p.action === action && p.resource === resource
+  );
+}
+const canViewKpiReview = computed(
+  () =>
+    hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.KPI_VALUE_COMPANY) ||
+    hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.KPI_VALUE_DEPARTMENT)
+);
+const canReview = computed(
+  () =>
+    hasPermission(RBAC_ACTIONS.UPDATE, RBAC_RESOURCES.KPI_VALUE_COMPANY) ||
+    hasPermission(RBAC_ACTIONS.UPDATE, RBAC_RESOURCES.KPI_VALUE_DEPARTMENT) ||
+    hasPermission(RBAC_ACTIONS.APPROVE, RBAC_RESOURCES.KPI_VALUE_COMPANY) ||
+    hasPermission(RBAC_ACTIONS.APPROVE, RBAC_RESOURCES.KPI_VALUE_DEPARTMENT)
+);
+
 onMounted(() => {
   fetchCycles();
   fetchReviews();
@@ -199,7 +248,7 @@ onMounted(() => {
 }
 .modern-table {
   border-radius: 16px;
-  box-shadow: 0 2px 16px rgba(0,0,0,0.07);
+  box-shadow: 0 2px 16px rgba(0, 0, 0, 0.07);
   overflow: hidden;
 }
 .modern-table .ant-table-thead > tr > th {
@@ -231,7 +280,8 @@ onMounted(() => {
 .status-tag.manager_reviewed {
   background: #409eff;
 }
-.status-tag.awaitingemployeefeedback, .status-tag.employee_feedback {
+.status-tag.awaitingemployeefeedback,
+.status-tag.employee_feedback {
   background: #13c2c2;
 }
 .status-tag.completed {
@@ -248,7 +298,7 @@ onMounted(() => {
 /* Modal custom style */
 :deep(.modern-modal .ant-modal-content) {
   border-radius: 18px;
-  box-shadow: 0 4px 32px rgba(0,0,0,0.13);
+  box-shadow: 0 4px 32px rgba(0, 0, 0, 0.13);
   padding: 0 0 24px 0;
 }
 :deep(.modern-modal .ant-modal-header) {
@@ -271,7 +321,7 @@ onMounted(() => {
   background: #f9fafb;
   border-radius: 12px;
   padding: 16px 18px;
-  box-shadow: 0 1px 6px rgba(0,0,0,0.04);
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.04);
   margin-bottom: 0;
 }
 :deep(.modern-modal .review-section-title) {

@@ -21,19 +21,27 @@ export class DepartmentsController {
   constructor(private readonly departmentService: DepartmentsService) {}
 
   @Post()
-  @Roles('admin', 'manager')
+  @Roles('department:create:company', 'department:create:department')
   async create(@Body() createDepartmentDto: any): Promise<Department> {
     return this.departmentService.create(createDepartmentDto);
   }
 
   @Get()
-  @Roles('admin', 'manager', 'department', 'section')
+  @Roles(
+    'department:view:company',
+    'department:view:department',
+    'department:view:section',
+  )
   async findAll(): Promise<Department[]> {
     return this.departmentService.findAll();
   }
 
   @Get(':id')
-  @Roles('admin', 'manager', 'department', 'section')
+  @Roles(
+    'department:view:company',
+    'department:view:department',
+    'department:view:section',
+  )
   async findOne(@Param('id') id: number): Promise<Department> {
     return this.departmentService.findOne(id);
   }

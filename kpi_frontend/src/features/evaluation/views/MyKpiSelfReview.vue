@@ -1,6 +1,6 @@
 <template>
-  <div class="my-kpi-self-review">
-    <h2>{{ $t('personalKpiReview') }}</h2>
+  <div class="my-kpi-self-review" v-if="canViewSelfReview">
+    <h2>{{ $t("personalKpiReview") }}</h2>
     <a-alert
       v-if="successMessage"
       type="success"
@@ -32,7 +32,12 @@
       row-key="id"
       bordered
       class="kpi-table"
-      style="margin-top: 32px; background: #fff; border-radius: 12px; box-shadow: 0 2px 8px #f0f1f2;"
+      style="
+        margin-top: 32px;
+        background: #fff;
+        border-radius: 12px;
+        box-shadow: 0 2px 8px #f0f1f2;
+      "
       :loading="loading"
       :pagination="false"
     >
@@ -44,7 +49,7 @@
             allow-half
             :disabled="loading || record.status !== 'PENDING'"
             @change="(value) => updateKpi(index, 'selfScore', value)"
-            style="font-size: 20px;"
+            style="font-size: 20px"
           />
         </template>
         <template v-else-if="column.key === 'selfComment'">
@@ -53,23 +58,50 @@
             rows="2"
             :placeholder="$t('selfComment')"
             :disabled="loading || record.status !== 'PENDING'"
-            @input="(event) => updateKpi(index, 'selfComment', event.target.value)"
-            style="background: #f9fafb; border-radius: 6px; border: 1px solid #e5e7eb; font-size: 15px;"
+            @input="
+              (event) => updateKpi(index, 'selfComment', event.target.value)
+            "
+            style="
+              background: #f9fafb;
+              border-radius: 6px;
+              border: 1px solid #e5e7eb;
+              font-size: 15px;
+            "
           />
         </template>
         <template v-else-if="column.key === 'status'">
-          <a-tag :color="getStatusColor(record.status, record)" style="font-size: 14px; padding: 2px 12px; border-radius: 8px;">{{ getStatusText(record.status, record) }}</a-tag>
+          <a-tag
+            :color="getStatusColor(record.status, record)"
+            style="font-size: 14px; padding: 2px 12px; border-radius: 8px"
+            >{{ getStatusText(record.status, record) }}</a-tag
+          >
         </template>
         <template v-else-if="column.key === 'actions'">
           <div v-if="record.status === 'EMPLOYEE_FEEDBACK'">
-            <a-button type="primary" size="small" @click="openFeedbackModal(record, index)" style="border-radius: 6px;">{{$t('viewAndFeedback')}}</a-button>
+            <a-button
+              type="primary"
+              size="small"
+              @click="openFeedbackModal(record, index)"
+              style="border-radius: 6px"
+              >{{ $t("viewAndFeedback") }}</a-button
+            >
           </div>
           <div v-else-if="record.status === 'MANAGER_REVIEWED'">
-            <span style="color: #faad14; font-weight: 500;">{{$t('waitingManagerConfirm')}}</span>
+            <span style="color: #faad14; font-weight: 500">{{
+              $t("waitingManagerConfirm")
+            }}</span>
           </div>
           <div v-else-if="record.status === 'COMPLETED'">
-            <span style="color: #52c41a; font-weight: 500;">{{$t('completed')}}</span>
-            <a-button type="link" size="small" @click="openDetailModal(record)" style="margin-left: 8px; color: #1890ff;">{{$t('viewDetails')}}</a-button>
+            <span style="color: #52c41a; font-weight: 500">{{
+              $t("completed")
+            }}</span>
+            <a-button
+              type="link"
+              size="small"
+              @click="openDetailModal(record)"
+              style="margin-left: 8px; color: #1890ff"
+              >{{ $t("viewDetails") }}</a-button
+            >
           </div>
         </template>
       </template>
@@ -79,9 +111,9 @@
       @click="submitSelfReview"
       :loading="loading"
       style="margin-top: 24px"
-      :disabled="!canSubmit || loading"
-      v-if="kpis.some(k => k.status === 'PENDING')"
-      >{{ $t('submitReview') }}</a-button
+      :disabled="!canSubmit || loading || !canUpdateSelfReview"
+      v-if="kpis.some((k) => k.status === 'PENDING')"
+      >{{ $t("submitReview") }}</a-button
     >
     <a-modal
       v-model:open="feedbackModal.visible"
@@ -93,22 +125,49 @@
     >
       <div v-if="feedbackModal.record">
         <div style="margin-bottom: 12px">
-          <b>{{$t('kpiName')}}:</b> {{ feedbackModal.record.kpi?.name }}
+          <b>{{ $t("kpiName") }}:</b> {{ feedbackModal.record.kpi?.name }}
         </div>
         <div v-if="feedbackModal.record.sectionScore !== undefined">
-          <b>{{$t('sectionScore')}}:</b> <a-rate :value="feedbackModal.record.sectionScore" :count="5" allow-half disabled />
-          <div><b>{{$t('sectionComment')}}:</b> {{ feedbackModal.record.sectionComment || $t('noComment') }}</div>
+          <b>{{ $t("sectionScore") }}:</b>
+          <a-rate
+            :value="feedbackModal.record.sectionScore"
+            :count="5"
+            allow-half
+            disabled
+          />
+          <div>
+            <b>{{ $t("sectionComment") }}:</b>
+            {{ feedbackModal.record.sectionComment || $t("noComment") }}
+          </div>
         </div>
         <div v-if="feedbackModal.record.departmentScore !== undefined">
-          <b>{{$t('departmentScore')}}:</b> <a-rate :value="feedbackModal.record.departmentScore" :count="5" allow-half disabled />
-          <div><b>{{$t('departmentComment')}}:</b> {{ feedbackModal.record.departmentComment || $t('noComment') }}</div>
+          <b>{{ $t("departmentScore") }}:</b>
+          <a-rate
+            :value="feedbackModal.record.departmentScore"
+            :count="5"
+            allow-half
+            disabled
+          />
+          <div>
+            <b>{{ $t("departmentComment") }}:</b>
+            {{ feedbackModal.record.departmentComment || $t("noComment") }}
+          </div>
         </div>
         <div v-if="feedbackModal.record.managerScore !== undefined">
-          <b>{{$t('managerScore')}}:</b> <a-rate :value="feedbackModal.record.managerScore" :count="5" allow-half disabled />
-          <div><b>{{$t('managerComment')}}:</b> {{ feedbackModal.record.managerComment || $t('noComment') }}</div>
+          <b>{{ $t("managerScore") }}:</b>
+          <a-rate
+            :value="feedbackModal.record.managerScore"
+            :count="5"
+            allow-half
+            disabled
+          />
+          <div>
+            <b>{{ $t("managerComment") }}:</b>
+            {{ feedbackModal.record.managerComment || $t("noComment") }}
+          </div>
         </div>
         <div style="margin-top: 16px">
-          <b>{{$t('yourFeedback')}}:</b>
+          <b>{{ $t("yourFeedback") }}:</b>
           <a-textarea
             v-model:value="feedbackModal.feedbackInput"
             rows="3"
@@ -121,7 +180,8 @@
             type="primary"
             :loading="feedbackModal.loading"
             @click="submitEmployeeFeedbackModal"
-          >{{$t('submitFeedback')}}</a-button>
+            >{{ $t("submitFeedback") }}</a-button
+          >
         </div>
       </div>
     </a-modal>
@@ -136,50 +196,91 @@
     >
       <div v-if="detailModal.record" class="kpi-detail-content">
         <div class="kpi-detail-header">
-          <span class="kpi-detail-title">{{ detailModal.record.kpi?.name }}</span>
+          <span class="kpi-detail-title">{{
+            detailModal.record.kpi?.name
+          }}</span>
         </div>
         <div class="kpi-detail-grid">
           <div class="kpi-detail-item">
-            <span class="kpi-detail-label">{{$t('selfScore')}}</span>
-            <a-rate :value="detailModal.record.selfScore" :count="5" allow-half disabled style="font-size: 22px; vertical-align: middle;" />
+            <span class="kpi-detail-label">{{ $t("selfScore") }}</span>
+            <a-rate
+              :value="detailModal.record.selfScore"
+              :count="5"
+              allow-half
+              disabled
+              style="font-size: 22px; vertical-align: middle"
+            />
           </div>
           <div class="kpi-detail-item">
-            <span class="kpi-detail-label">{{$t('selfComment')}}</span>
-            <span class="kpi-detail-value">{{ detailModal.record.selfComment || $t('noComment') }}</span>
+            <span class="kpi-detail-label">{{ $t("selfComment") }}</span>
+            <span class="kpi-detail-value">{{
+              detailModal.record.selfComment || $t("noComment")
+            }}</span>
           </div>
           <template v-if="detailModal.record.sectionScore !== undefined">
             <div class="kpi-detail-item">
-              <span class="kpi-detail-label">{{$t('sectionScore')}}</span>
-              <a-rate :value="detailModal.record.sectionScore" :count="5" allow-half disabled style="font-size: 22px; vertical-align: middle;" />
+              <span class="kpi-detail-label">{{ $t("sectionScore") }}</span>
+              <a-rate
+                :value="detailModal.record.sectionScore"
+                :count="5"
+                allow-half
+                disabled
+                style="font-size: 22px; vertical-align: middle"
+              />
             </div>
             <div class="kpi-detail-item">
-              <span class="kpi-detail-label">{{$t('sectionComment')}}</span>
-              <span class="kpi-detail-value">{{ detailModal.record.sectionComment || $t('noComment') }}</span>
+              <span class="kpi-detail-label">{{ $t("sectionComment") }}</span>
+              <span class="kpi-detail-value">{{
+                detailModal.record.sectionComment || $t("noComment")
+              }}</span>
             </div>
           </template>
           <template v-if="detailModal.record.departmentScore !== undefined">
             <div class="kpi-detail-item">
-              <span class="kpi-detail-label">{{$t('departmentScore')}}</span>
-              <a-rate :value="detailModal.record.departmentScore" :count="5" allow-half disabled style="font-size: 22px; vertical-align: middle;" />
+              <span class="kpi-detail-label">{{ $t("departmentScore") }}</span>
+              <a-rate
+                :value="detailModal.record.departmentScore"
+                :count="5"
+                allow-half
+                disabled
+                style="font-size: 22px; vertical-align: middle"
+              />
             </div>
             <div class="kpi-detail-item">
-              <span class="kpi-detail-label">{{$t('departmentComment')}}</span>
-              <span class="kpi-detail-value">{{ detailModal.record.departmentComment || $t('noComment') }}</span>
+              <span class="kpi-detail-label">{{
+                $t("departmentComment")
+              }}</span>
+              <span class="kpi-detail-value">{{
+                detailModal.record.departmentComment || $t("noComment")
+              }}</span>
             </div>
           </template>
           <template v-if="detailModal.record.managerScore !== undefined">
             <div class="kpi-detail-item">
-              <span class="kpi-detail-label">{{$t('managerScore')}}</span>
-              <a-rate :value="detailModal.record.managerScore" :count="5" allow-half disabled style="font-size: 22px; vertical-align: middle;" />
+              <span class="kpi-detail-label">{{ $t("managerScore") }}</span>
+              <a-rate
+                :value="detailModal.record.managerScore"
+                :count="5"
+                allow-half
+                disabled
+                style="font-size: 22px; vertical-align: middle"
+              />
             </div>
             <div class="kpi-detail-item">
-              <span class="kpi-detail-label">{{$t('managerComment')}}</span>
-              <span class="kpi-detail-value">{{ detailModal.record.managerComment || $t('noComment') }}</span>
+              <span class="kpi-detail-label">{{ $t("managerComment") }}</span>
+              <span class="kpi-detail-value">{{
+                detailModal.record.managerComment || $t("noComment")
+              }}</span>
             </div>
           </template>
-          <div v-if="detailModal.record.employeeFeedback" class="kpi-detail-item">
-            <span class="kpi-detail-label">{{$t('yourFeedback')}}</span>
-            <span class="kpi-detail-value">{{ detailModal.record.employeeFeedback }}</span>
+          <div
+            v-if="detailModal.record.employeeFeedback"
+            class="kpi-detail-item"
+          >
+            <span class="kpi-detail-label">{{ $t("yourFeedback") }}</span>
+            <span class="kpi-detail-value">{{
+              detailModal.record.employeeFeedback
+            }}</span>
           </div>
         </div>
       </div>
@@ -190,12 +291,13 @@
 <script setup>
 import { ref, onMounted, computed, watch } from "vue";
 import { useStore } from "vuex";
-import { useI18n } from 'vue-i18n';
+import { useI18n } from "vue-i18n";
 import {
   submitMyKpiSelfReview,
   getReviewCycles,
   submitEmployeeFeedback,
 } from "@/core/services/kpiReviewApi";
+import { RBAC_ACTIONS, RBAC_RESOURCES } from "@/core/constants/rbac.constants";
 
 const store = useStore();
 const { t } = useI18n();
@@ -208,35 +310,50 @@ const kpis = ref([]); // Sử dụng ref thay vì computed để có thể gán 
 const loading = ref(false);
 
 const columns = computed(() => [
-  { title: t('kpiName'), dataIndex: ['kpi', 'name'], key: 'kpiName' },
-  { title: t('target'), dataIndex: 'targetValue', key: 'targetValue' },
-  { title: t('actualResult'), dataIndex: 'actualValue', key: 'actualValue' },
-  { title: t('selfScore'), key: 'selfScore' },
-  { title: t('selfComment'), key: 'selfComment' },
-  { title: t('status'), key: 'status' },
-  { title: '', key: 'actions' },
+  { title: t("kpiName"), dataIndex: ["kpi", "name"], key: "kpiName" },
+  { title: t("target"), dataIndex: "targetValue", key: "targetValue" },
+  { title: t("actualResult"), dataIndex: "actualValue", key: "actualValue" },
+  { title: t("selfScore"), key: "selfScore" },
+  { title: t("selfComment"), key: "selfComment" },
+  { title: t("status"), key: "status" },
+  { title: "", key: "actions" },
 ]);
+
+const userPermissions = computed(
+  () => store.getters["auth/user"]?.permissions || []
+);
+function hasPermission(action, resource) {
+  return userPermissions.value?.some(
+    (p) => p.action === action && p.resource === resource
+  );
+}
+const canViewSelfReview = computed(() =>
+  hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.KPI_VALUE_EMPLOYEE)
+);
+const canUpdateSelfReview = computed(() =>
+  hasPermission(RBAC_ACTIONS.UPDATE, RBAC_RESOURCES.KPI_VALUE_EMPLOYEE)
+);
 
 const getStatusText = (status) => {
   switch (status) {
-    case 'PENDING':
-      return t('notSubmitted');
-    case 'SELF_REVIEWED':
-      return t('selfReviewed');
-    case 'SECTION_REVIEWED':
-      return t('sectionReviewed');
-    case 'DEPARTMENT_REVIEWED':
-      return t('departmentReviewed');
-    case 'EMPLOYEE_FEEDBACK':
-      return t('awaitingEmployeeFeedback');
-    case 'MANAGER_REVIEWED':
-      return t('waitingManagerConfirm');
-    case 'COMPLETED':
-      return t('completed');
-    case 'DEPARTMENT_REVIEW_PENDING':
-      return t('pendingDeptApproval');
+    case "PENDING":
+      return t("notSubmitted");
+    case "SELF_REVIEWED":
+      return t("selfReviewed");
+    case "SECTION_REVIEWED":
+      return t("sectionReviewed");
+    case "DEPARTMENT_REVIEWED":
+      return t("departmentReviewed");
+    case "EMPLOYEE_FEEDBACK":
+      return t("awaitingEmployeeFeedback");
+    case "MANAGER_REVIEWED":
+      return t("waitingManagerConfirm");
+    case "COMPLETED":
+      return t("completed");
+    case "DEPARTMENT_REVIEW_PENDING":
+      return t("pendingDeptApproval");
     default:
-      return status || t('notSubmitted');
+      return status || t("notSubmitted");
   }
 };
 
@@ -259,11 +376,11 @@ const canSubmit = computed(() => {
   // Chỉ cho phép gửi khi tất cả KPI của bản thân còn ở trạng thái PENDING và đã nhập đủ điểm, comment
   return kpis.value.every(
     (kpi) =>
-      kpi.status === 'PENDING' &&
+      kpi.status === "PENDING" &&
       kpi.selfScore !== null &&
       kpi.selfScore !== undefined &&
       kpi.selfComment &&
-      typeof kpi.selfComment === 'string' &&
+      typeof kpi.selfComment === "string" &&
       kpi.selfComment.trim().length > 0
   );
 });
@@ -314,7 +431,7 @@ const submitSelfReview = async () => {
 const feedbackModal = ref({
   visible: false,
   record: null,
-  feedbackInput: '',
+  feedbackInput: "",
   loading: false,
   index: null,
 });
@@ -327,7 +444,7 @@ const detailModal = ref({
 const openFeedbackModal = (record, index) => {
   feedbackModal.value.visible = true;
   feedbackModal.value.record = record;
-  feedbackModal.value.feedbackInput = record.employeeFeedbackInput || '';
+  feedbackModal.value.feedbackInput = record.employeeFeedbackInput || "";
   feedbackModal.value.loading = false;
   feedbackModal.value.index = index;
 };
@@ -335,7 +452,7 @@ const openFeedbackModal = (record, index) => {
 const closeFeedbackModal = () => {
   feedbackModal.value.visible = false;
   feedbackModal.value.record = null;
-  feedbackModal.value.feedbackInput = '';
+  feedbackModal.value.feedbackInput = "";
   feedbackModal.value.loading = false;
   feedbackModal.value.index = null;
 };
@@ -352,18 +469,21 @@ const closeDetailModal = () => {
 
 const submitEmployeeFeedbackModal = async () => {
   const record = feedbackModal.value.record;
-  if (!feedbackModal.value.feedbackInput || !feedbackModal.value.feedbackInput.trim()) {
-    errorMessage.value = 'Vui lòng nhập phản hồi trước khi gửi.';
+  if (
+    !feedbackModal.value.feedbackInput ||
+    !feedbackModal.value.feedbackInput.trim()
+  ) {
+    errorMessage.value = "Vui lòng nhập phản hồi trước khi gửi.";
     return;
   }
   feedbackModal.value.loading = true;
   try {
     await submitEmployeeFeedback(record.id, feedbackModal.value.feedbackInput);
-    successMessage.value = 'Gửi phản hồi thành công!';
+    successMessage.value = "Gửi phản hồi thành công!";
     closeFeedbackModal();
     fetchMyKpis();
   } catch (e) {
-    errorMessage.value = 'Gửi phản hồi thất bại.';
+    errorMessage.value = "Gửi phản hồi thất bại.";
   } finally {
     feedbackModal.value.loading = false;
   }
@@ -389,8 +509,8 @@ watch(
   (newKpis) => {
     // Ensure feedback input and loading state are initialized for feedback step
     newKpis.forEach((k) => {
-      if (k.status === 'EMPLOYEE_FEEDBACK') {
-        if (k.employeeFeedbackInput === undefined) k.employeeFeedbackInput = '';
+      if (k.status === "EMPLOYEE_FEEDBACK") {
+        if (k.employeeFeedbackInput === undefined) k.employeeFeedbackInput = "";
         if (k.feedbackLoading === undefined) k.feedbackLoading = false;
       }
     });

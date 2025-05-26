@@ -686,6 +686,7 @@
     "assign": "assign",
     "other": "other"
   },
-  "cannotDisableAdminManager": "cannotDisableAdminManager",
-  "reviewCycleManagement": "reviewCycleManagement"
+  "cannotDisableAdminManager": "Cannot Disable Admin Manager",
+  "reviewCycleManagement": "Rview Cycle Management",
+  "errorLoadingRolesOrPermissions": "Error Loading Roles Or Permissions"
 }

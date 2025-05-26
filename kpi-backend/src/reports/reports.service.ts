@@ -17,12 +17,18 @@ export class ReportsService {
     private readonly dashboardsService: DashboardsService, // Inject DashboardsService
   ) {}
 
-  async generateKpiReport(reportType: string, startDate?: Date, endDate?: Date, fileFormat: string = 'excel'): Promise<Buffer> {
+  async generateKpiReport(
+    reportType: string,
+    startDate?: Date,
+    endDate?: Date,
+    fileFormat: string = 'excel',
+  ): Promise<Buffer> {
     // Always fetch admin user for permissioned KPI queries
-    const adminUser = await this.employeesService['employeeRepository'].findOne({
-      where: { role: { name: 'admin' } },
-      relations: ['role'],
-    });
+    const adminUser = await this.employeesService['employeeRepository']
+      .createQueryBuilder('employee')
+      .leftJoinAndSelect('employee.roles', 'role')
+      .where('role.name = :roleName', { roleName: 'admin' })
+      .getOne();
     if (!adminUser) {
       throw new Error('No admin user found for KPI report.');
     }
@@ -54,7 +60,9 @@ export class ReportsService {
         if (val === null || val === undefined || val === '') return '';
         const num = Number(val);
         if (isNaN(num)) return val;
-        return num.toLocaleString('vi-VN', { maximumFractionDigits: 2 }).replace(/\,00$/, '');
+        return num
+          .toLocaleString('vi-VN', { maximumFractionDigits: 2 })
+          .replace(/\,00$/, '');
       };
 
       // --- Tổng quan ---
@@ -64,11 +72,20 @@ export class ReportsService {
         doc.moveDown();
         const tableTop = doc.y;
         const colWidths = [160, 80, 80, 100, 100];
-        const headers = ['Tên KPI', 'Mục tiêu', 'Kết quả', 'Tỷ lệ hoàn thành', 'Trạng thái'];
+        const headers = [
+          'Tên KPI',
+          'Mục tiêu',
+          'Kết quả',
+          'Tỷ lệ hoàn thành',
+          'Trạng thái',
+        ];
         let x = 40;
         doc.fontSize(12).fillColor('#333');
         headers.forEach((header, i) => {
-          doc.text(header, x, tableTop, { width: colWidths[i], align: 'center' });
+          doc.text(header, x, tableTop, {
+            width: colWidths[i],
+            align: 'center',
+          });
           x += colWidths[i];
         });
         let y = tableTop + 24;
@@ -86,16 +103,22 @@ export class ReportsService {
             formatNumber(kpi.target),
             formatNumber(kpi.actual_value),
             completionRate,
-            kpi.status || ''
+            kpi.status || '',
           ];
           let maxCellHeight = 0;
           row.forEach((cell, i) => {
-            const cellHeight = doc.heightOfString(cell, { width: colWidths[i], align: 'center' });
+            const cellHeight = doc.heightOfString(cell, {
+              width: colWidths[i],
+              align: 'center',
+            });
             if (cellHeight > maxCellHeight) maxCellHeight = cellHeight;
           });
           x = 40;
           row.forEach((cell, i) => {
-            doc.fontSize(11).fillColor('#000').text(cell, x, y, { width: colWidths[i], align: 'center' });
+            doc
+              .fontSize(11)
+              .fillColor('#000')
+              .text(cell, x, y, { width: colWidths[i], align: 'center' });
             x += colWidths[i];
           });
           y += maxCellHeight + rowPadding;
@@ -112,12 +135,31 @@ export class ReportsService {
         doc.fontSize(16).text('Chi tiết KPI', { align: 'center' });
         doc.moveDown();
         const tableTop = doc.y;
-        const colWidths = [40, 120, 120, 60, 60, 70, 70, 70, 60, 60, 80, 80, 80];
-        const headers = ['ID','Tên','Mô tả','Đơn vị','Tần suất','Bắt đầu','Kết thúc','Người tạo','Loại','Trọng số','Mục tiêu','Giá trị thực tế','Trạng thái'];
+        const colWidths = [
+          40, 120, 120, 60, 60, 70, 70, 70, 60, 60, 80, 80, 80,
+        ];
+        const headers = [
+          'ID',
+          'Tên',
+          'Mô tả',
+          'Đơn vị',
+          'Tần suất',
+          'Bắt đầu',
+          'Kết thúc',
+          'Người tạo',
+          'Loại',
+          'Trọng số',
+          'Mục tiêu',
+          'Giá trị thực tế',
+          'Trạng thái',
+        ];
         let x = 40;
         doc.fontSize(10).fillColor('#333');
         headers.forEach((header, i) => {
-          doc.text(header, x, tableTop, { width: colWidths[i], align: 'center' });
+          doc.text(header, x, tableTop, {
+            width: colWidths[i],
+            align: 'center',
+          });
           x += colWidths[i];
         });
         let y = tableTop + 20;
@@ -138,16 +180,25 @@ export class ReportsService {
             kpi.weight,
             formatNumber(kpi.target),
             formatNumber(kpi.actual_value),
-            kpi.status
+            kpi.status,
           ];
           let maxCellHeight = 0;
           row.forEach((cell, i) => {
-            const cellHeight = doc.heightOfString(cell ? cell.toString() : '', { width: colWidths[i], align: 'center' });
+            const cellHeight = doc.heightOfString(cell ? cell.toString() : '', {
+              width: colWidths[i],
+              align: 'center',
+            });
             if (cellHeight > maxCellHeight) maxCellHeight = cellHeight;
           });
           x = 40;
           row.forEach((cell, i) => {
-            doc.fontSize(9).fillColor('#000').text(cell ? cell.toString() : '', x, y, { width: colWidths[i], align: 'center' });
+            doc
+              .fontSize(9)
+              .fillColor('#000')
+              .text(cell ? cell.toString() : '', x, y, {
+                width: colWidths[i],
+                align: 'center',
+              });
             x += colWidths[i];
           });
           y += maxCellHeight + rowPadding;
@@ -165,27 +216,43 @@ export class ReportsService {
         doc.moveDown();
         const tableTop = doc.y;
         const colWidths = [100, 120, 80, 80, 100];
-        const headers = ['Phòng ban', 'KPI', 'Mục tiêu', 'Kết quả', 'Tỷ lệ hoàn thành'];
+        const headers = [
+          'Phòng ban',
+          'KPI',
+          'Mục tiêu',
+          'Kết quả',
+          'Tỷ lệ hoàn thành',
+        ];
         let x = 40;
         doc.fontSize(11).fillColor('#333');
         headers.forEach((header, i) => {
-          doc.text(header, x, tableTop, { width: colWidths[i], align: 'center' });
+          doc.text(header, x, tableTop, {
+            width: colWidths[i],
+            align: 'center',
+          });
           x += colWidths[i];
         });
         let y = tableTop + 20;
         const rowPadding = 4;
         // Luôn đảm bảo comparisonData là { data: any[] }
         let comparisonData: { data: any[] } = { data: [] };
-        if (typeof (this.kpisService as any).getKpiComparisonData === 'function') {
-          comparisonData = await (this.kpisService as any).getKpiComparisonData(adminUserId);
+        if (
+          typeof (this.kpisService as any).getKpiComparisonData === 'function'
+        ) {
+          comparisonData = await (this.kpisService as any).getKpiComparisonData(
+            adminUserId,
+          );
         } else {
           // Dùng dữ liệu tổng quan để giả lập
-          const kpiSummaryData = await this.kpisService.findAll({}, adminUserId);
+          const kpiSummaryData = await this.kpisService.findAll(
+            {},
+            adminUserId,
+          );
           comparisonData.data = (kpiSummaryData.data || []).map((k: any) => ({
             department_name: k.department_name || 'Phòng ban A',
             kpi_name: k.name,
             target: k.target,
-            actual_value: k.actual_value
+            actual_value: k.actual_value,
           }));
         }
         (comparisonData.data || []).forEach((item: any) => {
@@ -201,16 +268,25 @@ export class ReportsService {
             item.kpi_name || '',
             formatNumber(item.target),
             formatNumber(item.actual_value),
-            completionRate
+            completionRate,
           ];
           let maxCellHeight = 0;
           row.forEach((cell, i) => {
-            const cellHeight = doc.heightOfString(cell ? cell.toString() : '', { width: colWidths[i], align: 'center' });
+            const cellHeight = doc.heightOfString(cell ? cell.toString() : '', {
+              width: colWidths[i],
+              align: 'center',
+            });
             if (cellHeight > maxCellHeight) maxCellHeight = cellHeight;
           });
           x = 40;
           row.forEach((cell, i) => {
-            doc.fontSize(10).fillColor('#000').text(cell ? cell.toString() : '', x, y, { width: colWidths[i], align: 'center' });
+            doc
+              .fontSize(10)
+              .fillColor('#000')
+              .text(cell ? cell.toString() : '', x, y, {
+                width: colWidths[i],
+                align: 'center',
+              });
             x += colWidths[i];
           });
           y += maxCellHeight + rowPadding;
@@ -223,17 +299,17 @@ export class ReportsService {
 
       if (reportType === 'dashboard-multi') {
         // Lấy user admin đầu tiên để truyền vào DashboardsService
-        const adminUser = await this.employeesService[
-          'employeeRepository'
-        ].findOne({
-          where: { role: { name: 'admin' } },
-          relations: ['role'],
-        });
+        const adminUser = await this.employeesService['employeeRepository']
+          .createQueryBuilder('employee')
+          .leftJoinAndSelect('employee.roles', 'role')
+          .where('role.name = :roleName', { roleName: 'admin' })
+          .getOne();
         if (!adminUser) {
           throw new Error('No admin user found for dashboard report.');
         }
         // 1. KPI chờ duyệt
-        const awaitingStats = await this.dashboardsService.getKpiAwaitingApprovalStats(adminUser);
+        const awaitingStats =
+          await this.dashboardsService.getKpiAwaitingApprovalStats(adminUser);
         doc.addPage();
         doc.fontSize(18).text('THỐNG KÊ KPI CHỜ DUYỆT', { align: 'center' });
         doc.moveDown();
@@ -246,7 +322,14 @@ export class ReportsService {
           const headers = ['Cấp duyệt', 'Số lượng', 'Trạng thái'];
           let x = doc.x;
           headers.forEach((header, i) => {
-            doc.font('dejavu').fontSize(11).fillColor('#0050b3').text(header, x, y, { width: tableColWidths[i], align: i === 1 ? 'right' : 'left' });
+            doc
+              .font('dejavu')
+              .fontSize(11)
+              .fillColor('#0050b3')
+              .text(header, x, y, {
+                width: tableColWidths[i],
+                align: i === 1 ? 'right' : 'left',
+              });
             x += tableColWidths[i] + colPadding;
           });
           y += 18;
@@ -257,12 +340,22 @@ export class ReportsService {
             const cells = [row.name, row.count, row.status];
             let maxCellHeight = 0;
             cells.forEach((cell, i) => {
-              const cellHeight = doc.heightOfString(cell ? cell.toString() : '', { width: tableColWidths[i], align: i === 1 ? 'right' : 'left' });
+              const cellHeight = doc.heightOfString(
+                cell ? cell.toString() : '',
+                { width: tableColWidths[i], align: i === 1 ? 'right' : 'left' },
+              );
               if (cellHeight > maxCellHeight) maxCellHeight = cellHeight;
             });
             x = doc.x;
             cells.forEach((cell, i) => {
-              doc.font('dejavu').fontSize(10).fillColor('black').text(cell.toString(), x, y, { width: tableColWidths[i], align: i === 1 ? 'right' : 'left' });
+              doc
+                .font('dejavu')
+                .fontSize(10)
+                .fillColor('black')
+                .text(cell.toString(), x, y, {
+                  width: tableColWidths[i],
+                  align: i === 1 ? 'right' : 'left',
+                });
               x += tableColWidths[i] + colPadding;
             });
             chartLabels.push(row.name);
@@ -282,27 +375,42 @@ export class ReportsService {
           // Thêm biểu đồ Bar chart cho KPI chờ duyệt
           if (chartData.some((v) => v > 0)) {
             const { ChartJSNodeCanvas } = require('chartjs-node-canvas');
-            const chartJSNodeCanvas = new ChartJSNodeCanvas({ width: 500, height: 250, backgroundColour: 'white' });
+            const chartJSNodeCanvas = new ChartJSNodeCanvas({
+              width: 500,
+              height: 250,
+              backgroundColour: 'white',
+            });
             const chartConfig = {
               type: 'bar',
               data: {
                 labels: chartLabels,
-                datasets: [{
-                  label: 'Số lượng KPI chờ duyệt',
-                  data: chartData,
-                  backgroundColor: ['#1890ff', '#faad14', '#cf1322'],
-                }],
+                datasets: [
+                  {
+                    label: 'Số lượng KPI chờ duyệt',
+                    data: chartData,
+                    backgroundColor: ['#1890ff', '#faad14', '#cf1322'],
+                  },
+                ],
               },
               options: {
                 plugins: { legend: { display: false } },
                 scales: { y: { beginAtZero: true } },
               },
             };
-            const barBuffer = await chartJSNodeCanvas.renderToBuffer(chartConfig);
+            const barBuffer =
+              await chartJSNodeCanvas.renderToBuffer(chartConfig);
             doc.moveDown(1);
-            doc.fontSize(12).text('Biểu đồ số lượng KPI chờ duyệt theo cấp duyệt:', { align: 'left' });
+            doc
+              .fontSize(12)
+              .text('Biểu đồ số lượng KPI chờ duyệt theo cấp duyệt:', {
+                align: 'left',
+              });
             doc.moveDown(0.2);
-            doc.image(barBuffer, { fit: [400, 180], align: 'center', valign: 'center' });
+            doc.image(barBuffer, {
+              fit: [400, 180],
+              align: 'center',
+              valign: 'center',
+            });
             doc.moveDown(2); // Tạo khoảng cách lớn hơn trước section tiếp theo
           } else {
             doc.moveDown(2);
@@ -311,24 +419,42 @@ export class ReportsService {
           doc.moveDown(2);
         }
         // 2. KPI đã duyệt/từ chối 7 ngày qua
-        const statusStats = await this.dashboardsService.getKpiStatusOverTimeStats(adminUser, 7);
+        const statusStats =
+          await this.dashboardsService.getKpiStatusOverTimeStats(adminUser, 7);
         doc.addPage();
-        doc.fontSize(18).text('THỐNG KÊ KPI ĐÃ DUYỆT/TỪ CHỐI (7 ngày qua)', { align: 'center' });
+        doc.fontSize(18).text('THỐNG KÊ KPI ĐÃ DUYỆT/TỪ CHỐI (7 ngày qua)', {
+          align: 'center',
+        });
         doc.moveDown();
-        doc.fontSize(12).fillColor('#3f8600').text(`KPI đã duyệt: ${statusStats.approvedLastXDays}`);
-        doc.fontSize(12).fillColor('#cf1322').text(`KPI bị từ chối: ${statusStats.rejectedLastXDays}`);
+        doc
+          .fontSize(12)
+          .fillColor('#3f8600')
+          .text(`KPI đã duyệt: ${statusStats.approvedLastXDays}`);
+        doc
+          .fontSize(12)
+          .fillColor('#cf1322')
+          .text(`KPI bị từ chối: ${statusStats.rejectedLastXDays}`);
         doc.fillColor('black');
         // Thêm biểu đồ Pie chart cho KPI đã duyệt/từ chối
         const { ChartJSNodeCanvas } = require('chartjs-node-canvas');
-        const chartJSNodeCanvas2 = new ChartJSNodeCanvas({ width: 400, height: 220, backgroundColour: 'white' });
+        const chartJSNodeCanvas2 = new ChartJSNodeCanvas({
+          width: 400,
+          height: 220,
+          backgroundColour: 'white',
+        });
         const pieConfig = {
           type: 'pie',
           data: {
             labels: ['Đã duyệt', 'Từ chối'],
-            datasets: [{
-              data: [statusStats.approvedLastXDays, statusStats.rejectedLastXDays],
-              backgroundColor: ['#52c41a', '#f5222d'],
-            }],
+            datasets: [
+              {
+                data: [
+                  statusStats.approvedLastXDays,
+                  statusStats.rejectedLastXDays,
+                ],
+                backgroundColor: ['#52c41a', '#f5222d'],
+              },
+            ],
           },
           options: {
             plugins: { legend: { position: 'top' } },
@@ -336,16 +462,29 @@ export class ReportsService {
         };
         const pieBuffer = await chartJSNodeCanvas2.renderToBuffer(pieConfig);
         doc.moveDown(1);
-        doc.fontSize(12).text('Biểu đồ KPI đã duyệt/từ chối:', { align: 'left' });
+        doc
+          .fontSize(12)
+          .text('Biểu đồ KPI đã duyệt/từ chối:', { align: 'left' });
         doc.moveDown(0.2);
-        doc.image(pieBuffer, { fit: [300, 150], align: 'center', valign: 'center' });
+        doc.image(pieBuffer, {
+          fit: [300, 150],
+          align: 'center',
+          valign: 'center',
+        });
         doc.moveDown(2);
         // 3. Thời gian duyệt trung bình
-        const avgTimeStats = await this.dashboardsService.getAverageApprovalTimeStats(adminUser);
+        const avgTimeStats =
+          await this.dashboardsService.getAverageApprovalTimeStats(adminUser);
         doc.addPage();
-        doc.fontSize(18).text('THỐNG KÊ THỜI GIAN DUYỆT KPI TRUNG BÌNH', { align: 'center' });
+        doc
+          .fontSize(18)
+          .text('THỐNG KÊ THỜI GIAN DUYỆT KPI TRUNG BÌNH', { align: 'center' });
         doc.moveDown();
-        doc.fontSize(12).text(`Thời gian duyệt trung bình (tất cả cấp): ${avgTimeStats.totalAverageTime ?? 'N/A'} ngày`);
+        doc
+          .fontSize(12)
+          .text(
+            `Thời gian duyệt trung bình (tất cả cấp): ${avgTimeStats.totalAverageTime ?? 'N/A'} ngày`,
+          );
         doc.moveDown(0.5);
         if (avgTimeStats.byLevel && avgTimeStats.byLevel.length > 0) {
           const tableColWidths = [220, 120];
@@ -353,7 +492,14 @@ export class ReportsService {
           const headers = ['Cấp duyệt', 'Thời gian trung bình (ngày)'];
           let x = doc.x;
           headers.forEach((header, i) => {
-            doc.font('dejavu').fontSize(11).fillColor('#0050b3').text(header, x, y, { width: tableColWidths[i], align: 'center' });
+            doc
+              .font('dejavu')
+              .fontSize(11)
+              .fillColor('#0050b3')
+              .text(header, x, y, {
+                width: tableColWidths[i],
+                align: 'center',
+              });
             x += tableColWidths[i];
           });
           y += 18;
@@ -361,7 +507,14 @@ export class ReportsService {
             x = doc.x;
             const cells = [row.name, row.averageTime ?? 'N/A'];
             cells.forEach((cell, i) => {
-              doc.font('dejavu').fontSize(10).fillColor('black').text(cell.toString(), x, y, { width: tableColWidths[i], align: 'center' });
+              doc
+                .font('dejavu')
+                .fontSize(10)
+                .fillColor('black')
+                .text(cell.toString(), x, y, {
+                  width: tableColWidths[i],
+                  align: 'center',
+                });
               x += tableColWidths[i];
             });
             y += 16;
@@ -408,10 +561,17 @@ export class ReportsService {
           if (val === null || val === undefined || val === '') return '';
           const num = Number(val);
           if (isNaN(num)) return val;
-          return num.toLocaleString('vi-VN', { maximumFractionDigits: 2 }).replace(/\,00$/, '');
+          return num
+            .toLocaleString('vi-VN', { maximumFractionDigits: 2 })
+            .replace(/\,00$/, '');
         };
         let completionRate = '0%';
-        if (kpi.target && kpi.target > 0 && kpi.actual_value !== null && kpi.actual_value !== undefined) {
+        if (
+          kpi.target &&
+          kpi.target > 0 &&
+          kpi.actual_value !== null &&
+          kpi.actual_value !== undefined
+        ) {
           let rate = (Number(kpi.actual_value) / Number(kpi.target)) * 100;
           if (rate < 0) rate = 0;
           completionRate = rate.toFixed(2) + '%';
@@ -450,7 +610,9 @@ export class ReportsService {
           if (val === null || val === undefined || val === '') return '';
           const num = Number(val);
           if (isNaN(num)) return val;
-          return num.toLocaleString('vi-VN', { maximumFractionDigits: 2 }).replace(/\,00$/, '');
+          return num
+            .toLocaleString('vi-VN', { maximumFractionDigits: 2 })
+            .replace(/\,00$/, '');
         };
         detailsSheet.addRow([
           kpi.id,
@@ -482,8 +644,12 @@ export class ReportsService {
       ]);
       // Luôn đảm bảo comparisonData là { data: any[] }
       let comparisonData: { data: any[] } = { data: [] };
-      if (typeof (this.kpisService as any).getKpiComparisonData === 'function') {
-        comparisonData = await (this.kpisService as any).getKpiComparisonData(adminUserId);
+      if (
+        typeof (this.kpisService as any).getKpiComparisonData === 'function'
+      ) {
+        comparisonData = await (this.kpisService as any).getKpiComparisonData(
+          adminUserId,
+        );
       } else {
         // Dùng dữ liệu tổng quan để giả lập
         const kpiSummaryData = await this.kpisService.findAll({}, adminUserId);
@@ -491,7 +657,7 @@ export class ReportsService {
           department_name: k.department_name || 'Phòng ban A',
           kpi_name: k.name,
           target: k.target,
-          actual_value: k.actual_value
+          actual_value: k.actual_value,
         }));
       }
       (comparisonData.data || []).forEach((item: any) => {
@@ -499,10 +665,17 @@ export class ReportsService {
           if (val === null || val === undefined || val === '') return '';
           const num = Number(val);
           if (isNaN(num)) return val;
-          return num.toLocaleString('vi-VN', { maximumFractionDigits: 2 }).replace(/\,00$/, '');
+          return num
+            .toLocaleString('vi-VN', { maximumFractionDigits: 2 })
+            .replace(/\,00$/, '');
         };
         let completionRate = '0%';
-        if (item.target && item.target > 0 && item.actual_value !== null && item.actual_value !== undefined) {
+        if (
+          item.target &&
+          item.target > 0 &&
+          item.actual_value !== null &&
+          item.actual_value !== undefined
+        ) {
           let rate = (Number(item.actual_value) / Number(item.target)) * 100;
           if (rate < 0) rate = 0;
           completionRate = rate.toFixed(2) + '%';
@@ -512,7 +685,7 @@ export class ReportsService {
           item.kpi_name || '',
           formatNumber(item.target),
           formatNumber(item.actual_value),
-          completionRate
+          completionRate,
         ]);
       });
     }

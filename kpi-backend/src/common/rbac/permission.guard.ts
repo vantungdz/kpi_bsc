@@ -24,11 +24,22 @@ export class PermissionGuard implements CanActivate {
 
     const request = context.switchToHttp().getRequest();
     const user: Employee = request.user;
-    // Lấy permission từ user.role.permissions
-    if (!user || !user.role || !user.role.permissions) {
+    // Lấy permission từ tất cả roles của user
+    if (
+      !user ||
+      !user.roles ||
+      !Array.isArray(user.roles) ||
+      user.roles.length === 0
+    ) {
+      console.log('PermissionGuard - User missing or has no roles:', user);
       throw new ForbiddenException('No permission');
     }
-    const hasPermission = user.role.permissions.some(
+    const allPermissions = user.roles.flatMap(
+      (role: any) => role.permissions || [],
+    );
+    console.log('PermissionGuard - User permissions:', allPermissions);
+    console.log('PermissionGuard - Required permission:', permission);
+    const hasPermission = allPermissions.some(
       (p) =>
         p.action === permission.action && p.resource === permission.resource,
     );

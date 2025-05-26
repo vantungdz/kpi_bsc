@@ -271,16 +271,26 @@ const deletedKpiName = ref(null);
 const activePanelKeys = ref([]);
 const currentToggleKpiId = ref(null);
 
-const userPermissions = computed(() => store.getters["auth/user"]?.permissions || []);
+const userPermissions = computed(
+  () => store.getters["auth/user"]?.permissions || []
+);
 function hasPermission(action, resource) {
   return userPermissions.value?.some(
     (p) => p.action === action && p.resource === resource
   );
 }
-const canCreateCompanyKpiCompany = computed(() => hasPermission(RBAC_ACTIONS.CREATE, RBAC_RESOURCES.KPI_COMPANY));
-const canDeleteCompanyKpiCompany = computed(() => hasPermission(RBAC_ACTIONS.DELETE, RBAC_RESOURCES.KPI_COMPANY));
-const canCopyCompanyKpi = computed(() => hasPermission(RBAC_ACTIONS.COPY_TEMPLATE, RBAC_RESOURCES.KPI));
-const canToggleStatusKpiCompany = computed(() => hasPermission(RBAC_ACTIONS.TOGGLE_STATUS, RBAC_RESOURCES.KPI));
+const canCreateCompanyKpiCompany = computed(() =>
+  hasPermission(RBAC_ACTIONS.CREATE, RBAC_RESOURCES.KPI_COMPANY)
+);
+const canDeleteCompanyKpiCompany = computed(() =>
+  hasPermission(RBAC_ACTIONS.DELETE, RBAC_RESOURCES.KPI_COMPANY)
+);
+const canCopyCompanyKpi = computed(() =>
+  hasPermission(RBAC_ACTIONS.COPY_TEMPLATE, RBAC_RESOURCES.KPI_COMPANY)
+);
+const canToggleStatusKpiCompany = computed(() =>
+  hasPermission(RBAC_ACTIONS.TOGGLE_STATUS, RBAC_RESOURCES.KPI_COMPANY)
+);
 
 const loading = computed(() => store.getters["kpis/isLoading"]);
 const error = computed(() => store.getters["kpis/error"]);

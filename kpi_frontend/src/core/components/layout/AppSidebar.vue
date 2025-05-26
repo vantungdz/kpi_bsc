@@ -213,19 +213,22 @@
         >
           <router-link to="/review-cycle/create">
             <form-outlined />
-            <span>{{ $t('reviewCycleManagement') }}</span>
+            <span>{{ $t("reviewCycleManagement") }}</span>
           </router-link>
         </a-menu-item>
-        <a-menu-item key="admin-create-department" :title="$t('createDepartment')">
+        <a-menu-item
+          key="admin-create-department"
+          :title="$t('createDepartment')"
+        >
           <router-link to="/admin/create-department">
             <apartment-outlined />
-            <span>{{ $t('createDepartment') }}</span>
+            <span>{{ $t("createDepartment") }}</span>
           </router-link>
         </a-menu-item>
         <a-menu-item key="admin-create-section" :title="$t('createSection')">
           <router-link to="/admin/create-section">
             <cluster-outlined />
-            <span>{{ $t('createSection') }}</span>
+            <span>{{ $t("createSection") }}</span>
           </router-link>
         </a-menu-item>
       </a-sub-menu>
@@ -268,17 +271,38 @@ import { RBAC_ACTIONS, RBAC_RESOURCES } from "@/core/constants/rbac.constants";
 
 const store = useStore();
 
-const userPermissions = computed(
-  () => store.getters["auth/user"]?.permissions || []
-);
+const user = computed(() => store.getters["auth/user"]);
+// Chuẩn hóa lấy mảng roles từ user
+// const userRoles = computed(() => {
+//   if (!user.value) return [];
+//   if (Array.isArray(user.value.roles)) {
+//     return user.value.roles
+//       .map((r) => (typeof r === "string" ? r : r?.name))
+//       .filter(Boolean);
+//   }
+//   if (user.value.role) {
+//     if (typeof user.value.role === "string") return [user.value.role];
+//     if (typeof user.value.role === "object" && user.value.role?.name)
+//       return [user.value.role.name];
+//   }
+//   return [];
+// });
+
+// Lấy permissions đã tổng hợp từ backend (ưu tiên từ user.roles nếu có)
+const userPermissions = computed(() => user.value?.permissions || []);
 function hasPermission(action, resource) {
   return userPermissions.value?.some(
     (p) => p.action?.trim() === action && p.resource?.trim() === resource
   );
 }
 
-const canViewDashboard = computed(() =>
-  hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.DASHBOARD)
+// Sử dụng resource hợp lệ từ RBAC_RESOURCES
+const canViewDashboard = computed(
+  () =>
+    hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.DASHBOARD_COMPANY) ||
+    hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.DASHBOARD_DEPARTMENT) ||
+    hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.DASHBOARD_SECTION) ||
+    hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.DASHBOARD_EMPLOYEE)
 );
 const canViewCompanyLevel = computed(() =>
   hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.KPI_COMPANY)
@@ -290,40 +314,41 @@ const canViewSectionLevel = computed(() =>
   hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.KPI_SECTION)
 );
 const canViewEmployeeList = computed(() =>
-  hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.EMPLOYEE)
+  hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.EMPLOYEE_COMPANY)
 );
-const canViewApprovals = computed(() =>
-  hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.APPROVAL)
+// Không có resource APPROVAL, OBJECTIVE_APPROVAL, REPORT_GENERATOR, PERFORMANCE_OBJECTIVE_APPROVAL, KPI_REVIEW, EMPLOYEE_KPI_SCORES, MY_KPI_REVIEW
+// Nếu cần, phải bổ sung vào constants, còn không thì loại bỏ hoặc thay thế bằng resource hợp lệ
+// Ví dụ: KPI_PERSONAL => KPI_EMPLOYEE hoặc KPI_VALUE_EMPLOYEE
+const canViewApprovals = computed(
+  () =>
+    hasPermission(RBAC_ACTIONS.APPROVE, RBAC_RESOURCES.KPI_VALUE_COMPANY) ||
+    hasPermission(RBAC_ACTIONS.APPROVE, RBAC_RESOURCES.KPI_VALUE_DEPARTMENT) ||
+    hasPermission(RBAC_ACTIONS.APPROVE, RBAC_RESOURCES.KPI_VALUE_SECTION) ||
+    hasPermission(RBAC_ACTIONS.APPROVE, RBAC_RESOURCES.KPI_VALUE_MANAGER)
 );
-const canViewObjectiveApprovals = computed(() =>
-  hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.OBJECTIVE_APPROVAL)
+const canViewReport = computed(
+  () =>
+    hasPermission(RBAC_ACTIONS.EXPORT, RBAC_RESOURCES.REPORT_COMPANY) ||
+    hasPermission(RBAC_ACTIONS.EXPORT, RBAC_RESOURCES.REPORT_DEPARTMENT)
 );
-const canViewReport = computed(() =>
-  hasPermission("export", RBAC_RESOURCES.REPORT_GENERATOR)
-);
-const canViewPerformanceObjectiveApprovals = computed(() =>
-  hasPermission(
-    RBAC_ACTIONS.VIEW,
-    RBAC_RESOURCES.PERFORMANCE_OBJECTIVE_APPROVAL
-  )
-);
-const canViewKpiReview = computed(() =>
-  hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.KPI_REVIEW)
+const canViewKpiReview = computed(
+  () =>
+    hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.KPI_VALUE_COMPANY) ||
+    hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.KPI_VALUE_DEPARTMENT)
 );
 const canViewEmployeeKpiScores = computed(() =>
-  hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.EMPLOYEE_KPI_SCORES)
+  hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.KPI_VALUE_EMPLOYEE)
 );
-const canViewMyAreaSubMenu = computed(
-  () =>
-    hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.KPI_PERSONAL) ||
-    hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.MY_KPI_REVIEW)
+const canViewMyAreaSubMenu = computed(() =>
+  hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.KPI_VALUE_EMPLOYEE)
 );
 
 const canViewAdminMenu = computed(
   () =>
-    hasPermission(RBAC_ACTIONS.MANAGE, RBAC_RESOURCES.ADMIN) ||
-    hasPermission(RBAC_ACTIONS.MANAGE, "role") ||
-    hasPermission(RBAC_ACTIONS.MANAGE, "user")
+    hasPermission(RBAC_ACTIONS.UPDATE, RBAC_RESOURCES.ROLE_COMPANY) ||
+    hasPermission(RBAC_ACTIONS.UPDATE, RBAC_RESOURCES.PERMISSION_COMPANY) ||
+    hasPermission(RBAC_ACTIONS.UPDATE, "role") ||
+    hasPermission(RBAC_ACTIONS.UPDATE, "user")
 );
 
 const canViewKpiManagementSubMenu = computed(
@@ -333,9 +358,7 @@ const canViewKpiManagementSubMenu = computed(
     canViewSectionLevel.value
 );
 
-const canViewApprovalsReviewSubMenu = computed(
-  () => canViewApprovals.value || canViewObjectiveApprovals.value
-);
+const canViewApprovalsReviewSubMenu = computed(() => canViewApprovals.value);
 </script>
 
 <style scoped>

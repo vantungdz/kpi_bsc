@@ -12,7 +12,7 @@ export class ReportsController {
   constructor(private readonly reportsService: ReportsService) {}
 
   @Get('generate')
-  @Roles('admin', 'manager')
+  @Roles('report:export:company', 'report:export:department')
   async generateReport(
     @Query('reportType') reportType: string,
     @Query('fileFormat') fileFormat: string,
@@ -20,7 +20,8 @@ export class ReportsController {
     @Query('endDate') endDate: Date,
     @Res() res: Response,
   ) {
-    let contentType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    let contentType =
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
     let fileExt = 'xlsx';
     if (fileFormat === 'csv') {
       contentType = 'text/csv';
@@ -30,7 +31,10 @@ export class ReportsController {
       fileExt = 'pdf';
     }
     res.setHeader('Content-Type', contentType);
-    res.setHeader('Content-Disposition', `attachment; filename=kpi-report.${fileExt}`);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename=kpi-report.${fileExt}`,
+    );
     const buffer = await this.reportsService.generateKpiReport(
       reportType,
       startDate,

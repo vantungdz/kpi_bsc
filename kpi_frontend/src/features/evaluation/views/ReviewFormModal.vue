@@ -6,9 +6,13 @@
     @ok="submitReview"
     :confirm-loading="loading"
     :ok-button-props="{
-      disabled: loading || !isCurrentUserCanReview || (isCurrentLevelReviewed && !isManagerCanComplete),
+      disabled:
+        loading ||
+        !isCurrentUserCanReview ||
+        (isCurrentLevelReviewed && !isManagerCanComplete),
       style:
-        (isCurrentUserCanReview && (!isCurrentLevelReviewed || isManagerCanComplete))
+        isCurrentUserCanReview &&
+        (!isCurrentLevelReviewed || isManagerCanComplete)
           ? ''
           : 'display:none',
     }"
@@ -16,63 +20,93 @@
   >
     <div v-if="review">
       <div class="review-info-grid">
-        <div><b>{{ $t('kpiName') }}:</b> {{ review.kpi?.name }}</div>
-        <div><b>{{ $t('employee') }}:</b> {{ review.employee?.fullName }}</div>
-        <div><b>{{ $t('cycle') }}:</b> {{ review.cycle }}</div>
-        <div><b>{{ $t('target') }}:</b> {{ review.targetValue }}</div>
-        <div><b>{{ $t('actualResult') }}:</b> {{ review.actualValue }}</div>
+        <div>
+          <b>{{ $t("kpiName") }}:</b> {{ review.kpi?.name }}
+        </div>
+        <div>
+          <b>{{ $t("employee") }}:</b> {{ review.employee?.fullName }}
+        </div>
+        <div>
+          <b>{{ $t("cycle") }}:</b> {{ review.cycle }}
+        </div>
+        <div>
+          <b>{{ $t("target") }}:</b> {{ review.targetValue }}
+        </div>
+        <div>
+          <b>{{ $t("actualResult") }}:</b> {{ review.actualValue }}
+        </div>
       </div>
       <div class="review-section">
-        <div class="review-section-title">{{ $t('selfReview') }}</div>
+        <div class="review-section-title">{{ $t("selfReview") }}</div>
         <div class="review-row">
-          <span class="review-label">{{ $t('selfScore') }}:</span>
+          <span class="review-label">{{ $t("selfScore") }}:</span>
           <a-rate :value="review.selfScore" :count="5" allow-half disabled />
         </div>
         <div class="review-row">
-          <span class="review-label">{{ $t('selfComment') }}:</span>
-          <div class="review-comment">{{ review.selfComment || $t('noComment') }}</div>
+          <span class="review-label">{{ $t("selfComment") }}:</span>
+          <div class="review-comment">
+            {{ review.selfComment || $t("noComment") }}
+          </div>
         </div>
       </div>
       <div v-if="review.sectionScore !== undefined" class="review-section">
-        <div class="review-section-title">{{ $t('sectionReview') }}</div>
+        <div class="review-section-title">{{ $t("sectionReview") }}</div>
         <div class="review-row">
-          <span class="review-label">{{ $t('sectionScore') }}:</span>
+          <span class="review-label">{{ $t("sectionScore") }}:</span>
           <a-rate :value="review.sectionScore" :count="5" allow-half disabled />
         </div>
         <div class="review-row">
-          <span class="review-label">{{ $t('sectionComment') }}:</span>
-          <div class="review-comment">{{ review.sectionComment || $t('noComment') }}</div>
+          <span class="review-label">{{ $t("sectionComment") }}:</span>
+          <div class="review-comment">
+            {{ review.sectionComment || $t("noComment") }}
+          </div>
         </div>
       </div>
       <div v-if="review.departmentScore !== undefined" class="review-section">
-        <div class="review-section-title">{{ $t('departmentReview') }}</div>
+        <div class="review-section-title">{{ $t("departmentReview") }}</div>
         <div class="review-row">
-          <span class="review-label">{{ $t('departmentScore') }}:</span>
-          <a-rate :value="review.departmentScore" :count="5" allow-half disabled />
+          <span class="review-label">{{ $t("departmentScore") }}:</span>
+          <a-rate
+            :value="review.departmentScore"
+            :count="5"
+            allow-half
+            disabled
+          />
         </div>
         <div class="review-row">
-          <span class="review-label">{{ $t('departmentComment') }}:</span>
-          <div class="review-comment">{{ review.departmentComment || $t('noComment') }}</div>
+          <span class="review-label">{{ $t("departmentComment") }}:</span>
+          <div class="review-comment">
+            {{ review.departmentComment || $t("noComment") }}
+          </div>
         </div>
       </div>
       <div v-if="review.managerScore !== undefined" class="review-section">
-        <div class="review-section-title">{{ $t('managerReview') }}</div>
+        <div class="review-section-title">{{ $t("managerReview") }}</div>
         <div class="review-row">
-          <span class="review-label">{{ $t('managerScore') }}:</span>
+          <span class="review-label">{{ $t("managerScore") }}:</span>
           <a-rate :value="review.managerScore" :count="5" allow-half disabled />
         </div>
         <div class="review-row">
-          <span class="review-label">{{ $t('managerComment') }}:</span>
-          <div class="review-comment">{{ review.managerComment || $t('noComment') }}</div>
+          <span class="review-label">{{ $t("managerComment") }}:</span>
+          <div class="review-comment">
+            {{ review.managerComment || $t("noComment") }}
+          </div>
         </div>
       </div>
-      <div v-if="review.employeeFeedback && (review.status === 'MANAGER_REVIEWED' || review.status === 'COMPLETED')" class="review-section">
-        <div class="review-section-title">{{ $t('employeeFeedback') }}</div>
+      <div
+        v-if="
+          review.employeeFeedback &&
+          (review.status === 'MANAGER_REVIEWED' ||
+            review.status === 'COMPLETED')
+        "
+        class="review-section"
+      >
+        <div class="review-section-title">{{ $t("employeeFeedback") }}</div>
         <div class="review-comment">{{ review.employeeFeedback }}</div>
       </div>
       <div v-if="isCurrentUserCanReview">
         <div v-if="isEmployeeCanFeedback" class="review-section">
-          <div class="review-section-title">{{ $t('employeeFeedback') }}</div>
+          <div class="review-section-title">{{ $t("employeeFeedback") }}</div>
           <a-textarea
             v-model:value="form.employeeFeedback"
             :placeholder="$t('feedbackPlaceholder')"
@@ -81,30 +115,41 @@
           />
         </div>
         <div v-else-if="isManagerCanComplete" class="review-section">
-          <div style="margin-bottom: 12px; color: #52c41a; font-weight: 600;">
-            <span>{{ $t('employeeFeedbackCompleted') }}</span>
+          <div style="margin-bottom: 12px; color: #52c41a; font-weight: 600">
+            <span>{{ $t("employeeFeedbackCompleted") }}</span>
           </div>
         </div>
         <div v-else class="review-section">
-          <div class="review-section-title">{{ $t('yourReview') }}</div>
+          <div class="review-section-title">{{ $t("yourReview") }}</div>
           <div style="margin: 12px 0">
-            <a-rate v-model:value="form.score" :count="5" allow-half :disabled="loading || isCurrentLevelReviewed" />
+            <a-rate
+              v-model:value="form.score"
+              :count="5"
+              allow-half
+              :disabled="loading || isCurrentLevelReviewed"
+            />
           </div>
           <a-textarea
             v-model:value="form.managerComment"
             :placeholder="
-              review.status === 'SELF_REVIEWED' ? $t('sectionComment') :
-              review.status === 'SECTION_REVIEWED' ? $t('departmentComment') :
-              review.status === 'DEPARTMENT_REVIEWED' ? $t('managerComment') :
-              $t('comment')
+              review.status === 'SELF_REVIEWED'
+                ? $t('sectionComment')
+                : review.status === 'SECTION_REVIEWED'
+                  ? $t('departmentComment')
+                  : review.status === 'DEPARTMENT_REVIEWED'
+                    ? $t('managerComment')
+                    : $t('comment')
             "
             rows="3"
             :disabled="loading || isCurrentLevelReviewed"
           />
         </div>
       </div>
-      <div v-else-if="isCurrentLevelReviewed" style="color: #52c41a; margin-top: 8px; font-weight: 600;">
-        <b>{{ $t('reviewed') }}</b>
+      <div
+        v-else-if="isCurrentLevelReviewed"
+        style="color: #52c41a; margin-top: 8px; font-weight: 600"
+      >
+        <b>{{ $t("reviewed") }}</b>
       </div>
     </div>
   </a-modal>
@@ -137,23 +182,34 @@ const store = useStore();
 
 // Lấy user từ store giống UserProfile
 const user = computed(() => store.getters["auth/user"]);
-const effectiveRole = computed(() => {
-  const role = user.value?.role;
-  if (!role) return null;
-  if (typeof role === 'string') return role;
-  if (typeof role === 'object' && role.name) return role.name;
-  return null;
+
+// Chuẩn hóa lấy mảng roles (string)
+const userRoles = computed(() => {
+  if (!user.value) return [];
+  if (Array.isArray(user.value.roles)) {
+    return user.value.roles
+      .map((r) => (typeof r === "string" ? r : r?.name))
+      .filter(Boolean);
+  }
+  if (user.value.role) {
+    if (typeof user.value.role === "string") return [user.value.role];
+    if (typeof user.value.role === "object" && user.value.role?.name)
+      return [user.value.role.name];
+  }
+  return [];
 });
 
-const isSection = computed(() => effectiveRole.value === "section");
-const isDepartment = computed(() => effectiveRole.value === "department");
-const isManager = computed(() => effectiveRole.value === "manager");
-const isAdmin = computed(() => effectiveRole.value === "admin");
-const isEmployee = computed(() => effectiveRole.value === "employee");
+const isSection = computed(() => userRoles.value.includes("section"));
+const isDepartment = computed(() => userRoles.value.includes("department"));
+const isManager = computed(() => userRoles.value.includes("manager"));
+const isAdmin = computed(() => userRoles.value.includes("admin"));
+const isEmployee = computed(() => userRoles.value.includes("employee"));
 
 const isSectionCanReview = computed(() => {
   return (
-    props.review && props.review.status === "SELF_REVIEWED" && (isSection.value || isAdmin.value)
+    props.review &&
+    props.review.status === "SELF_REVIEWED" &&
+    (isSection.value || isAdmin.value)
   );
 });
 
@@ -275,15 +331,6 @@ const submitReview = async () => {
     loading.value = false;
   }
 };
-
-console.log('user:', user.value);
-console.log('userRole:', effectiveRole.value);
-console.log('status:', props.review?.status);
-console.log('isSectionCanReview:', isSectionCanReview.value);
-console.log('isDepartmentCanReview:', isDepartmentCanReview.value);
-console.log('isManagerCanReview:', isManagerCanReview.value);
-console.log('isCurrentUserCanReview:', isCurrentUserCanReview.value);
-console.log('isCurrentLevelReviewed:', isCurrentLevelReviewed.value);
 </script>
 
 <style scoped>
@@ -305,7 +352,7 @@ console.log('isCurrentLevelReviewed:', isCurrentLevelReviewed.value);
   background: #f9fafb;
   border-radius: 12px;
   padding: 14px 18px 10px 18px;
-  box-shadow: 0 1px 6px rgba(0,0,0,0.04);
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.04);
   margin-bottom: 12px;
 }
 .review-section-title {

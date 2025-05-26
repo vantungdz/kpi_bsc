@@ -361,7 +361,10 @@ import {
 } from "ant-design-vue";
 import dayjs from "dayjs";
 import { KpiUnits } from "@/core/constants/kpiConstants.js";
-import { RBAC_ACTIONS, RBAC_RESOURCES } from "@/core/constants/rbac.constants.js";
+import {
+  RBAC_ACTIONS,
+  RBAC_RESOURCES,
+} from "@/core/constants/rbac.constants.js";
 
 const router = useRouter();
 const route = useRoute();
@@ -511,15 +514,29 @@ const kpiTemplateOptions = computed(() =>
   }))
 );
 
-const userPermissions = computed(() => store.getters["auth/user"]?.permissions || []);
+const userPermissions = computed(
+  () => store.getters["auth/user"]?.permissions || []
+);
 const canAccessCreatePage = computed(() =>
-  userPermissions.value.some(p => p.action?.trim() === RBAC_ACTIONS.CREATE && p.resource?.trim() === RBAC_RESOURCES.KPI)
+  userPermissions.value.some(
+    (p) =>
+      p.action?.trim() === RBAC_ACTIONS.CREATE &&
+      p.resource?.trim() === RBAC_RESOURCES.KPI_COMPANY
+  )
 );
 const canAssignDirectlyToUser = computed(() =>
-  userPermissions.value.some(p => p.action?.trim() === RBAC_ACTIONS.ASSIGN_DIRECT_USER && p.resource?.trim() === RBAC_RESOURCES.KPI)
+  userPermissions.value.some(
+    (p) =>
+      p.action?.trim() === RBAC_ACTIONS.ASSIGN &&
+      p.resource?.trim() === RBAC_RESOURCES.KPI_COMPANY
+  )
 );
 const canAssignToUnits = computed(() =>
-  userPermissions.value.some(p => p.action?.trim() === RBAC_ACTIONS.ASSIGN_UNIT && p.resource?.trim() === RBAC_RESOURCES.KPI)
+  userPermissions.value.some(
+    (p) =>
+      p.action?.trim() === RBAC_ACTIONS.ASSIGN &&
+      p.resource?.trim() === RBAC_RESOURCES.KPI_COMPANY
+  )
 );
 
 const columns = [

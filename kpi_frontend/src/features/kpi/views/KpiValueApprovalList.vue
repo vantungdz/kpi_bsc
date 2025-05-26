@@ -416,8 +416,20 @@ function hasPermission(action, resource) {
     (p) => p.action === action && p.resource === resource
   );
 }
-const canApproveKpiValue = computed(() => hasPermission(RBAC_ACTIONS.APPROVE, RBAC_RESOURCES.KPI_VALUE));
-const canRejectKpiValue = computed(() => hasPermission(RBAC_ACTIONS.REJECT, RBAC_RESOURCES.KPI_VALUE));
+const canApproveKpiValue = computed(
+  () =>
+    hasPermission(RBAC_ACTIONS.APPROVE, RBAC_RESOURCES.KPI_VALUE_COMPANY) ||
+    hasPermission(RBAC_ACTIONS.APPROVE, RBAC_RESOURCES.KPI_VALUE_DEPARTMENT) ||
+    hasPermission(RBAC_ACTIONS.APPROVE, RBAC_RESOURCES.KPI_VALUE_SECTION) ||
+    hasPermission(RBAC_ACTIONS.APPROVE, RBAC_RESOURCES.KPI_VALUE_MANAGER)
+);
+const canRejectKpiValue = computed(
+  () =>
+    hasPermission(RBAC_ACTIONS.REJECT, RBAC_RESOURCES.KPI_VALUE_COMPANY) ||
+    hasPermission(RBAC_ACTIONS.REJECT, RBAC_RESOURCES.KPI_VALUE_DEPARTMENT) ||
+    hasPermission(RBAC_ACTIONS.REJECT, RBAC_RESOURCES.KPI_VALUE_SECTION) ||
+    hasPermission(RBAC_ACTIONS.REJECT, RBAC_RESOURCES.KPI_VALUE_MANAGER)
+);
 
 // Table columns definitions extracted outside component logic
 const columns = computed(() => [

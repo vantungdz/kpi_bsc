@@ -1,12 +1,21 @@
 <template>
   <a-card class="department-create-form">
-    <h2 class="form-title">{{ $t('createDepartment') }}</h2>
+    <h2 class="form-title">{{ $t("createDepartment") }}</h2>
     <a-divider />
-    <a-form :model="form" :rules="rules" ref="formRef" layout="vertical" @finish="handleSubmit">
+    <a-form
+      :model="form"
+      :rules="rules"
+      ref="formRef"
+      layout="vertical"
+      @finish="handleSubmit"
+    >
       <a-row :gutter="16">
         <a-col :xs="24" :md="12">
           <a-form-item :label="$t('departmentName')" name="name">
-            <a-input v-model:value="form.name" :placeholder="$t('enterDepartmentName')" />
+            <a-input
+              v-model:value="form.name"
+              :placeholder="$t('enterDepartmentName')"
+            />
           </a-form-item>
         </a-col>
         <a-col :xs="24" :md="12">
@@ -23,12 +32,14 @@
         </a-col>
       </a-row>
       <a-form-item>
-        <a-button type="primary" html-type="submit" :loading="loading">{{ $t('create') }}</a-button>
+        <a-button type="primary" html-type="submit" :loading="loading">{{
+          $t("create")
+        }}</a-button>
       </a-form-item>
     </a-form>
     <a-divider />
     <div>
-      <h3 style="margin-bottom: 12px;">{{ $t('departmentList') }}</h3>
+      <h3 style="margin-bottom: 12px">{{ $t("departmentList") }}</h3>
       <a-table
         :data-source="departmentList"
         :columns="departmentColumns"
@@ -44,42 +55,45 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue';
-import { useI18n } from 'vue-i18n';
-import { message } from 'ant-design-vue';
-import { useStore } from 'vuex';
+import { ref, onMounted, computed } from "vue";
+import { useI18n } from "vue-i18n";
+import { message } from "ant-design-vue";
+import { useStore } from "vuex";
 
 const { t } = useI18n();
 const store = useStore();
 const formRef = ref();
-const form = ref({ name: '', managerId: null });
+const form = ref({ name: "", managerId: null });
 const loading = ref(false);
 const loadingManagers = ref(false);
 const managerOptions = ref([]);
 
 const rules = {
   name: [
-    { required: true, message: t('departmentNameRequired'), trigger: 'blur' },
-    { min: 2, max: 100, message: t('departmentNameLength'), trigger: 'blur' },
+    { required: true, message: t("departmentNameRequired"), trigger: "blur" },
+    { min: 2, max: 100, message: t("departmentNameLength"), trigger: "blur" },
   ],
   managerId: [
-    { required: true, message: t('managerRequired'), trigger: 'change' },
+    { required: true, message: t("managerRequired"), trigger: "change" },
   ],
 };
 
 const filterManagerOption = (input, option) => {
-  return (
-    option.label.toLowerCase().includes(input.toLowerCase())
-  );
+  return option.label.toLowerCase().includes(input.toLowerCase());
 };
 
 const fetchManagers = async () => {
   loadingManagers.value = true;
   try {
-    const users = await store.dispatch('employees/fetchUsers', { role: 'manager', force: true });
-    managerOptions.value = (users || []).map(u => ({
+    // Truyền filter roles: ['manager'] để đồng bộ backend multi-role
+    const users = await store.dispatch("employees/fetchUsers", {
+      roles: ["manager"],
+      force: true,
+    });
+    managerOptions.value = (users || []).map((u) => ({
       value: u.id,
-      label: `${u.first_name || ''} ${u.last_name || ''} (${u.username})`.trim(),
+      label:
+        `${u.first_name || ""} ${u.last_name || ""} (${u.username})`.trim(),
     }));
   } catch (e) {
     managerOptions.value = [];
@@ -88,31 +102,40 @@ const fetchManagers = async () => {
   }
 };
 
-const departmentList = computed(() => store.getters['departments/departmentList'] || []);
-const departmentColumns = computed(() =>[
-  { title: t('departmentName'), dataIndex: 'name', key: 'name' },
-  { title: t('manager'), dataIndex: 'managerName', key: 'managerName',
-    customRender: ({ record }) => record.manager?.first_name ? `${record.manager.first_name} ${record.manager.last_name}` : '' },
+const departmentList = computed(
+  () => store.getters["departments/departmentList"] || []
+);
+const departmentColumns = computed(() => [
+  { title: t("departmentName"), dataIndex: "name", key: "name" },
+  {
+    title: t("manager"),
+    dataIndex: "managerName",
+    key: "managerName",
+    customRender: ({ record }) =>
+      record.manager?.first_name
+        ? `${record.manager.first_name} ${record.manager.last_name}`
+        : "",
+  },
 ]);
 
 onMounted(async () => {
   await fetchManagers();
-  await store.dispatch('departments/fetchDepartments');
+  await store.dispatch("departments/fetchDepartments");
 });
 
 const handleSubmit = async () => {
   loading.value = true;
   try {
-    await store.dispatch('departments/createDepartment', {
+    await store.dispatch("departments/createDepartment", {
       name: form.value.name,
       managerId: form.value.managerId,
     });
-    message.success(t('departmentCreatedSuccess'));
-    form.value = { name: '', managerId: null };
+    message.success(t("departmentCreatedSuccess"));
+    form.value = { name: "", managerId: null };
     formRef.value?.resetFields();
-    await store.dispatch('departments/fetchDepartments');
+    await store.dispatch("departments/fetchDepartments");
   } catch (e) {
-    message.error(e?.message || t('departmentCreatedError'));
+    message.error(e?.message || t("departmentCreatedError"));
   } finally {
     loading.value = false;
   }

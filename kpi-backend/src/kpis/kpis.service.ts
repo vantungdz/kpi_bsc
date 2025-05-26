@@ -64,13 +64,16 @@ export class KpisService {
   ) {
     const user = await this.employeeRepository.findOne({
       where: { id: userId },
-      relations: ['role', 'role.permissions'],
+      relations: ['roles', 'roles.permissions'],
     });
     if (!user) throw new UnauthorizedException('User not found.');
-    const rolePermissions = Array.isArray(user.role?.permissions)
-      ? user.role.permissions
+    // Gộp tất cả permissions từ các role
+    const allPermissions = Array.isArray(user.roles)
+      ? user.roles.flatMap((role: any) =>
+          Array.isArray(role.permissions) ? role.permissions : [],
+        )
       : [];
-    const hasPermission = rolePermissions.some(
+    const hasPermission = allPermissions.some(
       (p: any) => p.action === action && p.resource === resource,
     );
     if (!hasPermission)
@@ -84,7 +87,7 @@ export class KpisService {
     await this.checkPermission(
       userId,
       RBAC_ACTIONS.VIEW,
-      RBAC_RESOURCES.KPI_PERSONAL,
+      RBAC_RESOURCES.KPI_EMPLOYEE,
     );
     return this.kpisRepository
       .createQueryBuilder('kpi')
@@ -114,7 +117,11 @@ export class KpisService {
       itemsPerPage: number;
     };
   }> {
-    await this.checkPermission(userId, RBAC_ACTIONS.VIEW, RBAC_RESOURCES.KPI);
+    await this.checkPermission(
+      userId,
+      RBAC_ACTIONS.VIEW,
+      RBAC_RESOURCES.KPI_COMPANY,
+    );
     const { page = 1, limit = 15 } = filterDto;
 
     const query = this.kpisRepository
@@ -246,18 +253,21 @@ export class KpisService {
     await this.checkPermission(
       loggedInUser.id,
       RBAC_ACTIONS.VIEW,
-      RBAC_RESOURCES.KPI,
+      RBAC_RESOURCES.KPI_DEPARTMENT,
     );
     const { page = 1, limit = 15 } = filterDto;
     let effectiveDepartmentId: number | null = departmentId;
 
-    const roleName =
-      typeof loggedInUser.role === 'string'
-        ? loggedInUser.role
-        : (loggedInUser.role?.name ?? '');
-    if (roleName === 'department') {
+    // Lấy danh sách role name
+    const userRoles: string[] = Array.isArray(loggedInUser.roles)
+      ? loggedInUser.roles.map((r: any) =>
+          typeof r === 'string' ? r : r?.name,
+        )
+      : [];
+    // Ưu tiên quyền cao nhất: admin > manager > department > section
+    if (userRoles.includes('department')) {
       effectiveDepartmentId = loggedInUser.departmentId;
-    } else if (roleName === 'section') {
+    } else if (userRoles.includes('section')) {
       effectiveDepartmentId = loggedInUser.department?.id || null;
     }
 
@@ -294,9 +304,9 @@ export class KpisService {
             });
         }),
       );
-    } else if (roleName !== 'admin' && roleName !== 'manager') {
+    } else if (!userRoles.includes('admin') && !userRoles.includes('manager')) {
       this.logger.warn(
-        `User role ${roleName} (ID: ${loggedInUser.id}) attempted to view all department KPIs. Returning empty.`,
+        `User roles [${userRoles.join(', ')}] (ID: ${loggedInUser.id}) attempted to view all department KPIs. Returning empty.`,
       );
       return {
         data: [],
@@ -425,7 +435,11 @@ export class KpisService {
   }
 
   async getAllKpiAssignedToDepartments(userId: number): Promise<Kpi[]> {
-    await this.checkPermission(userId, RBAC_ACTIONS.VIEW, RBAC_RESOURCES.KPI);
+    await this.checkPermission(
+      userId,
+      RBAC_ACTIONS.VIEW,
+      RBAC_RESOURCES.KPI_DEPARTMENT,
+    );
     return this.kpisRepository
       .createQueryBuilder('kpi')
       .leftJoinAndSelect('kpi.perspective', 'perspective')
@@ -443,7 +457,11 @@ export class KpisService {
   }
 
   async getAllKpiAssignedToSections(userId: number): Promise<Kpi[]> {
-    await this.checkPermission(userId, RBAC_ACTIONS.VIEW, RBAC_RESOURCES.KPI);
+    await this.checkPermission(
+      userId,
+      RBAC_ACTIONS.VIEW,
+      RBAC_RESOURCES.KPI_SECTION,
+    );
     return this.kpisRepository
       .createQueryBuilder('kpi')
       .leftJoinAndSelect('kpi.perspective', 'perspective')
@@ -461,7 +479,11 @@ export class KpisService {
   }
 
   async getKpiComparisonData(userId: number): Promise<{ data: any[] }> {
-    await this.checkPermission(userId, RBAC_ACTIONS.VIEW, RBAC_RESOURCES.KPI);
+    await this.checkPermission(
+      userId,
+      RBAC_ACTIONS.VIEW,
+      RBAC_RESOURCES.KPI_DEPARTMENT,
+    );
     const kpis = await this.getAllKpiAssignedToDepartments(userId);
     const result: any[] = [];
     for (const kpi of kpis) {
@@ -507,22 +529,11 @@ export class KpisService {
     await this.checkPermission(
       loggedInUser.id,
       RBAC_ACTIONS.VIEW,
-      RBAC_RESOURCES.KPI,
+      RBAC_RESOURCES.KPI_SECTION,
     );
     const { page = 1, limit = 15 } = filterDto;
     let effectiveSectionId: number | null = Number(sectionIdParam);
     let effectiveDepartmentId: number | null = filterDto.departmentId ?? null;
-
-    const roleName =
-      typeof loggedInUser.role === 'string'
-        ? loggedInUser.role
-        : (loggedInUser.role?.name ?? '');
-    if (roleName === 'section') {
-      effectiveSectionId = loggedInUser.sectionId;
-      effectiveDepartmentId = loggedInUser.departmentId;
-    } else if (roleName === 'department') {
-      effectiveDepartmentId = loggedInUser.departmentId;
-    }
 
     const query = this.kpisRepository
       .createQueryBuilder('kpi')
@@ -542,6 +553,12 @@ export class KpisService {
       .where('kpi.deleted_at IS NULL')
       .andWhere('assignment.deleted_at IS NULL');
 
+    // Lấy danh sách role name
+    const userRoles: string[] = Array.isArray(loggedInUser.roles)
+      ? loggedInUser.roles.map((r: any) =>
+          typeof r === 'string' ? r : r?.name,
+        )
+      : [];
     if (effectiveDepartmentId !== null && effectiveDepartmentId !== 0) {
       query.andWhere(
         new Brackets((qb) => {
@@ -564,9 +581,9 @@ export class KpisService {
       );
     } else {
       if (
-        roleName === 'admin' ||
-        roleName === 'manager' ||
-        roleName === 'department'
+        userRoles.includes('admin') ||
+        userRoles.includes('manager') ||
+        userRoles.includes('department')
       ) {
         query.andWhere(
           new Brackets((qb) => {
@@ -575,9 +592,9 @@ export class KpisService {
             );
           }),
         );
-      } else if (roleName !== 'section') {
+      } else if (!userRoles.includes('section')) {
         this.logger.warn(
-          `User role ${roleName} (ID: ${loggedInUser.id}) attempted to view all section KPIs without admin/manager/department rights. Returning empty.`,
+          `User roles [${userRoles.join(', ')}] (ID: ${loggedInUser.id}) attempted to view all section KPIs without admin/manager/department rights. Returning empty.`,
         );
         return {
           data: [],
@@ -730,7 +747,7 @@ export class KpisService {
     await this.checkPermission(
       userId,
       RBAC_ACTIONS.VIEW,
-      RBAC_RESOURCES.KPI_PERSONAL,
+      RBAC_RESOURCES.KPI_EMPLOYEE,
     );
     const { page = 1, limit = 15 } = filterDto;
 
@@ -847,7 +864,7 @@ export class KpisService {
     await this.checkPermission(
       userId,
       RBAC_ACTIONS.VIEW,
-      RBAC_RESOURCES.KPI_PERSONAL,
+      RBAC_RESOURCES.KPI_EMPLOYEE,
     );
     this.logger.log(
       `Finding KPI Detail for ID: ${id} using QueryBuilder with Aggregation`,
@@ -1001,7 +1018,7 @@ export class KpisService {
     await this.checkPermission(
       userId,
       RBAC_ACTIONS.VIEW,
-      RBAC_RESOURCES.KPI_PERSONAL,
+      RBAC_RESOURCES.KPI_COMPANY,
     );
     const assignments = await this.kpiAssignmentRepository.find({
       where: { kpi_id: kpiId, deleted_at: IsNull() },
@@ -1055,7 +1072,11 @@ export class KpisService {
   }
 
   async toggleKpiStatus(id: number, userId: number): Promise<Kpi> {
-    await this.checkPermission(userId, RBAC_ACTIONS.EDIT, RBAC_RESOURCES.KPI);
+    await this.checkPermission(
+      userId,
+      RBAC_ACTIONS.TOGGLE_STATUS,
+      RBAC_RESOURCES.KPI_COMPANY,
+    );
     return await this.dataSource.transaction(async (manager) => {
       const kpiRepo = manager.getRepository(Kpi);
       const assignmentRepo = manager.getRepository(KPIAssignment);
@@ -1066,20 +1087,24 @@ export class KpisService {
         throw new NotFoundException(`KPI with ID ${id} not found`);
       }
 
+      // Lấy user và roles (ManyToMany)
       const user = await employeeRepo.findOne({
         where: { id: userId },
-        relations: ['role', 'role.permissions'],
+        relations: ['roles', 'roles.permissions'],
       });
       if (!user) {
         throw new UnauthorizedException('User not found.');
       }
-      const rolePermissions = Array.isArray(user.role?.permissions)
-        ? user.role.permissions
+      // Gộp tất cả permissions từ các role
+      const allPermissions = Array.isArray(user.roles)
+        ? user.roles.flatMap((role: any) =>
+            Array.isArray(role.permissions) ? role.permissions : [],
+          )
         : [];
-      const hasTogglePermission = rolePermissions.some(
+      const hasTogglePermission = allPermissions.some(
         (p: any) =>
           p.action === RBAC_ACTIONS.TOGGLE_STATUS &&
-          p.resource === RBAC_RESOURCES.KPI,
+          p.resource === RBAC_RESOURCES.KPI_COMPANY,
       );
       if (!hasTogglePermission) {
         throw new UnauthorizedException(
@@ -1230,10 +1255,10 @@ export class KpisService {
         resource = RBAC_RESOURCES.KPI_SECTION;
         break;
       case 'employee':
-        resource = RBAC_RESOURCES.KPI_PERSONAL;
+        resource = RBAC_RESOURCES.KPI_EMPLOYEE;
         break;
       default:
-        resource = RBAC_RESOURCES.KPI;
+        resource = RBAC_RESOURCES.KPI_COMPANY;
     }
     await this.checkPermission(userId, RBAC_ACTIONS.CREATE, resource);
     return await this.kpisRepository.manager.transaction(
@@ -1277,7 +1302,7 @@ export class KpisService {
         const assignmentEntities: KPIAssignment[] = [];
         const assignedByUserId = authenticatedUserId;
 
-      console.log('kpiData',kpiData)
+        console.log('kpiData', kpiData);
 
         if (assignments?.toDepartments) {
           for (const targetDepartment of assignments.toDepartments) {
@@ -1356,7 +1381,8 @@ export class KpisService {
             employeeAssignment.targetValue = Number(userAssignment.target);
             employeeAssignment.assignedBy = assignedByUserId;
             employeeAssignment.status = savedKpiObject.status;
-            employeeAssignment.startDate = kpiData.startDate || kpiData.start_date;
+            employeeAssignment.startDate =
+              kpiData.startDate || kpiData.start_date;
             employeeAssignment.endDate = kpiData.endDate || kpiData.end_date;
             employeeAssignment.weight = userAssignment.weight || null;
             assignmentEntities.push(employeeAssignment);
@@ -1375,7 +1401,7 @@ export class KpisService {
   async update(id: number, update: Partial<Kpi>, userId: number): Promise<Kpi> {
     // Lấy loại KPI để kiểm tra quyền động
     const kpi = await this.kpisRepository.findOne({ where: { id } });
-    let resource: string = RBAC_RESOURCES.KPI;
+    let resource: string = RBAC_RESOURCES.KPI_COMPANY;
     if (kpi) {
       switch (kpi.type) {
         case 'company':
@@ -1388,13 +1414,13 @@ export class KpisService {
           resource = RBAC_RESOURCES.KPI_SECTION;
           break;
         case 'employee':
-          resource = RBAC_RESOURCES.KPI_PERSONAL;
+          resource = RBAC_RESOURCES.KPI_EMPLOYEE;
           break;
         default:
-          resource = RBAC_RESOURCES.KPI;
+          resource = RBAC_RESOURCES.KPI_COMPANY;
       }
     }
-    await this.checkPermission(userId, RBAC_ACTIONS.EDIT, resource);
+    await this.checkPermission(userId, RBAC_ACTIONS.UPDATE, resource);
     await this.kpisRepository.update(id, update);
     return this.findOne(id, userId);
   }
@@ -1416,10 +1442,10 @@ export class KpisService {
         resource = RBAC_RESOURCES.KPI_SECTION;
         break;
       case 'employee':
-        resource = RBAC_RESOURCES.KPI_PERSONAL;
+        resource = RBAC_RESOURCES.KPI_EMPLOYEE;
         break;
       default:
-        resource = RBAC_RESOURCES.KPI;
+        resource = RBAC_RESOURCES.KPI_COMPANY;
     }
     await this.checkPermission(userId, RBAC_ACTIONS.DELETE, resource);
     await this.kpisRepository.softDelete(id);
@@ -1442,10 +1468,10 @@ export class KpisService {
         resource = RBAC_RESOURCES.KPI_SECTION;
         break;
       case 'employee':
-        resource = RBAC_RESOURCES.KPI_PERSONAL;
+        resource = RBAC_RESOURCES.KPI_EMPLOYEE;
         break;
       default:
-        resource = RBAC_RESOURCES.KPI;
+        resource = RBAC_RESOURCES.KPI_COMPANY;
     }
     await this.checkPermission(userId, RBAC_ACTIONS.DELETE, resource);
     await this.kpisRepository.delete(id);
@@ -1458,8 +1484,8 @@ export class KpisService {
   ): Promise<KPIAssignment[]> {
     await this.checkPermission(
       loggedInUser.id,
-      RBAC_ACTIONS.ASSIGN_USER,
-      RBAC_RESOURCES.KPI,
+      RBAC_ACTIONS.ASSIGN,
+      RBAC_RESOURCES.KPI_COMPANY,
     );
     const kpi = await this.kpisRepository.findOne({ where: { id: kpiId } });
     if (!kpi) {
@@ -1486,11 +1512,13 @@ export class KpisService {
     const assignmentsToSave: KPIAssignment[] = [];
 
     for (const incomingAssignment of assignments) {
-      const roleName =
-        typeof loggedInUser.role === 'string'
-          ? loggedInUser.role
-          : (loggedInUser.role?.name ?? '');
-      if (roleName === 'section') {
+      // Lấy roles của user
+      const userRoles: string[] = Array.isArray(loggedInUser.roles)
+        ? loggedInUser.roles.map((r: any) =>
+            typeof r === 'string' ? r : r?.name,
+          )
+        : [];
+      if (userRoles.includes('section')) {
         if (!loggedInUser.sectionId) {
           throw new UnauthorizedException(
             'You are not assigned to a section and cannot assign KPIs.',
@@ -1588,13 +1616,13 @@ export class KpisService {
         resource = RBAC_RESOURCES.KPI_SECTION;
         break;
       default:
-        resource = RBAC_RESOURCES.KPI;
+        resource = RBAC_RESOURCES.KPI_COMPANY;
     }
     // Cho phép trưởng phòng ban/section xóa assignment nếu có quyền EDIT hoặc ASSIGN_UNIT
     try {
-      await this.checkPermission(userId, RBAC_ACTIONS.EDIT, resource);
+      await this.checkPermission(userId, RBAC_ACTIONS.UPDATE, resource);
     } catch {
-      await this.checkPermission(userId, RBAC_ACTIONS.ASSIGN_UNIT, resource);
+      await this.checkPermission(userId, RBAC_ACTIONS.ASSIGN, resource);
     }
     const result = await this.kpiAssignmentRepository.update(
       { kpi_id: kpiId, assigned_to_section: sectionId },
@@ -1619,8 +1647,8 @@ export class KpisService {
   ): Promise<void> {
     await this.checkPermission(
       userId,
-      RBAC_ACTIONS.ASSIGN_UNIT,
-      RBAC_RESOURCES.KPI,
+      RBAC_ACTIONS.ASSIGN,
+      RBAC_RESOURCES.KPI_COMPANY,
     );
     const assignmentRepo = this.dataSource.getRepository(KPIAssignment);
 

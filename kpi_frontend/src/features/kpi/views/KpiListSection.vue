@@ -31,12 +31,21 @@
               v-model:value="localFilters.departmentId"
               style="width: 100%"
               @change="handleDepartmentChange"
-              :disabled="(isSectionUser && !!currentUser?.departmentId) || isDepartmentUser"
+              :disabled="
+                (isSectionUser && !!currentUser?.departmentId) ||
+                isDepartmentUser
+              "
             >
               <a-select-option
-                v-if="!((isSectionUser && !!currentUser?.departmentId) || isDepartmentUser)"
+                v-if="
+                  !(
+                    (isSectionUser && !!currentUser?.departmentId) ||
+                    isDepartmentUser
+                  )
+                "
                 :value="null"
-              >{{ $t('allDepartments') }}</a-select-option>
+                >{{ $t("allDepartments") }}</a-select-option
+              >
               <a-select-option
                 v-for="department in departmentList"
                 :key="department.id"
@@ -54,7 +63,9 @@
               style="width: 100%"
               :disabled="isSectionUser"
             >
-              <a-select-option v-if="!isSectionUser" :value="0">{{ $t('allSections') }}</a-select-option>
+              <a-select-option v-if="!isSectionUser" :value="0">{{
+                $t("allSections")
+              }}</a-select-option>
               <a-select-option
                 v-for="section in selectSectionList"
                 :key="section.id"
@@ -254,7 +265,10 @@
                       <copy-outlined /> {{ $t("copy") }}
                     </a-button>
                   </a-tooltip>
-                  <a-tooltip v-if="canDeleteSectionKpiSection" :title="$t('deleteKpi')">
+                  <a-tooltip
+                    v-if="canDeleteSectionKpiSection"
+                    :title="$t('deleteKpi')"
+                  >
                     <a-button
                       danger
                       class="kpi-actions-button"
@@ -316,16 +330,24 @@ const sectionKpiList = computed(
 
 const effectiveRole = computed(() => store.getters["auth/effectiveRole"]);
 
-const userPermissions = computed(() => store.getters["auth/user"]?.permissions || []);
+const userPermissions = computed(
+  () => store.getters["auth/user"]?.permissions || []
+);
 function hasPermission(action, resource) {
   return userPermissions.value?.some(
     (p) => p.action === action && p.resource === resource
   );
 }
 // Chỉ giữ lại các biến kiểm tra quyền động thực sự sử dụng trên UI
-const canCopySectionKpi = computed(() => hasPermission(RBAC_ACTIONS.COPY_TEMPLATE, RBAC_RESOURCES.KPI));
-const canCreateSectionKpiSection = computed(() => hasPermission(RBAC_ACTIONS.CREATE, RBAC_RESOURCES.KPI_SECTION));
-const canDeleteSectionKpiSection = computed(() => hasPermission(RBAC_ACTIONS.DELETE, RBAC_RESOURCES.KPI_SECTION));
+const canCopySectionKpi = computed(() =>
+  hasPermission(RBAC_ACTIONS.COPY_TEMPLATE, RBAC_RESOURCES.KPI_SECTION)
+);
+const canCreateSectionKpiSection = computed(() =>
+  hasPermission(RBAC_ACTIONS.CREATE, RBAC_RESOURCES.KPI_SECTION)
+);
+const canDeleteSectionKpiSection = computed(() =>
+  hasPermission(RBAC_ACTIONS.DELETE, RBAC_RESOURCES.KPI_SECTION)
+);
 
 const selectSectionList = ref([]);
 
@@ -610,8 +632,14 @@ const handleDepartmentChange = async () => {
 
   try {
     if (localFilters.departmentId && localFilters.departmentId !== null) {
-      await store.dispatch("sections/fetchSectionsByDepartment", localFilters.departmentId);
-      selectSectionList.value = store.getters["sections/sectionsByDepartment"](localFilters.departmentId) || [];
+      await store.dispatch(
+        "sections/fetchSectionsByDepartment",
+        localFilters.departmentId
+      );
+      selectSectionList.value =
+        store.getters["sections/sectionsByDepartment"](
+          localFilters.departmentId
+        ) || [];
       // Nếu section hiện tại không thuộc department mới, reset về 0 (All)
       if (
         localFilters.sectionId &&
@@ -777,19 +805,37 @@ onMounted(async () => {
     await store.dispatch("departments/fetchDepartments");
     if (isDepartmentUser.value && currentUser.value) {
       localFilters.departmentId = currentUser.value.departmentId || null;
-      await store.dispatch("sections/fetchSectionsByDepartment", localFilters.departmentId);
-      selectSectionList.value = store.getters["sections/sectionsByDepartment"](localFilters.departmentId) || [];
+      await store.dispatch(
+        "sections/fetchSectionsByDepartment",
+        localFilters.departmentId
+      );
+      selectSectionList.value =
+        store.getters["sections/sectionsByDepartment"](
+          localFilters.departmentId
+        ) || [];
       localFilters.sectionId = 0;
     } else if (isSectionUser.value && currentUser.value) {
       localFilters.sectionId = currentUser.value.sectionId || null;
       localFilters.departmentId = currentUser.value.departmentId || null;
-      await store.dispatch("sections/fetchSectionsByDepartment", localFilters.departmentId);
-      selectSectionList.value = store.getters["sections/sectionsByDepartment"](localFilters.departmentId) || [];
+      await store.dispatch(
+        "sections/fetchSectionsByDepartment",
+        localFilters.departmentId
+      );
+      selectSectionList.value =
+        store.getters["sections/sectionsByDepartment"](
+          localFilters.departmentId
+        ) || [];
     } else {
       if (departmentList.value.length > 0) {
         localFilters.departmentId = departmentList.value[0].id;
-        await store.dispatch("sections/fetchSectionsByDepartment", localFilters.departmentId);
-        selectSectionList.value = store.getters["sections/sectionsByDepartment"](localFilters.departmentId) || [];
+        await store.dispatch(
+          "sections/fetchSectionsByDepartment",
+          localFilters.departmentId
+        );
+        selectSectionList.value =
+          store.getters["sections/sectionsByDepartment"](
+            localFilters.departmentId
+          ) || [];
         localFilters.sectionId = 0;
       } else {
         await store.dispatch("sections/fetchSections");

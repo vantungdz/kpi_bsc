@@ -240,18 +240,30 @@
           :placeholder="$t('selectUser')"
           show-search
           allow-clear
-          :filter-option="(input, option) => option.label.toLowerCase().includes(input.toLowerCase())"
+          :filter-option="
+            (input, option) =>
+              option.label.toLowerCase().includes(input.toLowerCase())
+          "
           :loading="loadingSectionUsers"
           style="width: 100%"
           @change="handleAssignedUsersChange"
         />
-        <div v-for="user in form.assigned_users" :key="user.id" style="margin-top: 8px;">
-          <span>{{ sectionUserOptions.find(u => u.value === user.id)?.label || user.id }}</span>
+        <div
+          v-for="user in form.assigned_users"
+          :key="user.id"
+          style="margin-top: 8px"
+        >
+          <span>{{
+            sectionUserOptions.find((u) => u.value === user.id)?.label ||
+            user.id
+          }}</span>
           <a-input
             v-model:value="user.target"
-            style="width: 120px; margin-left: 8px;"
+            style="width: 120px; margin-left: 8px"
             :placeholder="$t('enterTarget')"
-            @input="(e) => handleAssignedUserTargetChange(user.id, e.target.value)"
+            @input="
+              (e) => handleAssignedUserTargetChange(user.id, e.target.value)
+            "
           />
         </div>
       </a-form-item>
@@ -306,7 +318,10 @@ import {
 } from "ant-design-vue";
 import dayjs from "dayjs";
 import { KpiUnits } from "@/core/constants/kpiConstants.js";
-import { RBAC_ACTIONS, RBAC_RESOURCES } from "@/core/constants/rbac.constants.js";
+import {
+  RBAC_ACTIONS,
+  RBAC_RESOURCES,
+} from "@/core/constants/rbac.constants.js";
 
 const router = useRouter();
 const route = useRoute();
@@ -336,7 +351,7 @@ const form = ref({
   start_date: null,
   end_date: null,
   assigned_users: [], // [{ id: number, target: string }]
-  description: ""
+  description: "",
 });
 
 const formulaList = ref([
@@ -389,12 +404,22 @@ const sectionUserOptions = computed(() =>
   }))
 );
 
-const userPermissions = computed(() => store.getters["auth/user"]?.permissions || []);
+const userPermissions = computed(
+  () => store.getters["auth/user"]?.permissions || []
+);
 const canAccessCreatePage = computed(() =>
-  userPermissions.value.some(p => p.action?.trim() === RBAC_ACTIONS.CREATE && p.resource?.trim() === RBAC_RESOURCES.KPI)
+  userPermissions.value.some(
+    (p) =>
+      p.action?.trim() === RBAC_ACTIONS.CREATE &&
+      p.resource?.trim() === RBAC_RESOURCES.KPI_SECTION
+  )
 );
 const canAssignDirectlyToUser = computed(() =>
-  userPermissions.value.some(p => p.action?.trim() === RBAC_ACTIONS.ASSIGN_DIRECT_USER && p.resource?.trim() === RBAC_RESOURCES.KPI)
+  userPermissions.value.some(
+    (p) =>
+      p.action?.trim() === RBAC_ACTIONS.ASSIGN &&
+      p.resource?.trim() === RBAC_RESOURCES.KPI_SECTION
+  )
 );
 
 const resetForm = (clearTemplateSelection = false) => {
@@ -492,7 +517,7 @@ const handleAssignedUsersChange = (userIds) => {
   const prev = form.value.assigned_users || [];
   form.value.assigned_users = userIds.map((id) => {
     const found = prev.find((u) => u.id === id);
-    return found ? found : { id, target: '' };
+    return found ? found : { id, target: "" };
   });
 };
 
@@ -504,8 +529,8 @@ const handleAssignedUserTargetChange = (id, value) => {
 const validateAssignment = async () => {
   if (!form.value.assigned_users || form.value.assigned_users.length === 0) {
     assignmentError.value =
-      'Assignment Required: Please select at least one user to assign this KPI.';
-    return Promise.reject('No user selected for assignment.');
+      "Assignment Required: Please select at least one user to assign this KPI.";
+    return Promise.reject("No user selected for assignment.");
   }
   for (const u of form.value.assigned_users) {
     if (!u.target || isNaN(Number(u.target))) {
@@ -537,8 +562,14 @@ const handleChangeCreate = async () => {
 
     // Build assignments array for users
     const userAssignments = (form.value.assigned_users || [])
-      .filter(u => u.id && u.target !== undefined && u.target !== null && !isNaN(Number(u.target)))
-      .map(u => ({ id: u.id, target: Number(u.target) }));
+      .filter(
+        (u) =>
+          u.id &&
+          u.target !== undefined &&
+          u.target !== null &&
+          !isNaN(Number(u.target))
+      )
+      .map((u) => ({ id: u.id, target: Number(u.target) }));
 
     // Section and department assignments (if any)
     const sectionAssignments = [];
@@ -549,7 +580,10 @@ const handleChangeCreate = async () => {
       });
     }
     const departmentAssignments = [];
-    if (form.value.department_id !== null && form.value.department_id !== undefined) {
+    if (
+      form.value.department_id !== null &&
+      form.value.department_id !== undefined
+    ) {
       departmentAssignments.push({
         id: form.value.department_id,
         target: form.value.target !== null ? Number(form.value.target) : null,
@@ -561,11 +595,14 @@ const handleChangeCreate = async () => {
       from: creationScope,
       to_employees: null,
       to_departments: [],
-      to_sections: []
+      to_sections: [],
     };
     let hasValidAssignment = false;
     if (userAssignments.length === 1) {
-      assignments.to_employees = { id: userAssignments[0].user_id, target: userAssignments[0].target };
+      assignments.to_employees = {
+        id: userAssignments[0].user_id,
+        target: userAssignments[0].target,
+      };
       hasValidAssignment = true;
     } else if (userAssignments.length > 1) {
       assignments.to_employees = userAssignments;
@@ -657,9 +694,7 @@ const onFinishFailed = (errorInfo) => {
         : "Unknown error";
       errorMessages = `Error in field '${fieldName}': ${errors}`;
     } else if (
-      errorInfo.errorFields.some(
-        (field) => field.name[0] === "assigned_users"
-      )
+      errorInfo.errorFields.some((field) => field.name[0] === "assigned_users")
     ) {
       if (assignmentError.value) {
         errorMessages = assignmentError.value;

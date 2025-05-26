@@ -5,7 +5,8 @@ import {
   OneToMany,
   ManyToOne,
   JoinColumn,
-  OneToOne,
+  ManyToMany,
+  JoinTable,
 } from 'typeorm';
 import { KpiValue } from './kpi-value.entity';
 import { KpiEvaluation } from './kpi-evaluation.entity';
@@ -33,12 +34,13 @@ export class Employee {
   @Column({ unique: true })
   email: string;
 
-  @ManyToOne(() => Role, { nullable: true })
-  @JoinColumn({ name: 'role_id' })
-  role: Role;
-
-  @Column({ nullable: true })
-  role_id?: number;
+  @ManyToMany(() => Role, { eager: true })
+  @JoinTable({
+    name: 'employee_roles',
+    joinColumn: { name: 'employee_id', referencedColumnName: 'id' },
+    inverseJoinColumn: { name: 'role_id', referencedColumnName: 'id' },
+  })
+  roles: Role[];
 
   @Column({ nullable: true })
   first_name: string;

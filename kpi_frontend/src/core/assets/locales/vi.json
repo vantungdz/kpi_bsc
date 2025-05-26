@@ -679,5 +679,6 @@
   "departmentNameRequired": "Tên Phòng ban là bắt buộc.",
   "departmentList": "Danh sách Phòng ban",
   "sectionCreatedSuccess": "Bộ phận đã được tạo thành công.",
-  "departmentCreatedSuccess": "Phòng ban đã được tạo thành công."
+  "departmentCreatedSuccess": "Phòng ban đã được tạo thành công.",
+  "errorLoadingRolesOrPermissions": "Lỗi khi tải danh sách vai trò hoặc quyền."
 }

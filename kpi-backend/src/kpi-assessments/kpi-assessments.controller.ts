@@ -22,7 +22,12 @@ export class KpiAssignmentsController {
   constructor(private readonly kpiAssignmentsService: KpiAssignmentsService) {}
 
   @Get()
-  @Roles('admin', 'manager', 'department', 'section', 'employee')
+  @Roles(
+    'kpi-assignment:view:company',
+    'kpi-assignment:view:department',
+    'kpi-assignment:view:section',
+    'kpi-assignment:view:personal',
+  )
   async getMyAssignedKpis(
     @Query('employeeid') employeeId: string,
   ): Promise<KPIAssignment[]> {
@@ -30,7 +35,12 @@ export class KpiAssignmentsController {
   }
 
   @Post('submit-target/:assignmentId')
-  @Roles('employee', 'section', 'department', 'manager', 'admin')
+  @Roles(
+    'kpi-assignment:submit-target:personal',
+    'kpi-assignment:submit-target:section',
+    'kpi-assignment:submit-target:department',
+    'kpi-assignment:submit-target:company',
+  )
   async submitTarget(
     @Param('assignmentId') assignmentId: string,
     @Body('target') target: number,
@@ -44,13 +54,16 @@ export class KpiAssignmentsController {
   }
 
   @Get('approved')
-  @Roles('admin', 'manager', 'department')
+  @Roles(
+    'kpi-assignment:view-approved:company',
+    'kpi-assignment:view-approved:department',
+  )
   async getApprovedKpiValues(): Promise<KpiValue[]> {
     return this.kpiAssignmentsService.getApprovedKpiValues();
   }
 
   @Delete(':id')
-  @Roles('admin', 'manager')
+  @Roles('kpi-assignment:delete:company', 'kpi-assignment:delete:department')
   async delete(@Param('id') id: string): Promise<void> {
     return this.kpiAssignmentsService.softDelete(+id);
   }

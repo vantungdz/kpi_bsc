@@ -1,47 +1,81 @@
 <template>
-    <div class="user-profile-container">
-        <a-card :title="$t('accountInformation')" :loading="!user" v-if="user">
-            <a-row :gutter="[16, 24]">
-                <a-col :xs="24" :sm="24" :md="8" :lg="6" style="text-align: center;">
-                    <a-avatar :size="128" :src="user.avatar_url">
-                        <template #icon>
-                            <span v-if="userInitial" class="avatar-initials">{{ userInitial }}</span>
-                            <UserOutlined v-else />
-                        </template>
-                    </a-avatar>
-                    <h2 class="user-profile-name">{{ fullName }}</h2>
-                    <p class="user-profile-username">@{{ user.username }}</p>
-                </a-col>
-                <a-col :xs="24" :sm="24" :md="16" :lg="18">
-                    <a-descriptions bordered :column="{ xxl: 2, xl: 2, lg: 1, md: 1, sm: 1, xs: 1 }">
-                        <a-descriptions-item :label="$t('fullName')">{{ fullName }}</a-descriptions-item>
-                        <a-descriptions-item :label="$t('username')">{{ user.username }}</a-descriptions-item>
-                        <a-descriptions-item :label="$t('email')">{{ user.email || $t('notUpdated') }}</a-descriptions-item>
-                        <a-descriptions-item :label="$t('currentRole')">
-                            <a-tag color="blue">{{ effectiveRole || $t('noRole') }}</a-tag>
-                        </a-descriptions-item>
-                        <a-descriptions-item :label="$t('allRoles')" :span="2" v-if="user.roles && user.roles.length">
-                            <a-tag v-for="role in user.roles" :key="role" color="geekblue" style="margin-right: 8px;">
-                                {{ role }}
-                            </a-tag>
-                        </a-descriptions-item>
-                        <a-descriptions-item :label="$t('department')">{{ user.department?.name || $t('notUpdated') }}</a-descriptions-item>
-                        <a-descriptions-item :label="$t('section')">{{ user.section?.name || $t('notUpdated') }}</a-descriptions-item>
-                        <a-descriptions-item :label="$t('dateJoined')">
-                            {{ user.date_joined ? formatDate(user.date_joined) : $t('noInformation') }}
-                        </a-descriptions-item>
-                    </a-descriptions>
-                </a-col>
-            </a-row>
-        </a-card>
-        <a-empty v-else :description="$t('userNotFoundOrNotLoggedIn')" />
-    </div>
+  <div class="user-profile-container">
+    <a-card :title="$t('accountInformation')" :loading="!user" v-if="user">
+      <a-row :gutter="[16, 24]">
+        <a-col :xs="24" :sm="24" :md="8" :lg="6" style="text-align: center">
+          <a-avatar :size="128" :src="user.avatar_url">
+            <template #icon>
+              <span v-if="userInitial" class="avatar-initials">{{
+                userInitial
+              }}</span>
+              <UserOutlined v-else />
+            </template>
+          </a-avatar>
+          <h2 class="user-profile-name">{{ fullName }}</h2>
+          <p class="user-profile-username">@{{ user.username }}</p>
+        </a-col>
+        <a-col :xs="24" :sm="24" :md="16" :lg="18">
+          <a-descriptions
+            bordered
+            :column="{ xxl: 2, xl: 2, lg: 1, md: 1, sm: 1, xs: 1 }"
+          >
+            <a-descriptions-item :label="$t('fullName')">{{
+              fullName
+            }}</a-descriptions-item>
+            <a-descriptions-item :label="$t('username')">{{
+              user.username
+            }}</a-descriptions-item>
+            <a-descriptions-item :label="$t('email')">{{
+              user.email || $t("notUpdated")
+            }}</a-descriptions-item>
+            <a-descriptions-item :label="$t('currentRole')">
+              <a-tag color="blue">
+                {{
+                  userRoles.length
+                    ? $t(roleLabelMap[userRoles[0]]) || userRoles[0]
+                    : $t("noRole")
+                }}
+              </a-tag>
+            </a-descriptions-item>
+            <a-descriptions-item
+              :label="$t('allRoles')"
+              :span="2"
+              v-if="userRoles.length"
+            >
+              <a-tag
+                v-for="role in userRoles"
+                :key="role"
+                color="geekblue"
+                style="margin-right: 8px"
+              >
+                {{ $t(roleLabelMap[role]) || role }}
+              </a-tag>
+            </a-descriptions-item>
+            <a-descriptions-item :label="$t('department')">{{
+              user.department?.name || $t("notUpdated")
+            }}</a-descriptions-item>
+            <a-descriptions-item :label="$t('section')">{{
+              user.section?.name || $t("notUpdated")
+            }}</a-descriptions-item>
+            <a-descriptions-item :label="$t('dateJoined')">
+              {{
+                user.date_joined
+                  ? formatDate(user.date_joined)
+                  : $t("noInformation")
+              }}
+            </a-descriptions-item>
+          </a-descriptions>
+        </a-col>
+      </a-row>
+    </a-card>
+    <a-empty v-else :description="$t('userNotFoundOrNotLoggedIn')" />
+  </div>
 </template>
 
 <script setup>
-import { computed } from 'vue';
-import { useStore } from 'vuex';
-import { UserOutlined } from '@ant-design/icons-vue';
+import { computed } from "vue";
+import { useStore } from "vuex";
+import { UserOutlined } from "@ant-design/icons-vue";
 import {
   Card as ACard,
   Row as ARow,
@@ -51,17 +85,38 @@ import {
   DescriptionsItem as ADescriptionsItem,
   Tag as ATag,
   Empty as AEmpty,
-} from 'ant-design-vue';
+} from "ant-design-vue";
 
 const store = useStore();
 
-const user = computed(() => store.getters['auth/user']);
-const effectiveRole = computed(() => user.value?.role?.name || null);
+const user = computed(() => store.getters["auth/user"]);
+// Chuẩn hóa lấy mảng roles (string)
+const userRoles = computed(() => {
+  if (!user.value) return [];
+  if (Array.isArray(user.value.roles)) {
+    return user.value.roles
+      .map((r) => (typeof r === "string" ? r : r?.name))
+      .filter(Boolean);
+  }
+  if (user.value.role) {
+    if (typeof user.value.role === "string") return [user.value.role];
+    if (typeof user.value.role === "object" && user.value.role?.name)
+      return [user.value.role.name];
+  }
+  return [];
+});
+const roleLabelMap = {
+  admin: "roleAdmin",
+  manager: "roleManager",
+  department: "roleDepartment",
+  section: "roleSection",
+  employee: "roleEmployee",
+};
 
 const fullName = computed(() => {
-  if (!user.value) return '';
-  const firstName = user.value.first_name || '';
-  const lastName = user.value.last_name || '';
+  if (!user.value) return "";
+  const firstName = user.value.first_name || "";
+  const lastName = user.value.last_name || "";
   return `${firstName} ${lastName}`.trim() || user.value.username;
 });
 
@@ -77,8 +132,8 @@ const userInitial = computed(() => {
 });
 
 const formatDate = (dateString) => {
-  if (!dateString) return '';
-  const options = { year: 'numeric', month: 'long', day: 'numeric' };
+  if (!dateString) return "";
+  const options = { year: "numeric", month: "long", day: "numeric" };
   return new Date(dateString).toLocaleDateString(undefined, options);
 };
 </script>

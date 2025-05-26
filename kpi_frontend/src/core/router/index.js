@@ -41,7 +41,7 @@ const routes = [
       permissions: [
         {
           action: RBAC_ACTIONS.VIEW,
-          resource: RBAC_RESOURCES.REPORT_GENERATOR,
+          resource: RBAC_RESOURCES.REPORT_COMPANY,
         },
       ],
     },
@@ -59,7 +59,10 @@ const routes = [
     meta: {
       requiresAuth: true,
       permissions: [
-        { action: RBAC_ACTIONS.VIEW, resource: RBAC_RESOURCES.DASHBOARD },
+        {
+          action: RBAC_ACTIONS.VIEW,
+          resource: RBAC_RESOURCES.DASHBOARD_COMPANY,
+        },
       ],
     },
   },
@@ -177,7 +180,10 @@ const routes = [
     meta: {
       requiresAuth: true,
       permissions: [
-        { action: RBAC_ACTIONS.VIEW, resource: RBAC_RESOURCES.APPROVAL },
+        {
+          action: RBAC_ACTIONS.VIEW,
+          resource: RBAC_RESOURCES.KPI_VALUE_COMPANY,
+        },
       ],
     },
   },
@@ -194,7 +200,7 @@ const routes = [
     meta: {
       requiresAuth: true,
       permissions: [
-        { action: RBAC_ACTIONS.VIEW, resource: RBAC_RESOURCES.KPI_PERSONAL },
+        { action: RBAC_ACTIONS.VIEW, resource: RBAC_RESOURCES.KPI_EMPLOYEE },
       ],
     },
   },
@@ -205,7 +211,10 @@ const routes = [
     meta: {
       requiresAuth: true,
       permissions: [
-        { action: RBAC_ACTIONS.VIEW, resource: RBAC_RESOURCES.EMPLOYEE },
+        {
+          action: RBAC_ACTIONS.VIEW,
+          resource: RBAC_RESOURCES.EMPLOYEE_COMPANY,
+        },
       ],
     },
   },
@@ -247,9 +256,7 @@ const routes = [
     component: KpiReviewList,
     meta: {
       requiresAuth: true,
-      permissions: [
-        { action: RBAC_ACTIONS.VIEW, resource: RBAC_RESOURCES.KPI_REVIEW },
-      ],
+      // Nếu có resource riêng cho review thì bổ sung vào RBAC_RESOURCES, nếu không thì bỏ permissions ở đây
     },
   },
   {
@@ -259,7 +266,7 @@ const routes = [
     meta: {
       requiresAuth: true,
       permissions: [
-        { action: RBAC_ACTIONS.MANAGE, resource: RBAC_RESOURCES.ADMIN },
+        { action: RBAC_ACTIONS.UPDATE, resource: RBAC_RESOURCES.ROLE_COMPANY },
       ],
     },
   },
@@ -270,7 +277,7 @@ const routes = [
     meta: {
       requiresAuth: true,
       permissions: [
-        { action: RBAC_ACTIONS.MANAGE, resource: RBAC_RESOURCES.ADMIN },
+        { action: RBAC_ACTIONS.UPDATE, resource: RBAC_RESOURCES.ROLE_COMPANY },
       ],
     },
   },
@@ -281,7 +288,7 @@ const routes = [
     meta: {
       requiresAuth: true,
       permissions: [
-        { action: RBAC_ACTIONS.MANAGE, resource: RBAC_RESOURCES.ADMIN },
+        { action: RBAC_ACTIONS.UPDATE, resource: RBAC_RESOURCES.ROLE_COMPANY },
       ],
     },
   },

@@ -69,15 +69,14 @@ export class SectionsService {
     // Auto-populate manager if missing, by finding employee with role 'section' and sectionId = section.id
     for (const section of sections) {
       if (!section.managerId) {
+        // Tìm employee có roles chứa 'section' và sectionId = section.id
         const manager = await this.sectionRepository.manager
           .getRepository(Employee)
-          .findOne({
-            where: {
-              sectionId: section.id,
-              role: { name: 'section' },
-            },
-            relations: ['role'],
-          });
+          .createQueryBuilder('employee')
+          .leftJoinAndSelect('employee.roles', 'role')
+          .where('employee.sectionId = :sectionId', { sectionId: section.id })
+          .andWhere('role.name = :roleName', { roleName: 'section' })
+          .getOne();
         if (manager) {
           section.manager = manager;
           section.managerId = manager.id;

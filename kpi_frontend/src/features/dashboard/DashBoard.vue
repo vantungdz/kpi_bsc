@@ -1,63 +1,63 @@
 <template>
   <div class="dashboard-overview-container" v-if="canViewDashboard">
-    <h1>{{ $t('dashboardOverview') }}</h1>
+    <h1>{{ $t("dashboardOverview") }}</h1>
     <a-row :gutter="[16, 24]">
-      <a-col :xs="24" :sm="12" :md="8" :lg="6">
+      <a-col v-if="canViewKpiProcessStats" :xs="24" :sm="12" :md="8" :lg="6">
         <router-link to="/dashboard/kpi-process-stats">
           <a-card hoverable class="dashboard-block-card card-kpi-stats">
             <template #title>
-              <line-chart-outlined /> {{ $t('kpiProcessStats') }}
+              <line-chart-outlined /> {{ $t("kpiProcessStats") }}
             </template>
             <p>
-              {{ $t('kpiProcessStatsDescription') }}
+              {{ $t("kpiProcessStatsDescription") }}
             </p>
           </a-card>
         </router-link>
       </a-col>
       <!-- Thêm Card mới cho User Activity Stats -->
-      <a-col :xs="24" :sm="12" :md="8" :lg="6">
+      <a-col v-if="canViewUserActivityStats" :xs="24" :sm="12" :md="8" :lg="6">
         <router-link to="/dashboard/user-activity-stats">
           <a-card
             hoverable
             class="dashboard-block-card card-user-activity-stats"
           >
             <template #title>
-              <user-switch-outlined /> {{ $t('userActivityStats') }}
+              <user-switch-outlined /> {{ $t("userActivityStats") }}
             </template>
             <p>
-              {{ $t('userActivityStatsDescription') }}
+              {{ $t("userActivityStatsDescription") }}
             </p>
           </a-card>
         </router-link>
       </a-col>
       <!-- Thêm Card mới cho KPI Performance Overview -->
-      <a-col :xs="24" :sm="12" :md="8" :lg="6">
+      <a-col
+        v-if="canViewKpiPerformanceOverview"
+        :xs="24"
+        :sm="12"
+        :md="8"
+        :lg="6"
+      >
         <router-link to="/dashboard/kpi-performance-overview">
-          <a-card
-            hoverable
-            class="dashboard-block-card card-kpi-performance"
-          >
+          <a-card hoverable class="dashboard-block-card card-kpi-performance">
             <template #title>
-              <bar-chart-outlined /> {{ $t('kpiPerformanceOverview') }}
+              <bar-chart-outlined /> {{ $t("kpiPerformanceOverview") }}
             </template>
             <p>
-              {{ $t('kpiPerformanceOverviewDescription') }}
+              {{ $t("kpiPerformanceOverviewDescription") }}
             </p>
           </a-card>
         </router-link>
       </a-col>
       <!-- Thêm Card mới cho Tổng quan Kho KPI -->
-      <a-col :xs="24" :sm="12" :md="8" :lg="6">
-        <router-link to="/dashboard/kpi-inventory-stats"> 
-          <a-card
-            hoverable
-            class="dashboard-block-card card-kpi-inventory"
-          >
+      <a-col v-if="canViewKpiInventoryStats" :xs="24" :sm="12" :md="8" :lg="6">
+        <router-link to="/dashboard/kpi-inventory-stats">
+          <a-card hoverable class="dashboard-block-card card-kpi-inventory">
             <template #title>
-              <appstore-outlined /> {{ $t('kpiInventoryOverview') }}
+              <appstore-outlined /> {{ $t("kpiInventoryOverview") }}
             </template>
             <p>
-              {{ $t('kpiInventoryOverviewDescription') }}
+              {{ $t("kpiInventoryOverviewDescription") }}
             </p>
           </a-card>
         </router-link>
@@ -67,19 +67,54 @@
 </template>
 
 <script setup>
-import { LineChartOutlined, UserSwitchOutlined, BarChartOutlined, AppstoreOutlined } from "@ant-design/icons-vue";
-import { computed } from 'vue';
-import { useStore } from 'vuex';
-import { RBAC_ACTIONS, RBAC_RESOURCES } from '@/core/constants/rbac.constants';
+import {
+  LineChartOutlined,
+  UserSwitchOutlined,
+  BarChartOutlined,
+  AppstoreOutlined,
+} from "@ant-design/icons-vue";
+import { computed } from "vue";
+import { useStore } from "vuex";
+import { RBAC_ACTIONS, RBAC_RESOURCES } from "@/core/constants/rbac.constants";
 
 const store = useStore();
-const userPermissions = computed(() => store.getters['auth/user']?.permissions || []);
+const userPermissions = computed(
+  () => store.getters["auth/user"]?.permissions || []
+);
 function hasPermission(action, resource) {
   return userPermissions.value?.some(
     (p) => p.action === action && p.resource === resource
   );
 }
-const canViewDashboard = computed(() => hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.DASHBOARD));
+const canViewDashboard = computed(
+  () =>
+    hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.DASHBOARD_COMPANY) ||
+    hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.DASHBOARD_DEPARTMENT) ||
+    hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.DASHBOARD_SECTION) ||
+    hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.DASHBOARD_EMPLOYEE)
+);
+const canViewKpiProcessStats = computed(
+  () =>
+    hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.DASHBOARD_COMPANY) ||
+    hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.DASHBOARD_DEPARTMENT) ||
+    hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.DASHBOARD_SECTION) ||
+    hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.DASHBOARD_EMPLOYEE)
+);
+const canViewUserActivityStats = computed(
+  () =>
+    hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.DASHBOARD_COMPANY) ||
+    hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.DASHBOARD_DEPARTMENT) ||
+    hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.DASHBOARD_SECTION) ||
+    hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.DASHBOARD_EMPLOYEE)
+);
+const canViewKpiPerformanceOverview = computed(
+  () =>
+    hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.DASHBOARD_COMPANY) ||
+    hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.DASHBOARD_DEPARTMENT)
+);
+const canViewKpiInventoryStats = computed(() =>
+  hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.DASHBOARD_COMPANY)
+);
 </script>
 
 <style scoped>

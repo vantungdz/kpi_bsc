@@ -6,9 +6,13 @@ import { KpiValueHistory } from '../entities/kpi-value-history.entity';
 import { KpiValue, KpiValueStatus } from '../entities/kpi-value.entity';
 import { Kpi } from '../entities/kpi.entity';
 import { KPIAssignment } from '../entities/kpi-assignment.entity';
-import { Section } from '../entities/section.entity'; 
-import { Department } from '../entities/department.entity'; 
-import { KpiInventoryDto, KpiPerformanceOverviewDto, PerformanceByRoleDto } from './dto/dashboard.dto';
+import { Section } from '../entities/section.entity';
+import { Department } from '../entities/department.entity';
+import {
+  KpiInventoryDto,
+  KpiPerformanceOverviewDto,
+  PerformanceByRoleDto,
+} from './dto/dashboard.dto';
 import { Permission } from '../entities/permission.entity';
 import { Role } from '../entities/role.entity';
 
@@ -19,11 +23,11 @@ export class DashboardsService {
   constructor(
     @InjectRepository(KpiValue)
     private readonly kpiValuesRepository: Repository<KpiValue>,
-    @InjectRepository(KpiValueHistory) 
+    @InjectRepository(KpiValueHistory)
     private readonly kpiValueHistoryRepository: Repository<KpiValueHistory>,
-    @InjectRepository(Kpi) 
+    @InjectRepository(Kpi)
     private readonly kpisRepository: Repository<Kpi>,
-    @InjectRepository(Employee) 
+    @InjectRepository(Employee)
     private readonly employeeRepository: Repository<Employee>,
     @InjectRepository(KPIAssignment)
     private readonly kpiAssignmentRepository: Repository<KPIAssignment>,
@@ -34,7 +38,7 @@ export class DashboardsService {
     byLevel: { name: string; count: number; status: KpiValueStatus }[];
   }> {
     this.logger.debug(
-      `[getKpiAwaitingApprovalStats] Called by user: ${currentUser.id} with role: ${currentUser.role}`,
+      `[getKpiAwaitingApprovalStats] Called by user: ${currentUser.id} with roles: ${Array.isArray(currentUser.roles) ? currentUser.roles.map((r) => (typeof r === 'string' ? r : r?.name)).join(',') : ''}`,
     );
 
     const query = this.kpiValuesRepository
@@ -52,9 +56,9 @@ export class DashboardsService {
       });
 
     const canProceed = this.applyRoleBasedFilters(query, currentUser, {
-      assignmentAlias: 'assignment', 
-      assignedEmployeeAlias: 'assignedEmployee', 
-      departmentOfAssignedSectionAlias: 'departmentOfAssignedSection', 
+      assignmentAlias: 'assignment',
+      assignedEmployeeAlias: 'assignedEmployee',
+      departmentOfAssignedSectionAlias: 'departmentOfAssignedSection',
     });
     if (!canProceed) {
       return { total: 0, byLevel: [] };
@@ -103,7 +107,7 @@ export class DashboardsService {
 
   async getKpiStatusOverTimeStats(
     currentUser: Employee,
-    days: number = 7, 
+    days: number = 7,
   ): Promise<{ approvedLastXDays: number; rejectedLastXDays: number }> {
     this.logger.debug(
       `[getKpiStatusOverTimeStats] Called by user: ${currentUser.id} for last ${days} days`,
@@ -118,7 +122,7 @@ export class DashboardsService {
       .leftJoin('assignment.employee', 'assignedEmployee')
       .leftJoin('assignment.section', 'assignedSection')
       .leftJoin('assignedSection.department', 'departmentOfAssignedSection')
-      .where('kpiValue.updated_at >= :sinceDate', { sinceDate }); 
+      .where('kpiValue.updated_at >= :sinceDate', { sinceDate });
 
     const canProceedStatusOverTime = this.applyRoleBasedFilters(
       baseQuery,
@@ -155,8 +159,8 @@ export class DashboardsService {
   }
 
   async getAverageApprovalTimeStats(currentUser: Employee): Promise<{
-    totalAverageTime: number | null; 
-    byLevel: { name: string; averageTime: number | null }[]; 
+    totalAverageTime: number | null;
+    byLevel: { name: string; averageTime: number | null }[];
   }> {
     this.logger.debug(
       `[getAverageApprovalTimeStats] Called by user: ${currentUser.id}`,
@@ -207,7 +211,7 @@ export class DashboardsService {
       .addOrderBy('history.changed_at', 'ASC')
       .getMany();
 
-    const processingTimes: number[] = []; 
+    const processingTimes: number[] = [];
 
     const kpiValueTimeMap = new Map<
       number,
@@ -284,7 +288,7 @@ export class DashboardsService {
       .createQueryBuilder('history')
       .select('history.kpi_id', 'kpiId')
       .addSelect('COUNT(history.id)', 'count')
-      .innerJoin('history.kpiValue', 'kpiValue') 
+      .innerJoin('history.kpiValue', 'kpiValue')
       .innerJoin('kpiValue.kpiAssignment', 'assignment')
       .leftJoin('assignment.employee', 'assignedEmployee')
       .leftJoin('assignment.section', 'assignedSection')
@@ -292,8 +296,8 @@ export class DashboardsService {
       .where('history.action = :action', { action: 'SUBMIT_CREATE' })
       .andWhere('history.changed_at >= :sinceDate', { sinceDate })
       .groupBy('history.kpi_id')
-      .innerJoin(Kpi, 'kpi_entity', 'kpi_entity.id = history.kpi_id') 
-      .andWhere('kpi_entity.deleted_at IS NULL') 
+      .innerJoin(Kpi, 'kpi_entity', 'kpi_entity.id = history.kpi_id')
+      .andWhere('kpi_entity.deleted_at IS NULL')
       .orderBy('count', 'DESC')
       .limit(limit);
 
@@ -301,14 +305,14 @@ export class DashboardsService {
       submittedQuery,
       currentUser,
       {
-        assignmentAlias: 'assignment', 
-        assignedEmployeeAlias: 'assignedEmployee', 
-        departmentOfAssignedSectionAlias: 'departmentOfAssignedSection', 
+        assignmentAlias: 'assignment',
+        assignedEmployeeAlias: 'assignedEmployee',
+        departmentOfAssignedSectionAlias: 'departmentOfAssignedSection',
       },
     );
     if (!canProceedSubmitted) return { submitted: [], updated: [] };
     const topSubmittedRaw = await submittedQuery.getRawMany();
-    
+
     const updatedQuery = this.kpiValueHistoryRepository
       .createQueryBuilder('history')
       .select('history.kpi_id', 'kpiId')
@@ -325,8 +329,8 @@ export class DashboardsService {
         Kpi,
         'kpi_entity_updated',
         'kpi_entity_updated.id = history.kpi_id',
-      ) 
-      .andWhere('kpi_entity_updated.deleted_at IS NULL') 
+      )
+      .andWhere('kpi_entity_updated.deleted_at IS NULL')
       .andWhere('history.changed_at >= :sinceDate', { sinceDate })
       .groupBy('history.kpi_id')
       .orderBy('count', 'DESC')
@@ -336,14 +340,14 @@ export class DashboardsService {
       updatedQuery,
       currentUser,
       {
-        assignmentAlias: 'assignment', 
-        assignedEmployeeAlias: 'assignedEmployee', 
-        departmentOfAssignedSectionAlias: 'departmentOfAssignedSection', 
+        assignmentAlias: 'assignment',
+        assignedEmployeeAlias: 'assignedEmployee',
+        departmentOfAssignedSectionAlias: 'departmentOfAssignedSection',
       },
     );
-    
+
     if (!canProceedUpdated && !canProceedSubmitted)
-      return { submitted: [], updated: [] }; 
+      return { submitted: [], updated: [] };
     const topUpdatedRaw = await updatedQuery.getRawMany();
 
     const kpiIds = [
@@ -369,8 +373,29 @@ export class DashboardsService {
 
     return { submitted, updated };
   }
-  
-  private applyRoleBasedFilters<T extends KpiValue | KpiValueHistory | Kpi | KPIAssignment>(
+
+  private hasDynamicRole(
+    currentUser: Employee,
+    rolePattern: string,
+    scopeId?: number,
+  ): boolean {
+    // rolePattern ví dụ: 'kpi:view:company', 'kpi:view:department', ...
+    const userRoles: string[] = Array.isArray(currentUser.roles)
+      ? currentUser.roles.map((r: any) => (typeof r === 'string' ? r : r?.name))
+      : [];
+    // Nếu có scopeId, kiểm tra role dạng 'kpi:view:department:3' (nếu bạn muốn phân biệt theo id cụ thể)
+    if (scopeId !== undefined) {
+      return (
+        userRoles.includes(`${rolePattern}:${scopeId}`) ||
+        userRoles.includes(rolePattern)
+      );
+    }
+    return userRoles.includes(rolePattern);
+  }
+
+  private applyRoleBasedFilters<
+    T extends KpiValue | KpiValueHistory | Kpi | KPIAssignment,
+  >(
     query: SelectQueryBuilder<T>,
     currentUser: Employee,
     aliases: {
@@ -380,26 +405,34 @@ export class DashboardsService {
       assignedDirectlyToDepartmentAlias?: string;
     },
   ): boolean {
-    const roleName = currentUser.role?.name;
-    if (!roleName) return false;
-
-    if (roleName === 'admin') {
+    // Ưu tiên quyền cao nhất
+    if (this.hasDynamicRole(currentUser, 'kpi:view:company')) {
       return true;
     }
-    if (roleName === 'manager' && currentUser.departmentId) {
-      query.andWhere(`${aliases.departmentOfAssignedSectionAlias}.id = :deptId`, { deptId: currentUser.departmentId });
+    if (
+      this.hasDynamicRole(currentUser, 'kpi:view:department') &&
+      currentUser.departmentId
+    ) {
+      query.andWhere(
+        `${aliases.departmentOfAssignedSectionAlias}.id = :deptId`,
+        { deptId: currentUser.departmentId },
+      );
       return true;
     }
-    if (roleName === 'department' && currentUser.departmentId) {
-      query.andWhere(`${aliases.departmentOfAssignedSectionAlias}.id = :deptId`, { deptId: currentUser.departmentId });
+    if (
+      this.hasDynamicRole(currentUser, 'kpi:view:section') &&
+      currentUser.sectionId
+    ) {
+      query.andWhere(
+        `${aliases.assignedEmployeeAlias}.sectionId = :sectionId`,
+        { sectionId: currentUser.sectionId },
+      );
       return true;
     }
-    if (roleName === 'section' && currentUser.sectionId) {
-      query.andWhere(`${aliases.assignedEmployeeAlias}.sectionId = :sectionId`, { sectionId: currentUser.sectionId });
-      return true;
-    }
-    if (roleName === 'user') {
-      query.andWhere(`${aliases.assignedEmployeeAlias}.id = :userId`, { userId: currentUser.id });
+    if (this.hasDynamicRole(currentUser, 'kpi:view:personal')) {
+      query.andWhere(`${aliases.assignedEmployeeAlias}.id = :userId`, {
+        userId: currentUser.id,
+      });
       return true;
     }
     return false;
@@ -414,27 +447,35 @@ export class DashboardsService {
       approverId: number;
       approverName: string;
       pendingCount: number;
-      pendingKpis?: { kpiValueId: number; kpiId: number; kpiName: string; submittedBy?: string }[];
+      pendingKpis?: {
+        kpiValueId: number;
+        kpiId: number;
+        kpiName: string;
+        submittedBy?: string;
+      }[];
     }[]
   > {
     this.logger.debug(
       `[getTopPendingApproversStats] Called by user: ${currentUser.id}, limit: ${limit}`,
     );
-    const roleName = currentUser.role?.name;
+    // Đặt khai báo userRoles lên đầu mỗi hàm cần dùng
+    const userRoles: string[] = Array.isArray(currentUser.roles)
+      ? currentUser.roles.map((r: any) => (typeof r === 'string' ? r : r?.name))
+      : [];
 
     const pendingValuesQuery = this.kpiValuesRepository
       .createQueryBuilder('kpiValue')
       .innerJoinAndSelect('kpiValue.kpiAssignment', 'assignment')
-      .innerJoinAndSelect('assignment.kpi', 'kpi') 
-      .leftJoinAndSelect('assignment.employee', 'assignedEmployee') 
+      .innerJoinAndSelect('assignment.kpi', 'kpi')
+      .leftJoinAndSelect('assignment.employee', 'assignedEmployee')
       .leftJoinAndSelect('assignedEmployee.section', 'submitterSection')
       .leftJoinAndSelect('assignedEmployee.department', 'submitterDepartment')
-      .leftJoinAndSelect('assignment.section', 'assignedSection') 
+      .leftJoinAndSelect('assignment.section', 'assignedSection')
       .leftJoinAndSelect(
         'assignedSection.department',
         'departmentOfAssignedSection',
-      ) 
-      .leftJoinAndSelect('assignment.department', 'assignedDepartment') 
+      )
+      .leftJoinAndSelect('assignment.department', 'assignedDepartment')
       .where('kpiValue.status IN (:...statuses)', {
         statuses: [
           KpiValueStatus.PENDING_SECTION_APPROVAL,
@@ -443,7 +484,7 @@ export class DashboardsService {
         ],
       });
 
-    if (roleName === 'manager' && currentUser.departmentId) {
+    if (userRoles.includes('manager') && currentUser.departmentId) {
       pendingValuesQuery.andWhere(
         new Brackets((qb) => {
           qb.where('assignedDepartment.id = :userDeptId', {
@@ -457,7 +498,7 @@ export class DashboardsService {
             });
         }),
       );
-    } else if (roleName === 'department' && currentUser.departmentId) {
+    } else if (userRoles.includes('department') && currentUser.departmentId) {
       pendingValuesQuery.andWhere(
         new Brackets((qb) => {
           qb.where('departmentOfAssignedSection.id = :userDeptId', {
@@ -467,10 +508,14 @@ export class DashboardsService {
           });
         }),
       );
-    } else if (roleName === 'section' && currentUser.sectionId) {
-      pendingValuesQuery.andWhere('assignedSection.id = :sectionId', { sectionId: currentUser.sectionId });
-    } else if (roleName === 'user') {
-      pendingValuesQuery.andWhere('assignedEmployee.id = :userId', { userId: currentUser.id });
+    } else if (userRoles.includes('section') && currentUser.sectionId) {
+      pendingValuesQuery.andWhere('assignedSection.id = :sectionId', {
+        sectionId: currentUser.sectionId,
+      });
+    } else if (userRoles.includes('user')) {
+      pendingValuesQuery.andWhere('assignedEmployee.id = :userId', {
+        userId: currentUser.id,
+      });
     }
 
     const pendingValues = await pendingValuesQuery.getMany();
@@ -482,7 +527,12 @@ export class DashboardsService {
         approverId: number;
         approverName: string;
         pendingCount: number;
-        pendingKpis: { kpiValueId: number; kpiId: number; kpiName: string; submittedBy?: string }[];
+        pendingKpis: {
+          kpiValueId: number;
+          kpiId: number;
+          kpiName: string;
+          submittedBy?: string;
+        }[];
         sortKey: string;
       }
     > = {};
@@ -490,15 +540,25 @@ export class DashboardsService {
     for (const pv of pendingValues) {
       let approverKey: string | null = null;
       let approverType: 'user' | 'department' | 'section' | null = null;
-      let approverEntityId: number | null = null; 
+      let approverEntityId: number | null = null;
       let approverName: string = '';
 
       const assignment = pv.kpiAssignment;
       if (!assignment) continue;
-      const kpiDetail = { kpiValueId: pv.id, kpiId: assignment.kpi.id, kpiName: assignment.kpi.name, submittedBy: assignment.employee ? `${assignment.employee.first_name} ${assignment.employee.last_name}` : (assignment.section ? assignment.section.name : '') };
+      const kpiDetail = {
+        kpiValueId: pv.id,
+        kpiId: assignment.kpi.id,
+        kpiName: assignment.kpi.name,
+        submittedBy: assignment.employee
+          ? `${assignment.employee.first_name} ${assignment.employee.last_name}`
+          : assignment.section
+            ? assignment.section.name
+            : '',
+      };
 
       if (pv.status === KpiValueStatus.PENDING_SECTION_APPROVAL) {
-        const targetSection = assignment.section || assignment.employee?.section; 
+        const targetSection =
+          assignment.section || assignment.employee?.section;
         if (targetSection) {
           approverType = 'section';
           approverEntityId = targetSection.id;
@@ -507,9 +567,9 @@ export class DashboardsService {
         }
       } else if (pv.status === KpiValueStatus.PENDING_DEPT_APPROVAL) {
         const targetDepartment =
-          assignment.department || 
-          assignment.section?.department || 
-          assignment.employee?.department; 
+          assignment.department ||
+          assignment.section?.department ||
+          assignment.employee?.department;
         if (targetDepartment) {
           approverType = 'department';
           approverEntityId = targetDepartment.id;
@@ -518,8 +578,8 @@ export class DashboardsService {
           approverKey = `department_${targetDepartment.id}`;
         }
       } else if (pv.status === KpiValueStatus.PENDING_MANAGER_APPROVAL) {
-        approverType = 'user'; 
-        approverEntityId = 0; 
+        approverType = 'user';
+        approverEntityId = 0;
         approverName = 'Cấp Quản lý/Admin';
         approverKey = `group_manager_admin`;
       }
@@ -528,7 +588,7 @@ export class DashboardsService {
         if (!approverCounts[approverKey]) {
           approverCounts[approverKey] = {
             approverType,
-            approverId: approverEntityId, 
+            approverId: approverEntityId,
             approverName,
             pendingCount: 0,
             pendingKpis: [],
@@ -536,7 +596,7 @@ export class DashboardsService {
           };
         }
         approverCounts[approverKey].pendingCount++;
-        if (approverCounts[approverKey].pendingKpis.length < 5) { 
+        if (approverCounts[approverKey].pendingKpis.length < 5) {
           approverCounts[approverKey].pendingKpis.push(kpiDetail);
         }
       }
@@ -544,7 +604,7 @@ export class DashboardsService {
     const sortedApprovers = Object.values(approverCounts)
       .sort((a, b) => {
         if (b.pendingCount === a.pendingCount) {
-          return a.sortKey.localeCompare(b.sortKey); 
+          return a.sortKey.localeCompare(b.sortKey);
         }
         return b.pendingCount - a.pendingCount;
       })
@@ -560,17 +620,21 @@ export class DashboardsService {
       limit: number;
       entityType: 'user' | 'section' | 'department';
       orderBy: 'most' | 'least';
-      recentKpisLimit?: number; 
+      recentKpisLimit?: number;
     },
   ): Promise<
     {
       id: number | string;
       name: string;
       count: number;
-      recentSubmittedKpis?: { kpiId: number; kpiName: string; submittedAt: Date }[];
+      recentSubmittedKpis?: {
+        kpiId: number;
+        kpiName: string;
+        submittedAt: Date;
+      }[];
     }[]
   > {
-    const { days, limit, entityType, orderBy, recentKpisLimit = 3 } = params; 
+    const { days, limit, entityType, orderBy, recentKpisLimit = 3 } = params;
     this.logger.debug(
       `[getKpiSubmissionStats] Called by user: ${currentUser.id}, entityType: ${entityType}, orderBy: ${orderBy}, days: ${days}, limit: ${limit}, recentKpisLimit: ${recentKpisLimit}`,
     );
@@ -585,51 +649,61 @@ export class DashboardsService {
       .innerJoin(Kpi, 'kpi_for_count', 'kpi_for_count.id = history.kpi_id')
       .where('history.action = :action', { action: 'SUBMIT_CREATE' })
       .andWhere('history.changed_at >= :sinceDate', { sinceDate })
-      .andWhere('kpi_for_count.deleted_at IS NULL'); 
+      .andWhere('kpi_for_count.deleted_at IS NULL');
 
-    const roleName = currentUser.role?.name;
-    if (roleName === 'manager' && currentUser.departmentId) {
-      topEntitiesQuery.andWhere('submitter.departmentId = :userDepartmentId', { 
+    // Đặt khai báo userRoles lên đầu mỗi hàm cần dùng
+    const userRoles: string[] = Array.isArray(currentUser.roles)
+      ? currentUser.roles.map((r: any) => (typeof r === 'string' ? r : r?.name))
+      : [];
+    if (userRoles.includes('manager') && currentUser.departmentId) {
+      topEntitiesQuery.andWhere('submitter.departmentId = :userDepartmentId', {
         userDepartmentId: currentUser.departmentId,
       });
-    } else if (roleName === 'department' && currentUser.departmentId) {
-      topEntitiesQuery.andWhere('submitter.departmentId = :userDepartmentId', { 
+    } else if (userRoles.includes('department') && currentUser.departmentId) {
+      topEntitiesQuery.andWhere('submitter.departmentId = :userDepartmentId', {
         userDepartmentId: currentUser.departmentId,
       });
-    } else if (roleName === 'section' && currentUser.sectionId) {
-      topEntitiesQuery.andWhere('submitter.sectionId = :userSectionId', { 
+    } else if (userRoles.includes('section') && currentUser.sectionId) {
+      topEntitiesQuery.andWhere('submitter.sectionId = :userSectionId', {
         userSectionId: currentUser.sectionId,
       });
-    } else if (roleName === 'user') {
-      topEntitiesQuery.andWhere('submitter.id = :userId', { userId: currentUser.id });
+    } else if (userRoles.includes('user')) {
+      topEntitiesQuery.andWhere('submitter.id = :userId', {
+        userId: currentUser.id,
+      });
     }
 
     switch (entityType) {
       case 'user':
         topEntitiesQuery
           .addSelect('submitter.id', 'id')
-          .addSelect("CONCAT(submitter.first_name, ' ', submitter.last_name)", 'name')
+          .addSelect(
+            "CONCAT(submitter.first_name, ' ', submitter.last_name)",
+            'name',
+          )
           .groupBy('submitter.id, submitter.first_name, submitter.last_name');
         break;
       case 'section':
         topEntitiesQuery
-          .leftJoin('submitter.section', 'sectionEntity') 
+          .leftJoin('submitter.section', 'sectionEntity')
           .addSelect('sectionEntity.id', 'id')
           .addSelect('sectionEntity.name', 'name')
-          .andWhere('sectionEntity.id IS NOT NULL') 
+          .andWhere('sectionEntity.id IS NOT NULL')
           .groupBy('sectionEntity.id, sectionEntity.name');
         break;
       case 'department':
         topEntitiesQuery
-          .leftJoin('submitter.department', 'departmentEntity') 
+          .leftJoin('submitter.department', 'departmentEntity')
           .addSelect('departmentEntity.id', 'id')
           .addSelect('departmentEntity.name', 'name')
-          .andWhere('departmentEntity.id IS NOT NULL') 
+          .andWhere('departmentEntity.id IS NOT NULL')
           .groupBy('departmentEntity.id, departmentEntity.name');
         break;
     }
 
-    topEntitiesQuery.orderBy('count', orderBy === 'most' ? 'DESC' : 'ASC').limit(limit);
+    topEntitiesQuery
+      .orderBy('count', orderBy === 'most' ? 'DESC' : 'ASC')
+      .limit(limit);
 
     const topEntitiesRaw = await topEntitiesQuery.getRawMany();
 
@@ -652,7 +726,8 @@ export class DashboardsService {
       const entityId = entity.id;
       let entityName = entity.name;
       const submissionCount = parseInt(entity.count, 10);
-      let recentKpis: { kpiId: number; kpiName: string; submittedAt: Date }[] = [];
+      let recentKpis: { kpiId: number; kpiName: string; submittedAt: Date }[] =
+        [];
 
       if (!entityName) {
         if (entityType === 'section') entityName = 'Không có Bộ phận';
@@ -660,28 +735,43 @@ export class DashboardsService {
         else entityName = 'Người dùng không xác định';
       }
 
-      if (recentKpisLimit > 0 && entityId) { 
+      if (recentKpisLimit > 0 && entityId) {
         const kpiDetailsQuery = this.kpiValueHistoryRepository
           .createQueryBuilder('h_detail')
           .select('h_detail.kpi_id', 'kpiId')
           .addSelect('kpi_entity.name', 'kpiName')
           .addSelect('h_detail.changed_at', 'submittedAt')
           .innerJoin(Kpi, 'kpi_entity', 'kpi_entity.id = h_detail.kpi_id')
-          .innerJoin(Employee, 'submitter_detail', 'submitter_detail.id = h_detail.changed_by')
+          .innerJoin(
+            Employee,
+            'submitter_detail',
+            'submitter_detail.id = h_detail.changed_by',
+          )
           .where('h_detail.action = :action', { action: 'SUBMIT_CREATE' })
           .andWhere('h_detail.changed_at >= :sinceDate', { sinceDate })
           .andWhere('kpi_entity.deleted_at IS NULL');
 
         if (entityType === 'user') {
-          kpiDetailsQuery.andWhere('h_detail.changed_by = :entityIdParam', { entityIdParam: entityId });
+          kpiDetailsQuery.andWhere('h_detail.changed_by = :entityIdParam', {
+            entityIdParam: entityId,
+          });
         } else if (entityType === 'section') {
-          kpiDetailsQuery.andWhere('submitter_detail.sectionId = :entityIdParam', { entityIdParam: entityId });
-        } else { 
-          kpiDetailsQuery.andWhere('submitter_detail.departmentId = :entityIdParam', { entityIdParam: entityId });
+          kpiDetailsQuery.andWhere(
+            'submitter_detail.sectionId = :entityIdParam',
+            { entityIdParam: entityId },
+          );
+        } else {
+          kpiDetailsQuery.andWhere(
+            'submitter_detail.departmentId = :entityIdParam',
+            { entityIdParam: entityId },
+          );
         }
 
-        if (roleName === 'manager' && currentUser.departmentId) {
-          kpiDetailsQuery.andWhere('submitter_detail.departmentId = :managerDeptId', { managerDeptId: currentUser.departmentId });
+        if (userRoles.includes('manager') && currentUser.departmentId) {
+          kpiDetailsQuery.andWhere(
+            'submitter_detail.departmentId = :managerDeptId',
+            { managerDeptId: currentUser.departmentId },
+          );
         }
 
         recentKpis = await kpiDetailsQuery
@@ -694,10 +784,10 @@ export class DashboardsService {
         id: entityId,
         name: entityName,
         count: submissionCount,
-        recentSubmittedKpis: recentKpis.map(kpi => ({
+        recentSubmittedKpis: recentKpis.map((kpi) => ({
           kpiId: kpi.kpiId,
           kpiName: kpi.kpiName,
-          submittedAt: new Date(kpi.submittedAt)
+          submittedAt: new Date(kpi.submittedAt),
         })),
       });
     }
@@ -706,7 +796,7 @@ export class DashboardsService {
 
   async getKpiPerformanceOverview(
     currentUser: Employee,
-    daysForNotUpdated: number = 7, 
+    daysForNotUpdated: number = 7,
   ): Promise<KpiPerformanceOverviewDto> {
     this.logger.debug(
       `[getKpiPerformanceOverview] Called by user: ${currentUser.id}`,
@@ -726,86 +816,130 @@ export class DashboardsService {
         'assignment.targetValue',
         'latestValue.value',
         'latestValue.id AS latestValue_kpi_value_id',
-        'assignedEmployee.id', 
+        'assignedEmployee.id',
         'assignedEmployee.first_name',
         'assignedEmployee.last_name',
-        'assignedEmployee.departmentId AS assignedEmployee_departmentId', 
-        'assignedEmployeeDepartment.name AS assignedEmployee_department_name', 
-        'assignedDirectlyToDepartment.id AS assignedDirectlyToDepartment_id', 
-        'assignedDirectlyToDepartment.name AS assignedDirectlyToDepartment_name', 
-        'departmentOfAssignedSection.id AS departmentOfAssignedSection_id', 
-        'departmentOfAssignedSection.name AS departmentOfAssignedSection_name', 
+        'assignedEmployee.departmentId AS assignedEmployee_departmentId',
+        'assignedEmployeeDepartment.name AS assignedEmployee_department_name',
+        'assignedDirectlyToDepartment.id AS assignedDirectlyToDepartment_id',
+        'assignedDirectlyToDepartment.name AS assignedDirectlyToDepartment_name',
+        'departmentOfAssignedSection.id AS departmentOfAssignedSection_id',
+        'departmentOfAssignedSection.name AS departmentOfAssignedSection_name',
         'latestValue.timestamp',
       ])
       .innerJoin('kpi.assignments', 'assignment')
       .leftJoin(
         (qb) =>
           qb
-            .select('kv_sub.kpi_assigment_id, MAX(kv_sub.timestamp) as max_timestamp') 
+            .select(
+              'kv_sub.kpi_assigment_id, MAX(kv_sub.timestamp) as max_timestamp',
+            )
             .from(KpiValue, 'kv_sub')
-            .groupBy('kv_sub.kpi_assigment_id'), 
+            .groupBy('kv_sub.kpi_assigment_id'),
         'latest_value_time',
-        'latest_value_time.kpi_assigment_id = assignment.id', 
+        'latest_value_time.kpi_assigment_id = assignment.id',
       )
       .leftJoin(
         KpiValue,
         'latestValue',
-        'latestValue.kpi_assigment_id = assignment.id AND latestValue.timestamp = latest_value_time.max_timestamp', 
+        'latestValue.kpi_assigment_id = assignment.id AND latestValue.timestamp = latest_value_time.max_timestamp',
       )
       .where('kpi.deleted_at IS NULL')
       .andWhere('assignment.deleted_at IS NULL');
-      
+
     this.applyRoleBasedFilters(relevantAssignmentsQuery, currentUser, {
       assignmentAlias: 'assignment',
       assignedEmployeeAlias: 'assignedEmployee',
-      departmentOfAssignedSectionAlias: 'departmentOfAssignedSection', 
+      departmentOfAssignedSectionAlias: 'departmentOfAssignedSection',
     });
-    
+
     relevantAssignmentsQuery
       .leftJoin('assignment.employee', 'assignedEmployee')
-      .leftJoin('assignedEmployee.department', 'assignedEmployeeDepartment') 
+      .leftJoin('assignedEmployee.department', 'assignedEmployeeDepartment')
       .leftJoin('assignment.section', 'assignedSection')
       .leftJoin('assignedSection.department', 'departmentOfAssignedSection')
-      .leftJoin('assignment.department', 'assignedDirectlyToDepartment'); 
+      .leftJoin('assignment.department', 'assignedDirectlyToDepartment');
 
-    const assignmentsWithLatestValues = await relevantAssignmentsQuery.getRawMany();
+    const assignmentsWithLatestValues =
+      await relevantAssignmentsQuery.getRawMany();
 
     let achievedCount = 0;
     let notAchievedCount = 0;
     let notUpdatedRecentlyCount = 0;
-    const kpisWithValues = assignmentsWithLatestValues.filter(a => a.latestValue_value !== null);
+    const kpisWithValues = assignmentsWithLatestValues.filter(
+      (a) => a.latestValue_value !== null,
+    );
     const totalKpisWithValues = kpisWithValues.length;
 
     const thresholdDate = new Date();
     thresholdDate.setDate(thresholdDate.getDate() - daysForNotUpdated);
 
     for (const item of assignmentsWithLatestValues) {
-      if (item.latestValue_value !== null && item.assignment_targetValue !== null) {
-        if (parseFloat(item.latestValue_value) >= parseFloat(item.assignment_targetValue)) {
+      if (
+        item.latestValue_value !== null &&
+        item.assignment_targetValue !== null
+      ) {
+        if (
+          parseFloat(item.latestValue_value) >=
+          parseFloat(item.assignment_targetValue)
+        ) {
           achievedCount++;
         } else {
           notAchievedCount++;
         }
       }
 
-      if (item.latestValue_value === null || (item.latestValue_timestamp && new Date(item.latestValue_timestamp) < thresholdDate) ) {
-        if (item.latestValue_value === null && new Date(item.assignment_created_at || item.kpi_created_at || Date.now()) < thresholdDate) {
-            notUpdatedRecentlyCount++;
-        } else if (item.latestValue_value !== null && new Date(item.latestValue_timestamp) < thresholdDate) {
-            notUpdatedRecentlyCount++;
+      if (
+        item.latestValue_value === null ||
+        (item.latestValue_timestamp &&
+          new Date(item.latestValue_timestamp) < thresholdDate)
+      ) {
+        if (
+          item.latestValue_value === null &&
+          new Date(
+            item.assignment_created_at || item.kpi_created_at || Date.now(),
+          ) < thresholdDate
+        ) {
+          notUpdatedRecentlyCount++;
+        } else if (
+          item.latestValue_value !== null &&
+          new Date(item.latestValue_timestamp) < thresholdDate
+        ) {
+          notUpdatedRecentlyCount++;
         }
       }
     }
 
     const totalRatedKpis = achievedCount + notAchievedCount;
-    const achievedRate = totalRatedKpis > 0 ? parseFloat(((achievedCount / totalRatedKpis) * 100).toFixed(2)) : 0;
-    const notAchievedRate = totalRatedKpis > 0 ? parseFloat(((notAchievedCount / totalRatedKpis) * 100).toFixed(2)) : 0;
-    const notUpdatedRecentlyRate = totalKpisWithValues > 0 ? parseFloat(((notUpdatedRecentlyCount / totalKpisWithValues) * 100).toFixed(2)) : 0;
+    const achievedRate =
+      totalRatedKpis > 0
+        ? parseFloat(((achievedCount / totalRatedKpis) * 100).toFixed(2))
+        : 0;
+    const notAchievedRate =
+      totalRatedKpis > 0
+        ? parseFloat(((notAchievedCount / totalRatedKpis) * 100).toFixed(2))
+        : 0;
+    const notUpdatedRecentlyRate =
+      totalKpisWithValues > 0
+        ? parseFloat(
+            ((notUpdatedRecentlyCount / totalKpisWithValues) * 100).toFixed(2),
+          )
+        : 0;
 
     const performanceByRole: PerformanceByRoleDto[] = [];
-    const roleName = typeof currentUser.role === 'string' ? currentUser.role : currentUser.role?.name;
-    if (roleName === 'admin' || roleName === 'manager') {
-      const performanceMap = new Map<number, { departmentName: string; total: number; achieved: number; notAchieved: number }>();
+    const userRoles: string[] = Array.isArray(currentUser.roles)
+      ? currentUser.roles.map((r: any) => (typeof r === 'string' ? r : r?.name))
+      : [];
+    if (userRoles.includes('admin') || userRoles.includes('manager')) {
+      const performanceMap = new Map<
+        number,
+        {
+          departmentName: string;
+          total: number;
+          achieved: number;
+          notAchieved: number;
+        }
+      >();
 
       for (const item of kpisWithValues) {
         const departmentId =
@@ -819,17 +953,31 @@ export class DashboardsService {
           'Không xác định';
 
         if (departmentId) {
-          if (roleName === 'manager' && currentUser.departmentId !== departmentId) {
+          if (
+            userRoles.includes('manager') &&
+            currentUser.departmentId !== departmentId
+          ) {
             continue;
           }
 
           if (!performanceMap.has(departmentId)) {
-            performanceMap.set(departmentId, { departmentName: departmentName, total: 0, achieved: 0, notAchieved: 0 });
+            performanceMap.set(departmentId, {
+              departmentName: departmentName,
+              total: 0,
+              achieved: 0,
+              notAchieved: 0,
+            });
           }
           const deptStat = performanceMap.get(departmentId)!;
           deptStat.total++;
-          if (item.latestValue_value !== null && item.assignment_targetValue !== null) {
-            if (parseFloat(item.latestValue_value) >= parseFloat(item.assignment_targetValue)) {
+          if (
+            item.latestValue_value !== null &&
+            item.assignment_targetValue !== null
+          ) {
+            if (
+              parseFloat(item.latestValue_value) >=
+              parseFloat(item.assignment_targetValue)
+            ) {
               deptStat.achieved++;
             } else {
               deptStat.notAchieved++;
@@ -846,11 +994,14 @@ export class DashboardsService {
           totalAssignedKpis: stat.total,
           achievedCount: stat.achieved,
           notAchievedCount: stat.notAchieved,
-          achievedRate: stat.total > 0 ? parseFloat(((stat.achieved / stat.total) * 100).toFixed(2)) : 0,
+          achievedRate:
+            stat.total > 0
+              ? parseFloat(((stat.achieved / stat.total) * 100).toFixed(2))
+              : 0,
         });
       });
-       
-       performanceByRole.sort((a, b) => a.roleName.localeCompare(b.roleName));
+
+      performanceByRole.sort((a, b) => a.roleName.localeCompare(b.roleName));
     }
 
     return {
@@ -862,37 +1013,50 @@ export class DashboardsService {
       notUpdatedRecentlyCount,
       totalKpisWithValues,
       notUpdatedRecentlyRate,
-      performanceByRole: performanceByRole.length > 0 ? performanceByRole : undefined,
+      performanceByRole:
+        performanceByRole.length > 0 ? performanceByRole : undefined,
     };
   }
 
-  async getKpiInventoryStats(
-    currentUser: Employee,
-  ): Promise<KpiInventoryDto> {
+  async getKpiInventoryStats(currentUser: Employee): Promise<KpiInventoryDto> {
+    // Đặt khai báo userRoles lên đầu mỗi hàm cần dùng
+    const userRoles: string[] = Array.isArray(currentUser.roles)
+      ? currentUser.roles.map((r: any) => (typeof r === 'string' ? r : r?.name))
+      : [];
+
     this.logger.debug(
-      `[getKpiInventoryStats] Called by user: ${currentUser.id} with role: ${currentUser.role}`,
+      `[getKpiInventoryStats] Called by user: ${currentUser.id} with roles: ${userRoles.join(',')}`,
     );
 
     const totalKpiDefinitionsQuery = this.kpisRepository
       .createQueryBuilder('kpi')
       .where('kpi.deleted_at IS NULL');
 
-    const roleName = typeof currentUser.role === 'string' ? currentUser.role : currentUser.role?.name;
-    if (roleName === 'manager' && currentUser.departmentId) {
-       totalKpiDefinitionsQuery
-         .innerJoin('kpi.assignments', 'assignment', 'assignment.deleted_at IS NULL')
-         .leftJoin('assignment.employee', 'assignedEmployee')
-         .leftJoin('assignment.section', 'assignedSection')
-         .leftJoin('assignedSection.department', 'departmentOfAssignedSection')
-         .leftJoin('assignment.department', 'assignedDirectlyToDepartment')
-         .andWhere(
-           new Brackets((qb) => {
-             qb.where('assignedDirectlyToDepartment.id = :userDeptId', { userDeptId: currentUser.departmentId })
-               .orWhere('departmentOfAssignedSection.id = :userDeptId', { userDeptId: currentUser.departmentId })
-               .orWhere('assignedEmployee.departmentId = :userDeptId', { userDeptId: currentUser.departmentId });
-           })
-         )
-         .distinct(true);
+    if (userRoles.includes('manager') && currentUser.departmentId) {
+      totalKpiDefinitionsQuery
+        .innerJoin(
+          'kpi.assignments',
+          'assignment',
+          'assignment.deleted_at IS NULL',
+        )
+        .leftJoin('assignment.employee', 'assignedEmployee')
+        .leftJoin('assignment.section', 'assignedSection')
+        .leftJoin('assignedSection.department', 'departmentOfAssignedSection')
+        .leftJoin('assignment.department', 'assignedDirectlyToDepartment')
+        .andWhere(
+          new Brackets((qb) => {
+            qb.where('assignedDirectlyToDepartment.id = :userDeptId', {
+              userDeptId: currentUser.departmentId,
+            })
+              .orWhere('departmentOfAssignedSection.id = :userDeptId', {
+                userDeptId: currentUser.departmentId,
+              })
+              .orWhere('assignedEmployee.departmentId = :userDeptId', {
+                userDeptId: currentUser.departmentId,
+              });
+          }),
+        )
+        .distinct(true);
     }
 
     const totalKpiDefinitions = await totalKpiDefinitionsQuery.getCount();
@@ -900,7 +1064,11 @@ export class DashboardsService {
     const totalKpiAssignmentsQuery = this.kpiValuesRepository
       .createQueryBuilder('kpiValue')
       .select('COUNT(DISTINCT assignment.id)', 'count')
-      .innerJoin('kpiValue.kpiAssignment', 'assignment', 'assignment.deleted_at IS NULL')
+      .innerJoin(
+        'kpiValue.kpiAssignment',
+        'assignment',
+        'assignment.deleted_at IS NULL',
+      )
       .leftJoin('assignment.employee', 'assignedEmployee')
       .leftJoin('assignment.section', 'assignedSection')
       .leftJoin('assignedSection.department', 'departmentOfAssignedSection')
@@ -915,25 +1083,40 @@ export class DashboardsService {
     });
 
     const totalKpiAssignmentsRaw = await totalKpiAssignmentsQuery.getRawOne();
-    const totalKpiAssignments = parseInt(totalKpiAssignmentsRaw?.count || '0', 10);
+    const totalKpiAssignments = parseInt(
+      totalKpiAssignmentsRaw?.count || '0',
+      10,
+    );
 
     const assignmentsByDepartmentQuery = this.kpiValuesRepository
       .createQueryBuilder('kpiValue')
-      .innerJoin('kpiValue.kpiAssignment', 'assignment', 'assignment.deleted_at IS NULL')
+      .innerJoin(
+        'kpiValue.kpiAssignment',
+        'assignment',
+        'assignment.deleted_at IS NULL',
+      )
       .leftJoin('assignment.department', 'assignedDirectlyToDepartment')
       .leftJoin('assignment.employee', 'assignedEmployee')
       .leftJoin('assignedEmployee.department', 'employeeDepartment')
       .leftJoin('assignment.section', 'assignedSection')
       .leftJoin('assignedSection.department', 'sectionDepartment')
-      .select('COALESCE(assignedDirectlyToDepartment.id, employeeDepartment.id, sectionDepartment.id)', 'departmentId')
-      .addSelect('COALESCE(assignedDirectlyToDepartment.name, employeeDepartment.name, sectionDepartment.name)', 'departmentName')
+      .select(
+        'COALESCE(assignedDirectlyToDepartment.id, employeeDepartment.id, sectionDepartment.id)',
+        'departmentId',
+      )
+      .addSelect(
+        'COALESCE(assignedDirectlyToDepartment.name, employeeDepartment.name, sectionDepartment.name)',
+        'departmentName',
+      )
       .addSelect('COUNT(DISTINCT assignment.id)', 'count')
       .where('assignment.deleted_at IS NULL')
-      .andWhere(new Brackets(qb => {
-        qb.where('assignedDirectlyToDepartment.id IS NOT NULL')
-          .orWhere('employeeDepartment.id IS NOT NULL')
-          .orWhere('sectionDepartment.id IS NOT NULL');
-      }));
+      .andWhere(
+        new Brackets((qb) => {
+          qb.where('assignedDirectlyToDepartment.id IS NOT NULL')
+            .orWhere('employeeDepartment.id IS NOT NULL')
+            .orWhere('sectionDepartment.id IS NOT NULL');
+        }),
+      );
 
     this.applyRoleBasedFilters(assignmentsByDepartmentQuery, currentUser, {
       assignmentAlias: 'assignment',
@@ -941,18 +1124,25 @@ export class DashboardsService {
       departmentOfAssignedSectionAlias: 'sectionDepartment',
       assignedDirectlyToDepartmentAlias: 'assignedDirectlyToDepartment',
     });
-    
+
     assignmentsByDepartmentQuery
-      .groupBy('COALESCE(assignedDirectlyToDepartment.id, employeeDepartment.id, sectionDepartment.id)')
-      .addGroupBy('COALESCE(assignedDirectlyToDepartment.name, employeeDepartment.name, sectionDepartment.name)')
+      .groupBy(
+        'COALESCE(assignedDirectlyToDepartment.id, employeeDepartment.id, sectionDepartment.id)',
+      )
+      .addGroupBy(
+        'COALESCE(assignedDirectlyToDepartment.name, employeeDepartment.name, sectionDepartment.name)',
+      )
       .orderBy('"departmentName"', 'ASC');
 
-    const assignmentsByDepartmentRaw = await assignmentsByDepartmentQuery.getRawMany();
-    const assignmentsByDepartment = assignmentsByDepartmentRaw.map(item => ({
-      departmentId: parseInt(item.departmentId, 10),
-      departmentName: item.departmentName || 'Không xác định',
-      count: parseInt(item.count, 10),
-    })).filter(item => item.departmentId);
+    const assignmentsByDepartmentRaw =
+      await assignmentsByDepartmentQuery.getRawMany();
+    const assignmentsByDepartment = assignmentsByDepartmentRaw
+      .map((item) => ({
+        departmentId: parseInt(item.departmentId, 10),
+        departmentName: item.departmentName || 'Không xác định',
+        count: parseInt(item.count, 10),
+      }))
+      .filter((item) => item.departmentId);
 
     const assignmentsByStatusQuery = this.kpiAssignmentRepository
       .createQueryBuilder('assignment')
@@ -976,7 +1166,7 @@ export class DashboardsService {
     assignmentsByStatusQuery.groupBy('assignment.status');
 
     const assignmentsByStatusRaw = await assignmentsByStatusQuery.getRawMany();
-    const assignmentsByStatus = assignmentsByStatusRaw.map(item => ({
+    const assignmentsByStatus = assignmentsByStatusRaw.map((item) => ({
       status: item.status,
       count: parseInt(item.count, 10),
     }));
@@ -984,8 +1174,12 @@ export class DashboardsService {
     return {
       totalKpiDefinitions,
       totalKpiAssignments,
-      assignmentsByDepartment: assignmentsByDepartment.length > 0 ? assignmentsByDepartment : undefined,
-      assignmentsByStatus: assignmentsByStatus.length > 0 ? assignmentsByStatus : undefined,
+      assignmentsByDepartment:
+        assignmentsByDepartment.length > 0
+          ? assignmentsByDepartment
+          : undefined,
+      assignmentsByStatus:
+        assignmentsByStatus.length > 0 ? assignmentsByStatus : undefined,
     };
   }
 }

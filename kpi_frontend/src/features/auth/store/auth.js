@@ -22,6 +22,22 @@ const getters = {
   // Chuẩn hóa: trả về user.role?.name (role entity)
   effectiveRole: (state) => state.user?.role?.name || null,
   authError: (state) => state.error,
+  // Chuẩn hóa: trả về mảng roles (string hoặc object)
+  userRoles: (state) => {
+    const user = state.user;
+    if (!user) return [];
+    if (Array.isArray(user.roles)) {
+      return user.roles
+        .map((r) => (typeof r === "string" ? r : r?.name))
+        .filter(Boolean);
+    }
+    if (user.role) {
+      if (typeof user.role === "string") return [user.role];
+      if (typeof user.role === "object" && user.role?.name)
+        return [user.role.name];
+    }
+    return [];
+  },
 };
 
 const mutations = {
@@ -55,9 +71,10 @@ const mutations = {
     sessionStorage.removeItem("authToken");
     sessionStorage.removeItem("authUser");
     delete apiClient.defaults.headers.common["Authorization"];
-    const specificMessage = errorPayload?.response?.data?.message ||
-                            errorPayload?.message ||
-                            "Login failed. Please check your credentials or try again later.";
+    const specificMessage =
+      errorPayload?.response?.data?.message ||
+      errorPayload?.message ||
+      "Login failed. Please check your credentials or try again later.";
     state.error = specificMessage;
   },
   LOGOUT(state) {

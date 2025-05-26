@@ -28,15 +28,16 @@ export class DepartmentsService {
     // Auto-populate manager if missing, by finding employee with role 'department' and departmentId = department.id
     for (const department of departments) {
       if (!department.managerId) {
+        // Sửa: dùng QueryBuilder join với roles
         const manager = await this.departmentRepository.manager
           .getRepository(Employee)
-          .findOne({
-            where: {
-              departmentId: department.id,
-              role: { name: 'department' },
-            },
-            relations: ['role'],
-          });
+          .createQueryBuilder('employee')
+          .leftJoinAndSelect('employee.roles', 'role')
+          .where('employee.departmentId = :departmentId', {
+            departmentId: department.id,
+          })
+          .andWhere('role.name = :roleName', { roleName: 'department' })
+          .getOne();
         if (manager) {
           department.manager = manager;
           department.managerId = manager.id;

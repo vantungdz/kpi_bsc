@@ -193,18 +193,33 @@ const actions = {
   },
 
   async updateUserRole({ commit, dispatch }, { id, role }) {
-    commit('SET_LOADING', true);
-    commit('SET_ERROR', null);
+    commit("SET_LOADING", true);
+    commit("SET_ERROR", null);
     try {
       // role là entity name
       await apiClient.patch(`/employees/${id}/role`, { role });
-      await dispatch('fetchUsers', { force: true });
+      await dispatch("fetchUsers", { force: true });
       return true;
     } catch (error) {
-      commit('SET_ERROR', error);
+      commit("SET_ERROR", error);
       throw error;
     } finally {
-      commit('SET_LOADING', false);
+      commit("SET_LOADING", false);
+    }
+  },
+
+  async updateUserRoles({ commit, dispatch }, { id, roles }) {
+    commit("SET_LOADING", true);
+    commit("SET_ERROR", null);
+    try {
+      await apiClient.patch(`/employees/${id}/roles`, { roles });
+      await dispatch("fetchUsers", { force: true });
+      return true;
+    } catch (error) {
+      commit("SET_ERROR", error);
+      throw error;
+    } finally {
+      commit("SET_LOADING", false);
     }
   },
 
@@ -213,7 +228,10 @@ const actions = {
     commit("SET_LOADING", true);
     commit("SET_ERROR", null);
     try {
-      const response = await apiClient.patch(`/employees/${id}/reset-password`, newPassword ? { newPassword } : {});
+      const response = await apiClient.patch(
+        `/employees/${id}/reset-password`,
+        newPassword ? { newPassword } : {}
+      );
       await dispatch("fetchUsers", { force: true });
       return response.data; // Trả về employee đã reset
     } catch (error) {
@@ -241,16 +259,20 @@ const actions = {
   },
 
   async updateEmployee({ commit, dispatch }, updateDto) {
-    if (!updateDto || !updateDto.id) throw new Error("User ID is required to update employee.");
+    if (!updateDto || !updateDto.id)
+      throw new Error("User ID is required to update employee.");
     commit("SET_LOADING", true);
     commit("SET_ERROR", null);
     try {
       // Đảm bảo chỉ truyền role là entity name (string)
       let payload = { ...updateDto };
-      if (payload.role && typeof payload.role === 'object') {
+      if (payload.role && typeof payload.role === "object") {
         payload.role = payload.role.name;
       }
-      const response = await apiClient.patch(`/employees/${payload.id}`, payload);
+      const response = await apiClient.patch(
+        `/employees/${payload.id}`,
+        payload
+      );
       await dispatch("fetchUsers", { force: true });
       return response.data;
     } catch (error) {
@@ -267,7 +289,7 @@ const actions = {
     try {
       // Đảm bảo chỉ truyền role là entity name (string)
       let payload = { ...createDto };
-      if (payload.role && typeof payload.role === 'object') {
+      if (payload.role && typeof payload.role === "object") {
         payload.role = payload.role.name;
       }
       const response = await apiClient.post("/employees", payload);
@@ -284,19 +306,19 @@ const actions = {
   // --- RBAC Role/Permission Management ---
   async fetchRolesWithPermissions({ commit }) {
     try {
-      const res = await apiClient.get('/roles/with-permissions');
+      const res = await apiClient.get("/roles/with-permissions");
       return res.data;
     } catch (error) {
-      commit('SET_ERROR', error);
+      commit("SET_ERROR", error);
       throw error;
     }
   },
   async fetchAllPermissions({ commit }) {
     try {
-      const res = await apiClient.get('/roles/permissions');
+      const res = await apiClient.get("/roles/permissions");
       return res.data;
     } catch (error) {
-      commit('SET_ERROR', error);
+      commit("SET_ERROR", error);
       throw error;
     }
   },
@@ -305,7 +327,7 @@ const actions = {
       await apiClient.patch(`/roles/${roleId}/permissions`, { permissionIds });
       return true;
     } catch (error) {
-      commit('SET_ERROR', error);
+      commit("SET_ERROR", error);
       throw error;
     }
   },

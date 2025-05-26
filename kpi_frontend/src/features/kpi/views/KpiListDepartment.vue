@@ -29,7 +29,9 @@
               style="width: 100%"
               @change="applyFilters"
             >
-              <a-select-option :value="null">{{ $t('allDepartments') }}</a-select-option>
+              <a-select-option :value="null">{{
+                $t("allDepartments")
+              }}</a-select-option>
               <a-select-option
                 v-for="department in departmentList"
                 :key="department.id"
@@ -284,15 +286,23 @@ const departmentKpiList = computed(
   () => store.getters["kpis/departmentKpiList"] || []
 );
 
-const userPermissions = computed(() => store.getters["auth/user"]?.permissions || []);
+const userPermissions = computed(
+  () => store.getters["auth/user"]?.permissions || []
+);
 function hasPermission(action, resource) {
   return userPermissions.value?.some(
     (p) => p.action === action && p.resource === resource
   );
 }
-const canCreateDepartmentKpi = computed(() => hasPermission(RBAC_ACTIONS.CREATE, RBAC_RESOURCES.KPI_DEPARTMENT));
-const canCopyDepartmentKpi = computed(() => hasPermission(RBAC_ACTIONS.COPY_TEMPLATE, RBAC_RESOURCES.KPI));
-const canDeleteDepartmentKpi = computed(() => hasPermission(RBAC_ACTIONS.DELETE, RBAC_RESOURCES.KPI_DEPARTMENT));
+const canCreateDepartmentKpi = computed(() =>
+  hasPermission(RBAC_ACTIONS.CREATE, RBAC_RESOURCES.KPI_DEPARTMENT)
+);
+const canCopyDepartmentKpi = computed(() =>
+  hasPermission(RBAC_ACTIONS.COPY_TEMPLATE, RBAC_RESOURCES.KPI_DEPARTMENT)
+);
+const canDeleteDepartmentKpi = computed(() =>
+  hasPermission(RBAC_ACTIONS.DELETE, RBAC_RESOURCES.KPI_DEPARTMENT)
+);
 
 const isDepartmentUser = computed(() => effectiveRole.value === "department");
 

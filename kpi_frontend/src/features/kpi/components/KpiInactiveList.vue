@@ -1,5 +1,5 @@
 <template>
-  <a-card :title="$t('inactiveKpiList')">
+  <a-card v-if="canViewInactiveKpi" :title="$t('inactiveKpiList')">
     <a-table
       :columns="columns"
       :data-source="inactiveKpis"
@@ -49,6 +49,7 @@ import { useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 import dayjs from "dayjs";
 import { KpiDefinitionStatus } from "@/core/constants/kpiStatus";
+import { RBAC_ACTIONS, RBAC_RESOURCES } from "@/core/constants/rbac.constants";
 
 const { t: $t } = useI18n();
 const store = useStore();
@@ -99,4 +100,20 @@ function getKpiStatusColor(status) {
       return "blue";
   }
 }
+
+const userPermissions = computed(
+  () => store.getters["auth/user"]?.permissions || []
+);
+function hasPermission(action, resource) {
+  return userPermissions.value?.some(
+    (p) => p.action === action && p.resource === resource
+  );
+}
+const canViewInactiveKpi = computed(
+  () =>
+    hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.KPI_COMPANY) ||
+    hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.KPI_DEPARTMENT) ||
+    hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.KPI_SECTION) ||
+    hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.KPI_EMPLOYEE)
+);
 </script>

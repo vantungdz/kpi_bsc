@@ -1150,21 +1150,33 @@ const allDepartments = computed(
 );
 const allSections = computed(() => store.getters["sections/sectionList"] || []);
 
-const userPermissions = computed(() => store.getters["auth/user"]?.permissions || []);
+const userPermissions = computed(
+  () => store.getters["auth/user"]?.permissions || []
+);
+
+/**
+ * Helper kiểm tra quyền động RBAC FE (resource:action)
+ * @param {string} action
+ * @param {string} resource
+ * @returns {boolean}
+ */
+function hasPermission(action, resource) {
+  return userPermissions.value.some(
+    (p) => p.action === action && p.resource === resource
+  );
+}
+
+// Kiểm tra quyền động cho các action quản trị KPI
 const canToggleStatus = computed(() =>
-  userPermissions.value.some(
-    (p) => p.action === RBAC_ACTIONS.TOGGLE_STATUS && p.resource === RBAC_RESOURCES.KPI
-  )
+  hasPermission(RBAC_ACTIONS.TOGGLE_STATUS, getKpiResourceType())
 );
+// Quản lý assignment (gán phòng ban, section, user...)
 const canManageAssignments = computed(() =>
-  userPermissions.value.some(
-    (p) => p.action === RBAC_ACTIONS.MANAGE_ASSIGNMENT && p.resource === RBAC_RESOURCES.KPI
-  )
+  hasPermission(RBAC_ACTIONS.MANAGE_ASSIGNMENT, getKpiResourceType())
 );
+// Copy KPI làm template
 const canCopyTemplate = computed(() =>
-  userPermissions.value.some(
-    (p) => p.action === RBAC_ACTIONS.COPY_TEMPLATE && p.resource === RBAC_RESOURCES.KPI
-  )
+  hasPermission(RBAC_ACTIONS.COPY_TEMPLATE, getKpiResourceType())
 );
 
 const sectionNameFromContext = computed(() => {
@@ -2566,6 +2578,28 @@ const submitEvaluation = async () => {
     submittingEvaluation.value = false;
   }
 };
+
+// Helper xác định resource động cho KPI detail (FE)
+function getKpiResourceType() {
+  // Ưu tiên context, nếu không có thì fallback theo kpiDetailData
+  if (kpiDetailData.value?.scope === "company")
+    return RBAC_RESOURCES.KPI_COMPANY;
+  if (kpiDetailData.value?.scope === "department")
+    return RBAC_RESOURCES.KPI_DEPARTMENT;
+  if (kpiDetailData.value?.scope === "section")
+    return RBAC_RESOURCES.KPI_SECTION;
+  if (kpiDetailData.value?.scope === "employee")
+    return RBAC_RESOURCES.KPI_EMPLOYEE;
+  // Fallback: đoán theo context route
+  if (route.path.includes("/kpis/company")) return RBAC_RESOURCES.KPI_COMPANY;
+  if (route.path.includes("/kpis/department"))
+    return RBAC_RESOURCES.KPI_DEPARTMENT;
+  if (route.path.includes("/kpis/section")) return RBAC_RESOURCES.KPI_SECTION;
+  if (route.path.includes("/kpis/individual"))
+    return RBAC_RESOURCES.KPI_EMPLOYEE;
+  // Mặc định
+  return RBAC_RESOURCES.KPI_COMPANY;
+}
 
 watch(
   kpiDetailData,

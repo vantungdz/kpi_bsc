@@ -2,38 +2,77 @@
   <div class="kpi-personal-list-page">
     <a-card>
       <template #title>
-        {{ $t('myAssignedKpis') }}
+        {{ $t("myAssignedKpis") }}
       </template>
       <template #extra>
-        <a-button type="primary" @click="goToCreatePersonalKpi" v-if="canCreatePersonalKpi">
+        <a-button
+          type="primary"
+          @click="goToCreatePersonalKpi"
+          v-if="canCreatePersonalKpi"
+        >
           <plus-outlined />
-          {{ $t('createPersonalKpi') }}
+          {{ $t("createPersonalKpi") }}
         </a-button>
       </template>
       <p style="margin-bottom: 16px">
-        {{ $t('listOfAssignedKpis', { user: actualUser?.username || '' }) }}
+        {{ $t("listOfAssignedKpis", { user: actualUser?.username || "" }) }}
       </p>
       <div style="margin-bottom: 20px">
-        <a-alert v-if="loadingMyAssignments" :message="$t('loadingYourKpis')" type="info" show-icon>
+        <a-alert
+          v-if="loadingMyAssignments"
+          :message="$t('loadingYourKpis')"
+          type="info"
+          show-icon
+        >
           <template #icon>
             <a-spin />
           </template>
         </a-alert>
-        <a-alert v-else-if="myAssignmentsError" :message="myAssignmentsError" type="error" show-icon closable
-          @close="clearError" />
-        <a-alert v-else-if="!loadingMyAssignments && myAssignments.length === 0" :message="$t('noAssignedKpis')"
-          type="warning" show-icon />
+        <a-alert
+          v-else-if="myAssignmentsError"
+          :message="myAssignmentsError"
+          type="error"
+          show-icon
+          closable
+          @close="clearError"
+        />
+        <a-alert
+          v-else-if="!loadingMyAssignments && myAssignments.length === 0"
+          :message="$t('noAssignedKpis')"
+          type="warning"
+          show-icon
+        />
       </div>
       <div v-if="!loadingMyAssignments && hasKpis">
-        <a-collapse v-model:activeKey="activePanelKeys" expandIconPosition="end">
-          <a-collapse-panel v-for="(kpiList, perspectiveId) in groupedPersonalKpis" :key="perspectiveId"
-            :header="`${kpiList[0].perspective?.id || '?'}. ${kpiList[0].perspective?.name || $t('uncategorized')} (${kpiList.length} ${kpiList.length > 1 ? $t('kpis') : $t('kpi')})`">
-            <a-table :columns="myPersonalKpiColumns" :data-source="kpiList" :row-key="'id'" :pagination="false"
-              size="small" bordered :scroll="{ x: 'max-content' }">
+        <a-collapse
+          v-model:activeKey="activePanelKeys"
+          expandIconPosition="end"
+        >
+          <a-collapse-panel
+            v-for="(kpiList, perspectiveId) in groupedPersonalKpis"
+            :key="perspectiveId"
+            :header="`${kpiList[0].perspective?.id || '?'}. ${kpiList[0].perspective?.name || $t('uncategorized')} (${kpiList.length} ${kpiList.length > 1 ? $t('kpis') : $t('kpi')})`"
+          >
+            <a-table
+              :columns="myPersonalKpiColumns"
+              :data-source="kpiList"
+              :row-key="'id'"
+              :pagination="false"
+              size="small"
+              bordered
+              :scroll="{ x: 'max-content' }"
+            >
               <template #bodyCell="{ column, record }">
                 <template v-if="column.key === 'name'">
-                  <a @click="$router.push({ name: 'KpiDetail', params: { id: record.id } })"
-                    style="cursor: pointer; color: #1890ff">
+                  <a
+                    @click="
+                      $router.push({
+                        name: 'KpiDetail',
+                        params: { id: record.id },
+                      })
+                    "
+                    style="cursor: pointer; color: #1890ff"
+                  >
                     {{ record.name }}
                   </a>
                 </template>
@@ -43,36 +82,64 @@
                   </a-tag>
                 </template>
                 <template v-else-if="column.key === 'target'">
-                  {{ getTargetValue(record)?.toLocaleString() ?? '' }}
+                  {{ getTargetValue(record)?.toLocaleString() ?? "" }}
                   <span v-if="record.unit">
                     {{ record.unit }}
                   </span>
                 </template>
                 <template v-else-if="column.key === 'value'">
-                  {{ getApprovedValue(record)?.toLocaleString() ?? '-' }}
+                  {{ getApprovedValue(record)?.toLocaleString() ?? "-" }}
                 </template>
                 <template v-else-if="column.key === 'progress'">
                   <template :set="APPROVEDVal = getApprovedValue(record)">
                   </template>
                   <template :set="targetVal = getTargetValue(record)">
                   </template>
-                  <a-progress v-if="targetVal != null && APPROVEDVal != null && targetVal !== 0"
-                    :percent="calculateProgress(APPROVEDVal, targetVal)" size="small" status="active" />
+                  <a-progress
+                    v-if="
+                      targetVal != null &&
+                      APPROVEDVal != null &&
+                      targetVal !== 0
+                    "
+                    :percent="calculateProgress(APPROVEDVal, targetVal)"
+                    size="small"
+                    status="active"
+                  />
                   <span v-else> - </span>
                 </template>
                 <template v-else-if="column.key === 'status'">
-                  <template :set="latestValue = findLatestKpiValue(getRelevantAssignment(record))">
+                  <template
+                    :set="
+                      latestValue = findLatestKpiValue(
+                        getRelevantAssignment(record)
+                      )
+                    "
+                  >
                   </template>
                   <div>
                     <a-tag :color="getValueStatusColor(latestValue?.status)">
                       {{ getValueStatusText(latestValue?.status) }}
                     </a-tag>
-                    <div v-if="latestValue?.rejection_reason && latestValue.status?.startsWith('REJECTED')"
-                      style="margin-top: 4px;">
-                      <a-tooltip placement="topLeft" :title="latestValue.rejection_reason">
-                        <span style="color: #ff4d4f; font-size: 0.85em; cursor: help;">
-                          <info-circle-outlined style="margin-right: 4px;" />
-                          {{ $t('rejectionReason') }}
+                    <div
+                      v-if="
+                        latestValue?.rejection_reason &&
+                        latestValue.status?.startsWith('REJECTED')
+                      "
+                      style="margin-top: 4px"
+                    >
+                      <a-tooltip
+                        placement="topLeft"
+                        :title="latestValue.rejection_reason"
+                      >
+                        <span
+                          style="
+                            color: #ff4d4f;
+                            font-size: 0.85em;
+                            cursor: help;
+                          "
+                        >
+                          <info-circle-outlined style="margin-right: 4px" />
+                          {{ $t("rejectionReason") }}
                         </span>
                       </a-tooltip>
                     </div>
@@ -80,15 +147,35 @@
                 </template>
                 <template v-else-if="column.key === 'actions'">
                   <a-space>
-                    <template :set="latestValueForActions = findLatestKpiValue(getRelevantAssignment(record))">
+                    <template
+                      :set="
+                        latestValueForActions = findLatestKpiValue(
+                          getRelevantAssignment(record)
+                        )
+                      "
+                    >
                     </template>
-                    <a-button type="primary" size="small" @click="openSubmitUpdateModal(record)"
-                      :disabled="isSubmitDisabled(latestValueForActions, record.status)"
-                      :loading="submittingUpdate && currentSubmittingAssignment?.assignment_id === getRelevantAssignment(record)?.id">
+                    <a-button
+                      type="primary"
+                      size="small"
+                      @click="openSubmitUpdateModal(record)"
+                      :disabled="
+                        isSubmitDisabled(latestValueForActions, record.status)
+                      "
+                      :loading="
+                        submittingUpdate &&
+                        currentSubmittingAssignment?.assignment_id ===
+                          getRelevantAssignment(record)?.id
+                      "
+                    >
                       {{ submitButtonText(latestValueForActions) }}
                     </a-button>
                     <a-tooltip :title="$t('viewUpdateApprovalHistory')">
-                      <a-button type="default" size="small" @click="openHistoryModal(record)">
+                      <a-button
+                        type="default"
+                        size="small"
+                        @click="openHistoryModal(record)"
+                      >
                         <history-outlined />
                       </a-button>
                     </a-tooltip>
@@ -101,54 +188,150 @@
       </div>
       <a-empty v-else :description="$t('noAssignedKpis')" />
     </a-card>
-    <a-modal :open="isSubmitUpdateModalVisible" @update:open="isSubmitUpdateModalVisible = $event"
-      :title="$t('submitProgressUpdate', { kpiName: currentSubmittingAssignment?.kpi_name })" @ok="handleSubmitUpdate"
-      @cancel="closeSubmitUpdateModal" :confirm-loading="submittingUpdate" :mask-closable="false" destroyOnClose
-      :okText="$t('submitForApproval')" :cancelText="$t('cancel')" width="600px">
+    <a-modal
+      :open="isSubmitUpdateModalVisible"
+      @update:open="isSubmitUpdateModalVisible = $event"
+      :title="
+        $t('submitProgressUpdate', {
+          kpiName: currentSubmittingAssignment?.kpi_name,
+        })
+      "
+      @ok="handleSubmitUpdate"
+      @cancel="closeSubmitUpdateModal"
+      :confirm-loading="submittingUpdate"
+      :mask-closable="false"
+      destroyOnClose
+      :okText="$t('submitForApproval')"
+      :cancelText="$t('cancel')"
+      width="600px"
+    >
       <a-form layout="vertical" :model="submitUpdateForm" ref="submitFormRef">
-        <div style="max-height: 300px; overflow-y: auto; margin-bottom: 15px; padding-right: 10px;">
-          <div v-for="(project, index) in submitUpdateForm.projectValues" :key="project.id">
-            <a-row :gutter="16" style="margin-bottom: 12px; display: flex; align-items: center">
+        <div
+          style="
+            max-height: 300px;
+            overflow-y: auto;
+            margin-bottom: 15px;
+            padding-right: 10px;
+          "
+        >
+          <div
+            v-for="(project, index) in submitUpdateForm.projectValues"
+            :key="project.id"
+          >
+            <a-row
+              :gutter="16"
+              style="margin-bottom: 12px; display: flex; align-items: center"
+            >
               <a-col :span="10">
-                <a-form-item :name="['projectValues', index, 'projectName']" :label="$t('projectName')"
-                  :rules="[{ required: true, message: $t('projectNameRequired') }]" style="margin-bottom: 0">
-                  <a-input v-model:value="project.projectName" :placeholder="$t('projectName')" style="height: 36px" />
+                <a-form-item
+                  :name="['projectValues', index, 'projectName']"
+                  :label="$t('projectName')"
+                  :rules="[
+                    { required: true, message: $t('projectNameRequired') },
+                  ]"
+                  style="margin-bottom: 0"
+                >
+                  <a-input
+                    v-model:value="project.projectName"
+                    :placeholder="$t('projectName')"
+                    style="height: 36px"
+                  />
                 </a-form-item>
               </a-col>
               <a-col :span="10">
-                <a-form-item :name="['projectValues', index, 'projectValue']" :label="$t('value')"
-                  :rules="[{ required: true, message: $t('valueRequired') }, { type: 'number', message: $t('mustBeNumber'), transform: (value) => Number(value) }]"
-                  style="margin-bottom: 0">
-                  <a-input-number v-model:value="project.projectValue"
+                <a-form-item
+                  :name="['projectValues', index, 'projectValue']"
+                  :label="$t('value')"
+                  :rules="[
+                    { required: true, message: $t('valueRequired') },
+                    {
+                      type: 'number',
+                      message: $t('mustBeNumber'),
+                      transform: (value) => Number(value),
+                    },
+                  ]"
+                  style="margin-bottom: 0"
+                >
+                  <a-input-number
+                    v-model:value="project.projectValue"
                     :placeholder="`${$t('value')} (${currentSubmittingAssignment?.unit || ''})`"
-                    style="width: 100%; height: 36px" :min="0"
-                    :formatter="value => value ? value.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',') : ''"
-                    :parser="value => value ? value.replace(/\\s?|(,*)/g, '') : ''" />
+                    style="width: 100%; height: 36px"
+                    :min="0"
+                    :formatter="
+                      (value) =>
+                        value
+                          ? value
+                              .toString()
+                              .replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+                          : ''
+                    "
+                    :parser="
+                      (value) => (value ? value.replace(/\\s?|(,*)/g, '') : '')
+                    "
+                  />
                 </a-form-item>
               </a-col>
-              <a-col :span="4" style="display: flex; align-items: center; justify-content: center;">
-                <MinusCircleOutlined v-if="submitUpdateForm.projectValues.length > 1"
-                  @click="removeProjectValue(project)" style="cursor: pointer; color: #ff4d4f; font-size: 16px" />
+              <a-col
+                :span="4"
+                style="
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+                "
+              >
+                <MinusCircleOutlined
+                  v-if="submitUpdateForm.projectValues.length > 1"
+                  @click="removeProjectValue(project)"
+                  style="cursor: pointer; color: #ff4d4f; font-size: 16px"
+                />
               </a-col>
             </a-row>
           </div>
         </div>
-        <a-button type="dashed" block @click="addProjectValue" style="margin-bottom: 15px;">
+        <a-button
+          type="dashed"
+          block
+          @click="addProjectValue"
+          style="margin-bottom: 15px"
+        >
           <plus-outlined />
-          {{ $t('addProjectEntry') }}
+          {{ $t("addProjectEntry") }}
         </a-button>
         <a-form-item :label="$t('overallNotesOptional')" name="notes">
-          <a-textarea v-model:value="submitUpdateForm.notes" rows="3" :placeholder="$t('addOverallNotes')" />
+          <a-textarea
+            v-model:value="submitUpdateForm.notes"
+            rows="3"
+            :placeholder="$t('addOverallNotes')"
+          />
         </a-form-item>
       </a-form>
     </a-modal>
-    <a-modal :open="isHistoryModalVisible" :title="$t('updateApprovalHistory')" @cancel="closeHistoryModal"
-      :width="1000" :footer="null" destroyOnClose>
+    <a-modal
+      :open="isHistoryModalVisible"
+      :title="$t('updateApprovalHistory')"
+      @cancel="closeHistoryModal"
+      :width="1000"
+      :footer="null"
+      destroyOnClose
+    >
       <a-spin :spinning="isLoadingHistory" :tip="$t('loadingHistory')">
-        <a-alert v-if="historyError" type="error" show-icon :message="historyError" style="margin-bottom: 10px" />
-        <a-table v-if="!historyError && kpiValueHistory.length > 0" :columns="historyColumns"
-          :data-source="kpiValueHistory" :row-key="'id'" size="small" bordered
-          :pagination="{ pageSize: 5, size: 'small' }" :scroll="{ x: 'max-content' }">
+        <a-alert
+          v-if="historyError"
+          type="error"
+          show-icon
+          :message="historyError"
+          style="margin-bottom: 10px"
+        />
+        <a-table
+          v-if="!historyError && kpiValueHistory.length > 0"
+          :columns="historyColumns"
+          :data-source="kpiValueHistory"
+          :row-key="'id'"
+          size="small"
+          bordered
+          :pagination="{ pageSize: 5, size: 'small' }"
+          :scroll="{ x: 'max-content' }"
+        >
           <template #bodyCell="{ column, record }">
             <template v-if="column.key === 'timestamp'">
               {{ formatDate(record.changed_at || record.timestamp) }}
@@ -159,12 +342,16 @@
               </span>
             </template>
             <template v-else-if="column.key === 'value'">
-              {{ record.value?.toLocaleString() ?? '' }}
+              {{ record.value?.toLocaleString() ?? "" }}
             </template>
             <template v-else-if="column.key === 'noteOrReason'">
-              <a-tooltip placement="topLeft" v-if="record.reason" :title="record.reason">
-                <span style="color: red;">
-                  {{ $t('reason') }}: {{ truncateText(record.reason, 70) }}
+              <a-tooltip
+                placement="topLeft"
+                v-if="record.reason"
+                :title="record.reason"
+              >
+                <span style="color: red">
+                  {{ $t("reason") }}: {{ truncateText(record.reason, 70) }}
                 </span>
               </a-tooltip>
               <a-tooltip v-else-if="record.notes" :title="record.notes">
@@ -172,25 +359,24 @@
                   {{ truncateText(record.notes, 70) }}
                 </span>
               </a-tooltip>
-              <span v-else style="color: #888;">
-                -
-              </span>
+              <span v-else style="color: #888"> - </span>
             </template>
             <template v-else-if="column.key === 'changed_by'">
               <span v-if="record.changedByUser">
-                {{ record.changedByUser.first_name }} {{ record.changedByUser.last_name
-                }}
+                {{ record.changedByUser.first_name }}
+                {{ record.changedByUser.last_name }}
               </span>
               <span v-else-if="record.changed_by">
-                {{ $t('id') }}: {{ record.changed_by }}
+                {{ $t("id") }}: {{ record.changed_by }}
               </span>
-              <span v-else>
-
-              </span>
+              <span v-else> </span>
             </template>
           </template>
         </a-table>
-        <a-empty v-if="!historyError && kpiValueHistory.length === 0" :description="$t('noHistory')" />
+        <a-empty
+          v-if="!historyError && kpiValueHistory.length === 0"
+          :description="$t('noHistory')"
+        />
       </a-spin>
     </a-modal>
   </div>
@@ -201,16 +387,40 @@ import { ref, computed, onMounted, reactive, nextTick } from "vue";
 import { useStore } from "vuex";
 import { useRouter } from "vue-router";
 import {
-  notification, Collapse as ACollapse, CollapsePanel as ACollapsePanel,
-  Form as AForm, FormItem as AFormItem, Modal as AModal, Input as AInput,
-  InputNumber as AInputNumber, Textarea as ATextarea, Space as ASpace,
-  Button as AButton, Table as ATable, Tag as ATag, Progress as AProgress,
-  Tooltip as ATooltip, Alert as AAlert, Spin as ASpin, Card as ACard, Empty as AEmpty,
+  notification,
+  Collapse as ACollapse,
+  CollapsePanel as ACollapsePanel,
+  Form as AForm,
+  FormItem as AFormItem,
+  Modal as AModal,
+  Input as AInput,
+  InputNumber as AInputNumber,
+  Textarea as ATextarea,
+  Space as ASpace,
+  Button as AButton,
+  Table as ATable,
+  Tag as ATag,
+  Progress as AProgress,
+  Tooltip as ATooltip,
+  Alert as AAlert,
+  Spin as ASpin,
+  Card as ACard,
+  Empty as AEmpty,
 } from "ant-design-vue";
-import { PlusOutlined, MinusCircleOutlined, InfoCircleOutlined, HistoryOutlined } from "@ant-design/icons-vue";
-import dayjs from 'dayjs';
-import { KpiValueStatus, getKpiValueStatusText, KpiValueStatusColor, KpiDefinitionStatus } from '@/core/constants/kpiStatus';
-import { useI18n } from 'vue-i18n';
+import {
+  PlusOutlined,
+  MinusCircleOutlined,
+  InfoCircleOutlined,
+  HistoryOutlined,
+} from "@ant-design/icons-vue";
+import dayjs from "dayjs";
+import {
+  KpiValueStatus,
+  getKpiValueStatusText,
+  KpiValueStatusColor,
+  KpiDefinitionStatus,
+} from "@/core/constants/kpiStatus";
+import { useI18n } from "vue-i18n";
 import { RBAC_ACTIONS, RBAC_RESOURCES } from "@/core/constants/rbac.constants";
 
 const { t: $t } = useI18n();
@@ -225,7 +435,9 @@ function hasPermission(action, resource) {
     (p) => p.action === action && p.resource === resource
   );
 }
-const canCreatePersonalKpi = computed(() => hasPermission(RBAC_ACTIONS.CREATE, RBAC_RESOURCES.KPI_PERSONAL));
+const canCreatePersonalKpi = computed(() =>
+  hasPermission(RBAC_ACTIONS.CREATE, RBAC_RESOURCES.KPI_EMPLOYEE)
+);
 
 const loadingMyAssignments = ref(false);
 const myAssignmentsError = ref(null);
@@ -244,8 +456,12 @@ const kpiValueHistory = ref([]);
 const isLoadingHistory = ref(false);
 const historyError = ref(null);
 
-const hasKpis = computed(() => myAssignments.value && myAssignments.value.length > 0);
-const submittingUpdate = computed(() => store.getters['kpiValues/isSubmittingUpdate']);
+const hasKpis = computed(
+  () => myAssignments.value && myAssignments.value.length > 0
+);
+const submittingUpdate = computed(
+  () => store.getters["kpiValues/isSubmittingUpdate"]
+);
 
 const groupedPersonalKpis = computed(() => {
   const grouped = {};
@@ -262,57 +478,97 @@ const groupedPersonalKpis = computed(() => {
     }
   });
   const sortedKeys = Object.keys(grouped).sort((a, b) => {
-    const numA = parseInt(a, 10); const numB = parseInt(b, 10);
+    const numA = parseInt(a, 10);
+    const numB = parseInt(b, 10);
     if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
-    if (!isNaN(numA)) return -1; if (!isNaN(numB)) return 1;
-    if (a === 'uncategorized') return 1; if (b === 'uncategorized') return -1;
+    if (!isNaN(numA)) return -1;
+    if (!isNaN(numB)) return 1;
+    if (a === "uncategorized") return 1;
+    if (b === "uncategorized") return -1;
     return String(a).localeCompare(String(b));
   });
   const sortedGrouped = {};
-  sortedKeys.forEach(key => { sortedGrouped[key] = grouped[key]; });
+  sortedKeys.forEach((key) => {
+    sortedGrouped[key] = grouped[key];
+  });
   return sortedGrouped;
 });
 
 const myPersonalKpiColumns = computed(() => [
-  { title: $t('kpiName'), key: "name", width: "20%", ellipsis: true, fixed: 'left' },
-  { title: $t('level'), dataIndex: "created_by_type", key: "level", width: "8%", align: "center" },
-  { title: $t('target'), key: "target", align: "right", width: "10%" },
-  { title: $t('approvedValue'), key: "value", align: "right", width: "10%" },
-  { title: $t('progressPercentage'), key: "progress", align: "center", width: "10%" },
   {
-    title: $t('updateStatus'),
+    title: $t("kpiName"),
+    key: "name",
+    width: "20%",
+    ellipsis: true,
+    fixed: "left",
+  },
+  {
+    title: $t("level"),
+    dataIndex: "created_by_type",
+    key: "level",
+    width: "8%",
+    align: "center",
+  },
+  { title: $t("target"), key: "target", align: "right", width: "10%" },
+  { title: $t("approvedValue"), key: "value", align: "right", width: "10%" },
+  {
+    title: $t("progressPercentage"),
+    key: "progress",
+    align: "center",
+    width: "10%",
+  },
+  {
+    title: $t("updateStatus"),
     key: "status",
     align: "center",
     width: "18%",
     customRender: ({ text }) => $t(`status_chart.${text}`) || text,
   },
-  { title: $t('actions'), key: "actions", align: "center", width: "15%", fixed: 'right' },
+  {
+    title: $t("actions"),
+    key: "actions",
+    align: "center",
+    width: "15%",
+    fixed: "right",
+  },
 ]);
 
 const historyColumns = computed(() => [
-  { title: $t('timestamp'), key: 'timestamp', width: 140 },
-  { title: $t('action'), dataIndex: 'action', key: 'action', width: 180 },
-  { title: $t('value'), dataIndex: 'value', key: 'value', align: 'right', width: 180 },
-  { title: $t('noteOrReason'), key: 'noteOrReason', ellipsis: true },
-  { title: $t('changedBy'), key: 'changed_by', width: 150 },
+  { title: $t("timestamp"), key: "timestamp", width: 140 },
+  { title: $t("action"), dataIndex: "action", key: "action", width: 180 },
+  {
+    title: $t("value"),
+    dataIndex: "value",
+    key: "value",
+    align: "right",
+    width: 180,
+  },
+  { title: $t("noteOrReason"), key: "noteOrReason", ellipsis: true },
+  { title: $t("changedBy"), key: "changed_by", width: 150 },
 ]);
 
-
-const getRelevantAssignment = (kpiRecord) => kpiRecord?.assignments?.[0] || null;
+const getRelevantAssignment = (kpiRecord) =>
+  kpiRecord?.assignments?.[0] || null;
 
 const findLatestKpiValue = (assignment) => {
   if (!assignment?.kpiValues || assignment.kpiValues.length === 0) return null;
-  return [...assignment.kpiValues].sort((a, b) =>
-    new Date(b.updated_at || b.created_at).getTime() - new Date(a.updated_at || a.created_at).getTime()
+  return [...assignment.kpiValues].sort(
+    (a, b) =>
+      new Date(b.updated_at || b.created_at).getTime() -
+      new Date(a.updated_at || a.created_at).getTime()
   )[0];
 };
 
 const findLatestApprovedKpiValue = (assignment) => {
   if (!assignment?.kpiValues || assignment.kpiValues.length === 0) return null;
-  const APPROVEDValues = assignment.kpiValues.filter(v => v.status === KpiValueStatus.APPROVED);
+  const APPROVEDValues = assignment.kpiValues.filter(
+    (v) => v.status === KpiValueStatus.APPROVED
+  );
   if (APPROVEDValues.length === 0) return null;
-  return [...APPROVEDValues].sort((a, b) =>
-    new Date(b.updated_at || b.created_at).getTime() - new Date(a.updated_at || a.created_at).getTime()
+  return [...APPROVEDValues].sort(
+    (a, b) =>
+      new Date(b.updated_at || b.created_at).getTime() -
+      new Date(a.updated_at || a.created_at).getTime()
   )[0];
 };
 
@@ -329,8 +585,16 @@ const getTargetValue = (kpiRecord) => {
 };
 
 const calculateProgress = (current, target) => {
-  const currentValue = parseFloat(current); const targetValue = parseFloat(target);
-  if (isNaN(currentValue) || isNaN(targetValue) || targetValue === 0 || currentValue === null || targetValue === null) return 0;
+  const currentValue = parseFloat(current);
+  const targetValue = parseFloat(target);
+  if (
+    isNaN(currentValue) ||
+    isNaN(targetValue) ||
+    targetValue === 0 ||
+    currentValue === null ||
+    targetValue === null
+  )
+    return 0;
   const percent = (currentValue / targetValue) * 100;
   return parseFloat(Math.min(percent, 100).toFixed(2));
 };
@@ -341,13 +605,14 @@ const isSubmitDisabled = (latestValue, kpiDefinitionStatus) => {
   }
   const valueStatus = latestValue?.status;
   const allowedStatuses = [
-    null, undefined,
+    null,
+    undefined,
     KpiValueStatus.DRAFT,
     KpiValueStatus.REJECTED_BY_SECTION,
     KpiValueStatus.REJECTED_BY_DEPT,
-    KpiValueStatus.REJECTED_BY_MANAGER
+    KpiValueStatus.REJECTED_BY_MANAGER,
   ];
-  
+
   const isDisabled = !allowedStatuses.includes(valueStatus);
   return isDisabled;
 };
@@ -358,61 +623,78 @@ const submitButtonText = (latestValue) => {
     case KpiValueStatus.REJECTED_BY_SECTION:
     case KpiValueStatus.REJECTED_BY_DEPT:
     case KpiValueStatus.REJECTED_BY_MANAGER:
-      return $t('resubmitUpdate');
+      return $t("resubmitUpdate");
     case KpiValueStatus.SUBMITTED:
     case KpiValueStatus.PENDING_SECTION_APPROVAL:
     case KpiValueStatus.PENDING_DEPT_APPROVAL:
     case KpiValueStatus.PENDING_MANAGER_APPROVAL:
-      return $t('awaitingApproval');
+      return $t("awaitingApproval");
     case KpiValueStatus.APPROVED:
-      return $t('approved');
+      return $t("approved");
     default:
-      return $t('submitUpdate');
+      return $t("submitUpdate");
   }
 };
 
-const getValueStatusColor = (status) => KpiValueStatusColor[status] || 'default';
-const getValueStatusText = (status) => getKpiValueStatusText[status] || status || $t('notSubmitted');
+const getValueStatusColor = (status) =>
+  KpiValueStatusColor[status] || "default";
+const getValueStatusText = (status) =>
+  getKpiValueStatusText[status] || status || $t("notSubmitted");
 
 const getKpiLevelColor = (level) => {
   switch (level?.toLowerCase()) {
-    case "company": return "blue";
-    case "department": return "green";
-    case "section": return "orange";
-    case "personal": case "user": return "purple";
-    default: return "default";
+    case "company":
+      return "blue";
+    case "department":
+      return "green";
+    case "section":
+      return "orange";
+    case "personal":
+    case "user":
+      return "purple";
+    default:
+      return "default";
   }
 };
-const formatDate = (dateString) => dateString ? dayjs(dateString).format('YYYY-MM-DD HH:mm') : '';
-const truncateText = (text, length) => (text?.length > length ? `${text.substring(0, length)}...` : text || '');
+const formatDate = (dateString) =>
+  dateString ? dayjs(dateString).format("YYYY-MM-DD HH:mm") : "";
+const truncateText = (text, length) =>
+  text?.length > length ? `${text.substring(0, length)}...` : text || "";
 const getActionText = (actionKey) => {
   const actionMap = {
-    SUBMIT_CREATE: $t('createAndSubmit'),
-    SUBMIT_UPDATE: $t('updateAndSubmit'),
-    APPROVE_SECTION: $t('sectionApprove'),
-    REJECT_SECTION: $t('sectionReject'),
-    APPROVE_DEPT: $t('deptApprove'),
-    REJECT_DEPT: $t('deptReject'),
-    APPROVE_MANAGER: $t('managerApprove'),
-    REJECT_MANAGER: $t('managerReject'),
-    CREATE: $t('create'),
-    UPDATE: $t('update'),
-    DELETE: $t('delete'),
+    SUBMIT_CREATE: $t("createAndSubmit"),
+    SUBMIT_UPDATE: $t("updateAndSubmit"),
+    APPROVE_SECTION: $t("sectionApprove"),
+    REJECT_SECTION: $t("sectionReject"),
+    APPROVE_DEPT: $t("deptApprove"),
+    REJECT_DEPT: $t("deptReject"),
+    APPROVE_MANAGER: $t("managerApprove"),
+    REJECT_MANAGER: $t("managerReject"),
+    CREATE: $t("create"),
+    UPDATE: $t("update"),
+    DELETE: $t("delete"),
   };
-  return actionMap[actionKey?.toUpperCase()] || actionKey || $t('unknown');
+  return actionMap[actionKey?.toUpperCase()] || actionKey || $t("unknown");
 };
 
 const fetchMyAssignedKpis = async () => {
   const userId = actualUser.value?.id;
-  if (!userId) { myAssignmentsError.value = $t('couldNotDetermineUserId'); loadingMyAssignments.value = false; return; }
+  if (!userId) {
+    myAssignmentsError.value = $t("couldNotDetermineUserId");
+    loadingMyAssignments.value = false;
+    return;
+  }
   loadingMyAssignments.value = true;
   myAssignmentsError.value = null;
   try {
-    const assignmentsData = await store.dispatch("kpis/fetchMyAssignments", userId);
+    const assignmentsData = await store.dispatch(
+      "kpis/fetchMyAssignments",
+      userId
+    );
     myAssignments.value = assignmentsData || [];
     await nextTick(); // Đợi DOM cập nhật (hoặc computed property tính toán xong)
     const groups = groupedPersonalKpis.value;
-    if (groups && typeof groups === 'object') {
+    if (groups && typeof groups === "object") {
       activePanelKeys.value = Object.keys(groups); // Lấy tất cả các key (perspectiveId)
       console.log("Setting active panel keys:", activePanelKeys.value);
     } else {
@@ -420,51 +702,115 @@ const fetchMyAssignedKpis = async () => {
     }
     console.log("Fetched My Assignments (KPI Objects):", myAssignments.value);
   } catch (error) {
-    myAssignmentsError.value = store.getters["kpis/error"] || error.message || $t('failedToLoadAssignedKpis');
+    myAssignmentsError.value =
+      store.getters["kpis/error"] ||
+      error.message ||
+      $t("failedToLoadAssignedKpis");
     myAssignments.value = [];
     console.error("Fetch my assignments error:", error);
   } finally {
     loadingMyAssignments.value = false;
   }
 };
-const clearError = () => { myAssignmentsError.value = null; };
+const clearError = () => {
+  myAssignmentsError.value = null;
+};
 
 const openSubmitUpdateModal = (kpiRecord) => {
   const relevantAssignment = getRelevantAssignment(kpiRecord);
-  if (!relevantAssignment || !relevantAssignment.id) { notification.error({ message: $t('error'), description: $t('cannotIdentifyAssignment') }); return; }
-  if (kpiRecord.status !== KpiDefinitionStatus.APPROVED) { notification.warn({ message: $t('notification'), description: $t('kpiNotApproved', { kpiName: kpiRecord.name }) }); return; }
+  if (!relevantAssignment || !relevantAssignment.id) {
+    notification.error({
+      message: $t("error"),
+      description: $t("cannotIdentifyAssignment"),
+    });
+    return;
+  }
+  if (kpiRecord.status !== KpiDefinitionStatus.APPROVED) {
+    notification.warn({
+      message: $t("notification"),
+      description: $t("kpiNotApproved", { kpiName: kpiRecord.name }),
+    });
+    return;
+  }
   const latestValue = findLatestKpiValue(relevantAssignment);
   if (!isSubmitDisabled(latestValue, kpiRecord.status)) {
     currentSubmittingAssignment.value = {
-      kpi_id: kpiRecord.id, kpi_name: kpiRecord.name, unit: kpiRecord.unit,
-      target: getTargetValue(kpiRecord), assignment_id: relevantAssignment.id,
+      kpi_id: kpiRecord.id,
+      kpi_name: kpiRecord.name,
+      unit: kpiRecord.unit,
+      target: getTargetValue(kpiRecord),
+      assignment_id: relevantAssignment.id,
     };
-    submitUpdateForm.projectValues = [{ id: Date.now(), projectName: "", projectValue: null }];
+    submitUpdateForm.projectValues = [
+      { id: Date.now(), projectName: "", projectValue: null },
+    ];
     submitUpdateForm.notes = "";
     isSubmitUpdateModalVisible.value = true;
-    nextTick(() => { submitFormRef.value?.resetFields(); });
+    nextTick(() => {
+      submitFormRef.value?.resetFields();
+    });
   } else {
-    notification.info({ message: $t('notification'), description: $t('currentStatusDoesNotAllowUpdate') });
+    notification.info({
+      message: $t("notification"),
+      description: $t("currentStatusDoesNotAllowUpdate"),
+    });
   }
 };
 
-const closeSubmitUpdateModal = () => { isSubmitUpdateModalVisible.value = false; currentSubmittingAssignment.value = null; };
-const addProjectValue = () => { submitUpdateForm.projectValues.push({ id: Date.now(), projectName: "", projectValue: null }); };
+const closeSubmitUpdateModal = () => {
+  isSubmitUpdateModalVisible.value = false;
+  currentSubmittingAssignment.value = null;
+};
+const addProjectValue = () => {
+  submitUpdateForm.projectValues.push({
+    id: Date.now(),
+    projectName: "",
+    projectValue: null,
+  });
+};
 const removeProjectValue = (itemToRemove) => {
-  const index = submitUpdateForm.projectValues.findIndex(item => item.id === itemToRemove.id);
-  if (index !== -1 && submitUpdateForm.projectValues.length > 1) { submitUpdateForm.projectValues.splice(index, 1); }
-  else if (submitUpdateForm.projectValues.length === 1) { notification.warn({ message: $t('cannotRemoveLastEntry') }); }
+  const index = submitUpdateForm.projectValues.findIndex(
+    (item) => item.id === itemToRemove.id
+  );
+  if (index !== -1 && submitUpdateForm.projectValues.length > 1) {
+    submitUpdateForm.projectValues.splice(index, 1);
+  } else if (submitUpdateForm.projectValues.length === 1) {
+    notification.warn({ message: $t("cannotRemoveLastEntry") });
+  }
 };
 
 const handleSubmitUpdate = async () => {
-  try { await submitFormRef.value?.validate(); } catch (errorInfo) { return; }
-  if (submitUpdateForm.projectValues.length === 0) { notification.error({ message: $t('validationFailed'), description: $t('addAtLeastOneProjectEntry') }); return; }
-  if (submitUpdateForm.projectValues.some(p => !p.projectName || p.projectValue === null || p.projectValue < 0)) { notification.error({ message: $t('validationFailed'), description: $t('enterValidProjectDetails') }); return; }
+  try {
+    await submitFormRef.value?.validate();
+  } catch (errorInfo) {
+    return;
+  }
+  if (submitUpdateForm.projectValues.length === 0) {
+    notification.error({
+      message: $t("validationFailed"),
+      description: $t("addAtLeastOneProjectEntry"),
+    });
+    return;
+  }
+  if (
+    submitUpdateForm.projectValues.some(
+      (p) => !p.projectName || p.projectValue === null || p.projectValue < 0
+    )
+  ) {
+    notification.error({
+      message: $t("validationFailed"),
+      description: $t("enterValidProjectDetails"),
+    });
+    return;
+  }
   if (!currentSubmittingAssignment.value?.assignment_id) return;
 
   const payload = {
     notes: submitUpdateForm.notes,
-    project_details: submitUpdateForm.projectValues.map((p) => ({ name: p.projectName, value: Number(p.projectValue) })),
+    project_details: submitUpdateForm.projectValues.map((p) => ({
+      name: p.projectName,
+      value: Number(p.projectValue),
+    })),
   };
 
   try {
@@ -472,7 +818,10 @@ const handleSubmitUpdate = async () => {
       assignmentId: currentSubmittingAssignment.value.assignment_id,
       updateData: payload,
     });
-    notification.success({ message: $t('updateSubmitted'), description: $t('progressSubmittedForApproval') });
+    notification.success({
+      message: $t("updateSubmitted"),
+      description: $t("progressSubmittedForApproval"),
+    });
     closeSubmitUpdateModal();
     await fetchMyAssignedKpis();
   } catch (error) {
@@ -480,13 +829,21 @@ const handleSubmitUpdate = async () => {
   }
 };
 
-const goToCreatePersonalKpi = () => { router.push({ name: "KpiPersonalCreate", query: { scope: "personal" } }); };
+const goToCreatePersonalKpi = () => {
+  router.push({ name: "KpiPersonalCreate", query: { scope: "personal" } });
+};
 
 const openHistoryModal = async (kpiRecord) => {
   const assignment = getRelevantAssignment(kpiRecord);
-  if (!assignment || !assignment.id) { notification.error({ message: $t('cannotViewHistoryWithoutAssignmentId') }); return; }
+  if (!assignment || !assignment.id) {
+    notification.error({ message: $t("cannotViewHistoryWithoutAssignmentId") });
+    return;
+  }
   const latestValue = findLatestKpiValue(assignment);
-  if (!latestValue || !latestValue.id) { notification.info({ message: $t('noSubmissionHistoryFound') }); return; }
+  if (!latestValue || !latestValue.id) {
+    notification.info({ message: $t("noSubmissionHistoryFound") });
+    return;
+  }
   selectedKpiValueForHistory.value = latestValue;
   kpiValueHistory.value = [];
   historyError.value = null;
@@ -499,10 +856,12 @@ const loadHistory = async (valueId) => {
   isLoadingHistory.value = true;
   historyError.value = null;
   try {
-    const historyData = await store.dispatch('kpiValues/fetchValueHistory', { valueId });
+    const historyData = await store.dispatch("kpiValues/fetchValueHistory", {
+      valueId,
+    });
     kpiValueHistory.value = historyData || [];
   } catch (error) {
-    historyError.value = error.message || $t('errorLoadingHistory');
+    historyError.value = error.message || $t("errorLoadingHistory");
   } finally {
     isLoadingHistory.value = false;
   }
@@ -521,7 +880,6 @@ const closeHistoryModal = () => {
 onMounted(() => {
   fetchMyAssignedKpis();
 });
-
 </script>
 
 <style scoped>

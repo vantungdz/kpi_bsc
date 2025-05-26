@@ -3,142 +3,319 @@
     <div class="header">
       <h2>{{ $t("employeeListTitle") }}</h2>
       <div>
-        <a-input-search v-model:value="searchText" :placeholder="$t('searchEmployeePlaceholder')"
-          style="width: 220px; margin-right: 8px;" @search="onSearch" allow-clear />
+        <a-input-search
+          v-model:value="searchText"
+          :placeholder="$t('searchEmployeePlaceholder')"
+          style="width: 220px; margin-right: 8px"
+          @search="onSearch"
+          allow-clear
+        />
         <a-button type="primary" @click="openAddModal" v-if="canCreateEmployee">
           {{ $t("addEmployee") }}
         </a-button>
-        <a-button style="margin-left:8px" @click="openUploadModal" v-if="canCreateEmployee">
+        <a-button
+          style="margin-left: 8px"
+          @click="openUploadModal"
+          v-if="canCreateEmployee"
+        >
           {{ $t("uploadEmployeeExcel") }}
         </a-button>
-        <a-button style="margin-left:8px" @click="exportExcel" v-if="canCreateEmployee">
+        <a-button
+          style="margin-left: 8px"
+          @click="exportExcel"
+          v-if="canCreateEmployee"
+        >
           {{ $t("exportExcel") }}
         </a-button>
       </div>
     </div>
     <div class="filters">
-      <a-select v-model:value="filterRole" :placeholder="$t('role')" allow-clear
-        style="width: 140px; margin-right: 8px;">
-        <a-select-option v-for="role in roles" :key="role.value" :value="role.value">{{ $t(role.label)
-          }}</a-select-option>
+      <a-select
+        v-model:value="filterRole"
+        :placeholder="$t('role')"
+        allow-clear
+        style="width: 140px; margin-right: 8px"
+      >
+        <a-select-option
+          v-for="role in roles"
+          :key="role.value"
+          :value="role.value"
+          >{{ $t(role.label) }}</a-select-option
+        >
       </a-select>
-      <a-select v-model:value="filterDepartment" :placeholder="$t('departmentLabel')" allow-clear
-        style="width: 160px; margin-right: 8px;">
-        <a-select-option v-for="dept in departmentList" :key="dept.id" :value="dept.id">{{ dept.name
-          }}</a-select-option>
+      <a-select
+        v-model:value="filterDepartment"
+        :placeholder="$t('departmentLabel')"
+        allow-clear
+        style="width: 160px; margin-right: 8px"
+      >
+        <a-select-option
+          v-for="dept in departmentList"
+          :key="dept.id"
+          :value="dept.id"
+          >{{ dept.name }}</a-select-option
+        >
       </a-select>
-      <a-select v-model:value="filterSection" :placeholder="$t('section')" allow-clear style="width: 160px;">
-        <a-select-option v-for="sec in sectionList" :key="sec.id" :value="sec.id">{{ sec.name }}</a-select-option>
+      <a-select
+        v-model:value="filterSection"
+        :placeholder="$t('section')"
+        allow-clear
+        style="width: 160px"
+      >
+        <a-select-option
+          v-for="sec in sectionList"
+          :key="sec.id"
+          :value="sec.id"
+          >{{ sec.name }}</a-select-option
+        >
       </a-select>
     </div>
-    <a-modal :open="isUploadModalVisible" :title="$t('uploadEmployeeExcel')" @ok="handleUpload"
-      @cancel="closeUploadModal" :confirm-loading="uploading">
-      <a-upload :before-upload="beforeUpload" :file-list="fileList" @remove="handleRemove" accept=".xlsx, .xls">
+    <a-modal
+      :open="isUploadModalVisible"
+      :title="$t('uploadEmployeeExcel')"
+      @ok="handleUpload"
+      @cancel="closeUploadModal"
+      :confirm-loading="uploading"
+    >
+      <a-upload
+        :before-upload="beforeUpload"
+        :file-list="fileList"
+        @remove="handleRemove"
+        accept=".xlsx, .xls"
+      >
         <a-button> <upload-outlined /> {{ $t("selectFile") }} </a-button>
       </a-upload>
     </a-modal>
-    <a-modal :open="isAddEditModalVisible" :title="editEmployee ? $t('editEmployee') : $t('addEmployee')"
-      @ok="submitAddEditEmployeeForm" @cancel="closeAddEditModal" :confirm-loading="savingEmployee" destroyOnClose>
-      <a-form ref="addEditEmployeeFormRef" :model="employeeForm" layout="vertical">
-        <a-form-item :label="$t('username')" :rules="[{ required: true, message: $t('usernameRequired') }]">
-          <a-input v-model:value="employeeForm.username" :disabled="!!editEmployee" />
+    <a-modal
+      :open="isAddEditModalVisible"
+      :title="editEmployee ? $t('editEmployee') : $t('addEmployee')"
+      @ok="submitAddEditEmployeeForm"
+      @cancel="closeAddEditModal"
+      :confirm-loading="savingEmployee"
+      destroyOnClose
+    >
+      <a-form
+        ref="addEditEmployeeFormRef"
+        :model="employeeForm"
+        layout="vertical"
+      >
+        <a-form-item
+          :label="$t('username')"
+          :rules="[{ required: true, message: $t('usernameRequired') }]"
+        >
+          <a-input
+            v-model:value="employeeForm.username"
+            :disabled="!!editEmployee"
+          />
         </a-form-item>
-        <a-form-item :label="$t('email')" :rules="[{ required: true, type: 'email', message: $t('emailRequired') }]">
+        <a-form-item
+          :label="$t('email')"
+          :rules="[
+            { required: true, type: 'email', message: $t('emailRequired') },
+          ]"
+        >
           <a-input v-model:value="employeeForm.email" />
         </a-form-item>
-        <a-form-item :label="$t('firstName')" :rules="[{ required: true, message: $t('firstNameRequired') }]">
+        <a-form-item
+          :label="$t('firstName')"
+          :rules="[{ required: true, message: $t('firstNameRequired') }]"
+        >
           <a-input v-model:value="employeeForm.first_name" />
         </a-form-item>
-        <a-form-item :label="$t('lastName')" :rules="[{ required: true, message: $t('lastNameRequired') }]">
+        <a-form-item
+          :label="$t('lastName')"
+          :rules="[{ required: true, message: $t('lastNameRequired') }]"
+        >
           <a-input v-model:value="employeeForm.last_name" />
         </a-form-item>
-        <a-form-item :label="$t('role')" :rules="[{ required: true, message: $t('roleRequired') }]">
-          <a-select v-model:value="employeeForm.role">
-            <a-select-option v-for="role in roles" :key="role.value" :value="role.value">{{ $t(role.label)
-              }}</a-select-option>
+        <a-form-item
+          :label="$t('role')"
+          :rules="[{ required: true, message: $t('roleRequired') }]"
+        >
+          <a-select
+            v-model:value="employeeForm.roles"
+            mode="multiple"
+            allow-clear
+          >
+            <a-select-option
+              v-for="role in roles"
+              :key="role.value"
+              :value="role.value"
+              >{{ $t(role.label) }}</a-select-option
+            >
           </a-select>
         </a-form-item>
-        <a-form-item :label="$t('departmentLabel')" :rules="[{ required: true, message: $t('departmentRequired') }]">
+        <a-form-item
+          :label="$t('departmentLabel')"
+          :rules="[{ required: true, message: $t('departmentRequired') }]"
+        >
           <a-select v-model:value="employeeForm.departmentId" allow-clear>
-            <a-select-option v-for="dept in departmentList" :key="dept.id" :value="dept.id">{{ dept.name
-              }}</a-select-option>
+            <a-select-option
+              v-for="dept in departmentList"
+              :key="dept.id"
+              :value="dept.id"
+              >{{ dept.name }}</a-select-option
+            >
           </a-select>
         </a-form-item>
-        <a-form-item :label="$t('section')" :rules="[{ required: true, message: $t('sectionRequired') }]">
+        <a-form-item
+          :label="$t('section')"
+          :rules="[{ required: true, message: $t('sectionRequired') }]"
+        >
           <a-select v-model:value="employeeForm.sectionId" allow-clear>
-            <a-select-option v-for="sec in sectionListForForm" :key="sec.id" :value="sec.id">{{ sec.name }}</a-select-option>
+            <a-select-option
+              v-for="sec in sectionListForForm"
+              :key="sec.id"
+              :value="sec.id"
+              >{{ sec.name }}</a-select-option
+            >
           </a-select>
         </a-form-item>
-        <a-form-item v-if="!editEmployee" :label="$t('password')" :rules="[{ required: true, message: $t('passwordRequired') }]">
+        <a-form-item
+          v-if="!editEmployee"
+          :label="$t('password')"
+          :rules="[{ required: true, message: $t('passwordRequired') }]"
+        >
           <a-input-password v-model:value="employeeForm.password" />
         </a-form-item>
       </a-form>
     </a-modal>
-    <a-table :columns="columns" :data-source="filteredEmployees" row-key="id" :pagination="pagination"
-      @change="onTableChange">
+    <a-table
+      :columns="columns"
+      :data-source="filteredEmployees"
+      row-key="id"
+      :pagination="pagination"
+      @change="onTableChange"
+    >
       <template #bodyCell="{ column, record }">
         <template v-if="column.dataIndex === 'fullName'">
           {{ record.first_name }} {{ record.last_name }}
         </template>
         <template v-else-if="column.dataIndex === 'department'">
-          {{ record.department?.name || $t('noData') }}
+          {{ record.department?.name || $t("noData") }}
         </template>
         <template v-else-if="column.dataIndex === 'section'">
-          {{ record.section?.name || $t('noData') }}
+          {{ record.section?.name || $t("noData") }}
         </template>
         <template v-else-if="column.dataIndex === 'role'">
-          {{ $t(record.role?.name || 'employee') || $t('noData') }}
+          <span v-if="Array.isArray(record.roles) && record.roles.length">
+            <a-tag
+              v-for="r in record.roles"
+              :key="typeof r === 'string' ? r : r?.name"
+              color="blue"
+              style="margin-right: 2px"
+            >
+              {{ $t(typeof r === "string" ? r : r?.name) }}
+            </a-tag>
+          </span>
+          <span v-else style="color: #aaa">{{ $t("noRole") }}</span>
         </template>
         <template v-else-if="column.key === 'actions'">
           <a-space>
             <a-button type="link" size="small" @click="viewDetail(record)">
-              <eye-outlined /> {{ $t('viewDetail') }}
+              <eye-outlined /> {{ $t("viewDetail") }}
             </a-button>
-            <a-button type="link" size="small" @click="openEditModal(record)" v-if="canEditEmployee">
-              <edit-outlined /> {{ $t('edit') }}
+            <a-button
+              type="link"
+              size="small"
+              @click="openEditModal(record)"
+              v-if="canEditEmployee"
+            >
+              <edit-outlined /> {{ $t("edit") }}
             </a-button>
-            <a-button type="link" size="small" danger @click="confirmDelete(record)" v-if="canDeleteEmployee">
-              <delete-outlined /> {{ $t('delete') }}
+            <a-button
+              type="link"
+              size="small"
+              danger
+              @click="confirmDelete(record)"
+              v-if="canDeleteEmployee"
+            >
+              <delete-outlined /> {{ $t("delete") }}
             </a-button>
-            <a-button type="link" size="small" @click="openResetPasswordModal(record)" v-if="canResetPassword">
-              <key-outlined /> {{ $t('resetPassword') }}
+            <a-button
+              type="link"
+              size="small"
+              @click="openResetPasswordModal(record)"
+              v-if="canResetPassword"
+            >
+              <key-outlined /> {{ $t("resetPassword") }}
             </a-button>
-            <a-button type="link" size="small" @click="viewReviewHistory(record)">
+            <a-button
+              type="link"
+              size="small"
+              @click="viewReviewHistory(record)"
+            >
               <history-outlined />
-              {{ $t('reviewHistory') }}
+              {{ $t("reviewHistory") }}
             </a-button>
           </a-space>
         </template>
-        <template v-else-if="column.dataIndex && record.hasOwnProperty(column.dataIndex)">
-          {{ record[column.dataIndex] || $t('noData') }}
+        <template
+          v-else-if="
+            column.dataIndex && record.hasOwnProperty(column.dataIndex)
+          "
+        >
+          {{ record[column.dataIndex] || $t("noData") }}
         </template>
-        <template v-else> {{ $t('noData') }} </template>
+        <template v-else> {{ $t("noData") }} </template>
       </template>
     </a-table>
-    <a-modal :open="isDetailModalVisible" :title="$t('employeeDetail')" @cancel="closeDetailModal" width="1000px"
-      destroyOnClose>
+    <a-modal
+      :open="isDetailModalVisible"
+      :title="$t('employeeDetail')"
+      @cancel="closeDetailModal"
+      width="1000px"
+      destroyOnClose
+    >
       <a-descriptions v-if="detailEmployee" bordered column="1" size="middle">
         <a-descriptions-item :label="$t('username')">
-          <user-outlined style="margin-right:4px" />{{ detailEmployee.username }}
-          </a-descriptions-item>
-          <a-descriptions-item :label="$t('email')">
-            <mail-outlined style="margin-right:4px" />{{ detailEmployee.email }}
-          </a-descriptions-item>
-          <a-descriptions-item :label="$t('fullName')">
-            <idcard-outlined style="margin-right:4px" />{{ detailEmployee.first_name }} {{ detailEmployee.last_name }}
-          </a-descriptions-item>
-          <a-descriptions-item :label="$t('role')">
-            <safety-certificate-outlined style="margin-right:4px" />{{ $t(detailEmployee.role?.name || 'employee') }}
-          </a-descriptions-item>
-          <a-descriptions-item :label="$t('departmentLabel')">
-            <apartment-outlined style="margin-right:4px" />{{ detailEmployee.department?.name || $t('noData') }}
-          </a-descriptions-item>
-          <a-descriptions-item :label="$t('section')">
-            <cluster-outlined style="margin-right:4px" />{{ detailEmployee.section?.name || $t('noData') }}
-          </a-descriptions-item>
-          <a-descriptions-item :label="$t('createdAt')">
-            <calendar-outlined style="margin-right:4px" />{{ detailEmployee.created_at }}
-          </a-descriptions-item>
+          <user-outlined style="margin-right: 4px" />{{
+            detailEmployee.username
+          }}
+        </a-descriptions-item>
+        <a-descriptions-item :label="$t('email')">
+          <mail-outlined style="margin-right: 4px" />{{ detailEmployee.email }}
+        </a-descriptions-item>
+        <a-descriptions-item :label="$t('fullName')">
+          <idcard-outlined style="margin-right: 4px" />{{
+            detailEmployee.first_name
+          }}
+          {{ detailEmployee.last_name }}
+        </a-descriptions-item>
+        <a-descriptions-item :label="$t('role')">
+          <safety-certificate-outlined style="margin-right: 4px" />
+          <span
+            v-if="
+              Array.isArray(detailEmployee?.roles) &&
+              detailEmployee.roles.length
+            "
+          >
+            <a-tag
+              v-for="r in detailEmployee.roles"
+              :key="typeof r === 'string' ? r : r?.name"
+              color="blue"
+              style="margin-right: 2px"
+            >
+              {{ $t(typeof r === "string" ? r : r?.name) }}
+            </a-tag>
+          </span>
+          <span v-else style="color: #aaa">{{ $t("noRole") }}</span>
+        </a-descriptions-item>
+        <a-descriptions-item :label="$t('departmentLabel')">
+          <apartment-outlined style="margin-right: 4px" />{{
+            detailEmployee.department?.name || $t("noData")
+          }}
+        </a-descriptions-item>
+        <a-descriptions-item :label="$t('section')">
+          <cluster-outlined style="margin-right: 4px" />{{
+            detailEmployee.section?.name || $t("noData")
+          }}
+        </a-descriptions-item>
+        <a-descriptions-item :label="$t('createdAt')">
+          <calendar-outlined style="margin-right: 4px" />{{
+            detailEmployee.created_at
+          }}
+        </a-descriptions-item>
       </a-descriptions>
     </a-modal>
     <a-modal
@@ -149,8 +326,12 @@
       :confirm-loading="store.getters['employees/isLoading']"
     >
       <div>
-        <p>{{ $t('resetPasswordInstruction') }}</p>
-        <a-input-password v-model:value="resetPasswordValue" :placeholder="$t('enterNewPasswordOrLeaveBlank')" allow-clear />
+        <p>{{ $t("resetPasswordInstruction") }}</p>
+        <a-input-password
+          v-model:value="resetPasswordValue"
+          :placeholder="$t('enterNewPasswordOrLeaveBlank')"
+          allow-clear
+        />
       </div>
     </a-modal>
   </div>
@@ -177,36 +358,71 @@ import {
   Descriptions as ADescriptions,
   DescriptionsItem as ADescriptionsItem,
 } from "ant-design-vue";
-import { UploadOutlined, HistoryOutlined, EyeOutlined, EditOutlined, DeleteOutlined, KeyOutlined, UserOutlined, MailOutlined, IdcardOutlined, SafetyCertificateOutlined, ApartmentOutlined, ClusterOutlined, CalendarOutlined } from "@ant-design/icons-vue";
+import {
+  UploadOutlined,
+  HistoryOutlined,
+  EyeOutlined,
+  EditOutlined,
+  DeleteOutlined,
+  KeyOutlined,
+  UserOutlined,
+  MailOutlined,
+  IdcardOutlined,
+  SafetyCertificateOutlined,
+  ApartmentOutlined,
+  ClusterOutlined,
+  CalendarOutlined,
+} from "@ant-design/icons-vue";
 import { useRouter } from "vue-router";
 import { RBAC_ACTIONS, RBAC_RESOURCES } from "@/core/constants/rbac.constants";
 
 const { t: $t } = useI18n();
 const store = useStore();
 const router = useRouter();
-const userPermissions = computed(() => store.getters["auth/user"]?.permissions || []);
+const userPermissions = computed(
+  () => store.getters["auth/user"]?.permissions || []
+);
 function hasPermission(action, resource) {
   return userPermissions.value?.some(
     (p) => p.action?.trim() === action && p.resource?.trim() === resource
   );
 }
-const canCreateEmployee = computed(() => hasPermission(RBAC_ACTIONS.CREATE, RBAC_RESOURCES.EMPLOYEE));
-const canEditEmployee = computed(() => hasPermission(RBAC_ACTIONS.EDIT, RBAC_RESOURCES.EMPLOYEE));
-const canDeleteEmployee = computed(() => hasPermission(RBAC_ACTIONS.DELETE, RBAC_RESOURCES.EMPLOYEE));
-const canResetPassword = computed(() => hasPermission(RBAC_ACTIONS.EDIT, RBAC_RESOURCES.EMPLOYEE));
-const canViewEmployee = computed(() => hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.EMPLOYEE));
+const canCreateEmployee = computed(() =>
+  hasPermission(RBAC_ACTIONS.CREATE, RBAC_RESOURCES.EMPLOYEE_COMPANY)
+);
+const canEditEmployee = computed(() =>
+  hasPermission(RBAC_ACTIONS.UPDATE, RBAC_RESOURCES.EMPLOYEE_COMPANY)
+);
+const canDeleteEmployee = computed(() =>
+  hasPermission(RBAC_ACTIONS.DELETE, RBAC_RESOURCES.EMPLOYEE_COMPANY)
+);
+const canResetPassword = computed(() =>
+  hasPermission(RBAC_ACTIONS.UPDATE, RBAC_RESOURCES.EMPLOYEE_COMPANY)
+);
+const canViewEmployee = computed(() =>
+  hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.EMPLOYEE_COMPANY)
+);
 
 const employees = computed(() => store.getters["employees/userList"]);
-const departmentList = computed(() => store.getters["departments/departmentList"] || []);
+const departmentList = computed(
+  () => store.getters["departments/departmentList"] || []
+);
 const sectionList = computed(() => {
   if (filterDepartment.value) {
-    return store.getters["sections/sectionsByDepartment"](filterDepartment.value) || [];
+    return (
+      store.getters["sections/sectionsByDepartment"](filterDepartment.value) ||
+      []
+    );
   }
   return store.getters["sections/sectionList"] || [];
 });
 const sectionListForForm = computed(() => {
   if (employeeForm.value.departmentId) {
-    return store.getters["sections/sectionsByDepartment"](employeeForm.value.departmentId) || [];
+    return (
+      store.getters["sections/sectionsByDepartment"](
+        employeeForm.value.departmentId
+      ) || []
+    );
   }
   return store.getters["sections/sectionList"] || [];
 });
@@ -230,7 +446,7 @@ const employeeForm = ref({
   email: "",
   first_name: "",
   last_name: "",
-  role: "employee",
+  roles: [], // đổi từ role sang roles (mảng)
   departmentId: undefined,
   sectionId: undefined,
   password: "",
@@ -256,9 +472,26 @@ const filteredEmployees = computed(() => {
         e.last_name?.toLowerCase().includes(search)
     );
   }
-  if (filterRole.value) list = list.filter((e) => e.role?.name === filterRole.value);
-  if (filterDepartment.value) list = list.filter((e) => e.department?.id === filterDepartment.value);
-  if (filterSection.value) list = list.filter((e) => e.section?.id === filterSection.value);
+  // Filter theo role: kiểm tra user có thuộc role đó không (mảng roles)
+  if (filterRole.value) {
+    list = list.filter((e) => {
+      if (Array.isArray(e.roles)) {
+        return e.roles.some(
+          (r) => (typeof r === "string" ? r : r?.name) === filterRole.value
+        );
+      }
+      if (e.role) {
+        if (typeof e.role === "string") return e.role === filterRole.value;
+        if (typeof e.role === "object" && e.role?.name)
+          return e.role.name === filterRole.value;
+      }
+      return false;
+    });
+  }
+  if (filterDepartment.value)
+    list = list.filter((e) => e.department?.id === filterDepartment.value);
+  if (filterSection.value)
+    list = list.filter((e) => e.section?.id === filterSection.value);
   return list;
 });
 
@@ -287,45 +520,70 @@ const handleRemove = () => {
 };
 const handleUpload = async () => {
   if (fileList.value.length === 0) {
-    notification.error({ message: $t("noFileSelected"), description: $t("selectFile") });
+    notification.error({
+      message: $t("noFileSelected"),
+      description: $t("selectFile"),
+    });
     return;
   }
   uploading.value = true;
   try {
     const file = fileList.value[0];
-    const response = await store.dispatch("employees/uploadFile", file.originFileObj || file);
+    const response = await store.dispatch(
+      "employees/uploadFile",
+      file.originFileObj || file
+    );
     const successCount = response?.successCount || 0;
     const responseErrors = response?.errors || [];
-    const notificationMessage = response?.message || $t("importResult", { successCount, errorCount: responseErrors.length });
+    const notificationMessage =
+      response?.message ||
+      $t("importResult", { successCount, errorCount: responseErrors.length });
     let notificationDescription = "";
     if (responseErrors.length > 0) {
-      const errorDetails = responseErrors.slice(0, 3).map((err) => {
-        let rowIdentifier = "";
-        if (err.rowNumber) rowIdentifier = `Excel Row ${err.rowNumber}`;
-        else if (err.rowData) {
-          const username = err.rowData["Username"];
-          const email = err.rowData["Email"];
-          if (username || email) rowIdentifier = `Row (Username: ${username || ""}, Email: ${email || ""})`;
-          else {
-            const firstFewEntries = Object.entries(err.rowData).slice(0, 2).map(([k, v]) => `${k}: ${v}`).join(", ");
-            rowIdentifier = firstFewEntries ? `Row data starting with (${firstFewEntries})` : "Problematic row data";
-          }
-        } else rowIdentifier = "Details for a row unavailable";
-        return `  • ${rowIdentifier}: ${err.error}`;
-      }).join("\n");
-      notificationDescription = $t("importErrorDetails", { count: Math.min(3, responseErrors.length), details: errorDetails });
+      const errorDetails = responseErrors
+        .slice(0, 3)
+        .map((err) => {
+          let rowIdentifier = "";
+          if (err.rowNumber) rowIdentifier = `Excel Row ${err.rowNumber}`;
+          else if (err.rowData) {
+            const username = err.rowData["Username"];
+            const email = err.rowData["Email"];
+            if (username || email)
+              rowIdentifier = `Row (Username: ${username || ""}, Email: ${email || ""})`;
+            else {
+              const firstFewEntries = Object.entries(err.rowData)
+                .slice(0, 2)
+                .map(([k, v]) => `${k}: ${v}`)
+                .join(", ");
+              rowIdentifier = firstFewEntries
+                ? `Row data starting with (${firstFewEntries})`
+                : "Problematic row data";
+            }
+          } else rowIdentifier = "Details for a row unavailable";
+          return `  • ${rowIdentifier}: ${err.error}`;
+        })
+        .join("\n");
+      notificationDescription = $t("importErrorDetails", {
+        count: Math.min(3, responseErrors.length),
+        details: errorDetails,
+      });
     }
     const notificationConfig = {
       message: notificationMessage,
       description: notificationDescription,
       duration: responseErrors.length > 0 ? 10 : 4.5,
     };
-    if (responseErrors.length > 0 && successCount === 0) notification.error(notificationConfig);
-    else if (responseErrors.length > 0 && successCount > 0) notification.warning(notificationConfig);
+    if (responseErrors.length > 0 && successCount === 0)
+      notification.error(notificationConfig);
+    else if (responseErrors.length > 0 && successCount > 0)
+      notification.warning(notificationConfig);
     else notification.success(notificationConfig);
     await store.dispatch("employees/fetchUsers", { force: true });
   } catch (error) {
-    notification.error({ message: $t("uploadFailed"), description: error.message || $t("uploadErrorDefault") });
+    notification.error({
+      message: $t("uploadFailed"),
+      description: error.message || $t("uploadErrorDefault"),
+    });
   } finally {
     uploading.value = false;
     isUploadModalVisible.value = false;
@@ -334,7 +592,16 @@ const handleUpload = async () => {
 };
 const openAddModal = () => {
   editEmployee.value = null;
-  Object.assign(employeeForm.value, { username: "", email: "", first_name: "", last_name: "", role: "employee", departmentId: undefined, sectionId: undefined, password: "" });
+  Object.assign(employeeForm.value, {
+    username: "",
+    email: "",
+    first_name: "",
+    last_name: "",
+    roles: [],
+    departmentId: undefined,
+    sectionId: undefined,
+    password: "",
+  });
   isAddEditModalVisible.value = true;
 };
 const openEditModal = (employee) => {
@@ -343,7 +610,11 @@ const openEditModal = (employee) => {
     ...employee,
     departmentId: employee.department?.id,
     sectionId: employee.section?.id,
-    role: employee.role?.name || "employee",
+    roles: Array.isArray(employee.roles)
+      ? employee.roles.map((r) => (typeof r === "string" ? r : r?.name))
+      : employee.role?.name
+        ? [employee.role.name]
+        : [],
     password: "",
   });
   isAddEditModalVisible.value = true;
@@ -355,22 +626,28 @@ const closeAddEditModal = () => {
 const addEditEmployeeFormRef = ref();
 
 const submitAddEditEmployeeForm = () => {
-  addEditEmployeeFormRef.value?.validate().then(() => {
-    handleAddEditEmployee();
-  }).catch(() => {
-    // Validation failed, do nothing
-  });
+  addEditEmployeeFormRef.value
+    ?.validate()
+    .then(() => {
+      handleAddEditEmployee();
+    })
+    .catch(() => {
+      // Validation failed, do nothing
+    });
 };
 const handleAddEditEmployee = async () => {
   savingEmployee.value = true;
   try {
-    // Đảm bảo role là entity name (string)
+    // Đảm bảo roles là mảng string
     const formData = { ...employeeForm.value };
-    if (formData.role && typeof formData.role === 'object') {
-      formData.role = formData.role.name;
-    }
+    formData.roles = (formData.roles || [])
+      .map((r) => (typeof r === "string" ? r : r?.name))
+      .filter(Boolean);
     if (editEmployee.value) {
-      await store.dispatch("employees/updateEmployee", { ...formData, id: editEmployee.value.id });
+      await store.dispatch("employees/updateEmployee", {
+        ...formData,
+        id: editEmployee.value.id,
+      });
       notification.success({ message: $t("updateEmployeeSuccess") });
     } else {
       await store.dispatch("employees/createEmployee", { ...formData });
@@ -379,7 +656,10 @@ const handleAddEditEmployee = async () => {
     await store.dispatch("employees/fetchUsers", { force: true });
     isAddEditModalVisible.value = false;
   } catch (e) {
-    notification.error({ message: $t("saveEmployeeError"), description: e.message || $t("saveEmployeeErrorDefault") });
+    notification.error({
+      message: $t("saveEmployeeError"),
+      description: e.message || $t("saveEmployeeErrorDefault"),
+    });
   } finally {
     savingEmployee.value = false;
   }
@@ -397,7 +677,10 @@ const confirmDelete = (employee) => {
         notification.success({ message: $t("deleteEmployeeSuccess") });
         await store.dispatch("employees/fetchUsers", { force: true });
       } catch (e) {
-        notification.error({ message: $t("deleteEmployeeError"), description: e.message || $t("deleteEmployeeErrorDefault") });
+        notification.error({
+          message: $t("deleteEmployeeError"),
+          description: e.message || $t("deleteEmployeeErrorDefault"),
+        });
       }
     },
   });
@@ -422,11 +705,17 @@ const handleResetPassword = async () => {
     notification.success({ message: $t("resetPasswordSuccess") });
     closeResetPasswordModal();
   } catch (e) {
-    notification.error({ message: $t("resetPasswordError"), description: e.message || $t("resetPasswordErrorDefault") });
+    notification.error({
+      message: $t("resetPasswordError"),
+      description: e.message || $t("resetPasswordErrorDefault"),
+    });
   }
 };
 const viewDetail = async (employee) => {
-  detailEmployee.value = await store.dispatch("employees/fetchUserById", employee.id);
+  detailEmployee.value = await store.dispatch(
+    "employees/fetchUserById",
+    employee.id
+  );
   isDetailModalVisible.value = true;
 };
 const closeDetailModal = () => {
@@ -439,7 +728,7 @@ const exportExcel = async () => {
     Email: e.email,
     "First Name": e.first_name,
     "Last Name": e.last_name,
-    Role: $t(e.role?.name || 'employee'),
+    Role: $t(e.role?.name || "employee"),
     Department: e.department?.name || "",
     Section: e.section?.name || "",
   }));
@@ -478,11 +767,23 @@ const exportExcel = async () => {
   };
   worksheet.getRow(1).height = 32;
   // Thêm header row thủ công vào dòng 2
-  worksheet.insertRow(2, columns.map(col => col.header));
+  worksheet.insertRow(
+    2,
+    columns.map((col) => col.header)
+  );
   // Header style (dòng 2)
   worksheet.getRow(2).eachCell((cell) => {
-    cell.font = { name: "Arial", size: 12, bold: true, color: { argb: "FFFFFFFF" } };
-    cell.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
+    cell.font = {
+      name: "Arial",
+      size: 12,
+      bold: true,
+      color: { argb: "FFFFFFFF" },
+    };
+    cell.alignment = {
+      vertical: "middle",
+      horizontal: "center",
+      wrapText: true,
+    };
     cell.fill = {
       type: "pattern",
       pattern: "solid",
@@ -503,7 +804,11 @@ const exportExcel = async () => {
     row.height = 24;
     row.eachCell((cell) => {
       cell.font = cell.font || { name: "Arial", size: 12 };
-      cell.alignment = cell.alignment || { vertical: "middle", horizontal: "left", wrapText: true };
+      cell.alignment = cell.alignment || {
+        vertical: "middle",
+        horizontal: "left",
+        wrapText: true,
+      };
       cell.border = {
         top: { style: "thin", color: { argb: "FFBFBFBF" } },
         left: { style: "thin", color: { argb: "FFBFBFBF" } },
@@ -512,7 +817,12 @@ const exportExcel = async () => {
       };
     });
     // Căn giữa cho header
-    if (rowNumber === 2) row.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
+    if (rowNumber === 2)
+      row.alignment = {
+        vertical: "middle",
+        horizontal: "center",
+        wrapText: true,
+      };
   });
   // Freeze header
   worksheet.views = [{ state: "frozen", ySplit: 2 }];
@@ -523,7 +833,9 @@ const exportExcel = async () => {
   };
   // Xuất file
   const buffer = await workbook.xlsx.writeBuffer();
-  const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  const blob = new Blob([buffer], {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
   const url = window.URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -537,7 +849,10 @@ const exportExcel = async () => {
   notification.success({ message: $t("exportExcelSuccess") });
 };
 const viewReviewHistory = (employee) => {
-  router.push({ name: "ReviewHistory", params: { targetType: "employee", targetId: employee.id } });
+  router.push({
+    name: "ReviewHistory",
+    params: { targetType: "employee", targetId: employee.id },
+  });
 };
 onMounted(async () => {
   await store.dispatch("employees/fetchUsers", { force: true });
@@ -564,13 +879,68 @@ watch(
   }
 );
 const columns = computed(() => [
-  { title: $t("employeeFullName") || "Tên nhân viên", dataIndex: "fullName", key: "fullName", sorter: (a, b) => `${a.first_name || ""} ${a.last_name || ""}`.trim().localeCompare(`${b.first_name || ""} ${b.last_name || ""}`.trim()) },
-  { title: $t("username"), dataIndex: "username", key: "username", sorter: (a, b) => a.username.localeCompare(b.username) },
-  { title: $t("email"), dataIndex: "email", key: "email", sorter: (a, b) => a.email.localeCompare(b.email) },
-  { title: $t("departmentLabel"), dataIndex: "department", key: "department", sorter: (a, b) => (a.department?.name || "").localeCompare(b.department?.name || "") },
-  { title: $t("section"), dataIndex: "section", key: "section", sorter: (a, b) => (a.section?.name || "").localeCompare(b.section?.name || "") },
-  { title: $t("role"), dataIndex: "role", key: "role", sorter: (a, b) => (a.role?.name || "").localeCompare(b.role?.name || "") },
-  { title: $t("actions"), dataIndex: "actions", key: "actions", align: "center" },
+  {
+    title: $t("employeeFullName") || "Tên nhân viên",
+    dataIndex: "fullName",
+    key: "fullName",
+    sorter: (a, b) =>
+      `${a.first_name || ""} ${a.last_name || ""}`
+        .trim()
+        .localeCompare(`${b.first_name || ""} ${b.last_name || ""}`.trim()),
+  },
+  {
+    title: $t("username"),
+    dataIndex: "username",
+    key: "username",
+    sorter: (a, b) => a.username.localeCompare(b.username),
+  },
+  {
+    title: $t("email"),
+    dataIndex: "email",
+    key: "email",
+    sorter: (a, b) => a.email.localeCompare(b.email),
+  },
+  {
+    title: $t("departmentLabel"),
+    dataIndex: "department",
+    key: "department",
+    sorter: (a, b) =>
+      (a.department?.name || "").localeCompare(b.department?.name || ""),
+  },
+  {
+    title: $t("section"),
+    dataIndex: "section",
+    key: "section",
+    sorter: (a, b) =>
+      (a.section?.name || "").localeCompare(b.section?.name || ""),
+  },
+  // Hiển thị tất cả roles, phân cách phẩy
+  {
+    title: $t("role"),
+    dataIndex: "role",
+    key: "role",
+    customRender: ({ record }) => {
+      let rolesArr = [];
+      if (Array.isArray(record.roles))
+        rolesArr = record.roles
+          .map((r) => (typeof r === "string" ? r : r?.name))
+          .filter(Boolean);
+      else if (record.role) {
+        if (typeof record.role === "string") rolesArr = [record.role];
+        else if (typeof record.role === "object" && record.role?.name)
+          rolesArr = [record.role.name];
+      }
+      return rolesArr.length
+        ? rolesArr.map((r) => $t(r)).join(", ")
+        : $t("noRole");
+    },
+  },
+  {
+    title: $t("actions"),
+    dataIndex: "actions",
+    key: "actions",
+    align: "center",
+  },
 ]);
 </script>
 

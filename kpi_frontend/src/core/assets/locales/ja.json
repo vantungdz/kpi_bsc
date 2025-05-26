@@ -684,6 +684,7 @@
 "departmentNameRequired": "部門名は必須です。",
   "departmentList": "部門一覧",
   "sectionCreatedSuccess": "セクションが正常に作成されました。",
-  "departmentCreatedSuccess": "部門が正常に作成されました。"
+  "departmentCreatedSuccess": "部門が正常に作成されました。",
+  "errorLoadingRolesOrPermissions": "役割または権限の読み込み中にエラーが発生しました。"
  
 }

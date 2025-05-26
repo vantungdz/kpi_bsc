@@ -36,7 +36,11 @@ export class EmployeesController {
   constructor(private readonly employeeService: EmployeesService) {}
 
   @Get()
-  @Roles('admin', 'manager' , 'department', 'section')
+  @Roles(
+    'employee:view:company',
+    'employee:view:department',
+    'employee:view:section',
+  )
   @ApiOperation({
     summary:
       'Get all employees, optionally filtered by department, section, or team',
@@ -69,7 +73,11 @@ export class EmployeesController {
   }
 
   @Get(':id')
-  @Roles('admin', 'manager', 'department', 'section')
+  @Roles(
+    'employee:view:company',
+    'employee:view:department',
+    'employee:view:section',
+  )
   @ApiOperation({ summary: 'Get employee details by ID' })
   @ApiResponse({ status: 200, description: 'Employee found', type: Employee })
   @ApiResponse({ status: 404, description: 'Employee not found' })
@@ -82,18 +90,20 @@ export class EmployeesController {
   }
 
   @Delete(':id')
-  @Roles('admin')
+  @Roles('employee:delete:company')
   @ApiOperation({ summary: 'Delete an employee' })
   @ApiResponse({ status: 200, description: 'Employee deleted successfully.' })
   @ApiResponse({ status: 404, description: 'Employee not found.' })
-  async deleteEmployee(@Param('id', ParseIntPipe) id: number): Promise<{ message: string }> {
+  async deleteEmployee(
+    @Param('id', ParseIntPipe) id: number,
+  ): Promise<{ message: string }> {
     await this.employeeService.remove(id);
     return { message: 'Employee deleted successfully.' };
   }
 
   @Post('upload')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin', 'manager')
+  @Roles('employee:create:company', 'employee:create:department')
   @UseInterceptors(FileInterceptor('file'))
   async uploadEmployeeExcel(@UploadedFile() file: Express.Multer.File) {
     if (!file) {
@@ -132,53 +142,56 @@ export class EmployeesController {
     }
   }
 
+  @Patch(':id/roles')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('employee:update:company')
+  @ApiOperation({ summary: 'Update user roles (multiple)' })
+  async updateRoles(
+    @Param('id', ParseIntPipe) id: number,
+    @Body('roles') roles: (string | number)[],
+  ): Promise<Employee> {
+    return this.employeeService.updateRoles(id, roles);
+  }
+
   @Patch(':id/role')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin')
-  @ApiOperation({ summary: 'Update user role' })
+  @Roles('employee:update:company')
+  @ApiOperation({ summary: 'Update user role (single, legacy)' })
   async updateRole(
     @Param('id', ParseIntPipe) id: number,
     @Body('role') role: string,
   ): Promise<Employee> {
-    return this.employeeService.updateRole(id, role);
-  }
-
-  @Patch(':id/reset-password')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin', 'manager')
-  @ApiOperation({ summary: 'Reset employee password' })
-  async resetPassword(
-    @Param('id', ParseIntPipe) id: number,
-    @Body('newPassword') newPassword?: string,
-  ): Promise<{ message: string }> {
-    await this.employeeService.resetPassword(id, newPassword);
-    return { message: 'Password reset successfully.' };
+    // Gọi updateRoles cho 1 role duy nhất để giữ tương thích
+    return this.employeeService.updateRoles(id, [role]);
   }
 
   @Patch(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin', 'manager')
+  @Roles('employee:update:company', 'employee:update:department')
   @ApiOperation({ summary: 'Update employee info' })
   async updateEmployee(
     @Param('id', ParseIntPipe) id: number,
-    @Body() updateDto: Partial<Employee>,
+    @Body() updateDto: Partial<Employee & { roles?: (string | number)[] }>,
   ): Promise<Employee> {
     return this.employeeService.updateEmployee(id, updateDto);
   }
 
   @Post()
-  @Roles('admin', 'manager')
+  @Roles('employee:create:company', 'employee:create:department')
   @ApiOperation({ summary: 'Create a new employee' })
   @ApiResponse({ status: 201, description: 'Employee created', type: Employee })
   @ApiResponse({ status: 400, description: 'Invalid input' })
-  async createEmployee(@Body() createEmployeeDto: Partial<Employee>): Promise<Employee> {
+  async createEmployee(@Body() createEmployeeDto: any): Promise<Employee> {
     return this.employeeService.create(createEmployeeDto);
   }
 
   @Get('department/:departmentId/manager-only')
   @UseGuards(PolicyGuard)
   @PolicyCheck('isManagerOfDepartment', { getDepartmentIdFromParam: true })
-  async managerOnlyEndpoint(@Req() req, @Param('departmentId', ParseIntPipe) departmentId: number) {
+  async managerOnlyEndpoint(
+    @Req() req,
+    @Param('departmentId', ParseIntPipe) departmentId: number,
+  ) {
     // Truyền động departmentId vào policy check
     return { message: `Bạn là manager của phòng ban ${departmentId}!` };
   }

@@ -10,7 +10,10 @@ export class PolicyGuard implements CanActivate {
   constructor(private readonly reflector: Reflector) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const policyMeta = this.reflector.get<{ policy: string; options?: any }>(POLICY_CHECK_KEY, context.getHandler());
+    const policyMeta = this.reflector.get<{ policy: string; options?: any }>(
+      POLICY_CHECK_KEY,
+      context.getHandler(),
+    );
     if (!policyMeta) return true;
     const { policy, options } = policyMeta;
     const request = context.switchToHttp().getRequest();
@@ -19,10 +22,13 @@ export class PolicyGuard implements CanActivate {
 
     // Ví dụ: kiểm tra user có phải là manager của phòng ban options.departmentId không
     if (policy === 'isManagerOfDepartment') {
-      // Nếu user.role là object (sau khi tách role/permission), kiểm tra user.role.name
-      const userRole = typeof user.role === 'string' ? user.role : user.role?.name;
-      if (userRole !== 'manager') return false;
-      if (options?.departmentId && user.departmentId !== options.departmentId) return false;
+      // Kiểm tra user có ít nhất 1 role là 'manager'
+      const userRoles = Array.isArray(user.roles)
+        ? user.roles.map((r: any) => (typeof r === 'string' ? r : r?.name))
+        : [];
+      if (!userRoles.includes('manager')) return false;
+      if (options?.departmentId && user.departmentId !== options.departmentId)
+        return false;
       return true;
     }
 

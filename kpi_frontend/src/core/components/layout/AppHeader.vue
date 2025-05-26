@@ -108,23 +108,41 @@ const isUserAuthenticated = computed(
 );
 const actualUser = computed(() => store.getters["auth/user"]);
 
-const userRole = computed(() => {
-  // Ưu tiên lấy từ store (đã chuẩn hóa), fallback lấy từ actualUser nếu backend trả về role entity
-  const roleFromStore = store.getters["auth/effectiveRole"];
-  if (roleFromStore) return roleFromStore;
-  if (actualUser.value && typeof actualUser.value.role === 'object' && actualUser.value.role?.name) {
-    return actualUser.value.role.name;
+// Lấy mảng roles từ user, fallback nếu chưa có
+const userRoles = computed(() => {
+  if (!actualUser.value) return [];
+  // Chuẩn hóa: roles là mảng string hoặc mảng object {name}
+  if (Array.isArray(actualUser.value.roles)) {
+    return actualUser.value.roles
+      .map((r) => (typeof r === "string" ? r : r?.name))
+      .filter(Boolean);
   }
-  return null;
+  // Fallback: nếu backend trả về role đơn lẻ
+  if (actualUser.value.role) {
+    if (typeof actualUser.value.role === "string")
+      return [actualUser.value.role];
+    if (
+      typeof actualUser.value.role === "object" &&
+      actualUser.value.role?.name
+    )
+      return [actualUser.value.role.name];
+  }
+  return [];
 });
+
 const roleLabelMap = computed(() => ({
-  admin: $t('roleAdmin'),
-  manager: $t('roleManager'),
-  department: $t('roleDepartment'),
-  section: $t('roleSection'),
-  employee: $t('roleEmployee'),
+  admin: $t("roleAdmin"),
+  manager: $t("roleManager"),
+  department: $t("roleDepartment"),
+  section: $t("roleSection"),
+  employee: $t("roleEmployee"),
 }));
-const userRoleDisplay = computed(() => userRole.value ? (roleLabelMap.value[userRole.value] || userRole.value) : $t('noRole'));
+
+// Hiển thị tất cả roles, phân cách bằng dấu phẩy
+const userRoleDisplay = computed(() => {
+  if (!userRoles.value.length) return $t("noRole");
+  return userRoles.value.map((r) => roleLabelMap.value[r] || r).join(", ");
+});
 
 const displayName = computed(() => {
   if (!actualUser.value) return $t("user");

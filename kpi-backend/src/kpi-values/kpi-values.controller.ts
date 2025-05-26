@@ -39,11 +39,21 @@ export class KpiValuesController {
   }
 
   @Get('pending-approvals')
-  @Roles('manager', 'admin', 'department', 'section')
+  @Roles(
+    'kpi-value:approve:company',
+    'kpi-value:approve:department',
+    'kpi-value:approve:section',
+  )
   @ApiOperation({ summary: 'Lấy danh sách giá trị KPI đang chờ phê duyệt' })
-  @ApiResponse({ status: 200, description: 'Danh sách giá trị chờ duyệt.', type: [KpiValue] })
+  @ApiResponse({
+    status: 200,
+    description: 'Danh sách giá trị chờ duyệt.',
+    type: [KpiValue],
+  })
   @ApiResponse({ status: 403, description: 'Forbidden.' })
-  async getMyPendingApprovals(@Req() req: Request & { user?: Employee }): Promise<KpiValue[]> {
+  async getMyPendingApprovals(
+    @Req() req: Request & { user?: Employee },
+  ): Promise<KpiValue[]> {
     if (!req.user) {
       throw new UnauthorizedException('User information not available.');
     }
@@ -53,7 +63,9 @@ export class KpiValuesController {
   @Get(':id/history')
   @ApiOperation({ summary: 'Lấy lịch sử thay đổi của một giá trị KPI' })
   @ApiResponse({ status: 200, type: [KpiValueHistory] })
-  async getHistory(@Param('id', ParseIntPipe) id: number): Promise<KpiValueHistory[]> {
+  async getHistory(
+    @Param('id', ParseIntPipe) id: number,
+  ): Promise<KpiValueHistory[]> {
     return this.kpiValuesService.getHistory(id);
   }
 
@@ -94,7 +106,7 @@ export class KpiValuesController {
   }
 
   @Post(':valueId/approve-section')
-  @Roles('manager', 'admin', 'department', 'section')
+  @Roles('kpi-value:approve:section')
   @ApiOperation({ summary: 'Section Manager/Admin phê duyệt giá trị KPI' })
   @ApiResponse({ status: 200, type: KpiValue })
   async approveBySection(
@@ -108,7 +120,7 @@ export class KpiValuesController {
   }
 
   @Post(':valueId/reject-section')
-  @Roles('manager', 'admin', 'department', 'section')
+  @Roles('kpi-value:reject:section')
   @ApiOperation({ summary: 'Section Leader/Manager/Admin từ chối giá trị KPI' })
   @ApiBody({ type: RejectValueDto })
   @ApiResponse({ status: 200, type: KpiValue })
@@ -128,7 +140,7 @@ export class KpiValuesController {
   }
 
   @Post(':valueId/approve-department')
-  @Roles('manager', 'admin', 'department')
+  @Roles('kpi-value:approve:department')
   @ApiOperation({ summary: 'Department Manager/Admin phê duyệt giá trị KPI' })
   @ApiResponse({ status: 200, type: KpiValue })
   async approveByDepartment(
@@ -142,7 +154,7 @@ export class KpiValuesController {
   }
 
   @Post(':valueId/reject-department')
-  @Roles('manager', 'admin', 'department')
+  @Roles('kpi-value:reject:department')
   @ApiOperation({ summary: 'Department Manager/Admin từ chối giá trị KPI' })
   @ApiBody({ type: RejectValueDto })
   @ApiResponse({ status: 200, type: KpiValue })
@@ -162,7 +174,7 @@ export class KpiValuesController {
   }
 
   @Post(':valueId/approve-manager')
-  @Roles('manager', 'admin')
+  @Roles('kpi-value:approve:company')
   @ApiOperation({ summary: 'Manager/Admin phê duyệt cuối cùng giá trị KPI' })
   @ApiResponse({ status: 200, type: KpiValue })
   async approveByManager(
@@ -176,7 +188,7 @@ export class KpiValuesController {
   }
 
   @Post(':valueId/reject-manager')
-  @Roles('manager', 'admin')
+  @Roles('kpi-value:reject:company')
   @ApiOperation({ summary: 'Manager/Admin từ chối cuối cùng giá trị KPI' })
   @ApiBody({ type: RejectValueDto })
   @ApiResponse({ status: 200, type: KpiValue })
@@ -215,7 +227,7 @@ export class KpiValuesController {
     @Param('id', ParseIntPipe) id: number,
     @Param('role') role: string,
   ): Promise<KpiValue> {
-    return this.kpiValuesService.approveKpiReview(id, role.toUpperCase());
+    return this.kpiValuesService.approveKpiReview(id, [role.toUpperCase()]);
   }
 
   @Patch(':id/reject/:role')
@@ -224,12 +236,14 @@ export class KpiValuesController {
     @Param('id', ParseIntPipe) id: number,
     @Param('role') role: string,
   ): Promise<KpiValue> {
-    return this.kpiValuesService.rejectKpiReview(id, role.toUpperCase());
+    return this.kpiValuesService.rejectKpiReview(id, [role.toUpperCase()]);
   }
 
   @Patch(':id/resubmit')
   @ApiOperation({ summary: 'Resubmit a rejected KPI review' })
-  async resubmitKpiReview(@Param('id', ParseIntPipe) id: number): Promise<KpiValue> {
+  async resubmitKpiReview(
+    @Param('id', ParseIntPipe) id: number,
+  ): Promise<KpiValue> {
     return this.kpiValuesService.resubmitKpiReview(id);
   }
 

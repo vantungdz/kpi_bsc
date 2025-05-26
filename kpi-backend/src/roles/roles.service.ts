@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import { Role } from '../entities';
 import { Permission } from '../entities/permission.entity';
 
@@ -31,8 +31,9 @@ export class RolesService {
       relations: ['permissions'],
     });
     if (!role) throw new NotFoundException('Role not found');
-    const permissions =
-      await this.permissionRepository.findByIds(permissionIds);
+    const permissions = await this.permissionRepository.findBy({
+      id: In(permissionIds),
+    });
     role.permissions = permissions;
     await this.roleRepository.save(role);
     return { message: 'Permissions updated successfully.' };
