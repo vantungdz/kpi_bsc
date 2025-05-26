@@ -6,6 +6,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Section } from 'src/entities/section.entity';
 import { Department } from 'src/entities/department.entity';
+import { Employee } from 'src/entities/employee.entity';
 
 import { Repository } from 'typeorm';
 
@@ -16,13 +17,15 @@ export class SectionsService {
     private readonly sectionRepository: Repository<Section>,
   ) {}
 
-  async create(createSectionDto: Section): Promise<Section> {
-    const section = this.sectionRepository.create(createSectionDto);
-
-    if (!section) {
-      throw new UnauthorizedException('Invalid credentials');
+  async create(createSectionDto: any): Promise<Section> {
+    const created = this.sectionRepository.create(createSectionDto);
+    const section = Array.isArray(created) ? created[0] : created;
+    if (createSectionDto.departmentId) {
+      section.department = { id: createSectionDto.departmentId } as Department;
     }
-
+    if (createSectionDto.managerId) {
+      section.managerId = createSectionDto.managerId;
+    }
     return this.sectionRepository.save(section);
   }
 
@@ -50,25 +53,37 @@ export class SectionsService {
    */
   async getFilteredSections(departmentId?: number): Promise<Section[]> {
     let sections: Section[] = [];
-    const relationsToLoad = ['department'];
+    const relationsToLoad = ['department', 'manager'];
 
     if (departmentId) {
-      console.log(
-        `[SectionsService] Finding sections with departmentId: ${departmentId}`,
-      );
       sections = await this.sectionRepository.find({
         where: { department: { id: departmentId } },
         relations: relationsToLoad,
       });
     } else {
-      console.log(`[SectionsService] Finding all sections`);
       sections = await this.sectionRepository.find({
         relations: relationsToLoad,
       });
     }
 
-    console.log(`[SectionsService] Returning ${sections.length} sections.`);
-
+    // Auto-populate manager if missing, by finding employee with role 'section' and sectionId = section.id
+    for (const section of sections) {
+      if (!section.managerId) {
+        const manager = await this.sectionRepository.manager
+          .getRepository(Employee)
+          .findOne({
+            where: {
+              sectionId: section.id,
+              role: { name: 'section' },
+            },
+            relations: ['role'],
+          });
+        if (manager) {
+          section.manager = manager;
+          section.managerId = manager.id;
+        }
+      }
+    }
     return sections;
   }
 }

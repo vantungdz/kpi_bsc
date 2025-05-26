@@ -261,6 +261,26 @@ const actions = {
     }
   },
 
+  async createEmployee({ commit, dispatch }, createDto) {
+    commit("SET_LOADING", true);
+    commit("SET_ERROR", null);
+    try {
+      // Đảm bảo chỉ truyền role là entity name (string)
+      let payload = { ...createDto };
+      if (payload.role && typeof payload.role === 'object') {
+        payload.role = payload.role.name;
+      }
+      const response = await apiClient.post("/employees", payload);
+      await dispatch("fetchUsers", { force: true });
+      return response.data;
+    } catch (error) {
+      commit("SET_ERROR", error);
+      throw error;
+    } finally {
+      commit("SET_LOADING", false);
+    }
+  },
+
   // --- RBAC Role/Permission Management ---
   async fetchRolesWithPermissions({ commit }) {
     try {

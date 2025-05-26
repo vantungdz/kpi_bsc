@@ -29,9 +29,11 @@ export class KpiReviewController {
     return this.kpiReviewService.submitMyKpiSelfReview(req.user.id, body);
   }
 
+  @UseGuards(JwtAuthGuard)
   @Get()
-  async getKpiReviews(@Query() query: any) {
-    return this.kpiReviewService.getKpiReviews(query);
+  async getKpiReviews(@Req() req, @Query() query: any) {
+    // Truyền user vào service để filter theo quyền
+    return this.kpiReviewService.getKpiReviews(query, req.user);
   }
 
   @Get(':id')
@@ -83,5 +85,12 @@ export class KpiReviewController {
   @Post('complete-review')
   async completeReview(@Req() req, @Body() body) {
     return this.kpiReviewService.completeReview(body.reviewId, req.user.id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('employee-feedback')
+  async submitEmployeeFeedback(@Req() req, @Body() body) {
+    // req.user.id là id của nhân viên feedback
+    return this.kpiReviewService.submitEmployeeFeedback(req.user.id, body);
   }
 }

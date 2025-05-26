@@ -15,7 +15,7 @@ import { EventEmitterModule } from '@nestjs/event-emitter';
 import { NotificationModule } from './notification/notification.module';
 import { DashboardsModule } from './dashboard/dashboard.module';
 import { ReportsModule } from './reports/reports.module';
-import { RolesController } from './roles.controller';
+import { RolesModule } from './roles/roles.module';
 import { Role } from './entities/role.entity';
 import { Permission } from './entities/permission.entity';
 import { ReviewCycleModule } from './review-cycle/review-cycle.module';
@@ -60,7 +60,7 @@ import { KpiReviewModule } from './evaluation/kpi-review.module';
     TypeOrmModule.forFeature([Role, Permission]),
     ReviewCycleModule,
     KpiReviewModule,
+    RolesModule,
   ],
-  controllers: [RolesController],
 })
 export class AppModule {}

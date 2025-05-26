@@ -64,3 +64,24 @@ export async function submitManagerReview(
 export async function completeReview(reviewId) {
   return apiClient.post(`/kpi-review/complete-review`, { reviewId });
 }
+
+export async function submitEmployeeFeedback(reviewId, employeeFeedback) {
+  return apiClient.post(`/kpi-review/employee-feedback`, {
+    reviewId,
+    employeeFeedback,
+  });
+}
+
+export async function getKpiReviewHistory(review) {
+  // Ưu tiên lấy theo review.id, nếu không có thì lấy theo kpi.id và cycle
+  if (review && review.id) {
+    // Nếu backend có API /kpi-review/history/:reviewId thì dùng dòng dưới:
+    // const res = await apiClient.get(`/kpi-review/history/${review.id}`);
+    // Nếu backend chỉ có /kpi-review/history/:kpiId/:cycle:
+    const res = await apiClient.get(
+      `/kpi-review/history/${review.kpi?.id}/${review.cycle}`
+    );
+    return res.data;
+  }
+  return [];
+}

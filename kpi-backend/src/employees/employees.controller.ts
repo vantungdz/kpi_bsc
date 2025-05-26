@@ -166,6 +166,15 @@ export class EmployeesController {
     return this.employeeService.updateEmployee(id, updateDto);
   }
 
+  @Post()
+  @Roles('admin', 'manager')
+  @ApiOperation({ summary: 'Create a new employee' })
+  @ApiResponse({ status: 201, description: 'Employee created', type: Employee })
+  @ApiResponse({ status: 400, description: 'Invalid input' })
+  async createEmployee(@Body() createEmployeeDto: Partial<Employee>): Promise<Employee> {
+    return this.employeeService.create(createEmployeeDto);
+  }
+
   @Get('department/:departmentId/manager-only')
   @UseGuards(PolicyGuard)
   @PolicyCheck('isManagerOfDepartment', { getDepartmentIdFromParam: true })

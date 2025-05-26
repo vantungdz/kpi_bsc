@@ -138,16 +138,6 @@
           </router-link>
         </a-menu-item>
         <a-menu-item
-          key="evaluation"
-          v-if="canViewKpiReview"
-          :title="$t('evaluation')"
-        >
-          <router-link to="/kpi/review">
-            <solution-outlined />
-            <span>{{ $t("evaluation") }}</span>
-          </router-link>
-        </a-menu-item>
-        <a-menu-item
           key="employee-kpi-score-list"
           v-if="canViewEmployeeKpiScores"
           :title="$t('employeeKpiScoreList')"
@@ -203,11 +193,11 @@
             ><setting-outlined /><span>{{ $t("administration") }}</span></span
           >
         </template>
-        <a-menu-item key="admin-users" :title="$t('userManagement')">
-          <router-link to="/admin/users">
+        <a-menu-item key="admin-users" :title="$t('addRole')">
+          <router-link to="/admin/create-role">
             <usergroup-add-outlined />
             <!-- Added icon -->
-            <span>{{ $t("userManagement") }}</span>
+            <span>{{ $t("addRole") }}</span>
           </router-link>
         </a-menu-item>
         <a-menu-item key="admin-roles" :title="$t('roleManagement')">
@@ -223,7 +213,19 @@
         >
           <router-link to="/review-cycle/create">
             <form-outlined />
-            <span>{{ $t("reviewCycleManagement") }}</span>
+            <span>{{ $t('reviewCycleManagement') }}</span>
+          </router-link>
+        </a-menu-item>
+        <a-menu-item key="admin-create-department" :title="$t('createDepartment')">
+          <router-link to="/admin/create-department">
+            <apartment-outlined />
+            <span>{{ $t('createDepartment') }}</span>
+          </router-link>
+        </a-menu-item>
+        <a-menu-item key="admin-create-section" :title="$t('createSection')">
+          <router-link to="/admin/create-section">
+            <cluster-outlined />
+            <span>{{ $t('createSection') }}</span>
           </router-link>
         </a-menu-item>
       </a-sub-menu>

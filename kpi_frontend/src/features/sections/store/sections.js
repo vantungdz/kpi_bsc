@@ -144,6 +144,18 @@ const actions = {
       commit("SET_LOADING_DETAIL", false);
     }
   },
+
+  async createSection({ dispatch }, payload) {
+    // payload: { name, departmentId, managerId }
+    const res = await apiClient.post("/sections", {
+      name: payload.name,
+      departmentId: payload.departmentId,
+      managerId: payload.managerId,
+    });
+    // Refresh list after creation
+    await dispatch("fetchSections", { forceRefresh: true });
+    return res.data;
+  },
 };
 
 export default {

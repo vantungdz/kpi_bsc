@@ -26,6 +26,10 @@ import RolePermissionManager from "@/features/employees/components/RolePermissio
 import HomePage from "../../features/home/HomePage.vue";
 import MyKpiSelfReview from "../../features/evaluation/views/MyKpiSelfReview.vue";
 import ReviewCycleCreate from "../../features/evaluation/views/ReviewCycleCreate.vue";
+import DepartmentCreateForm from "@/features/departments/views/DepartmentCreateForm.vue";
+import SectionCreateForm from "@/features/sections/views/SectionCreateForm.vue";
+import KpiReviewList from "@/features/evaluation/views/KpiReviewList.vue";
+import RoleManager from "@/features/roles/views/RoleManager.vue";
 
 const routes = [
   {
@@ -240,11 +244,44 @@ const routes = [
   {
     path: "/kpi-review",
     name: "KpiReviewList",
-    component: () => import("@/features/evaluation/views/KpiReviewList.vue"),
+    component: KpiReviewList,
     meta: {
       requiresAuth: true,
       permissions: [
         { action: RBAC_ACTIONS.VIEW, resource: RBAC_RESOURCES.KPI_REVIEW },
+      ],
+    },
+  },
+  {
+    path: "/admin/create-department",
+    name: "AdminCreateDepartment",
+    component: DepartmentCreateForm,
+    meta: {
+      requiresAuth: true,
+      permissions: [
+        { action: RBAC_ACTIONS.MANAGE, resource: RBAC_RESOURCES.ADMIN },
+      ],
+    },
+  },
+  {
+    path: "/admin/create-section",
+    name: "AdminCreateSection",
+    component: SectionCreateForm,
+    meta: {
+      requiresAuth: true,
+      permissions: [
+        { action: RBAC_ACTIONS.MANAGE, resource: RBAC_RESOURCES.ADMIN },
+      ],
+    },
+  },
+  {
+    path: "/admin/create-role",
+    name: "AdminCreateRole",
+    component: RoleManager,
+    meta: {
+      requiresAuth: true,
+      permissions: [
+        { action: RBAC_ACTIONS.MANAGE, resource: RBAC_RESOURCES.ADMIN },
       ],
     },
   },

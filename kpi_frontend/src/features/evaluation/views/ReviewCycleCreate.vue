@@ -213,7 +213,6 @@ onMounted(() => {
 
 <style scoped>
 .review-cycle-create-page {
-  max-width: 500px;
   margin: 0 auto;
   padding: 32px 0;
 }

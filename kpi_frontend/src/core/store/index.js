@@ -1,15 +1,16 @@
 import { createStore } from "vuex";
-import kpis from "../../features/kpi/store/kpis";
-import departments from "../../features/organization/store/departments";
-import perspectives from "../../features/kpi/store/perspectives";
-import employees from "../../features/employees/store/employees";
-import kpiValues from "../../features/kpi/store/kpiValues";
-import sections from "../../features/organization/store/sections";
-import auth from "../../features/auth/store/auth";
-import notifications from "../../features/notifications/store/notifications";
-import dashboard from "../../features/dashboard/store/dashboard";
-import reports from "../../features/reports/store/report";
+import kpis from "@/features/kpi/store/kpis";
+import departments from "@/features/departments/store/departments";
+import perspectives from "@/features/kpi/store/perspectives";
+import employees from "@/features/employees/store/employees";
+import kpiValues from "@/features/kpi/store/kpiValues";
+import sections from "@/features/sections/store/sections";
+import auth from "@/features/auth/store/auth";
+import notifications from "@/features/notifications/store/notifications";
+import dashboard from "@/features/dashboard/store/dashboard";
+import reports from "@/features/reports/store/report";
 import myKpiReviews from "@/features/evaluation/store/myKpiReviews";
+import roles from "@/features/roles/store/roles"; 
 
 const store = createStore({
   modules: {
@@ -22,8 +23,9 @@ const store = createStore({
     perspectives,
     employees,
     kpiValues,
-    reports, // <-- Thêm module reports
+    reports, 
     myKpiReviews,
+    roles,
   },
 });
 

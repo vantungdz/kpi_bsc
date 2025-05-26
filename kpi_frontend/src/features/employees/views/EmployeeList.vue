@@ -38,38 +38,38 @@
       </a-upload>
     </a-modal>
     <a-modal :open="isAddEditModalVisible" :title="editEmployee ? $t('editEmployee') : $t('addEmployee')"
-      @ok="handleAddEditEmployee" @cancel="closeAddEditModal" :confirm-loading="savingEmployee" destroyOnClose>
-      <a-form :model="employeeForm" layout="vertical">
-        <a-form-item :label="$t('username')">
+      @ok="submitAddEditEmployeeForm" @cancel="closeAddEditModal" :confirm-loading="savingEmployee" destroyOnClose>
+      <a-form ref="addEditEmployeeFormRef" :model="employeeForm" layout="vertical">
+        <a-form-item :label="$t('username')" :rules="[{ required: true, message: $t('usernameRequired') }]">
           <a-input v-model:value="employeeForm.username" :disabled="!!editEmployee" />
         </a-form-item>
-        <a-form-item :label="$t('email')">
+        <a-form-item :label="$t('email')" :rules="[{ required: true, type: 'email', message: $t('emailRequired') }]">
           <a-input v-model:value="employeeForm.email" />
         </a-form-item>
-        <a-form-item :label="$t('firstName')">
+        <a-form-item :label="$t('firstName')" :rules="[{ required: true, message: $t('firstNameRequired') }]">
           <a-input v-model:value="employeeForm.first_name" />
         </a-form-item>
-        <a-form-item :label="$t('lastName')">
+        <a-form-item :label="$t('lastName')" :rules="[{ required: true, message: $t('lastNameRequired') }]">
           <a-input v-model:value="employeeForm.last_name" />
         </a-form-item>
-        <a-form-item :label="$t('role')">
+        <a-form-item :label="$t('role')" :rules="[{ required: true, message: $t('roleRequired') }]">
           <a-select v-model:value="employeeForm.role">
             <a-select-option v-for="role in roles" :key="role.value" :value="role.value">{{ $t(role.label)
               }}</a-select-option>
           </a-select>
         </a-form-item>
-        <a-form-item :label="$t('departmentLabel')">
+        <a-form-item :label="$t('departmentLabel')" :rules="[{ required: true, message: $t('departmentRequired') }]">
           <a-select v-model:value="employeeForm.departmentId" allow-clear>
             <a-select-option v-for="dept in departmentList" :key="dept.id" :value="dept.id">{{ dept.name
               }}</a-select-option>
           </a-select>
         </a-form-item>
-        <a-form-item :label="$t('section')">
+        <a-form-item :label="$t('section')" :rules="[{ required: true, message: $t('sectionRequired') }]">
           <a-select v-model:value="employeeForm.sectionId" allow-clear>
             <a-select-option v-for="sec in sectionListForForm" :key="sec.id" :value="sec.id">{{ sec.name }}</a-select-option>
           </a-select>
         </a-form-item>
-        <a-form-item v-if="!editEmployee" :label="$t('password')">
+        <a-form-item v-if="!editEmployee" :label="$t('password')" :rules="[{ required: true, message: $t('passwordRequired') }]">
           <a-input-password v-model:value="employeeForm.password" />
         </a-form-item>
       </a-form>
@@ -351,6 +351,15 @@ const openEditModal = (employee) => {
 const closeAddEditModal = () => {
   isAddEditModalVisible.value = false;
   editEmployee.value = null;
+};
+const addEditEmployeeFormRef = ref();
+
+const submitAddEditEmployeeForm = () => {
+  addEditEmployeeFormRef.value?.validate().then(() => {
+    handleAddEditEmployee();
+  }).catch(() => {
+    // Validation failed, do nothing
+  });
 };
 const handleAddEditEmployee = async () => {
   savingEmployee.value = true;

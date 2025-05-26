@@ -21,21 +21,76 @@ export class KpiReviewService {
     private readonly kpiValueRepository: Repository<KpiValue>,
   ) {}
 
-  async getKpiReviews(filter: any, managerId?: number): Promise<KpiReview[]> {
-    // Nếu có managerId, chỉ lấy các review của nhân viên thuộc quyền quản lý
-    if (managerId) {
-      // Lấy danh sách employeeIds mà manager này quản lý (bao gồm section, department, hoặc trực tiếp)
-      // Giả sử có hàm getManagedEmployeeIds(managerId) trả về mảng id
-      const employeeIds = await this.getManagedEmployeeIds(managerId);
+  async getKpiReviews(filter: any, reqUser?: any): Promise<KpiReview[]> {
+    // Nếu có user truyền vào, lọc theo quyền
+    if (reqUser) {
+      // Always extract role as string
+      const role = typeof reqUser.role === 'string' ? reqUser.role : reqUser.role?.name;
+      // List of statuses that are considered 'submitted' or further
+      const allowedStatuses = [
+        ReviewStatus.SELF_REVIEWED,
+        ReviewStatus.SECTION_REVIEWED,
+        ReviewStatus.DEPARTMENT_REVIEWED,
+        ReviewStatus.MANAGER_REVIEWED,
+        ReviewStatus.EMPLOYEE_FEEDBACK,
+        ReviewStatus.COMPLETED,
+        ReviewStatus.DEPARTMENT_REVIEW_PENDING,
+      ];
+      if (role === 'section') {
+        // Lấy tất cả employee thuộc section/department mà section này quản lý
+        const employees = await this.kpiReviewRepository.manager.find(Employee, {
+          where: {
+            sectionId: reqUser.sectionId,
+            departmentId: reqUser.departmentId,
+          },
+        });
+        const employeeIds = employees.map((e) => e.id);
+        return this.kpiReviewRepository.find({
+          where: {
+            ...filter,
+            employee: employeeIds.length ? { id: In(employeeIds) } : undefined,
+            status: In(allowedStatuses),
+          },
+          relations: ['kpi', 'employee', 'department', 'section'],
+        });
+      }
+      if (role === 'department') {
+        // Lấy tất cả employee thuộc department mà department này quản lý
+        const employees = await this.kpiReviewRepository.manager.find(Employee, {
+          where: {
+            departmentId: reqUser.departmentId,
+          },
+        });
+        const employeeIds = employees.map((e) => e.id);
+        return this.kpiReviewRepository.find({
+          where: {
+            ...filter,
+            employee: employeeIds.length ? { id: In(employeeIds) } : undefined,
+            status: In(allowedStatuses),
+          },
+          relations: ['kpi', 'employee', 'department', 'section'],
+        });
+      }
+      if (role === 'manager' || role === 'admin') {
+        // Trả về tất cả review đã gửi (not PENDING)
+        return this.kpiReviewRepository.find({
+          where: {
+            ...filter,
+            status: In(allowedStatuses),
+          },
+          relations: ['kpi', 'employee', 'department', 'section'],
+        });
+      }
+      // Employee chỉ xem review của chính mình
       return this.kpiReviewRepository.find({
         where: {
           ...filter,
-          employee: employeeIds.length ? { id: In(employeeIds) } : undefined,
+          employee: { id: reqUser.id },
         },
         relations: ['kpi', 'employee', 'department', 'section'],
       });
     }
-    // Nếu không truyền managerId, lấy tất cả theo filter
+    // Nếu không truyền user, lấy tất cả theo filter
     return this.kpiReviewRepository.find({
       where: filter,
       relations: ['kpi', 'employee', 'department', 'section'],
@@ -174,8 +229,16 @@ export class KpiReviewService {
   ) {
     const review = await this.kpiReviewRepository.findOne({
       where: { id: body.reviewId },
+      relations: ['section'],
     });
     if (!review) throw new Error('Review not found');
+    // Nếu review gắn với section, không cho phép section đó tự duyệt
+    if (review.section && review.section.id) {
+      // Lấy thông tin user section đang duyệt
+      if (review.section.id === sectionUserId) {
+        throw new Error('Section không được tự duyệt review do chính section mình tạo ra. Chỉ cấp trên mới được duyệt.');
+      }
+    }
     // Chỉ cho phép section duyệt khi status là SELF_REVIEWED
     if (review.status !== ReviewStatus.SELF_REVIEWED) {
       throw new Error('Chỉ được duyệt khi đã tự đánh giá');
@@ -187,7 +250,7 @@ export class KpiReviewService {
     return review;
   }
 
-  // Department review
+  // Department review (skip-level approval supported)
   async submitDepartmentReview(
     departmentUserId: number,
     body: {
@@ -200,24 +263,23 @@ export class KpiReviewService {
       where: { id: body.reviewId },
     });
     if (!review) throw new Error('Review not found');
-    // Chỉ cho phép department duyệt khi status là SECTION_REVIEWED hoặc SELF_REVIEWED (nếu không có section)
-    if (
-      ![ReviewStatus.SECTION_REVIEWED, ReviewStatus.SELF_REVIEWED].includes(
-        review.status,
-      )
-    ) {
-      throw new Error(
-        'Chỉ được duyệt khi đã qua bước section hoặc tự đánh giá',
-      );
+    // Cho phép department duyệt nếu status là SELF_REVIEWED, SECTION_REVIEWED, hoặc DEPARTMENT_REVIEWED (skip-level)
+    if (![
+      ReviewStatus.SELF_REVIEWED,
+      ReviewStatus.SECTION_REVIEWED,
+      ReviewStatus.DEPARTMENT_REVIEWED,
+    ].includes(review.status)) {
+      throw new Error('Chỉ được duyệt khi đã qua bước tự đánh giá hoặc section hoặc department');
     }
     review.departmentScore = body.departmentScore;
     review.departmentComment = body.departmentComment;
+    // Nếu đã có department review, giữ nguyên status, nếu không thì chuyển sang DEPARTMENT_REVIEWED
     review.status = ReviewStatus.DEPARTMENT_REVIEWED;
     await this.kpiReviewRepository.save(review);
     return review;
   }
 
-  // Manager review
+  // Manager review (skip-level approval supported)
   async submitManagerReview(
     managerUserId: number,
     body: {
@@ -230,37 +292,104 @@ export class KpiReviewService {
       where: { id: body.reviewId },
     });
     if (!review) throw new Error('Review not found');
-    // Chỉ cho phép manager duyệt khi status là DEPARTMENT_REVIEWED hoặc SECTION_REVIEWED/SELF_REVIEWED (nếu không có cấp dưới)
-    if (
-      ![
-        ReviewStatus.DEPARTMENT_REVIEWED,
-        ReviewStatus.SECTION_REVIEWED,
-        ReviewStatus.SELF_REVIEWED,
-      ].includes(review.status)
-    ) {
-      throw new Error(
-        'Chỉ được duyệt khi đã qua bước department/section/tự đánh giá',
-      );
+    // Cho phép manager duyệt nếu status là SELF_REVIEWED, SECTION_REVIEWED, DEPARTMENT_REVIEWED, hoặc MANAGER_REVIEWED (skip-level)
+    if (![
+      ReviewStatus.SELF_REVIEWED,
+      ReviewStatus.SECTION_REVIEWED,
+      ReviewStatus.DEPARTMENT_REVIEWED,
+      ReviewStatus.MANAGER_REVIEWED,
+    ].includes(review.status)) {
+      throw new Error('Chỉ được duyệt khi đã qua bước tự đánh giá, section, department hoặc manager');
     }
     review.managerScore = body.managerScore;
     review.managerComment = body.managerComment;
-    review.status = ReviewStatus.MANAGER_REVIEWED;
+    // Sau khi manager duyệt, chuyển sang EMPLOYEE_FEEDBACK
+    review.status = ReviewStatus.EMPLOYEE_FEEDBACK;
     await this.kpiReviewRepository.save(review);
     return review;
   }
 
-  // Hoàn thành review (chuyển trạng thái COMPLETED)
+  // Nhân viên feedback
+  async submitEmployeeFeedback(
+    employeeId: number,
+    body: { reviewId: number; employeeFeedback: string },
+  ) {
+    const review = await this.kpiReviewRepository.findOne({
+      where: { id: body.reviewId, employee: { id: employeeId } },
+    });
+    if (!review) throw new Error('Review not found');
+    if (review.status !== ReviewStatus.EMPLOYEE_FEEDBACK) {
+      throw new Error('Chỉ feedback khi trạng thái là EMPLOYEE_FEEDBACK');
+    }
+    review.employeeFeedback = body.employeeFeedback;
+    review.status = ReviewStatus.MANAGER_REVIEWED; // Chờ quản lý xác nhận hoàn thành
+    await this.kpiReviewRepository.save(review);
+    return review;
+  }
+
+  // Quản lý xác nhận hoàn thành
   async completeReview(reviewId: number, userId: number) {
     const review = await this.kpiReviewRepository.findOne({
       where: { id: reviewId },
     });
     if (!review) throw new Error('Review not found');
-    // Chỉ cho phép hoàn thành khi đã manager review
     if (review.status !== ReviewStatus.MANAGER_REVIEWED) {
-      throw new Error('Chỉ hoàn thành khi đã được manager review');
+      throw new Error('Chỉ hoàn thành khi đã feedback và chờ xác nhận');
     }
     review.status = ReviewStatus.COMPLETED;
     await this.kpiReviewRepository.save(review);
     return review;
+  }
+
+  async getKpisForReview(filter: any, managerId?: number): Promise<KpiReview[]> {
+    const reviews = await this.kpiReviewRepository.find({
+      where: filter,
+      relations: ['kpi', 'employee', 'department', 'section'],
+    });
+
+    // Fetch selfComment and selfScore for each review
+    for (const review of reviews) {
+      const selfReview = await this.kpiReviewRepository.findOne({
+        where: {
+          kpi: { id: review.kpi.id },
+          employee: { id: review.employee.id },
+          status: ReviewStatus.SELF_REVIEWED,
+        },
+      });
+      if (selfReview) {
+        review.selfComment = selfReview.selfComment;
+        review.selfScore = selfReview.selfScore;
+      }
+
+      // Update status for department role
+      if (managerId && review.status === ReviewStatus.SECTION_REVIEWED) {
+        review.status = ReviewStatus.DEPARTMENT_REVIEW_PENDING;
+      }
+    }
+
+    return reviews;
+  }
+
+  async mergeDuplicateReviews(kpiId: number, cycle: string): Promise<void> {
+    const reviews = await this.kpiReviewRepository.find({
+      where: { kpi: { id: kpiId }, cycle },
+    });
+
+    if (reviews.length > 1) {
+      const mergedReview = reviews.reduce((acc, review) => {
+        acc.selfScore = acc.selfScore || review.selfScore;
+        acc.selfComment = acc.selfComment || review.selfComment;
+        acc.sectionScore = acc.sectionScore || review.sectionScore;
+        acc.sectionComment = acc.sectionComment || review.sectionComment;
+        acc.departmentScore = acc.departmentScore || review.departmentScore;
+        acc.departmentComment = acc.departmentComment || review.departmentComment;
+        return acc;
+      }, reviews[0]);
+
+      await this.kpiReviewRepository.save(mergedReview);
+      for (let i = 1; i < reviews.length; i++) {
+        await this.kpiReviewRepository.delete(reviews[i].id);
+      }
+    }
   }
 }

@@ -30,6 +30,12 @@ export class Section {
   @OneToMany(() => Employee, (employee) => employee.section)
   employees: Employee[];
 
+  @ManyToOne(() => Employee, { nullable: true })
+  manager: Employee;
+
+  @Column({ nullable: true })
+  managerId: number;
+
   @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
   created_at: Date;
 
