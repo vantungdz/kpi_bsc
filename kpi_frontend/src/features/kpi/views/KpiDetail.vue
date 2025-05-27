@@ -1110,11 +1110,9 @@ const modalFilterAssignableSections = computed(() => {
 });
 
 const isCompanyOverviewMode = computed(() => {
-  const roleOk =
-    effectiveRole.value === "admin" || effectiveRole.value === "manager";
   const noDeptContext = !contextDepartmentId.value;
   const noSectionContext = !contextSectionId.value;
-  return roleOk && noDeptContext && noSectionContext;
+  return noDeptContext && noSectionContext;
 });
 
 const contextSectionId = computed(() => {
@@ -1138,7 +1136,25 @@ const toggleStatusError = computed(
   () => store.getters["kpis/toggleKpiStatusError"]
 );
 const actualUser = computed(() => store.getters["auth/user"]);
-const effectiveRole = computed(() => store.getters["auth/effectiveRole"]);
+const effectiveRole = computed(() => {
+  const userRoles = currentUser.value?.roles || [];
+
+  // Logic để xác định role hiệu lực (effective role)
+  if (userRoles.some((role) => role.name === "admin")) {
+    return "admin";
+  }
+  if (userRoles.some((role) => role.name === "manager")) {
+    return "manager";
+  }
+  if (userRoles.some((role) => role.name === "department")) {
+    return "department";
+  }
+  if (userRoles.some((role) => role.name === "section")) {
+    return "section";
+  }
+
+  return null; // Không có role phù hợp
+});
 const loadingDepartmentSectionAssignments = computed(
   () => store.getters["kpis/isLoadingDepartmentSectionAssignments"] || false
 );

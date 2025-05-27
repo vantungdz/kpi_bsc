@@ -240,14 +240,6 @@
             >
               <key-outlined /> {{ $t("resetPassword") }}
             </a-button>
-            <a-button
-              type="link"
-              size="small"
-              @click="viewReviewHistory(record)"
-            >
-              <history-outlined />
-              {{ $t("reviewHistory") }}
-            </a-button>
           </a-space>
         </template>
         <template
@@ -360,7 +352,6 @@ import {
 } from "ant-design-vue";
 import {
   UploadOutlined,
-  HistoryOutlined,
   EyeOutlined,
   EditOutlined,
   DeleteOutlined,
@@ -373,12 +364,10 @@ import {
   ClusterOutlined,
   CalendarOutlined,
 } from "@ant-design/icons-vue";
-import { useRouter } from "vue-router";
 import { RBAC_ACTIONS, RBAC_RESOURCES } from "@/core/constants/rbac.constants";
 
 const { t: $t } = useI18n();
 const store = useStore();
-const router = useRouter();
 const userPermissions = computed(
   () => store.getters["auth/user"]?.permissions || []
 );
@@ -847,12 +836,6 @@ const exportExcel = async () => {
     document.body.removeChild(a);
   }, 100);
   notification.success({ message: $t("exportExcelSuccess") });
-};
-const viewReviewHistory = (employee) => {
-  router.push({
-    name: "ReviewHistory",
-    params: { targetType: "employee", targetId: employee.id },
-  });
 };
 onMounted(async () => {
   await store.dispatch("employees/fetchUsers", { force: true });

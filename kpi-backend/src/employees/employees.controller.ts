@@ -151,6 +151,17 @@ export class EmployeesController {
     return this.employeeService.updateRoles(id, [role]);
   }
 
+  @Patch(':id/reset-password')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @ApiOperation({ summary: 'Reset employee password' })
+  async resetPassword(
+    @Param('id', ParseIntPipe) id: number,
+    @Body('newPassword') newPassword?: string,
+  ): Promise<{ message: string }> {
+    await this.employeeService.resetPassword(id, newPassword);
+    return { message: 'Password reset successfully.' };
+  }
+
   @Patch(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @ApiOperation({ summary: 'Update employee info' })

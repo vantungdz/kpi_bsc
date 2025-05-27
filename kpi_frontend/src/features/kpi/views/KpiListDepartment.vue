@@ -476,7 +476,7 @@ const departmentGroups = computed(() => {
     if (!kpi || !kpi.assignments) return;
 
     const kpiDetails = {
-      /* ... giữ nguyên logic lấy kpiDetails ... */ kpiId: kpi.id,
+      kpiId: kpi.id,
       kpiName: kpi.name,
       kpiUnit: kpi.unit || "",
       kpiStartDate: kpi.start_date,
@@ -488,88 +488,92 @@ const departmentGroups = computed(() => {
       perspectiveName: kpi.perspective ? kpi.perspective.name : "Uncategorized",
     };
 
-    kpi.assignments.forEach((assignment) => {
-      const assignmentDepartmentId =
-        assignment.assigned_to_department || assignment.section?.department_id;
+    // Lấy assignment chính: ưu tiên assignment không có assigned_to_section, nếu không có thì lấy assignment đầu tiên
+    let mainAssignment =
+      kpi.assignments.find(
+        (a) => !a.assigned_to_section && a.status === "APPROVED"
+      ) || kpi.assignments.find((a) => a.status === "APPROVED");
 
-      if (!assignmentDepartmentId) {
-        console.warn(
-          "LOG (WARN): Assignment không xác định được Department ID:",
-          assignment
-        );
-        return;
-      }
+    if (!mainAssignment) return;
 
-      if (currentFilterDepartmentId && currentFilterDepartmentId !== "") {
-        const filterIdNumber = parseInt(currentFilterDepartmentId, 10);
-        if (
-          !isNaN(filterIdNumber) &&
-          assignmentDepartmentId !== filterIdNumber
-        ) {
-          return;
-        }
-      }
+    const assignmentDepartmentId =
+      mainAssignment.assigned_to_department ||
+      mainAssignment.section?.department_id;
 
-      const assignedDepartment = allDepartments.find(
-        (d) => d.id === assignmentDepartmentId
+    if (!assignmentDepartmentId) {
+      console.warn(
+        "LOG (WARN): Assignment không xác định được Department ID:",
+        mainAssignment
       );
+      return;
+    }
 
-      if (!assignedDepartment) {
-        console.warn(
-          `LOG (WARN): Không tìm thấy thông tin Department ID ${assignmentDepartmentId} trong danh sách department:`,
-          assignment
-        );
+    if (currentFilterDepartmentId && currentFilterDepartmentId !== "") {
+      const filterIdNumber = parseInt(currentFilterDepartmentId, 10);
+      if (!isNaN(filterIdNumber) && assignmentDepartmentId !== filterIdNumber) {
         return;
       }
+    }
 
-      const departmentName = assignedDepartment.name;
-      const perspectiveKey = `${kpiDetails.perspectiveId}. ${kpiDetails.perspectiveName}`;
+    const assignedDepartment = allDepartments.find(
+      (d) => d.id === assignmentDepartmentId
+    );
 
-      if (!groupedData[assignmentDepartmentId]) {
-        groupedData[assignmentDepartmentId] = {
-          department: departmentName,
-          data: {},
-          actualSum: 0,
-        };
-      }
+    if (!assignedDepartment) {
+      console.warn(
+        `LOG (WARN): Không tìm thấy thông tin Department ID ${assignmentDepartmentId} trong danh sách department:`,
+        mainAssignment
+      );
+      return;
+    }
 
-      if (!groupedData[assignmentDepartmentId].data[perspectiveKey]) {
-        groupedData[assignmentDepartmentId].data[perspectiveKey] = [];
-      }
+    const departmentName = assignedDepartment.name;
+    const perspectiveKey = `${kpiDetails.perspectiveId}. ${kpiDetails.perspectiveName}`;
 
-      let assignToDisplay = departmentName;
-      if (assignment.assigned_to_section && assignment.section) {
-        assignToDisplay = assignment.section.name;
-      } else if (assignment.assigned_to_employee && assignment.employee) {
-        assignToDisplay = assignment.employee.name;
-      }
-
-      // Use the aggregated actual_value from the KPI for the actual field
-      const actualValue =
-        kpi.actual_value !== undefined && kpi.actual_value !== null
-          ? parseFloat(kpi.actual_value) || 0
-          : 0;
-
-      const rowData = {
-        key: `assignment-${assignment.id}`,
-        departmentId: assignmentDepartmentId,
-        kpiId: kpiDetails.kpiId,
-        kpiName: kpiDetails.kpiName,
-        perspectiveName: kpiDetails.perspectiveName,
-        assignTo: assignToDisplay,
-        startDate: kpiDetails.kpiStartDate,
-        endDate: kpiDetails.kpiEndDate,
-        weight: kpiDetails.kpiWeight,
-        target: assignment.targetValue || "0",
-        actual: actualValue.toString(),
-        unit: kpiDetails.kpiUnit,
-        status: assignment.status || "Unknown",
+    if (!groupedData[assignmentDepartmentId]) {
+      groupedData[assignmentDepartmentId] = {
+        department: departmentName,
+        data: {},
+        actualSum: 0,
       };
+    }
 
-      groupedData[assignmentDepartmentId].data[perspectiveKey].push(rowData);
+    if (!groupedData[assignmentDepartmentId].data[perspectiveKey]) {
+      groupedData[assignmentDepartmentId].data[perspectiveKey] = [];
+    }
 
-      groupedData[assignmentDepartmentId].actualSum += actualValue;
-    });
+    let assignToDisplay = departmentName;
+    if (mainAssignment.assigned_to_section && mainAssignment.section) {
+      assignToDisplay = mainAssignment.section.name;
+    } else if (mainAssignment.assigned_to_employee && mainAssignment.employee) {
+      assignToDisplay = mainAssignment.employee.name;
+    }
+
+    // Use the aggregated actual_value from the KPI for the actual field
+    const actualValue =
+      mainAssignment.latest_actual_value !== undefined &&
+      mainAssignment.latest_actual_value !== null
+        ? parseFloat(mainAssignment.latest_actual_value) || 0
+        : 0;
+
+    const rowData = {
+      key: `assignment-${mainAssignment.id}`,
+      departmentId: assignmentDepartmentId,
+      kpiId: kpiDetails.kpiId,
+      kpiName: kpiDetails.kpiName,
+      perspectiveName: kpiDetails.perspectiveName,
+      assignTo: assignToDisplay,
+      startDate: kpiDetails.kpiStartDate,
+      endDate: kpiDetails.kpiEndDate,
+      weight: kpiDetails.kpiWeight,
+      target: mainAssignment.targetValue || "0",
+      actual: actualValue.toString(),
+      unit: kpiDetails.kpiUnit,
+      status: mainAssignment.status || "Unknown",
+    };
+
+    groupedData[assignmentDepartmentId].data[perspectiveKey].push(rowData);
+    groupedData[assignmentDepartmentId].actualSum += actualValue;
   });
 
   const finalGroupedArray = Object.values(groupedData).map((deptGroup) => {
@@ -580,11 +584,9 @@ const departmentGroups = computed(() => {
         return sortedMap;
       }, {});
 
-    // Update actualSum to sum of kpi.actual_value for KPIs in this department group
     const actualSum = Object.values(deptGroup.data)
       .flat()
       .reduce((sum, row) => {
-        // row.actual is string, convert to float
         const actualVal = parseFloat(row.actual) || 0;
         return sum + actualVal;
       }, 0);

@@ -408,6 +408,17 @@ export class EmployeesService {
     return employee;
   }
 
+  async resetPassword(id: number, newPassword?: string): Promise<Employee> {
+    const employee = await this.employeeRepository.findOneBy({ id });
+    if (!employee) throw new NotFoundException('Employee not found');
+    // Nếu không truyền newPassword thì tạo random hoặc dùng mặc định
+    const password = newPassword || Math.random().toString(36).slice(-8);
+    const hashed = await bcrypt.hash(password, 10);
+    employee.password = hashed;
+    await this.employeeRepository.save(employee);
+    return employee;
+  }
+
   async updateEmployee(
     id: number,
     updateDto: Partial<Employee & { roles?: (string | number)[] }>,
