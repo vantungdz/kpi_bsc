@@ -57,7 +57,7 @@
 </template>
 
 <script setup>
-import { computed, watch } from "vue";
+import { computed } from "vue";
 import { h } from "vue";
 import { useI18n } from "vue-i18n";
 import { useCurrentLocale, setLocale } from "@/core/i18n";
@@ -96,11 +96,6 @@ const currentLanguageDisplay = computed(() => {
   // Điều này không nên xảy ra nếu locale được quản lý đúng cách
   const fallbackLang = availableLanguages[0]; // Hoặc một ngôn ngữ mặc định cụ thể
   return { ...fallbackLang, name: $t(fallbackLang.nameKey) };
-});
-
-watch(currentLocale, (newLocale) => {
-  console.log("Language changed to:", newLocale);
-  // Removed force update logic as it caused errors
 });
 
 const isUserAuthenticated = computed(
@@ -197,9 +192,7 @@ const handleLogout = () => {
 };
 
 function changeLanguage(lang) {
-  console.log("Changing language to:", lang);
   setLocale(lang);
-  console.log("Current locale after change:", currentLocale.value);
 }
 </script>
 

@@ -1,23 +1,23 @@
 <template>
   <div class="review-cycle-create-page">
-    <h2>Tạo chu kỳ đánh giá KPI</h2>
+    <h2>{{ $t('reviewCycle.createTitle') }}</h2>
     <a-form layout="vertical" :model="form" @submit.prevent="handleSubmit">
-      <a-form-item label="Tên chu kỳ" required>
+      <a-form-item :label="$t('reviewCycle.name')" required>
         <a-input
           v-model:value="form.name"
-          placeholder="Nhập tên chu kỳ (ví dụ: Quý 2/2025)"
+          :placeholder="$t('reviewCycle.namePlaceholder')"
         />
       </a-form-item>
-      <a-form-item label="Ngày bắt đầu" required>
+      <a-form-item :label="$t('reviewCycle.startDate')" required>
         <a-date-picker v-model:value="form.startDate" style="width: 100%" />
       </a-form-item>
-      <a-form-item label="Ngày kết thúc" required>
+      <a-form-item :label="$t('reviewCycle.endDate')" required>
         <a-date-picker v-model:value="form.endDate" style="width: 100%" />
       </a-form-item>
       <a-form-item>
-        <a-button type="primary" @click="handleSubmit" :loading="loading"
-          >Tạo chu kỳ</a-button
-        >
+        <a-button type="primary" @click="handleSubmit" :loading="loading">
+          {{ $t('reviewCycle.createButton') }}
+        </a-button>
       </a-form-item>
       <a-alert
         v-if="successMessage"
@@ -37,7 +37,7 @@
       />
     </a-form>
 
-    <h3 style="margin-top: 40px">Danh sách chu kỳ đã tạo</h3>
+    <h3 style="margin-top: 40px">{{ $t('reviewCycle.listTitle') }}</h3>
     <a-table
       :data-source="cycles"
       :columns="columns"
@@ -49,16 +49,16 @@
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'actions'">
           <a-space>
-            <a-button size="small" type="primary" @click="editCycle(record)"
-              >Sửa</a-button
-            >
+            <a-button size="small" type="primary" @click="editCycle(record)">
+              {{ $t('common.edit') }}
+            </a-button>
             <a-popconfirm
-              title="Bạn chắc chắn muốn xoá chu kỳ này?"
+              :title="$t('reviewCycle.confirmDelete')"
               @confirm="deleteCycle(record.id)"
-              ok-text="Xoá"
-              cancel-text="Huỷ"
+              :ok-text="$t('common.delete')"
+              :cancel-text="$t('common.cancel')"
             >
-              <a-button size="small" danger>Xoá</a-button>
+              <a-button size="small" danger>{{ $t('common.delete') }}</a-button>
             </a-popconfirm>
           </a-space>
         </template>
@@ -66,22 +66,22 @@
     </a-table>
     <a-modal
       v-model:open="editing"
-      title="Sửa chu kỳ đánh giá"
+      :title="$t('reviewCycle.editTitle')"
       @ok="submitEdit"
       @cancel="cancelEdit"
       :confirm-loading="loadingEdit"
     >
       <a-form layout="vertical">
-        <a-form-item label="Tên chu kỳ" required>
+        <a-form-item :label="$t('reviewCycle.name')" required>
           <a-input v-model:value="editForm.name" />
         </a-form-item>
-        <a-form-item label="Ngày bắt đầu" required>
+        <a-form-item :label="$t('reviewCycle.startDate')" required>
           <a-date-picker
             v-model:value="editForm.startDate"
             style="width: 100%"
           />
         </a-form-item>
-        <a-form-item label="Ngày kết thúc" required>
+        <a-form-item :label="$t('reviewCycle.endDate')" required>
           <a-date-picker v-model:value="editForm.endDate" style="width: 100%" />
         </a-form-item>
       </a-form>
@@ -90,9 +90,12 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from "vue";
+import { ref, onMounted, computed } from "vue";
 import apiClient from "@/core/services/api";
 import dayjs from "dayjs";
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 const form = ref({ name: "", startDate: null, endDate: null });
 const loading = ref(false);
@@ -102,22 +105,22 @@ const errorMessage = ref("");
 const cycles = ref([]);
 const loadingCycles = ref(false);
 
-const columns = [
-  { title: "Tên chu kỳ", dataIndex: "name", key: "name" },
+const columns = computed(() => [
+  { title: t('reviewCycle.name'), dataIndex: "name", key: "name" },
   {
-    title: "Ngày bắt đầu",
+    title: t('reviewCycle.startDate'),
     dataIndex: "startDate",
     key: "startDate",
     customRender: ({ text }) => (text ? dayjs(text).format("YYYY-MM-DD") : ""),
   },
   {
-    title: "Ngày kết thúc",
+    title: t('reviewCycle.endDate'),
     dataIndex: "endDate",
     key: "endDate",
     customRender: ({ text }) => (text ? dayjs(text).format("YYYY-MM-DD") : ""),
   },
-  { title: "Hành động", key: "actions" },
-];
+  { title: t('common.actions'), key: "actions" },
+]);
 
 const fetchCycles = async () => {
   loadingCycles.value = true;
@@ -133,7 +136,7 @@ const fetchCycles = async () => {
 
 const handleSubmit = async () => {
   if (!form.value.name || !form.value.startDate || !form.value.endDate) {
-    errorMessage.value = "Vui lòng nhập đầy đủ thông tin.";
+    errorMessage.value = t('reviewCycle.missingFields');
     return;
   }
   loading.value = true;
@@ -144,11 +147,11 @@ const handleSubmit = async () => {
       startDate: form.value.startDate,
       endDate: form.value.endDate,
     });
-    successMessage.value = "Tạo chu kỳ đánh giá thành công!";
+    successMessage.value = t('reviewCycle.createSuccess');
     form.value = { name: "", startDate: null, endDate: null };
     fetchCycles();
   } catch (e) {
-    errorMessage.value = e?.response?.data?.message || "Tạo chu kỳ thất bại.";
+    errorMessage.value = e?.response?.data?.message || t('reviewCycle.createError');
   } finally {
     loading.value = false;
   }

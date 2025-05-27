@@ -25,11 +25,14 @@ export class NotificationGateway implements OnGatewayConnection, OnGatewayDiscon
 
   handleConnection(client: Socket) {
     this.logger.log(`Client connected: ${client.id}`);
+    this.logger.log(`Handshake details: ${JSON.stringify(client.handshake)}`);
     // Optionally, join user-specific room if userId is provided
     const { userId } = client.handshake.query;
     if (userId) {
       client.join(`user_${userId}`);
       this.logger.log(`Client ${client.id} joined room user_${userId}`);
+    } else {
+      this.logger.warn(`Client ${client.id} connected without userId`);
     }
   }
 

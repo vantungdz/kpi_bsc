@@ -214,15 +214,11 @@ function hasPermission(action, resource) {
 }
 const canViewKpiReview = computed(
   () =>
-    hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.KPI_VALUE_COMPANY) ||
-    hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.KPI_VALUE_DEPARTMENT)
+    hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.KPI_VALUE) 
 );
 const canReview = computed(
   () =>
-    hasPermission(RBAC_ACTIONS.UPDATE, RBAC_RESOURCES.KPI_VALUE_COMPANY) ||
-    hasPermission(RBAC_ACTIONS.UPDATE, RBAC_RESOURCES.KPI_VALUE_DEPARTMENT) ||
-    hasPermission(RBAC_ACTIONS.APPROVE, RBAC_RESOURCES.KPI_VALUE_COMPANY) ||
-    hasPermission(RBAC_ACTIONS.APPROVE, RBAC_RESOURCES.KPI_VALUE_DEPARTMENT)
+    hasPermission(RBAC_ACTIONS.APPROVE, RBAC_RESOURCES.KPI_VALUE)
 );
 
 onMounted(() => {

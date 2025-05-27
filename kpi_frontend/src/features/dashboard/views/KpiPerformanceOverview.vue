@@ -263,10 +263,7 @@ function hasPermission(action, resource) {
 }
 const canViewDashboard = computed(
   () =>
-    hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.DASHBOARD_COMPANY) ||
-    hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.DASHBOARD_DEPARTMENT) ||
-    hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.DASHBOARD_SECTION) ||
-    hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.DASHBOARD_EMPLOYEE)
+    hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.DASHBOARD) 
 );
 
 const performanceByRoleColumns = ref([

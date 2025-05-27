@@ -234,7 +234,7 @@ function hasPermission(action, resource) {
   );
 }
 const canCreateKpiPersonal = computed(() => hasPermission(RBAC_ACTIONS.CREATE, RBAC_RESOURCES.KPI_PERSONAL));
-const canDeleteKpiPersonal = computed(() => hasPermission(RBAC_ACTIONS.DELETE, RBAC_RESOURCES.KPI_PERSONAL));
+const canDeleteKpiPersonal = computed(() => hasPermission(RBAC_ACTIONS.DELETE, RBAC_RESOURCES.KPI));
 
 const canCreateKpi = 1; // computed(() => ['admin', 'manager', 'leader'].includes('admin'));
 const isDeleteModalVisible = ref(false);

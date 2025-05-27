@@ -46,12 +46,6 @@ export class DashboardsController {
   }
 
   @Get('statistics/kpi-awaiting-approval')
-  @Roles(
-    'kpi:view:company',
-    'kpi:view:department',
-    'kpi:view:section',
-    'kpi:view:personal',
-  )
   @ApiOperation({
     summary: 'Lấy thống kê số lượng KPI values đang chờ duyệt cho dashboard',
   })
@@ -68,12 +62,6 @@ export class DashboardsController {
   }
 
   @Get('statistics/kpi-status-over-time')
-  @Roles(
-    'kpi:view:company',
-    'kpi:view:department',
-    'kpi:view:section',
-    'kpi:view:personal',
-  )
   @ApiOperation({
     summary:
       'Lấy thống kê số lượng KPI được duyệt/từ chối trong khoảng thời gian',
@@ -98,12 +86,6 @@ export class DashboardsController {
   }
 
   @Get('statistics/average-approval-time')
-  @Roles(
-    'kpi:view:company',
-    'kpi:view:department',
-    'kpi:view:section',
-    'kpi:view:personal',
-  )
   @ApiOperation({ summary: 'Lấy thống kê thời gian duyệt KPI trung bình' })
   @ApiResponse({
     status: 200,
@@ -118,12 +100,6 @@ export class DashboardsController {
   }
 
   @Get('statistics/top-kpi-activity')
-  @Roles(
-    'kpi:view:company',
-    'kpi:view:department',
-    'kpi:view:section',
-    'kpi:view:personal',
-  )
   @ApiOperation({
     summary: 'Lấy thống kê top KPI được submit/cập nhật nhiều nhất',
   })
@@ -151,7 +127,6 @@ export class DashboardsController {
   }
 
   @Get('statistics/top-pending-approvers')
-  @Roles('kpi:view:company', 'kpi:view:department')
   @ApiOperation({
     summary: 'Lấy thống kê người dùng/bộ phận có nhiều KPI đang chờ duyệt nhất',
   })
@@ -172,7 +147,6 @@ export class DashboardsController {
   }
 
   @Get('statistics/kpi-submission-stats')
-  @Roles('kpi:view:company', 'kpi:view:department')
   @ApiOperation({
     summary: 'Lấy thống kê người dùng/bộ phận submit KPI nhiều nhất/ít nhất',
   })
@@ -234,7 +208,6 @@ export class DashboardsController {
   }
 
   @Get('statistics/kpi-performance-overview')
-  @Roles('kpi:view:company', 'kpi:view:department')
   @ApiOperation({ summary: 'Lấy tổng quan hiệu suất KPI' })
   @ApiQuery({
     name: 'daysForNotUpdated',
@@ -261,7 +234,6 @@ export class DashboardsController {
   }
 
   @Get('statistics/kpi-inventory-stats')
-  @Roles('kpi:view:company', 'kpi:view:department')
   @ApiOperation({ summary: 'Lấy tổng quan kho KPI (định nghĩa và lượt giao)' })
   @ApiResponse({
     status: 200,

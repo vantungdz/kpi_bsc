@@ -173,7 +173,7 @@ export class KpiValuesService {
 
         const submitter = await transactionalEntityManager
           .getRepository(Employee)
-          .findOne({ where: { id: userId }, relations: ['role'] });
+          .findOne({ where: { id: userId }, relations: ['roles'] });
         if (!submitter) {
           throw new UnauthorizedException('Submitter information not found.');
         }
@@ -294,7 +294,7 @@ export class KpiValuesService {
     const statusBefore = kpiValue.status;
     const user = await this.employeeRepository.findOne({
       where: { id: userId },
-      relations: ['role'],
+      relations: ['roles'],
     });
     if (!user) {
       throw new UnauthorizedException('Approving user not found.');
@@ -397,7 +397,7 @@ export class KpiValuesService {
     const statusBefore = kpiValue.status;
     const user = await this.employeeRepository.findOne({
       where: { id: userId },
-      relations: ['role'],
+      relations: ['roles'],
     });
     if (!user) throw new UnauthorizedException('Rejecting user not found.');
     const assignment =
@@ -453,11 +453,18 @@ export class KpiValuesService {
       reason,
     );
     const rejectedValue = await this.kpiValuesRepository.save(kpiValue);
-    const assignmentFound =
-      rejectedValue.kpiAssignment ??
-      (await this.kpiAssignmentRepository.findOneBy({
-        id: rejectedValue.kpi_assigment_id,
-      }));
+    console.log('Starting QueryBuilder for assignment with ID:', rejectedValue.kpi_assigment_id);
+    const assignmentFound = await this.kpiAssignmentRepository
+      .createQueryBuilder('assignment')
+      .leftJoinAndSelect('assignment.kpi', 'kpi')
+      .where('assignment.id = :id', { id: rejectedValue.kpi_assigment_id })
+      .getOne();
+    console.log('QueryBuilder executed. Result:', assignmentFound);
+    if (!assignmentFound) {
+      console.error('No assignment found for ID:', rejectedValue.kpi_assigment_id);
+    } else {
+      console.log('Assignment found with QueryBuilder:', assignmentFound);
+    }
     if (assignmentFound && assignmentFound.employee_id) {
       this.eventEmitter.emit('kpi_value.rejected_by_user', {
         kpiValue: rejectedValue,
@@ -477,7 +484,7 @@ export class KpiValuesService {
     const statusBefore = kpiValue.status;
     const user = await this.employeeRepository.findOne({
       where: { id: userId },
-      relations: ['role'],
+      relations: ['roles'],
     });
 
     if (!user) {
@@ -586,7 +593,7 @@ export class KpiValuesService {
     const statusBefore = kpiValue.status;
     const user = await this.employeeRepository.findOne({
       where: { id: userId },
-      relations: ['role'],
+      relations: ['roles'],
     });
 
     if (!user) throw new UnauthorizedException('Rejecting user not found.');
@@ -647,11 +654,18 @@ export class KpiValuesService {
       reason,
     );
     const rejectedValue = await this.kpiValuesRepository.save(kpiValue);
-    const assignmentFound =
-      rejectedValue.kpiAssignment ??
-      (await this.kpiAssignmentRepository.findOneBy({
-        id: rejectedValue.kpi_assigment_id,
-      }));
+    console.log('Starting QueryBuilder for assignment with ID:', rejectedValue.kpi_assigment_id);
+    const assignmentFound = await this.kpiAssignmentRepository
+      .createQueryBuilder('assignment')
+      .leftJoinAndSelect('assignment.kpi', 'kpi')
+      .where('assignment.id = :id', { id: rejectedValue.kpi_assigment_id })
+      .getOne();
+    console.log('QueryBuilder executed. Result:', assignmentFound);
+    if (!assignmentFound) {
+      console.error('No assignment found for ID:', rejectedValue.kpi_assigment_id);
+    } else {
+      console.log('Assignment found with QueryBuilder:', assignmentFound);
+    }
     if (assignmentFound && assignmentFound.employee_id) {
       this.eventEmitter.emit('kpi_value.rejected_by_user', {
         kpiValue: rejectedValue,
@@ -671,7 +685,7 @@ export class KpiValuesService {
     const statusBefore = kpiValue.status;
     const user = await this.employeeRepository.findOne({
       where: { id: userId },
-      relations: ['role'],
+      relations: ['roles'],
     });
 
     if (!user) {
@@ -756,7 +770,7 @@ export class KpiValuesService {
     const statusBefore = kpiValue.status;
     const user = await this.employeeRepository.findOne({
       where: { id: userId },
-      relations: ['role'],
+      relations: ['roles'],
     });
 
     if (!user) throw new UnauthorizedException('Rejecting user not found.');
@@ -818,8 +832,9 @@ export class KpiValuesService {
 
     const assignmentFound =
       rejectedValue.kpiAssignment ??
-      (await this.kpiAssignmentRepository.findOneBy({
-        id: rejectedValue.kpi_assigment_id,
+      (await this.kpiAssignmentRepository.findOne({
+        where: { id: rejectedValue.kpi_assigment_id },
+        relations: ['kpi'],
       }));
     if (assignmentFound?.employee_id) {
       this.eventEmitter.emit('kpi_value.rejected_by_user', {

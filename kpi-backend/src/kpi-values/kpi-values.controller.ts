@@ -39,11 +39,6 @@ export class KpiValuesController {
   }
 
   @Get('pending-approvals')
-  @Roles(
-    'kpi-value:approve:company',
-    'kpi-value:approve:department',
-    'kpi-value:approve:section',
-  )
   @ApiOperation({ summary: 'Lấy danh sách giá trị KPI đang chờ phê duyệt' })
   @ApiResponse({
     status: 200,
@@ -106,7 +101,6 @@ export class KpiValuesController {
   }
 
   @Post(':valueId/approve-section')
-  @Roles('kpi-value:approve:section')
   @ApiOperation({ summary: 'Section Manager/Admin phê duyệt giá trị KPI' })
   @ApiResponse({ status: 200, type: KpiValue })
   async approveBySection(
@@ -120,7 +114,6 @@ export class KpiValuesController {
   }
 
   @Post(':valueId/reject-section')
-  @Roles('kpi-value:reject:section')
   @ApiOperation({ summary: 'Section Leader/Manager/Admin từ chối giá trị KPI' })
   @ApiBody({ type: RejectValueDto })
   @ApiResponse({ status: 200, type: KpiValue })
@@ -140,7 +133,6 @@ export class KpiValuesController {
   }
 
   @Post(':valueId/approve-department')
-  @Roles('kpi-value:approve:department')
   @ApiOperation({ summary: 'Department Manager/Admin phê duyệt giá trị KPI' })
   @ApiResponse({ status: 200, type: KpiValue })
   async approveByDepartment(
@@ -154,7 +146,6 @@ export class KpiValuesController {
   }
 
   @Post(':valueId/reject-department')
-  @Roles('kpi-value:reject:department')
   @ApiOperation({ summary: 'Department Manager/Admin từ chối giá trị KPI' })
   @ApiBody({ type: RejectValueDto })
   @ApiResponse({ status: 200, type: KpiValue })
@@ -174,7 +165,6 @@ export class KpiValuesController {
   }
 
   @Post(':valueId/approve-manager')
-  @Roles('kpi-value:approve:company')
   @ApiOperation({ summary: 'Manager/Admin phê duyệt cuối cùng giá trị KPI' })
   @ApiResponse({ status: 200, type: KpiValue })
   async approveByManager(
@@ -188,7 +178,6 @@ export class KpiValuesController {
   }
 
   @Post(':valueId/reject-manager')
-  @Roles('kpi-value:reject:company')
   @ApiOperation({ summary: 'Manager/Admin từ chối cuối cùng giá trị KPI' })
   @ApiBody({ type: RejectValueDto })
   @ApiResponse({ status: 200, type: KpiValue })

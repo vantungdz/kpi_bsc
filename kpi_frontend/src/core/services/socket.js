@@ -6,13 +6,23 @@ let socket = null;
 
 export function connectNotificationSocket(userId) {
   if (socket) return socket;
-  socket = io('/notifications', {
-    path: '/socket.io', // adjust if backend uses a different path
+  const socketUrl = process.env.VUE_APP_API_URL;
+  socket = io(`${socketUrl}/notifications`, {
+    path: "/socket.io", // adjust if backend uses a different path
     query: { userId },
-    transports: ['websocket'],
+    transports: ["websocket"],
     autoConnect: true,
     reconnection: true,
   });
+
+  // Log connection success or error
+  socket.on('connect', () => {
+    console.log('Socket connected:', socket.id);
+  });
+  socket.on('connect_error', (error) => {
+    console.error('Socket connection error:', error);
+  });
+
   return socket;
 }
 

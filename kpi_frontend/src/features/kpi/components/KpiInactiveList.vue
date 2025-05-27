@@ -111,9 +111,6 @@ function hasPermission(action, resource) {
 }
 const canViewInactiveKpi = computed(
   () =>
-    hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.KPI_COMPANY) ||
-    hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.KPI_DEPARTMENT) ||
-    hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.KPI_SECTION) ||
-    hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.KPI_EMPLOYEE)
+    hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.KPI_COMPANY) 
 );
 </script>

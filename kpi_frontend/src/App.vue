@@ -63,10 +63,8 @@ onMounted(async () => {
   const token = store.getters["auth/token"];
 
   if (token) {
-    console.log("App.vue onMounted: Token found, fetching user profile...");
     try {
       await store.dispatch("auth/fetchUserProfile");
-      console.log("App.vue onMounted: User profile fetch attempt finished.");
 
       if (isAuthenticated.value) {
         store.dispatch("notifications/fetchUnreadCount");
@@ -77,8 +75,6 @@ onMounted(async () => {
       );
     }
   } else {
-    console.log("App.vue onMounted: No token found.");
-
     if (store.getters["auth/user"]) {
       console.warn("App.vue: User state exists without token, forcing logout.");
       store.dispatch("auth/logout");
@@ -94,8 +90,7 @@ watch(isAuthenticated, (newValue, oldValue) => {
   }
 });
 
-watch(i18nLocale, (newLocale) => {
-  console.log('Global locale changed to:', newLocale);
+watch(i18nLocale, () => {
   const app = getCurrentInstance();
   if (app) app.proxy.$forceUpdate();
 });

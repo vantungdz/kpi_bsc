@@ -298,10 +298,10 @@ const canCreateDepartmentKpi = computed(() =>
   hasPermission(RBAC_ACTIONS.CREATE, RBAC_RESOURCES.KPI_DEPARTMENT)
 );
 const canCopyDepartmentKpi = computed(() =>
-  hasPermission(RBAC_ACTIONS.COPY_TEMPLATE, RBAC_RESOURCES.KPI_DEPARTMENT)
+  hasPermission(RBAC_ACTIONS.COPY_TEMPLATE, RBAC_RESOURCES.KPI)
 );
 const canDeleteDepartmentKpi = computed(() =>
-  hasPermission(RBAC_ACTIONS.DELETE, RBAC_RESOURCES.KPI_DEPARTMENT)
+  hasPermission(RBAC_ACTIONS.DELETE, RBAC_RESOURCES.KPI)
 );
 
 const isDepartmentUser = computed(() => effectiveRole.value === "department");

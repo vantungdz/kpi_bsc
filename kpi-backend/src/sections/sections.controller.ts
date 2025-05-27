@@ -19,17 +19,11 @@ export class SectionsController {
   constructor(private readonly sectionService: SectionsService) {}
 
   @Post()
-  @Roles('section:create:company')
   async create(@Body() createSectionDto: any): Promise<Section> {
     return this.sectionService.create(createSectionDto);
   }
 
   @Get()
-  @Roles(
-    'section:view:company',
-    'section:view:department',
-    'section:view:employee',
-  )
   async findSections(
     @Query('department_id') departmentId?: number,
   ): Promise<Section[]> {
@@ -39,11 +33,6 @@ export class SectionsController {
   }
 
   @Get(':id')
-  @Roles(
-    'section:view:company',
-    'section:view:department',
-    'section:view:employee',
-  )
   async findOne(@Param('id') id: number): Promise<Section> {
     return this.sectionService.findOne(id);
   }

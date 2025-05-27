@@ -33,44 +33,24 @@ export class KpiReviewController {
 
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Get()
-  @Roles(
-    'kpi-review:view:company',
-    'kpi-review:view:department',
-    'kpi-review:view:section',
-  )
   async getKpiReviews(@Req() req, @Query() query: any) {
     return this.kpiReviewService.getKpiReviews(query, req.user);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Get(':id')
-  @Roles(
-    'kpi-review:view:company',
-    'kpi-review:view:department',
-    'kpi-review:view:section',
-  )
   async getKpiReviewById(@Param('id') id: number, @Req() req) {
     return this.kpiReviewService.getKpiReviewById(id);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Post()
-  @Roles(
-    'kpi-review:create:company',
-    'kpi-review:create:department',
-    'kpi-review:create:section',
-  )
   async createKpiReview(@Req() req, @Body() dto: CreateKpiReviewDto) {
     return this.kpiReviewService.createKpiReview(dto);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Put(':id')
-  @Roles(
-    'kpi-review:update:company',
-    'kpi-review:update:department',
-    'kpi-review:update:section',
-  )
   async updateKpiReview(
     @Param('id') id: number,
     @Body() dto: UpdateKpiReviewDto,
@@ -90,7 +70,6 @@ export class KpiReviewController {
 
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Post('section-review')
-  @Roles('kpi-review:review:section')
   async submitSectionReview(@Req() req, @Body() body) {
     // req.user.id là id của user section đang duyệt
     return this.kpiReviewService.submitSectionReview(req.user.id, body);
@@ -98,14 +77,12 @@ export class KpiReviewController {
 
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Post('department-review')
-  @Roles('kpi-review:review:department')
   async submitDepartmentReview(@Req() req, @Body() body) {
     return this.kpiReviewService.submitDepartmentReview(req.user.id, body);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Post('manager-review')
-  @Roles('kpi-review:review:company')
   async submitManagerReview(@Req() req, @Body() body) {
     return this.kpiReviewService.submitManagerReview(req.user.id, body);
   }

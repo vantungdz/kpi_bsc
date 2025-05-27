@@ -340,13 +340,13 @@ function hasPermission(action, resource) {
 }
 // Chỉ giữ lại các biến kiểm tra quyền động thực sự sử dụng trên UI
 const canCopySectionKpi = computed(() =>
-  hasPermission(RBAC_ACTIONS.COPY_TEMPLATE, RBAC_RESOURCES.KPI_SECTION)
+  hasPermission(RBAC_ACTIONS.COPY_TEMPLATE, RBAC_RESOURCES.KPI)
 );
 const canCreateSectionKpiSection = computed(() =>
   hasPermission(RBAC_ACTIONS.CREATE, RBAC_RESOURCES.KPI_SECTION)
 );
 const canDeleteSectionKpiSection = computed(() =>
-  hasPermission(RBAC_ACTIONS.DELETE, RBAC_RESOURCES.KPI_SECTION)
+  hasPermission(RBAC_ACTIONS.DELETE, RBAC_RESOURCES.KPI)
 );
 
 const selectSectionList = ref([]);

@@ -58,7 +58,6 @@ export class KpisController {
 
   @Get('/departments')
   @ApiOperation({ summary: 'Get all departments from KPI assignments' })
-  @Roles('kpi:view:company', 'kpi:view:department', 'kpi:view:section')
   @ApiResponse({
     status: 200,
     description: 'List of departments',
@@ -75,7 +74,6 @@ export class KpisController {
     return { data };
   }
 
-  @Roles('kpi:view:company', 'kpi:view:department', 'kpi:view:section')
   @Get('/sections')
   @ApiOperation({ summary: 'Get all section from KPI assignments' })
   @ApiResponse({
@@ -96,12 +94,6 @@ export class KpisController {
 
   @Get()
   @ApiOperation({ summary: 'List of KPIs with details' })
-  @Roles(
-    'kpi:view:company',
-    'kpi:view:department',
-    'kpi:view:section',
-    'kpi:view:employee',
-  )
   @ApiQuery({
     name: 'search',
     required: false,
@@ -128,7 +120,6 @@ export class KpisController {
     return this.kpisService.findAll(filterDto, req.user.id);
   }
 
-  @Roles('kpi:view:department')
   @Get('/departments/:departmentId')
   @ApiOperation({ summary: 'Get KPIs of a department' })
   @ApiResponse({
@@ -150,7 +141,6 @@ export class KpisController {
     );
   }
 
-  @Roles('kpi:view:section')
   @Get('/sections/:sectionId')
   @ApiOperation({ summary: 'Get KPIs of a section' })
   @ApiResponse({
@@ -169,12 +159,6 @@ export class KpisController {
     return this.kpisService.getSectionKpis(sectionId, filterDto, req.user);
   }
 
-  @Roles(
-    'kpi:view:employee',
-    'kpi:view:section',
-    'kpi:view:department',
-    'kpi:view:company',
-  )
   @Get('/employees/:employeeId')
   @ApiOperation({ summary: 'Get KPIs of a employee' })
   @ApiResponse({
@@ -193,7 +177,6 @@ export class KpisController {
   }
 
   @Get(':id/assignments')
-  @Roles('kpi:view:company', 'kpi:view:department', 'kpi:view:section')
   @ApiOperation({ summary: 'Get KPI assignments by KPI ID' })
   @ApiResponse({ status: 200, description: 'List of KPI assignments' })
   async getKpiAssignments(
@@ -206,12 +189,6 @@ export class KpisController {
   }
 
   @Get(':id')
-  @Roles(
-    'kpi:view:company',
-    'kpi:view:department',
-    'kpi:view:section',
-    'kpi:view:employee',
-  )
   @ApiOperation({ summary: 'Get details of a KPI' })
   @ApiResponse({ status: 200, description: 'KPI details', type: Kpi })
   @ApiResponse({ status: 404, description: 'KPI not found' })
@@ -226,7 +203,6 @@ export class KpisController {
   }
 
   @Patch(':id/toggle-status')
-  @Roles('kpi:update:company', 'kpi:update:department')
   @ApiOperation({ summary: 'Toggle KPI status between DRAFT and APPROVED' })
   @ApiResponse({ status: 200, description: 'KPI status updated', type: Kpi })
   @ApiResponse({ status: 403, description: 'Access denied' })
@@ -242,7 +218,6 @@ export class KpisController {
   }
 
   @Post('/createKpi')
-  @Roles('kpi:create:company', 'kpi:create:department')
   async create(
     @Body() body: any,
     @Req() req: Request & { user?: { id: number } },
@@ -254,7 +229,6 @@ export class KpisController {
 
   @Patch(':id')
   @ApiOperation({ summary: 'Cập nhật một đánh giá KPI' })
-  @Roles('kpi:update:company', 'kpi:update:department')
   @ApiResponse({
     status: 200,
     description: 'Đánh giá được cập nhật',
@@ -274,7 +248,6 @@ export class KpisController {
   }
 
   @Delete(':id')
-  @Roles('kpi:delete:company', 'kpi:delete:department')
   async delete(
     @Param('id') id: string,
     @Req() req: Request & { user?: { id: number } },
@@ -301,7 +274,6 @@ export class KpisController {
   }
 
   @Post(':id/sections/assignments')
-  @Roles('kpi:update:company', 'kpi:update:department')
   async saveDepartmentAndSectionAssignments(
     @Param('id') kpiId: number,
     @Body()
@@ -325,7 +297,6 @@ export class KpisController {
   }
 
   @Post(':id/assignments')
-  @Roles('kpi:update:company', 'kpi:update:department', 'kpi:update:section')
   async saveUserAssignments(
     @Param('id') kpiId: number,
     @Body()
@@ -343,7 +314,6 @@ export class KpisController {
   }
 
   @Delete(':kpiId/sections/:sectionId')
-  @Roles('kpi:update:company', 'kpi:update:department')
   async deleteSectionAssignment(
     @Param('kpiId') kpiId: number,
     @Param('sectionId') sectionId: number,

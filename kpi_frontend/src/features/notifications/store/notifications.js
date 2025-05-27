@@ -168,7 +168,10 @@ const actions = {
   },
 
   handleRealtimeNotification({ commit, dispatch }, notificationData) {
+    console.log("Adding notification to store:", notificationData);
     commit("ADD_NOTIFICATION", notificationData);
+    console.log("Updated unread count:", state.unreadCount);
+
     antNotification.info({
       message: "Thông báo mới!",
       description: notificationData.message,

@@ -36,11 +36,6 @@ export class EmployeesController {
   constructor(private readonly employeeService: EmployeesService) {}
 
   @Get()
-  @Roles(
-    'employee:view:company',
-    'employee:view:department',
-    'employee:view:section',
-  )
   @ApiOperation({
     summary:
       'Get all employees, optionally filtered by department, section, or team',
@@ -73,11 +68,6 @@ export class EmployeesController {
   }
 
   @Get(':id')
-  @Roles(
-    'employee:view:company',
-    'employee:view:department',
-    'employee:view:section',
-  )
   @ApiOperation({ summary: 'Get employee details by ID' })
   @ApiResponse({ status: 200, description: 'Employee found', type: Employee })
   @ApiResponse({ status: 404, description: 'Employee not found' })
@@ -90,7 +80,6 @@ export class EmployeesController {
   }
 
   @Delete(':id')
-  @Roles('employee:delete:company')
   @ApiOperation({ summary: 'Delete an employee' })
   @ApiResponse({ status: 200, description: 'Employee deleted successfully.' })
   @ApiResponse({ status: 404, description: 'Employee not found.' })
@@ -103,7 +92,6 @@ export class EmployeesController {
 
   @Post('upload')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('employee:create:company', 'employee:create:department')
   @UseInterceptors(FileInterceptor('file'))
   async uploadEmployeeExcel(@UploadedFile() file: Express.Multer.File) {
     if (!file) {
@@ -144,7 +132,6 @@ export class EmployeesController {
 
   @Patch(':id/roles')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('employee:update:company')
   @ApiOperation({ summary: 'Update user roles (multiple)' })
   async updateRoles(
     @Param('id', ParseIntPipe) id: number,
@@ -155,7 +142,6 @@ export class EmployeesController {
 
   @Patch(':id/role')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('employee:update:company')
   @ApiOperation({ summary: 'Update user role (single, legacy)' })
   async updateRole(
     @Param('id', ParseIntPipe) id: number,
@@ -167,7 +153,6 @@ export class EmployeesController {
 
   @Patch(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('employee:update:company', 'employee:update:department')
   @ApiOperation({ summary: 'Update employee info' })
   async updateEmployee(
     @Param('id', ParseIntPipe) id: number,
@@ -177,7 +162,6 @@ export class EmployeesController {
   }
 
   @Post()
-  @Roles('employee:create:company', 'employee:create:department')
   @ApiOperation({ summary: 'Create a new employee' })
   @ApiResponse({ status: 201, description: 'Employee created', type: Employee })
   @ApiResponse({ status: 400, description: 'Invalid input' })

@@ -40,16 +40,10 @@ export class AuthController {
         });
         result.user.roles = rolesWithPerms;
       }
-      // eslint-disable-next-line no-console
-      console.log('LOGIN SUCCESS - User info:', result.user);
-      // eslint-disable-next-line no-console
-      console.log('LOGIN SUCCESS - User roles:', result.user.roles);
       if (Array.isArray(result.user.roles)) {
         const allPermissions = result.user.roles.flatMap(
           (role: any) => role.permissions || [],
         );
-        // eslint-disable-next-line no-console
-        console.log('LOGIN SUCCESS - User permissions:', allPermissions);
       }
     }
     return result;

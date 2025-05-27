@@ -283,13 +283,13 @@ const canCreateCompanyKpiCompany = computed(() =>
   hasPermission(RBAC_ACTIONS.CREATE, RBAC_RESOURCES.KPI_COMPANY)
 );
 const canDeleteCompanyKpiCompany = computed(() =>
-  hasPermission(RBAC_ACTIONS.DELETE, RBAC_RESOURCES.KPI_COMPANY)
+  hasPermission(RBAC_ACTIONS.DELETE, RBAC_RESOURCES.KPI)
 );
 const canCopyCompanyKpi = computed(() =>
-  hasPermission(RBAC_ACTIONS.COPY_TEMPLATE, RBAC_RESOURCES.KPI_COMPANY)
+  hasPermission(RBAC_ACTIONS.COPY_TEMPLATE, RBAC_RESOURCES.KPI)
 );
 const canToggleStatusKpiCompany = computed(() =>
-  hasPermission(RBAC_ACTIONS.TOGGLE_STATUS, RBAC_RESOURCES.KPI_COMPANY)
+  hasPermission(RBAC_ACTIONS.TOGGLE_STATUS, RBAC_RESOURCES.KPI)
 );
 
 const loading = computed(() => store.getters["kpis/isLoading"]);

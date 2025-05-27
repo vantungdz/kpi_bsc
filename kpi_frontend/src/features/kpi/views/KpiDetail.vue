@@ -1168,11 +1168,11 @@ function hasPermission(action, resource) {
 
 // Kiểm tra quyền động cho các action quản trị KPI
 const canToggleStatus = computed(() =>
-  hasPermission(RBAC_ACTIONS.TOGGLE_STATUS, getKpiResourceType())
+  hasPermission(RBAC_ACTIONS.TOGGLE_STATUS, RBAC_RESOURCES.KPI)
 );
 // Quản lý assignment (gán phòng ban, section, user...)
 const canManageAssignments = computed(() =>
-  hasPermission(RBAC_ACTIONS.MANAGE_ASSIGNMENT, getKpiResourceType())
+  hasPermission(RBAC_ACTIONS.ASSIGN, getKpiResourceType())
 );
 // Copy KPI làm template
 const canCopyTemplate = computed(() =>

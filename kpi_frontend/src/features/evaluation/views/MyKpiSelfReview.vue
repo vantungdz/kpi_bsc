@@ -1,5 +1,5 @@
 <template>
-  <div class="my-kpi-self-review" v-if="canViewSelfReview">
+  <div class="my-kpi-self-review">
     <h2>{{ $t("personalKpiReview") }}</h2>
     <a-alert
       v-if="successMessage"
@@ -111,7 +111,7 @@
       @click="submitSelfReview"
       :loading="loading"
       style="margin-top: 24px"
-      :disabled="!canSubmit || loading || !canUpdateSelfReview"
+      :disabled="!canSubmit || loading"
       v-if="kpis.some((k) => k.status === 'PENDING')"
       >{{ $t("submitReview") }}</a-button
     >
@@ -297,7 +297,6 @@ import {
   getReviewCycles,
   submitEmployeeFeedback,
 } from "@/core/services/kpiReviewApi";
-import { RBAC_ACTIONS, RBAC_RESOURCES } from "@/core/constants/rbac.constants";
 
 const store = useStore();
 const { t } = useI18n();
@@ -318,21 +317,6 @@ const columns = computed(() => [
   { title: t("status"), key: "status" },
   { title: "", key: "actions" },
 ]);
-
-const userPermissions = computed(
-  () => store.getters["auth/user"]?.permissions || []
-);
-function hasPermission(action, resource) {
-  return userPermissions.value?.some(
-    (p) => p.action === action && p.resource === resource
-  );
-}
-const canViewSelfReview = computed(() =>
-  hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.KPI_VALUE_EMPLOYEE)
-);
-const canUpdateSelfReview = computed(() =>
-  hasPermission(RBAC_ACTIONS.UPDATE, RBAC_RESOURCES.KPI_VALUE_EMPLOYEE)
-);
 
 const getStatusText = (status) => {
   switch (status) {

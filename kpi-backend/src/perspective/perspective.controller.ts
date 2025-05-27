@@ -11,13 +11,11 @@ export class PerspectiveController {
   constructor(private readonly perspectivesService: PerspectiveService) {}
 
   @Get()
-  @Roles('admin', 'manager', 'employee')
   async findAll(): Promise<Perspective[]> {
     return await this.perspectivesService.findAll();
   }
 
   @Get(':id')
-  @Roles('admin', 'manager', 'employee')
   async findOne(@Param('id', ParseIntPipe) id: number): Promise<Perspective> {
     return await this.perspectivesService.findOne(id);
   }

@@ -24,7 +24,6 @@
       <!-- 2. My Area (Sub-menu) -->
       <a-sub-menu
         key="my-area"
-        v-if="canViewMyAreaSubMenu"
         :title="$t('myArea')"
       >
         <template #title>
@@ -35,7 +34,6 @@
         </template>
         <a-menu-item
           key="personal-kpis"
-          v-if="hasPermission('view', 'kpi_personal')"
           :title="$t('myPersonalKpis')"
         >
           <router-link to="/personal">
@@ -95,7 +93,7 @@
         </a-menu-item>
         <a-menu-item
           key="kpis-inactive"
-          v-if="canViewSectionLevel"
+          v-if="canViewInactiveKpiList"
           :title="$t('inactiveKpiList')"
         >
           <router-link to="/kpis/inactive">
@@ -299,10 +297,7 @@ function hasPermission(action, resource) {
 // Sử dụng resource hợp lệ từ RBAC_RESOURCES
 const canViewDashboard = computed(
   () =>
-    hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.DASHBOARD_COMPANY) ||
-    hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.DASHBOARD_DEPARTMENT) ||
-    hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.DASHBOARD_SECTION) ||
-    hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.DASHBOARD_EMPLOYEE)
+    hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.DASHBOARD)
 );
 const canViewCompanyLevel = computed(() =>
   hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.KPI_COMPANY)
@@ -313,42 +308,34 @@ const canViewDepartmentLevel = computed(() =>
 const canViewSectionLevel = computed(() =>
   hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.KPI_SECTION)
 );
+
+const canViewInactiveKpiList = computed(() =>
+  hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.EMPLOYEE_COMPANY)
+);
+
 const canViewEmployeeList = computed(() =>
   hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.EMPLOYEE_COMPANY)
 );
-// Không có resource APPROVAL, OBJECTIVE_APPROVAL, REPORT_GENERATOR, PERFORMANCE_OBJECTIVE_APPROVAL, KPI_REVIEW, EMPLOYEE_KPI_SCORES, MY_KPI_REVIEW
-// Nếu cần, phải bổ sung vào constants, còn không thì loại bỏ hoặc thay thế bằng resource hợp lệ
-// Ví dụ: KPI_PERSONAL => KPI_EMPLOYEE hoặc KPI_VALUE_EMPLOYEE
+
 const canViewApprovals = computed(
   () =>
-    hasPermission(RBAC_ACTIONS.APPROVE, RBAC_RESOURCES.KPI_VALUE_COMPANY) ||
-    hasPermission(RBAC_ACTIONS.APPROVE, RBAC_RESOURCES.KPI_VALUE_DEPARTMENT) ||
-    hasPermission(RBAC_ACTIONS.APPROVE, RBAC_RESOURCES.KPI_VALUE_SECTION) ||
-    hasPermission(RBAC_ACTIONS.APPROVE, RBAC_RESOURCES.KPI_VALUE_MANAGER)
+    hasPermission(RBAC_ACTIONS.APPROVE, RBAC_RESOURCES.KPI_VALUE)
 );
 const canViewReport = computed(
   () =>
-    hasPermission(RBAC_ACTIONS.EXPORT, RBAC_RESOURCES.REPORT_COMPANY) ||
-    hasPermission(RBAC_ACTIONS.EXPORT, RBAC_RESOURCES.REPORT_DEPARTMENT)
+    hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.REPORT) 
 );
 const canViewKpiReview = computed(
   () =>
-    hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.KPI_VALUE_COMPANY) ||
-    hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.KPI_VALUE_DEPARTMENT)
+    hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.KPI_VALUE)
 );
 const canViewEmployeeKpiScores = computed(() =>
-  hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.KPI_VALUE_EMPLOYEE)
-);
-const canViewMyAreaSubMenu = computed(() =>
-  hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.KPI_VALUE_EMPLOYEE)
+  hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.KPI_VALUE)
 );
 
 const canViewAdminMenu = computed(
   () =>
-    hasPermission(RBAC_ACTIONS.UPDATE, RBAC_RESOURCES.ROLE_COMPANY) ||
-    hasPermission(RBAC_ACTIONS.UPDATE, RBAC_RESOURCES.PERMISSION_COMPANY) ||
-    hasPermission(RBAC_ACTIONS.UPDATE, "role") ||
-    hasPermission(RBAC_ACTIONS.UPDATE, "user")
+    hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.ADMIN)
 );
 
 const canViewKpiManagementSubMenu = computed(

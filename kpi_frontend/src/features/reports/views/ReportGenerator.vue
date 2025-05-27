@@ -96,8 +96,7 @@ const canGenerateReport = computed(() =>
   userPermissions.value.some(
     (p) =>
       p.action?.trim() === RBAC_ACTIONS.EXPORT &&
-      (p.resource?.trim() === RBAC_RESOURCES.REPORT_COMPANY ||
-        p.resource?.trim() === RBAC_RESOURCES.REPORT_DEPARTMENT)
+      p.resource?.trim() === RBAC_RESOURCES.REPORT
   )
 );
 
@@ -105,8 +104,7 @@ const canViewReportGenerator = computed(() =>
   userPermissions.value.some(
     (p) =>
       p.action?.trim() === RBAC_ACTIONS.VIEW &&
-      (p.resource?.trim() === RBAC_RESOURCES.REPORT_COMPANY ||
-        p.resource?.trim() === RBAC_RESOURCES.REPORT_DEPARTMENT)
+      p.resource?.trim() === RBAC_RESOURCES.REPORT
   )
 );
 

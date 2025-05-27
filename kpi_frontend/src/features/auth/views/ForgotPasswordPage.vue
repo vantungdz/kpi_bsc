@@ -59,11 +59,10 @@ const rules = reactive({
 });
 
 // Handle form submission for password reset request
-const handleRequestReset = async (values) => {
+const handleRequestReset = async () => {
   loading.value = true;
   statusMessage.value = ""; // Clear previous messages
   isError.value = false;
-  console.log("Requesting password reset for:", values.email);
 
   try {
     // TODO: Implement store action 'auth/requestPasswordReset(email)'
@@ -91,11 +90,6 @@ const handleRequestReset = async (values) => {
   }
 };
 
-// Handle client-side validation failure
-const onFinishFailed = (errorInfo) => {
-  console.log("Form validation Failed:", errorInfo);
-  // Usually no extra handling needed as Ant Design shows errors under inputs
-};
 
 // Clear messages on component unmount
 onUnmounted(() => {

@@ -14,13 +14,6 @@ export class KpiAssignmentsService {
   ) {}
 
   async getUserAssignedKpis(employeeId: number): Promise<KPIAssignment[]> {
-    console.log(
-      this.kpiAssignmentRepository.find({
-        where: { employee_id: employeeId },
-        relations: ['kpi', 'kpi.assignments'], // Include related KPI details if needed
-      }),
-    );
-
     return this.kpiAssignmentRepository.find({
       where: { employee_id: employeeId },
       relations: ['kpi', 'kpi.assignments'], // Include related KPI details if needed

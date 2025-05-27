@@ -1,37 +1,20 @@
 <template>
-  <a-popover
-    v-model:open="popoverVisible"
-    trigger="click"
-    placement="bottomRight"
-    overlayClassName="notification-popover"
-    :get-popup-container="(trigger) => trigger.parentElement"
-  >
+  <a-popover v-model:open="popoverVisible" trigger="click" placement="bottomRight"
+    overlayClassName="notification-popover" :get-popup-container="(trigger) => trigger.parentElement">
     <template #content>
       <div class="notification-panel">
         <div class="notification-header">
           <h3>{{ $t('notifications') }}</h3>
-          <a-button
-            v-if="unreadCount > 0"
-            type="link"
-            size="small"
-            @click="handleMarkAllAsRead"
-            :loading="isProcessingMarkAll"
-          >
+          <a-button v-if="unreadCount > 0" type="link" size="small" @click="handleMarkAllAsRead"
+            :loading="isProcessingMarkAll">
             {{ $t('markAllAsRead') }}
           </a-button>
         </div>
         <a-spin :spinning="isLoadingNotifications" :tip="$t('loading')">
-          <a-list
-            v-if="notifications.length > 0"
-            item-layout="horizontal"
-            :data-source="notifications"
-            class="notification-list"
-          >
+          <a-list v-if="notifications.length > 0" item-layout="horizontal" :data-source="notifications"
+            class="notification-list">
             <template #renderItem="{ item }">
-              <a-list-item
-                :class="{ 'notification-unread': !item.is_read }"
-                @click="handleNotificationClick(item)"
-              >
+              <a-list-item :class="{ 'notification-unread': !item.is_read }" @click="handleNotificationClick(item)">
                 <a-list-item-meta>
                   <template #title>
                     <span class="notification-message">{{ item.message }}</span>
@@ -42,43 +25,29 @@
                     </span>
                   </template>
                   <template #avatar>
-                    <a-avatar
-                      :style="{
+                    <a-avatar :style="{
                         backgroundColor: getNotificationIconColor(item.type),
-                      }"
-                    >
+                      }">
                       <template #icon>
                         <bell-outlined v-if="!item.type" />
-                        <profile-outlined
-                          v-if="item.type === 'NEW_KPI_ASSIGNMENT'"
-                        />
-                        <check-circle-outlined
-                          v-if="item.type === 'KPI_APPROVAL_PENDING'"
-                        />
-                        <message-outlined
-                          v-if="
+                        <profile-outlined v-if="item.type === 'NEW_KPI_ASSIGNMENT'" />
+                        <check-circle-outlined v-if="item.type === 'KPI_APPROVAL_PENDING'" />
+                        <message-outlined v-if="
                             item.type === 'REVIEW_PENDING_EMPLOYEE_FEEDBACK' ||
                             item.type === 'REVIEW_EMPLOYEE_RESPONDED'
-                          "
-                        />
-                        <file-done-outlined
-                          v-if="item.type === 'REVIEW_COMPLETED'"
-                        />
+                          " />
+                        <file-done-outlined v-if="item.type === 'REVIEW_COMPLETED'" />
+                        <close-circle-outlined v-if="item.type === 'KPI_VALUE_REJECTED'" style="color: #ff4d4f" />
+                        <check-circle-outlined v-if="item.type === 'KPI_VALUE_APPROVED'" style="color: #52c41a" />
                       </template>
                     </a-avatar>
                   </template>
                 </a-list-item-meta>
                 <template #actions>
                   <a-tooltip :title="$t('markAsRead')" v-if="!item.is_read">
-                    <a-button
-                      type="text"
-                      shape="circle"
-                      size="small"
-                      @click.stop="handleMarkAsRead(item.id)"
-                      :loading="
+                    <a-button type="text" shape="circle" size="small" @click.stop="handleMarkAsRead(item.id)" :loading="
                         isProcessingMarkOne && currentMarkingId === item.id
-                      "
-                    >
+                      ">
                       <eye-outlined />
                     </a-button>
                   </a-tooltip>
@@ -86,11 +55,8 @@
               </a-list-item>
             </template>
           </a-list>
-          <a-empty
-            v-if="!isLoadingNotifications && notifications.length === 0"
-            :description="$t('noNotifications')"
-            style="padding: 20px 0"
-          />
+          <a-empty v-if="!isLoadingNotifications && notifications.length === 0" :description="$t('noNotifications')"
+            style="padding: 20px 0" />
         </a-spin>
         <div class="notification-footer" v-if="notifications.length > 0">
           <a-button type="link" block @click="viewAllNotifications">
@@ -99,18 +65,14 @@
         </div>
       </div>
     </template>
-    <a-badge
-      :count="unreadCount"
-      :overflow-count="99"
-      class="notification-badge"
-    >
+    <a-badge :count="unreadCount" :overflow-count="99" class="notification-badge">
       <bell-outlined style="font-size: 20px; cursor: pointer" />
     </a-badge>
   </a-popover>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from "vue";
+import { ref, computed, onMounted, onUnmounted, watch } from "vue";
 import { useStore } from "vuex";
 import { useRouter } from "vue-router";
 import {
@@ -133,10 +95,12 @@ import {
   CheckCircleOutlined,
   MessageOutlined, // Icon cho phản hồi
   FileDoneOutlined, // Icon cho hoàn tất
+  CloseCircleOutlined
 } from "@ant-design/icons-vue";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 import "dayjs/locale/vi";
+import { connectNotificationSocket, disconnectNotificationSocket } from '@/core/services/socket';
 
 dayjs.extend(relativeTime);
 dayjs.locale("vi");
@@ -161,6 +125,30 @@ const isLoadingNotifications = computed(
 
 onMounted(() => {
   store.dispatch("notifications/fetchUnreadCount");
+
+  const userId = store.getters["auth/user"]?.id;
+  if (!userId) {
+    console.error("Error: userId is undefined. Please check Vuex store or authentication state.");
+  }
+
+  const socket = connectNotificationSocket(userId);
+
+  socket.on("connect", () => {
+    console.log("WebSocket connected successfully");
+  });
+
+  socket.on("connect_error", (error) => {
+    console.error("WebSocket connection error:", error);
+  });
+
+  socket.on("notification", (notification) => {
+    store.dispatch("notifications/handleRealtimeNotification", notification);
+  });
+});
+
+onUnmounted(() => {
+  // Ngắt kết nối socket khi component bị hủy
+  disconnectNotificationSocket();
 });
 
 watch(popoverVisible, (newValue) => {
@@ -192,60 +180,52 @@ const getNotificationIconColor = (type) => {
 };
 
 const handleNotificationClick = async (notificationItem) => {
-  if (!notificationItem.is_read) {
+  if (!notificationItem.isRead && !notificationItem.is_read) {
     await handleMarkAsRead(notificationItem.id);
   }
+  console.log('Notification Item:', notificationItem);
+  // Ưu tiên camelCase
+  const relatedEntityId = notificationItem.relatedEntityId || notificationItem.related_entity_id;
+  const kpiId = notificationItem.kpiId || notificationItem.kpi_id;
+  const relatedEntityType = notificationItem.relatedEntityType || notificationItem.related_entity_type;
 
-  const { related_entity_type, related_entity_id, kpi_id } = notificationItem;
-
-  if (related_entity_id) {
-    switch (related_entity_type) {
+  if (relatedEntityId) {
+    switch (relatedEntityType) {
       case "KPI_ASSIGNMENT":
-        router.push({
-          name: "KpiDetail",
-          params: { id: kpi_id || related_entity_id },
-        });
-        break;
       case "KPI_VALUE":
-        if (kpi_id) {
-          router.push({ name: "KpiDetail", params: { id: kpi_id } });
+        if (kpiId || relatedEntityId) {
+          router.push({
+            name: "KpiPersonal",
+            params: { id: kpiId || relatedEntityId },
+          });
         } else {
-          console.warn(
-            "Không có kpi_id để điều hướng cho KPI_VALUE notification:",
-            notificationItem
-          );
+          antNotification.error({
+            message: "Không tìm thấy ID KPI để điều hướng.",
+          });
         }
-        break; // Thêm break để tránh fall-through
+        break;
       case "OVERALL_REVIEW": {
-        // Thêm khối lệnh {} để bao bọc khai báo biến
-        // Điều hướng dựa trên vai trò của người dùng hiện tại
-        const currentUserRole = store.getters["auth/effectiveRole"];
-        if (currentUserRole === "employee") {
-          router.push({ name: "MyKpiReview" }); // Nhân viên vào trang review của mình
+        const currentUserRoles = store.getters["auth/effectiveRoles"] || [];
+        if (currentUserRoles.includes("employee")) {
+          router.push({ name: "MyKpiSelfReview" });
         } else if (
-          currentUserRole === "manager" ||
-          currentUserRole === "admin"
+          currentUserRoles.includes("manager") ||
+          currentUserRoles.includes("admin")
         ) {
-          // Quản lý có thể cần vào trang KpiReview, nhưng cần targetId, targetType, cycleId
-          // Thông tin này có thể cần được lưu trữ thêm trong notification hoặc lấy từ related_entity_id (OverallReview.id)
-          router.push({ name: "KpiReview" }); // Cần cải thiện để điều hướng chính xác
+          router.push({ name: "KpiReviewList" });
         }
         break;
       }
-
       default:
-        console.log(
-          "Loại thông báo không xác định hoặc không có quy tắc điều hướng:",
-          notificationItem
-        );
-
+        antNotification.info({
+          message: "Loại thông báo này chưa hỗ trợ điều hướng.",
+        });
         break;
     }
   } else {
-    console.warn(
-      "Thông báo không có related_entity_id để điều hướng:",
-      notificationItem
-    );
+    antNotification.warning({
+      message: "Thông báo không có thông tin để điều hướng.",
+    });
   }
 
   popoverVisible.value = false;

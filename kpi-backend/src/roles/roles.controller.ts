@@ -25,64 +25,16 @@ export class RolesController {
 
   @Get()
   async getAllRoles(@Req() req: any) {
-    // Log user info and permissions for debugging
-    try {
-      if (req && req.user) {
-        console.log('User info:', req.user);
-        console.log('User roles:', req.user.roles);
-        if (Array.isArray(req.user.roles)) {
-          const allPermissions = req.user.roles.flatMap(
-            (role: any) => role.permissions || [],
-          );
-          console.log('User permissions:', allPermissions);
-        }
-      }
-    } catch (e) {
-      /* ignore */
-    }
     return this.rolesService.getAllRoles();
   }
 
   @Get('with-permissions')
   async getRolesWithPermissions(@Req() req: any) {
-    // Log current user permissions and required permission
-    try {
-      if (req && req.user) {
-        const userPerms = req.user.roles?.flatMap(
-          (role: any) => role.permissions || [],
-        );
-        console.log(
-          'API /roles/with-permissions - User permissions:',
-          userPerms,
-        );
-        console.log('API /roles/with-permissions - Required permission:', {
-          action: 'update',
-          resource: 'role:company',
-        });
-      }
-    } catch (e) {
-      /* ignore */
-    }
     return this.rolesService.getRolesWithPermissions();
   }
 
   @Get('/permissions')
   async getAllPermissions(@Req() req: any) {
-    // Log current user permissions and required permission
-    try {
-      if (req && req.user) {
-        const userPerms = req.user.roles?.flatMap(
-          (role: any) => role.permissions || [],
-        );
-        console.log('API /roles/permissions - User permissions:', userPerms);
-        console.log('API /roles/permissions - Required permission:', {
-          action: 'update',
-          resource: 'role:company',
-        });
-      }
-    } catch (e) {
-      /* ignore */
-    }
     return this.rolesService.getAllPermissions();
   }
 

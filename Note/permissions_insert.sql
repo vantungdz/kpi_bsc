@@ -1,71 +1,35 @@
--- SQL insert cho bảng permissions (PostgreSQL)
--- Giả sử bảng permissions có các trường: id (serial), action (text), resource (text), scope (text, nullable)
+INSERT INTO permissions (action, resource)
+VALUES
+  ('view', 'dashboard'),
+  ('view', 'kpi:company'),
+  ('view', 'kpi:department'),
+  ('view', 'kpi:section'),
+  ('view', 'employee:company'),
+  ('view', 'report'),
+  ('view', 'kpi-value'),
+  ('view', 'admin'),
+  ('view', 'kpi:employee'),
 
-INSERT INTO permissions (action, resource, scope) VALUES
--- KPI
-('view', 'kpi', 'company'),
-('view', 'kpi', 'department'),
-('view', 'kpi', 'section'),
-('view', 'kpi', 'employee'),
-('create', 'kpi', 'company'),
-('create', 'kpi', 'department'),
-('create', 'kpi', 'section'),
-('create', 'kpi', 'employee'),
-('update', 'kpi', 'company'),
-('update', 'kpi', 'department'),
-('update', 'kpi', 'section'),
-('update', 'kpi', 'employee'),
-('delete', 'kpi', 'company'),
-('delete', 'kpi', 'department'),
-('delete', 'kpi', 'section'),
-('delete', 'kpi', 'employee'),
-('assign', 'kpi', 'company'),
-('assign', 'kpi', 'department'),
-('assign', 'kpi', 'section'),
-('assign', 'kpi', 'employee'),
-('toggle-status', 'kpi', 'company'),
-('toggle-status', 'kpi', 'department'),
-('toggle-status', 'kpi', 'section'),
-('toggle-status', 'kpi', 'employee'),
--- KPI Value
-('approve', 'kpi-value', 'section'),
-('approve', 'kpi-value', 'department'),
-('approve', 'kpi-value', 'manager'),
-('reject', 'kpi-value', 'section'),
-('reject', 'kpi-value', 'department'),
-('reject', 'kpi-value', 'manager'),
-('view', 'kpi-value', 'company'),
-('view', 'kpi-value', 'department'),
-('view', 'kpi-value', 'section'),
-('view', 'kpi-value', 'employee'),
--- Department
-('view', 'department', 'company'),
-('create', 'department', 'company'),
-('update', 'department', 'company'),
-('delete', 'department', 'company'),
--- Section
-('view', 'section', 'company'),
-('view', 'section', 'department'),
-('view', 'section', 'employee'),
-('create', 'section', 'company'),
-('update', 'section', 'company'),
-('delete', 'section', 'company'),
--- Employee
-('view', 'employee', 'company'),
-('create', 'employee', 'company'),
-('update', 'employee', 'company'),
-('delete', 'employee', 'company'),
--- Role/Permission
-('view', 'role', 'company'),
-('create', 'role', 'company'),
-('update', 'role', 'company'),
-('delete', 'role', 'company'),
-('view', 'permission', 'company'),
--- Report
-('export', 'report', 'company'),
-('export', 'report', 'department'),
--- Dashboard
-('view', 'dashboard', 'company'),
-('view', 'dashboard', 'department'),
-('view', 'dashboard', 'section'),
-('view', 'dashboard', 'employee');
+  ('create', 'employee:company'),
+  ('create', 'kpi:company'),
+  ('create', 'kpi:section'),
+  ('create', 'kpi:employee'),
+  ('create', 'kpi:department'),
+  ('create', 'kpi:section'),
+
+  ('delete', 'employee:company'),
+  ('delete', 'kpi'),
+
+  ('update', 'employee:company'),
+
+  ('assign', 'kpi:company'),
+  ('assign', 'kpi:department'),
+  ('assign', 'kpi:section'),
+
+  ('reject', 'kpi-value'),
+  ('approve', 'kpi-value'),
+
+  ('copy-template', 'kpi'),
+  ('toggle-status', 'kpi'),
+
+  ('export', 'report');

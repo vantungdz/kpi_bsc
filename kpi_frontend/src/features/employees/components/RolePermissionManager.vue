@@ -35,40 +35,48 @@
                 </div>
               </div>
             </div>
-            <!-- Create/Edit/Delete block -->
+            <!-- Create/Edit/Delete block (2 cột dọc) -->
             <div class="permission-block">
               <span class="permission-block-label">{{ $t('permissionBlock.createEditDelete') }}</span>
-              <div class="permission-block-toggles">
-                <template v-for="option in createEditDeleteOptions" :key="option.value">
-                  <div class="permission-toggle-item">
-                    <a-switch :checked="record.permissionIds.includes(option.value)" @change="checked => onTogglePermission(record, option.value, checked)" />
-                    <span class="permission-toggle-label">{{ option.label }}</span>
-                  </div>
-                </template>
+              <div class="permission-block-toggles view-block view-block-2col">
+                <div class="view-block-col">
+                  <template v-for="option in createEditDeleteOptions.slice(0, Math.ceil(createEditDeleteOptions.length/2))" :key="option.value">
+                    <div class="permission-toggle-item">
+                      <a-switch :checked="record.permissionIds.includes(option.value)" @change="checked => onTogglePermission(record, option.value, checked)" />
+                      <span class="permission-toggle-label">{{ option.label }}</span>
+                    </div>
+                  </template>
+                </div>
+                <div class="view-block-col">
+                  <template v-for="option in createEditDeleteOptions.slice(Math.ceil(createEditDeleteOptions.length/2))" :key="option.value">
+                    <div class="permission-toggle-item">
+                      <a-switch :checked="record.permissionIds.includes(option.value)" @change="checked => onTogglePermission(record, option.value, checked)" />
+                      <span class="permission-toggle-label">{{ option.label }}</span>
+                    </div>
+                  </template>
+                </div>
               </div>
             </div>
-            <!-- Approve/Reject block -->
+            <!-- Gộp Approve/Reject và Assign thành 1 block -->
             <div class="permission-block">
-              <span class="permission-block-label">{{ $t('permissionBlock.approveReject') }}</span>
-              <div class="permission-block-toggles">
-                <template v-for="option in approveRejectOptions" :key="option.value">
-                  <div class="permission-toggle-item">
-                    <a-switch :checked="record.permissionIds.includes(option.value)" @change="checked => onTogglePermission(record, option.value, checked)" />
-                    <span class="permission-toggle-label">{{ option.label }}</span>
-                  </div>
-                </template>
-              </div>
-            </div>
-            <!-- Assign block -->
-            <div class="permission-block">
-              <span class="permission-block-label">{{ $t('permissionBlock.assign') }}</span>
-              <div class="permission-block-toggles">
-                <template v-for="option in assignOptions" :key="option.value">
-                  <div class="permission-toggle-item">
-                    <a-switch :checked="record.permissionIds.includes(option.value)" @change="checked => onTogglePermission(record, option.value, checked)" />
-                    <span class="permission-toggle-label">{{ option.label }}</span>
-                  </div>
-                </template>
+              <span class="permission-block-label">{{ $t('permissionBlock.approveRejectAssign') }}</span>
+              <div class="permission-block-toggles view-block view-block-2col">
+                <div class="view-block-col">
+                  <template v-for="option in approveRejectOptions" :key="option.value">
+                    <div class="permission-toggle-item">
+                      <a-switch :checked="record.permissionIds.includes(option.value)" @change="checked => onTogglePermission(record, option.value, checked)" />
+                      <span class="permission-toggle-label">{{ option.label }}</span>
+                    </div>
+                  </template>
+                </div>
+                <div class="view-block-col">
+                  <template v-for="option in assignOptions" :key="option.value">
+                    <div class="permission-toggle-item">
+                      <a-switch :checked="record.permissionIds.includes(option.value)" @change="checked => onTogglePermission(record, option.value, checked)" />
+                      <span class="permission-toggle-label">{{ option.label }}</span>
+                    </div>
+                  </template>
+                </div>
               </div>
             </div>
             <!-- Các nhóm còn lại gom chung 1 khối -->
@@ -104,7 +112,8 @@ const rolesWithPermissions = ref([]);
 const allPermissions = ref([]);
 
 const permissionDisplayName = (permission) => {
-  const key = `permission.${permission.action}_${permission.resource}`;
+  const resourceKey = permission.resource.replace(/:/g, '_');
+  const key = `permission.${permission.action}_${resourceKey}`;
   return t(key);
 };
 
@@ -162,14 +171,9 @@ const otherOptionsWithManage = computed(() => {
 });
 
 const roleDisplayName = (roleName) => {
-  switch (roleName) {
-    case 'admin': return t('administrator');
-    case 'manager': return t('manager');
-    case 'department': return t('department_head');
-    case 'section': return t('section_head');
-    case 'employee': return t('employee');
-    default: return roleName;
-  }
+  // Ưu tiên lấy từ i18n, fallback về roleName nếu không có
+  const key = roleName === 'admin' ? 'administrator' : roleName;
+  return t(key) || roleName;
 };
 
 const columns = computed(() => [

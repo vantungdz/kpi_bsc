@@ -41,7 +41,7 @@ const routes = [
       permissions: [
         {
           action: RBAC_ACTIONS.VIEW,
-          resource: RBAC_RESOURCES.REPORT_COMPANY,
+          resource: RBAC_RESOURCES.REPORT,
         },
       ],
     },
@@ -61,7 +61,7 @@ const routes = [
       permissions: [
         {
           action: RBAC_ACTIONS.VIEW,
-          resource: RBAC_RESOURCES.DASHBOARD_COMPANY,
+          resource: RBAC_RESOURCES.DASHBOARD,
         },
       ],
     },
@@ -182,7 +182,7 @@ const routes = [
       permissions: [
         {
           action: RBAC_ACTIONS.VIEW,
-          resource: RBAC_RESOURCES.KPI_VALUE_COMPANY,
+          resource: RBAC_RESOURCES.KPI_VALUE,
         },
       ],
     },
@@ -199,9 +199,6 @@ const routes = [
     component: KpiPersonal,
     meta: {
       requiresAuth: true,
-      permissions: [
-        { action: RBAC_ACTIONS.VIEW, resource: RBAC_RESOURCES.KPI_EMPLOYEE },
-      ],
     },
   },
   {
@@ -230,13 +227,27 @@ const routes = [
     component: KpiInactiveList,
     meta: {
       requiresAuth: true,
+      permissions: [
+        {
+          action: RBAC_ACTIONS.VIEW,
+          resource: RBAC_RESOURCES.EMPLOYEE_COMPANY,
+        },
+      ],
     },
   },
   {
     path: "/user-role-manager",
     name: "RolePermissionManager",
     component: RolePermissionManager,
-    meta: { requiresAuth: true },
+    meta: {
+      requiresAuth: true,
+      permissions: [
+        {
+          action: RBAC_ACTIONS.VIEW,
+          resource: RBAC_RESOURCES.ADMIN,
+        },
+      ],
+    },
   },
   {
     path: "/my-kpi-self-review",
@@ -248,7 +259,15 @@ const routes = [
     path: "/review-cycle/create",
     name: "ReviewCycleCreate",
     component: ReviewCycleCreate,
-    meta: { requiresAuth: true },
+    meta: {
+      requiresAuth: true,
+      permissions: [
+        {
+          action: RBAC_ACTIONS.VIEW,
+          resource: RBAC_RESOURCES.ADMIN,
+        },
+      ],
+    },
   },
   {
     path: "/kpi-review",
@@ -256,7 +275,12 @@ const routes = [
     component: KpiReviewList,
     meta: {
       requiresAuth: true,
-      // Nếu có resource riêng cho review thì bổ sung vào RBAC_RESOURCES, nếu không thì bỏ permissions ở đây
+      permissions: [
+        {
+          action: RBAC_ACTIONS.VIEW,
+          resource: RBAC_RESOURCES.KPI_VALUE,
+        },
+      ],
     },
   },
   {
@@ -266,7 +290,10 @@ const routes = [
     meta: {
       requiresAuth: true,
       permissions: [
-        { action: RBAC_ACTIONS.UPDATE, resource: RBAC_RESOURCES.ROLE_COMPANY },
+        {
+          action: RBAC_ACTIONS.VIEW,
+          resource: RBAC_RESOURCES.ADMIN,
+        },
       ],
     },
   },
@@ -277,7 +304,10 @@ const routes = [
     meta: {
       requiresAuth: true,
       permissions: [
-        { action: RBAC_ACTIONS.UPDATE, resource: RBAC_RESOURCES.ROLE_COMPANY },
+        {
+          action: RBAC_ACTIONS.VIEW,
+          resource: RBAC_RESOURCES.ADMIN,
+        },
       ],
     },
   },
@@ -288,7 +318,10 @@ const routes = [
     meta: {
       requiresAuth: true,
       permissions: [
-        { action: RBAC_ACTIONS.UPDATE, resource: RBAC_RESOURCES.ROLE_COMPANY },
+        {
+          action: RBAC_ACTIONS.VIEW,
+          resource: RBAC_RESOURCES.ADMIN,
+        },
       ],
     },
   },

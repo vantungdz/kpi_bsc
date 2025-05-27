@@ -12,7 +12,6 @@ export class ReportsController {
   constructor(private readonly reportsService: ReportsService) {}
 
   @Get('generate')
-  @Roles('report:export:company', 'report:export:department')
   async generateReport(
     @Query('reportType') reportType: string,
     @Query('fileFormat') fileFormat: string,
