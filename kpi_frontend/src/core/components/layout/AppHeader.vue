@@ -1,7 +1,7 @@
 <template>
   <a-layout-header class="app-header-container">
     <div class="header-left">
-      <div class="logo-title">{{ $t("kpiDashboard") }}</div>
+      <div class="logo-title">{{ $t("kpiManagementSystem") }}</div>
     </div>
 
     <div class="header-right">
@@ -18,7 +18,6 @@
           </a-avatar>
           <span class="user-name">
             {{ displayName }}
-            <span class="role-display"> ({{ userRoleDisplay }})</span>
           </span>
           <down-outlined class="user-arrow" />
         </div>
@@ -43,13 +42,9 @@
             </a-menu-item>
           </a-menu>
         </template>
-        <a-button>
-          <flag
-            :iso="currentLanguageDisplay.countryCode"
-            style="margin-right: 8px; font-size: 1.2em"
-          />
-          {{ currentLanguageDisplay.name }}
-          <DownOutlined />
+        <a-button class="lang-btn lang-btn-ghost" type="text" :title="$t(currentLanguageDisplay.nameKey)">
+          <flag :iso="currentLanguageDisplay.countryCode" style="font-size: 1.15em; margin-right: 6px;" />
+          <span class="lang-code">{{ currentLocale.value ? currentLocale.value.toUpperCase() : '' }}</span>
         </a-button>
       </a-dropdown>
     </div>
@@ -67,7 +62,6 @@ import { useRouter } from "vue-router";
 
 import {
   UserOutlined,
-  SettingOutlined,
   LogoutOutlined,
   DownOutlined,
 } from "@ant-design/icons-vue";
@@ -82,7 +76,7 @@ const router = useRouter();
 const currentLocale = useCurrentLocale();
 
 const availableLanguages = [
-  { code: "en", nameKey: "english", countryCode: "us" }, // Sử dụng cờ Mỹ cho tiếng Anh
+  { code: "en", nameKey: "english", countryCode: "us" }, 
   { code: "vi", nameKey: "vietnamese", countryCode: "vn" },
   { code: "ja", nameKey: "japanese", countryCode: "jp" },
 ];
@@ -102,42 +96,6 @@ const isUserAuthenticated = computed(
   () => store.getters["auth/isAuthenticated"]
 );
 const actualUser = computed(() => store.getters["auth/user"]);
-
-// Lấy mảng roles từ user, fallback nếu chưa có
-const userRoles = computed(() => {
-  if (!actualUser.value) return [];
-  // Chuẩn hóa: roles là mảng string hoặc mảng object {name}
-  if (Array.isArray(actualUser.value.roles)) {
-    return actualUser.value.roles
-      .map((r) => (typeof r === "string" ? r : r?.name))
-      .filter(Boolean);
-  }
-  // Fallback: nếu backend trả về role đơn lẻ
-  if (actualUser.value.role) {
-    if (typeof actualUser.value.role === "string")
-      return [actualUser.value.role];
-    if (
-      typeof actualUser.value.role === "object" &&
-      actualUser.value.role?.name
-    )
-      return [actualUser.value.role.name];
-  }
-  return [];
-});
-
-const roleLabelMap = computed(() => ({
-  admin: $t("roleAdmin"),
-  manager: $t("roleManager"),
-  department: $t("roleDepartment"),
-  section: $t("roleSection"),
-  employee: $t("roleEmployee"),
-}));
-
-// Hiển thị tất cả roles, phân cách bằng dấu phẩy
-const userRoleDisplay = computed(() => {
-  if (!userRoles.value.length) return $t("noRole");
-  return userRoles.value.map((r) => roleLabelMap.value[r] || r).join(", ");
-});
 
 const displayName = computed(() => {
   if (!actualUser.value) return $t("user");
@@ -163,11 +121,6 @@ const menuItems = computed(() => [
     icon: () => h(UserOutlined),
   },
   {
-    key: MENU_KEYS.SETTINGS,
-    label: $t("settings"),
-    icon: () => h(SettingOutlined),
-  },
-  {
     type: "divider",
   },
   {
@@ -182,9 +135,7 @@ const handleMenuClick = ({ key }) => {
     handleLogout();
   } else if (key === MENU_KEYS.PROFILE) {
     router.push(ROUTES.PROFILE);
-  } else if (key === MENU_KEYS.SETTINGS) {
-    router.push(ROUTES.SETTINGS);
-  }
+  } 
 };
 
 const handleLogout = () => {
@@ -198,64 +149,155 @@ function changeLanguage(lang) {
 
 <style scoped>
 .app-header-container {
-  background: linear-gradient(to bottom right, #e0f7fa, #f8f9fa);
-  padding: 0 24px;
+  background: linear-gradient(90deg, #e0f7fa 0%, #f8f9fa 100%);
+  padding: 0 32px;
   display: flex;
   justify-content: space-between;
   align-items: center;
   height: 61px;
-  color: rgba(0, 0, 0, 0.85);
-  border-bottom: 1px solid #f0f0f0;
+  color: rgba(0, 0, 0, 0.92);
+  border-bottom: 1px solid #e3e8ee;
   position: sticky;
   top: 0;
-  z-index: 10;
+  z-index: 20;
+  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.06);
+  border-radius: 0 0 12px 12px;
+  transition: box-shadow 0.2s;
 }
 
 .logo-title {
   color: var(--brand-primary, #0056b3);
-  font-size: 1.4em;
-  font-weight: 600;
+  font-size: 1.7em;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-shadow: 0 1px 0 #fff, 0 1.5px 2px #b2ebf2;
+  margin-left: 0;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.header-logo {
+  height: 38px;
+  width: auto;
+  display: block;
+  margin-right: 6px;
+  object-fit: contain;
+  transition: height 0.2s;
 }
 
 .header-right {
   display: flex;
   align-items: center;
-  gap: 20px;
-  /* Tăng khoảng cách để chứa NotificationBell */
+  gap: 28px;
 }
 
-/* Loại bỏ .role-selector và .role-label nếu không còn sử dụng */
 .user-profile-trigger {
   display: flex;
   align-items: center;
   cursor: pointer;
-  padding: 0 12px;
-  height: 100%;
-  transition: background-color 0.3s;
-  border-radius: 4px;
+  padding: 0 14px;
+  height: 48px;
+  border-radius: 8px;
+  transition: background 0.2s, box-shadow 0.2s;
+  box-shadow: 0 1px 4px 0 rgba(0, 0, 0, 0.03);
 }
 
 .user-profile-trigger:hover {
-  background-color: rgba(0, 0, 0, 0.025);
+  background: #e3f2fd;
+  box-shadow: 0 2px 8px 0 rgba(0, 0, 0, 0.07);
 }
 
 .user-name {
-  margin-left: 8px;
-  font-weight: 500;
-  color: rgba(0, 0, 0, 0.85);
+  margin-left: 10px;
+  font-weight: 600;
+  color: #222;
   white-space: nowrap;
+  font-size: 1.08em;
 }
 
 .user-arrow {
-  font-size: 0.8em;
-  margin-left: 5px;
-  color: rgba(0, 0, 0, 0.45);
+  font-size: 0.9em;
+  margin-left: 7px;
+  color: #90a4ae;
 }
 
 .role-display {
-  font-size: 0.8em;
+  font-size: 0.85em;
   opacity: 0.7;
   margin-left: 4px;
   font-weight: 400;
+}
+
+/* Nút chọn ngôn ngữ dạng ghost/text */
+.lang-btn-ghost {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  color: #1976d2 !important;
+  font-weight: 500;
+  padding: 0 10px !important;
+  height: 38px;
+  min-width: 48px;
+  display: flex;
+  align-items: center;
+  transition: color 0.18s, background 0.18s;
+}
+.lang-btn-ghost:hover,
+.lang-btn-ghost:focus {
+  background: #e3f2fd !important;
+  color: #0d47a1 !important;
+}
+.lang-code {
+  font-size: 1.08em;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  margin-left: 2px;
+}
+:deep(.ant-dropdown-menu) {
+  opacity: 1;
+  transform: scale(1);
+  transition: opacity 0.22s cubic-bezier(0.4, 0, 0.2, 1),
+    transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+}
+:deep(.ant-slide-down-appear),
+:deep(.ant-slide-down-enter) {
+  opacity: 0 !important;
+  transform: scale(0.96) !important;
+}
+:deep(.ant-slide-down-appear-active),
+:deep(.ant-slide-down-enter-active) {
+  opacity: 1 !important;
+  transform: scale(1) !important;
+}
+:deep(.ant-dropdown-menu-item) {
+  font-size: 1em;
+  padding: 8px 18px;
+  display: flex;
+  align-items: center;
+}
+:deep(.ant-dropdown-menu-item-selected),
+:deep(.ant-dropdown-menu-item-active) {
+  background: #e3f2fd !important;
+  color: #1976d2 !important;
+}
+:deep(.ant-avatar) {
+  background: #e3f2fd;
+  color: #1976d2;
+  font-weight: 700;
+  border: 1.5px solid #b3e5fc;
+  box-shadow: 0 1px 4px 0 rgba(25, 118, 210, 0.07);
+}
+
+/* Hiệu ứng cho NotificationBell nếu cần */
+:deep(.notification-bell) {
+  transition: color 0.2s;
+}
+:deep(.notification-bell:hover) {
+  color: #1976d2;
 }
 </style>

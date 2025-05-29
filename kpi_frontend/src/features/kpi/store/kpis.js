@@ -42,6 +42,10 @@ const state = {
     totalItems: 0,
     itemsPerPage: 10,
   },
+
+  employeeKpiList: [],
+  loadingEmployeeKpis: false,
+  employeeKpiError: null,
 };
 
 const getters = {
@@ -81,6 +85,10 @@ const getters = {
   isLoading: (state) => state.loading,
   error: (state) => state.error,
   pagination: (state) => state.pagination,
+
+  employeeKpiList: (state) => state.employeeKpiList,
+  isLoadingEmployeeKpis: (state) => state.loadingEmployeeKpis,
+  employeeKpiError: (state) => state.employeeKpiError,
 };
 
 const mutations = {
@@ -291,6 +299,16 @@ const mutations = {
     } else {
       console.log(`KPI ID ${kpiId} not found in kpis list state.`);
     }
+  },
+  SET_EMPLOYEE_KPI_LIST(state, kpis) {
+    if (kpis && typeof kpis === 'object' && kpis.data) {
+      state.employeeKpiList = kpis;
+    } else {
+      state.employeeKpiList = { data: Array.isArray(kpis) ? kpis : [] };
+    }
+  },
+  SET_LOADING_EMPLOYEE_KPIS(state, isLoading) {
+    state.loadingEmployeeKpis = isLoading;
   },
 };
 
@@ -759,6 +777,23 @@ const actions = {
       throw error;
     } finally {
       commit("SET_TOGGLING_KPI_STATUS", false);
+    }
+  },
+
+  async fetchKpisByEmployee({ commit }, { employeeId, filters = {} }) {
+    commit('SET_LOADING_EMPLOYEE_KPIS', true);
+    commit('SET_EMPLOYEE_KPI_ERROR', null);
+    try {
+      const response = await apiClient.get(`/kpis/employees/${employeeId}`, { params: filters });
+      const kpis = response.data?.data || response.data || [];
+      commit('SET_EMPLOYEE_KPI_LIST', kpis);
+      return kpis;
+    } catch (error) {
+      commit('SET_EMPLOYEE_KPI_ERROR', error);
+      commit('SET_EMPLOYEE_KPI_LIST', []);
+      throw error;
+    } finally {
+      commit('SET_LOADING_EMPLOYEE_KPIS', false);
     }
   },
 };

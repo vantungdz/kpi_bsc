@@ -207,12 +207,6 @@
               </template>
             </template>
           </a-table>
-          <a-empty
-            v-if="
-              companyOverviewDepartmentAssignments.length === 0 && !loadingKpi
-            "
-            :description="$t('noDirectDepartmentAssignments')"
-          />
         </a-skeleton>
       </a-card>
 
@@ -293,10 +287,6 @@
               </template>
             </template>
           </a-table>
-          <a-empty
-            v-if="companyOverviewSectionAssignments.length === 0 && !loadingKpi"
-            :description="$t('noDirectSectionAssignments')"
-          />
         </a-skeleton>
       </a-card>
 
@@ -384,13 +374,6 @@
               </template>
             </template>
           </a-table>
-          <a-empty
-            v-if="
-              companyOverviewUserAssignments.length === 0 &&
-              !loadingUserAssignments
-            "
-            :description="$t('noDirectUserAssignments')"
-          />
         </a-skeleton>
       </a-card>
     </template>
@@ -1110,9 +1093,11 @@ const modalFilterAssignableSections = computed(() => {
 });
 
 const isCompanyOverviewMode = computed(() => {
+  const roleOk =
+    effectiveRole.value === "admin" || effectiveRole.value === "manager";
   const noDeptContext = !contextDepartmentId.value;
   const noSectionContext = !contextSectionId.value;
-  return noDeptContext && noSectionContext;
+  return roleOk && noDeptContext && noSectionContext;
 });
 
 const contextSectionId = computed(() => {
@@ -1135,22 +1120,18 @@ const isToggling = computed(() => store.getters["kpis/isTogglingKpiStatus"]);
 const toggleStatusError = computed(
   () => store.getters["kpis/toggleKpiStatusError"]
 );
+
+
 const actualUser = computed(() => store.getters["auth/user"]);
 const effectiveRole = computed(() => {
   const userRoles = currentUser.value?.roles || [];
 
-  // Logic để xác định role hiệu lực (effective role)
-  if (userRoles.some((role) => role.name === "admin")) {
-    return "admin";
-  }
-  if (userRoles.some((role) => role.name === "manager")) {
-    return "manager";
-  }
-  if (userRoles.some((role) => role.name === "department")) {
-    return "department";
-  }
-  if (userRoles.some((role) => role.name === "section")) {
-    return "section";
+  const rolePriority = ["admin", "manager", "department", "section"];
+
+  for (const role of rolePriority) {
+    if (userRoles.some((userRole) => userRole.name === role)) {
+      return role;
+    }
   }
 
   return null; // Không có role phù hợp
@@ -1192,7 +1173,7 @@ const canManageAssignments = computed(() =>
 );
 // Copy KPI làm template
 const canCopyTemplate = computed(() =>
-  hasPermission(RBAC_ACTIONS.COPY_TEMPLATE, getKpiResourceType())
+  hasPermission(RBAC_ACTIONS.COPY_TEMPLATE, RBAC_RESOURCES.KPI)
 );
 
 const sectionNameFromContext = computed(() => {

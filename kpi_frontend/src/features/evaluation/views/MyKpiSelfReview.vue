@@ -344,8 +344,8 @@ const getStatusText = (status) => {
 const getStatusColor = (status, record) => {
   if (
     (!status || status === "PENDING") &&
-    record.selfScore &&
-    record.selfScore.trim().length > 0
+    record.selfScore !== null &&
+    record.selfScore !== undefined
   ) {
     return "blue";
   }

@@ -61,6 +61,19 @@
           </a-card>
         </router-link>
       </a-col>
+      <!-- Thêm Card mới cho Lịch sử hiệu suất nhân viên -->
+      <a-col :xs="24" :sm="12" :md="8" :lg="6">
+        <router-link to="/dashboard/employee-performance-history">
+          <a-card hoverable class="dashboard-block-card card-employee-performance-history">
+            <template #title>
+              <bar-chart-outlined /> {{ $t("employeePerformanceHistory.title") }}
+            </template>
+            <p>
+              {{ $t("employeePerformanceHistoryDescription") }}
+            </p>
+          </a-card>
+        </router-link>
+      </a-col>
     </a-row>
   </div>
 </template>
@@ -182,6 +195,24 @@ import {
 .card-kpi-inventory p {
   color: #08979c; /* Màu chữ vừa của teal/cyan */
 }
+
+.card-employee-performance-history {
+  border-left: 5px solid #fa541c; /* Màu cam đậm */
+}
+.card-employee-performance-history :deep(.ant-card-head) {
+  background-color: #fff2e8;
+}
+.card-employee-performance-history :deep(.ant-card-body) {
+  background-color: #fff7f0;
+}
+.card-employee-performance-history .ant-card-head-title,
+.card-employee-performance-history :deep(.anticon) {
+  color: #ad2102;
+}
+.card-employee-performance-history p {
+  color: #d4380d;
+}
+
 .dashboard-block-card:hover {
   transform: translateY(-5px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);

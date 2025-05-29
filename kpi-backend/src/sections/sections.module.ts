@@ -4,9 +4,10 @@ import { Section } from '../entities/section.entity';
 import { SectionsService } from './sections.service';
 import { SectionsController } from './sections.controller';
 import { KPIAssignment } from 'src/entities/kpi-assignment.entity';
+import { EmployeesModule } from '../employees/employees.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Section, KPIAssignment])],
+  imports: [TypeOrmModule.forFeature([Section, KPIAssignment]), EmployeesModule],
   providers: [SectionsService],
   controllers: [SectionsController],
   exports: [SectionsService],

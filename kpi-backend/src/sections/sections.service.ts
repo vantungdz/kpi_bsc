@@ -7,6 +7,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Section } from 'src/entities/section.entity';
 import { Department } from 'src/entities/department.entity';
 import { Employee } from 'src/entities/employee.entity';
+import { EmployeesService } from '../employees/employees.service';
 
 import { Repository } from 'typeorm';
 
@@ -15,6 +16,7 @@ export class SectionsService {
   constructor(
     @InjectRepository(Section)
     private readonly sectionRepository: Repository<Section>,
+    private readonly employeesService: EmployeesService, // Inject EmployeesService
   ) {}
 
   async create(createSectionDto: any): Promise<Section> {
@@ -26,7 +28,16 @@ export class SectionsService {
     if (createSectionDto.managerId) {
       section.managerId = createSectionDto.managerId;
     }
-    return this.sectionRepository.save(section);
+    const savedSection = await this.sectionRepository.save(section);
+    // Update manager's roles if managerId exists
+    if (createSectionDto.managerId) {
+      const manager = await this.employeesService.findOne(createSectionDto.managerId);
+      const currentRoles = manager.roles?.map(r => typeof r === 'string' ? r : r.name) || [];
+      if (!currentRoles.includes('section')) {
+        await this.employeesService.updateRoles(manager.id, [...currentRoles, 'section']);
+      }
+    }
+    return savedSection;
   }
 
   async findAll(): Promise<Section[]> {

@@ -28,6 +28,7 @@ import * as XLSX from 'xlsx';
 import { Request } from 'express';
 import { PolicyGuard } from '../auth/guards/policy.guard';
 import { PolicyCheck } from '../auth/guards/policy.decorator';
+import { EmployeePerformanceHistoryDto } from './dto/employee-performance-history.dto';
 
 @ApiTags('Employees')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -189,5 +190,15 @@ export class EmployeesController {
   ) {
     // Truyền động departmentId vào policy check
     return { message: `Bạn là manager của phòng ban ${departmentId}!` };
+  }
+
+  @Get(':id/performance-history')
+  @ApiOperation({ summary: 'Get employee performance history by year' })
+  async getPerformanceHistory(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('fromYear') fromYear?: number,
+    @Query('toYear') toYear?: number,
+  ): Promise<EmployeePerformanceHistoryDto> {
+    return this.employeeService.getEmployeePerformanceHistory(id, fromYear, toYear);
   }
 }

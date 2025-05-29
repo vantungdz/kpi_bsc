@@ -49,7 +49,7 @@ export class KpiReviewService {
           where: {
             ...filter,
             employee: employeeIds.length ? { id: In(employeeIds) } : undefined,
-            status: In(allowedStatuses),
+            status: In(allowedStatuses), // Đảm bảo không lấy PENDING
           },
           relations: ['kpi', 'employee', 'department', 'section'],
         });
@@ -66,7 +66,7 @@ export class KpiReviewService {
           where: {
             ...filter,
             employee: employeeIds.length ? { id: In(employeeIds) } : undefined,
-            status: In(allowedStatuses),
+            status: In(allowedStatuses), // Đảm bảo không lấy PENDING
           },
           relations: ['kpi', 'employee', 'department', 'section'],
         });
@@ -76,7 +76,7 @@ export class KpiReviewService {
         return this.kpiReviewRepository.find({
           where: {
             ...filter,
-            status: In(allowedStatuses),
+            status: In(allowedStatuses), // Đảm bảo không lấy PENDING
           },
           relations: ['kpi', 'employee', 'department', 'section'],
         });
@@ -86,28 +86,57 @@ export class KpiReviewService {
         where: {
           ...filter,
           employee: { id: reqUser.id },
+          status: In(allowedStatuses), // Đảm bảo không lấy PENDING cho employee
         },
         relations: ['kpi', 'employee', 'department', 'section'],
       });
     }
-    // Nếu không truyền user, lấy tất cả theo filter
+    // Nếu không truyền user, lấy tất cả theo filter nhưng loại PENDING
     return this.kpiReviewRepository.find({
-      where: filter,
+      where: {
+        ...filter,
+        status: In([
+          ReviewStatus.SELF_REVIEWED,
+          ReviewStatus.SECTION_REVIEWED,
+          ReviewStatus.DEPARTMENT_REVIEWED,
+          ReviewStatus.MANAGER_REVIEWED,
+          ReviewStatus.EMPLOYEE_FEEDBACK,
+          ReviewStatus.COMPLETED,
+          ReviewStatus.DEPARTMENT_REVIEW_PENDING,
+        ]),
+      },
       relations: ['kpi', 'employee', 'department', 'section'],
     });
   }
 
   // Hàm giả lập lấy danh sách employeeIds mà manager quản lý
   async getManagedEmployeeIds(managerId: number): Promise<number[]> {
-    // TODO: Thay bằng truy vấn thực tế theo tổ chức của bạn
-    // Ví dụ: lấy tất cả employee thuộc các section/department mà manager này quản lý
-    // Ở đây trả về tất cả employee để demo
-    // Gợi ý thực tế:
     // 1. Lấy các section mà manager này quản lý
+    const sectionRepo = this.kpiReviewRepository.manager.getRepository('Section');
+    const managedSections = await sectionRepo.find({ where: { managerId } });
+    const sectionIds = managedSections.map((s: any) => s.id);
+
     // 2. Lấy các department mà manager này quản lý
+    const departmentRepo = this.kpiReviewRepository.manager.getRepository('Department');
+    const managedDepartments = await departmentRepo.find({ where: { managerId } });
+    const departmentIds = managedDepartments.map((d: any) => d.id);
+
     // 3. Lấy tất cả employee thuộc các section/department đó hoặc trực tiếp dưới quyền
-    // Ví dụ demo:
-    const employees = await this.kpiReviewRepository.manager.find(Employee);
+    const employeeRepo = this.kpiReviewRepository.manager.getRepository(Employee);
+    const whereClause: any[] = [];
+    if (sectionIds.length) {
+      whereClause.push({ sectionId: In(sectionIds) });
+    }
+    if (departmentIds.length) {
+      whereClause.push({ departmentId: In(departmentIds) });
+    }
+    // Trực tiếp dưới quyền
+    whereClause.push({ managerId });
+
+    // Gộp điều kiện bằng OR
+    const employees = await employeeRepo.find({
+      where: whereClause.length > 1 ? whereClause : whereClause[0],
+    });
     return employees.map((e) => e.id);
   }
 

@@ -30,6 +30,8 @@ import DepartmentCreateForm from "@/features/departments/views/DepartmentCreateF
 import SectionCreateForm from "@/features/sections/views/SectionCreateForm.vue";
 import KpiReviewList from "@/features/evaluation/views/KpiReviewList.vue";
 import RoleManager from "@/features/roles/views/RoleManager.vue";
+import KpiListEmployee from "../../features/kpi/views/KpiListEmployee.vue";
+import EmployeePerformanceHistory from "@/features/employees/EmployeePerformanceHistory.vue";
 
 const routes = [
   {
@@ -321,6 +323,31 @@ const routes = [
         {
           action: RBAC_ACTIONS.VIEW,
           resource: RBAC_RESOURCES.ADMIN,
+        },
+      ],
+    },
+  },
+  {
+    path: "/kpis/employee-management",
+    name: "KpiListEmployee",
+    component: KpiListEmployee,
+    meta: {
+      requiresAuth: true,
+      permissions: [
+        { action: RBAC_ACTIONS.VIEW, resource: RBAC_RESOURCES.KPI_EMPLOYEE },
+      ],
+    },
+  },
+  {
+    path: "/dashboard/employee-performance-history",
+    name: "EmployeePerformanceHistory",
+    component: EmployeePerformanceHistory,
+    meta: {
+      requiresAuth: true,
+      permissions: [
+        {
+          action: RBAC_ACTIONS.VIEW,
+          resource: RBAC_RESOURCES.EMPLOYEE_COMPANY,
         },
       ],
     },

@@ -2,65 +2,25 @@
   <div class="kpi-review-list" v-if="canViewKpiReview">
     <h2 class="kpi-title">{{ $t("kpiReviewListTitle") }}</h2>
     <div class="filters">
-      <a-select
-        v-model="selectedCycle"
-        :options="cycleOptions"
-        :placeholder="$t('selectCycle')"
-        style="width: 200px; margin-right: 16px"
-      />
-      <a-select
-        v-model="selectedStatus"
-        :options="statusOptions"
-        :placeholder="$t('reviewStatus')"
-        style="width: 200px; margin-right: 16px"
-      />
-      <a-input
-        v-model="searchText"
-        :placeholder="$t('searchKpiEmployee')"
-        style="width: 250px"
-      />
-      <a-button type="primary" @click="fetchReviews" style="margin-left: 16px">
-        {{ $t("search") }}
-      </a-button>
+      <a-select v-model:value="selectedCycle" :options="cycleOptions" :placeholder="$t('selectCycle')"
+        style="width: 200px; margin-right: 16px" />
+      <a-select v-model:value="selectedStatus" :options="statusOptions" :placeholder="$t('reviewStatus')"
+        style="width: 200px; margin-right: 16px" />
+      <a-input v-model:value="searchText" :placeholder="$t('searchKpiEmployee')" style="width: 250px" />
     </div>
     <div class="modern-table-wrapper">
-      <a-table
-        :columns="columns"
-        :data-source="normalizedReviews"
-        row-key="id"
-        :loading="loading"
-        bordered
-        class="modern-table"
-        style="margin-top: 24px"
-        :pagination="{ pageSize: 10, showSizeChanger: true }"
-      >
+      <a-table :columns="columns" :data-source="normalizedReviews" row-key="id" :loading="loading" bordered
+        class="modern-table" style="margin-top: 24px" :pagination="{ pageSize: 10, showSizeChanger: true }">
         <template #bodyCell="slotProps">
-          <template
-            v-if="slotProps.column && slotProps.column.key === 'actions'"
-          >
-            <a-button
-              type="primary"
-              size="small"
-              @click="openReviewForm(slotProps.record.raw)"
-              class="action-btn"
-              v-if="canReview"
-              >{{ $t("review") }}</a-button
-            >
-            <a-button
-              type="default"
-              size="small"
-              @click="viewHistory(slotProps.record.raw)"
-              class="action-btn"
-              >{{ $t("reviewHistory") }}</a-button
-            >
+          <template v-if="slotProps.column && slotProps.column.key === 'actions'">
+            <a-button type="primary" size="small" @click="openReviewForm(slotProps.record.raw)" class="action-btn"
+              v-if="canReview">{{ $t("review") }}</a-button>
+            <a-button type="default" size="small" @click="viewHistory(slotProps.record.raw)" class="action-btn">{{
+              $t("reviewHistory") }}</a-button>
           </template>
-          <template
-            v-else-if="slotProps.column && slotProps.column.key === 'status'"
-          >
-            <span
-              :class="['status-tag', slotProps.record.status.toLowerCase()]"
-            >
-              {{ $t(slotProps.record.status.toLowerCase()) }}
+          <template v-else-if="slotProps.column && slotProps.column.key === 'status'">
+            <span v-if="slotProps.record.status" :class="['status-tag', slotProps.record.status.toLowerCase()]">
+              {{ $t('statusReview.' + slotProps.record.status.toLowerCase()) }}
             </span>
           </template>
           <template v-else>
@@ -69,25 +29,11 @@
         </template>
       </a-table>
     </div>
-    <a-empty
-      v-if="!normalizedReviews.length && !loading"
-      :description="$t('noDataMatch')"
-    />
-    <ReviewFormModal
-      v-if="showReviewForm"
-      :review="selectedReview"
-      :visible="showReviewForm"
-      @close="closeReviewForm"
-      @saved="onReviewSaved"
-      modal-class="modern-modal"
-    />
-    <ReviewHistoryModal
-      v-if="showHistory"
-      :review="selectedReview"
-      :visible="showHistory"
-      @close="closeHistory"
-      class="modern-modal"
-    />
+    <a-empty v-if="!normalizedReviews.length && !loading" :description="$t('noDataMatch')" />
+    <ReviewFormModal v-if="showReviewForm" :review="selectedReview" :visible="showReviewForm" @close="closeReviewForm"
+      @saved="onReviewSaved" modal-class="modern-modal" />
+    <ReviewHistoryModal v-if="showHistory" :review="selectedReview" :visible="showHistory" @close="closeHistory"
+      class="modern-modal" />
   </div>
 </template>
 
@@ -107,8 +53,8 @@ const { t } = useI18n();
 
 const reviews = ref([]);
 const loading = ref(false);
-const selectedCycle = ref();
-const selectedStatus = ref();
+const selectedCycle = ref(null);
+const selectedStatus = ref(null);
 const searchText = ref("");
 const showReviewForm = ref(false);
 const showHistory = ref(false);
@@ -121,11 +67,11 @@ const statusOptions = [
   { label: t("awaitingEmployeeFeedback"), value: "EMPLOYEE_FEEDBACK" },
   { label: t("completed"), value: "COMPLETED" },
 ];
+const manualSearch = ref(false);
 
 const columns = computed(() => [
   { title: t("kpiName"), key: "kpiName", dataIndex: "kpiName" },
   { title: t("employee"), key: "employee", dataIndex: "employee" },
-  { title: t("cycle"), key: "cycle", dataIndex: "cycle" },
   { title: t("target"), key: "targetValue", dataIndex: "targetValue" },
   { title: t("actualResult"), key: "actualValue", dataIndex: "actualValue" },
   { title: t("status"), key: "status", dataIndex: "status" },
@@ -136,7 +82,7 @@ const columns = computed(() => [
 const filteredReviews = computed(() => {
   let data = reviews.value;
   if (selectedCycle.value)
-    data = data.filter((r) => r.cycle === selectedCycle.value);
+    data = data.filter((r) => r.cycle === String(selectedCycle.value));
   if (selectedStatus.value)
     data = data.filter((r) => r.status === selectedStatus.value);
   if (searchText.value) {
@@ -153,11 +99,10 @@ const filteredReviews = computed(() => {
 const normalizedReviews = computed(() => {
   return filteredReviews.value.map((r) => ({
     id: r.id,
-    kpiName: r.kpi?.name || "",
-    employee: r.employee?.fullName || "",
-    cycle: r.cycle || "",
-    targetValue: r.targetValue ?? "",
-    actualValue: r.actualValue ?? "",
+    kpiName: r.kpi.name || "",
+    employee: `${r.employee?.first_name} ${r.employee?.last_name}` || "",
+    targetValue: `${Number(r.targetValue).toLocaleString()} ${r.kpi.unit}` ?? "",
+    actualValue: `${Number(r.actualValue).toLocaleString()} ${r.kpi.unit}` ?? "",
     status: r.status || "",
     score: r.score ?? "",
     raw: r, // giữ lại bản gốc để truyền cho modal nếu cần
@@ -167,15 +112,23 @@ const normalizedReviews = computed(() => {
 const fetchReviews = async () => {
   loading.value = true;
   try {
-    const res = await getKpiReviewList({
+    console.log('[KPI Review] fetchReviews selectedCycle:', selectedCycle.value, 'selectedStatus:', selectedStatus.value);
+    const params = {
       cycle: selectedCycle.value,
-      status: selectedStatus.value,
-    });
+      status: selectedStatus.value
+    };
+    // Chỉ truyền search nếu bấm nút search
+    if (searchText.value && manualSearch.value) {
+      params.search = searchText.value;
+    }
+    console.log('[KPI Review] Params gửi lên API:', params); // Thêm log debug
+    const res = await getKpiReviewList(params);
     reviews.value = res;
   } finally {
     loading.value = false;
   }
 };
+
 
 const fetchCycles = async () => {
   const res = await getReviewCycles();
@@ -221,10 +174,13 @@ const canReview = computed(
     hasPermission(RBAC_ACTIONS.APPROVE, RBAC_RESOURCES.KPI_VALUE)
 );
 
-onMounted(() => {
-  fetchCycles();
+// Đảm bảo fetchReviews chỉ gọi sau khi fetchCycles xong
+onMounted(async () => {
+  console.log('[KPI Review] onMounted');
+  await fetchCycles();
   fetchReviews();
 });
+
 </script>
 
 <style scoped>
@@ -272,6 +228,9 @@ onMounted(() => {
 }
 .status-tag.pending {
   background: #f59e42;
+}
+.status-tag.self_reviewed {
+  background: #05574c;
 }
 .status-tag.manager_reviewed {
   background: #409eff;

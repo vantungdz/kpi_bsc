@@ -331,6 +331,24 @@ const actions = {
       throw error;
     }
   },
+
+  async fetchEmployeePerformanceHistory({ commit }, { employeeId, fromYear, toYear }) {
+    if (!employeeId) return [];
+    commit('SET_LOADING', true);
+    commit('SET_ERROR', null);
+    try {
+      const response = await apiClient.get(`/employees/${employeeId}/performance-history`, {
+        params: { fromYear, toYear },
+      });
+      // Không lưu vào state chung vì dữ liệu này dạng động, trả về luôn
+      return response.data || [];
+    } catch (error) {
+      commit('SET_ERROR', error);
+      throw error;
+    } finally {
+      commit('SET_LOADING', false);
+    }
+  },
 };
 
 export default {

@@ -98,8 +98,23 @@ const rules = reactive({
   ],
 });
 
+// Khi vào trang, kiểm tra localStorage để tự động tick và điền username nếu rememberMe
+if (localStorage.getItem('rememberMe') === 'true') {
+  rememberMe.value = true;
+  const savedUsername = localStorage.getItem('rememberedUsername');
+  if (savedUsername) formData.username = savedUsername;
+}
+
 // Handle login form submission
 const handleLogin = async (values) => {
+  // Nếu rememberMe, lưu vào localStorage, ngược lại xóa
+  if (rememberMe.value) {
+    localStorage.setItem('rememberMe', 'true');
+    localStorage.setItem('rememberedUsername', values.username);
+  } else {
+    localStorage.removeItem('rememberMe');
+    localStorage.removeItem('rememberedUsername');
+  }
   const success = await store.dispatch("auth/login", {
     username: values.username,
     password: values.password,
@@ -147,47 +162,96 @@ onUnmounted(() => {
 });
 </script>
 <style scoped>
-/* 
-    Nếu bạn có các biến màu global, hãy định nghĩa chúng trong một file CSS chung.
-    Ví dụ: --brand-primary: #0056b3; 
-  */
+:root {
+  --brand-primary: #1976d2;
+  --brand-primary-hover: #125ea2;
+  --brand-link: #1976d2;
+  --brand-primary-bg: #f5faff;
+  --brand-shadow: 0 8px 32px 0 rgba(25, 118, 210, 0.10);
+}
 .login-container {
+  position: fixed;
+  inset: 0;
   display: flex;
-  justify-content: center;
   align-items: center;
-  min-height: 100vh;
-  padding: 20px;
-  background: linear-gradient(to bottom right, #ece9e6, #ffffff);
+  justify-content: center;
+  background: linear-gradient(135deg, #f5faff 0%, #e3f0ff 100%);
+  padding: 0;
+  overflow: auto;
+  min-height: unset;
+  height: unset;
 }
 .login-box {
-  background-color: #fff;
-  padding: 40px 35px;
-  border-radius: 10px;
-  box-shadow: 0 5px 20px rgba(0, 0, 0, 0.12);
+  background: #fff;
+  border-radius: 18px;
+  box-shadow: var(--brand-shadow);
+  padding: 48px 38px 36px 38px;
+  max-width: 400px;
   width: 100%;
-  max-width: 420px;
   text-align: center;
+  animation: fadeIn 0.7s cubic-bezier(.4,0,.2,1);
+  max-height: 100vh;
+  overflow-y: auto;
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(30px); }
+  to { opacity: 1; transform: none; }
 }
 .login-logo {
   max-height: 60px;
-  margin-bottom: 25px;
+  margin-bottom: 28px;
+  filter: drop-shadow(0 2px 8px #1976d220);
 }
 .login-box h2 {
-  margin-bottom: 35px;
-  color: #343a40;
-  font-size: 1.75rem;
+  margin-bottom: 32px;
+  color: var(--brand-primary);
+  font-size: 2rem;
   font-weight: 700;
+  letter-spacing: 0.5px;
 }
 :deep(.ant-form-item-label > label) {
   font-weight: 600;
-  font-size: 0.9rem;
-  color: #495057;
+  font-size: 1rem;
+  color: #1976d2;
 }
 :deep(.ant-form-item) {
-  margin-bottom: 24px;
+  margin-bottom: 22px;
+}
+:deep(.ant-input-affix-wrapper),
+:deep(.ant-input-password-affix-wrapper) {
+  border-radius: 8px;
+  background: #f5faff;
+  border: 1.5px solid #e3f0ff;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+:deep(.ant-input-affix-wrapper-focused),
+:deep(.ant-input-password-affix-wrapper-focused) {
+  border-color: var(--brand-primary);
+  box-shadow: 0 0 0 2px #1976d220;
+}
+:deep(.ant-input),
+:deep(.ant-input-password) {
+  background: transparent;
+}
+:deep(.ant-input-prefix),
+:deep(.ant-input-password-icon) {
+  color: #1976d2;
+  opacity: 0.8;
+}
+:deep(.ant-checkbox-checked .ant-checkbox-inner) {
+  background-color: var(--brand-primary);
+  border-color: var(--brand-primary);
+}
+:deep(.ant-checkbox-inner) {
+  border-radius: 4px;
+}
+:deep(.ant-checkbox-wrapper:hover .ant-checkbox-inner),
+:deep(.ant-checkbox:hover .ant-checkbox-inner),
+:deep(.ant-checkbox-input:focus + .ant-checkbox-inner) {
+  border-color: var(--brand-primary);
 }
 .remember-forgot-row.ant-form-item {
-  margin-bottom: 20px;
+  margin-bottom: 18px;
 }
 .remember-forgot-row {
   display: flex;
@@ -195,48 +259,49 @@ onUnmounted(() => {
   align-items: center;
 }
 .forgot-password-link {
-  font-size: 0.9em;
+  font-size: 0.95em;
   color: var(--brand-link);
   text-decoration: none;
-  transition: color 0.2s ease;
+  transition: color 0.2s;
 }
 .forgot-password-link:hover {
   text-decoration: underline;
   color: var(--brand-primary-hover);
 }
-:deep(.ant-input-affix-wrapper:focus),
-:deep(.ant-input-affix-wrapper-focused),
-:deep(.ant-input-password-affix-wrapper:focus),
-:deep(.ant-input-password-affix-wrapper-focused) {
-  border-color: var(--brand-primary);
-  box-shadow: 0 0 0 2px
-    color-mix(in srgb, var(--brand-primary) 20%, transparent);
-}
-:deep(.ant-checkbox-checked .ant-checkbox-inner) {
-  background-color: var(--brand-primary);
-  border-color: var(--brand-primary);
-}
-:deep(.ant-checkbox-wrapper:hover .ant-checkbox-inner),
-:deep(.ant-checkbox:hover .ant-checkbox-inner),
-:deep(.ant-checkbox-input:focus + .ant-checkbox-inner) {
-  border-color: var(--brand-primary);
-}
 :deep(.ant-btn) {
-  transition:
-    background-color 0.2s ease-in-out,
-    border-color 0.2s ease-in-out,
-    transform 0.1s ease;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 1.08rem;
+  height: 44px;
+  transition: background 0.2s, border 0.2s, transform 0.1s;
 }
 :deep(.ant-btn-primary) {
-  background-color: var(--brand-primary);
-  border-color: var(--brand-primary);
+  background: linear-gradient(90deg, #1976d2 80%, #2196f3 100%);
+  border: none;
   color: #fff;
+  box-shadow: 0 2px 8px #1976d220;
 }
 :deep(.ant-btn-primary:not(:disabled):hover) {
-  background-color: var(--brand-primary-hover);
-  border-color: var(--brand-primary-hover);
+  background: linear-gradient(90deg, #125ea2 80%, #1976d2 100%);
+  color: #fff;
 }
 :deep(.ant-btn:active:not(:disabled)) {
-  transform: scale(0.98);
+  transform: scale(0.97);
+}
+:deep(.ant-alert) {
+  border-radius: 8px;
+  font-size: 1rem;
+}
+@media (max-width: 600px) {
+  .login-box {
+    padding: 28px 8px 24px 8px;
+    max-width: 98vw;
+  }
+  .login-logo {
+    max-height: 44px;
+  }
+  .login-box h2 {
+    font-size: 1.2rem;
+  }
 }
 </style>

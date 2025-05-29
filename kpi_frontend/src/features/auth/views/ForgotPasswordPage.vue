@@ -106,67 +106,129 @@ const AAlert = Alert;
 </script>
 
 <style scoped>
+:root {
+  --brand-primary: #1976d2;
+  --brand-primary-hover: #125ea2;
+  --brand-link: #1976d2;
+  --brand-primary-bg: #f5faff;
+  --brand-shadow: 0 8px 32px 0 rgba(25, 118, 210, 0.10);
+}
 .forgot-password-container {
+  position: fixed;
+  inset: 0;
   display: flex;
-  justify-content: center;
   align-items: center;
-  min-height: 100vh; /* Hoặc height phù hợp nếu nằm trong layout khác */
-  padding: 20px;
-  background: linear-gradient(
-    to bottom right,
-    #f0f2f5,
-    #e6e9f0
-  ); /* Nền khác trang login */
+  justify-content: center;
+  background: linear-gradient(135deg, #f5faff 0%, #e3f0ff 100%);
+  padding: 0;
+  overflow: auto;
+  min-height: unset;
+  height: unset;
 }
-
 .forgot-password-box {
-  background-color: #fff;
-  padding: 40px 35px;
-  border-radius: 8px;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+  background: #fff;
+  border-radius: 18px;
+  box-shadow: var(--brand-shadow);
+  padding: 48px 38px 36px 38px;
+  max-width: 400px;
   width: 100%;
-  max-width: 450px; /* Có thể rộng hơn login box một chút */
   text-align: center;
+  animation: fadeIn 0.7s cubic-bezier(.4,0,.2,1);
+  max-height: 100vh;
+  overflow-y: auto;
 }
-
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(30px); }
+  to { opacity: 1; transform: none; }
+}
 .logo-image {
-  /* Đổi tên class nếu dùng logo */
   max-height: 60px;
-  margin-bottom: 20px;
+  margin-bottom: 28px;
+  filter: drop-shadow(0 2px 8px #1976d220);
 }
-
 .forgot-password-box h2 {
-  margin-bottom: 15px;
-  color: #343a40;
-  font-size: 1.6rem; /* Hơi nhỏ hơn login */
-  font-weight: 600;
+  margin-bottom: 32px;
+  color: var(--brand-primary);
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: 0.5px;
 }
-
-.description-text {
-  color: #6c757d;
-  margin-bottom: 25px;
-  font-size: 0.95em;
-}
-
 :deep(.ant-form-item-label > label) {
-  font-weight: 500;
-  color: #495057;
+  font-weight: 600;
+  font-size: 1rem;
+  color: #1976d2;
 }
-
 :deep(.ant-form-item) {
-  margin-bottom: 24px;
+  margin-bottom: 22px;
 }
-
+:deep(.ant-input-affix-wrapper),
+:deep(.ant-input-password-affix-wrapper) {
+  border-radius: 8px;
+  background: #f5faff;
+  border: 1.5px solid #e3f0ff;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+:deep(.ant-input-affix-wrapper-focused),
+:deep(.ant-input-password-affix-wrapper-focused) {
+  border-color: var(--brand-primary);
+  box-shadow: 0 0 0 2px #1976d220;
+}
+:deep(.ant-input),
+:deep(.ant-input-password) {
+  background: transparent;
+}
+:deep(.ant-input-prefix),
+:deep(.ant-input-password-icon) {
+  color: #1976d2;
+  opacity: 0.8;
+}
+:deep(.ant-btn) {
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 1.08rem;
+  height: 44px;
+  transition: background 0.2s, border 0.2s, transform 0.1s;
+}
+:deep(.ant-btn-primary) {
+  background: linear-gradient(90deg, #1976d2 80%, #2196f3 100%);
+  border: none;
+  color: #fff;
+  box-shadow: 0 2px 8px #1976d220;
+}
+:deep(.ant-btn-primary:not(:disabled):hover) {
+  background: linear-gradient(90deg, #125ea2 80%, #1976d2 100%);
+  color: #fff;
+}
+:deep(.ant-btn:active:not(:disabled)) {
+  transform: scale(0.97);
+}
+:deep(.ant-alert) {
+  border-radius: 8px;
+  font-size: 1rem;
+}
 .back-to-login {
   margin-top: 25px;
-  font-size: 0.9em;
+  font-size: 0.95em;
 }
-
 .back-to-login a {
-  color: var(--brand-link, #0d6efd); /* Dùng biến màu nếu có */
+  color: var(--brand-link);
   text-decoration: none;
+  transition: color 0.2s;
 }
 .back-to-login a:hover {
   text-decoration: underline;
+  color: var(--brand-primary-hover);
+}
+@media (max-width: 600px) {
+  .forgot-password-box {
+    padding: 28px 8px 24px 8px;
+    max-width: 98vw;
+  }
+  .logo-image {
+    max-height: 44px;
+  }
+  .forgot-password-box h2 {
+    font-size: 1.2rem;
+  }
 }
 </style>

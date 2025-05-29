@@ -16,9 +16,15 @@ import {
   DataSource,
   IsNull,
   Equal,
+  In,
 } from 'typeorm';
 import * as XLSX from 'xlsx';
 import * as bcrypt from 'bcrypt';
+import { EmployeePerformanceHistoryDto, EmployeePerformanceYearDto } from './dto/employee-performance-history.dto';
+import { KPIAssignment } from '../entities/kpi-assignment.entity';
+import { KpiValue, KpiValueStatus } from '../entities/kpi-value.entity';
+import { KpiReview } from '../entities/kpi-review.entity';
+import { Kpi } from '../entities/kpi.entity';
 
 interface EmployeeFilterOptions {
   departmentId?: number;
@@ -464,5 +470,111 @@ export class EmployeesService {
     Object.assign(employee, updateDto);
     await this.employeeRepository.save(employee);
     return employee;
+  }
+
+  async getEmployeePerformanceHistory(
+    employeeId: number,
+    fromYear?: number,
+    toYear?: number,
+  ): Promise<EmployeePerformanceHistoryDto> {
+    const employee = await this.employeeRepository.findOne({
+      where: { id: employeeId },
+      relations: ['department'],
+    });
+    if (!employee) throw new NotFoundException('Employee not found');
+    // Lấy tất cả assignment của employee
+    const assignmentRepo = this.dataSource.getRepository(KPIAssignment);
+    const valueRepo = this.dataSource.getRepository(KpiValue);
+    const reviewRepo = this.dataSource.getRepository(KpiReview);
+    const kpiRepo = this.dataSource.getRepository(Kpi);
+
+    // Lấy tất cả assignment của employee
+    const assignments = await assignmentRepo.find({
+      where: { employee: { id: employeeId } },
+      relations: ['kpi'],
+    });
+    if (!assignments.length) {
+      return {
+        employeeId,
+        fullName: `${employee.first_name || ''} ${employee.last_name || ''}`.trim(),
+        department: employee.department?.name,
+        years: [],
+      };
+    }
+    // Lấy tất cả value đã APPROVED của các assignment này
+    const assignmentIds = assignments.map(a => a.id);
+    const values = await valueRepo.find({
+      where: {
+        ...(assignmentIds.length ? { kpi_assigment_id: In(assignmentIds) } : {}),
+        status: KpiValueStatus.APPROVED,
+      },
+      order: { timestamp: 'ASC' },
+    });
+    // Gom theo năm
+    const yearMap: Record<number, { values: KpiValue[]; kpis: Set<number> }> = {};
+    for (const v of values) {
+      const year = v.timestamp.getFullYear();
+      if (fromYear && year < fromYear) continue;
+      if (toYear && year > toYear) continue;
+      if (!yearMap[year]) yearMap[year] = { values: [], kpis: new Set() };
+      yearMap[year].values.push(v);
+      yearMap[year].kpis.add(v.kpi_assigment_id);
+    }
+    // Tính toán từng năm
+    const years: EmployeePerformanceYearDto[] = [];
+    for (const year of Object.keys(yearMap).map(Number).sort()) {
+      const yearData = yearMap[year];
+      // Tính điểm trung bình theo tỷ lệ hoàn thành (%)
+      const kpiScores = yearData.values.map(v => {
+        const assignment = assignments.find(a => a.id === v.kpi_assigment_id);
+        const target = assignment?.kpi?.target;
+        if (target && Number(target) > 0) {
+          return (Number(v.value) / Number(target)) * 100;
+        }
+        return 0;
+      });
+      const averageKpiScore = kpiScores.length
+        ? parseFloat((kpiScores.reduce((a, b) => a + b, 0) / kpiScores.length).toFixed(2))
+        : 0;
+      // Đếm số KPI đạt (>= target) và chưa đạt
+      let achievedCount = 0;
+      let notAchievedCount = 0;
+      for (const v of yearData.values) {
+        // Lấy target của KPI
+        const assignment = assignments.find(a => a.id === v.kpi_assigment_id);
+        const target = assignment?.kpi?.target;
+        if (target !== undefined && target !== null) {
+          if (Number(v.value) >= Number(target)) achievedCount++;
+          else notAchievedCount++;
+        }
+      }
+      const total = achievedCount + notAchievedCount;
+      const achievedRate = total > 0 ? parseFloat(((achievedCount / total) * 100).toFixed(2)) : 0;
+      const notAchievedRate = total > 0 ? parseFloat(((notAchievedCount / total) * 100).toFixed(2)) : 0;
+      // Lấy nhận xét nổi bật (manager review)
+      const reviews = await reviewRepo.find({
+        where: {
+          employee: { id: employeeId },
+          cycle: String(year),
+        },
+        order: { id: 'ASC' },
+      });
+      const highlightComments = reviews.map(r => r.managerComment).filter(Boolean);
+      years.push({
+        year,
+        averageKpiScore,
+        achievedCount,
+        notAchievedCount,
+        achievedRate,
+        notAchievedRate,
+        highlightComments,
+      });
+    }
+    return {
+      employeeId,
+      fullName: `${employee.first_name || ''} ${employee.last_name || ''}`.trim(),
+      department: employee.department?.name,
+      years,
+    };
   }
 }

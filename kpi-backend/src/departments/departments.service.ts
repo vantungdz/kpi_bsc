@@ -4,12 +4,14 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Department } from 'src/entities/department.entity';
 import { Employee } from 'src/entities/employee.entity';
 import { Repository } from 'typeorm';
+import { EmployeesService } from '../employees/employees.service';
 
 @Injectable()
 export class DepartmentsService {
   constructor(
     @InjectRepository(Department)
     private readonly departmentRepository: Repository<Department>,
+    private readonly employeesService: EmployeesService, // Inject EmployeesService
   ) {}
 
   async create(createDepartmentDto: any): Promise<Department> {
@@ -18,7 +20,16 @@ export class DepartmentsService {
     if (createDepartmentDto.managerId) {
       department.manager = { id: createDepartmentDto.managerId } as Employee; // Sửa ở đây
     }
-    return this.departmentRepository.save(department);
+    const savedDepartment = await this.departmentRepository.save(department);
+    // Update manager's roles if managerId exists
+    if (createDepartmentDto.managerId) {
+      const manager = await this.employeesService.findOne(createDepartmentDto.managerId);
+      const currentRoles = manager.roles?.map(r => typeof r === 'string' ? r : r.name) || [];
+      if (!currentRoles.includes('department')) {
+        await this.employeesService.updateRoles(manager.id, [...currentRoles, 'department']);
+      }
+    }
+    return savedDepartment;
   }
 
   async findAll(): Promise<Department[]> {

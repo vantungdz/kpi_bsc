@@ -17,27 +17,56 @@
           : 'display:none',
     }"
     :cancel-button-props="{ disabled: loading }"
+    width="80%"
+    wrap-class-name="kpi-review-modal"
+    body-style="padding: 0; background: #f4f7fb; border-radius: 14px;"
   >
-    <div v-if="review">
-      <div class="review-info-grid">
+    <div v-if="review" class="kpi-review-content compact">
+      <!-- Steps: Quy trình đánh giá KPI -->
+      <a-steps
+        :current="currentStep"
+        class="kpi-steps"
+        direction="horizontal"
+      >
+        <a-step :title="$t('selfReview')">
+          <template #icon><user-outlined /></template>
+        </a-step>
+        <a-step :title="$t('sectionReview')">
+          <template #icon><team-outlined /></template>
+        </a-step>
+        <a-step :title="$t('departmentReview')">
+          <template #icon><apartment-outlined /></template>
+        </a-step>
+        <a-step :title="$t('managerReview')">
+          <template #icon><solution-outlined /></template>
+        </a-step>
+        <a-step :title="$t('employeeFeedback')">
+          <template #icon><message-outlined /></template>
+        </a-step>
+        <a-step :title="$t('completed')">
+          <template #icon><smile-outlined /></template>
+        </a-step>
+      </a-steps>
+      <div class="review-info-grid pro">
         <div>
-          <b>{{ $t("kpiName") }}:</b> {{ review.kpi?.name }}
+          <span class="info-label">{{ $t("kpiName") }}:</span>
+          <span class="info-value">{{ review.kpi.name }}</span>
         </div>
         <div>
-          <b>{{ $t("employee") }}:</b> {{ review.employee?.fullName }}
+          <span class="info-label">{{ $t("employee") }}:</span>
+          <span class="info-value">{{ review.employee?.first_name }} {{ review.employee?.last_name }}</span>
         </div>
         <div>
-          <b>{{ $t("cycle") }}:</b> {{ review.cycle }}
+          <span class="info-label">{{ $t("target") }}:</span>
+          <span class="info-value">{{ Number(review.targetValue).toLocaleString()}} {{ review.kpi.unit }}</span>
         </div>
         <div>
-          <b>{{ $t("target") }}:</b> {{ review.targetValue }}
-        </div>
-        <div>
-          <b>{{ $t("actualResult") }}:</b> {{ review.actualValue }}
+          <span class="info-label">{{ $t("actualResult") }}:</span>
+          <span class="info-value">{{ Number(review.actualValue).toLocaleString() }} {{ review.kpi.unit }}</span>
         </div>
       </div>
-      <div class="review-section">
-        <div class="review-section-title">{{ $t("selfReview") }}</div>
+      <div class="review-section pro">
+        <div class="review-section-title self">{{ $t("selfReview") }}</div>
         <div class="review-row">
           <span class="review-label">{{ $t("selfScore") }}:</span>
           <a-rate :value="review.selfScore" :count="5" allow-half disabled />
@@ -49,8 +78,8 @@
           </div>
         </div>
       </div>
-      <div v-if="review.sectionScore !== undefined" class="review-section">
-        <div class="review-section-title">{{ $t("sectionReview") }}</div>
+      <div v-if="review.sectionScore !== undefined" class="review-section pro">
+        <div class="review-section-title section">{{ $t("sectionReview") }}</div>
         <div class="review-row">
           <span class="review-label">{{ $t("sectionScore") }}:</span>
           <a-rate :value="review.sectionScore" :count="5" allow-half disabled />
@@ -62,16 +91,11 @@
           </div>
         </div>
       </div>
-      <div v-if="review.departmentScore !== undefined" class="review-section">
-        <div class="review-section-title">{{ $t("departmentReview") }}</div>
+      <div v-if="review.departmentScore !== undefined" class="review-section pro">
+        <div class="review-section-title department">{{ $t("departmentReview") }}</div>
         <div class="review-row">
           <span class="review-label">{{ $t("departmentScore") }}:</span>
-          <a-rate
-            :value="review.departmentScore"
-            :count="5"
-            allow-half
-            disabled
-          />
+          <a-rate :value="review.departmentScore" :count="5" allow-half disabled />
         </div>
         <div class="review-row">
           <span class="review-label">{{ $t("departmentComment") }}:</span>
@@ -80,8 +104,8 @@
           </div>
         </div>
       </div>
-      <div v-if="review.managerScore !== undefined" class="review-section">
-        <div class="review-section-title">{{ $t("managerReview") }}</div>
+      <div v-if="review.managerScore !== undefined" class="review-section pro">
+        <div class="review-section-title manager">{{ $t("managerReview") }}</div>
         <div class="review-row">
           <span class="review-label">{{ $t("managerScore") }}:</span>
           <a-rate :value="review.managerScore" :count="5" allow-half disabled />
@@ -94,19 +118,15 @@
         </div>
       </div>
       <div
-        v-if="
-          review.employeeFeedback &&
-          (review.status === 'MANAGER_REVIEWED' ||
-            review.status === 'COMPLETED')
-        "
-        class="review-section"
+        v-if="review.employeeFeedback && (review.status === 'MANAGER_REVIEWED' || review.status === 'COMPLETED')"
+        class="review-section pro"
       >
-        <div class="review-section-title">{{ $t("employeeFeedback") }}</div>
+        <div class="review-section-title feedback">{{ $t("employeeFeedback") }}</div>
         <div class="review-comment">{{ review.employeeFeedback }}</div>
       </div>
       <div v-if="isCurrentUserCanReview">
-        <div v-if="isEmployeeCanFeedback" class="review-section">
-          <div class="review-section-title">{{ $t("employeeFeedback") }}</div>
+        <div v-if="isEmployeeCanFeedback" class="review-section pro">
+          <div class="review-section-title feedback">{{ $t("employeeFeedback") }}</div>
           <a-textarea
             v-model:value="form.employeeFeedback"
             :placeholder="$t('feedbackPlaceholder')"
@@ -114,13 +134,13 @@
             :disabled="loading"
           />
         </div>
-        <div v-else-if="isManagerCanComplete" class="review-section">
-          <div style="margin-bottom: 12px; color: #52c41a; font-weight: 600">
+        <div v-else-if="isManagerCanComplete" class="review-section pro">
+          <div class="review-section-title completed" style="color: #52c41a;">
             <span>{{ $t("employeeFeedbackCompleted") }}</span>
           </div>
         </div>
-        <div v-else class="review-section">
-          <div class="review-section-title">{{ $t("yourReview") }}</div>
+        <div v-else class="review-section pro">
+          <div class="review-section-title your-review">{{ $t("yourReview") }}</div>
           <div style="margin: 12px 0">
             <a-rate
               v-model:value="form.score"
@@ -147,7 +167,7 @@
       </div>
       <div
         v-else-if="isCurrentLevelReviewed"
-        style="color: #52c41a; margin-top: 8px; font-weight: 600"
+        class="review-section pro reviewed-msg"
       >
         <b>{{ $t("reviewed") }}</b>
       </div>
@@ -166,6 +186,7 @@ import {
   completeReview,
 } from "@/core/services/kpiReviewApi";
 import { useStore } from "vuex";
+import { UserOutlined, TeamOutlined, ApartmentOutlined, SolutionOutlined, MessageOutlined, SmileOutlined } from '@ant-design/icons-vue';
 
 const props = defineProps({
   review: Object,
@@ -331,55 +352,157 @@ const submitReview = async () => {
     loading.value = false;
   }
 };
+
+// Steps: xác định bước hiện tại dựa vào review.status
+const statusStepMap = {
+  PENDING: 0,
+  SELF_REVIEWED: 1,
+  SECTION_REVIEWED: 2,
+  DEPARTMENT_REVIEWED: 3,
+  MANAGER_REVIEWED: 4,
+  EMPLOYEE_FEEDBACK: 4, // EMPLOYEE_FEEDBACK là bước 5, nhưng MANAGER_REVIEWED cũng có thể là 4
+  COMPLETED: 5,
+};
+const currentStep = computed(() => {
+  if (!props.review || !props.review.status) return 0;
+  return statusStepMap[props.review.status] ?? 0;
+});
 </script>
 
 <style scoped>
-.review-info-grid {
+.kpi-review-modal .ant-modal-content {
+  border-radius: 14px;
+  background: #f4f7fb;
+  box-shadow: 0 4px 18px #b3c6e022;
+  max-width: 900px;
+  min-width: 320px;
+}
+.kpi-review-content.compact {
+  padding: 24px 18px 12px 18px;
+  background: #f4f7fb;
+  border-radius: 14px;
+}
+.kpi-steps {
+  margin-bottom: 18px;
+  background: #eaf2fb;
+  border-radius: 10px;
+  padding: 12px 10px 4px 10px;
+  box-shadow: 0 2px 8px #e6f7ff33;
+}
+.review-info-grid.pro {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 8px 24px;
-  margin-bottom: 18px;
+  gap: 8px 18px;
+  margin-bottom: 16px;
   font-size: 15px;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 1px 4px #e6f7ff22;
+  padding: 12px 14px 6px 14px;
 }
-@media (max-width: 600px) {
-  .review-info-grid {
+.info-label {
+  color: #888;
+  font-weight: 500;
+  margin-right: 4px;
+}
+.info-value {
+  color: #1a237e;
+  font-weight: 600;
+}
+@media (max-width: 900px) {
+  .kpi-review-content.compact {
+    padding: 8px 2px 4px 2px;
+  }
+  .review-info-grid.pro {
     grid-template-columns: 1fr;
     gap: 6px 0;
-    font-size: 14px;
+    font-size: 13px;
+    padding: 6px 4px 4px 4px;
   }
 }
-.review-section {
-  background: #f9fafb;
-  border-radius: 12px;
-  padding: 14px 18px 10px 18px;
-  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.04);
-  margin-bottom: 12px;
+.review-section.pro {
+  background: #fff;
+  border-radius: 8px;
+  padding: 12px 14px 8px 14px;
+  box-shadow: 0 1px 4px #e6f7ff22;
+  margin-bottom: 10px;
+  border-left: 4px solid #eaf2fb;
+  transition: border-color 0.2s;
 }
 .review-section-title {
-  font-weight: 600;
-  color: #409eff;
-  margin-bottom: 8px;
-  font-size: 16px;
+  font-weight: 700;
+  margin-bottom: 6px;
+  font-size: 15px;
+  letter-spacing: 0.2px;
 }
+.review-section-title.self { color: #409eff; border-left: 3px solid #409eff; padding-left: 4px; }
+.review-section-title.section { color: #13c2c2; border-left: 3px solid #13c2c2; padding-left: 4px; }
+.review-section-title.department { color: #1890ff; border-left: 3px solid #1890ff; padding-left: 4px; }
+.review-section-title.manager { color: #722ed1; border-left: 3px solid #722ed1; padding-left: 4px; }
+.review-section-title.feedback { color: #faad14; border-left: 3px solid #faad14; padding-left: 4px; }
+.review-section-title.completed { color: #52c41a; border-left: 3px solid #52c41a; padding-left: 4px; }
+.review-section-title.your-review { color: #1a237e; border-left: 3px solid #1a237e; padding-left: 4px; }
 .review-row {
   display: flex;
   align-items: flex-start;
   margin-bottom: 6px;
 }
 .review-label {
-  min-width: 120px;
+  min-width: 100px;
   color: #666;
   font-weight: 500;
-  margin-right: 8px;
+  margin-right: 6px;
 }
 .review-comment {
-  background: #fff;
-  border: 1px solid #eee;
+  background: #f7faff;
+  border: 1px solid #eaf2fb;
   border-radius: 6px;
-  padding: 7px 12px;
-  min-height: 32px;
-  font-size: 14px;
+  padding: 6px 10px;
+  min-height: 28px;
+  font-size: 13px;
   color: #222;
   flex: 1;
+  box-shadow: 0 1px 2px #e6f7ff11;
+}
+.reviewed-msg {
+  color: #52c41a;
+  font-size: 14px;
+  text-align: center;
+  background: #f6fff6;
+  border-left: 4px solid #52c41a;
+}
+:deep(.ant-steps-horizontal .ant-steps-item .ant-steps-item-title) {
+  white-space: normal;
+  max-width: 90px;
+  text-align: center;
+  font-weight: 600;
+  color: #1a237e;
+  font-size: 13px;
+}
+:deep(.ant-steps-item-process .ant-steps-item-icon) {
+  background: linear-gradient(90deg, #1890ff 0%, #40a9ff 100%);
+  box-shadow: 0 2px 8px #1890ff22;
+  border: none;
+}
+:deep(.ant-steps-item-finish .ant-steps-item-icon) {
+  background: #52c41a;
+  color: #fff;
+  border: none;
+}
+:deep(.ant-steps-item-wait .ant-steps-item-icon) {
+  background: #e6f7ff;
+  color: #bfbfbf;
+  border: none;
+}
+:deep(.ant-steps-item .ant-steps-item-icon) {
+  box-shadow: 0 1px 2px #e6f7ff22;
+}
+:deep(.ant-steps-item .ant-steps-item-content) {
+  min-width: 80px;
+}
+:deep(.ant-steps-horizontal) {
+  flex-wrap: wrap;
+  row-gap: 6px;
+  justify-content: center;
 }
 </style>

@@ -97,85 +97,55 @@
       <a-form
         ref="addEditEmployeeFormRef"
         :model="employeeForm"
+        :rules="{
+          username: [{ required: true, message: $t('usernameRequired') }],
+          email: [
+            { required: true, message: $t('emailRequired') },
+            { type: 'email', message: $t('emailInvalid') }
+          ],
+          first_name: [{ required: true, message: $t('firstNameRequired') }],
+          last_name: [{ required: true, message: $t('lastNameRequired') }],
+          roles: [{ required: true, message: $t('roleRequired') }],
+          departmentId: [{ required: true, message: $t('departmentRequired') }],
+          sectionId: [{ required: true, message: $t('sectionRequired') }],
+          password: [{ required: !editEmployee, message: $t('passwordRequired') }],
+        }"
         layout="vertical"
       >
-        <a-form-item
-          :label="$t('username')"
-          :rules="[{ required: true, message: $t('usernameRequired') }]"
-        >
-          <a-input
-            v-model:value="employeeForm.username"
-            :disabled="!!editEmployee"
-          />
+        <a-form-item :label="$t('username')" name="username">
+          <a-input v-model:value="employeeForm.username" :disabled="!!editEmployee" />
         </a-form-item>
-        <a-form-item
-          :label="$t('email')"
-          :rules="[
-            { required: true, type: 'email', message: $t('emailRequired') },
-          ]"
-        >
+        <a-form-item :label="$t('email')" name="email">
           <a-input v-model:value="employeeForm.email" />
         </a-form-item>
-        <a-form-item
-          :label="$t('firstName')"
-          :rules="[{ required: true, message: $t('firstNameRequired') }]"
-        >
+        <a-form-item :label="$t('firstName')" name="first_name">
           <a-input v-model:value="employeeForm.first_name" />
         </a-form-item>
-        <a-form-item
-          :label="$t('lastName')"
-          :rules="[{ required: true, message: $t('lastNameRequired') }]"
-        >
+        <a-form-item :label="$t('lastName')" name="last_name">
           <a-input v-model:value="employeeForm.last_name" />
         </a-form-item>
-        <a-form-item
-          :label="$t('role')"
-          :rules="[{ required: true, message: $t('roleRequired') }]"
-        >
-          <a-select
-            v-model:value="employeeForm.roles"
-            mode="multiple"
-            allow-clear
-          >
-            <a-select-option
-              v-for="role in roles"
-              :key="role.value"
-              :value="role.value"
-              >{{ $t(role.label) }}</a-select-option
-            >
+        <a-form-item :label="$t('role')" name="roles">
+          <a-select v-model:value="employeeForm.roles" mode="multiple" allow-clear>
+            <a-select-option v-for="role in roles" :key="role.value" :value="role.value">
+              {{ $t(role.label) }}
+            </a-select-option>
           </a-select>
         </a-form-item>
-        <a-form-item
-          :label="$t('departmentLabel')"
-          :rules="[{ required: true, message: $t('departmentRequired') }]"
-        >
+        <a-form-item :label="$t('departmentLabel')" name="departmentId">
           <a-select v-model:value="employeeForm.departmentId" allow-clear>
-            <a-select-option
-              v-for="dept in departmentList"
-              :key="dept.id"
-              :value="dept.id"
-              >{{ dept.name }}</a-select-option
-            >
+            <a-select-option v-for="dept in departmentList" :key="dept.id" :value="dept.id">
+              {{ dept.name }}
+            </a-select-option>
           </a-select>
         </a-form-item>
-        <a-form-item
-          :label="$t('section')"
-          :rules="[{ required: true, message: $t('sectionRequired') }]"
-        >
+        <a-form-item :label="$t('section')" name="sectionId">
           <a-select v-model:value="employeeForm.sectionId" allow-clear>
-            <a-select-option
-              v-for="sec in sectionListForForm"
-              :key="sec.id"
-              :value="sec.id"
-              >{{ sec.name }}</a-select-option
-            >
+            <a-select-option v-for="sec in sectionListForForm" :key="sec.id" :value="Number(sec.id)">
+              {{ sec.name }}
+            </a-select-option>
           </a-select>
         </a-form-item>
-        <a-form-item
-          v-if="!editEmployee"
-          :label="$t('password')"
-          :rules="[{ required: true, message: $t('passwordRequired') }]"
-        >
+        <a-form-item v-if="!editEmployee" :label="$t('password')" name="password">
           <a-input-password v-model:value="employeeForm.password" />
         </a-form-item>
       </a-form>
@@ -435,11 +405,14 @@ const employeeForm = ref({
   email: "",
   first_name: "",
   last_name: "",
-  roles: [], // đổi từ role sang roles (mảng)
+  roles: [],
   departmentId: undefined,
   sectionId: undefined,
   password: "",
 });
+
+const isEditingEmployee = ref(false);
+
 const roles = [
   { value: "admin", label: "admin" },
   { value: "manager", label: "manager" },
@@ -593,35 +566,84 @@ const openAddModal = () => {
   });
   isAddEditModalVisible.value = true;
 };
-const openEditModal = (employee) => {
+// Helper lấy sectionId từ employee, fallback nhiều trường hợp
+function getSectionIdFromEmployee(employee) {
+  if (employee.sectionId !== undefined && employee.sectionId !== null) return Number(employee.sectionId);
+  if (employee.section && employee.section.id !== undefined && employee.section.id !== null) return Number(employee.section.id);
+  // Fallback nếu có mảng sections (ít gặp)
+  if (Array.isArray(employee.sections) && employee.sections.length > 0 && employee.sections[0].id !== undefined) return Number(employee.sections[0].id);
+  // Fallback nếu có section_code và sectionListForForm
+  if (employee.section_code && sectionListForForm.value) {
+    const found = sectionListForForm.value.find(sec => sec.code === employee.section_code);
+    if (found) return Number(found.id);
+  }
+  return undefined;
+}
+
+const openEditModal = async (employee) => {
+  isEditingEmployee.value = true;
   editEmployee.value = employee;
-  Object.assign(employeeForm.value, {
-    ...employee,
-    departmentId: employee.department?.id,
-    sectionId: employee.section?.id,
-    roles: Array.isArray(employee.roles)
-      ? employee.roles.map((r) => (typeof r === "string" ? r : r?.name))
-      : employee.role?.name
-        ? [employee.role.name]
-        : [],
-    password: "",
-  });
+  // Gán từng trường một để tránh bị ghi đè sectionId
+  employeeForm.value.username = employee.username || '';
+  employeeForm.value.email = employee.email || '';
+  employeeForm.value.first_name = employee.first_name || '';
+  employeeForm.value.last_name = employee.last_name || '';
+  employeeForm.value.roles = Array.isArray(employee.roles)
+    ? employee.roles.map((r) => (typeof r === "string" ? r : r?.name))
+    : employee.role?.name
+      ? [employee.role.name]
+      : [];
+  employeeForm.value.departmentId = Number(employee.department?.id) || undefined;
+  employeeForm.value.sectionId = getSectionIdFromEmployee(employee);
+  employeeForm.value.password = '';
+  // Đảm bảo sectionListForForm luôn chứa section của nhân viên
+  if (employee.department?.id) {
+    const sections = store.getters["sections/sectionsByDepartment"](employee.department.id);
+    if (!sections || !sections.length) {
+      await store.dispatch("sections/fetchSectionsByDepartment", employee.department.id);
+    }
+  }
   isAddEditModalVisible.value = true;
+  isEditingEmployee.value = false;
 };
+
+watch(
+  () => employeeForm.value.departmentId,
+  (newVal) => {
+    if (newVal) {
+      if (!isEditingEmployee.value) {
+        employeeForm.value.sectionId = undefined;
+      }
+      store.dispatch("sections/fetchSectionsByDepartment", newVal);
+    }
+  }
+);
 const closeAddEditModal = () => {
   isAddEditModalVisible.value = false;
   editEmployee.value = null;
 };
 const addEditEmployeeFormRef = ref();
 
+// Update the form to use Ant Design's built-in validation for required fields.
 const submitAddEditEmployeeForm = () => {
+  if (!addEditEmployeeFormRef.value) {
+    notification.error({
+      message: $t("validationError"),
+      description: $t("formReferenceMissing"),
+    });
+    return;
+  }
+
   addEditEmployeeFormRef.value
-    ?.validate()
+    .validate()
     .then(() => {
       handleAddEditEmployee();
     })
     .catch(() => {
-      // Validation failed, do nothing
+      notification.error({
+        message: $t("validationError"),
+        description: $t("pleaseCheckFormFields"),
+      });
     });
 };
 const handleAddEditEmployee = async () => {
@@ -856,7 +878,9 @@ watch(
   () => employeeForm.value.departmentId,
   (newVal) => {
     if (newVal) {
-      employeeForm.value.sectionId = undefined;
+      if (!isEditingEmployee.value) {
+        employeeForm.value.sectionId = undefined;
+      }
       store.dispatch("sections/fetchSectionsByDepartment", newVal);
     }
   }

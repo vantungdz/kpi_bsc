@@ -1014,3 +1014,9 @@ body {
       justify-content: center; color: #aaa; border: 1px dashed #ccc;
       border-radius: 4px; font-style: italic;
   }
+
+/* Hiệu ứng transition width cho Ant Design Sider (sidebar) */
+.ant-layout-sider {
+  transition: width 0.35s cubic-bezier(0.4,0,0.2,1), background 0.25s, box-shadow 0.25s !important;
+  overflow: hidden !important;
+}

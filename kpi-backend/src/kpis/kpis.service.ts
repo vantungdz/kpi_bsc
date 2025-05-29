@@ -112,11 +112,6 @@ export class KpisService {
       itemsPerPage: number;
     };
   }> {
-    await this.checkPermission(
-      userId,
-      RBAC_ACTIONS.VIEW,
-      RBAC_RESOURCES.KPI_COMPANY,
-    );
     const { page = 1, limit = 15 } = filterDto;
 
     const query = this.kpisRepository
@@ -245,11 +240,6 @@ export class KpisService {
       itemsPerPage: number;
     };
   }> {
-    await this.checkPermission(
-      loggedInUser.id,
-      RBAC_ACTIONS.VIEW,
-      RBAC_RESOURCES.KPI_DEPARTMENT,
-    );
     const { page = 1, limit = 15 } = filterDto;
     let effectiveDepartmentId: number | null = departmentId;
 
@@ -427,11 +417,6 @@ export class KpisService {
   }
 
   async getAllKpiAssignedToDepartments(userId: number): Promise<Kpi[]> {
-    await this.checkPermission(
-      userId,
-      RBAC_ACTIONS.VIEW,
-      RBAC_RESOURCES.KPI_DEPARTMENT,
-    );
     return this.kpisRepository
       .createQueryBuilder('kpi')
       .leftJoinAndSelect('kpi.perspective', 'perspective')
@@ -449,11 +434,6 @@ export class KpisService {
   }
 
   async getAllKpiAssignedToSections(userId: number): Promise<Kpi[]> {
-    await this.checkPermission(
-      userId,
-      RBAC_ACTIONS.VIEW,
-      RBAC_RESOURCES.KPI_SECTION,
-    );
     return this.kpisRepository
       .createQueryBuilder('kpi')
       .leftJoinAndSelect('kpi.perspective', 'perspective')
@@ -471,11 +451,6 @@ export class KpisService {
   }
 
   async getKpiComparisonData(userId: number): Promise<{ data: any[] }> {
-    await this.checkPermission(
-      userId,
-      RBAC_ACTIONS.VIEW,
-      RBAC_RESOURCES.KPI_DEPARTMENT,
-    );
     const kpis = await this.getAllKpiAssignedToDepartments(userId);
     const result: any[] = [];
     for (const kpi of kpis) {
@@ -518,11 +493,6 @@ export class KpisService {
       itemsPerPage: number;
     };
   }> {
-    await this.checkPermission(
-      loggedInUser.id,
-      RBAC_ACTIONS.VIEW,
-      RBAC_RESOURCES.KPI_SECTION,
-    );
     const { page = 1, limit = 15 } = filterDto;
     let effectiveSectionId: number | null = Number(sectionIdParam);
     let effectiveDepartmentId: number | null = filterDto.departmentId ?? null;
@@ -991,11 +961,6 @@ export class KpisService {
     kpiId: number,
     userId: number,
   ): Promise<KPIAssignment[]> {
-    await this.checkPermission(
-      userId,
-      RBAC_ACTIONS.VIEW,
-      RBAC_RESOURCES.KPI_COMPANY,
-    );
     const assignments = await this.kpiAssignmentRepository.find({
       where: { kpi_id: kpiId, deleted_at: IsNull() },
       withDeleted: true,
@@ -1219,24 +1184,6 @@ export class KpisService {
   async create(createKpiDto: CreateKpiDto, userId: number): Promise<Kpi> {
     // Phân biệt quyền CREATE động theo loại KPI
     const type = createKpiDto?.assignments?.from || 'company';
-    let resource: string;
-    switch (type) {
-      case 'company':
-        resource = RBAC_RESOURCES.KPI_COMPANY;
-        break;
-      case 'department':
-        resource = RBAC_RESOURCES.KPI_DEPARTMENT;
-        break;
-      case 'section':
-        resource = RBAC_RESOURCES.KPI_SECTION;
-        break;
-      case 'employee':
-        resource = RBAC_RESOURCES.KPI_EMPLOYEE;
-        break;
-      default:
-        resource = RBAC_RESOURCES.KPI_COMPANY;
-    }
-    await this.checkPermission(userId, RBAC_ACTIONS.CREATE, resource);
     return await this.kpisRepository.manager.transaction(
       async (manager): Promise<Kpi> => {
         const dto = plainToInstance(CreateKpiDto, createKpiDto);
@@ -1393,11 +1340,6 @@ export class KpisService {
     assignments: { user_id: number; target: number; weight?: number }[],
     loggedInUser: Employee,
   ): Promise<KPIAssignment[]> {
-    await this.checkPermission(
-      loggedInUser.id,
-      RBAC_ACTIONS.ASSIGN,
-      RBAC_RESOURCES.KPI_COMPANY,
-    );
     const kpi = await this.kpisRepository.findOne({ where: { id: kpiId } });
     if (!kpi) {
       throw new NotFoundException(`KPI with ID ${kpiId} not found`);
@@ -1538,11 +1480,6 @@ export class KpisService {
     }[],
     userId: number,
   ): Promise<void> {
-    await this.checkPermission(
-      userId,
-      RBAC_ACTIONS.ASSIGN,
-      RBAC_RESOURCES.KPI_COMPANY,
-    );
     const assignmentRepo = this.dataSource.getRepository(KPIAssignment);
 
     return await this.dataSource.transaction(async (manager) => {

@@ -28,17 +28,8 @@
             <a-descriptions-item :label="$t('email')">{{
               user.email || $t("notUpdated")
             }}</a-descriptions-item>
-            <a-descriptions-item :label="$t('currentRole')">
-              <a-tag color="blue">
-                {{
-                  userRoles.length
-                    ? $t(roleLabelMap[userRoles[0]]) || userRoles[0]
-                    : $t("noRole")
-                }}
-              </a-tag>
-            </a-descriptions-item>
             <a-descriptions-item
-              :label="$t('allRoles')"
+              :label="$t('roles')"
               :span="2"
               v-if="userRoles.length"
             >

@@ -127,13 +127,7 @@
               bordered
             >
               <template #bodyCell="{ column, record }">
-                <template v-if="column.dataIndex === 'department'">
-                  {{ record.department?.name || "--" }}
-                </template>
-                <template v-else-if="column.dataIndex === 'section'">
-                  {{ record.section?.name || "--" }}
-                </template>
-                <template v-else-if="column.dataIndex === 'target'">
+                <template v-if="column.dataIndex === 'target'">
                   {{ Number(record.target).toLocaleString() }}
                   {{ record.unit || "" }}
                 </template>
@@ -214,7 +208,7 @@
 </template>
 
 <script setup>
-import { reactive, computed, onMounted, ref, watch } from "vue";
+import { reactive, computed, onMounted, ref, watch,h } from "vue";
 import { useStore } from "vuex";
 import { useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
@@ -237,6 +231,8 @@ import {
   Space as ASpace,
   Modal as AModal,
   Empty as AEmpty,
+  Avatar,
+  Tooltip,
 } from "ant-design-vue";
 import {
   PlusOutlined,
@@ -328,6 +324,22 @@ const columns = computed(() => [
     key: "department",
     width: "12%",
     ellipsis: true,
+    customRender({ record }) {
+      const departmentAssignments = record.assignments?.filter(
+        (assignment) => assignment.assigned_to_department && assignment.department
+      );
+      return h(
+        Avatar.Group,
+        {},
+        departmentAssignments.map((assignment) =>
+          h(
+            Tooltip,
+            { title: assignment.department.name, key: assignment.id },
+            () => h(Avatar, { style: { backgroundColor: "#1890ff" } }, assignment.department.name[0])
+          )
+        )
+      );
+    },
   },
   {
     title: $t("section"),
@@ -335,12 +347,51 @@ const columns = computed(() => [
     key: "section",
     width: "12%",
     ellipsis: true,
+    customRender({ record }) {
+      const sectionAssignments = record.assignments?.filter(
+        (assignment) => assignment.assigned_to_section && assignment.section
+      );
+      return h(
+        Avatar.Group,
+        {},
+        sectionAssignments.map((assignment) =>
+          h(
+            Tooltip,
+            { title: assignment.section.name, key: assignment.id },
+            () => h(Avatar, { style: { backgroundColor: "#1890ff" } }, assignment.section.name[0])
+          )
+        )
+      );
+    },
+  },
+  {
+    title: $t("employee"),
+    dataIndex: "employee",
+    key: "employee",
+    width: "12%",
+    ellipsis: true,
+    customRender({ record }) {
+      const employeeAssignments = record.assignments?.filter(
+        (assignment) => assignment.assigned_to_employee && assignment.employee
+      );
+      return h(
+        Avatar.Group,
+        {},
+        employeeAssignments.map((assignment) =>
+          h(
+            Tooltip,
+            { title: `${assignment.employee.first_name} ${assignment.employee.last_name}`, key: assignment.id },
+            () => h(Avatar, { style: { backgroundColor: "#f56a00" } }, assignment.employee.first_name[0])
+          )
+        )
+      );
+    },
   },
   {
     title: $t("target"),
     dataIndex: "target",
     key: "target",
-    width: "20%",
+    width: "13%",
     align: "right",
   },
   {

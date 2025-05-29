@@ -21,7 +21,9 @@
                   <template v-for="option in viewOptions.slice(0, Math.ceil(viewOptions.length/2))" :key="option.value">
                     <div class="permission-toggle-item">
                       <a-switch :checked="record.permissionIds.includes(option.value)" @change="checked => onTogglePermission(record, option.value, checked)" />
-                      <span class="permission-toggle-label">{{ option.label }}</span>
+                      <a-tooltip :title="permissionDescription(option.value)">
+                        <span class="permission-toggle-label">{{ option.label }}</span>
+                      </a-tooltip>
                     </div>
                   </template>
                 </div>
@@ -29,7 +31,9 @@
                   <template v-for="option in viewOptions.slice(Math.ceil(viewOptions.length/2))" :key="option.value">
                     <div class="permission-toggle-item">
                       <a-switch :checked="record.permissionIds.includes(option.value)" @change="checked => onTogglePermission(record, option.value, checked)" />
-                      <span class="permission-toggle-label">{{ option.label }}</span>
+                      <a-tooltip :title="permissionDescription(option.value)">
+                        <span class="permission-toggle-label">{{ option.label }}</span>
+                      </a-tooltip>
                     </div>
                   </template>
                 </div>
@@ -43,7 +47,9 @@
                   <template v-for="option in createEditDeleteOptions.slice(0, Math.ceil(createEditDeleteOptions.length/2))" :key="option.value">
                     <div class="permission-toggle-item">
                       <a-switch :checked="record.permissionIds.includes(option.value)" @change="checked => onTogglePermission(record, option.value, checked)" />
-                      <span class="permission-toggle-label">{{ option.label }}</span>
+                      <a-tooltip :title="permissionDescription(option.value)">
+                        <span class="permission-toggle-label">{{ option.label }}</span>
+                      </a-tooltip>
                     </div>
                   </template>
                 </div>
@@ -51,7 +57,9 @@
                   <template v-for="option in createEditDeleteOptions.slice(Math.ceil(createEditDeleteOptions.length/2))" :key="option.value">
                     <div class="permission-toggle-item">
                       <a-switch :checked="record.permissionIds.includes(option.value)" @change="checked => onTogglePermission(record, option.value, checked)" />
-                      <span class="permission-toggle-label">{{ option.label }}</span>
+                      <a-tooltip :title="permissionDescription(option.value)">
+                        <span class="permission-toggle-label">{{ option.label }}</span>
+                      </a-tooltip>
                     </div>
                   </template>
                 </div>
@@ -65,7 +73,9 @@
                   <template v-for="option in approveRejectOptions" :key="option.value">
                     <div class="permission-toggle-item">
                       <a-switch :checked="record.permissionIds.includes(option.value)" @change="checked => onTogglePermission(record, option.value, checked)" />
-                      <span class="permission-toggle-label">{{ option.label }}</span>
+                      <a-tooltip :title="permissionDescription(option.value)">
+                        <span class="permission-toggle-label">{{ option.label }}</span>
+                      </a-tooltip>
                     </div>
                   </template>
                 </div>
@@ -73,7 +83,9 @@
                   <template v-for="option in assignOptions" :key="option.value">
                     <div class="permission-toggle-item">
                       <a-switch :checked="record.permissionIds.includes(option.value)" @change="checked => onTogglePermission(record, option.value, checked)" />
-                      <span class="permission-toggle-label">{{ option.label }}</span>
+                      <a-tooltip :title="permissionDescription(option.value)">
+                        <span class="permission-toggle-label">{{ option.label }}</span>
+                      </a-tooltip>
                     </div>
                   </template>
                 </div>
@@ -86,7 +98,9 @@
                 <template v-for="option in otherOptionsWithManage" :key="option.value">
                   <div class="permission-toggle-item">
                     <a-switch :checked="record.permissionIds.includes(option.value)" @change="checked => onTogglePermission(record, option.value, checked)" />
-                    <span class="permission-toggle-label">{{ option.label }}</span>
+                    <a-tooltip :title="permissionDescription(option.value)">
+                      <span class="permission-toggle-label">{{ option.label }}</span>
+                    </a-tooltip>
                   </div>
                 </template>
               </div>
@@ -115,6 +129,18 @@ const permissionDisplayName = (permission) => {
   const resourceKey = permission.resource.replace(/:/g, '_');
   const key = `permission.${permission.action}_${resourceKey}`;
   return t(key);
+};
+
+// Hàm lấy mô tả quyền (ưu tiên i18n, fallback mặc định)
+const permissionDescription = (permissionId) => {
+  const permission = allPermissions.value.find(p => p.id === permissionId);
+  if (!permission) return '';
+  const resourceKey = permission.resource.replace(/:/g, '_');
+  const i18nKey = `permissionDesc.${permission.action}_${resourceKey}`;
+  const desc = t(i18nKey);
+  // Nếu không có mô tả, fallback về label
+  if (desc === i18nKey) return permissionDisplayName(permission);
+  return desc;
 };
 
 const groupPermissionOptions = computed(() => {

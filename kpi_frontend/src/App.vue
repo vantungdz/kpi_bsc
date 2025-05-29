@@ -21,7 +21,9 @@
           <a-spin size="large" :tip="$t('loadingUserData')" />
         </div>
         <div v-else id="app">
-          <router-view />
+          <transition name="fade-page" mode="out-in">
+            <router-view />
+          </transition>
         </div>
       </a-layout-content>
 
@@ -123,5 +125,15 @@ watch(i18nLocale, () => {
 
 .site-layout-footer {
   flex-shrink: 0; /* Ngăn footer co lại */
+}
+
+.fade-page-enter-active, .fade-page-leave-active {
+  transition: opacity 0.45s cubic-bezier(0.4,0,0.2,1);
+}
+.fade-page-enter-from, .fade-page-leave-to {
+  opacity: 0;
+}
+.fade-page-enter-to, .fade-page-leave-from {
+  opacity: 1;
 }
 </style>

@@ -407,8 +407,6 @@ const sectionGroups = computed(() => {
     const sectionsForThisKpi = new Map();
 
     kpi.assignments.forEach((assignment) => {
-      if (assignment.status !== "APPROVED") return; // Chỉ lấy các assignment đã được phê duyệt
-
       let targetSectionId = null;
       let departmentIdOfSection = null;
 

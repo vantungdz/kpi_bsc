@@ -1,6 +1,5 @@
 import axios from "axios";
 import store from "../store"; 
-import router from "../router"; 
 import { notification } from 'ant-design-vue';
 const apiClient = axios.create({
   baseURL: process.env.VUE_APP_API_URL || "/api", 
@@ -32,20 +31,23 @@ apiClient.interceptors.response.use(
 
     if (error.response) {
       const status = error.response.status;
-      const currentRouteName = router.currentRoute.value.name; 
-      const loginRouteName = 'LoginPage'; 
+      const serverMessage = error.response.data?.message;
+      // Log toàn bộ response để debug
+      console.error("API Error Response:", error.response);
 
       if (status === 401) {
-        if (currentRouteName !== loginRouteName) {
-             console.error("Unauthorized (401) or Token Expired. Logging out and redirecting...");
-             store.commit('auth/LOGOUT'); 
-             router.push({ name: loginRouteName, query: { sessionExpired: "true" } }); 
-
-        } else {
-            console.warn("Already on Login page, received 401.");
-        }
-
+        notification.error({
+          message: 'Unauthorized',
+          description: serverMessage || 'Bạn không có quyền truy cập chức năng này hoặc phiên đăng nhập đã hết hạn.',
+          duration: 5
+        });
+        // Không logout, không redirect về LoginPage nữa
       } else if (status === 403) {
+        notification.error({
+          message: 'Forbidden',
+          description: serverMessage || 'Bạn không có quyền thực hiện thao tác này.',
+          duration: 5
+        });
         console.error("Forbidden (403). Access denied.");
       } else {
         console.error(`API Error ${status}:`, error.response.data);
@@ -53,16 +55,16 @@ apiClient.interceptors.response.use(
     } else if (error.request) {
       console.error("Network Error:", error.request);
       notification.error({
-          message: 'Network Error',
-          description: 'Unable to connect to the server. Please check your network connection.',
-          duration: 5 
+        message: 'Network Error',
+        description: 'Unable to connect to the server. Please check your network connection.',
+        duration: 5 
       });
     } else {
       console.error("Request Setup Error:", error.message);
-       notification.error({
-          message: 'Request Error',
-          description: 'An error occurred while setting up the request.',
-       });
+      notification.error({
+        message: 'Request Error',
+        description: 'An error occurred while setting up the request.',
+      });
     }
     return Promise.reject(error);
   }
