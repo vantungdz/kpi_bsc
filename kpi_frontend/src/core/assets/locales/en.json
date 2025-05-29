@@ -777,5 +777,18 @@
       "section": "Section",
       "action": "Action"
     }
+  },
+  "chatbot": {
+    "header": "KPI Assistant",
+    "greeting": "Hello! I am the KPI assistant. How can I help you?",
+    "kpiDefinition": "KPI (Key Performance Indicator) is a metric for evaluating work performance.",
+    "guide": "You can go to the 'KPI Management' section to create, view, and evaluate KPIs. For detailed instructions, please ask more specifically!",
+    "deadline": "You should check the 'Notifications' or 'Calendar' section for upcoming deadlines.",
+    "evaluator": "Your direct manager or department head will evaluate your KPIs.",
+    "hello": "Hello! How can I assist you with KPIs?",
+    "report": "You can export KPI reports in the 'Reports' section on the menu.",
+    "unknown": "Sorry, I didn't understand. You can ask about KPIs, usage instructions, deadlines, reports...",
+    "inputPlaceholder": "Type your question...",
+    "send": "Send"
   }
 }

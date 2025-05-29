@@ -714,5 +714,18 @@
     "manager_reviewed": "Đã đánh giá cấp quản lý",
     "employee_feedback": "Nhân viên đã phản hồi",
     "completed": "Đã hoàn thành"
+  },
+  "chatbot": {
+    "header": "Trợ lý KPI",
+    "greeting": "Xin chào! Tôi là trợ lý KPI. Bạn cần hỗ trợ gì?",
+    "kpiDefinition": "KPI (Key Performance Indicator) là chỉ số đánh giá hiệu quả công việc.",
+    "guide": "Bạn có thể vào mục 'Quản lý KPI' để tạo, xem và đánh giá KPI. Nếu cần hướng dẫn chi tiết, hãy hỏi cụ thể hơn!",
+    "deadline": "Bạn nên kiểm tra mục 'Thông báo' hoặc 'Lịch' để biết các deadline sắp tới.",
+    "evaluator": "Người quản lý trực tiếp hoặc trưởng bộ phận sẽ là người đánh giá KPI của bạn.",
+    "hello": "Xin chào! Tôi có thể giúp gì cho bạn về KPI?",
+    "report": "Bạn có thể xuất báo cáo KPI tại mục 'Báo cáo' trên menu.",
+    "unknown": "Xin lỗi, tôi chưa hiểu ý bạn. Bạn có thể hỏi về KPI, hướng dẫn sử dụng, deadline, báo cáo...",
+    "inputPlaceholder": "Nhập câu hỏi...",
+    "send": "Gửi"
   }
 }

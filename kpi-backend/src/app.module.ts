@@ -20,6 +20,9 @@ import { Role } from './entities/role.entity';
 import { Permission } from './entities/permission.entity';
 import { ReviewCycleModule } from './review-cycle/review-cycle.module';
 import { KpiReviewModule } from './evaluation/kpi-review.module';
+import { AppController } from './app.controller';
+import { AppService } from './app.service';
+import { GeminiController } from './gemini/gemini.controller';
 
 @Module({
   imports: [
@@ -62,5 +65,7 @@ import { KpiReviewModule } from './evaluation/kpi-review.module';
     KpiReviewModule,
     RolesModule,
   ],
+  controllers: [AppController, GeminiController],
+  providers: [AppService],
 })
 export class AppModule {}
