@@ -120,6 +120,11 @@
   "weightedScoreSupervisor": "加重スコア（上司）",
   "note": "メモ",
   "totalWeightedScoreSupervisor": "加重スコア合計（上司）",
+  "assignToDepartment": "部門に割り当て",
+  "assignToDepartmentHelp": "このKPIを部門に割り当てると、部門内のすべてのユーザーがこのKPIを参照できます。",
+  "departmentSection": "部門/セクション",
+  "assignToSections": "セクションに割り当て",
+  "assignToSectionsHelp": "このKPIをセクションに割り当てると、セクション内のすべてのユーザーがこのKPIを参照できます。",
   "averageScoreSupervisor": "平均スコア（上司）",
   "saveEvaluation": "評価を保存",
   "errorFetchingObjectives": "目標の取得エラー",
@@ -708,7 +713,9 @@
     "actions": "操作",
     "all": "すべて",
     "apply": "適用",
-    "reset": "リセット"
+    "reset": "リセット",
+    "reject": "却下",
+    "approve": "承認"
   },
   "reviewTime": "レビュー時間",
   "reviewer": "レビュアー",
@@ -804,5 +811,10 @@
     "manager_reviewed": "マネージャーレビュー済み",
     "employee_feedback": "従業員フィードバック済み",
     "completed": "完了"
-  }
+  },
+  "scoreRequired": "スコアは必須です。",
+  "submitReview": "レビューを送信",
+  "rejectReview": "レビューを却下",
+  "rejectionReasonRequired": "却下理由は必須です。",
+  "rejectionReasonPlaceholder": "却下理由を入力してください"
 }

@@ -61,11 +61,12 @@ export class KpiReviewController {
 
   @UseGuards(JwtAuthGuard)
   @Get('history/:kpiId/:cycle')
-  async getReviewHistory(
+  async getKpiReviewHistory(
     @Param('kpiId') kpiId: number,
     @Param('cycle') cycle: string,
+    @Query('employeeId') employeeId?: number,
   ) {
-    return this.kpiReviewService.getReviewHistory(kpiId, cycle);
+    return this.kpiReviewService.getKpiReviewHistory(kpiId, cycle, employeeId);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -98,5 +99,45 @@ export class KpiReviewController {
   async submitEmployeeFeedback(@Req() req, @Body() body) {
     // req.user.id là id của nhân viên feedback
     return this.kpiReviewService.submitEmployeeFeedback(req.user.id, body);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Post('submit-review')
+  async submitReviewByRole(@Req() req, @Body() body) {
+    // Lấy userId và roles từ req.user
+    const userId = req.user.id;
+    let roles: string[] = [];
+    if (Array.isArray(req.user.roles)) {
+      roles = req.user.roles.map((r) => (typeof r === 'string' ? r : r?.name)).filter(Boolean);
+    } else if (req.user.role) {
+      if (typeof req.user.role === 'string') roles = [req.user.role];
+      else if (req.user.role?.name) roles = [req.user.role.name];
+    }
+    if (!roles.length) throw new Error('Thiếu thông tin vai trò người duyệt (controller)');
+    // Ưu tiên role cao nhất: admin > manager > department > section
+    const priority = ['admin', 'manager', 'department', 'section'];
+    const highestRole = priority.find((r) => roles.includes(r));
+    if (!highestRole) throw new Error('Không có vai trò hợp lệ để duyệt KPI');
+    // body: { reviewId, score, comment }
+    return this.kpiReviewService.submitReviewByRole(userId, highestRole, body);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Post('reject')
+  async rejectReviewByRole(@Req() req, @Body() body) {
+    const userId = req.user.id;
+    let roles: string[] = [];
+    if (Array.isArray(req.user.roles)) {
+      roles = req.user.roles.map((r) => (typeof r === 'string' ? r : r?.name)).filter(Boolean);
+    } else if (req.user.role) {
+      if (typeof req.user.role === 'string') roles = [req.user.role];
+      else if (req.user.role?.name) roles = [req.user.role.name];
+    }
+    if (!roles.length) throw new Error('Thiếu thông tin vai trò người từ chối (controller)');
+    const priority = ['admin', 'manager', 'department', 'section'];
+    const highestRole = priority.find((r) => roles.includes(r));
+    if (!highestRole) throw new Error('Không có vai trò hợp lệ để từ chối KPI');
+    // body: { reviewId, rejectionReason }
+    return this.kpiReviewService.rejectReviewByRole(userId, highestRole, body);
   }
 }

@@ -87,6 +87,37 @@ const actions = {
       commit("SET_LOADING", false);
     }
   },
+  async updateDepartment({ dispatch, commit }, { id, data }) {
+    commit("SET_LOADING", true);
+    commit("SET_ERROR", null);
+    try {
+      const response = await apiClient.put(`/departments/${id}`, data);
+      await dispatch("fetchDepartments", { forceRefresh: true });
+      return response.data;
+    } catch (error) {
+      commit("SET_ERROR", error);
+      throw error;
+    } finally {
+      commit("SET_LOADING", false);
+    }
+  },
+
+  async deleteDepartment({ dispatch, commit }, id) {
+    commit("SET_LOADING", true);
+    commit("SET_ERROR", null);
+    try {
+      await apiClient.delete(`/departments/${id}`);
+      await dispatch("fetchDepartments", { forceRefresh: true });
+      return true;
+    } catch (error) {
+      // Hiển thị thông báo lỗi cụ thể nếu backend trả về
+      const msg = error?.response?.data?.message || error.message || 'Xóa phòng ban thất bại';
+      commit('SET_ERROR', msg);
+      throw new Error(msg);
+    } finally {
+      commit("SET_LOADING", false);
+    }
+  },
 };
 
 export default {

@@ -96,6 +96,11 @@
   "noRoleData": "No role data available.",
   "achievedRatePercentage": "Achieved Rate (%)",
   "kpiRate": "KPI Rate",
+  "assignToDepartment": "Assign to Department",
+  "assignToDepartmentHelp": "Select a department to assign the KPI.",
+  "departmentSection": "Department/Section",
+  "assignToSections": "Assign to Sections",
+  "assignToSectionsHelp": "Select sections to assign the KPI.",
   "kpiAchievementChartTitle": "KPI Achievement Chart",
   "noKpiPerformanceOverviewData": "No KPI performance overview data available.",
   "assignmentsByDepartment": "Assignments by Department",
@@ -643,6 +648,33 @@
     "toggle-status_kpi": "Toggle KPI Status",
     "copy-template_kpi": "Copy KPI as Template"
   },
+  "permissionDesc": {
+    "view_dashboard": "View dashboard, where performance reports are summarized.",
+    "view_report": "Permission to view KPI reports.",
+    "view_kpi_company": "Permission to view company KPIs, including objectives and performance of the entire company.",
+    "view_kpi_department": "Permission to view department KPIs, including objectives and performance of each department.",
+    "view_kpi_section": "Permission to view section KPIs, including objectives and performance of each section.",
+    "view_kpi_employee": "Permission to view employee KPIs, including objectives and performance of each employee.",
+    "view_admin": "Admin permission, allows access to system administration features.",
+    "create_kpi_company": "Permission to create company KPIs, allows users to create new KPIs for the entire company.",
+    "create_kpi_department": "Permission to create department KPIs, allows users to create new KPIs for specific departments.",
+    "create_kpi_section": "Permission to create section KPIs, allows users to create new KPIs for specific sections.",
+    "create_kpi_employee": "Permission to create employee KPIs, allows users to create new KPIs for specific employees.",
+    "delete_kpi": "Permission to delete KPIs, allows users to delete created KPIs.",
+    "assign_kpi_company": "Allows users to assign KPIs created at the company level.",
+    "assign_kpi_department": "Assign department KPIs, allows users to assign created KPIs to specific departments.",
+    "assign_kpi_section": "Assign section KPIs, allows users to assign created KPIs to specific sections.",
+    "export_report": "Export reports, allows users to export KPI reports as files.",
+    "update_employee_company": "Update company employees, allows users to update information of company employees.",
+    "view_employee_company": "View company employee information, allows users to view detailed information of company employees.",
+    "view_kpi-value": "View KPI values, allows users to view specific values of established KPIs.",
+    "create_employee_company": "Create company employees, allows users to add new employees to the system.",
+    "delete_employee_company": "Delete company employees, allows users to remove employees from the system.",
+    "approve_kpi-value": "Permission to approve KPI values, allows users to approve submitted KPI values.",
+    "reject_kpi-value": "Permission to reject KPI values, allows users to reject submitted KPI values.",
+    "toggle-status_kpi": "Toggle KPI status, allows users to switch KPI status between 'Active' and 'Inactive'.",
+    "copy-template_kpi": "Copy KPI as template, allows users to copy created KPIs to use as templates for new KPIs."
+  },
   "permissionsUpdatedSuccessfully": "Permissions updated successfully!",
   "errorUpdatingPermissions": "Error updating permissions.",
   "saveAll": "Save All",
@@ -681,7 +713,9 @@
     "actions": "Actions",
     "apply": "Apply",
     "reset": "Reset",
-    "all": "All"
+    "all": "All",
+    "reject": "Reject",
+    "approve": "Approve"
   },
   "reviewTime": "Review Time",
   "reviewer": "Reviewer",
@@ -777,5 +811,10 @@
       "section": "Section",
       "action": "Action"
     }
-  }
+  },
+  "scoreRequired": "Score is required.",
+  "submitReview": "Submit Review",
+  "rejectReview": "Reject Review",
+  "rejectionReasonRequired": "Rejection reason is required.",
+  "rejectionReasonPlaceholder": "Enter rejection reason here..."
 }

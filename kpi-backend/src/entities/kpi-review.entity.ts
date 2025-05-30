@@ -20,7 +20,9 @@ export enum ReviewStatus {
   MANAGER_REVIEWED = 'MANAGER_REVIEWED',
   EMPLOYEE_FEEDBACK = 'EMPLOYEE_FEEDBACK',
   COMPLETED = 'COMPLETED',
-  DEPARTMENT_REVIEW_PENDING = 'DEPARTMENT_REVIEW_PENDING',
+  SECTION_REJECTED = 'SECTION_REJECTED',
+  DEPARTMENT_REJECTED = 'DEPARTMENT_REJECTED',
+  MANAGER_REJECTED = 'MANAGER_REJECTED',
 }
 
 @Entity('kpi_review')
@@ -100,4 +102,7 @@ export class KpiReview {
 
   @Column({ type: 'text', nullable: true })
   managerComment: string;
+
+  @Column({ type: 'text', nullable: true })
+  rejectionReason: string;
 }

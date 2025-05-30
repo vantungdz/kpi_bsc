@@ -156,6 +156,27 @@ const actions = {
     await dispatch("fetchSections", { forceRefresh: true });
     return res.data;
   },
+
+  async updateSection({ dispatch }, { id, data }) {
+    // data: { name, departmentId, managerId }
+    const res = await apiClient.put(`/sections/${id}`, data);
+    // Refresh list after update
+    await dispatch("fetchSections", { forceRefresh: true });
+    return res.data;
+  },
+
+  async deleteSection({ dispatch, commit }, id) {
+    try {
+      await apiClient.delete(`/sections/${id}`);
+      await dispatch("fetchSections", { forceRefresh: true });
+      return true;
+    } catch (error) {
+      // Hiển thị thông báo lỗi cụ thể nếu backend trả về
+      const msg = error?.response?.data?.message || error.message || 'Xóa section thất bại';
+      commit('SET_ERROR', msg);
+      throw new Error(msg);
+    }
+  },
 };
 
 export default {

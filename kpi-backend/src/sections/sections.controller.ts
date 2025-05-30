@@ -6,6 +6,8 @@ import {
   Param,
   Query,
   UseGuards,
+  Put,
+  Delete,
 } from '@nestjs/common';
 import { SectionsService } from './sections.service';
 import { Section } from 'src/entities/section.entity';
@@ -35,5 +37,19 @@ export class SectionsController {
   @Get(':id')
   async findOne(@Param('id') id: number): Promise<Section> {
     return this.sectionService.findOne(id);
+  }
+
+  @Put(':id')
+  async update(
+    @Param('id') id: number,
+    @Body() updateSectionDto: any,
+  ): Promise<Section> {
+    return this.sectionService.update(id, updateSectionDto);
+  }
+
+  @Delete(':id')
+  async remove(@Param('id') id: number): Promise<{ success: boolean }> {
+    await this.sectionService.remove(id);
+    return { success: true };
   }
 }

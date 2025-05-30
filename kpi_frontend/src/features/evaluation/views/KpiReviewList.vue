@@ -1,12 +1,12 @@
 <template>
   <div class="kpi-review-list" v-if="canViewKpiReview">
     <h2 class="kpi-title">{{ $t("kpiReviewListTitle") }}</h2>
-    <div class="filters">
+    <div class="filters modern-filters">
       <a-select v-model:value="selectedCycle" :options="cycleOptions" :placeholder="$t('selectCycle')"
-        style="width: 200px; margin-right: 16px" />
+        class="modern-filter-input" />
       <a-select v-model:value="selectedStatus" :options="statusOptions" :placeholder="$t('reviewStatus')"
-        style="width: 200px; margin-right: 16px" />
-      <a-input v-model:value="searchText" :placeholder="$t('searchKpiEmployee')" style="width: 250px" />
+        class="modern-filter-input" />
+      <a-input v-model:value="searchText" :placeholder="$t('searchKpiEmployee')" class="modern-filter-input" />
     </div>
     <div class="modern-table-wrapper">
       <a-table :columns="columns" :data-source="normalizedReviews" row-key="id" :loading="loading" bordered
@@ -30,9 +30,19 @@
       </a-table>
     </div>
     <a-empty v-if="!normalizedReviews.length && !loading" :description="$t('noDataMatch')" />
-    <ReviewFormModal v-if="showReviewForm" :review="selectedReview" :visible="showReviewForm" @close="closeReviewForm"
-      @saved="onReviewSaved" modal-class="modern-modal" />
-    <ReviewHistoryModal v-if="showHistory" :review="selectedReview" :visible="showHistory" @close="closeHistory"
+    <ReviewFormModal 
+      v-if="showReviewForm" 
+      :review="selectedReview" 
+      :visible="showReviewForm" 
+      @close="closeReviewForm" 
+      @saved="onReviewSaved" 
+      @show-history="onShowHistoryFromModal" 
+      modal-class="modern-modal" />
+    <ReviewHistoryModal 
+      v-if="showHistory" 
+      :review="selectedReview" 
+      :visible="showHistory" 
+      @close="closeHistory" 
       class="modern-modal" />
   </div>
 </template>
@@ -68,6 +78,7 @@ const statusOptions = [
   { label: t("completed"), value: "COMPLETED" },
 ];
 const manualSearch = ref(false);
+const lastModal = ref(null); // 'review' hoặc 'history'
 
 const columns = computed(() => [
   { title: t("kpiName"), key: "kpiName", dataIndex: "kpiName" },
@@ -90,7 +101,7 @@ const filteredReviews = computed(() => {
     data = data.filter(
       (r) =>
         r.kpi?.name?.toLowerCase().includes(s) ||
-        r.employee?.fullName?.toLowerCase().includes(s)
+        (`${r.employee?.first_name || ''} ${r.employee?.last_name || ''}`.toLowerCase().includes(s))
     );
   }
   return data;
@@ -104,7 +115,7 @@ const normalizedReviews = computed(() => {
     targetValue: `${Number(r.targetValue).toLocaleString()} ${r.kpi.unit}` ?? "",
     actualValue: `${Number(r.actualValue).toLocaleString()} ${r.kpi.unit}` ?? "",
     status: r.status || "",
-    score: r.score ?? "",
+    score: `${Number(r.score).toLocaleString()} `?? "",
     raw: r, // giữ lại bản gốc để truyền cho modal nếu cần
   }));
 });
@@ -138,10 +149,12 @@ const fetchCycles = async () => {
 const openReviewForm = (review) => {
   selectedReview.value = review;
   showReviewForm.value = true;
+  lastModal.value = 'review';
 };
 const closeReviewForm = () => {
   showReviewForm.value = false;
   selectedReview.value = null;
+  lastModal.value = null;
 };
 const onReviewSaved = () => {
   closeReviewForm();
@@ -150,10 +163,24 @@ const onReviewSaved = () => {
 const viewHistory = (review) => {
   selectedReview.value = review;
   showHistory.value = true;
+  lastModal.value = 'history';
 };
 const closeHistory = () => {
   showHistory.value = false;
-  selectedReview.value = null;
+  // Nếu vừa chuyển từ modal review sang thì mở lại modal review
+  if (lastModal.value === 'review') {
+    showReviewForm.value = true;
+    lastModal.value = null;
+  } else {
+    selectedReview.value = null;
+    lastModal.value = null;
+  }
+};
+
+const onShowHistoryFromModal = () => {
+  showReviewForm.value = false;
+  showHistory.value = true;
+  lastModal.value = 'review';
 };
 
 const store = useStore();
@@ -193,10 +220,50 @@ onMounted(async () => {
   margin-bottom: 24px;
   color: #1a237e;
 }
-.filters {
-  margin-bottom: 16px;
+.filters.modern-filters {
   display: flex;
   align-items: center;
+  gap: 18px;
+  margin-bottom: 18px;
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 1px 6px #e6f7ff22;
+  padding: 18px 18px 10px 18px;
+  flex-wrap: wrap;
+}
+.modern-filter-input {
+  min-width: 180px;
+  max-width: 260px;
+  flex: 1 1 180px;
+  margin-right: 0 !important;
+  margin-bottom: 0 !important;
+  background: #f7faff;
+  border-radius: 6px;
+  border: 1px solid #eaf2fb;
+  box-shadow: 0 1px 2px #e6f7ff11;
+  font-size: 15px;
+  height: 38px;
+  transition: border 0.2s;
+}
+.modern-filter-input .ant-select-selector,
+.modern-filter-input input {
+  background: #f7faff !important;
+  border: none !important;
+  box-shadow: none !important;
+  border-radius: 6px !important;
+  height: 38px !important;
+  font-size: 15px;
+  padding-left: 12px;
+}
+.modern-filter-input .ant-select-selection-placeholder,
+.modern-filter-input input::placeholder {
+  color: #bfbfbf !important;
+  font-size: 15px;
+}
+.modern-filter-input:focus-within,
+.modern-filter-input:focus {
+  border: 1.5px solid #409eff !important;
+  box-shadow: 0 0 0 2px #e6f7ff55 !important;
 }
 .modern-table {
   border-radius: 16px;
@@ -229,8 +296,15 @@ onMounted(async () => {
 .status-tag.pending {
   background: #f59e42;
 }
+
 .status-tag.self_reviewed {
   background: #05574c;
+}
+.status-tag.section_reviewed {
+  background: #e944e9;
+}
+.status-tag.department_reviewed {
+  background: #e02884;
 }
 .status-tag.manager_reviewed {
   background: #409eff;
@@ -303,6 +377,25 @@ onMounted(async () => {
   }
   :deep(.modern-modal .review-section) {
     padding: 10px 8px;
+  }
+}
+@media (max-width: 900px) {
+  .filters.modern-filters {
+    flex-direction: column;
+    gap: 10px;
+    padding: 10px 6px 6px 6px;
+  }
+  .modern-filter-input {
+    min-width: 120px;
+    max-width: 100%;
+    font-size: 13px;
+    height: 32px;
+  }
+  .modern-filter-input .ant-select-selector,
+  .modern-filter-input input {
+    height: 32px !important;
+    font-size: 13px;
+    padding-left: 8px;
   }
 }
 </style>

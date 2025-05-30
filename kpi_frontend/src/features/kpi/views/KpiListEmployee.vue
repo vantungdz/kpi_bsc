@@ -122,10 +122,10 @@
                 </a-tag>
               </template>
               <template v-else-if="column.key === 'target'">
-                <span class="kpi-value">{{ record.target !== undefined && record.target !== null && record.target !== '--' ? record.target + (record.unit ? ' ' + record.unit : '') : '--' }}</span>
+                <span class="kpi-value">{{ record.target !== undefined && record.target !== null && record.target !== '--' ? Number(record.target).toLocaleString() + (record.unit ? ' ' + record.unit : '') : '--' }}</span>
               </template>
               <template v-else-if="column.key === 'actual_value'">
-                <span class="kpi-value kpi-actual">{{ record.actual_value !== undefined && record.actual_value !== null && record.actual_value !== '--' ? record.actual_value + (record.unit ? ' ' + record.unit : '') : '--' }}</span>
+                <span class="kpi-value kpi-actual">{{ record.actual_value !== undefined && record.actual_value !== null && record.actual_value !== '--' ? Number(record.actual_value).toLocaleString() + (record.unit ? ' ' + record.unit : '') : '--' }}</span>
               </template>
               <template v-else-if="column.key === 'start_date'">
                 <span class="kpi-date">{{ record.start_date || '--' }}</span>

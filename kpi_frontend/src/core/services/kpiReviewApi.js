@@ -25,42 +25,6 @@ export async function submitMyKpiSelfReview(data) {
   return res.data;
 }
 
-export async function submitSectionReview(
-  reviewId,
-  sectionScore,
-  sectionComment
-) {
-  return apiClient.post(`/kpi-review/section-review`, {
-    reviewId,
-    sectionScore,
-    sectionComment,
-  });
-}
-
-export async function submitDepartmentReview(
-  reviewId,
-  departmentScore,
-  departmentComment
-) {
-  return apiClient.post(`/kpi-review/department-review`, {
-    reviewId,
-    departmentScore,
-    departmentComment,
-  });
-}
-
-export async function submitManagerReview(
-  reviewId,
-  managerScore,
-  managerComment
-) {
-  return apiClient.post(`/kpi-review/manager-review`, {
-    reviewId,
-    managerScore,
-    managerComment,
-  });
-}
-
 export async function completeReview(reviewId) {
   return apiClient.post(`/kpi-review/complete-review`, { reviewId });
 }
@@ -84,4 +48,21 @@ export async function getKpiReviewHistory(review) {
     return res.data;
   }
   return [];
+}
+
+export async function submitReviewByRole(reviewId, score, comment) {
+  // Gọi API tổng quát cho nhảy bậc review
+  return apiClient.post(`/kpi-review/submit-review`, {
+    reviewId,
+    score,
+    comment,
+  });
+}
+
+export async function rejectReviewByRole(reviewId, rejectionReason) {
+  // Gọi API tổng quát cho từ chối review theo vai trò cao nhất
+  return apiClient.post(`/kpi-review/reject`, {
+    reviewId,
+    rejectionReason,
+  });
 }

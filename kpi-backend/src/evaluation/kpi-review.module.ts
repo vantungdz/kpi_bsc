@@ -6,10 +6,11 @@ import { KpiReviewService } from './kpi-review.service';
 import { KpiReviewController } from './kpi-review.controller';
 import { KPIAssignment } from '../entities/kpi-assignment.entity';
 import { KpiValue } from '../entities/kpi-value.entity';
+import { KpiReviewHistory } from '../entities/kpi-review-history.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([KpiReview, Kpi, KPIAssignment, KpiValue]),
+    TypeOrmModule.forFeature([KpiReview, Kpi, KPIAssignment, KpiValue, KpiReviewHistory]),
   ],
   providers: [KpiReviewService],
   controllers: [KpiReviewController],

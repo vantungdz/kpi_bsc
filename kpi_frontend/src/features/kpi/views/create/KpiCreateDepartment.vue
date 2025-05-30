@@ -344,6 +344,7 @@ import {
   RBAC_ACTIONS,
   RBAC_RESOURCES,
 } from "@/core/constants/rbac.constants.js";
+import { useI18n } from "vue-i18n";
 
 const router = useRouter();
 const store = useStore();
@@ -358,6 +359,7 @@ const assignmentError = ref(null);
 const formRef = ref();
 const selectedTemplateKpiId = ref(null);
 const loadingKpiTemplate = ref(false);
+const { t: $t } = useI18n();
 
 const form = ref({
   name: "",
@@ -452,21 +454,21 @@ const canAssignToSections = computed(() =>
   )
 );
 
-const columns = [
+const columns = computed(() => [
   {
-    title: "Section",
+    title: $t("section"),
     dataIndex: "name",
     key: "name",
   },
   {
-    title: "Target",
+    title: $t("target"),
     key: "target",
     slots: {
       customRender: "target",
     },
     width: "150px",
   },
-];
+]);
 
 const rowSelection = computed(() => ({
   type: "checkbox",

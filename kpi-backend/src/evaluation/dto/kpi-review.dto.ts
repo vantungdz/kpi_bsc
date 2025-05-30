@@ -56,3 +56,11 @@ export class UpdateKpiReviewDto {
   @IsEnum(ReviewStatus)
   status?: ReviewStatus;
 }
+
+export class RejectKpiReviewDto {
+  @IsNumber()
+  reviewId: number;
+
+  @IsString()
+  rejectionReason: string;
+}

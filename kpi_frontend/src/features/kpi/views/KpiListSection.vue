@@ -803,46 +803,11 @@ watch(
 onMounted(async () => {
   try {
     await store.dispatch("departments/fetchDepartments");
-    if (isDepartmentUser.value && currentUser.value) {
-      localFilters.departmentId = currentUser.value.departmentId || null;
-      await store.dispatch(
-        "sections/fetchSectionsByDepartment",
-        localFilters.departmentId
-      );
-      selectSectionList.value =
-        store.getters["sections/sectionsByDepartment"](
-          localFilters.departmentId
-        ) || [];
-      localFilters.sectionId = 0;
-    } else if (isSectionUser.value && currentUser.value) {
-      localFilters.sectionId = currentUser.value.sectionId || null;
-      localFilters.departmentId = currentUser.value.departmentId || null;
-      await store.dispatch(
-        "sections/fetchSectionsByDepartment",
-        localFilters.departmentId
-      );
-      selectSectionList.value =
-        store.getters["sections/sectionsByDepartment"](
-          localFilters.departmentId
-        ) || [];
-    } else {
-      if (departmentList.value.length > 0) {
-        localFilters.departmentId = departmentList.value[0].id;
-        await store.dispatch(
-          "sections/fetchSectionsByDepartment",
-          localFilters.departmentId
-        );
-        selectSectionList.value =
-          store.getters["sections/sectionsByDepartment"](
-            localFilters.departmentId
-          ) || [];
-        localFilters.sectionId = 0;
-      } else {
-        await store.dispatch("sections/fetchSections");
-        selectSectionList.value = store.getters["sections/sectionList"] || [];
-        localFilters.sectionId = 0;
-      }
-    }
+    // Luôn để mặc định là ALL phòng ban khi vào lần đầu
+    localFilters.departmentId = null;
+    await store.dispatch("sections/fetchSections");
+    selectSectionList.value = store.getters["sections/sectionList"] || [];
+    localFilters.sectionId = 0;
     await applyFilters(); // Tải dữ liệu KPI ban đầu
   } catch (err) {
     error.value = err.message || "Failed to fetch initial data.";

@@ -6,7 +6,7 @@
         <img src="../../assets/logo.png" alt="Company Logo" class="sidebar-logo" />
       </div>
       <a-menu :theme="'light'" mode="inline" class="menu-list" :inline-collapsed="collapsed">
-        <div class="menu-group-title" v-if="!collapsed || canViewDashboard">{{ $t('sidebarGroup.dashboard') }}</div>
+        <div class="menu-group-title" v-if="!collapsed && canViewDashboard">{{ $t('sidebarGroup.dashboard') }}</div>
         <a-menu-item key="dashboard" v-if="canViewDashboard" :title="$t('dashboard')">
           <router-link to="/dashboard">
             <dashboard-outlined />
@@ -37,7 +37,7 @@
           </a-menu-item>
         </a-sub-menu>
 
-        <div class="menu-group-title" v-if="!collapsed || canViewKpiManagementSubMenu">{{ $t('sidebarGroup.kpi') }}
+        <div class="menu-group-title" v-if="!collapsed && canViewKpiManagementSubMenu">{{ $t('sidebarGroup.kpi') }}
         </div>
         <a-sub-menu key="kpi-management" v-if="canViewKpiManagementSubMenu" :title="$t('kpiManagement')">
           <template #title>
@@ -76,7 +76,7 @@
             </router-link>
           </a-menu-item>
         </a-sub-menu>
-        <div class="menu-group-title" v-if="!collapsed || canViewApprovalsReviewSubMenu">{{ $t('sidebarGroup.approval')
+        <div class="menu-group-title" v-if="!collapsed && canViewApprovalsReviewSubMenu">{{ $t('sidebarGroup.approval')
           }}</div>
         <a-sub-menu key="approvals-reviews" v-if="canViewApprovalsReviewSubMenu" :title="$t('approvalsAndReviews')">
           <template #title>
@@ -96,13 +96,6 @@
               <span>{{ $t('performanceObjectiveApprovalMenu') }}</span>
             </router-link>
           </a-menu-item>
-          <a-menu-item key="employee-kpi-score-list" v-if="canViewEmployeeKpiScores"
-            :title="$t('employeeKpiScoreList')">
-            <router-link to="/employee-kpi-scores">
-              <bar-chart-outlined />
-              <span>{{ $t('employeeKpiScoreList') }}</span>
-            </router-link>
-          </a-menu-item>
           <a-menu-item key="kpi-review-list" v-if="canViewKpiReview" :title="$t('kpiReviewTitle')">
             <router-link to="/kpi-review">
               <solution-outlined />
@@ -110,21 +103,21 @@
             </router-link>
           </a-menu-item>
         </a-sub-menu>
-        <div class="menu-group-title" v-if="!collapsed || canViewEmployeeList">{{ $t('sidebarGroup.employee') }}</div>
+        <div class="menu-group-title" v-if="!collapsed && canViewEmployeeList">{{ $t('sidebarGroup.employee') }}</div>
         <a-menu-item key="employees" v-if="canViewEmployeeList" :title="$t('employeeList')">
           <router-link to="/employees">
             <team-outlined />
             <span>{{ $t('employeeList') }}</span>
           </router-link>
         </a-menu-item>
-        <div class="menu-group-title" v-if="!collapsed || canViewReport">{{ $t('sidebarGroup.report') }}</div>
+        <div class="menu-group-title" v-if="!collapsed && canViewReport">{{ $t('sidebarGroup.report') }}</div>
         <a-menu-item key="report-generator" v-if="canViewReport" :title="$t('reportGenerator')">
           <router-link to="/report-generator">
             <bar-chart-outlined />
             <span>{{ $t('reportGenerator') }}</span>
           </router-link>
         </a-menu-item>
-        <div class="menu-group-title" v-if="!collapsed || canViewAdminMenu">{{ $t('sidebarGroup.admin') }}</div>
+        <div class="menu-group-title" v-if="!collapsed && canViewAdminMenu">{{ $t('sidebarGroup.admin') }}</div>
         <a-sub-menu key="admin" v-if="canViewAdminMenu" :title="$t('administration')">
           <template #title>
             <setting-outlined />
@@ -258,9 +251,6 @@ const canViewReport = computed(
 const canViewKpiReview = computed(
   () =>
     hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.KPI_VALUE)
-);
-const canViewEmployeeKpiScores = computed(() =>
-  hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.KPI_VALUE)
 );
 
 const canViewKpiEmployeeLevel = computed(() =>

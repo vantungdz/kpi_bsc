@@ -55,9 +55,67 @@
         :pagination="false"
         bordered
         v-if="sectionList && sectionList.length"
-      />
+      >
+        <template #actions="{ record }">
+          <a-button size="small" type="link" @click="() => editSection(record)">{{ $t('edit') }}</a-button>
+          <a-popconfirm
+            :title="$t('confirmDelete')"
+            :ok-text="$t('delete')"
+            :cancel-text="$t('cancel')"
+            @confirm="() => deleteSection(record)"
+          >
+            <a-button size="small" type="link" danger>{{ $t('delete') }}</a-button>
+          </a-popconfirm>
+        </template>
+      </a-table>
       <a-empty v-else :description="$t('noSections')" />
     </div>
+    <a-modal
+      v-model:visible="showEditModal"
+      :title="$t('editSection')"
+      :confirm-loading="editLoading"
+      @ok="handleUpdateSection"
+      @cancel="closeEditModal"
+      destroy-on-close
+    >
+      <a-form
+        :model="editForm"
+        :rules="rules"
+        ref="editFormRef"
+        layout="vertical"
+        @finish="handleUpdateSection"
+      >
+        <a-row :gutter="16">
+          <a-col :xs="24" :md="12">
+            <a-form-item :label="$t('sectionName')" name="name">
+              <a-input
+                v-model:value="editForm.name"
+                :placeholder="$t('enterSectionName')"
+              />
+            </a-form-item>
+          </a-col>
+          <a-col :xs="24" :md="12">
+            <a-form-item :label="$t('manager')" name="managerId">
+              <a-select
+                v-model:value="editForm.managerId"
+                :placeholder="$t('selectManager')"
+                :options="managerOptions"
+                :loading="loadingManagers"
+                show-search
+                :filter-option="filterManagerOption"
+              />
+            </a-form-item>
+          </a-col>
+        </a-row>
+        <a-form-item :label="$t('department')" name="departmentId">
+          <a-select
+            v-model:value="editForm.departmentId"
+            :placeholder="$t('selectDepartment')"
+            :options="departmentOptions"
+          />
+        </a-form-item>
+      </a-form>
+    </a-modal>
   </a-card>
 </template>
 
@@ -71,10 +129,14 @@ const { t } = useI18n();
 const store = useStore();
 const formRef = ref();
 const form = ref({ name: "", departmentId: null, managerId: null });
+const editFormRef = ref();
+const editForm = ref({ id: null, name: '', departmentId: null, managerId: null });
 const loading = ref(false);
+const editLoading = ref(false);
 const departmentOptions = ref([]);
 const loadingManagers = ref(false);
 const managerOptions = ref([]);
+const showEditModal = ref(false);
 
 const rules = {
   name: [
@@ -145,7 +207,59 @@ const sectionColumns = computed(() => [
       return "";
     },
   },
+  {
+    title: t("common.actions"),
+    key: "actions",
+    slots: { customRender: 'actions' },
+  },
 ]);
+
+const editSection = (record) => {
+  editForm.value = {
+    id: record.id,
+    name: record.name,
+    departmentId: record.department?.id || null,
+    managerId: record.manager?.id || null,
+  };
+  showEditModal.value = true;
+};
+
+const closeEditModal = () => {
+  showEditModal.value = false;
+  editForm.value = { id: null, name: '', departmentId: null, managerId: null };
+  editFormRef.value?.resetFields();
+};
+
+const handleUpdateSection = async () => {
+  editLoading.value = true;
+  try {
+    await store.dispatch('sections/updateSection', {
+      id: editForm.value.id,
+      data: {
+        name: editForm.value.name,
+        departmentId: editForm.value.departmentId,
+        managerId: editForm.value.managerId,
+      },
+    });
+    message.success(t('sectionUpdatedSuccess'));
+    closeEditModal();
+    await store.dispatch('sections/fetchSections');
+  } catch (e) {
+    message.error(e?.message || t('sectionUpdatedError'));
+  } finally {
+    editLoading.value = false;
+  }
+};
+
+const deleteSection = async (record) => {
+  try {
+    await store.dispatch("sections/deleteSection", record.id);
+    message.success(t("sectionDeletedSuccess"));
+    await store.dispatch("sections/fetchSections");
+  } catch (e) {
+    message.error(e?.message || t("sectionDeletedError"));
+  }
+};
 
 onMounted(async () => {
   await Promise.all([fetchManagers(), fetchDepartments()]);

@@ -1,5 +1,5 @@
 // src/departments/department.service.ts
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Department } from 'src/entities/department.entity';
 import { Employee } from 'src/entities/employee.entity';
@@ -68,5 +68,46 @@ export class DepartmentsService {
     }
 
     return user;
+  }
+
+  async update(id: number, updateDepartmentDto: any): Promise<Department> {
+    const department = await this.departmentRepository.findOne({ where: { id } });
+    if (!department) {
+      throw new UnauthorizedException('Department not found');
+    }
+    if (updateDepartmentDto.name !== undefined) {
+      department.name = updateDepartmentDto.name;
+    }
+    if (updateDepartmentDto.managerId !== undefined) {
+      department.manager = { id: updateDepartmentDto.managerId } as Employee;
+    }
+    const saved = await this.departmentRepository.save(department);
+    // Update manager's roles nếu cần
+    if (updateDepartmentDto.managerId) {
+      const manager = await this.employeesService.findOne(updateDepartmentDto.managerId);
+      const currentRoles = manager.roles?.map(r => typeof r === 'string' ? r : r.name) || [];
+      if (!currentRoles.includes('department')) {
+        await this.employeesService.updateRoles(manager.id, [...currentRoles, 'department']);
+      }
+    }
+    return saved;
+  }
+
+  async remove(id: number): Promise<void> {
+    // Kiểm tra còn section nào thuộc department này không
+    const sectionCount = await this.departmentRepository.manager
+      .getRepository('Section')
+      .count({ where: { department: { id } } });
+    if (sectionCount > 0) {
+      throw new BadRequestException('Không thể xóa phòng ban: vẫn còn section thuộc phòng ban này.');
+    }
+    // Kiểm tra còn nhân viên nào thuộc department này không
+    const employeeCount = await this.departmentRepository.manager
+      .getRepository('Employee')
+      .count({ where: { department: { id } } });
+    if (employeeCount > 0) {
+      throw new BadRequestException('Không thể xóa phòng ban: vẫn còn nhân viên thuộc phòng ban này.');
+    }
+    await this.departmentRepository.delete(id);
   }
 }

@@ -31,13 +31,13 @@
         <a-step :title="$t('selfReview')">
           <template #icon><user-outlined /></template>
         </a-step>
-        <a-step :title="$t('sectionReview')">
+        <a-step :title="$t('sectionReview')" :status="rejectedStep === 2 ? 'error' : undefined">
           <template #icon><team-outlined /></template>
         </a-step>
-        <a-step :title="$t('departmentReview')">
+        <a-step :title="$t('departmentReview')" :status="rejectedStep === 3 ? 'error' : undefined">
           <template #icon><apartment-outlined /></template>
         </a-step>
-        <a-step :title="$t('managerReview')">
+        <a-step :title="$t('managerReview')" :status="rejectedStep === 4 ? 'error' : undefined">
           <template #icon><solution-outlined /></template>
         </a-step>
         <a-step :title="$t('employeeFeedback')">
@@ -147,6 +147,7 @@
               :count="5"
               allow-half
               :disabled="loading || isCurrentLevelReviewed"
+              :rules="[{ required: true, message: $t('scoreRequired') }]"
             />
           </div>
           <a-textarea
@@ -163,6 +164,11 @@
             rows="3"
             :disabled="loading || isCurrentLevelReviewed"
           />
+          <div v-if="isSectionCanReview || isDepartmentCanReview || isManagerCanReview" style="text-align:right; margin-top:8px;">
+            <a-button danger @click="openRejectModal" :disabled="loading">
+              {{ $t('common.reject') }}
+            </a-button>
+          </div>
         </div>
       </div>
       <div
@@ -172,18 +178,53 @@
         <b>{{ $t("reviewed") }}</b>
       </div>
     </div>
+    <div v-if="errorMsg" style="color:#ff4d4f; text-align:center; margin-bottom:8px;">{{ errorMsg }}</div>
+
+    <!-- Reject Modal -->
+    <a-modal
+      v-model:visible="showRejectModal"
+      :title="$t('rejectReview')"
+      @cancel="closeRejectModal"
+      @ok="handleReject"
+      :confirm-loading="rejectLoading"
+      width="50%"
+      ok-text="OK"
+      cancel-text="Cancel"
+    >
+      <div>
+        <a-form-item
+          :label="`${$t('rejectionReason')} `"
+          labelAlign="left"
+          :rules="[{ required: true, message: $t('rejectionReasonRequired') }]"
+          validate-status=""
+        >
+          <a-textarea
+            v-model:value="rejectReason"
+            :placeholder="$t('rejectionReasonPlaceholder')"
+            rows="4"
+            :disabled="rejectLoading"
+          />
+        </a-form-item>
+        <div v-if="rejectError" style="color:#ff4d4f; margin-top:-8px; margin-bottom:8px;">{{ rejectError }}</div>
+      </div>
+    </a-modal>
+    <div style="text-align:left; margin-bottom:8px ; margin-left:8px;">
+      <a-button type="link" @click="$emit('show-history')" style="padding:0; color:#1890ff; font-weight:600">
+        {{$t('viewUpdateApprovalHistory')}}
+      </a-button>
+    </div>
   </a-modal>
 </template>
 
 <script setup>
 import { ref, watch, computed } from "vue";
+import { useI18n } from 'vue-i18n';
 import {
-  submitSectionReview,
-  submitDepartmentReview,
-  submitManagerReview,
+  submitReviewByRole,
   updateKpiReview,
-  submitEmployeeFeedback,
   completeReview,
+  submitEmployeeFeedback,
+  rejectReviewByRole // <-- Thêm hàm này
 } from "@/core/services/kpiReviewApi";
 import { useStore } from "vuex";
 import { UserOutlined, TeamOutlined, ApartmentOutlined, SolutionOutlined, MessageOutlined, SmileOutlined } from '@ant-design/icons-vue';
@@ -200,7 +241,8 @@ const form = ref({
 });
 const loading = ref(false);
 const store = useStore();
-
+const errorMsg = ref("");
+const { t: $t } = useI18n();
 // Lấy user từ store giống UserProfile
 const user = computed(() => store.getters["auth/user"]);
 
@@ -306,8 +348,11 @@ watch(
   () => props.review,
   (val) => {
     if (val) {
+      let score = val.managerScore || val.score || null;
+      // Nếu score không phải số hợp lệ (NaN, chuỗi, ngoài khoảng 0.5-5) thì set null
+      if (typeof score !== 'number' || isNaN(score) || score < 0.5 || score > 5) score = null;
       form.value = {
-        score: val.managerScore || val.score || null,
+        score,
         managerComment: val.managerComment || "",
         actionPlan: val.actionPlan || "",
       };
@@ -316,23 +361,30 @@ watch(
   { immediate: true }
 );
 
+const isValidScore = (score) => {
+  return typeof score === 'number' && !isNaN(score) && score >= 0.5 && score <= 5;
+};
+
 const submitReview = async () => {
+  errorMsg.value = "";
+  if (
+    isCurrentUserCanReview.value &&
+    !isEmployeeCanFeedback.value &&
+    !isManagerCanComplete.value &&
+    (!isValidScore(form.value.score))
+  ) {
+    errorMsg.value = $t('scoreRequired');
+    return;
+  }
   loading.value = true;
   try {
-    if (isSectionCanReview.value) {
-      await submitSectionReview(
-        props.review.id,
-        form.value.score,
-        form.value.managerComment
-      );
-    } else if (isDepartmentCanReview.value) {
-      await submitDepartmentReview(
-        props.review.id,
-        form.value.score,
-        form.value.managerComment
-      );
-    } else if (isManagerCanReview.value) {
-      await submitManagerReview(
+    if (
+      isSectionCanReview.value ||
+      isDepartmentCanReview.value ||
+      isManagerCanReview.value
+    ) {
+      // Gọi API tổng quát để backend tự quyết định nhảy bậc
+      await submitReviewByRole(
         props.review.id,
         form.value.score,
         form.value.managerComment
@@ -358,8 +410,11 @@ const statusStepMap = {
   PENDING: 0,
   SELF_REVIEWED: 1,
   SECTION_REVIEWED: 2,
+  SECTION_REJECTED: 2,
   DEPARTMENT_REVIEWED: 3,
+  DEPARTMENT_REJECTED: 3,
   MANAGER_REVIEWED: 4,
+  MANAGER_REJECTED: 4,
   EMPLOYEE_FEEDBACK: 4, // EMPLOYEE_FEEDBACK là bước 5, nhưng MANAGER_REVIEWED cũng có thể là 4
   COMPLETED: 5,
 };
@@ -367,6 +422,49 @@ const currentStep = computed(() => {
   if (!props.review || !props.review.status) return 0;
   return statusStepMap[props.review.status] ?? 0;
 });
+// Xác định step bị từ chối
+const rejectedStep = computed(() => {
+  switch (props.review?.status) {
+    case 'SECTION_REJECTED': return 2;
+    case 'DEPARTMENT_REJECTED': return 3;
+    case 'MANAGER_REJECTED': return 4;
+    default: return null;
+  }
+});
+
+const showRejectModal = ref(false);
+const rejectReason = ref("");
+const rejectLoading = ref(false);
+const rejectError = ref("");
+
+function openRejectModal() {
+  rejectReason.value = "";
+  rejectError.value = "";
+  showRejectModal.value = true;
+}
+function closeRejectModal() {
+  showRejectModal.value = false;
+  rejectReason.value = "";
+  rejectError.value = "";
+}
+
+async function handleReject() {
+  rejectError.value = "";
+  if (!rejectReason.value.trim()) {
+    rejectError.value = $t('rejectionReasonRequired');
+    return;
+  }
+  rejectLoading.value = true;
+  try {
+    await rejectReviewByRole(props.review.id, rejectReason.value);
+    closeRejectModal();
+    emit("saved");
+  } catch (e) {
+    rejectError.value = e?.response?.data?.message || e?.message || 'Error';
+  } finally {
+    rejectLoading.value = false;
+  }
+}
 </script>
 
 <style scoped>

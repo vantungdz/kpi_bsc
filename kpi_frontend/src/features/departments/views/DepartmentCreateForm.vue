@@ -48,10 +48,53 @@
         :pagination="false"
         bordered
         v-if="departmentList && departmentList.length"
-      />
+      >
+        <template #actions="{ record }">
+          <a-button size="small" type="link" @click="editDepartment(record)">{{ t('edit') }}</a-button>
+          <a-popconfirm
+            :title="t('confirmDelete')"
+            :ok-text="t('delete')"
+            :cancel-text="t('cancel')"
+            @confirm="deleteDepartment(record)"
+          >
+            <a-button size="small" type="link" danger>{{ t('delete') }}</a-button>
+          </a-popconfirm>
+        </template>
+      </a-table>
       <a-empty v-else :description="$t('noDepartments')" />
     </div>
   </a-card>
+
+  <a-modal
+    v-model:visible="showEditModal"
+    :title="$t('editDepartment')"
+    :confirm-loading="editLoading"
+    @ok="handleUpdateDepartment"
+    @cancel="closeEditModal"
+    destroy-on-close
+  >
+    <a-form
+      :model="editForm"
+      :rules="rules"
+      ref="editFormRef"
+      layout="vertical"
+      @finish="handleUpdateDepartment"
+    >
+      <a-form-item :label="$t('departmentName')" name="name">
+        <a-input v-model:value="editForm.name" :placeholder="$t('enterDepartmentName')" />
+      </a-form-item>
+      <a-form-item :label="$t('manager')" name="managerId">
+        <a-select
+          v-model:value="editForm.managerId"
+          :placeholder="$t('selectManager')"
+          :options="managerOptions"
+          :loading="loadingManagers"
+          show-search
+          :filter-option="filterManagerOption"
+        />
+      </a-form-item>
+    </a-form>
+  </a-modal>
 </template>
 
 <script setup>
@@ -64,6 +107,10 @@ const { t } = useI18n();
 const store = useStore();
 const formRef = ref();
 const form = ref({ name: "", managerId: null });
+const editFormRef = ref();
+const showEditModal = ref(false);
+const editForm = ref({ id: null, name: '', managerId: null });
+const editLoading = ref(false);
 const loading = ref(false);
 const loadingManagers = ref(false);
 const managerOptions = ref([]);
@@ -116,7 +163,57 @@ const departmentColumns = computed(() => [
         ? `${record.manager.first_name} ${record.manager.last_name}`
         : "",
   },
+  {
+    title: t("common.actions"),
+    key: "actions",
+    slots: { customRender: "actions" },
+  },
 ]);
+
+const editDepartment = (record) => {
+  editForm.value = {
+    id: record.id,
+    name: record.name,
+    managerId: record.manager?.id || null,
+  };
+  showEditModal.value = true;
+};
+
+const closeEditModal = () => {
+  showEditModal.value = false;
+  editForm.value = { id: null, name: '', managerId: null };
+  editFormRef.value?.resetFields();
+};
+
+const handleUpdateDepartment = async () => {
+  editLoading.value = true;
+  try {
+    await store.dispatch('departments/updateDepartment', {
+      id: editForm.value.id,
+      data: {
+        name: editForm.value.name,
+        managerId: editForm.value.managerId,
+      },
+    });
+    message.success(t('departmentUpdatedSuccess'));
+    closeEditModal();
+    await store.dispatch('departments/fetchDepartments');
+  } catch (e) {
+    message.error(e?.message || t('departmentUpdatedError'));
+  } finally {
+    editLoading.value = false;
+  }
+};
+
+const deleteDepartment = async (record) => {
+  try {
+    await store.dispatch("departments/deleteDepartment", record.id);
+    message.success(t("departmentDeletedSuccess"));
+    await store.dispatch("departments/fetchDepartments");
+  } catch (e) {
+    message.error(e?.message || t("departmentDeletedError"));
+  }
+};
 
 onMounted(async () => {
   await fetchManagers();

@@ -34,4 +34,18 @@ export class DepartmentsController {
   async findOne(@Param('id') id: number): Promise<Department> {
     return this.departmentService.findOne(id);
   }
+
+  @Put(':id')
+  async update(
+    @Param('id') id: number,
+    @Body() updateDepartmentDto: any,
+  ): Promise<Department> {
+    return this.departmentService.update(id, updateDepartmentDto);
+  }
+
+  @Delete(':id')
+  async remove(@Param('id') id: number): Promise<{ success: boolean }> {
+    await this.departmentService.remove(id);
+    return { success: true };
+  }
 }

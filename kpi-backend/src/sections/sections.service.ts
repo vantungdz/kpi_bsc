@@ -2,6 +2,7 @@ import {
   Injectable,
   UnauthorizedException,
   NotFoundException,
+  BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Section } from 'src/entities/section.entity';
@@ -95,5 +96,42 @@ export class SectionsService {
       }
     }
     return sections;
+  }
+
+  async update(id: number, updateSectionDto: any): Promise<Section> {
+    const section = await this.sectionRepository.findOne({ where: { id } });
+    if (!section) {
+      throw new NotFoundException('Section not found');
+    }
+    if (updateSectionDto.name !== undefined) {
+      section.name = updateSectionDto.name;
+    }
+    if (updateSectionDto.departmentId !== undefined) {
+      section.department = { id: updateSectionDto.departmentId } as Department;
+    }
+    if (updateSectionDto.managerId !== undefined) {
+      section.managerId = updateSectionDto.managerId;
+    }
+    const saved = await this.sectionRepository.save(section);
+    // Update manager's roles nếu cần
+    if (updateSectionDto.managerId) {
+      const manager = await this.employeesService.findOne(updateSectionDto.managerId);
+      const currentRoles = manager.roles?.map(r => typeof r === 'string' ? r : r.name) || [];
+      if (!currentRoles.includes('section')) {
+        await this.employeesService.updateRoles(manager.id, [...currentRoles, 'section']);
+      }
+    }
+    return saved;
+  }
+
+  async remove(id: number): Promise<void> {
+    // Kiểm tra còn nhân viên nào thuộc section này không
+    const employeeCount = await this.sectionRepository.manager
+      .getRepository(Employee)
+      .count({ where: { sectionId: id } });
+    if (employeeCount > 0) {
+      throw new BadRequestException('Không thể xóa section: vẫn còn nhân viên thuộc section này.');
+    }
+    await this.sectionRepository.delete(id);
   }
 }

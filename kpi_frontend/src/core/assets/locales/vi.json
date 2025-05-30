@@ -452,6 +452,11 @@
     "COMPLETED": "Hoàn thành",
     "undefined": "Chưa đánh giá"
   },
+  "assignToDepartment": "Gán cho Phòng ban",
+  "assignToDepartmentHelp": "Chọn phòng ban để gán KPI này. Nếu không chọn, KPI sẽ không được gán cho phòng ban nào.",
+  "departmentSection": "Phòng ban/Bộ phận",
+  "assignToSections": "Gán cho Bộ phận",
+  "assignToSectionsHelp": "Chọn bộ phận để gán KPI này. Nếu không chọn, KPI sẽ không được gán cho bộ phận nào.",
   "manageObjectives": "Quản lý mục tiêu & KPI",
   "managerReview": "Đánh giá KPI (Quản lý)",
   "yourReview": "Đánh giá của bạn",
@@ -619,7 +624,9 @@
     "actions": "Hành động",
     "all": "Tất cả",
     "apply": "Áp dụng",
-    "reset": "Đặt lại"
+    "reset": "Đặt lại",
+    "reject": "Từ chối",
+    "approve": "Phê duyệt"
   },
   "reviewTime": "Thời gian đánh giá",
   "reviewer": "Người đánh giá",
@@ -714,5 +721,10 @@
     "manager_reviewed": "Đã đánh giá cấp quản lý",
     "employee_feedback": "Nhân viên đã phản hồi",
     "completed": "Đã hoàn thành"
-  }
+  },
+  "scoreRequired": "Nhập điểm đánh giá nào!",
+  "submitReview": "Gửi đánh giá",
+  "rejectReview": "Từ chối đánh giá",
+  "rejectionReasonRequired": "Lý do từ chối là bắt buộc.",
+  "rejectionReasonPlaceholder": "Nhập lý do từ chối tại đây"
 }
