@@ -208,7 +208,7 @@
 </template>
 
 <script setup>
-import { reactive, computed, onMounted, ref, watch,h } from "vue";
+import { reactive, computed, onMounted, ref, watch, h } from "vue";
 import { useStore } from "vuex";
 import { useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
@@ -325,9 +325,12 @@ const columns = computed(() => [
     width: "12%",
     ellipsis: true,
     customRender({ record }) {
-      const departmentAssignments = record.assignments?.filter(
-        (assignment) => assignment.assigned_to_department && assignment.department
-      );
+      const departmentAssignments = Array.isArray(record.assignments)
+        ? record.assignments.filter(
+            (assignment) =>
+              assignment.assigned_to_department && assignment.department
+          )
+        : []; // Ensure it's an array
       return h(
         Avatar.Group,
         {},
@@ -335,7 +338,12 @@ const columns = computed(() => [
           h(
             Tooltip,
             { title: assignment.department.name, key: assignment.id },
-            () => h(Avatar, { style: { backgroundColor: "#1890ff" } }, assignment.department.name[0])
+            () =>
+              h(
+                Avatar,
+                { style: { backgroundColor: "#1890ff" } },
+                assignment.department.name[0]
+              )
           )
         )
       );
@@ -348,9 +356,11 @@ const columns = computed(() => [
     width: "12%",
     ellipsis: true,
     customRender({ record }) {
-      const sectionAssignments = record.assignments?.filter(
-        (assignment) => assignment.assigned_to_section && assignment.section
-      );
+      const sectionAssignments = Array.isArray(record.assignments)
+        ? record.assignments.filter(
+            (assignment) => assignment.assigned_to_section && assignment.section
+          )
+        : []; // Ensure it's an array
       return h(
         Avatar.Group,
         {},
@@ -358,7 +368,12 @@ const columns = computed(() => [
           h(
             Tooltip,
             { title: assignment.section.name, key: assignment.id },
-            () => h(Avatar, { style: { backgroundColor: "#1890ff" } }, assignment.section.name[0])
+            () =>
+              h(
+                Avatar,
+                { style: { backgroundColor: "#1890ff" } },
+                assignment.section.name[0]
+              )
           )
         )
       );
@@ -371,17 +386,28 @@ const columns = computed(() => [
     width: "12%",
     ellipsis: true,
     customRender({ record }) {
-      const employeeAssignments = record.assignments?.filter(
-        (assignment) => assignment.assigned_to_employee && assignment.employee
-      );
+      const employeeAssignments = Array.isArray(record.assignments)
+        ? record.assignments.filter(
+            (assignment) =>
+              assignment.assigned_to_employee && assignment.employee
+          )
+        : []; // Ensure it's an array
       return h(
         Avatar.Group,
         {},
         employeeAssignments.map((assignment) =>
           h(
             Tooltip,
-            { title: `${assignment.employee.first_name} ${assignment.employee.last_name}`, key: assignment.id },
-            () => h(Avatar, { style: { backgroundColor: "#f56a00" } }, assignment.employee.first_name[0])
+            {
+              title: `${assignment.employee.first_name} ${assignment.employee.last_name}`,
+              key: assignment.id,
+            },
+            () =>
+              h(
+                Avatar,
+                { style: { backgroundColor: "#f56a00" } },
+                assignment.employee.first_name[0]
+              )
           )
         )
       );
