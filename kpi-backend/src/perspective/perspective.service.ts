@@ -26,4 +26,32 @@ export class PerspectiveService {
 
     return dataRes;
   }
+
+  async create(perspective: Partial<Perspective>): Promise<Perspective> {
+    // Loại bỏ id nếu được cung cấp để tránh vi phạm khóa chính
+    const { id, ...data } = perspective;
+    const newPerspective = this.perspectivesRepository.create(data);
+    return await this.perspectivesRepository.save(newPerspective);
+  }
+
+  async update(
+    id: number,
+    perspective: Partial<Perspective>,
+  ): Promise<Perspective> {
+    await this.perspectivesRepository.update(id, perspective);
+    const updatedPerspective = await this.perspectivesRepository.findOne({
+      where: { id },
+    });
+    if (!updatedPerspective) {
+      throw new UnauthorizedException('Perspective not found');
+    }
+    return updatedPerspective;
+  }
+
+  async delete(id: number): Promise<void> {
+    const result = await this.perspectivesRepository.delete(id);
+    if (result.affected === 0) {
+      throw new UnauthorizedException('Perspective not found');
+    }
+  }
 }

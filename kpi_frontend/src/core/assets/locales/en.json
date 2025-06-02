@@ -715,6 +715,7 @@
   "common": {
     "edit": "Edit",
     "delete": "Delete",
+    "create": "Create",
     "cancel": "Cancel",
     "actions": "Actions",
     "apply": "Apply",
@@ -822,5 +823,24 @@
   "submitReview": "Submit Review",
   "rejectReview": "Reject Review",
   "rejectionReasonRequired": "Rejection reason is required.",
-  "rejectionReasonPlaceholder": "Enter rejection reason here..."
+  "rejectionReasonPlaceholder": "Enter rejection reason here...",
+  "perspectiveObject": {
+    "managePerspectives": "Manage Perspectives",
+    "name": "Name",
+    "description": "Description",
+    "existingPerspectives": "Existing Perspectives",
+    "namePlaceholder": "Enter perspective name",
+    "descriptionPlaceholder": "Enter perspective description",
+    "updatePerspective": "Update Perspective",
+    "deleteConfirm": "Are you sure you want to delete this perspective?",
+    "confirmNo": "No",
+    "confirmYes": "Yes",
+    "successCreate": "Perspective created successfully",
+    "successUpdate": "Perspective updated successfully",
+    "successDelete": "Perspective deleted successfully",
+    "errorFetch": "Error fetching perspectives",
+    "errorCreate": "Error creating perspective",
+    "errorUpdate": "Error updating perspective",
+    "errorDelete": "Error deleting perspective"
+  }
 }

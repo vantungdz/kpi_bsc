@@ -715,6 +715,7 @@
   "common": {
     "edit": "編集",
     "delete": "削除",
+    "create": "作成",
     "cancel": "キャンセル",
     "actions": "操作",
     "all": "すべて",
@@ -822,5 +823,24 @@
   "submitReview": "レビューを送信",
   "rejectReview": "レビューを却下",
   "rejectionReasonRequired": "却下理由は必須です。",
-  "rejectionReasonPlaceholder": "却下理由を入力してください"
+  "rejectionReasonPlaceholder": "却下理由を入力してください",
+  "perspectiveObject": {
+    "managePerspectives": "視点を管理する",
+    "name": "名前",
+    "description": "説明",
+    "existingPerspectives": "既存の視点",
+    "namePlaceholder": "視点名を入力",
+    "descriptionPlaceholder": "視点の説明を入力",
+    "updatePerspective": "視点を更新",
+    "deleteConfirm": "この視点を削除してもよろしいですか？",
+    "confirmNo": "いいえ",
+    "confirmYes": "はい",
+    "successCreate": "視点が正常に作成されました",
+    "successUpdate": "視点が正常に更新されました",
+    "successDelete": "視点が正常に削除されました",
+    "errorFetch": "視点の取得エラー",
+    "errorCreate": "視点の作成エラー",
+    "errorUpdate": "視点の更新エラー",
+    "errorDelete": "視点の削除エラー"
+  }
 }

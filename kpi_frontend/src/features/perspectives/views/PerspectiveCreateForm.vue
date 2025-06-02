@@ -1,63 +1,104 @@
 <template>
   <div class="perspective-create-form">
-    <a-card title="Manage Perspectives" bordered>
+    <a-card :title="$t('perspectiveObject.managePerspectives')" bordered>
       <a-form @submit.prevent="handleSubmit" layout="vertical">
         <a-form-item
-          label="Name"
-          :rules=" [
-            { required: true, message: 'Please enter the perspective name' },
-            { min: 3, message: 'Name must be at least 3 characters' },
-            { max: 50, message: 'Name cannot exceed 50 characters' }
+          :label="$t('perspectiveObject.name')"
+          :rules="[
+            { required: true, message: $t('perspectiveObject.nameRequired') },
+            { min: 3, message: $t('perspectiveObject.nameMin') },
+            { max: 50, message: $t('perspectiveObject.nameMax') },
           ]"
         >
           <a-input
             v-model:value="form.name"
             :disabled="isLoading"
-            placeholder="Enter perspective name"
+            :placeholder="$t('perspectiveObject.namePlaceholder')"
           />
         </a-form-item>
 
-        <a-form-item
-          label="Description"
-        >
+        <a-form-item :label="$t('perspectiveObject.description')">
           <a-textarea
             v-model:value="form.description"
             :disabled="isLoading"
-            placeholder="Enter perspective description"
+            :placeholder="$t('perspectiveObject.descriptionPlaceholder')"
             auto-size
           />
         </a-form-item>
 
         <a-form-item>
-          <a-button
-            type="primary"
-            html-type="submit"
-            :loading="isLoading"
-          >
-            {{ editingId ? 'Update' : 'Create' }}
+          <a-button type="primary" html-type="submit" :loading="isLoading">
+            {{ $t("common.create") }}
           </a-button>
         </a-form-item>
       </a-form>
     </a-card>
 
-    <a-card v-if="perspectives.length" title="Existing Perspectives" bordered style="margin-top: 20px;">
+    <a-card
+      v-if="perspectives.length"
+      :title="$t('perspectiveObject.existingPerspectives')"
+      bordered
+      style="margin-top: 20px"
+    >
       <a-list :data-source="perspectives" bordered>
         <template #renderItem="{ item }">
           <a-list-item>
-            <a-list-item-meta :title="item.name" :description="item.description" />
+            <a-list-item-meta
+              :title="item.name"
+              :description="item.description"
+            />
             <template #actions>
-              <a @click="handleEdit(item)">Edit</a>
-              <a @click="handleDelete(item.id)">Delete</a>
+              <a @click="handleEdit(item)">{{ $t("common.edit") }}</a>
+              <a-popconfirm
+                :title="$t('perspectiveObject.deleteConfirm')"
+                @confirm="() => handleDelete(item.id)"
+                :okText="$t('perspectiveObject.confirmYes')"
+                :cancelText="$t('perspectiveObject.confirmNo')"
+              >
+                <a>{{ $t("common.delete") }}</a>
+              </a-popconfirm>
             </template>
           </a-list-item>
         </template>
       </a-list>
     </a-card>
+
+    <a-modal
+      v-model:visible="isUpdateModalVisible"
+      :title="$t('perspectiveObject.updatePerspective')"
+      @ok="handleUpdate"
+      @cancel="closeUpdateModal"
+      :confirm-loading="isLoading"
+    >
+      <a-form layout="vertical">
+        <a-form-item
+          :label="$t('perspectiveObject.name')"
+          :rules="[
+            { required: true, message: $t('perspectiveObject.nameRequired') },
+            { min: 3, message: $t('perspectiveObject.nameMin') },
+            { max: 50, message: $t('perspectiveObject.nameMax') },
+          ]"
+        >
+          <a-input
+            v-model:value="updateForm.name"
+            :placeholder="$t('perspectiveObject.namePlaceholder')"
+          />
+        </a-form-item>
+
+        <a-form-item :label="$t('perspectiveObject.description')">
+          <a-textarea
+            v-model:value="updateForm.description"
+            :placeholder="$t('perspectiveObject.descriptionPlaceholder')"
+            auto-size
+          />
+        </a-form-item>
+      </a-form>
+    </a-modal>
   </div>
 </template>
 
 <script setup>
-import { reactive, onMounted, computed } from "vue";
+import { reactive, onMounted, computed, ref } from "vue";
 import { useStore } from "vuex";
 import { message } from "ant-design-vue";
 
@@ -68,7 +109,13 @@ const form = reactive({
   description: "",
 });
 
-let editingId = null;
+const updateForm = reactive({
+  name: "",
+  description: "",
+});
+
+const isUpdateModalVisible = ref(false);
+const editingId = ref(null);
 
 const perspectives = computed(() => store.state.perspectives.perspectives);
 const isLoading = computed(() => store.state.perspectives.isLoading);
@@ -83,29 +130,42 @@ const handleFetch = async () => {
 
 const handleSubmit = async () => {
   try {
-    if (editingId) {
-      await store.dispatch("perspectives/updatePerspective", {
-        id: editingId,
-        perspective: form,
-      });
-      message.success("Perspective updated successfully");
-      editingId = null;
-    } else {
-      await store.dispatch("perspectives/createPerspective", form);
-      message.success("Perspective created successfully");
-    }
+    await store.dispatch("perspectives/createPerspective", form);
+    message.success("Perspective created successfully");
     form.name = "";
     form.description = "";
     handleFetch();
   } catch (error) {
-    message.error("Error creating/updating perspective");
+    message.error("Error creating perspective");
   }
 };
 
 const handleEdit = (perspective) => {
-  editingId = perspective.id;
-  form.name = perspective.name;
-  form.description = perspective.description;
+  editingId.value = perspective.id;
+  updateForm.name = perspective.name;
+  updateForm.description = perspective.description;
+  isUpdateModalVisible.value = true;
+};
+
+const handleUpdate = async () => {
+  try {
+    await store.dispatch("perspectives/updatePerspective", {
+      id: editingId.value,
+      perspective: updateForm,
+    });
+    message.success("Perspective updated successfully");
+    closeUpdateModal();
+    handleFetch();
+  } catch (error) {
+    message.error("Error updating perspective");
+  }
+};
+
+const closeUpdateModal = () => {
+  isUpdateModalVisible.value = false;
+  editingId.value = null;
+  updateForm.name = "";
+  updateForm.description = "";
 };
 
 const handleDelete = async (id) => {

@@ -626,6 +626,7 @@
   "common": {
     "edit": "Sửa",
     "delete": "Xoá",
+    "create": "Tạo mới",
     "cancel": "Huỷ",
     "actions": "Hành động",
     "all": "Tất cả",
@@ -732,5 +733,24 @@
   "submitReview": "Gửi đánh giá",
   "rejectReview": "Từ chối đánh giá",
   "rejectionReasonRequired": "Lý do từ chối là bắt buộc.",
-  "rejectionReasonPlaceholder": "Nhập lý do từ chối tại đây"
+  "rejectionReasonPlaceholder": "Nhập lý do từ chối tại đây",
+  "perspectiveObject": {
+    "managePerspectives": "Quản lý Tiêu chí",
+    "name": "Tên",
+    "description": "Mô tả",
+    "existingPerspectives": "Tiêu chí hiện có",
+    "namePlaceholder": "Nhập tên tiêu chí",
+    "descriptionPlaceholder": "Nhập mô tả tiêu chí",
+    "updatePerspective": "Cập nhật Tiêu chí",
+    "deleteConfirm": "Bạn có chắc chắn muốn xóa tiêu chí này không?",
+    "confirmNo": "Không, giữ nguyên",
+    "confirmYes": "Có, xóa tiêu chí",
+    "successCreate": "Tạo tiêu chí thành công",
+    "successUpdate": "Cập nhật tiêu chí thành công",
+    "successDelete": "Xóa tiêu chí thành công",
+    "errorFetch": "Lỗi khi tải tiêu chí",
+    "errorCreate": "Lỗi khi tạo tiêu chí",
+    "errorUpdate": "Lỗi khi cập nhật tiêu chí",
+    "errorDelete": "Lỗi khi xóa tiêu chí"
+  }
 }

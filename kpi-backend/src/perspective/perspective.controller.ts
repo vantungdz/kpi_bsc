@@ -1,4 +1,14 @@
-import { Controller, Get, Param, ParseIntPipe, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Param,
+  ParseIntPipe,
+  UseGuards,
+  Body,
+  Post,
+  Put,
+  Delete,
+} from '@nestjs/common';
 import { Perspective } from 'src/entities/perspective.entity';
 import { PerspectiveService } from './perspective.service';
 import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
@@ -18,5 +28,25 @@ export class PerspectiveController {
   @Get(':id')
   async findOne(@Param('id', ParseIntPipe) id: number): Promise<Perspective> {
     return await this.perspectivesService.findOne(id);
+  }
+
+  @Post()
+  async create(
+    @Body() perspective: Partial<Perspective>,
+  ): Promise<Perspective> {
+    return await this.perspectivesService.create(perspective);
+  }
+
+  @Put(':id')
+  async update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() perspective: Partial<Perspective>,
+  ): Promise<Perspective> {
+    return await this.perspectivesService.update(id, perspective);
+  }
+
+  @Delete(':id')
+  async delete(@Param('id', ParseIntPipe) id: number): Promise<void> {
+    return await this.perspectivesService.delete(id);
   }
 }
