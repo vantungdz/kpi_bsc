@@ -11,9 +11,11 @@ import dashboard from "@/features/dashboard/store/dashboard";
 import reports from "@/features/reports/store/report";
 import myKpiReviews from "@/features/evaluation/store/myKpiReviews";
 import roles from "@/features/roles/store/roles"; 
+import loading from "@/store/loading";
 
 const store = createStore({
   modules: {
+    loading,
     auth,
     dashboard,
     notifications,

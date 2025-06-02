@@ -15,7 +15,6 @@ import { Section } from './section.entity';
 import { Team } from './team.entity';
 import { Notification } from './notification.entity';
 import { KpiReview } from './kpi-review.entity';
-import { ObjectiveEvaluation } from './objective-evaluation.entity'; // + Import ObjectiveEvaluation
 import { Permission } from './permission.entity';
 import { Policy } from './policy.entity';
 import { Role } from './role.entity';
@@ -47,18 +46,6 @@ export class Employee {
 
   @Column({ nullable: true })
   last_name: string;
-
-  @OneToMany(
-    () => ObjectiveEvaluation,
-    (objectiveEvaluation) => objectiveEvaluation.employee,
-  )
-  objectiveEvaluationsAsSubject: ObjectiveEvaluation[]; // Evaluations where this employee is the one being evaluated
-
-  @OneToMany(
-    () => ObjectiveEvaluation,
-    (objectiveEvaluation) => objectiveEvaluation.evaluator,
-  )
-  objectiveEvaluationsAsEvaluator: ObjectiveEvaluation[]; // Evaluations submitted by this employee (as a manager/evaluator)
 
   @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
   created_at: Date;

@@ -692,6 +692,12 @@
   },
   "reviewCycleManagement": "Review Cycle Management",
   "errorLoadingRolesOrPermissions": "Error loading roles or permissions",
+  "selectPerspective": "Select Perspective",
+  "enterKpiName": "Enter KPI Name",
+  "selectUnit": "Select Unit",
+  "enterWeight": "Enter Weight",
+  "selectFrequency": "Select Frequency",
+  "selectType": "Select Type",
   "reviewCycle": {
     "createTitle": "Create KPI Review Cycle",
     "name": "Cycle Name",
@@ -776,11 +782,11 @@
     "report": "Report",
     "admin": "Administration"
   },
-  "statusReview":{
+  "statusReview": {
     "self_reviewed": "Self Reviewed",
     "section_reviewed": "Section Reviewed",
     "department_reviewed": "Department Reviewed",
-    "manager_reviewed": "Manager Reviewed", 
+    "manager_reviewed": "Manager Reviewed",
     "employee_feedback": "Employee Feedback",
     "completed": "Completed"
   },

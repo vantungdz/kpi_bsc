@@ -141,6 +141,12 @@
               <span>{{ $t('reviewCycleManagement') }}</span>
             </router-link>
           </a-menu-item>
+          <a-menu-item key="admin-create-perspective" :title="$t('createPerspective')">
+            <router-link to="/perspectives/create">
+              <cluster-outlined />
+              <span>{{ $t('createPerspective') }}</span>
+            </router-link>
+          </a-menu-item>
           <a-menu-item key="admin-create-department" :title="$t('createDepartment')">
             <router-link to="/admin/create-department">
               <apartment-outlined />

@@ -5,7 +5,6 @@ import { KPIAssignment } from 'src/entities/kpi-assignment.entity';
 import { KpiValue } from 'src/entities/kpi-value.entity';
 import { EmployeesService } from 'src/employees/employees.service';
 import { NotificationType } from 'src/entities/notification.entity';
-import { OverallReview } from 'src/entities/overall-review.entity'; // Thêm import
 import { Employee } from 'src/entities/employee.entity';
 import { NotificationGateway } from './notification.gateway';
 
@@ -215,93 +214,4 @@ export class NotificationEventListener {
     }
   }
 
-  // Listener cho sự kiện quản lý review xong, chờ nhân viên phản hồi
-  @OnEvent('overall_review.employee_feedback_pending')
-  async handleOverallReviewPendingEmployeeFeedback(payload: {
-    overallReview: OverallReview;
-    manager: Employee;
-    targetId: number;
-    targetType: string;
-  }) {
-    this.logger.log(
-      `Caught event: overall_review.employee_feedback_pending for target ${payload.targetType}:${payload.targetId} by manager ${payload.manager.username}`,
-    );
-    // Chỉ gửi thông báo nếu target là employee
-    if (payload.targetType === 'employee') {
-      const employeeToNotify = await this.employeeService.findOne(
-        payload.targetId,
-      );
-      if (employeeToNotify) {
-        const notification = await this.notificationService.createNotification(
-          employeeToNotify.id,
-          NotificationType.REVIEW_PENDING_EMPLOYEE_FEEDBACK,
-          `Đánh giá KPI của bạn cho chu kỳ ${payload.overallReview.cycleId} đã được quản lý cập nhật và đang chờ phản hồi của bạn.`,
-          payload.overallReview.id,
-          'OVERALL_REVIEW',
-          null, // kpiId không trực tiếp liên quan ở đây, có thể để null hoặc dùng targetId
-        );
-        this.notificationGateway.sendNotificationToUser(employeeToNotify.id, notification);
-        this.logger.log(
-          `Notification sent to employee ${employeeToNotify.username} for pending feedback.`,
-        );
-      } else {
-        this.logger.warn(
-          `Employee with ID ${payload.targetId} not found for notification.`,
-        );
-      }
-    }
-  }
-
-  // Listener cho sự kiện nhân viên đã phản hồi
-  @OnEvent('overall_review.employee_responded')
-  async handleOverallReviewEmployeeResponded(payload: {
-    overallReview: OverallReview;
-    employee: Employee;
-  }) {
-    this.logger.log(
-      `Caught event: overall_review.employee_responded for review ID ${payload.overallReview.id} by employee ${payload.employee.username}`,
-    );
-    // Thông báo cho người quản lý đã thực hiện review (overallReview.reviewedById)
-    const managerToNotify = await this.employeeService.findOne(
-      payload.overallReview.reviewedById,
-    );
-    if (managerToNotify) {
-      const notification = await this.notificationService.createNotification(
-        managerToNotify.id,
-        NotificationType.REVIEW_EMPLOYEE_RESPONDED,
-        `Nhân viên ${payload.employee.first_name} ${payload.employee.last_name} đã gửi phản hồi về đánh giá KPI chu kỳ ${payload.overallReview.cycleId}.`,
-        payload.overallReview.id,
-        'OVERALL_REVIEW',
-        null,
-      );
-      this.notificationGateway.sendNotificationToUser(managerToNotify.id, notification);
-      this.logger.log(
-        `Notification sent to manager ${managerToNotify.username} about employee feedback.`,
-      );
-    }
-  }
-
-  // Listener cho sự kiện review đã hoàn tất
-  @OnEvent('overall_review.completed')
-  async handleOverallReviewCompleted(payload: {
-    overallReview: OverallReview;
-    manager: Employee;
-    targetId: number;
-    targetType: string;
-  }) {
-    this.logger.log(
-      `Caught event: overall_review.completed for target ${payload.targetType}:${payload.targetId} by manager ${payload.manager.username}`,
-    );
-    if (payload.targetType === 'employee') {
-      const notification = await this.notificationService.createNotification(
-        payload.targetId, // ID của nhân viên được review
-        NotificationType.REVIEW_COMPLETED,
-        `Đánh giá KPI của bạn cho chu kỳ ${payload.overallReview.cycleId} đã được hoàn tất.`,
-        payload.overallReview.id,
-        'OVERALL_REVIEW',
-        null,
-      );
-      this.notificationGateway.sendNotificationToUser(payload.targetId, notification);
-    }
-  }
 }

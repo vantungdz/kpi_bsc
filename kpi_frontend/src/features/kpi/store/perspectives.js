@@ -1,32 +1,40 @@
 import apiClient from "@/core/services/api";
+import store from "@/core/store";
 
 const state = {
-  perspectives: [],
-  loading: false,
-  error: null,
+  perspectives: [], // Danh sách perspectives
+  error: null, // Lỗi khi tải hoặc xử lý perspectives
 };
 
 const getters = {
+  // --- Dữ liệu ---
   perspectiveList: (state) => state.perspectives,
-  isLoading: (state) => state.loading,
+
+  // --- Trạng thái lỗi ---
   error: (state) => state.error,
 };
 
 const mutations = {
-  SET_LOADING(state, isLoading) {
-    state.loading = isLoading;
-  },
+  // --- Trạng thái lỗi ---
   SET_ERROR(state, error) {
     state.error = error ? error.response?.data?.message || error.message : null;
   },
+
+  // --- Dữ liệu ---
   SET_PERSPECTIVES(state, perspectives) {
-    state.perspectives = perspectives;
+    state.perspectives = perspectives || [];
   },
+
+  // --- Trạng thái loading ---
+  // Không còn mutation `SET_LOADING` vì trạng thái loading được quản lý toàn cục
 };
 
 const actions = {
+  /**
+   * Lấy danh sách perspectives.
+   */
   async fetchPerspectives({ commit }, params = {}) {
-    commit("SET_LOADING", true);
+    await store.dispatch("loading/startLoading");
     commit("SET_ERROR", null);
     try {
       const response = await apiClient.get("/perspectives", { params });
@@ -35,7 +43,7 @@ const actions = {
       commit("SET_ERROR", error);
       commit("SET_PERSPECTIVES", []);
     } finally {
-      commit("SET_LOADING", false);
+      await store.dispatch("loading/stopLoading");
     }
   },
 };

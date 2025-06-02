@@ -15,14 +15,6 @@ export function connectNotificationSocket(userId) {
     reconnection: true,
   });
 
-  // Log connection success or error
-  socket.on('connect', () => {
-    console.log('Socket connected:', socket.id);
-  });
-  socket.on('connect_error', (error) => {
-    console.error('Socket connection error:', error);
-  });
-
   return socket;
 }
 

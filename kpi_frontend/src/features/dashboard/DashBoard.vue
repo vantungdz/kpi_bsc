@@ -1,5 +1,6 @@
 <template>
-  <div class="dashboard-overview-container" >
+  <div class="dashboard-overview-container">
+    <LoadingOverlay :visible="loading" />
     <h1>{{ $t("dashboardOverview") }}</h1>
     <a-row :gutter="[16, 24]">
       <a-col :xs="24" :sm="12" :md="8" :lg="6">
@@ -17,10 +18,7 @@
       <!-- Thêm Card mới cho User Activity Stats -->
       <a-col :xs="24" :sm="12" :md="8" :lg="6">
         <router-link to="/dashboard/user-activity-stats">
-          <a-card
-            hoverable
-            class="dashboard-block-card card-user-activity-stats"
-          >
+          <a-card hoverable class="dashboard-block-card card-user-activity-stats">
             <template #title>
               <user-switch-outlined /> {{ $t("userActivityStats") }}
             </template>
@@ -31,12 +29,7 @@
         </router-link>
       </a-col>
       <!-- Thêm Card mới cho KPI Performance Overview -->
-      <a-col
-        :xs="24"
-        :sm="12"
-        :md="8"
-        :lg="6"
-      >
+      <a-col :xs="24" :sm="12" :md="8" :lg="6">
         <router-link to="/dashboard/kpi-performance-overview">
           <a-card hoverable class="dashboard-block-card card-kpi-performance">
             <template #title>
@@ -85,8 +78,11 @@ import {
   BarChartOutlined,
   AppstoreOutlined,
 } from "@ant-design/icons-vue";
+import { useStore } from "vuex";
+import { computed } from "vue";
 
-
+const store = useStore();
+const loading = computed(() => store.getters["loading/isLoading"]);
 </script>
 
 <style scoped>

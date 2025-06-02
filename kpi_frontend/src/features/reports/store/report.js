@@ -1,15 +1,13 @@
-// /e/project/kpi-frontend/src/features/reports/store/reports.js
 import apiClient from "@/core/services/api";
 import { notification } from "ant-design-vue";
+import store from "@/core/store"; // Dùng store chính để dispatch loading toàn cục
 
 const state = {
-  loading: false,
   error: null,
   reportData: null,
 };
 
 const getters = {
-  isLoading: (state) => state.loading,
   hasError: (state) => state.error !== null,
   getError: (state) => state.error,
   getReportData: (state) => state.reportData,
@@ -20,7 +18,7 @@ const actions = {
     { commit, dispatch },
     { reportType, fileFormat, startDate, endDate }
   ) {
-    commit("setLoading", true);
+    await store.dispatch("loading/startLoading");
     commit("setError", null);
     try {
       const response = await apiClient.get("/reports/generate", {
@@ -30,11 +28,11 @@ const actions = {
           startDate,
           endDate,
         },
-        responseType: "blob", // Quan trọng để nhận file từ backend
+        responseType: "blob",
       });
 
       // Lấy tên file thực tế từ header nếu có
-      let fileName = `report.${fileFormat === 'excel' ? 'xlsx' : fileFormat}`;
+      let fileName = `report.${fileFormat === "excel" ? "xlsx" : fileFormat}`;
       const disposition = response.headers["content-disposition"];
       if (disposition) {
         const match = disposition.match(/filename="?([^";]+)"?/);
@@ -48,14 +46,13 @@ const actions = {
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.setAttribute("download", fileName); // Đặt tên file đúng từ backend
+      link.setAttribute("download", fileName);
       document.body.appendChild(link);
       link.click();
 
-      // Giải phóng bộ nhớ
       window.URL.revokeObjectURL(url);
       commit("setReportData", response.data);
-      return true; // <-- Đảm bảo luôn trả về Promise
+      return true;
     } catch (error) {
       commit("setError", error);
       dispatch("showErrorNotification", {
@@ -63,9 +60,9 @@ const actions = {
         description:
           error.response?.data?.message || "Có lỗi xảy ra khi xuất báo cáo.",
       });
-      throw error; // <-- Đảm bảo trả về Promise bị reject
+      throw error;
     } finally {
-      commit("setLoading", false);
+      await store.dispatch("loading/stopLoading");
     }
   },
   showErrorNotification(_, { message, description }) {
@@ -77,9 +74,6 @@ const actions = {
 };
 
 const mutations = {
-  setLoading(state, loading) {
-    state.loading = loading;
-  },
   setError(state, error) {
     state.error = error;
   },

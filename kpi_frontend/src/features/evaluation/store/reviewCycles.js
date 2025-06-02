@@ -2,19 +2,17 @@ import apiClient from "@/core/services/api";
 
 const state = {
   cycles: [],
-  isLoading: false,
   error: null,
 };
 
 const getters = {
   getCycles: (state) => state.cycles,
-  isLoadingCycles: (state) => state.isLoading,
   getCycleError: (state) => state.error,
 };
 
 const actions = {
   async fetchCycles({ commit }) {
-    commit("SET_LOADING", true);
+    await store.dispatch("loading/startLoading");
     commit("SET_ERROR", null);
     try {
       const res = await apiClient.get("/review-cycles");
@@ -22,7 +20,7 @@ const actions = {
     } catch (e) {
       commit("SET_ERROR", e.message);
     } finally {
-      commit("SET_LOADING", false);
+      await store.dispatch("loading/stopLoading");
     }
   },
   async addCycle({ dispatch }, name) {
@@ -42,9 +40,6 @@ const actions = {
 const mutations = {
   SET_CYCLES(state, data) {
     state.cycles = data;
-  },
-  SET_LOADING(state, isLoading) {
-    state.isLoading = isLoading;
   },
   SET_ERROR(state, error) {
     state.error = error;

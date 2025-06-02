@@ -453,18 +453,14 @@ export class KpiValuesService {
       reason,
     );
     const rejectedValue = await this.kpiValuesRepository.save(kpiValue);
-    console.log('Starting QueryBuilder for assignment with ID:', rejectedValue.kpi_assigment_id);
     const assignmentFound = await this.kpiAssignmentRepository
       .createQueryBuilder('assignment')
       .leftJoinAndSelect('assignment.kpi', 'kpi')
       .where('assignment.id = :id', { id: rejectedValue.kpi_assigment_id })
       .getOne();
-    console.log('QueryBuilder executed. Result:', assignmentFound);
     if (!assignmentFound) {
       console.error('No assignment found for ID:', rejectedValue.kpi_assigment_id);
-    } else {
-      console.log('Assignment found with QueryBuilder:', assignmentFound);
-    }
+    } 
     if (assignmentFound && assignmentFound.employee_id) {
       this.eventEmitter.emit('kpi_value.rejected_by_user', {
         kpiValue: rejectedValue,
@@ -654,18 +650,14 @@ export class KpiValuesService {
       reason,
     );
     const rejectedValue = await this.kpiValuesRepository.save(kpiValue);
-    console.log('Starting QueryBuilder for assignment with ID:', rejectedValue.kpi_assigment_id);
     const assignmentFound = await this.kpiAssignmentRepository
       .createQueryBuilder('assignment')
       .leftJoinAndSelect('assignment.kpi', 'kpi')
       .where('assignment.id = :id', { id: rejectedValue.kpi_assigment_id })
       .getOne();
-    console.log('QueryBuilder executed. Result:', assignmentFound);
     if (!assignmentFound) {
       console.error('No assignment found for ID:', rejectedValue.kpi_assigment_id);
-    } else {
-      console.log('Assignment found with QueryBuilder:', assignmentFound);
-    }
+    } 
     if (assignmentFound && assignmentFound.employee_id) {
       this.eventEmitter.emit('kpi_value.rejected_by_user', {
         kpiValue: rejectedValue,

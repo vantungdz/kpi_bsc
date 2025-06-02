@@ -1,20 +1,19 @@
 import apiClient from "@/core/services/api";
+import store from "@/core/store";
 
 const state = {
   myKpiReviews: [],
-  isLoading: false,
   error: null,
 };
 
 const getters = {
   myKpiReviews: (state) => state.myKpiReviews,
-  isLoadingMyKpiReviews: (state) => state.isLoading,
   myKpiReviewsError: (state) => state.error,
 };
 
 const actions = {
   async fetchMyKpiReviews({ commit }, cycleId) {
-    commit("SET_LOADING", true);
+    await store.dispatch("loading/startLoading");
     commit("SET_ERROR", null);
     try {
       const res = await apiClient.get("/kpi-review/my", {
@@ -25,7 +24,7 @@ const actions = {
       commit("SET_ERROR", e.message);
       commit("SET_MY_KPI_REVIEWS", []);
     } finally {
-      commit("SET_LOADING", false);
+      await store.dispatch("loading/stopLoading");
     }
   },
 };
@@ -33,9 +32,6 @@ const actions = {
 const mutations = {
   SET_MY_KPI_REVIEWS(state, data) {
     state.myKpiReviews = data;
-  },
-  SET_LOADING(state, isLoading) {
-    state.isLoading = isLoading;
   },
   SET_ERROR(state, error) {
     state.error = error;

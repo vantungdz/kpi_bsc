@@ -692,6 +692,12 @@
   "sectionCreatedSuccess": "セクションが正常に作成されました。",
   "departmentCreatedSuccess": "部門が正常に作成されました。",
   "errorLoadingRolesOrPermissions": "役割または権限の読み込み中にエラーが発生しました。",
+  "selectPerspective": "視点を選択",
+  "enterKpiName": "KPI名を入力",
+  "selectUnit": "単位を選択",
+  "enterWeight": "重みを入力",
+  "selectFrequency": "頻度を選択",
+  "selectType": "タイプを選択",
   "reviewCycle": {
     "createTitle": "KPI評価サイクル作成",
     "name": "サイクル名",
@@ -804,7 +810,7 @@
     "report": "レポート",
     "admin": "管理者"
   },
-  "statusReview":{
+  "statusReview": {
     "self_reviewed": "自己レビュー済み",
     "section_reviewed": "セクションレビュー済み",
     "department_reviewed": "部門レビュー済み",

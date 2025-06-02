@@ -2,32 +2,20 @@
   <a-card class="department-create-form">
     <h2 class="form-title">{{ $t("createDepartment") }}</h2>
     <a-divider />
-    <a-form
-      :model="form"
-      :rules="rules"
-      ref="formRef"
-      layout="vertical"
-      @finish="handleSubmit"
-    >
+    <a-form :model="form" :rules="rules" ref="formRef" layout="vertical" @finish="handleSubmit">
       <a-row :gutter="16">
         <a-col :xs="24" :md="12">
           <a-form-item :label="$t('departmentName')" name="name">
-            <a-input
-              v-model:value="form.name"
-              :placeholder="$t('enterDepartmentName')"
-            />
+            <a-input v-model:value="form.name" :placeholder="$t('enterDepartmentName')" />
           </a-form-item>
         </a-col>
         <a-col :xs="24" :md="12">
           <a-form-item :label="$t('manager')" name="managerId">
-            <a-select
-              v-model:value="form.managerId"
-              :placeholder="$t('selectManager')"
-              :options="managerOptions"
-              :loading="loadingManagers"
+            <a-select v-model:value="form.managerId" :placeholder="$t('selectManager')" :options="managerOptions"
+              :loading="loading"
               show-search
               :filter-option="filterManagerOption"
-            />
+              />
           </a-form-item>
         </a-col>
       </a-row>
@@ -40,24 +28,17 @@
     <a-divider />
     <div>
       <h3 style="margin-bottom: 12px">{{ $t("departmentList") }}</h3>
-      <a-table
-        :data-source="departmentList"
-        :columns="departmentColumns"
-        row-key="id"
-        size="small"
-        :pagination="false"
-        bordered
-        v-if="departmentList && departmentList.length"
-      >
+      <a-table :data-source="departmentList" :columns="departmentColumns" row-key="id" size="small" :pagination="false"
+        bordered v-if="departmentList && departmentList.length">
         <template #actions="{ record }">
-          <a-button size="small" type="link" @click="editDepartment(record)">{{ t('edit') }}</a-button>
-          <a-popconfirm
-            :title="t('confirmDelete')"
-            :ok-text="t('delete')"
-            :cancel-text="t('cancel')"
-            @confirm="deleteDepartment(record)"
-          >
-            <a-button size="small" type="link" danger>{{ t('delete') }}</a-button>
+          <a-button size="small" type="link" @click="editDepartment(record)">{{
+            t("edit")
+          }}</a-button>
+          <a-popconfirm :title="t('confirmDelete')" :ok-text="t('delete')" :cancel-text="t('cancel')"
+            @confirm="deleteDepartment(record)">
+            <a-button size="small" type="link" danger>{{
+              t("delete")
+            }}</a-button>
           </a-popconfirm>
         </template>
       </a-table>
@@ -65,33 +46,21 @@
     </div>
   </a-card>
 
-  <a-modal
-    v-model:visible="showEditModal"
-    :title="$t('editDepartment')"
-    :confirm-loading="editLoading"
+  <a-modal v-model:visible="showEditModal" :title="$t('editDepartment')" :confirm-loading="loading"
     @ok="handleUpdateDepartment"
     @cancel="closeEditModal"
     destroy-on-close
-  >
-    <a-form
-      :model="editForm"
-      :rules="rules"
-      ref="editFormRef"
-      layout="vertical"
-      @finish="handleUpdateDepartment"
     >
+    <a-form :model="editForm" :rules="rules" ref="editFormRef" layout="vertical" @finish="handleUpdateDepartment">
       <a-form-item :label="$t('departmentName')" name="name">
         <a-input v-model:value="editForm.name" :placeholder="$t('enterDepartmentName')" />
       </a-form-item>
       <a-form-item :label="$t('manager')" name="managerId">
-        <a-select
-          v-model:value="editForm.managerId"
-          :placeholder="$t('selectManager')"
-          :options="managerOptions"
-          :loading="loadingManagers"
+        <a-select v-model:value="editForm.managerId" :placeholder="$t('selectManager')" :options="managerOptions"
+          :loading="loading"
           show-search
           :filter-option="filterManagerOption"
-        />
+          />
       </a-form-item>
     </a-form>
   </a-modal>
@@ -109,10 +78,7 @@ const formRef = ref();
 const form = ref({ name: "", managerId: null });
 const editFormRef = ref();
 const showEditModal = ref(false);
-const editForm = ref({ id: null, name: '', managerId: null });
-const editLoading = ref(false);
-const loading = ref(false);
-const loadingManagers = ref(false);
+const editForm = ref({ id: null, name: "", managerId: null });
 const managerOptions = ref([]);
 
 const rules = {
@@ -129,10 +95,11 @@ const filterManagerOption = (input, option) => {
   return option.label.toLowerCase().includes(input.toLowerCase());
 };
 
+const loading = computed(() => store.getters["loading/isLoading"]); // Sử dụng loading toàn cục
+
 const fetchManagers = async () => {
-  loadingManagers.value = true;
+  await store.dispatch("loading/startLoading");
   try {
-    // Truyền filter roles: ['manager'] để đồng bộ backend multi-role
     const users = await store.dispatch("employees/fetchUsers", {
       roles: ["manager"],
       force: true,
@@ -145,7 +112,7 @@ const fetchManagers = async () => {
   } catch (e) {
     managerOptions.value = [];
   } finally {
-    loadingManagers.value = false;
+    await store.dispatch("loading/stopLoading");
   }
 };
 
@@ -181,37 +148,40 @@ const editDepartment = (record) => {
 
 const closeEditModal = () => {
   showEditModal.value = false;
-  editForm.value = { id: null, name: '', managerId: null };
+  editForm.value = { id: null, name: "", managerId: null };
   editFormRef.value?.resetFields();
 };
 
 const handleUpdateDepartment = async () => {
-  editLoading.value = true;
+  await store.dispatch("loading/startLoading");
   try {
-    await store.dispatch('departments/updateDepartment', {
+    await store.dispatch("departments/updateDepartment", {
       id: editForm.value.id,
       data: {
         name: editForm.value.name,
         managerId: editForm.value.managerId,
       },
     });
-    message.success(t('departmentUpdatedSuccess'));
+    message.success(t("departmentUpdatedSuccess"));
     closeEditModal();
-    await store.dispatch('departments/fetchDepartments');
+    await store.dispatch("departments/fetchDepartments");
   } catch (e) {
-    message.error(e?.message || t('departmentUpdatedError'));
+    message.error(e?.message || t("departmentUpdatedError"));
   } finally {
-    editLoading.value = false;
+    await store.dispatch("loading/stopLoading");
   }
 };
 
 const deleteDepartment = async (record) => {
+  await store.dispatch("loading/startLoading");
   try {
     await store.dispatch("departments/deleteDepartment", record.id);
     message.success(t("departmentDeletedSuccess"));
     await store.dispatch("departments/fetchDepartments");
   } catch (e) {
     message.error(e?.message || t("departmentDeletedError"));
+  } finally {
+    await store.dispatch("loading/stopLoading");
   }
 };
 
@@ -221,7 +191,7 @@ onMounted(async () => {
 });
 
 const handleSubmit = async () => {
-  loading.value = true;
+  await store.dispatch("loading/startLoading");
   try {
     await store.dispatch("departments/createDepartment", {
       name: form.value.name,
@@ -234,7 +204,7 @@ const handleSubmit = async () => {
   } catch (e) {
     message.error(e?.message || t("departmentCreatedError"));
   } finally {
-    loading.value = false;
+    await store.dispatch("loading/stopLoading");
   }
 };
 </script>

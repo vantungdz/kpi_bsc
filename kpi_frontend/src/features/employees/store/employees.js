@@ -1,11 +1,10 @@
 import apiClient from "@/core/services/api";
+import store from "@/core/store";
 
 const state = {
   userList: [],
   usersBySection: {},
   usersByDepartment: {},
-  loading: false,
-  loadingDetail: false, // Thêm state cho loading user detail
   error: null,
 };
 
@@ -15,19 +14,10 @@ const getters = {
     state.usersBySection[String(sectionId)] || [],
   usersByDepartment: (state) => (departmentId) =>
     state.usersByDepartment[String(departmentId)] || [],
-  isLoading: (state) => state.loading,
-  isLoadingDetail: (state) => state.loadingDetail, // Getter mới
   error: (state) => state.error,
 };
 
 const mutations = {
-  SET_LOADING(state, isLoading) {
-    state.loading = isLoading;
-  },
-  SET_LOADING_DETAIL(state, isLoading) {
-    // Mutation mới
-    state.loadingDetail = isLoading;
-  },
   SET_ERROR(state, error) {
     state.error = error ? error.response?.data?.message || error.message : null;
   },
@@ -89,7 +79,7 @@ const actions = {
       return state.userList;
     }
 
-    commit("SET_LOADING", true);
+    await store.dispatch("loading/startLoading");
     commit("SET_ERROR", null);
     try {
       const apiParams = { ...params };
@@ -125,7 +115,7 @@ const actions = {
         });
       throw error;
     } finally {
-      commit("SET_LOADING", false);
+      await store.dispatch("loading/stopLoading");
     }
   },
 
@@ -154,26 +144,25 @@ const actions = {
       commit("SET_ERROR", "User ID is required to fetch details.");
       return null;
     }
-    commit("SET_LOADING_DETAIL", true);
+    await store.dispatch("loading/startLoading");
     commit("SET_ERROR", null);
     try {
-      // Giả sử API của bạn là GET /employees/:id
       const response = await apiClient.get(`/employees/${userId}`);
-      return response.data; // Trả về dữ liệu chi tiết của user
+      return response.data;
     } catch (error) {
       console.error(
         `Error fetching user by ID ${userId}:`,
         error.response || error
       );
       commit("SET_ERROR", error);
-      throw error; // Ném lỗi để component có thể bắt
+      throw error;
     } finally {
-      commit("SET_LOADING_DETAIL", false);
+      await store.dispatch("loading/stopLoading");
     }
   },
 
   async uploadFile({ commit, dispatch }, file) {
-    commit("SET_LOADING", true);
+    await store.dispatch("loading/startLoading");
     commit("SET_ERROR", null);
     const formData = new FormData();
     formData.append("file", file);
@@ -188,15 +177,14 @@ const actions = {
       commit("SET_ERROR", error);
       throw error.response?.data || error;
     } finally {
-      commit("SET_LOADING", false);
+      await store.dispatch("loading/stopLoading");
     }
   },
 
   async updateUserRole({ commit, dispatch }, { id, role }) {
-    commit("SET_LOADING", true);
+    await store.dispatch("loading/startLoading");
     commit("SET_ERROR", null);
     try {
-      // role là entity name
       await apiClient.patch(`/employees/${id}/role`, { role });
       await dispatch("fetchUsers", { force: true });
       return true;
@@ -204,12 +192,12 @@ const actions = {
       commit("SET_ERROR", error);
       throw error;
     } finally {
-      commit("SET_LOADING", false);
+      await store.dispatch("loading/stopLoading");
     }
   },
 
   async updateUserRoles({ commit, dispatch }, { id, roles }) {
-    commit("SET_LOADING", true);
+    await store.dispatch("loading/startLoading");
     commit("SET_ERROR", null);
     try {
       await apiClient.patch(`/employees/${id}/roles`, { roles });
@@ -219,13 +207,13 @@ const actions = {
       commit("SET_ERROR", error);
       throw error;
     } finally {
-      commit("SET_LOADING", false);
+      await store.dispatch("loading/stopLoading");
     }
   },
 
   async resetPassword({ commit, dispatch }, { id, newPassword } = {}) {
     if (!id) throw new Error("User ID is required to reset password.");
-    commit("SET_LOADING", true);
+    await store.dispatch("loading/startLoading");
     commit("SET_ERROR", null);
     try {
       const response = await apiClient.patch(
@@ -233,18 +221,18 @@ const actions = {
         newPassword ? { newPassword } : {}
       );
       await dispatch("fetchUsers", { force: true });
-      return response.data; // Trả về employee đã reset
+      return response.data;
     } catch (error) {
       commit("SET_ERROR", error);
       throw error;
     } finally {
-      commit("SET_LOADING", false);
+      await store.dispatch("loading/stopLoading");
     }
   },
 
   async deleteEmployee({ commit, dispatch }, id) {
     if (!id) throw new Error("User ID is required to delete employee.");
-    commit("SET_LOADING", true);
+    await store.dispatch("loading/startLoading");
     commit("SET_ERROR", null);
     try {
       await apiClient.delete(`/employees/${id}`);
@@ -254,14 +242,14 @@ const actions = {
       commit("SET_ERROR", error);
       throw error;
     } finally {
-      commit("SET_LOADING", false);
+      await store.dispatch("loading/stopLoading");
     }
   },
 
   async updateEmployee({ commit, dispatch }, updateDto) {
     if (!updateDto || !updateDto.id)
       throw new Error("User ID is required to update employee.");
-    commit("SET_LOADING", true);
+    await store.dispatch("loading/startLoading");
     commit("SET_ERROR", null);
     try {
       // Đảm bảo chỉ truyền role là entity name (string)
@@ -279,12 +267,12 @@ const actions = {
       commit("SET_ERROR", error);
       throw error;
     } finally {
-      commit("SET_LOADING", false);
+      await store.dispatch("loading/stopLoading");
     }
   },
 
   async createEmployee({ commit, dispatch }, createDto) {
-    commit("SET_LOADING", true);
+    await store.dispatch("loading/startLoading");
     commit("SET_ERROR", null);
     try {
       // Đảm bảo chỉ truyền role là entity name (string)
@@ -299,7 +287,7 @@ const actions = {
       commit("SET_ERROR", error);
       throw error;
     } finally {
-      commit("SET_LOADING", false);
+      await store.dispatch("loading/stopLoading");
     }
   },
 
@@ -332,21 +320,27 @@ const actions = {
     }
   },
 
-  async fetchEmployeePerformanceHistory({ commit }, { employeeId, fromYear, toYear }) {
+  async fetchEmployeePerformanceHistory(
+    { commit },
+    { employeeId, fromYear, toYear }
+  ) {
     if (!employeeId) return [];
-    commit('SET_LOADING', true);
-    commit('SET_ERROR', null);
+    await store.dispatch("loading/startLoading");
+    commit("SET_ERROR", null);
     try {
-      const response = await apiClient.get(`/employees/${employeeId}/performance-history`, {
-        params: { fromYear, toYear },
-      });
+      const response = await apiClient.get(
+        `/employees/${employeeId}/performance-history`,
+        {
+          params: { fromYear, toYear },
+        }
+      );
       // Không lưu vào state chung vì dữ liệu này dạng động, trả về luôn
       return response.data || [];
     } catch (error) {
-      commit('SET_ERROR', error);
+      commit("SET_ERROR", error);
       throw error;
     } finally {
-      commit('SET_LOADING', false);
+      await store.dispatch("loading/stopLoading");
     }
   },
 };

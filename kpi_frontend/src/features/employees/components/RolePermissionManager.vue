@@ -2,11 +2,12 @@
   <div class="role-permission-manager">
     <div class="header-row">
       <h2>{{ $t('rolePermissionManagement') }}</h2>
-      <a-button type="primary" @click="saveAll" :loading="saving">
+      <a-button type="primary" @click="saveAll" :loading="loading">
         {{ $t('saveAll') }}
       </a-button>
     </div>
-    <a-table :dataSource="rolesWithPermissions" :columns="columns" rowKey="id" :loading="loading" bordered table-layout="fixed">
+    <a-table :dataSource="rolesWithPermissions" :columns="columns" rowKey="id" :loading="loading" bordered
+      table-layout="fixed">
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'name'">
           <span>{{ roleDisplayName(record.name) }}</span>
@@ -18,9 +19,11 @@
               <span class="permission-block-label">{{ $t('permissionBlock.view') }}</span>
               <div class="permission-block-toggles view-block view-block-2col">
                 <div class="view-block-col">
-                  <template v-for="option in viewOptions.slice(0, Math.ceil(viewOptions.length/2))" :key="option.value">
+                  <template v-for="option in viewOptions.slice(0, Math.ceil(viewOptions.length / 2))"
+                    :key="option.value">
                     <div class="permission-toggle-item">
-                      <a-switch :checked="record.permissionIds.includes(option.value)" @change="checked => onTogglePermission(record, option.value, checked)" />
+                      <a-switch :checked="record.permissionIds.includes(option.value)"
+                        @change="checked => onTogglePermission(record, option.value, checked)" />
                       <a-tooltip :title="permissionDescription(option.value)">
                         <span class="permission-toggle-label">{{ option.label }}</span>
                       </a-tooltip>
@@ -28,9 +31,10 @@
                   </template>
                 </div>
                 <div class="view-block-col">
-                  <template v-for="option in viewOptions.slice(Math.ceil(viewOptions.length/2))" :key="option.value">
+                  <template v-for="option in viewOptions.slice(Math.ceil(viewOptions.length / 2))" :key="option.value">
                     <div class="permission-toggle-item">
-                      <a-switch :checked="record.permissionIds.includes(option.value)" @change="checked => onTogglePermission(record, option.value, checked)" />
+                      <a-switch :checked="record.permissionIds.includes(option.value)"
+                        @change="checked => onTogglePermission(record, option.value, checked)" />
                       <a-tooltip :title="permissionDescription(option.value)">
                         <span class="permission-toggle-label">{{ option.label }}</span>
                       </a-tooltip>
@@ -44,9 +48,12 @@
               <span class="permission-block-label">{{ $t('permissionBlock.createEditDelete') }}</span>
               <div class="permission-block-toggles view-block view-block-2col">
                 <div class="view-block-col">
-                  <template v-for="option in createEditDeleteOptions.slice(0, Math.ceil(createEditDeleteOptions.length/2))" :key="option.value">
+                  <template
+                    v-for="option in createEditDeleteOptions.slice(0, Math.ceil(createEditDeleteOptions.length/2))"
+                    :key="option.value">
                     <div class="permission-toggle-item">
-                      <a-switch :checked="record.permissionIds.includes(option.value)" @change="checked => onTogglePermission(record, option.value, checked)" />
+                      <a-switch :checked="record.permissionIds.includes(option.value)"
+                        @change="checked => onTogglePermission(record, option.value, checked)" />
                       <a-tooltip :title="permissionDescription(option.value)">
                         <span class="permission-toggle-label">{{ option.label }}</span>
                       </a-tooltip>
@@ -54,9 +61,11 @@
                   </template>
                 </div>
                 <div class="view-block-col">
-                  <template v-for="option in createEditDeleteOptions.slice(Math.ceil(createEditDeleteOptions.length/2))" :key="option.value">
+                  <template v-for="option in createEditDeleteOptions.slice(Math.ceil(createEditDeleteOptions.length/2))"
+                    :key="option.value">
                     <div class="permission-toggle-item">
-                      <a-switch :checked="record.permissionIds.includes(option.value)" @change="checked => onTogglePermission(record, option.value, checked)" />
+                      <a-switch :checked="record.permissionIds.includes(option.value)"
+                        @change="checked => onTogglePermission(record, option.value, checked)" />
                       <a-tooltip :title="permissionDescription(option.value)">
                         <span class="permission-toggle-label">{{ option.label }}</span>
                       </a-tooltip>
@@ -72,7 +81,8 @@
                 <div class="view-block-col">
                   <template v-for="option in approveRejectOptions" :key="option.value">
                     <div class="permission-toggle-item">
-                      <a-switch :checked="record.permissionIds.includes(option.value)" @change="checked => onTogglePermission(record, option.value, checked)" />
+                      <a-switch :checked="record.permissionIds.includes(option.value)"
+                        @change="checked => onTogglePermission(record, option.value, checked)" />
                       <a-tooltip :title="permissionDescription(option.value)">
                         <span class="permission-toggle-label">{{ option.label }}</span>
                       </a-tooltip>
@@ -82,7 +92,8 @@
                 <div class="view-block-col">
                   <template v-for="option in assignOptions" :key="option.value">
                     <div class="permission-toggle-item">
-                      <a-switch :checked="record.permissionIds.includes(option.value)" @change="checked => onTogglePermission(record, option.value, checked)" />
+                      <a-switch :checked="record.permissionIds.includes(option.value)"
+                        @change="checked => onTogglePermission(record, option.value, checked)" />
                       <a-tooltip :title="permissionDescription(option.value)">
                         <span class="permission-toggle-label">{{ option.label }}</span>
                       </a-tooltip>
@@ -97,7 +108,8 @@
               <div class="permission-block-toggles other-block">
                 <template v-for="option in otherOptionsWithManage" :key="option.value">
                   <div class="permission-toggle-item">
-                    <a-switch :checked="record.permissionIds.includes(option.value)" @change="checked => onTogglePermission(record, option.value, checked)" />
+                    <a-switch :checked="record.permissionIds.includes(option.value)"
+                      @change="checked => onTogglePermission(record, option.value, checked)" />
                     <a-tooltip :title="permissionDescription(option.value)">
                       <span class="permission-toggle-label">{{ option.label }}</span>
                     </a-tooltip>
@@ -120,25 +132,24 @@ import { useStore } from 'vuex';
 
 const { t } = useI18n();
 const store = useStore();
-const loading = ref(false);
-const saving = ref(false);
+
+const loading = computed(() => store.getters["loading/isLoading"]);
+
 const rolesWithPermissions = ref([]);
 const allPermissions = ref([]);
 
 const permissionDisplayName = (permission) => {
-  const resourceKey = permission.resource.replace(/:/g, '_');
+  const resourceKey = permission.resource.replace(/:/g, "_");
   const key = `permission.${permission.action}_${resourceKey}`;
   return t(key);
 };
 
-// Hàm lấy mô tả quyền (ưu tiên i18n, fallback mặc định)
 const permissionDescription = (permissionId) => {
-  const permission = allPermissions.value.find(p => p.id === permissionId);
-  if (!permission) return '';
-  const resourceKey = permission.resource.replace(/:/g, '_');
+  const permission = allPermissions.value.find((p) => p.id === permissionId);
+  if (!permission) return "";
+  const resourceKey = permission.resource.replace(/:/g, "_");
   const i18nKey = `permissionDesc.${permission.action}_${resourceKey}`;
   const desc = t(i18nKey);
-  // Nếu không có mô tả, fallback về label
   if (desc === i18nKey) return permissionDisplayName(permission);
   return desc;
 };
@@ -210,21 +221,21 @@ const columns = computed(() => [
 ]);
 
 const fetchData = async () => {
-  loading.value = true;
+  await store.dispatch("loading/startLoading");
   try {
     const [roles, permissions] = await Promise.all([
-      store.dispatch('employees/fetchRolesWithPermissions'),
-      store.dispatch('employees/fetchAllPermissions'),
+      store.dispatch("employees/fetchRolesWithPermissions"),
+      store.dispatch("employees/fetchAllPermissions"),
     ]);
-    rolesWithPermissions.value = (roles || []).map(r => ({
+    rolesWithPermissions.value = (roles || []).map((r) => ({
       ...r,
-      permissionIds: (r.permissions || []).map(p => p.id),
+      permissionIds: (r.permissions || []).map((p) => p.id),
     }));
     allPermissions.value = permissions || [];
   } catch (e) {
-    message.error(t('errorLoadingRolesOrPermissions'));
+    message.error(t("errorLoadingRolesOrPermissions"));
   } finally {
-    loading.value = false;
+    await store.dispatch("loading/stopLoading");
   }
 };
 
@@ -240,7 +251,7 @@ const onTogglePermission = (role, permissionId, checked) => {
 };
 
 const saveAll = async () => {
-  saving.value = true;
+  await store.dispatch("loading/startLoading");
   try {
     await Promise.all(
       rolesWithPermissions.value.map(role =>
@@ -255,7 +266,7 @@ const saveAll = async () => {
   } catch (e) {
     message.error(t('errorUpdatingPermissions'));
   } finally {
-    saving.value = false;
+    await store.dispatch("loading/stopLoading");
   }
 };
 

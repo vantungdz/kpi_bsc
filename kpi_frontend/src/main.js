@@ -22,8 +22,6 @@ function setupNotificationSocket(store) {
   notificationSocket = connectNotificationSocket(user.id);
 
   notificationSocket.on("connect", () => {
-    // eslint-disable-next-line no-console
-    console.log("[Socket] Connected to notification server");
   });
 
   notificationSocket.on("notification", (data) => {
@@ -32,8 +30,6 @@ function setupNotificationSocket(store) {
   });
 
   notificationSocket.on("disconnect", () => {
-    // eslint-disable-next-line no-console
-    console.log("[Socket] Disconnected from notification server");
   });
 }
 

@@ -1,5 +1,6 @@
 <template>
   <div class="report-generator" v-if="canViewReportGenerator">
+    <LoadingOverlay :visible="loading" message="Loading user data..." />
     <h2>{{ $t("reportOptions") }}</h2>
 
     <a-form
@@ -50,7 +51,6 @@
         <a-button
           type="primary"
           @click="generateReport"
-          :loading="loading"
           :disabled="!canGenerateReport"
         >
           <template #icon>
@@ -71,11 +71,12 @@
 </template>
 
 <script setup>
-import { ref, computed } from "vue";
+import { ref, computed, onMounted } from "vue";
 import { useI18n } from "vue-i18n";
 import { useStore } from "vuex";
 import { message } from "ant-design-vue";
 import { ExportOutlined } from "@ant-design/icons-vue";
+import LoadingOverlay from "@/core/components/common/LoadingOverlay.vue";
 import {
   RBAC_ACTIONS,
   RBAC_RESOURCES,
@@ -87,7 +88,7 @@ const store = useStore();
 const selectedReportType = ref(null);
 const selectedFileFormat = ref("excel");
 const selectedDateRange = ref(null);
-const loading = ref(false);
+const loading = computed(() => store.getters["loading/isLoading"]);
 
 const userPermissions = computed(
   () => store.getters["auth/user"]?.permissions || []
@@ -117,7 +118,6 @@ const generateReport = () => {
     message.error(t("selectReportTypeFirst"));
     return;
   }
-  loading.value = true;
   let startDate = null,
     endDate = null;
   if (selectedDateRange.value && selectedDateRange.value.length === 2) {
@@ -138,13 +138,20 @@ const generateReport = () => {
       endDate,
     })
     .then(() => {
-      loading.value = false;
       message.success(t("reportGeneratedSuccessfully"));
     })
     .catch(() => {
-      loading.value = false;
+      // Error handling is already managed in the store
     });
 };
+
+onMounted(() => {
+  store.dispatch("loading/startLoading"); // Start loading when the component is mounted
+  // Simulate a delay or fetch initial data
+  setTimeout(() => {
+    store.dispatch("loading/stopLoading"); // Stop loading after initialization
+  }, 1000); // Adjust the delay as needed
+});
 </script>
 
 <style scoped>

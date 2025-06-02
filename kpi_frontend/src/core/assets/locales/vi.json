@@ -603,6 +603,12 @@
   "sectionCreatedSuccess": "Bộ phận đã được tạo thành công.",
   "departmentCreatedSuccess": "Phòng ban đã được tạo thành công.",
   "errorLoadingRolesOrPermissions": "Lỗi khi tải danh sách vai trò hoặc quyền.",
+  "selectPerspective": "Chọn Tiêu chí BSC",
+  "enterKpiName": "Nhập tên KPI",
+  "selectUnit": "Chọn Đơn vị",
+  "enterWeight": "Nhập Trọng số",
+  "selectFrequency": "Chọn Tần suất",
+  "selectType": "Chọn Loại KPI",
   "reviewCycle": {
     "createTitle": "Tạo chu kỳ đánh giá KPI",
     "name": "Tên chu kỳ",

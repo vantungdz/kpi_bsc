@@ -9,16 +9,13 @@
 
       <!-- Khu vực nội dung chính, phần này sẽ cuộn -->
       <a-layout-content class="site-layout-content">
-        <div
-          v-if="isAuthenticating"
-          style="
+        <div v-if="isAuthenticating" style="
             display: flex;
             justify-content: center;
             align-items: center;
             height: calc(100vh - 100px);
-          "
-        >
-          <a-spin size="large" :tip="$t('loadingUserData')" />
+          ">
+          <LoadingOverlay :visible="loading" message="Loading user data..." />
         </div>
         <div v-else id="app">
           <transition name="fade-page" mode="out-in">
@@ -28,10 +25,7 @@
       </a-layout-content>
 
       <!-- Footer sẽ nằm ở dưới cùng của site-layout -->
-      <a-layout-footer
-        class="site-layout-footer"
-        style="text-align: center; padding: 13px 50px; background: #f0f2f5"
-      >
+      <a-layout-footer class="site-layout-footer" style="text-align: center; padding: 13px 50px; background: #f0f2f5">
         {{ $t('footerText', { year: new Date().getFullYear() }) }}
       </a-layout-footer>
     </a-layout>
@@ -43,13 +37,13 @@ import { ref, computed, onMounted, watch, getCurrentInstance } from "vue";
 import { useStore } from "vuex";
 import AppHeader from "@/core/components/layout/AppHeader.vue";
 import AppSidebar from "@/core/components/layout/AppSidebar.vue";
-import  { useI18nLocale } from "@/core/i18n";
+import LoadingOverlay from "@/core/components/common/LoadingOverlay.vue";
+import { useI18nLocale } from "@/core/i18n";
 
 import {
   Layout as ALayout,
   LayoutContent as ALayoutContent,
   LayoutFooter as ALayoutFooter,
-  Spin as ASpin,
 } from "ant-design-vue";
 
 const store = useStore();

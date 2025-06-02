@@ -32,6 +32,7 @@ import KpiReviewList from "@/features/evaluation/views/KpiReviewList.vue";
 import RoleManager from "@/features/roles/views/RoleManager.vue";
 import KpiListEmployee from "../../features/kpi/views/KpiListEmployee.vue";
 import EmployeePerformanceHistory from "@/features/employees/EmployeePerformanceHistory.vue";
+import PerspectiveCreateForm from "@/features/perspectives/views/PerspectiveCreateForm.vue";
 
 const routes = [
   {
@@ -348,6 +349,20 @@ const routes = [
         {
           action: RBAC_ACTIONS.VIEW,
           resource: RBAC_RESOURCES.EMPLOYEE_COMPANY,
+        },
+      ],
+    },
+  },
+  {
+    path: "/perspectives/create",
+    name: "PerspectiveCreate",
+    component: PerspectiveCreateForm,
+    meta: {
+      requiresAuth: true,
+      permissions: [
+        {
+          action: RBAC_ACTIONS.VIEW,
+          resource: RBAC_RESOURCES.ADMIN,
         },
       ],
     },

@@ -1,47 +1,40 @@
 import apiClient from "@/core/services/api";
+import store from "@/core/store"; // Dùng store chính để dispatch loading toàn cục
 
 const state = {
   departments: [],
-  loading: false,
   error: null,
-  departmentDetail: null, // thêm
-  loadingDetail: false,   // thêm
-  detailError: null,      // thêm
+  departmentDetail: null,
+  detailError: null,
 };
 
 const getters = {
   departmentList: (state) => state.departments,
-  isLoading: (state) => state.loading,
   error: (state) => state.error,
-  departmentDetail: (state) => state.departmentDetail, // thêm
-  isLoadingDetail: (state) => state.loadingDetail,     // thêm
-  detailError: (state) => state.detailError,           // thêm
+  departmentDetail: (state) => state.departmentDetail,
+  detailError: (state) => state.detailError,
 };
 
 const mutations = {
-  SET_LOADING(state, isLoading) {
-    state.loading = isLoading;
-  },
   SET_ERROR(state, error) {
     state.error = error ? error.response?.data?.message || error.message : null;
   },
   SET_DEPARTMENTS(state, departments) {
     state.departments = departments;
   },
-  SET_DEPARTMENT_DETAIL(state, detail) { // thêm
+  SET_DEPARTMENT_DETAIL(state, detail) {
     state.departmentDetail = detail;
   },
-  SET_LOADING_DETAIL(state, isLoading) { // thêm
-    state.loadingDetail = isLoading;
-  },
-  SET_DETAIL_ERROR(state, error) { // thêm
-    state.detailError = error ? error.response?.data?.message || error.message : null;
+  SET_DETAIL_ERROR(state, error) {
+    state.detailError = error
+      ? error.response?.data?.message || error.message
+      : null;
   },
 };
 
 const actions = {
   async fetchDepartments({ commit }, params = {}) {
-    commit("SET_LOADING", true);
+    await store.dispatch("loading/startLoading");
     commit("SET_ERROR", null);
     try {
       const response = await apiClient.get("/departments", { params });
@@ -50,15 +43,15 @@ const actions = {
       commit("SET_ERROR", error);
       commit("SET_DEPARTMENTS", []);
     } finally {
-      commit("SET_LOADING", false);
+      await store.dispatch("loading/stopLoading");
     }
   },
-  async fetchDepartmentById({ commit }, departmentId) { // thêm
+  async fetchDepartmentById({ commit }, departmentId) {
     if (!departmentId) {
       commit("SET_DETAIL_ERROR", "Department ID is required.");
       return null;
     }
-    commit("SET_LOADING_DETAIL", true);
+    await store.dispatch("loading/startLoading");
     commit("SET_DETAIL_ERROR", null);
     try {
       const response = await apiClient.get(`/departments/${departmentId}`);
@@ -69,11 +62,11 @@ const actions = {
       commit("SET_DEPARTMENT_DETAIL", null);
       return null;
     } finally {
-      commit("SET_LOADING_DETAIL", false);
+      await store.dispatch("loading/stopLoading");
     }
   },
   async createDepartment({ dispatch, commit }, payload) {
-    commit("SET_LOADING", true);
+    await store.dispatch("loading/startLoading");
     commit("SET_ERROR", null);
     try {
       const response = await apiClient.post("/departments", payload);
@@ -84,11 +77,11 @@ const actions = {
       commit("SET_ERROR", error);
       throw error;
     } finally {
-      commit("SET_LOADING", false);
+      await store.dispatch("loading/stopLoading");
     }
   },
   async updateDepartment({ dispatch, commit }, { id, data }) {
-    commit("SET_LOADING", true);
+    await store.dispatch("loading/startLoading");
     commit("SET_ERROR", null);
     try {
       const response = await apiClient.put(`/departments/${id}`, data);
@@ -98,24 +91,26 @@ const actions = {
       commit("SET_ERROR", error);
       throw error;
     } finally {
-      commit("SET_LOADING", false);
+      await store.dispatch("loading/stopLoading");
     }
   },
 
   async deleteDepartment({ dispatch, commit }, id) {
-    commit("SET_LOADING", true);
+    await store.dispatch("loading/startLoading");
     commit("SET_ERROR", null);
     try {
       await apiClient.delete(`/departments/${id}`);
       await dispatch("fetchDepartments", { forceRefresh: true });
       return true;
     } catch (error) {
-      // Hiển thị thông báo lỗi cụ thể nếu backend trả về
-      const msg = error?.response?.data?.message || error.message || 'Xóa phòng ban thất bại';
-      commit('SET_ERROR', msg);
+      const msg =
+        error?.response?.data?.message ||
+        error.message ||
+        "Xóa phòng ban thất bại";
+      commit("SET_ERROR", msg);
       throw new Error(msg);
     } finally {
-      commit("SET_LOADING", false);
+      await store.dispatch("loading/stopLoading");
     }
   },
 };
