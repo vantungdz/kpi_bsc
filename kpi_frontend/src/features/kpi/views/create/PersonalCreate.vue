@@ -301,9 +301,13 @@ const handleChangeCreate = async () => {
 
     payload.assignments = {
       from: "employee",
-      assigned_to_employee: currentUserId,
-      target: targetValue,
-      weight: weightValue,
+      to_employees: [
+        {
+          id: currentUserId,
+          target: targetValue,
+          weight: weightValue,
+        },
+      ],
     };
 
     console.log("Submitting Personal KPI Data:", payload);

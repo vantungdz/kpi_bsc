@@ -224,7 +224,7 @@ const router = useRouter();
 
 
 const topPendingApproversStats = computed(() => store.getters["dashboard/getTopPendingApproversStats"]);
-const isLoadingTopPendingApprovers = computed(() => store.getters["dashboard/isLoadingTopPendingApprovers"]);
+const isLoadingTopPendingApprovers = computed(() => store.getters["loading/isLoading"]);
 const topPendingApproversError = computed(() => store.getters["dashboard/getTopPendingApproversError"]);
 
 const formatApproverType = (type) => {
@@ -268,7 +268,7 @@ const kpiSubmissionFilters = reactive({
 });
 
 const kpiSubmissionStats = computed(() => store.getters["dashboard/getKpiSubmissionStats"]);
-const isLoadingKpiSubmissionStats = computed(() => store.getters["dashboard/isLoadingKpiSubmissionStats"]);
+const isLoadingKpiSubmissionStats = computed(() => store.getters["loading/isLoading"]);
 const kpiSubmissionStatsError = computed(() => store.getters["dashboard/getKpiSubmissionStatsError"]);
 
 

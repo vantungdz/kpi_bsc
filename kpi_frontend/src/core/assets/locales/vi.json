@@ -452,6 +452,9 @@
     "COMPLETED": "Hoàn thành",
     "undefined": "Chưa đánh giá"
   },
+  "departmentAssignments": "Phân công Phòng ban",
+  "sectionAssignments": "Phân công Bộ phận",
+  "directUserAssignments": "Phân công Người dùng Trực tiếp",
   "assignToDepartment": "Gán cho Phòng ban",
   "assignToDepartmentHelp": "Chọn phòng ban để gán KPI này. Nếu không chọn, KPI sẽ không được gán cho phòng ban nào.",
   "departmentSection": "Phòng ban/Bộ phận",
@@ -624,6 +627,7 @@
     "createError": "Tạo chu kỳ thất bại."
   },
   "common": {
+    "save": "Lưu",
     "edit": "Sửa",
     "delete": "Xoá",
     "create": "Tạo mới",
@@ -734,6 +738,7 @@
   "rejectReview": "Từ chối đánh giá",
   "rejectionReasonRequired": "Lý do từ chối là bắt buộc.",
   "rejectionReasonPlaceholder": "Nhập lý do từ chối tại đây",
+  "createPerspective": "Tạo Tiêu chí BSC",
   "perspectiveObject": {
     "managePerspectives": "Quản lý Tiêu chí",
     "name": "Tên",

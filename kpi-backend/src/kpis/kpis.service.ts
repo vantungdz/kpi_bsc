@@ -1269,6 +1269,11 @@ export class KpisService {
 
         if (assignments?.employeeId) {
           const assignedToEmployeeId = assignments.employeeId;
+          const employee = await this.employeeRepository.findOne({
+            where: { id: assignedToEmployeeId },
+            relations: ['department'],
+          });
+
           const employeeAssignment = new KPIAssignment();
           employeeAssignment.kpi = { id: savedKpiObject.id } as Kpi;
           employeeAssignment.assignedFrom = assignments?.from || createdByType;
@@ -1284,6 +1289,12 @@ export class KpisService {
             ? new Date(kpiData.endDate.split('T')[0])
             : null;
           employeeAssignment.weight = kpiData.weight;
+
+          // Gắn phòng ban của nhân viên vào assignment
+          if (employee?.department) {
+            employeeAssignment.assigned_to_department = employee.department.id;
+          }
+
           assignmentEntities.push(employeeAssignment);
         }
 

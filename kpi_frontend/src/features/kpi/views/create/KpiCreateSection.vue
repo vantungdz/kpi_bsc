@@ -1,87 +1,37 @@
 <template>
   <div v-if="canAccessCreatePage">
-    <a-form
-      ref="formRef"
-      :model="form"
-      :rules="formRules"
-      layout="vertical"
-      @finish="handleChangeCreate"
-      @finishFailed="onFinishFailed"
-    >
+    <a-form ref="formRef" :model="form" :rules="formRules" layout="vertical" @finish="handleChangeCreate"
+      @finishFailed="onFinishFailed">
       <a-row :gutter="12">
         <a-col :span="12">
           <a-form-item :label="$t('useExistingKpiTemplate')" name="templateKpi">
-            <a-select
-              v-model:value="selectedTemplateKpiId"
-              :placeholder="$t('selectKpiTemplate')"
-              show-search
-              allow-clear
-              :options="kpiTemplateOptions"
-              :filter-option="
+            <a-select v-model:value="selectedTemplateKpiId" :placeholder="$t('selectKpiTemplate')" show-search
+              allow-clear :options="kpiTemplateOptions" :filter-option="
                 (input, option) =>
                   option.label.toLowerCase().includes(input.toLowerCase())
-              "
-              :loading="loadingKpiTemplates"
-              style="width: 100%; margin-bottom: 15px"
-              @change="loadKpiTemplate"
-            />
+              " :loading="loadingKpiTemplates" style="width: 100%; margin-bottom: 15px" @change="loadKpiTemplate" />
           </a-form-item>
         </a-col>
       </a-row>
 
-      <a-form-item
-        class="textLabel"
-        :label="$t('perspective')"
-        name="perspective_id"
-      >
-        <a-select
-          v-model:value="form.perspective_id"
-          :placeholder="$t('selectPerspective')"
-        >
-          <a-select-option
-            v-for="perspective in perspectiveList"
-            :key="perspective.id"
-            :value="perspective.id"
-            >{{ perspective.name }}</a-select-option
-          >
+      <a-form-item class="textLabel" :label="$t('perspective')" name="perspective_id">
+        <a-select v-model:value="form.perspective_id" :placeholder="$t('selectPerspective')">
+          <a-select-option v-for="perspective in perspectiveList" :key="perspective.id" :value="perspective.id">{{
+            perspective.name }}</a-select-option>
         </a-select>
       </a-form-item>
 
-      <a-form-item
-        class="textLabel"
-        :label="$t('department')"
-        name="department_id"
-        required
-      >
-        <a-select
-          v-model:value="form.department_id"
-          :placeholder="$t('selectDepartment')"
-        >
-          <a-select-option
-            v-for="department in departmentList"
-            :key="department.id"
-            :value="department.id"
-          >
+      <a-form-item class="textLabel" :label="$t('department')" name="department_id" required>
+        <a-select v-model:value="form.department_id" :placeholder="$t('selectDepartment')">
+          <a-select-option v-for="department in departmentList" :key="department.id" :value="department.id">
             {{ department.name }}
           </a-select-option>
         </a-select>
       </a-form-item>
 
-      <a-form-item
-        class="textLabel"
-        :label="$t('section')"
-        name="section_id"
-        required
-      >
-        <a-select
-          v-model:value="form.section_id"
-          :placeholder="$t('selectSection')"
-        >
-          <a-select-option
-            v-for="section in sectionList"
-            :key="section.id"
-            :value="section.id"
-          >
+      <a-form-item class="textLabel" :label="$t('section')" name="section_id" required>
+        <a-select v-model:value="form.section_id" :placeholder="$t('selectSection')">
+          <a-select-option v-for="section in sectionList" :key="section.id" :value="section.id">
             {{ section.name }}
           </a-select-option>
         </a-select>
@@ -89,27 +39,13 @@
       <a-row :gutter="12">
         <a-col :span="12">
           <a-form-item class="textLabel" :label="$t('kpiName')" name="name">
-            <a-input
-              v-model:value="form.name"
-              :placeholder="$t('enterKpiName')"
-            />
+            <a-input v-model:value="form.name" :placeholder="$t('enterKpiName')" />
           </a-form-item>
         </a-col>
         <a-col :span="12">
-          <a-form-item
-            class="textLabel"
-            :label="$t('calculationFormula')"
-            name="calculation_type"
-          >
-            <a-select
-              v-model:value="form.calculation_type"
-              :placeholder="$t('selectCalculationFormula')"
-            >
-              <a-select-option
-                v-for="formula in formulaList"
-                :key="formula.id"
-                :value="formula.id"
-              >
+          <a-form-item class="textLabel" :label="$t('calculationFormula')" name="calculation_type">
+            <a-select v-model:value="form.calculation_type" :placeholder="$t('selectCalculationFormula')">
+              <a-select-option v-for="formula in formulaList" :key="formula.id" :value="formula.id">
                 {{ formula.name }}
               </a-select-option>
             </a-select>
@@ -132,11 +68,7 @@
         <a-col :span="12">
           <a-form-item class="textLabel" :label="$t('unit')" name="unit">
             <a-select v-model:value="form.unit" :placeholder="$t('selectUnit')">
-              <a-select-option
-                v-for="(unitValue, unitKey) in KpiUnits"
-                :key="unitKey"
-                :value="unitValue"
-              >
+              <a-select-option v-for="(unitValue, unitKey) in KpiUnits" :key="unitKey" :value="unitValue">
                 {{ unitKey }}
               </a-select-option>
             </a-select>
@@ -146,28 +78,19 @@
       <a-row :gutter="12">
         <a-col :span="12">
           <a-form-item class="textLabel" :label="$t('target')" name="target">
-            <a-input
-              v-model:value="form.target"
-              :placeholder="$t('enterTarget')"
-              @input="(event) => handleNumericInput('target', event)"
-            />
+            <a-input v-model:value="form.targetFormatted" :placeholder="$t('enterTarget')"
+              @input="(event) => handleNumericInput('target', event)" />
           </a-form-item>
         </a-col>
         <a-col :span="12">
           <a-form-item class="textLabel" :label="$t('weight')" name="weight">
-            <a-input
-              v-model:value="form.weight"
-              :placeholder="$t('enterWeight')"
-              @input="(event) => handleNumericInput('weight', event)"
-            />
+            <a-input v-model:value="form.weight" :placeholder="$t('enterWeight')"
+              @input="(event) => handleNumericInput('weight', event)" />
           </a-form-item>
         </a-col>
       </a-row>
       <a-form-item class="textLabel" :label="$t('frequency')" name="frequency">
-        <a-select
-          v-model:value="form.frequency"
-          :placeholder="$t('selectFrequency')"
-        >
+        <a-select v-model:value="form.frequency" :placeholder="$t('selectFrequency')">
           <a-select-option value="daily"> {{ $t("daily") }} </a-select-option>
           <a-select-option value="weekly"> {{ $t("weekly") }} </a-select-option>
           <a-select-option value="monthly">
@@ -181,90 +104,37 @@
       </a-form-item>
       <a-row :gutter="12">
         <a-col :span="6">
-          <a-form-item
-            class="textLabel"
-            :label="$t('dateStart')"
-            name="start_date"
-          >
-            <a-date-picker
-              v-model:value="form.start_date"
-              style="width: 100%"
-              value-format="YYYY-MM-DD"
-            />
+          <a-form-item class="textLabel" :label="$t('dateStart')" name="start_date">
+            <a-date-picker v-model:value="form.start_date" style="width: 100%" value-format="YYYY-MM-DD" />
           </a-form-item>
         </a-col>
         <a-col :span="6">
-          <a-form-item
-            class="textLabel"
-            :label="$t('dateEnd')"
-            name="end_date"
-            :rules="[{ validator: validateEndDate }]"
-          >
-            <a-date-picker
-              v-model:value="form.end_date"
-              style="width: 100%"
-              value-format="YYYY-MM-DD"
-            />
+          <a-form-item class="textLabel" :label="$t('dateEnd')" name="end_date"
+            :rules="[{ validator: validateEndDate }]">
+            <a-date-picker v-model:value="form.end_date" style="width: 100%" value-format="YYYY-MM-DD" />
           </a-form-item>
         </a-col>
       </a-row>
-      <a-form-item
-        class="textLabel"
-        :label="$t('description')"
-        name="description"
-      >
-        <a-textarea
-          v-model:value="form.description"
-          :placeholder="$t('enterDescription')"
-          allow-clear
-        />
+      <a-form-item class="textLabel" :label="$t('description')" name="description">
+        <a-textarea v-model:value="form.description" :placeholder="$t('enterDescription')" allow-clear />
       </a-form-item>
 
-      <a-form-item
-        v-if="canAssignDirectlyToUser"
-        class="textLabel"
-        :label="$t('assignToUser')"
-        name="assigned_users"
-      >
-        <a-alert
-          v-if="assignmentError"
-          :message="assignmentError"
-          type="error"
-          show-icon
-          style="margin-bottom: 10px"
-        />
-        <a-select
-          mode="multiple"
-          v-model:value="form.assigned_usersIds"
-          :options="sectionUserOptions"
-          :placeholder="$t('selectUser')"
-          show-search
-          allow-clear
-          :filter-option="
+      <a-form-item v-if="canAssignDirectlyToUser" class="textLabel" :label="$t('assignToUser')" name="assigned_users">
+        <a-alert v-if="assignmentError" :message="assignmentError" type="error" show-icon style="margin-bottom: 10px" />
+        <a-select mode="multiple" v-model:value="form.assigned_usersIds" :options="sectionUserOptions"
+          :placeholder="$t('selectUser')" show-search allow-clear :filter-option="
             (input, option) =>
               option.label.toLowerCase().includes(input.toLowerCase())
-          "
-          :loading="loadingSectionUsers"
-          style="width: 100%"
-          @change="handleAssignedUsersChange"
-        />
-        <div
-          v-for="user in form.assigned_users"
-          :key="user.id"
-          style="margin-top: 8px"
-        >
+          " :loading="loadingSectionUsers" style="width: 100%" @change="handleAssignedUsersChange" />
+        <div v-for="user in form.assigned_users" :key="user.id" style="margin-top: 8px">
           <span>{{
             sectionUserOptions.find((u) => u.value === user.id)?.label ||
             user.id
-          }}</span>
-          <a-input
-            v-model:value="user.target"
-            style="width: 120px; margin-left: 8px"
-            :placeholder="$t('enterTarget')"
+            }}</span>
+          <a-input v-model:value="user.target" style="width: 120px; margin-left: 8px" :placeholder="$t('enterTarget')"
             @input="
               (e) => handleAssignedUserTargetChange(user.id, e.target.value)
-            "
-          />
+            " />
         </div>
       </a-form-item>
       <a-form-item>
@@ -272,12 +142,7 @@
           <a-button style="margin-right: 10px" @click="resetForm(true)">
             {{ $t("clearForm") }}
           </a-button>
-          <a-button
-            style="margin-right: 10px"
-            type="primary"
-            html-type="submit"
-            :loading="loading"
-          >
+          <a-button style="margin-right: 10px" type="primary" html-type="submit" :loading="loading">
             {{ $t("saveKpi") }}
           </a-button>
           <a-button type="default" @click="goBack"> {{ $t("back") }} </a-button>
@@ -286,12 +151,7 @@
     </a-form>
   </div>
   <div v-else>
-    <a-alert
-      :message="$t('accessDenied')"
-      :description="$t('accessDeniedDescription')"
-      type="error"
-      show-icon
-    />
+    <a-alert :message="$t('accessDenied')" :description="$t('accessDeniedDescription')" type="error" show-icon />
     <a-button type="default" style="margin-top: 15px" @click="goBack">
       {{ $t("back") }}
     </a-button>
@@ -493,17 +353,25 @@ const loadKpiTemplate = async (selectedId) => {
 };
 
 const handleNumericInput = (field, event) => {
-  let value = event.target.value.replace(/[^0-9.]/g, "");
+  let value = event.target.value.replace(/[^0-9.]/g, ""); // Loại bỏ ký tự không phải số hoặc dấu chấm
   const parts = value.split(".");
   if (parts.length > 2) {
-    value = parts[0] + "." + parts.slice(1).join("");
+    value = parts[0] + "." + parts.slice(1).join(""); // Xử lý trường hợp có nhiều dấu chấm
   }
-  // Format phần nguyên với dấu phẩy
+
+  // Lưu giá trị thực tế (rawTarget)
+  const rawValue = parseFloat(value) || 0;
+
+  // Format giá trị hiển thị (formattedTarget)
   const [intPart, decPart] = value.split(".");
   let formatted = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
   if (decPart !== undefined) formatted += "." + decPart;
-  form.value[field] = formatted;
+
+  // Lưu giá trị thực tế và giá trị format
+  form.value[field] = rawValue; // Lưu giá trị thực tế
+  form.value[`${field}Formatted`] = formatted; // Lưu giá trị format
 };
+
 const validateWeight = async (_, value) => {
   if (value === null || value === "") return Promise.resolve();
   const numValue = parseFloat(value);
@@ -593,16 +461,16 @@ const handleChangeCreate = async () => {
     // Chuẩn hóa assignments object
     let assignments = {
       from: creationScope,
-      to_employees: null,
+      to_employees: [],
       to_departments: [],
       to_sections: [],
     };
     let hasValidAssignment = false;
     if (userAssignments.length === 1) {
-      assignments.to_employees = {
-        id: userAssignments[0].user_id,
-        target: userAssignments[0].target,
-      };
+      assignments.to_employees = userAssignments.map((user) => ({
+        id: user.id,
+        target: user.target,
+      }));
       hasValidAssignment = true;
     } else if (userAssignments.length > 1) {
       assignments.to_employees = userAssignments;

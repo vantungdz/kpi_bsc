@@ -93,7 +93,7 @@ import PieChart from "@/core/components/common/PieChart.vue";
 const store = useStore();
 const { t: $t } = useI18n();
 
-const isLoading = computed(() => store.getters["dashboard/isLoadingKpiInventory"]);
+const isLoading = computed(() => store.getters["loading/isLoading"]);
 const loadingError = computed(() => store.getters["dashboard/getKpiInventoryError"]); 
 const inventoryStats = computed(() => store.getters["dashboard/getKpiInventoryStats"]);
 

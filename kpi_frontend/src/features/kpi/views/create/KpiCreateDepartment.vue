@@ -1,94 +1,42 @@
 <template>
   <div v-if="canAccessCreatePage">
-    <a-form
-      ref="formRef"
-      :model="form"
-      :rules="formRules"
-      layout="vertical"
-      @finish="handleChangeCreate"
-      @finishFailed="onFinishFailed"
-    >
+    <a-form ref="formRef" :model="form" :rules="formRules" layout="vertical" @finish="handleChangeCreate"
+      @finishFailed="onFinishFailed">
       <a-row :gutter="12">
         <a-col :span="12">
           <a-form-item :label="$t('useExistingKpiTemplate')" name="templateKpi">
-            <a-select
-              v-model:value="selectedTemplateKpiId"
-              :placeholder="$t('selectKpiTemplate')"
-              show-search
-              allow-clear
-              :options="kpiTemplateOptions"
-              :filter-option="
+            <a-select v-model:value="selectedTemplateKpiId" :placeholder="$t('selectKpiTemplate')" show-search
+              allow-clear :options="kpiTemplateOptions" :filter-option="
                 (input, option) =>
                   option.label.toLowerCase().includes(input.toLowerCase())
-              "
-              :loading="loadingKpiTemplates"
-              style="width: 100%; margin-bottom: 15px"
-              @change="loadKpiTemplate"
-            />
+              " :loading="loadingKpiTemplates" style="width: 100%; margin-bottom: 15px" @change="loadKpiTemplate" />
           </a-form-item>
         </a-col>
       </a-row>
 
-      <a-form-item
-        class="textLabel"
-        :label="$t('department')"
-        name="department_id"
-        required
-      >
-        <a-select
-          v-model:value="form.department_id"
-          :placeholder="$t('selectDepartment')"
-        >
-          <a-select-option
-            v-for="department in departmentList"
-            :key="department.id"
-            :value="department.id"
-            >{{ department.name }}</a-select-option
-          >
+      <a-form-item class="textLabel" :label="$t('department')" name="department_id" required>
+        <a-select v-model:value="form.department_id" :placeholder="$t('selectDepartment')">
+          <a-select-option v-for="department in departmentList" :key="department.id" :value="department.id">{{
+            department.name }}</a-select-option>
         </a-select>
       </a-form-item>
 
-      <a-form-item
-        class="textLabel"
-        :label="$t('perspective')"
-        name="perspective_id"
-      >
-        <a-select
-          v-model:value="form.perspective_id"
-          :placeholder="$t('selectPerspective')"
-        >
-          <a-select-option
-            v-for="perspective in perspectiveList"
-            :key="perspective.id"
-            :value="perspective.id"
-            >{{ perspective.name }}</a-select-option
-          >
+      <a-form-item class="textLabel" :label="$t('perspective')" name="perspective_id">
+        <a-select v-model:value="form.perspective_id" :placeholder="$t('selectPerspective')">
+          <a-select-option v-for="perspective in perspectiveList" :key="perspective.id" :value="perspective.id">{{
+            perspective.name }}</a-select-option>
         </a-select>
       </a-form-item>
       <a-row :gutter="12">
         <a-col :span="12">
           <a-form-item class="textLabel" :label="$t('kpiName')" name="name">
-            <a-input
-              v-model:value="form.name"
-              :placeholder="$t('enterKpiName')"
-            />
+            <a-input v-model:value="form.name" :placeholder="$t('enterKpiName')" />
           </a-form-item>
         </a-col>
         <a-col :span="12">
-          <a-form-item
-            class="textLabel"
-            :label="$t('calculationFormula')"
-            name="calculation_type"
-          >
-            <a-select
-              v-model:value="form.calculation_type"
-              :placeholder="$t('selectCalculationFormula')"
-            >
-              <a-select-option
-                v-for="formula in formulaList"
-                :key="formula.id"
-                :value="formula.id"
-              >
+          <a-form-item class="textLabel" :label="$t('calculationFormula')" name="calculation_type">
+            <a-select v-model:value="form.calculation_type" :placeholder="$t('selectCalculationFormula')">
+              <a-select-option v-for="formula in formulaList" :key="formula.id" :value="formula.id">
                 {{ formula.name }}
               </a-select-option>
             </a-select>
@@ -111,11 +59,7 @@
         <a-col :span="12">
           <a-form-item class="textLabel" :label="$t('unit')" name="unit">
             <a-select v-model:value="form.unit" :placeholder="$t('selectUnit')">
-              <a-select-option
-                v-for="(unitValue, unitKey) in KpiUnits"
-                :key="unitKey"
-                :value="unitValue"
-              >
+              <a-select-option v-for="(unitValue, unitKey) in KpiUnits" :key="unitKey" :value="unitValue">
                 {{ unitKey }}
               </a-select-option>
             </a-select>
@@ -125,28 +69,19 @@
       <a-row :gutter="12">
         <a-col :span="12">
           <a-form-item class="textLabel" :label="$t('target')" name="target">
-            <a-input
-              v-model:value="form.target"
-              :placeholder="$t('enterTarget')"
-              @input="(event) => handleNumericInput('target', event)"
-            />
+            <a-input v-model:value="form.targetFormatted" :placeholder="$t('enterTarget')"
+              @input="(event) => handleNumericInput('target', event)" />
           </a-form-item>
         </a-col>
         <a-col :span="12">
           <a-form-item class="textLabel" :label="$t('weight')" name="weight">
-            <a-input
-              v-model:value="form.weight"
-              :placeholder="$t('enterWeight')"
-              @input="(event) => handleNumericInput('weight', event)"
-            />
+            <a-input v-model:value="form.weight" :placeholder="$t('enterWeight')"
+              @input="(event) => handleNumericInput('weight', event)" />
           </a-form-item>
         </a-col>
       </a-row>
       <a-form-item class="textLabel" :label="$t('frequency')" name="frequency">
-        <a-select
-          v-model:value="form.frequency"
-          :placeholder="$t('selectFrequency')"
-        >
+        <a-select v-model:value="form.frequency" :placeholder="$t('selectFrequency')">
           <a-select-option value="daily"> {{ $t("daily") }} </a-select-option>
           <a-select-option value="weekly"> {{ $t("weekly") }} </a-select-option>
           <a-select-option value="monthly">
@@ -160,121 +95,56 @@
       </a-form-item>
       <a-row :gutter="12">
         <a-col :span="6">
-          <a-form-item
-            class="textLabel"
-            :label="$t('dateStart')"
-            name="start_date"
-          >
-            <a-date-picker
-              v-model:value="form.start_date"
-              style="width: 100%"
-              value-format="YYYY-MM-DD"
-            />
+          <a-form-item class="textLabel" :label="$t('dateStart')" name="start_date">
+            <a-date-picker v-model:value="form.start_date" style="width: 100%" value-format="YYYY-MM-DD" />
           </a-form-item>
         </a-col>
         <a-col :span="6">
-          <a-form-item
-            class="textLabel"
-            :label="$t('dateEnd')"
-            name="end_date"
-            :rules="[{ validator: validateEndDate }]"
-          >
-            <a-date-picker
-              v-model:value="form.end_date"
-              style="width: 100%"
-              value-format="YYYY-MM-DD"
-            />
+          <a-form-item class="textLabel" :label="$t('dateEnd')" name="end_date"
+            :rules="[{ validator: validateEndDate }]">
+            <a-date-picker v-model:value="form.end_date" style="width: 100%" value-format="YYYY-MM-DD" />
           </a-form-item>
         </a-col>
       </a-row>
-      <a-form-item
-        class="textLabel"
-        :label="$t('description')"
-        name="description"
-      >
-        <a-textarea
-          v-model:value="form.description"
-          :placeholder="$t('enterDescription')"
-          allow-clear
-        />
+      <a-form-item class="textLabel" :label="$t('description')" name="description">
+        <a-textarea v-model:value="form.description" :placeholder="$t('enterDescription')" allow-clear />
       </a-form-item>
 
-      <a-row
-        :gutter="12"
-        style="
+      <a-row :gutter="12" style="
           margin-top: -10px;
           margin-bottom: 16px;
           background: #f0f2f5;
           padding: 8px;
           border-radius: 4px;
-        "
-      >
+        ">
         <a-col :span="8">
-          <a-statistic
-            :title="$t('overallTargetDepartment')"
-            :value="overallTargetValue"
-            :precision="2"
-          />
+          <a-statistic :title="$t('overallTargetDepartment')" :value="overallTargetValue" :precision="2" />
         </a-col>
         <a-col :span="8">
-          <a-statistic
-            :title="$t('totalAssigned')"
-            :value="totalAssignedTarget"
-            :precision="2"
-          />
+          <a-statistic :title="$t('totalAssigned')" :value="totalAssignedTarget" :precision="2" />
         </a-col>
         <a-col :span="8">
-          <a-statistic
-            :title="$t('remaining')"
-            :value="remainingTarget"
-            :precision="2"
-            :value-style="isOverAssigned ? { color: '#cf1322' } : {}"
-          />
+          <a-statistic :title="$t('remaining')" :value="remainingTarget" :precision="2"
+            :value-style="isOverAssigned ? { color: '#cf1322' } : {}" />
         </a-col>
       </a-row>
 
-      <a-form-item
-        v-if="canAssignToSections"
-        class="textLabel"
-        :label="$t('assignToSections')"
-        name="section_id_table"
-        :help="$t('assignToSectionsHelp')"
-      >
-        <a-alert
-          v-if="assignmentError"
-          :message="assignmentError"
-          type="error"
-          show-icon
-          style="margin-bottom: 10px"
-        />
-        <a-table
-          :columns="columns"
-          :data-source="sectionsForAssignmentTable"
-          :pagination="false"
-          :row-key="(record) => `section - ${record.id}`"
-          :row-selection="rowSelection"
-          :class="{ 'table-disabled': !!form.assigned_user_id }"
-          size="small"
-          bordered
-        >
+      <a-form-item v-if="canAssignToSections" class="textLabel" :label="$t('assignToSections')" name="section_id_table"
+        :help="$t('assignToSectionsHelp')">
+        <a-alert v-if="assignmentError" :message="assignmentError" type="error" show-icon style="margin-bottom: 10px" />
+        <a-table :columns="columns" :data-source="sectionsForAssignmentTable" :pagination="false"
+          :row-key="(record) => `section - ${record.id}`" :row-selection="rowSelection"
+          :class="{ 'table-disabled': !!form.assigned_user_id }" size="small" bordered>
           <template #target="{ record }">
-            <a-input-number
-              :value="targetValues[`section - ${record.id}`] || null"
-              :placeholder="$t('enterTarget')"
-              :min="0"
-              style="width: 100%"
-              :disabled="
+            <a-input-number :value="targetValues[`section - ${record.id}`] || null" :placeholder="$t('enterTarget')"
+              :min="0" style="width: 100%" :disabled="
                 !!form.assigned_user_id ||
                 !selectedRowKeys.includes(`section - ${record.id}`)
-              "
-              :formatter="
+              " :formatter="
                 (value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
-              "
-              :parser="(value) => String(value).replace(/\$\s?|(,*)/g, '')"
-              @change="
+              " :parser="(value) => String(value).replace(/\$\s?|(,*)/g, '')" @change="
                 (value) => handleTargetChange(`section - ${record.id}`, value)
-              "
-            />
+              " />
           </template>
           <template #bodyCell="{ column, record }">
             <template v-if="column.key === 'name'">
@@ -291,12 +161,7 @@
           <a-button style="margin-right: 10px" @click="resetForm(true)">
             {{ $t("clearForm") }}
           </a-button>
-          <a-button
-            style="margin-right: 10px"
-            type="primary"
-            html-type="submit"
-            :loading="loading"
-          >
+          <a-button style="margin-right: 10px" type="primary" html-type="submit" :loading="loading">
             {{ $t("saveKpi") }}
           </a-button>
           <a-button type="default" @click="goBack"> {{ $t("back") }} </a-button>
@@ -305,12 +170,7 @@
     </a-form>
   </div>
   <div v-else>
-    <a-alert
-      :message="$t('accessDenied')"
-      :description="$t('accessDeniedDescription')"
-      type="error"
-      show-icon
-    />
+    <a-alert :message="$t('accessDenied')" :description="$t('accessDeniedDescription')" type="error" show-icon />
     <a-button type="default" style="margin-top: 15px" @click="goBack">
       {{ $t("back") }}
     </a-button>
@@ -641,17 +501,25 @@ const handleTargetChange = (key, value) => {
   }
 };
 const handleNumericInput = (field, event) => {
-  let value = event.target.value.replace(/[^0-9.]/g, "");
+  let value = event.target.value.replace(/[^0-9.]/g, ""); // Loại bỏ ký tự không phải số hoặc dấu chấm
   const parts = value.split(".");
   if (parts.length > 2) {
-    value = parts[0] + "." + parts.slice(1).join("");
+    value = parts[0] + "." + parts.slice(1).join(""); // Xử lý trường hợp có nhiều dấu chấm
   }
-  // Format phần nguyên với dấu phẩy
+
+  // Lưu giá trị thực tế (rawTarget)
+  const rawValue = parseFloat(value) || 0;
+
+  // Format giá trị hiển thị (formattedTarget)
   const [intPart, decPart] = value.split(".");
   let formatted = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
   if (decPart !== undefined) formatted += "." + decPart;
-  form.value[field] = formatted;
+
+  // Lưu giá trị thực tế và giá trị format
+  form.value[field] = rawValue; // Lưu giá trị thực tế
+  form.value[`${field}Formatted`] = formatted; // Lưu giá trị format
 };
+
 const validateWeight = async (_, value) => {
   if (value === null || value === "") return Promise.resolve();
   const numValue = parseFloat(value);
@@ -730,7 +598,7 @@ const handleChangeCreate = async () => {
       from: creationScope,
       to_departments: [],
       to_sections: [],
-      to_user: null,
+      to_employees: [],
     };
 
     assignmentsPayload.to_departments.push({
@@ -769,7 +637,10 @@ const handleChangeCreate = async () => {
       canAssignDirectlyToUser.value &&
       form.value.assigned_user_id !== null
     ) {
-      assignmentsPayload.to_user = { id: form.value.assigned_user_id };
+      assignmentsPayload.to_employees.push({
+        id: form.value.assigned_user_id,
+        target: form.value.target,
+      });
       hasValidAssignment = true;
     }
 
@@ -818,10 +689,15 @@ const handleChangeCreate = async () => {
       assignments: assignmentsPayload,
     };
 
-    if (kpiData.assignments.to_user) {
+    // Chỉ xóa các trường nếu chúng không có dữ liệu
+    if (!kpiData.assignments.to_employees || kpiData.assignments.to_employees.length === 0) {
+      delete kpiData.assignments.to_employees;
+    }
+    if (!kpiData.assignments.to_departments || kpiData.assignments.to_departments.length === 0) {
+      delete kpiData.assignments.to_departments;
+    }
+    if (!kpiData.assignments.to_sections || kpiData.assignments.to_sections.length === 0) {
       delete kpiData.assignments.to_sections;
-    } else {
-      delete kpiData.assignments.to_user;
     }
 
     console.log("Submitting KPI Data (Final Structure):", kpiData);

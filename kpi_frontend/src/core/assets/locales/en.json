@@ -389,6 +389,7 @@
   "user": "User",
   "searchAndSelectUsers": "Search and select users",
   "manageDepartmentSectionAssignments": "Manage Department/Section Assignments",
+  "shouldShowDirectUserAssignmentCard": "Direct user assignment card",
   "assignedUnit": "Assigned Unit",
   "targetValue": "Target Value",
   "latestActual": "Latest Actual",
@@ -713,6 +714,7 @@
     "createError": "Failed to create review cycle."
   },
   "common": {
+    "save": "Save",
     "edit": "Edit",
     "delete": "Delete",
     "create": "Create",
@@ -824,6 +826,7 @@
   "rejectReview": "Reject Review",
   "rejectionReasonRequired": "Rejection reason is required.",
   "rejectionReasonPlaceholder": "Enter rejection reason here...",
+  "createPerspective": "Create Perspective",
   "perspectiveObject": {
     "managePerspectives": "Manage Perspectives",
     "name": "Name",

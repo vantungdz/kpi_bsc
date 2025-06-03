@@ -60,7 +60,7 @@ const fromYear = ref(new Date().getFullYear() - 3);
 const toYear = ref(new Date().getFullYear());
 const employeeOptions = ref([]);
 const performanceHistory = ref([]);
-const loading = ref(false);
+const loading = computed(() => store.getters["loading/isLoading"]);
 const highlightComments = ref([]);
 const { t: $t } = useI18n();
 
@@ -141,7 +141,7 @@ async function fetchEmployees() {
 
 async function fetchPerformanceHistory() {
   if (!selectedEmployeeId.value) return;
-  loading.value = true;
+   store.dispatch("loading/startLoading");
   try {
     const data = await store.dispatch('employees/fetchEmployeePerformanceHistory', {
       employeeId: selectedEmployeeId.value,
@@ -155,7 +155,7 @@ async function fetchPerformanceHistory() {
   } catch (err) {
     message.error('Không thể tải dữ liệu hiệu suất');
   } finally {
-    loading.value = false;
+    store.dispatch("loading/stopLoading");
   }
 }
 

@@ -713,6 +713,7 @@
     "createError": "評価サイクルの作成に失敗しました。"
   },
   "common": {
+    "save": "保存",
     "edit": "編集",
     "delete": "削除",
     "create": "作成",
@@ -824,6 +825,7 @@
   "rejectReview": "レビューを却下",
   "rejectionReasonRequired": "却下理由は必須です。",
   "rejectionReasonPlaceholder": "却下理由を入力してください",
+  "createPerspective": "視点を作成",
   "perspectiveObject": {
     "managePerspectives": "視点を管理する",
     "name": "名前",

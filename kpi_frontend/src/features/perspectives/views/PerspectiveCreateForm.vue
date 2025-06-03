@@ -55,7 +55,7 @@
                 :okText="$t('perspectiveObject.confirmYes')"
                 :cancelText="$t('perspectiveObject.confirmNo')"
               >
-                <a>{{ $t("common.delete") }}</a>
+                <a style="color: red;">{{ $t("common.delete") }}</a>
               </a-popconfirm>
             </template>
           </a-list-item>

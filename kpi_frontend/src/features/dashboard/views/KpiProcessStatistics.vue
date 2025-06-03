@@ -191,9 +191,7 @@ const store = useStore();
 const kpiAwaitingApprovalStats = computed(
   () => store.getters["dashboard/getKpiAwaitingApprovalStats"]
 );
-const isLoadingKpiAwaitingStats = computed(
-  () => store.getters["dashboard/isLoadingKpiAwaitingStats"]
-);
+const isLoadingKpiAwaitingStats = computed(() => store.getters["loading/isLoading"]);
 const kpiAwaitingStatsError = computed(
   () => store.getters["dashboard/getKpiAwaitingStatsError"]
 );
@@ -201,9 +199,7 @@ const kpiAwaitingStatsError = computed(
 const kpiStatusOverTimeStats = computed(
   () => store.getters["dashboard/getKpiStatusOverTimeStats"]
 );
-const isLoadingKpiStatusOverTime = computed(
-  () => store.getters["dashboard/isLoadingKpiStatusOverTime"]
-);
+const isLoadingKpiStatusOverTime = computed(() => store.getters["loading/isLoading"]);
 const kpiStatusOverTimeError = computed(
   () => store.getters["dashboard/getKpiStatusOverTimeError"]
 );
@@ -211,9 +207,7 @@ const kpiStatusOverTimeError = computed(
 const averageApprovalTimeStats = computed(
   () => store.getters["dashboard/getAverageApprovalTimeStats"]
 );
-const isLoadingAverageApprovalTime = computed(
-  () => store.getters["dashboard/isLoadingAverageApprovalTime"]
-);
+const isLoadingAverageApprovalTime = computed(() => store.getters["loading/isLoading"]);
 const averageApprovalTimeError = computed(
   () => store.getters["dashboard/getAverageApprovalTimeError"]
 );
@@ -221,9 +215,7 @@ const averageApprovalTimeError = computed(
 const topKpiActivityStats = computed(
   () => store.getters["dashboard/getTopKpiActivityStats"]
 );
-const isLoadingTopKpiActivity = computed(
-  () => store.getters["dashboard/isLoadingTopKpiActivity"]
-);
+const isLoadingTopKpiActivity = computed(() => store.getters["loading/isLoading"]);
 const topKpiActivityError = computed(
   () => store.getters["dashboard/getTopKpiActivityError"]
 );

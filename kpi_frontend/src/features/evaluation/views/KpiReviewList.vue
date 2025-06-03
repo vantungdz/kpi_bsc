@@ -62,7 +62,7 @@ import { RBAC_ACTIONS, RBAC_RESOURCES } from "@/core/constants/rbac.constants";
 const { t } = useI18n();
 
 const reviews = ref([]);
-const loading = ref(false);
+const loading = computed(() => store.getters["loading/isLoading"]);
 const selectedCycle = ref(null);
 const selectedStatus = ref(null);
 const searchText = ref("");
@@ -121,7 +121,7 @@ const normalizedReviews = computed(() => {
 });
 
 const fetchReviews = async () => {
-  loading.value = true;
+  store.dispatch("loading/startLoading");
   try {
     console.log('[KPI Review] fetchReviews selectedCycle:', selectedCycle.value, 'selectedStatus:', selectedStatus.value);
     const params = {
@@ -136,7 +136,7 @@ const fetchReviews = async () => {
     const res = await getKpiReviewList(params);
     reviews.value = res;
   } finally {
-    loading.value = false;
+    store.dispatch("loading/stopLoading");
   }
 };
 

@@ -246,9 +246,7 @@ const store = useStore();
 const kpiOverviewStats = computed(
   () => store.getters["dashboard/getKpiPerformanceOverviewStats"]
 );
-const isLoadingOverview = computed(
-  () => store.getters["dashboard/isLoadingKpiPerformanceOverview"]
-);
+const isLoadingOverview = computed(() => store.getters["loading/isLoading"]);
 const loadingError = computed(
   () => store.getters["dashboard/getKpiPerformanceOverviewError"]
 );
