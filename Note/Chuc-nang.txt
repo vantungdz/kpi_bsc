@@ -1,11 +1,15 @@
+Xác định chu kỳ đánh giá KPI:
 
-Chức năng chưa có:
-	- Tạo tài khoản và import nhân viên //
-    - Thống kê Dashboard
-    - Review đánh giá kết quả KPI
-	- Form tổng hợp KPI của cá nhân employee 
-	- Form so sách tiến độ kpi mỗi năm ( Hiện thị dạng biểu đồ cột )
-    - Phân quyền chức năng sử dụng hệ thống
-    - Xuất report
-	
-	
+Frequency (daily, weekly, monthly, quarterly, yearly) quyết định KPI sẽ được đo lường, tổng hợp và đánh giá theo chu kỳ nào.
+Giới hạn thời gian hiệu lực của KPI:
+
+Start Date và End Date xác định khoảng thời gian KPI có hiệu lực, dùng để lọc dữ liệu, báo cáo, và xác định KPI nào đang hoạt động.
+Tính toán dữ liệu thực tế:
+
+Khi tổng hợp kết quả, hệ thống sẽ chỉ lấy dữ liệu trong khoảng từ Start Date đến End Date, và chia nhỏ theo Frequency để tính toán, so sánh với target.
+Hiển thị báo cáo, dashboard:
+
+Các biểu đồ, bảng báo cáo sẽ dựa vào 3 trường này để hiển thị đúng dữ liệu theo từng chu kỳ và thời gian.
+Tự động hóa nhắc nhở, cảnh báo:
+
+Hệ thống có thể gửi thông báo khi sắp đến hạn kết thúc KPI, hoặc khi đến kỳ đánh giá tiếp theo dựa vào các trường này.

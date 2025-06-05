@@ -12,6 +12,7 @@ import reports from "@/features/reports/store/report";
 import myKpiReviews from "@/features/evaluation/store/myKpiReviews";
 import roles from "@/features/roles/store/roles";
 import loading from "@/store/loading";
+import formula from "@/features/formula/store/fomula";
 
 const store = createStore({
   modules: {
@@ -28,6 +29,7 @@ const store = createStore({
     reports,
     myKpiReviews,
     roles,
+    formula,
   },
 });
 

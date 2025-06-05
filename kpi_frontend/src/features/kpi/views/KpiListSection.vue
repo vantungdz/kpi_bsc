@@ -172,7 +172,7 @@
                 <template v-else-if="column.dataIndex === 'chart'">
                   <ApexChart
                     type="donut"
-                    width="80%"
+                    width="50%"
                     height="80"
                     :options="{
                       chart: { height: 80, type: 'donut' },
@@ -183,6 +183,16 @@
                       colors: ['#008FFB', '#B9E5FF'],
                       dataLabels: {
                         enabled: true,
+                        formatter: function(val, opts) {
+                          const actual = parseFloat(opts.w.config.series[0]);
+                          const target = actual + parseFloat(opts.w.config.series[1]);
+                          if (!target || isNaN(target)) return '--';
+                          if (!actual || isNaN(actual)) return '0%';
+                          let percent = Math.round((actual / target) * 100);
+                          if (percent > 100) percent = 100;
+                          if (percent < 0) percent = 0;
+                          return percent + '%';
+                        },
                         style: {
                           fontSize: '10px',
                           fontWeight: 'bold',
@@ -192,12 +202,8 @@
                       legend: { show: false },
                     }"
                     :series="[
-                      parseFloat(record.actual) || 0,
-                      Math.max(
-                        (parseFloat(record.target) || 0) -
-                          (parseFloat(record.actual) || 0),
-                        0
-                      ),
+                      (parseFloat(record.actual) && parseFloat(record.actual) > 0) ? parseFloat(record.actual) : 0,
+                      (parseFloat(record.target) && parseFloat(record.target) > 0) ? Math.max(parseFloat(record.target) - parseFloat(record.actual), 0) : 0,
                     ]"
                   />
                 </template>
@@ -236,6 +242,12 @@
                     :color="getStatusColor(record.status)"
                   >
                     {{ record.status }}
+                  </a-tag>
+                </template>
+
+                <template v-else-if="column.dataIndex === 'validityStatus'">
+                  <a-tag :color="validityStatusColor[record.validityStatus] || 'default'">
+                    {{ $t('validityStatus.' + record.validityStatus) || record.validityStatus }}
                   </a-tag>
                 </template>
 
@@ -300,10 +312,25 @@
 </template>
 
 <script setup>
-import { reactive, computed, onMounted, ref, watch } from "vue";
+import { reactive, computed, onMounted, ref, watch,h } from "vue";
 import { useStore } from "vuex";
 import { useRouter } from "vue-router";
-import { useI18n } from "vue-i18n";
+import { useI18n } from "vue-i18n";import {
+  Button as AButton,
+  Input as AInput,
+  Select as ASelect,
+  SelectOption as ASelectOption,
+  DatePicker as ADatePicker,
+  Row as ARow,
+  Col as ACol,
+  FormItem as AFormItem,
+  Alert as AAlert,
+  Spin as ASpin,
+  Collapse as ACollapse,
+  CollapsePanel as ACollapsePanel,
+  Table as ATable,
+  Tag as ATag,
+} from "ant-design-vue";
 import {
   PlusOutlined,
   ScheduleOutlined,
@@ -557,6 +584,7 @@ const sectionGroups = computed(() => {
         })(),
         unit: kpiDetails.kpiUnit,
         status: displayStatus,
+        validityStatus: kpi.validityStatus || "active", // <--- Add this line
       };
       groupedData[sectionId].data[perspectiveKey].push(rowData);
     });
@@ -710,6 +738,23 @@ const handleDeleteKpi = () => {
     });
 };
 
+const validityStatusColor = {
+  active: 'green',
+  expiring_soon: 'orange',
+  expired: 'red',
+};
+
+const renderProgress = (record) => {
+  const actual = parseFloat(record.actual);
+  const target = parseFloat(record.target);
+  if (!target || isNaN(target)) return '--';
+  if (!actual || isNaN(actual)) return '0%';
+  let percent = Math.round((actual / target) * 100);
+  if (percent > 100) percent = 100;
+  if (percent < 0) percent = 0;
+  return `${percent}%`;
+};
+
 const columns = computed(() => [
   {
     title: $t("kpiName"),
@@ -718,11 +763,11 @@ const columns = computed(() => [
     width: "15%",
   },
   {
-    title: $t("progress"),
+    title: $t("currentProgress"),
     dataIndex: "chart",
     key: "chart",
     width: "10%",
-    align: "center",
+    customRender: ({ record }) => renderProgress(record),
   },
   {
     title: $t("assignTo"),
@@ -757,7 +802,21 @@ const columns = computed(() => [
     width: "8%",
   },
   {
-    title: $t("action"),
+    title: $t('validityStatus.name'),
+    dataIndex: 'validityStatus',
+    key: 'validityStatus',
+    width: '8%',
+    align: 'center',
+    customRender: ({ text }) => {
+      return h(
+        ATag,
+        { color: validityStatusColor[text] || 'default' },
+        () => $t(`validityStatus.${text}`) || text
+      );
+    },
+  },
+  {
+    title: $t("common.actions"),
     dataIndex: "action",
     key: "action",
     width: "15%",

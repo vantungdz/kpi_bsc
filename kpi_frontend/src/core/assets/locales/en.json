@@ -126,6 +126,7 @@
   "employeeFeedbackDate": "Employee Feedback Date",
   "employeeFeedbackContent": "Employee Feedback Content",
   "awaitingEmployeeFeedback": "Awaiting employee feedback.",
+  "managerReviewed": "Manager Reviewed",
   "evaluation": "Evaluation",
   "companyKpiList": "Company KPI List",
   "createNewKpi": "Create New KPI",
@@ -271,8 +272,15 @@
   "selectKpiTemplate": "Select a KPI to use as template...",
   "perspective": "Perspective",
   "pleaseSelectPerspective": "Please select a perspective",
+  "pleaseSelectSection": "Please select a section",
+  "pleaseSelectCalculationFormula": "Please select a calculation formula",
   "kpiName": "KPI Name",
   "pleaseEnterKpiName": "Please enter the KPI name",
+  "pleaseSelectKpiType": "Please select a KPI type",
+  "pleaseSelectUnit": "Please select a unit",
+  "targetMustBeNonNegative": "Target must be a non-negative number.",
+  "pleaseSelectStartDate": "Please select a start date",
+  "pleaseSelectEndDate": "Please select an end date",
   "calculationFormula": "Calculation Formula",
   "selectCalculationFormula": "Select Calculation Formula",
   "type": "Type",
@@ -382,6 +390,13 @@
   "assignedTo": "Assigned To",
   "manageUserAssignments": "Manage User Assignments",
   "assignKpiToUsersInSection": "Assign KPI to Users in Section",
+  "manageDirectUserAssignments": "Manage Direct User Assignments",
+  "assignUsersInDepartmentSections": "Assign Users in Department/Sections",
+  "endDateMustBeAfterStartDate": "End date must be after start date.",
+  "endDateAtLeastOneWeek": "End date must be at least one week after start date.",
+  "endDateAtLeastOneMonth": "End date must be at least one month after start date.",
+  "endDateAtLeastOneQuarter": "End date must be at least one quarter (3 month) after start date.",
+  "endDateAtLeastOneYear": "End date must be at least one year after start date.",
   "selectUsers": "Select Users",
   "setTargetAndWeight": "Set Target and Weight",
   "addEditUserAssignment": "Add/Edit User Assignment",
@@ -613,6 +628,7 @@
   "searchEmployeePlaceholder": "Search employee by name, email, or ID...",
   "importResult": "Import Result",
   "importErrorDetails": "Import Error Details",
+  "deleteEmployeeConfirm": "Are you sure you want to delete this employee?",
   "uploadFailed": "Upload Failed",
   "uploadErrorDefault": "Upload Error Default",
   "noFileSelected": "No file selected.",
@@ -714,6 +730,7 @@
     "createError": "Failed to create review cycle."
   },
   "common": {
+    "add": "Add",
     "save": "Save",
     "edit": "Edit",
     "delete": "Delete",
@@ -845,5 +862,62 @@
     "errorCreate": "Error creating perspective",
     "errorUpdate": "Error updating perspective",
     "errorDelete": "Error deleting perspective"
+  },
+  "validityStatus": {
+    "name": "Validity Status",
+    "active": "Active",
+    "expired": "Expired",
+    "expiring_soon": "Expiring Soon"
+  },
+  "formulaManagement": "Formula Management",
+  "formula": {
+    "title": "KPI Calculation Formula Management",
+    "name": "Formula Name",
+    "namePlaceholder": "Enter formula name",
+    "nameRequired": "Formula name is required",
+    "code": "Formula Code",
+    "codePlaceholder": "Enter unique code",
+    "codeRequired": "Formula code is required",
+    "expression": "Expression",
+    "expressionPlaceholder": "E.g.: (sum(values)/sum(targets))*100",
+    "expressionRequired": "Expression is required",
+    "description": "Description",
+    "descriptionPlaceholder": "Formula description (optional)",
+    "listTitle": "Formula List",
+    "deleteConfirm": "Are you sure you want to delete this formula?",
+    "empty": "No formulas yet",
+    "tooltipTitle": "Expression conventions:",
+    "tooltip": {
+      "values": "<b>values</b>: list of actual values of units/individuals assigned this KPI (e.g. departments, teams, or employees below the current level)",
+      "targets": "<b>targets</b>: list of target values",
+      "weight": "<b>weight</b>: weight of the KPI (0-100)",
+      "sum": "<b>sum(arr)</b>: sum of elements",
+      "average": "<b>average(arr)</b>: average value",
+      "minmax": "<b>min(arr)</b>, <b>max(arr)</b>: minimum/maximum value",
+      "exampleLabel": "Example:",
+      "example": "(sum(values)/sum(targets))*100"
+    }
+  },
+  "page404": {
+    "title": "404",
+    "company": "IVC - KPI Management System",
+    "bscFinance": "Finance",
+    "bscCustomer": "Customer",
+    "bscInternal": "Internal Process",
+    "bscLearning": "Learning & Growth",
+    "subtitle": "Sorry, the page you are looking for does not exist in the IVC KPI Management System.",
+    "backHome": "Back to Home"
+  },
+  "page500": {
+    "title": "500",
+    "company": "IVC - KPI Management System",
+    "message": "A system error has occurred. Please try again later.",
+    "backHome": "Back to Home"
+  },
+  "page403": {
+    "title": "403",
+    "company": "IVC - KPI Management System",
+    "message": "You do not have permission to access this page.",
+    "backHome": "Back to Home"
   }
 }

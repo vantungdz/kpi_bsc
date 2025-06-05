@@ -33,6 +33,10 @@ import RoleManager from "@/features/roles/views/RoleManager.vue";
 import KpiListEmployee from "../../features/kpi/views/KpiListEmployee.vue";
 import EmployeePerformanceHistory from "@/features/employees/EmployeePerformanceHistory.vue";
 import PerspectiveCreateForm from "@/features/perspectives/views/PerspectiveCreateForm.vue";
+import FomulaCreateForm from "@/features/formula/views/FomulaCreateForm.vue";
+import PageNotFound from "@/features/common/PageNotFound.vue";
+import PageForbidden from "@/features/common/PageForbidden.vue";
+import PageServerError from "@/features/common/PageServerError.vue";
 
 const routes = [
   {
@@ -367,6 +371,38 @@ const routes = [
       ],
     },
   },
+  {
+    path: "/admin/formula-management",
+    name: "FormulaManagement",
+    component: FomulaCreateForm,
+    meta: {
+      requiresAuth: true,
+      permissions: [
+        {
+          action: RBAC_ACTIONS.VIEW,
+          resource: RBAC_RESOURCES.ADMIN,
+        },
+      ],
+    },
+  },
+  {
+    path: "/403",
+    name: "PageForbidden",
+    component: PageForbidden,
+    meta: { requiresAuth: false },
+  },
+  {
+    path: "/500",
+    name: "PageServerError",
+    component: PageServerError,
+    meta: { requiresAuth: false },
+  },
+  {
+    path: "/:pathMatch(.*)*",
+    name: "PageNotFound",
+    component: PageNotFound,
+    meta: { requiresAuth: false },
+  },
 ];
 
 function hasPermission(userPermissions, action, resource) {
@@ -404,7 +440,7 @@ router.beforeEach((to, from, next) => {
         hasPermission(userPermissions, perm.action, perm.resource)
       );
       if (!ok) {
-        next({ name: "HomePage" });
+        next({ name: "PageForbidden" });
         return;
       }
     }

@@ -26,6 +26,7 @@ import { Roles } from 'src/auth/guards/roles.decorator';
 import { CreateKpiDto } from './dto/create_kpi_dto';
 import { error } from 'console';
 import { Employee } from 'src/entities/employee.entity';
+import { getKpiStatus } from './kpis.service';
 
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('kpis')
@@ -71,7 +72,12 @@ export class KpisController {
     const data = await this.kpisService.getAllKpiAssignedToDepartments(
       req.user.id,
     );
-    return { data };
+    // Map each KPI to include validityStatus
+    const dataWithValidity = data.map((kpi) => ({
+      ...kpi,
+      validityStatus: getKpiStatus(kpi.start_date, kpi.end_date),
+    }));
+    return { data: dataWithValidity };
   }
 
   @Get('/sections')

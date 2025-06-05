@@ -88,7 +88,7 @@
     <a-modal
       v-model:open="isKpiModalVisible"
       :title="selectedEmployee ? t('kpiEmployee.kpisOf', { name: selectedEmployee.first_name + ' ' + selectedEmployee.last_name }) : t('kpiEmployee.employeeKpis')"
-      width="950px"
+      width="70%"
       @cancel="handleKpiModalCancel"
       :footer="null"
       centered
@@ -146,9 +146,19 @@
 </template>
 
 <script setup>
-import { reactive, computed, onMounted, ref, watch } from 'vue';
+import { reactive, computed, onMounted, ref, watch, h } from 'vue';
 import { useStore } from 'vuex';
 import { useI18n } from 'vue-i18n';
+import {
+  FormItem as AFormItem,
+  Modal as AModal,
+  Button as AButton,
+  Table as ATable,
+  Tag as ATag,
+  Alert as AAlert,
+  Spin as ASpin,
+  Empty as AEmpty,
+} from "ant-design-vue";
 import { FilterOutlined, ReloadOutlined, ScheduleOutlined } from '@ant-design/icons-vue';
 import { KpiDefinitionStatus } from '@/core/constants/kpiStatus';
 import { RBAC_ACTIONS, RBAC_RESOURCES } from '@/core/constants/rbac.constants';
@@ -257,11 +267,27 @@ const employeeKpis = ref([]);
 const loadingKpis = ref(false);
 const kpiError = ref('');
 
+const validityStatusColor = {
+  active: 'green',
+  expiring_soon: 'orange',
+  expired: 'red',
+};
+
 const kpiColumns = computed(() => [
   { title: t('kpiEmployee.kpiName'), dataIndex: 'name', key: 'name', width: '20%' },
   { title: t('kpiEmployee.target'), dataIndex: 'target', key: 'target', width: '10%' },
   { title: t('kpiEmployee.actualValue'), dataIndex: 'actual_value', key: 'actual_value', width: '10%' },
   { title: t('kpiEmployee.status'), dataIndex: 'status', key: 'status', width: '10%' },
+  { title: t('validityStatus.name'), dataIndex: 'validityStatus', key: 'validityStatus', width: '11%',
+    align: 'center',
+    customRender: ({ text }) => {
+      return h(
+        ATag,
+        { color: validityStatusColor[text] || 'default' },
+        () => t(`validityStatus.${text}`) || text
+      );
+    },
+  },
   { title: t('kpiEmployee.startDate'), dataIndex: 'start_date', key: 'start_date', width: '12%' },
   { title: t('kpiEmployee.endDate'), dataIndex: 'end_date', key: 'end_date', width: '12%' },
 ]);
@@ -302,6 +328,7 @@ const fetchEmployeeKpis = async (employeeId) => {
         actual_value: actualValue,
         unit: assignment.unit || kpi.unit || '',
         status: status,
+        validityStatus: kpi.validityStatus,
         start_date: assignment.startDate ? assignment.startDate.split('T')[0] : kpi.start_date,
         end_date: assignment.endDate ? assignment.endDate.split('T')[0] : kpi.end_date,
       };

@@ -146,6 +146,7 @@
   "employeeFeedbackDate": "従業員フィードバック日",
   "employeeFeedbackContent": "従業員フィードバック内容",
   "awaitingEmployeeFeedback": "従業員のフィードバック待ちです。",
+  "managerReviewed": "マネージャーがレビュー済み",
   "employeeFeedbackPendingStatus": "従業員のフィードバック待ち",
   "evaluation": "評価",
   "companyKpiList": "会社KPIリスト",
@@ -290,7 +291,14 @@
   "selectKpiTemplate": "テンプレートとして使用するKPIを選択...",
   "perspective": "視点",
   "pleaseSelectPerspective": "視点を選択してください",
+  "pleaseSelectSection": "セクションを選択してください",
+  "pleaseSelectCalculationFormula": "計算式を選択してください",
+  "pleaseSelectKpiType": "KPIタイプを選択してください",
   "pleaseEnterKpiName": "KPI名を入力してください",
+  "pleaseSelectUnit": "単位を選択してください",
+  "targetMustBeNonNegative": "目標は0以上の数値でなければなりません。",
+  "pleaseSelectStartDate": "開始日を選択してください",
+  "pleaseSelectEndDate": "終了日を選択してください",
   "calculationFormula": "計算式",
   "selectCalculationFormula": "計算式を選択",
   "type": "タイプ",
@@ -403,6 +411,13 @@
   "assignedTo": "割り当て先",
   "manageUserAssignments": "ユーザー割り当て管理",
   "assignKpiToUsersInSection": "セクション内ユーザーにKPIを割り当て",
+  "manageDirectUserAssignments": "直接ユーザー割り当てを管理",
+  "assignUsersInDepartmentSections": "部門/セクション内のユーザーにKPIを割り当て",
+  "endDateMustBeAfterStartDate": "終了日は開始日より後でなければなりません。",
+  "endDateAtLeastOneWeek": "終了日は開始日から少なくとも1週間後でなければなりません。",
+  "endDateAtLeastOneMonth": "終了日は開始日から少なくとも1ヶ月後でなければなりません。",
+  "endDateAtLeastOneQuarter": "終了日は開始日から少なくとも 1 四半期 (3 か月) 後にする必要があります。",
+  "endDateAtLeastOneYear": "終了日は開始日から少なくとも1年後でなければなりません。",
   "selectUsers": "ユーザーを選択",
   "setTargetAndWeight": "目標と重みを設定",
   "addEditUserAssignment": "ユーザー割り当て追加/編集",
@@ -713,6 +728,7 @@
     "createError": "評価サイクルの作成に失敗しました。"
   },
   "common": {
+    "add": "追加",
     "save": "保存",
     "edit": "編集",
     "delete": "削除",
@@ -844,5 +860,62 @@
     "errorCreate": "視点の作成エラー",
     "errorUpdate": "視点の更新エラー",
     "errorDelete": "視点の削除エラー"
+  },
+  "validityStatus": {
+    "name": "有効性ステータス",
+    "active": "アクティブ",
+    "expired": "期限切れ",
+    "expiring_soon": "期限切れ間近"
+  },
+  "formulaManagement": "KPI計算式管理",
+  "formula": {
+    "title": "KPI計算式管理",
+    "name": "式名",
+    "namePlaceholder": "式名を入力",
+    "nameRequired": "式名は必須です",
+    "code": "式コード",
+    "codePlaceholder": "一意のコードを入力",
+    "codeRequired": "式コードは必須です",
+    "expression": "式",
+    "expressionPlaceholder": "例: (sum(values)/sum(targets))*100",
+    "expressionRequired": "式は必須です",
+    "description": "説明",
+    "descriptionPlaceholder": "式の説明（任意）",
+    "listTitle": "式一覧",
+    "deleteConfirm": "この式を削除してもよろしいですか？",
+    "empty": "まだ式がありません",
+    "tooltipTitle": "式の規約:",
+    "tooltip": {
+      "values": "<b>values</b>: このKPIが割り当てられた部門・チーム・従業員などの実際値リスト",
+      "targets": "<b>targets</b>: 目標値のリスト",
+      "weight": "<b>weight</b>: KPIの重み（0-100）",
+      "sum": "<b>sum(arr)</b>: 配列要素の合計",
+      "average": "<b>average(arr)</b>: 平均値",
+      "minmax": "<b>min(arr)</b>, <b>max(arr)</b>: 最小/最大値",
+      "exampleLabel": "例:",
+      "example": "(sum(values)/sum(targets))*100"
+    }
+  },
+  "page404":{
+    "title": "404",
+    "company": "IVC - KPI管理システム",
+    "bscFinance": "財務",
+    "bscCustomer": "顧客",
+    "bscInternal": "内部プロセス",
+    "bscLearning": "学習と成長",
+    "subtitle": "申し訳ありませんが、お探しのページはIVCのKPI管理システムに存在しません。",
+    "backHome": "ホームに戻る"
+  },
+  "page500": {
+    "title": "500",
+    "company": "IVC - KPI管理システム",
+    "message": "システムエラーが発生しました。後でもう一度お試しください。",
+    "backHome": "ホームに戻る"
+  },
+  "pahe403": {
+    "title": "403",
+    "company": "IVC - KPI管理システム",
+    "message": "このページにアクセスする権限がありません。",
+    "backHome": "ホームに戻る"
   }
 }

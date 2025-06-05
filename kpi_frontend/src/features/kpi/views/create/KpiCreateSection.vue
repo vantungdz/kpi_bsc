@@ -20,22 +20,6 @@
             perspective.name }}</a-select-option>
         </a-select>
       </a-form-item>
-
-      <a-form-item class="textLabel" :label="$t('department')" name="department_id" required>
-        <a-select v-model:value="form.department_id" :placeholder="$t('selectDepartment')">
-          <a-select-option v-for="department in departmentList" :key="department.id" :value="department.id">
-            {{ department.name }}
-          </a-select-option>
-        </a-select>
-      </a-form-item>
-
-      <a-form-item class="textLabel" :label="$t('section')" name="section_id" required>
-        <a-select v-model:value="form.section_id" :placeholder="$t('selectSection')">
-          <a-select-option v-for="section in sectionList" :key="section.id" :value="section.id">
-            {{ section.name }}
-          </a-select-option>
-        </a-select>
-      </a-form-item>
       <a-row :gutter="12">
         <a-col :span="12">
           <a-form-item class="textLabel" :label="$t('kpiName')" name="name">
@@ -43,8 +27,8 @@
           </a-form-item>
         </a-col>
         <a-col :span="12">
-          <a-form-item class="textLabel" :label="$t('calculationFormula')" name="calculation_type">
-            <a-select v-model:value="form.calculation_type" :placeholder="$t('selectCalculationFormula')">
+          <a-form-item class="textLabel" :label="$t('calculationFormula')" name="formula_id">
+            <a-select v-model:value="form.formula_id" :placeholder="$t('selectCalculationFormula')">
               <a-select-option v-for="formula in formulaList" :key="formula.id" :value="formula.id">
                 {{ formula.name }}
               </a-select-option>
@@ -89,6 +73,26 @@
           </a-form-item>
         </a-col>
       </a-row>
+      <a-row :gutter="12">
+        <a-col :span="12">
+          <a-form-item class="textLabel" :label="$t('department')" name="department_id" required>
+            <a-select v-model:value="form.department_id" :placeholder="$t('selectDepartment')">
+              <a-select-option v-for="department in departmentList" :key="department.id" :value="department.id">
+                {{ department.name }}
+              </a-select-option>
+            </a-select>
+          </a-form-item>
+        </a-col>
+        <a-col :span="12">
+          <a-form-item class="textLabel" :label="$t('section')" name="section_id" required>
+            <a-select v-model:value="form.section_id" :placeholder="$t('selectSection')">
+              <a-select-option v-for="section in sectionList" :key="section.id" :value="section.id">
+                {{ section.name }}
+              </a-select-option>
+            </a-select>
+          </a-form-item>
+        </a-col>
+      </a-row>
       <a-form-item class="textLabel" :label="$t('frequency')" name="frequency">
         <a-select v-model:value="form.frequency" :placeholder="$t('selectFrequency')">
           <a-select-option value="daily"> {{ $t("daily") }} </a-select-option>
@@ -103,14 +107,16 @@
         </a-select>
       </a-form-item>
       <a-row :gutter="12">
-        <a-col :span="6">
-          <a-form-item class="textLabel" :label="$t('dateStart')" name="start_date">
+        <a-col :span="12">
+          <a-form-item class="textLabel" :label="$t('dateStart')" name="start_date"
+            :rules="[{ required: true, message: $t('pleaseSelectStartDate') }]">
             <a-date-picker v-model:value="form.start_date" style="width: 100%" value-format="YYYY-MM-DD" />
           </a-form-item>
         </a-col>
-        <a-col :span="6">
-          <a-form-item class="textLabel" :label="$t('dateEnd')" name="end_date"
-            :rules="[{ validator: validateEndDate }]">
+        <a-col :span="12">
+          <a-form-item class="textLabel" :label="$t('dateEnd')" name="end_date" :rules="[
+            { required: true, message: $t('pleaseSelectEndDate') },
+            { validator: validateEndDate }]">
             <a-date-picker v-model:value="form.end_date" style="width: 100%" value-format="YYYY-MM-DD" />
           </a-form-item>
         </a-col>
@@ -119,23 +125,44 @@
         <a-textarea v-model:value="form.description" :placeholder="$t('enterDescription')" allow-clear />
       </a-form-item>
 
+      <a-row :gutter="12" style="
+          margin-top: -10px;
+          margin-bottom: 16px;
+          background: #f0f2f5;
+          padding: 8px;
+          border-radius: 4px;
+        ">
+        <a-col :span="8">
+          <a-statistic :title="$t('overallTargetDepartment')" :value="overallTargetValue" :precision="2" />
+        </a-col>
+        <a-col :span="8">
+          <a-statistic :title="$t('totalAssigned')" :value="totalAssignedTarget" :precision="2" />
+        </a-col>
+        <a-col :span="8">
+          <a-statistic :title="$t('remaining')" :value="remainingTarget" :precision="2"
+            :value-style="isOverAssigned ? { color: '#cf1322' } : {}" />
+        </a-col>
+      </a-row>
+
       <a-form-item v-if="canAssignDirectlyToUser" class="textLabel" :label="$t('assignToUser')" name="assigned_users">
         <a-alert v-if="assignmentError" :message="assignmentError" type="error" show-icon style="margin-bottom: 10px" />
-        <a-select mode="multiple" v-model:value="form.assigned_usersIds" :options="sectionUserOptions"
-          :placeholder="$t('selectUser')" show-search allow-clear :filter-option="
-            (input, option) =>
-              option.label.toLowerCase().includes(input.toLowerCase())
-          " :loading="loadingSectionUsers" style="width: 100%" @change="handleAssignedUsersChange" />
-        <div v-for="user in form.assigned_users" :key="user.id" style="margin-top: 8px">
-          <span>{{
-            sectionUserOptions.find((u) => u.value === user.id)?.label ||
-            user.id
-            }}</span>
-          <a-input v-model:value="user.target" style="width: 120px; margin-left: 8px" :placeholder="$t('enterTarget')"
-            @input="
-              (e) => handleAssignedUserTargetChange(user.id, e.target.value)
-            " />
-        </div>
+        <a-table :columns="columns" :data-source="sectionUserOptions" :pagination="false"
+          :row-key="(record) => `user - ${record.value}`" :row-selection="rowSelection"
+          :class="{ 'table-disabled': false }" size="small" bordered @blur="onAssignedUsersBlur">
+          <template #target="{ record }">
+            <a-input-number :value="targetValues[`user - ${record.value}`] || null" :placeholder="$t('enterTarget')"
+              :min="0" style="width: 100%" :disabled="!selectedRowKeys.includes(`user - ${record.value}`)"
+              :formatter="(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')"
+              :parser="(value) => String(value).replace(/\$\s?|(,*)/g, '')"
+              @change="(value) => handleAssignedUserTargetChange(`user - ${record.value}`, value)"
+              @blur="onAssignedUsersBlur" />
+          </template>
+          <template #bodyCell="{ column, record }">
+            <template v-if="column.key === 'name'">
+              <span>{{ record.label }}</span>
+            </template>
+          </template>
+        </a-table>
       </a-form-item>
       <a-form-item>
         <a-row justify="end" style="margin-top: 10px">
@@ -159,7 +186,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch, reactive } from "vue";
+import { onMounted, ref, computed, watch, reactive } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import { useStore } from "vuex";
 import {
@@ -182,10 +209,12 @@ import {
   RBAC_ACTIONS,
   RBAC_RESOURCES,
 } from "@/core/constants/rbac.constants.js";
+import { useI18n } from "vue-i18n";
 
 const router = useRouter();
 const route = useRoute();
 const store = useStore();
+const { t: $t } = useI18n();
 
 const sectionId = computed(() => parseInt(route.params.sectionId, 10));
 
@@ -200,7 +229,7 @@ const formRef = ref();
 
 const form = ref({
   name: "",
-  calculation_type: null,
+  formula_id: null,
   type: null,
   unit: null,
   target: null,
@@ -214,20 +243,7 @@ const form = ref({
   description: "",
 });
 
-const formulaList = ref([
-  {
-    id: "percentage",
-    name: "Tỷ lệ hoàn thành (%)",
-  },
-  {
-    id: "average",
-    name: "Giá trị trung bình",
-  },
-  {
-    id: "sum",
-    name: "Tổng số",
-  },
-]);
+const formulaList = computed(() => store.getters["formula/getFormulas"] || []);
 
 const perspectiveList = computed(
   () => store.getters["perspectives/perspectiveList"] || []
@@ -253,9 +269,9 @@ const kpiTemplateOptions = computed(() =>
 const sectionUserList = computed(
   () => store.getters["employees/usersBySection"](form.value.section_id) || []
 );
-const loadingSectionUsers = computed(
-  () => store.getters["users/loadingBySection"] || false
-);
+// const loadingSectionUsers = computed(
+//   () => store.getters["users/loadingBySection"] || false
+// );
 
 const sectionUserOptions = computed(() =>
   sectionUserList.value.map((user) => ({
@@ -282,11 +298,88 @@ const canAssignDirectlyToUser = computed(() =>
   )
 );
 
+// --- Thêm các state cho assignToUser ---
+const selectedRowKeys = ref([]); // ['user - 1', ...]
+const targetValues = ref({}); // { 'user - 1': 10, ... }
+const assignmentTouched = ref(false); // Thêm biến này để kiểm soát UX validate
+
+// --- Table columns cho user assignment ---
+const columns = computed(() => [
+  {
+    title: $t('user'),
+    dataIndex: 'label',
+    key: 'name',
+  },
+  {
+    title: $t('target'),
+    key: 'target',
+    slots: { customRender: 'target' },
+    width: '150px',
+  },
+]);
+
+// --- rowSelection cho table user ---
+const rowSelection = computed(() => ({
+  type: 'checkbox',
+  selectedRowKeys: selectedRowKeys.value,
+  getCheckboxProps: (record) => ({
+    disabled: false,
+    name: record.label,
+  }),
+  onSelect: (record, selected) => {
+    let currentSelectedKeys = [...selectedRowKeys.value];
+    const recordKey = `user - ${record.value}`;
+    if (selected) {
+      if (!currentSelectedKeys.includes(recordKey)) {
+        currentSelectedKeys.push(recordKey);
+      }
+    } else {
+      currentSelectedKeys = currentSelectedKeys.filter((key) => key !== recordKey);
+      delete targetValues.value[recordKey];
+    }
+    selectedRowKeys.value = currentSelectedKeys;
+  },
+  onSelectAll: (selected, selectedRows) => {
+    if (selected) {
+      selectedRowKeys.value = selectedRows.map((r) => `user - ${r.value}`);
+    } else {
+      selectedRowKeys.value = [];
+      targetValues.value = {};
+    }
+  },
+}));
+
+// --- Tổng target đã assign ---
+const overallTargetValue = computed(() => {
+  const target = parseFloat(form.value.target);
+  return isNaN(target) ? 0 : target;
+});
+const totalAssignedTarget = computed(() => {
+  let total = 0;
+  selectedRowKeys.value.forEach((key) => {
+    if (key.startsWith('user - ')) {
+      const targetValue = targetValues.value[key];
+      if (
+        targetValue !== undefined &&
+        targetValue !== null &&
+        !isNaN(targetValue) &&
+        targetValue >= 0
+      ) {
+        total += Number(targetValue);
+      }
+    }
+  });
+  return total;
+});
+const remainingTarget = computed(() => {
+  return parseFloat((overallTargetValue.value - totalAssignedTarget.value).toFixed(5));
+});
+
 const resetForm = (clearTemplateSelection = false) => {
   formRef.value?.resetFields();
   form.value = {
     name: "",
-    calculation_type: null,
+    formula_id: null,
     type: null,
     unit: null,
     target: null,
@@ -299,6 +392,7 @@ const resetForm = (clearTemplateSelection = false) => {
     description: "",
   };
   assignmentError.value = null;
+  assignmentTouched.value = false; // Reset khi clear form
   if (clearTemplateSelection) {
     selectedTemplateKpiId.value = null;
   }
@@ -312,16 +406,19 @@ const loadKpiTemplate = async (selectedId) => {
   }
   loadingKpiTemplate.value = true;
   assignmentError.value = null;
-  console.log(`Loading template KPI ID: ${selectedId}`);
+  assignmentTouched.value = false; // Reset khi load template
   try {
     await store.dispatch("kpis/fetchKpiDetail", selectedId);
     const kpiDetail = store.getters["kpis/currentKpi"];
     if (kpiDetail) {
       form.value.name = kpiDetail.name ? `${kpiDetail.name} (Copy)` : "";
-      form.value.calculation_type = kpiDetail.calculation_type || null;
+      form.value.formula_id = kpiDetail.formula_id;
       form.value.type = kpiDetail.type || null;
       form.value.unit = kpiDetail.unit || null;
       form.value.target = kpiDetail.target ?? null;
+      form.value.targetFormatted = kpiDetail.target !== null && kpiDetail.target !== undefined
+        ? String(kpiDetail.target).replace(/\B(?=(\d{3})+(?!\d))/g, ",")
+        : "";
       form.value.weight = kpiDetail.weight ?? null;
       form.value.frequency = kpiDetail.frequency || null;
       form.value.perspective_id = kpiDetail.perspective?.id || null;
@@ -332,9 +429,12 @@ const loadKpiTemplate = async (selectedId) => {
       form.value.end_date = kpiDetail.end_date
         ? dayjs(kpiDetail.end_date)
         : null;
-
       form.value.assigned_users = [];
-
+      // Reset assignment state khi load template
+      selectedRowKeys.value = [];
+      targetValues.value = {};
+      assignmentError.value = null;
+      assignmentTouched.value = false; // Reset khi load template
       notification.success({
         message: `Loaded data from KPI: ${kpiDetail.name}`,
       });
@@ -381,33 +481,69 @@ const validateWeight = async (_, value) => {
   return Promise.resolve();
 };
 
-const handleAssignedUsersChange = (userIds) => {
-  const prev = form.value.assigned_users || [];
-  form.value.assigned_users = userIds.map((id) => {
-    const found = prev.find((u) => u.id === id);
-    return found ? found : { id, target: "" };
-  });
-};
+// const handleAssignedUsersChange = (userIds) => {
+//   const prev = form.value.assigned_users || [];
+//   form.value.assigned_users = userIds.map((id) => {
+//     const found = prev.find((u) => u.id === id);
+//     return found ? found : { id, target: "" };
+//   });
+// };
 
-const handleAssignedUserTargetChange = (id, value) => {
-  const user = form.value.assigned_users.find((u) => u.id === id);
-  if (user) user.target = value;
+// --- Xử lý thay đổi target từng user ---
+const handleAssignedUserTargetChange = (key, value) => {
+  assignmentTouched.value = true; // Đánh dấu đã thao tác
+  if (value === null || value === '' || isNaN(value)) {
+    delete targetValues.value[key];
+  } else {
+    const numValue = parseFloat(value);
+    if (numValue < 0) {
+      targetValues.value[key] = null;
+      assignmentError.value = `Target for ${key.split(' - ')[1]} cannot be negative.`;
+      formRef.value?.validateFields(['assigned_users']);
+      return;
+    }
+    targetValues.value[key] = numValue;
+    assignmentError.value = null;
+  }
 };
 
 const validateAssignment = async () => {
-  if (!form.value.assigned_users || form.value.assigned_users.length === 0) {
+  if (!assignmentTouched.value) {
+    assignmentError.value = null;
+    return Promise.resolve();
+  }
+  if (!selectedRowKeys.value || selectedRowKeys.value.length === 0) {
     assignmentError.value =
-      "Assignment Required: Please select at least one user to assign this KPI.";
-    return Promise.reject("No user selected for assignment.");
+      'Assignment Required: Please select at least one user to assign this KPI.';
+    return Promise.reject('No user selected for assignment.');
   }
-  for (const u of form.value.assigned_users) {
-    if (!u.target || isNaN(Number(u.target))) {
-      assignmentError.value = `Please enter a valid target for user ID ${u.id}`;
-      return Promise.reject(assignmentError.value);
+  let missingTarget = false;
+  selectedRowKeys.value.forEach((key) => {
+    const targetValue = targetValues.value[key];
+    if (
+      targetValue === undefined ||
+      targetValue === null ||
+      isNaN(targetValue) ||
+      targetValue < 0
+    ) {
+      missingTarget = true;
     }
+  });
+  if (missingTarget) {
+    assignmentError.value =
+      'Please enter a valid Target (>= 0) for all selected users.';
+    return Promise.reject('Missing target for selected users.');
   }
-  assignmentError.value = null;
-  return Promise.resolve();
+  const total = totalAssignedTarget.value;
+  const overall = overallTargetValue.value;
+  const isTotalMismatch = Math.abs(total - overall) > 1e-9;
+  if (isTotalMismatch) {
+    assignmentError.value = `Total assigned target (${total.toFixed(2)}) does not match Overall Target (${overall.toFixed(2)}). Remaining: ${remainingTarget.value.toFixed(2)}`;
+    return Promise.reject('Assigned targets mismatch overall target.');
+  } else {
+    assignmentError.value = null;
+    return Promise.resolve();
+  }
 };
 
 const goBack = () => {
@@ -424,22 +560,17 @@ const formatToDateString = (dateValue) => {
 const handleChangeCreate = async () => {
   loading.value = true;
   assignmentError.value = null;
-
   try {
     await formRef.value?.validate();
-
     // Build assignments array for users
-    const userAssignments = (form.value.assigned_users || [])
-      .filter(
-        (u) =>
-          u.id &&
-          u.target !== undefined &&
-          u.target !== null &&
-          !isNaN(Number(u.target))
-      )
-      .map((u) => ({ id: u.id, target: Number(u.target) }));
-
-    // Section and department assignments (if any)
+    const userAssignments = selectedRowKeys.value
+      .filter((key) => key.startsWith('user - '))
+      .map((key) => {
+        const userId = parseInt(key.split(' - ')[1], 10);
+        const target = targetValues.value[key];
+        return { id: userId, target: Number(target) };
+      });
+    // Section and department assignments (nếu cần giữ)
     const sectionAssignments = [];
     if (form.value.section_id !== null && form.value.section_id !== undefined) {
       sectionAssignments.push({
@@ -457,7 +588,6 @@ const handleChangeCreate = async () => {
         target: form.value.target !== null ? Number(form.value.target) : null,
       });
     }
-
     // Chuẩn hóa assignments object
     let assignments = {
       from: creationScope,
@@ -466,13 +596,7 @@ const handleChangeCreate = async () => {
       to_sections: [],
     };
     let hasValidAssignment = false;
-    if (userAssignments.length === 1) {
-      assignments.to_employees = userAssignments.map((user) => ({
-        id: user.id,
-        target: user.target,
-      }));
-      hasValidAssignment = true;
-    } else if (userAssignments.length > 1) {
+    if (userAssignments.length > 0) {
       assignments.to_employees = userAssignments;
       hasValidAssignment = true;
     }
@@ -484,23 +608,20 @@ const handleChangeCreate = async () => {
       assignments.to_departments = departmentAssignments;
       hasValidAssignment = true;
     }
-
     if (!hasValidAssignment) {
       assignmentError.value =
-        "Assignment Required: Please select a user or section/department to assign this KPI.";
+        'Assignment Required: Please select a user or section/department to assign this KPI.';
       throw new Error(assignmentError.value);
     }
-
     const formattedStartDate = formatToDateString(form.value.start_date);
     const formattedEndDate = formatToDateString(form.value.end_date);
     const numericMainTarget =
       form.value.target !== null ? Number(form.value.target) : null;
     const numericMainWeight =
       form.value.weight !== null ? Number(form.value.weight) : null;
-
     const kpiData = {
       name: form.value.name,
-      calculation_type: form.value.calculation_type,
+      formula_id: form.value.formula_id,
       type: form.value.type,
       unit: form.value.unit,
       target: numericMainTarget,
@@ -514,28 +635,23 @@ const handleChangeCreate = async () => {
       department_id: form.value.department_id,
       assignments,
     };
-
-    console.log("Submitting KPI Data (Final Structure):", kpiData);
-
-    await store.dispatch("kpis/createKpi", kpiData);
-
+    await store.dispatch('kpis/createKpi', kpiData);
     resetForm(true);
-
     router.push({
-      name: "KpiListSection",
+      name: 'KpiListSection',
       params: { sectionId: form.value.section_id },
     });
   } catch (error) {
     if (error instanceof Error && error.message === assignmentError.value) {
-      console.log("Assignment validation failed:", assignmentError.value);
+      console.log('Assignment validation failed:', assignmentError.value);
     } else {
-      console.error("KPI creation failed:", error);
+      console.error('KPI creation failed:', error);
       const errorMessage =
         error?.response?.data?.message ||
         error?.message ||
-        "KPI creation failed.";
+        'KPI creation failed.';
       notification.error({
-        message: "KPI Creation Failed",
+        message: 'KPI Creation Failed',
         description: errorMessage,
         duration: 5,
       });
@@ -578,13 +694,37 @@ const onFinishFailed = (errorInfo) => {
   });
 };
 
-const validateEndDate = async (_, value) => {
-  if (
-    value &&
-    form.value.start_date &&
-    dayjs(value).isBefore(dayjs(form.value.start_date))
-  ) {
-    return Promise.reject("End Date must be after Start Date");
+const validateEndDate = async (_rule, value) => {
+  if (!value || !form.value.start_date) return Promise.resolve();
+  const start = dayjs(form.value.start_date);
+  const end = dayjs(value);
+  if (end.isBefore(start, 'day')) {
+    return Promise.reject(new Error($t('endDateMustBeAfterStartDate')));
+  }
+  const freq = form.value.frequency;
+  if (freq === 'daily') {
+    // Đã kiểm tra ở trên, không cần thêm
+    return Promise.resolve();
+  }
+  if (freq === 'weekly') {
+    if (end.diff(start, 'week') < 1) {
+      return Promise.reject(new Error($t('endDateAtLeastOneWeek')));
+    }
+  }
+  if (freq === 'monthly') {
+    if (end.diff(start, 'month') < 1) {
+      return Promise.reject(new Error($t('endDateAtLeastOneMonth')));
+    }
+  }
+  if (freq === 'quarterly') {
+    if (end.diff(start, 'month') < 3) {
+      return Promise.reject(new Error($t('endDateAtLeastOneQuarter')));
+    }
+  }
+  if (freq === 'yearly') {
+    if (end.diff(start, 'year') < 1) {
+      return Promise.reject(new Error($t('endDateAtLeastOneYear')));
+    }
   }
   return Promise.resolve();
 };
@@ -593,99 +733,93 @@ const formRules = reactive({
   section_id: [
     {
       required: true,
-      message: "Please select Section",
+      message: $t('pleaseSelectSection'),
     },
   ],
   perspective_id: [
     {
       required: true,
-      message: "Please select Perspective",
+      message: $t('pleaseSelectPerspective'),
     },
   ],
   name: [
     {
       required: true,
-      message: "Please enter KPI Name",
-      trigger: "blur",
+      message: $t('pleaseEnterKpiName'),
+      trigger: 'blur',
     },
   ],
-  calculation_type: [
+  formula_id: [
     {
       required: true,
-      message: "Please select Calculation Formula",
+      message: $t('pleaseSelectFormula'),
     },
   ],
   type: [
     {
       required: true,
-      message: "Please select KPI Type",
+      message: $t('pleaseSelectKpiType'),
     },
   ],
   unit: [
     {
       required: true,
-      message: "Please select Unit",
+      message: $t('pleaseSelectUnit'),
     },
   ],
   target: [
     {
       required: true,
-      message: "Please enter Target",
-      trigger: "blur",
+      message: $t('pleaseEnterTarget'),
+      trigger: 'blur',
     },
-
     {
       validator: async (_, value) => {
         const numValue = parseFloat(value);
-        if (value === null || value === "" || isNaN(numValue) || numValue < 0) {
-          return Promise.reject("Target must be a non-negative number");
+        if (value === null || value === '' || isNaN(numValue) || numValue < 0) {
+          return Promise.reject($t('targetMustBeNonNegative'));
         }
         return Promise.resolve();
       },
-      trigger: "blur",
+      trigger: 'blur',
     },
   ],
   weight: [
     {
       required: true,
-      message: "Please enter Weight",
-      trigger: "blur",
+      message: $t('pleaseEnterWeight'),
+      trigger: 'blur',
     },
     {
       validator: validateWeight,
-      trigger: "blur",
+      trigger: 'blur',
     },
   ],
   frequency: [
     {
       required: true,
-      message: "Please select Frequency",
+      message: $t('pleaseSelectFrequency'),
     },
   ],
   start_date: [
     {
       required: true,
-      message: "Please select Start Date",
+      message: $t('pleaseSelectStartDate'),
     },
   ],
   end_date: [
     {
       required: true,
-      message: "Please select End Date",
+      message: $t('pleaseSelectEndDate'),
     },
     {
       validator: validateEndDate,
-      trigger: "change",
+      trigger: 'change',
     },
   ],
 
   assigned_users: [
-    {
-      validator: validateAssignment,
-      required: computed(() => canAssignDirectlyToUser.value),
-      message: "Please select a user for assignment",
-      trigger: "change",
-    },
+    { validator: validateAssignment, trigger: ['finish'] },
   ],
 });
 
@@ -701,13 +835,24 @@ watch(
   { immediate: true }
 );
 
+watch(
+  () => form.value.frequency,
+  () => {
+    if (form.value.end_date && formRef.value) {
+      formRef.value.validateFields(["end_date"]);
+    }
+  }
+);
+
 onMounted(async () => {
   loadingInitialData.value = true;
   try {
     await Promise.all([
-      store.dispatch("perspectives/fetchPerspectives"),
-      store.dispatch("kpis/fetchAllKpisForSelect"),
       store.dispatch("departments/fetchDepartments"),
+      store.dispatch("perspectives/fetchPerspectives"),
+      store.dispatch("sections/fetchSections"),
+      store.dispatch("kpis/fetchAllKpisForSelect"),
+      store.dispatch("formula/fetchFormulas"), // fetch formulas from DB
     ]);
 
     if (form.value.department_id) {
@@ -763,6 +908,11 @@ watch(
       } finally {
         loadingInitialData.value = false;
       }
+      // Reset các user đã chọn và target khi đổi section
+      selectedRowKeys.value = [];
+      targetValues.value = {};
+      assignmentError.value = null;
+      assignmentTouched.value = false; // Reset khi đổi section
     }
   }
 );
@@ -787,9 +937,19 @@ watch(
       } finally {
         loadingInitialData.value = false;
       }
+      // Reset các user đã chọn và target khi đổi department
+      selectedRowKeys.value = [];
+      targetValues.value = {};
+      assignmentError.value = null;
+      assignmentTouched.value = false; // Reset khi đổi department
     }
   }
 );
+
+// --- Khi blur vào bảng user hoặc nhập target, set assignmentTouched ---
+const onAssignedUsersBlur = () => {
+  assignmentTouched.value = true;
+};
 </script>
 
 <style scoped>

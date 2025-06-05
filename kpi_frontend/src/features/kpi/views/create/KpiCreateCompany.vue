@@ -26,8 +26,8 @@
           </a-form-item>
         </a-col>
         <a-col :span="12">
-          <a-form-item class="textLabel" :label="$t('calculationFormula')" name="calculation_type">
-            <a-select v-model:value="form.calculation_type" :placeholder="$t('selectCalculationFormula')">
+          <a-form-item class="textLabel" :label="$t('calculationFormula')" name="formula_id">
+            <a-select v-model:value="form.formula_id" :placeholder="$t('selectCalculationFormula')">
               <a-select-option v-for="formula in formulaList" :key="formula.id" :value="formula.id">
                 {{ formula.name }}
               </a-select-option>
@@ -92,15 +92,16 @@
       </a-form-item>
 
       <a-row :gutter="12">
-        <a-col :span="6">
+        <a-col :span="12">
           <a-form-item class="textLabel" :label="$t('dateStart')" name="start_date">
             <a-date-picker v-model:value="form.start_date" style="width: 100%" value-format="YYYY-MM-DD" />
           </a-form-item>
         </a-col>
 
-        <a-col :span="6">
-          <a-form-item class="textLabel" :label="$t('dateEnd')" name="end_date"
-            :rules="[{ validator: validateEndDate }]">
+        <a-col :span="12">
+          <a-form-item class="textLabel" :label="$t('dateEnd')" name="end_date" :rules="[
+            { required: true, message: $t('pleaseSelectEndDate') },
+            { validator: validateEndDate }]">
             <a-date-picker v-model:value="form.end_date" style="width: 100%" value-format="YYYY-MM-DD" />
           </a-form-item>
         </a-col>
@@ -248,7 +249,7 @@ const { t: $t } = useI18n();
 
 const form = ref({
   name: "",
-  calculation_type: null,
+  formula_id: null,
   type: null,
   unit: null,
   target: null,
@@ -264,20 +265,7 @@ const form = ref({
   targets: {},
 });
 
-const formulaList = ref([
-  {
-    id: "percentage",
-    name: "Tỷ lệ hoàn thành (%)",
-  },
-  {
-    id: "average",
-    name: "Giá trị trung bình",
-  },
-  {
-    id: "sum",
-    name: "Tổng số",
-  },
-]);
+const formulaList = computed(() => store.getters["formula/getFormulas"] || []);
 
 const departments = computed(
   () => store.getters["departments/departmentList"] || []
@@ -559,7 +547,7 @@ const resetForm = (clearTemplateSelection = false) => {
   formRef.value?.resetFields();
   form.value = {
     name: "",
-    calculation_type: null,
+    formula_id: null,
     type: null,
     unit: null,
     target: null,
@@ -594,10 +582,13 @@ const loadKpiTemplate = async (selectedId) => {
     const kpiDetail = store.getters["kpis/currentKpi"];
     if (kpiDetail) {
       form.value.name = kpiDetail.name ? `${kpiDetail.name} (Copy)` : "";
-      form.value.calculation_type = kpiDetail.calculation_type || null;
+      form.value.formula_id = kpiDetail.formula_id;
       form.value.type = kpiDetail.type || null;
       form.value.unit = kpiDetail.unit || null;
       form.value.target = kpiDetail.target ?? null;
+      form.value.targetFormatted = kpiDetail.target !== null && kpiDetail.target !== undefined
+        ? String(kpiDetail.target).replace(/\B(?=(\d{3})+(?!\d))/g, ",")
+        : "";
       form.value.weight = kpiDetail.weight ?? null;
       form.value.frequency = kpiDetail.frequency || null;
       form.value.perspective_id = kpiDetail.perspective?.id || null;
@@ -828,7 +819,7 @@ const handleChangeCreate = async () => {
 
     const kpiData = {
       name: form.value.name,
-      calculation_type: form.value.calculation_type,
+      formula_id: form.value.formula_id,
       type: form.value.type,
       unit: form.value.unit,
       target: numericMainTarget,
@@ -907,76 +898,105 @@ const onFinishFailed = (errorInfo) => {
 };
 
 const validateEndDate = async (_rule, value) => {
-  if (
-    value &&
-    form.value.start_date &&
-    dayjs(value).isBefore(dayjs(form.value.start_date))
-  ) {
-    return Promise.reject("End Date must be after Start Date");
+  if (!value || !form.value.start_date) return Promise.resolve();
+  const start = dayjs(form.value.start_date);
+  const end = dayjs(value);
+  if (end.isBefore(start, 'day')) {
+    return Promise.reject(new Error($t('endDateMustBeAfterStartDate')));
+  }
+  const freq = form.value.frequency;
+  if (freq === 'daily') {
+    // Đã kiểm tra ở trên, không cần thêm
+    return Promise.resolve();
+  }
+  if (freq === 'weekly') {
+    if (end.diff(start, 'week') < 1) {
+      return Promise.reject(new Error($t('endDateAtLeastOneWeek')));
+    }
+  }
+  if (freq === 'monthly') {
+    if (end.diff(start, 'month') < 1) {
+      return Promise.reject(new Error($t('endDateAtLeastOneMonth')));
+    }
+  }
+  if (freq === 'quarterly') {
+    if (end.diff(start, 'month') < 3) {
+      return Promise.reject(new Error($t('endDateAtLeastOneQuarter')));
+    }
+  }
+  if (freq === 'yearly') {
+    if (end.diff(start, 'year') < 1) {
+      return Promise.reject(new Error($t('endDateAtLeastOneYear')));
+    }
   }
   return Promise.resolve();
 };
+
 const formRules = reactive({
   perspective_id: [
     {
       required: true,
-      message: "Please select Perspective",
+      message: $t('pleaseSelectPerspective'),
     },
   ],
   name: [
     {
       required: true,
-      message: "Please enter KPI Name",
-      trigger: "blur",
+      message: $t('pleaseEnterKpiName'),
+      trigger: 'blur',
     },
   ],
-  calculation_type: [
+  formula_id: [
     {
       required: true,
-      message: "Please select Calculation Formula",
+      message: $t('pleaseSelectFormula'),
     },
   ],
   type: [
     {
       required: true,
-      message: "Please select KPI Type",
+      message: $t('pleaseSelectKpiType'),
     },
   ],
   unit: [
     {
       required: true,
-      message: "Please select Unit",
+      message: $t('pleaseSelectUnit'),
     },
   ],
   target: [
     {
       required: true,
-      message: "Please enter Target",
-      trigger: "blur",
+      message: $t('pleaseEnterTarget'),
+      trigger: 'blur',
     },
   ],
   weight: [
     {
       required: true,
-      message: "Please enter Weight",
-      trigger: "blur",
+      message: $t('pleaseEnterWeight'),
+      trigger: 'blur',
     },
     {
       validator: validateWeight,
-      trigger: "blur",
+      trigger: 'blur',
     },
   ],
   frequency: [
     {
       required: true,
-      message: "Please select Frequency",
+      message: $t('pleaseSelectFrequency'),
+    },
+  ],
+  start_date: [
+    {
+      required: true,
+      message: $t('pleaseSelectStartDate'),
     },
   ],
   end_date: [
-    {
-      validator: validateEndDate,
-      trigger: "change",
-    },
+    { required: true, message: $t('pleaseSelectEndDate') },
+    { validator: validateEndDate, trigger: 'change' },
   ],
 });
 
@@ -1005,6 +1025,14 @@ watch(
     deep: true,
   }
 );
+watch(
+  () => form.value.frequency,
+  () => {
+    if (form.value.end_date && formRef.value) {
+      formRef.value.validateFields(["end_date"]);
+    }
+  }
+);
 
 onMounted(async () => {
   loadingUsers.value = true;
@@ -1014,6 +1042,7 @@ onMounted(async () => {
       store.dispatch("perspectives/fetchPerspectives"),
       store.dispatch("sections/fetchSections"),
       store.dispatch("kpis/fetchAllKpisForSelect"),
+      store.dispatch("formula/fetchFormulas"), // <-- fetch formulas from DB
       loadDepartmentTreeData(),
     ]);
     const templateKpiIdFromRoute = route.query.templateKpiId;

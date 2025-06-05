@@ -27,6 +27,7 @@ import { CreateKpiDto } from './dto/create_kpi_dto';
 import { KpiFilterDto } from './dto/filter-kpi.dto';
 import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { RBAC_ACTIONS, RBAC_RESOURCES } from '../common/rbac/rbac.constants';
+import { evaluate } from 'mathjs';
 
 interface AssignmentWithLatestValue extends KPIAssignment {
   latest_actual_value?: number | null;
@@ -125,6 +126,7 @@ export class KpisService {
       .leftJoinAndSelect('kpi.perspective', 'perspective')
       .leftJoinAndSelect('assignment.kpiValues', 'kpiValue')
       .leftJoinAndSelect('kpi.createdBy', 'createdBy')
+      .leftJoinAndSelect('kpi.formula', 'formula') // join formula entity
       .where('kpi.deleted_at IS NULL');
 
     query.andWhere('assignment.deleted_at IS NULL');
@@ -198,6 +200,7 @@ export class KpisService {
       .take(limit)
       .getManyAndCount();
 
+    // Refactored: Use mathjs to evaluate dynamic formula.expression
     const dataWithActualValue = data.map((kpi) => {
       const activeAssignments = kpi.assignments.filter(
         (assignment) =>
@@ -206,15 +209,37 @@ export class KpisService {
       const allValues = activeAssignments
         .flatMap((assignment) => assignment.kpiValues)
         .map((value) => Number(value.value) || 0);
-
-      const actual_value =
-        kpi.calculation_type === 'sum'
-          ? allValues.reduce((sum, val) => sum + val, 0)
-          : allValues.length > 0
+      const allTargets = activeAssignments.map(
+        (a) => Number(a.targetValue) || 0,
+      );
+      let actual_value = 0;
+      if (kpi.formula && kpi.formula.expression) {
+        try {
+          // Các biến truyền vào cho công thức
+          const scope = {
+            values: allValues,
+            targets: allTargets,
+            target: Number(kpi.target) || 0,
+            weight: Number(kpi.weight) || 0,
+          };
+          const result = evaluate(kpi.formula.expression, scope);
+          actual_value =
+            typeof result === 'number' && !isNaN(result)
+              ? parseFloat(result.toFixed(2))
+              : 0;
+        } catch (err) {
+          actual_value = 0;
+        }
+      } else {
+        // fallback legacy logic if no formula
+        actual_value =
+          allValues.length > 0
             ? allValues.reduce((sum, val) => sum + val, 0) / allValues.length
             : 0;
+      }
 
-      return { ...kpi, actual_value };
+      const validityStatus = getKpiStatus(kpi.start_date, kpi.end_date);
+      return { ...kpi, actual_value, validityStatus };
     });
 
     const pagination = {
@@ -369,9 +394,7 @@ export class KpisService {
         (assignment) =>
           assignment.deleted_at === null || assignment.deleted_at === undefined,
       );
-
       const employeeLatestApprovedValues = new Map<number, number>();
-
       activeAssignments.forEach((assignment) => {
         if (
           assignment.assigned_to_employee &&
@@ -394,16 +417,35 @@ export class KpisService {
           }
         }
       });
-
       const allValues = Array.from(employeeLatestApprovedValues.values());
-
-      const actual_value = this.aggregateValues(
-        kpi.calculation_type,
-        allValues,
-        [],
+      const allTargets = activeAssignments.map(
+        (a) => Number(a.targetValue) || 0,
       );
-
-      return { ...kpi, actual_value: actual_value ?? 0 };
+      let actual_value = 0;
+      if (kpi.formula && kpi.formula.expression) {
+        try {
+          const scope = {
+            values: allValues,
+            targets: allTargets,
+            target: Number(kpi.target) || 0,
+            weight: Number(kpi.weight) || 0,
+          };
+          const result = evaluate(kpi.formula.expression, scope);
+          actual_value =
+            typeof result === 'number' && !isNaN(result)
+              ? parseFloat(result.toFixed(2))
+              : 0;
+        } catch (err) {
+          actual_value = 0;
+        }
+      } else {
+        actual_value =
+          allValues.length > 0
+            ? allValues.reduce((sum, val) => sum + val, 0) / allValues.length
+            : 0;
+      }
+      const validityStatus = getKpiStatus(kpi.start_date, kpi.end_date);
+      return { ...kpi, actual_value: actual_value ?? 0, validityStatus };
     });
 
     const pagination = {
@@ -451,7 +493,17 @@ export class KpisService {
   }
 
   async getKpiComparisonData(userId: number): Promise<{ data: any[] }> {
-    const kpis = await this.getAllKpiAssignedToDepartments(userId);
+    // Fetch all KPIs assigned to departments for the user
+    // Use repository query to get all department KPIs with assignments and formula
+    const kpis = await this.kpisRepository.find({
+      where: {},
+      relations: [
+        'assignments',
+        'assignments.department',
+        'assignments.kpiValues',
+        'formula',
+      ],
+    });
     const result: any[] = [];
     for (const kpi of kpis) {
       const departmentAssignment = (kpi.assignments || []).find(
@@ -464,12 +516,18 @@ export class KpisService {
       const allValues = activeAssignments
         .flatMap((a) => a.kpiValues || [])
         .map((v) => Number(v.value) || 0);
-      const actual_value =
-        kpi.calculation_type === 'sum'
-          ? allValues.reduce((sum, val) => sum + val, 0)
-          : allValues.length > 0
-            ? allValues.reduce((sum, val) => sum + val, 0) / allValues.length
-            : 0;
+      const allTargets = activeAssignments.map(
+        (a) => Number(a.targetValue) || 0,
+      );
+      let actual_value = 0;
+      if (kpi.formula && kpi.formula.expression) {
+        actual_value = this.evaluateFormulaExpression(kpi.formula.expression, {
+          values: allValues,
+          targets: allTargets,
+          target: kpi.target,
+          weight: kpi.weight,
+        });
+      }
       result.push({
         department_name: departmentName,
         kpi_name: kpi.name,
@@ -602,6 +660,7 @@ export class KpisService {
       ? filterDto.sortBy!
       : 'created_at';
     const sortOrder = filterDto.sortOrder === 'ASC' ? 'ASC' : 'DESC';
+
     query.orderBy(`kpi.${sortBy}`, sortOrder);
 
     const [data, totalItems] = await query
@@ -614,7 +673,6 @@ export class KpisService {
       const employee_values_by_section: {
         [sectionId: number]: { values: number[]; targets: number[] };
       } = {};
-
       if (kpi.assignments) {
         kpi.assignments.forEach((assignment) => {
           if (
@@ -624,7 +682,6 @@ export class KpisService {
             assignment.deleted_at === null
           ) {
             const employeeActualSectionId = assignment.employee.sectionId;
-
             let latestApprovedValue: number | null = null;
             if (assignment.kpiValues && assignment.kpiValues.length > 0) {
               const approved = assignment.kpiValues
@@ -636,13 +693,11 @@ export class KpisService {
                     new Date(b.updated_at || b.created_at).getTime() -
                     new Date(a.updated_at || a.created_at).getTime(),
                 );
-
               if (approved.length > 0 && approved[0].value != null) {
                 const val = Number(approved[0].value);
                 latestApprovedValue = isNaN(val) ? null : val;
               }
             }
-
             if (latestApprovedValue !== null) {
               if (!employee_values_by_section[employeeActualSectionId]) {
                 employee_values_by_section[employeeActualSectionId] = {
@@ -653,11 +708,7 @@ export class KpisService {
               employee_values_by_section[employeeActualSectionId].values.push(
                 latestApprovedValue,
               );
-              if (
-                (kpi.calculation_type === 'percentage' ||
-                  kpi.calculation_type === 'percent') &&
-                assignment.targetValue != null
-              ) {
+              if (assignment.targetValue != null) {
                 employee_values_by_section[
                   employeeActualSectionId
                 ].targets.push(Number(assignment.targetValue));
@@ -666,18 +717,37 @@ export class KpisService {
           }
         });
       }
-
       for (const sectionIdStr in employee_values_by_section) {
         const currentSectionAggId = parseInt(sectionIdStr, 10);
         const { values, targets } =
           employee_values_by_section[currentSectionAggId];
-        actuals_by_section_id[currentSectionAggId] = this.aggregateValues(
-          kpi.calculation_type,
-          values,
-          targets,
-        );
+        let sectionActual = 0;
+        if (kpi.formula && kpi.formula.expression) {
+          try {
+            const scope = {
+              values,
+              targets,
+              target: Number(kpi.target) || 0,
+              weight: Number(kpi.weight) || 0,
+            };
+            const result = evaluate(kpi.formula.expression, scope);
+            sectionActual =
+              typeof result === 'number' && !isNaN(result)
+                ? parseFloat(result.toFixed(2))
+                : 0;
+          } catch (err) {
+            sectionActual = 0;
+          }
+        } else {
+          sectionActual =
+            values.length > 0
+              ? values.reduce((sum, val) => sum + val, 0) / values.length
+              : 0;
+        }
+        actuals_by_section_id[currentSectionAggId] = sectionActual;
       }
-      return { ...kpi, actuals_by_section_id };
+      const validityStatus = getKpiStatus(kpi.start_date, kpi.end_date);
+      return { ...kpi, actuals_by_section_id, validityStatus };
     });
 
     const pagination = {
@@ -758,6 +828,12 @@ export class KpisService {
       .take(limit)
       .getManyAndCount();
 
+    // Add validityStatus to each KPI
+    const dataWithValidityStatus = data.map((kpi) => {
+      const validityStatus = getKpiStatus(kpi.start_date, kpi.end_date);
+      return { ...kpi, validityStatus };
+    });
+
     const pagination = {
       currentPage: page,
       totalPages: Math.ceil(totalItems / limit),
@@ -765,49 +841,22 @@ export class KpisService {
       itemsPerPage: limit,
     };
 
-    return { data, pagination };
+    return { data: dataWithValidityStatus, pagination };
   }
 
-  private aggregateValues(
-    calcType: string,
-    values: number[],
-    targets: number[],
-  ): number | null {
-    if (values.length === 0) {
-      return null;
-    }
-    let result: number | null = null;
+  // Helper to evaluate formula expression using mathjs
+  private evaluateFormulaExpression(
+    expression: string,
+    variables: Record<string, any>,
+  ): number {
     try {
-      switch (calcType) {
-        case 'sum':
-          result = values.reduce((sum, val) => sum + val, 0);
-          break;
-        case 'average':
-          result = values.reduce((sum, val) => sum + val, 0) / values.length;
-          break;
-        case 'percent':
-        case 'percentage':
-          if (values.length > 0 && targets.length > 0) {
-            const sumActual = values.reduce((sum, val) => sum + val, 0);
-            const sumTarget = targets.reduce((sum, val) => sum + val, 0);
-            result = sumTarget > 0 ? (sumActual / sumTarget) * 100 : null;
-          } else if (
-            values.length > 0 &&
-            (targets.length === 0 || targets.every((t) => t === 0))
-          ) {
-            result = null;
-          } else {
-            result = null;
-          }
-          break;
-        default:
-          result = null;
+      const result = evaluate(expression, variables);
+      if (typeof result === 'number' && !isNaN(result)) {
+        return parseFloat(result.toFixed(2));
       }
-      return result === null || isNaN(result)
-        ? null
-        : parseFloat(result.toFixed(2));
-    } catch (error) {
-      return null;
+      return 0;
+    } catch (e) {
+      return 0;
     }
   }
 
@@ -843,6 +892,7 @@ export class KpisService {
       kpi.assignments = [];
     }
 
+    // Map employeeId -> { value, target }
     const employeeLatestApprovedValues = new Map<
       number,
       { value: number | null; target: number | null }
@@ -854,7 +904,6 @@ export class KpisService {
         if (employeeId === null || employeeId === undefined) {
           return;
         }
-
         let latestApprovedValue: number | null = null;
         if (assign.kpiValues && assign.kpiValues.length > 0) {
           const approved = assign.kpiValues
@@ -877,12 +926,13 @@ export class KpisService {
 
     const processedAssignments = kpi.assignments.map((assignment) => {
       let calculatedActualValue: number | null = null;
-
+      // For employee assignment: just get the latest approved value
       if (assignment.assigned_to_employee) {
         calculatedActualValue =
           employeeLatestApprovedValues.get(assignment.assigned_to_employee)
             ?.value ?? null;
       } else if (assignment.assigned_to_section) {
+        // For section: collect all employee values in this section
         const sectionId = assignment.assigned_to_section;
         const relevantValues: number[] = [];
         const relevantTargets: number[] = [];
@@ -896,22 +946,38 @@ export class KpisService {
             );
             if (empData && empData.value !== null) {
               relevantValues.push(empData.value);
-              if (
-                (kpi.calculation_type === 'percentage' ||
-                  kpi.calculation_type === 'percent') &&
-                empData.target !== null
-              ) {
+              if (empData.target !== null) {
                 relevantTargets.push(empData.target);
               }
             }
           }
         });
-        calculatedActualValue = this.aggregateValues(
-          kpi.calculation_type,
-          relevantValues,
-          relevantTargets,
-        );
+        // Use formula if present, else fallback to average
+        if (kpi.formula && kpi.formula.expression) {
+          try {
+            const scope = {
+              values: relevantValues,
+              targets: relevantTargets,
+              target: Number(assignment.targetValue) || 0,
+              weight: Number(assignment.weight) || 0,
+            };
+            const result = evaluate(kpi.formula.expression, scope);
+            calculatedActualValue =
+              typeof result === 'number' && !isNaN(result)
+                ? parseFloat(result.toFixed(2))
+                : 0;
+          } catch (err) {
+            calculatedActualValue = 0;
+          }
+        } else {
+          calculatedActualValue =
+            relevantValues.length > 0
+              ? relevantValues.reduce((sum, val) => sum + val, 0) /
+                relevantValues.length
+              : 0;
+        }
       } else if (assignment.assigned_to_department) {
+        // For department: collect all employee values in this department
         const departmentId = assignment.assigned_to_department;
         const relevantValues: number[] = [];
         const relevantTargets: number[] = [];
@@ -925,32 +991,42 @@ export class KpisService {
             );
             if (empData && empData.value !== null) {
               relevantValues.push(empData.value);
-              if (
-                (kpi.calculation_type === 'percentage' ||
-                  kpi.calculation_type === 'percent') &&
-                empData.target !== null
-              ) {
+              if (empData.target !== null) {
                 relevantTargets.push(empData.target);
               }
             }
           }
         });
-        calculatedActualValue = this.aggregateValues(
-          kpi.calculation_type,
-          relevantValues,
-          relevantTargets,
-        );
+        // Use formula if present, else fallback to average
+        if (kpi.formula && kpi.formula.expression) {
+          try {
+            const scope = {
+              values: relevantValues,
+              targets: relevantTargets,
+              target: Number(assignment.targetValue) || 0,
+              weight: Number(assignment.weight) || 0,
+            };
+            const result = evaluate(kpi.formula.expression, scope);
+            calculatedActualValue =
+              typeof result === 'number' && !isNaN(result)
+                ? parseFloat(result.toFixed(2))
+                : 0;
+          } catch (err) {
+            calculatedActualValue = 0;
+          }
+        } else {
+          calculatedActualValue =
+            relevantValues.length > 0
+              ? relevantValues.reduce((sum, val) => sum + val, 0) /
+                relevantValues.length
+              : 0;
+        }
       }
-
       return {
         ...assignment,
         latest_actual_value: calculatedActualValue,
-        startDate: assignment.startDate
-          ? new Date(assignment.startDate).toISOString().split('T')[0]
-          : null,
-        endDate: assignment.endDate
-          ? new Date(assignment.endDate).toISOString().split('T')[0]
-          : null,
+        startDate: assignment.startDate ? new Date(assignment.startDate) : null,
+        endDate: assignment.endDate ? new Date(assignment.endDate) : null,
       } as AssignmentWithLatestValue;
     });
 
@@ -1012,88 +1088,20 @@ export class KpisService {
     return processedAssignments;
   }
 
-  async toggleKpiStatus(id: number, userId: number): Promise<Kpi> {
-    await this.checkPermission(
-      userId,
-      RBAC_ACTIONS.TOGGLE_STATUS,
-      RBAC_RESOURCES.KPI,
-    );
-    return await this.dataSource.transaction(async (manager) => {
-      const kpiRepo = manager.getRepository(Kpi);
-      const assignmentRepo = manager.getRepository(KPIAssignment);
-      const employeeRepo = manager.getRepository(Employee);
-
-      const kpi = await kpiRepo.findOneBy({ id });
-      if (!kpi) {
-        throw new NotFoundException(`KPI with ID ${id} not found`);
-      }
-
-      // Lấy user và roles (ManyToMany)
-      const user = await employeeRepo.findOne({
-        where: { id: userId },
-        relations: ['roles', 'roles.permissions'],
-      });
-      if (!user) {
-        throw new UnauthorizedException('User not found.');
-      }
-      // Gộp tất cả permissions từ các role
-      const allPermissions = Array.isArray(user.roles)
-        ? user.roles.flatMap((role: any) =>
-            Array.isArray(role.permissions) ? role.permissions : [],
-          )
-        : [];
-      const hasTogglePermission = allPermissions.some(
-        (p: any) =>
-          p.action === RBAC_ACTIONS.TOGGLE_STATUS &&
-          p.resource === RBAC_RESOURCES.KPI,
-      );
-      if (!hasTogglePermission) {
-        throw new UnauthorizedException(
-          'User does not have permission to change KPI status.',
-        );
-      }
-
-      const newKpiStatus =
-        kpi.status === KpiDefinitionStatus.DRAFT
-          ? KpiDefinitionStatus.APPROVED
-          : KpiDefinitionStatus.DRAFT;
-
-      const newAssignmentStatus =
-        newKpiStatus === KpiDefinitionStatus.APPROVED
-          ? KpiDefinitionStatus.APPROVED
-          : KpiDefinitionStatus.DRAFT;
-
-      kpi.status = newKpiStatus;
-      kpi.updated_by = userId;
-      kpi.updated_at = new Date();
-      const updatedKpi = await kpiRepo.save(kpi);
-
-      await assignmentRepo.update(
-        { kpi_id: id },
-        { status: newAssignmentStatus, updated_at: new Date() },
-      );
-
-      return updatedKpi;
-    });
-  }
-
   async recalculateKpiActualValue(kpiId: number): Promise<void> {
     const kpi = await this.kpisRepository.findOne({
       where: { id: kpiId },
+      relations: ['formula'],
     });
-
     if (!kpi) {
       return;
     }
-
     const assignments = await this.kpiAssignmentRepository.find({
       where: { kpi_id: kpiId, deleted_at: IsNull() },
       relations: ['kpiValues'],
     });
-
     const latestApprovedValues: number[] = [];
     const correspondingTargets: number[] = [];
-
     if (assignments && assignments.length > 0) {
       for (const assignment of assignments) {
         const latestApprovedValueRecord = assignment.kpiValues
@@ -1102,70 +1110,25 @@ export class KpisService {
             (a, b) =>
               new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
           )[0];
-
         if (latestApprovedValueRecord) {
           latestApprovedValues.push(latestApprovedValueRecord.value);
-
-          if (
-            (kpi.calculation_type === 'percentage' ||
-              kpi.calculation_type === 'percent') &&
-            assignment.targetValue != null
-          ) {
+          if (assignment.targetValue != null) {
             correspondingTargets.push(assignment.targetValue);
           }
         }
       }
     }
-
     let newActualValue: number | null = null;
-
-    if (latestApprovedValues.length > 0) {
-      switch (kpi.calculation_type) {
-        case 'sum':
-          newActualValue = latestApprovedValues.reduce(
-            (sum, val) => sum + Number(val || 0),
-            0,
-          );
-          break;
-        case 'average':
-          const sumForAvg = latestApprovedValues.reduce(
-            (sum, val) => sum + Number(val || 0),
-            0,
-          );
-          newActualValue = sumForAvg / latestApprovedValues.length;
-          break;
-        case 'percentage':
-        case 'percent':
-          if (
-            latestApprovedValues.length > 0 &&
-            correspondingTargets.length > 0
-          ) {
-            const sumActual = latestApprovedValues.reduce(
-              (sum, val) => sum + Number(val || 0),
-              0,
-            );
-            const sumTarget = correspondingTargets.reduce(
-              (sum, val) => sum + Number(val || 0),
-              0,
-            );
-
-            if (sumTarget > 0) {
-              newActualValue = (sumActual / sumTarget) * 100;
-            } else {
-              newActualValue = null;
-            }
-          } else {
-            newActualValue = null;
-          }
-          break;
-        default:
-          newActualValue = null;
-      }
+    if (kpi.formula && kpi.formula.expression) {
+      newActualValue = this.evaluateFormulaExpression(kpi.formula.expression, {
+        values: latestApprovedValues,
+        targets: correspondingTargets,
+        target: kpi.target,
+        weight: kpi.weight,
+      });
     }
-
     const finalActualValue =
       newActualValue === null ? null : parseFloat(newActualValue.toFixed(2));
-
     if (kpi.actual_value !== finalActualValue) {
       kpi.actual_value = finalActualValue;
       kpi.updated_at = new Date();
@@ -1195,9 +1158,10 @@ export class KpisService {
         if (createdByType === 'company') {
         }
 
+        // Refactored: Use formula_id instead of calculation_type
         const kpiEntityToSave = manager.getRepository(Kpi).create({
           ...kpiData,
-          calculation_type: kpiData.calculationType || kpiData.calculation_type,
+          formula_id: kpiData.formula_id || kpiData.formulaId, // persist formula_id
           perspective_id: kpiData.perspectiveId || kpiData.perspective_id,
           start_date: kpiData.startDate || kpiData.start_date,
           end_date: kpiData.endDate || kpiData.end_date,
@@ -1333,7 +1297,17 @@ export class KpisService {
   async update(id: number, update: Partial<Kpi>, userId: number): Promise<Kpi> {
     // Lấy loại KPI để kiểm tra quyền động
     const kpi = await this.kpisRepository.findOne({ where: { id } });
-    await this.kpisRepository.update(id, update);
+    // Refactored: Remove calculation_type, support formula_id
+    const updatePayload: Partial<Kpi> = { ...update };
+    if ((update as any).formula_id || (update as any).formulaId) {
+      updatePayload.formula_id =
+        (update as any).formula_id || (update as any).formulaId;
+    }
+    // Remove calculation_type if present
+    if ('calculation_type' in updatePayload) {
+      delete (updatePayload as any).calculation_type;
+    }
+    await this.kpisRepository.update(id, updatePayload);
     return this.findOne(id, userId);
   }
 
@@ -1448,10 +1422,11 @@ export class KpisService {
       }
     });
 
-    const updatedAssignmentsList = await this.getKpiAssignments(
-      kpiId,
-      loggedInUser.id,
-    );
+    // Return updated assignments for this KPI
+    const updatedAssignmentsList = await this.kpiAssignmentRepository.find({
+      where: { kpi_id: kpiId },
+      relations: ['employee'],
+    });
     return updatedAssignmentsList;
   }
 
@@ -1599,4 +1574,113 @@ export class KpisService {
       }
     });
   }
+
+  /**
+   * Lấy tất cả KPI để kiểm tra hết hạn/sắp hết hạn (không phân trang, chỉ lấy các trường cần thiết)
+   */
+  async getAllKpisForExpiryCheck(): Promise<any[]> {
+    const kpis = await this.kpisRepository.find({
+      where: { deleted_at: IsNull() },
+      relations: ['assignments', 'createdBy'],
+    });
+    return kpis.map((kpi) => {
+      const validityStatus = getKpiStatus(kpi.start_date, kpi.end_date);
+      return { ...kpi, validityStatus };
+    });
+  }
+
+  /**
+   * Lấy tất cả userId liên quan đến 1 KPI: người tạo, tất cả người được assign, leader, manager (nếu có)
+   */
+  async getAllRelatedUserIdsForKpi(kpi: any): Promise<number[]> {
+    const userIds = new Set<number>();
+    if (kpi.createdBy && kpi.createdBy.id) userIds.add(kpi.createdBy.id);
+    if (Array.isArray(kpi.assignments)) {
+      for (const assignment of kpi.assignments) {
+        if (assignment.assigned_to_employee)
+          userIds.add(assignment.assigned_to_employee);
+        // Có thể mở rộng: lấy leader/manager của phòng ban/section nếu cần
+        if (assignment.department && assignment.department.managerId)
+          userIds.add(assignment.department.managerId);
+        if (assignment.section && assignment.section.leaderId)
+          userIds.add(assignment.section.leaderId);
+      }
+    }
+    return Array.from(userIds);
+  }
+
+  async toggleKpiStatus(id: number, userId: number): Promise<Kpi> {
+    await this.checkPermission(
+      userId,
+      RBAC_ACTIONS.TOGGLE_STATUS,
+      RBAC_RESOURCES.KPI,
+    );
+    return await this.dataSource.transaction(async (manager) => {
+      const kpiRepo = manager.getRepository(Kpi);
+      const assignmentRepo = manager.getRepository(KPIAssignment);
+      const employeeRepo = manager.getRepository(Employee);
+
+      const kpi = await kpiRepo.findOneBy({ id });
+      if (!kpi) {
+        throw new NotFoundException(`KPI with ID ${id} not found`);
+      }
+
+      // Lấy user và roles (ManyToMany)
+      const user = await employeeRepo.findOne({
+        where: { id: userId },
+        relations: ['roles', 'roles.permissions'],
+      });
+      if (!user) {
+        throw new UnauthorizedException('User not found.');
+      }
+      // Gộp tất cả permissions từ các role
+      const allPermissions = Array.isArray(user.roles)
+        ? user.roles.flatMap((role: any) =>
+            Array.isArray(role.permissions) ? role.permissions : [],
+          )
+        : [];
+      const hasTogglePermission = allPermissions.some(
+        (p: any) =>
+          p.action === RBAC_ACTIONS.TOGGLE_STATUS &&
+          p.resource === RBAC_RESOURCES.KPI,
+      );
+      if (!hasTogglePermission) {
+        throw new UnauthorizedException(
+          'User does not have permission to change KPI status.',
+        );
+      }
+
+      const newKpiStatus =
+        kpi.status === KpiDefinitionStatus.DRAFT
+          ? KpiDefinitionStatus.APPROVED
+          : KpiDefinitionStatus.DRAFT;
+
+      const newAssignmentStatus =
+        newKpiStatus === KpiDefinitionStatus.APPROVED
+          ? KpiDefinitionStatus.APPROVED
+          : KpiDefinitionStatus.DRAFT;
+
+      kpi.status = newKpiStatus;
+      kpi.updated_by = userId;
+      kpi.updated_at = new Date();
+      const updatedKpi = await kpiRepo.save(kpi);
+
+      await assignmentRepo.update(
+        { kpi_id: id },
+        { status: newAssignmentStatus, updated_at: new Date() },
+      );
+
+      return updatedKpi;
+    });
+  }
+}
+
+export function getKpiStatus(startDate: string | Date | null, endDate: string | Date | null): 'active' | 'expired' | 'expiring_soon' {
+  const now = new Date();
+  const start = startDate ? new Date(startDate) : null;
+  const end = endDate ? new Date(endDate) : null;
+  if (end && now > end) return 'expired';
+  if (end && now >= new Date(end.getTime() - 7 * 24 * 60 * 60 * 1000) && now <= end) return 'expiring_soon'; // 7 days before end
+  if (start && now < start) return 'expired'; // Not yet started, treat as expired/inactive
+  return 'active';
 }

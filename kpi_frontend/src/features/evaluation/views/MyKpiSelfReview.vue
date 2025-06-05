@@ -15,30 +15,26 @@
         box-shadow: 0 2px 8px #f0f1f2;
       " :loading="loading" :pagination="false">
       <template #bodyCell="{ column, record, index }">
+        <template v-if="column.key === 'targetValue'">
+          <span>{{ Number(record.targetValue).toLocaleString() }} {{ record.kpi.unit }}</span>
+        </template>
+        <template v-if="column.key === 'actualValue'">
+          <span>{{ Number(record.actualValue).toLocaleString() }} {{ record.kpi.unit }}</span>
+        </template>
         <template v-if="column.key === 'selfScore'">
-          <a-rate
-            :value="record.selfScore"
-            :count="5"
-            allow-half
+          <a-rate :value="record.selfScore" :count="5" allow-half
             :disabled="loading || !EDITABLE_STATUSES.includes(record.status)"
-            @change="(value) => updateKpi(index, 'selfScore', value)"
-            style="font-size: 20px"
-          />
+            @change="(value) => updateKpi(index, 'selfScore', value)" style="font-size: 20px" />
         </template>
         <template v-else-if="column.key === 'selfComment'">
-          <a-textarea
-            :value="record.selfComment"
-            rows="2"
-            :placeholder="$t('selfComment')"
+          <a-textarea :value="record.selfComment" rows="2" :placeholder="$t('selfComment')"
             :disabled="loading || !EDITABLE_STATUSES.includes(record.status)"
-            @input="(event) => updateKpi(index, 'selfComment', event.target.value)"
-            style="
+            @input="(event) => updateKpi(index, 'selfComment', event.target.value)" style="
               background: #f9fafb;
               border-radius: 6px;
               border: 1px solid #e5e7eb;
               font-size: 15px;
-            "
-          />
+            " />
         </template>
         <template v-else-if="column.key === 'status'">
           <a-tag :color="getStatusColor(record.status, record)"

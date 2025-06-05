@@ -111,7 +111,7 @@
                   {{ kpiDetailData.unit }}</span>
               </template>
               <template v-else-if="column.key === 'actual'">
-                {{ record.latest_actual_value?.toLocaleString() ?? "-" }}
+                {{ Number(record.latest_actual_value).toLocaleString() ?? "-" }}
                 {{ kpiDetailData.unit }}
               </template>
               <template v-else-if="column.key === 'status'">
@@ -168,7 +168,7 @@
                   {{ kpiDetailData.unit }}</span>
               </template>
               <template v-else-if="column.key === 'actual'">
-                {{ record.latest_actual_value?.toLocaleString() ?? "-" }}
+                {{ Number(record.latest_actual_value).toLocaleString() ?? "-" }}
                 {{ kpiDetailData.unit }}
               </template>
               <template v-else-if="column.key === 'status'">
@@ -228,7 +228,7 @@
                 {{ kpiDetailData?.unit || "" }}
               </template>
               <template v-else-if="column.key === 'actual'">
-                {{ record.latest_actual_value?.toLocaleString() ?? "" }}
+                {{ Number(record.latest_actual_value).toLocaleString() ?? "" }}
                 {{ kpiDetailData?.unit || "" }}
               </template>
               <template v-else-if="column.key === 'status'">
@@ -333,15 +333,14 @@
           <a-alert v-if="userAssignmentError" :message="userAssignmentError" type="error" show-icon closable
             @close="clearAssignmentError" style="margin-bottom: 16px" />
           <a-table :columns="userAssignmentColumns" :data-source="filteredUserAssignmentsInDepartmentSections"
-            row-key="id" size="small" bordered :pagination="false" :locale="{ emptyText: $t('noData') }"
-            style="min-height: 180px">
+            row-key="id" size="small" bordered :pagination="false" style="min-height: 180px">
             <template #bodyCell="{ column, record }">
               <template v-if="column.key === 'user'">
                 <a-avatar :src="record.employee?.avatar_url" size="small" style="margin-right: 8px">
                   {{ record.employee?.first_name?.charAt(0) }}
                 </a-avatar>
                 {{ record.employee?.first_name }}
-                {{ record.employee?.last_name }} ({{ record.employee?.username }})
+                {{ record.employee?.last_name }}
               </template>
               <template v-else-if="column.key === 'target'">
                 {{ Number(record.targetValue).toLocaleString() }}
@@ -406,7 +405,7 @@
                 {{ kpiDetailData?.unit || "" }}
               </template>
               <template v-else-if="column.key === 'actual'">
-                {{ record.latest_actual_value?.toLocaleString() ?? "" }}
+                {{ Number(record.latest_actual_value).toLocaleString() ?? "" }}
                 {{ kpiDetailData?.unit || "" }}
               </template>
               <template v-else-if="column.key === 'status'">
@@ -465,14 +464,12 @@
               </template>
               <template v-else-if="column.key === 'target'">
                 {{
-                record.target?.toLocaleString() ??
-                record.targetValue?.toLocaleString() ??
-                ""
+                Number(record.targetValue).toLocaleString()
                 }}
                 {{ kpiDetailData?.unit || "" }}
               </template>
               <template v-else-if="column.key === 'actual'">
-                {{ record.latest_actual_value?.toLocaleString() ?? "" }}
+                {{ Number(record.latest_actual_value).toLocaleString() ?? "0" }}  {{ kpiDetailData?.unit || "" }}
               </template>
               <template v-else-if="column.key === 'status'">
                 <a-tag :color="getAssignmentStatusColor(record.status)">
@@ -520,11 +517,14 @@
           style="margin-bottom: 10px">
           <template #bodyCell="{ column, record }">
             <template v-if="column.key === 'user'">
+              <a-avatar :src="record.avatar_url" size="small" style="margin-right: 8px">
+                {{ record.name?.charAt(0) }}
+              </a-avatar>
               {{ record.name }}
             </template>
             <template v-else-if="column.key === 'target'">
               <a-input v-model:value="assignUsersInSectionTargetDetails[record.userId]" :placeholder="$t('target')"
-                style="width: 100px" type="number" min="0" />
+              style="width: 100%" type="number" min="0" />
             </template>
           </template>
         </a-table>
@@ -555,7 +555,7 @@
     <a-modal :open="isAssignUserModalVisible" @update:open="isAssignUserModalVisible = $event"
       :title="assignUserModalTitle" @ok="handleSaveUserAssignment" @cancel="closeAssignUserModal"
       :confirm-loading="submittingUserAssignment" :width="800" :mask-closable="false" :keyboard="false"
-      :ok-text="$t('save')" :cancel-text="$t('cancel')" @afterClose="
+      :ok-text="$t('common.save')" :cancel-text="$t('common.cancel')" @afterClose="
         () => {
           modalFilterDepartmentId = null;
           modalFilterSectionId = null;
@@ -661,7 +661,7 @@
           : $t('addDepartmentSectionAssignment')
       " @ok="handleSaveDepartmentSectionAssignment" @cancel="closeManageDepartmentSectionAssignments"
       :confirm-loading="submittingDepartmentSectionAssignment" :width="600" :mask-closable="false" :keyboard="false"
-      :ok-text="$t('save')" :cancel-text="$t('cancel')">
+      :ok-text="$t('common.save')" :cancel-text="$t('common.cancel')">
       <a-spin :spinning="
           /* Cân nhắc thêm state loading riêng khi fetch sections cho modal nếu cần */
           /* loadingDepartmentSectionAssignments || */
@@ -838,21 +838,20 @@ const toggleStatusError = computed(
   () => store.getters["kpis/toggleKpiStatusError"]
 );
 
+// const effectiveRole = computed(() => {
+//   const userRoles = currentUser.value?.roles || [];
 
-const actualUser = computed(() => store.getters["auth/user"]);
-const effectiveRole = computed(() => {
-  const userRoles = currentUser.value?.roles || [];
+//   const rolePriority = ["admin", "manager", "department", "section"];
 
-  const rolePriority = ["admin", "manager", "department", "section"];
+//   for (const role of rolePriority) {
+//     if (userRoles.some((userRole) => userRole.name === role)) {
+//       return role;
+//     }
+//   }
 
-  for (const role of rolePriority) {
-    if (userRoles.some((userRole) => userRole.name === role)) {
-      return role;
-    }
-  }
+//   return null; // Không có role phù hợp
+// });
 
-  return null; // Không có role phù hợp
-});
 const loadingDepartmentSectionAssignments = computed(
   () => store.getters["kpis/isLoadingDepartmentSectionAssignments"] || false
 );
@@ -983,11 +982,34 @@ const submittingDepartmentSectionDeletion = ref(false);
 const departmentSectionAssignmentFormRef = ref(null);
 const isAssignUsersInDeptSectionsModalVisible = ref(false);
 const selectedSectionIdForUserAssign = ref(null);
-const assignableUsersInSection = ref([]);
 const selectedUserIdsInSection = ref([]);
 const assigningUsersInSection = ref(false);
 const userAssignErrorInSection = ref(null);
 const assignUsersInSectionTargetDetails = reactive({});
+
+const assignedUserIdsInSection = computed(() => {
+  if (!selectedSectionIdForUserAssign.value) return [];
+  return (kpiDetailData.value?.assignments || [])
+    .filter(
+      (a) =>
+        a.assigned_to_employee &&
+        a.employee?.sectionId === selectedSectionIdForUserAssign.value
+    )
+    .map((a) => a.employee.id);
+});
+
+const assignableUsersInSection = computed(() => {
+  // Giả sử bạn đã fetch danh sách users của section này vào biến users
+  const users = store.getters["employees/usersBySection"](
+    selectedSectionIdForUserAssign.value
+  ) || [];
+  return users
+    .filter((u) => !assignedUserIdsInSection.value.includes(u.id))
+    .map((u) => ({
+      value: u.id,
+      label: `${u.first_name || ""} ${u.last_name || ""} (${u.username})`,
+    }));
+});
 
 const sectionsInContextDepartment = computed(() => {
   if (!contextDepartmentId.value) return [];
@@ -1521,29 +1543,30 @@ const clearToggleError = () => {
 };
 
 const sectionIdForUserAssignmentsCard = computed(() => {
-
+  // Ưu tiên contextDepartmentId: lấy section đầu tiên thuộc phòng ban đó
   if (contextDepartmentId.value) {
     const sectionsInDepartment = allSections.value.filter(
       (section) =>
         section.department_id === contextDepartmentId.value ||
         section.department?.id === contextDepartmentId.value
     );
-
     if (sectionsInDepartment.length > 0) {
-      return sectionsInDepartment[0].id; // Trả về section đầu tiên thuộc department
+      return sectionsInDepartment[0].id;
     }
   }
 
-  if (effectiveRole.value === "section" && currentUser.value?.sectionId) {
-    return currentUser.value.sectionId;
-  }
-
+  // Ưu tiên contextSectionId nếu có
   if (contextSectionId.value) {
     return contextSectionId.value;
   }
 
+  // Nếu user hiện tại có sectionId thì lấy sectionId đó
+  if (currentUser.value?.sectionId) {
+    return currentUser.value.sectionId;
+  }
+
+  // Nếu KPI được tạo bởi section thì lấy luôn section đó
   if (
-    ["admin", "manager"].includes(effectiveRole.value) &&
     kpiDetailData.value?.created_by_type === "section" &&
     kpiDetailData.value?.created_by
   ) {
@@ -1644,21 +1667,16 @@ const shouldShowUserAssignmentsInDepartmentSectionsCard = computed(() => {
   );
   if (sections.length === 0) return false;
 
-  // Kiểm tra quyền quản lý phòng ban
-  const isAllowedRole = ["admin", "manager", "department"].includes(effectiveRole.value);
-  if (!isAllowedRole) return false;
+  // Kiểm tra quyền động RBAC
+  if (!hasPermission(RBAC_ACTIONS.ASSIGN, RBAC_RESOURCES.KPI_SECTION)) return false;
 
-  const canManageThis =
-    ["admin", "manager"].includes(effectiveRole.value) ||
-    (effectiveRole.value === "department" &&
-      actualUser.value?.department_id === deptId);
-
-  return canManageThis;
+  return true;
 });
 
 const shouldShowDirectUserAssignmentCard = computed(() => {
   const kpi = kpiDetailData.value;
 
+  // Chỉ áp dụng cho KPI tạo bởi phòng ban
   if (!kpi || kpi.created_by_type !== "department") {
     return false;
   }
@@ -1666,6 +1684,7 @@ const shouldShowDirectUserAssignmentCard = computed(() => {
   const departmentId = kpi.created_by;
   const allDepartmentsList = allDepartments.value;
 
+  // Phòng ban phải tồn tại
   const kpiDepartment = Array.isArray(allDepartmentsList)
     ? allDepartmentsList.find((d) => d.id == departmentId)
     : undefined;
@@ -1674,64 +1693,39 @@ const shouldShowDirectUserAssignmentCard = computed(() => {
     return false;
   }
 
+  // Phòng ban không được có section
   const deptHasSections = departmentHasSections.value;
-
-  if (deptHasSections === null) {
-    return false;
-  }
-  if (deptHasSections === true) {
+  if (deptHasSections === null || deptHasSections === true) {
     return false;
   }
 
-  const isAllowedRole = ["admin", "manager", "department", "section"].includes(
-    effectiveRole.value
-  );
-  if (!isAllowedRole) {
+  // Kiểm tra quyền động RBAC
+  if (!hasPermission(RBAC_ACTIONS.ASSIGN, RBAC_RESOURCES.KPI_SECTION)) {
     return false;
   }
 
-  const canManageThis =
-    ["admin", "manager"].includes(effectiveRole.value) ||
-    (effectiveRole.value === "department" &&
-      actualUser.value?.department_id === departmentId);
+  // Nếu cần kiểm tra thêm quyền quản lý phòng ban, có thể bổ sung điều kiện động ở đây (nếu có logic custom)
+  // Ví dụ: nếu muốn chỉ cho phép user thuộc phòng ban này thì:
+  // if (actualUser.value?.department_id !== departmentId) return false;
 
-  const finalResult =
-    isAllowedRole && canManageThis && deptHasSections === false;
-
-  return finalResult;
+  return true;
 });
 
 const shouldShowSectionUserAssignmentCard = computed(() => {
   const kpi = kpiDetailData.value;
-  const userRole = effectiveRole.value;
   const user = currentUser.value;
+  const sectionId = sectionIdForUserAssignmentsCard.value;
 
-  if (!kpi || !userRole || !user) return false;
+  // Phải có dữ liệu KPI, user, section context
+  if (!kpi || !user || !sectionId) return false;
 
-  if (userRole === "section") {
-    return !!user.sectionId;
-  }
+  // Kiểm tra quyền động RBAC: phải có quyền ASSIGN trên KPI_SECTION
+  if (!hasPermission(RBAC_ACTIONS.ASSIGN, RBAC_RESOURCES.KPI_SECTION)) return false;
 
-  if (userRole === "admin" || userRole === "manager") {
-    return !!sectionIdForUserAssignmentsCard.value;
-  }
+  // Nếu muốn chỉ cho phép user thuộc section đó thì kiểm tra thêm:
+  // if (user.sectionId && user.sectionId !== sectionId) return false;
 
-  if (userRole === "department") {
-    const relevantSectionId = sectionIdForUserAssignmentsCard.value;
-    if (relevantSectionId && user.departmentId) {
-      const sectionInfo = allSections.value.find(
-        (s) => s.id == relevantSectionId
-      );
-      if (sectionInfo) {
-        const sectionDeptId =
-          sectionInfo.department_id || sectionInfo.department?.id;
-        return sectionDeptId == user.departmentId;
-      }
-    }
-    return false;
-  }
-
-  return false;
+  return true;
 });
 
 const assignableUserOptions = computed(() => {
@@ -1854,7 +1848,7 @@ const departmentSectionAssignmentColumns = computed(() => [
     width: "15%",
     align: "center",
   },
-  { title: $t("actions"), key: "actions", align: "center", width: "100px" },
+  { title: $t("common.actions"), key: "actions", align: "center", width: "100px" },
 ]);
 
 const userAssignmentColumns = computed(() => [
@@ -1886,7 +1880,7 @@ const userAssignmentColumns = computed(() => [
     width: "20%",
   },
   {
-    title: $t("actions"),
+    title: $t("common.actions"),
     key: "actions",
     align: "center",
     width: "150px",

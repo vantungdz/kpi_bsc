@@ -212,7 +212,6 @@ import { reactive, computed, onMounted, ref, watch, h } from "vue";
 import { useStore } from "vuex";
 import { useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
-
 import {
   Button as AButton,
   Input as AInput,
@@ -309,6 +308,12 @@ const groupedKpis = computed(() => {
 });
 
 const isToggling = computed(() => store.getters["kpis/isTogglingKpiStatus"]);
+
+const validityStatusColor = {
+  active: 'green',
+  expiring_soon: 'orange',
+  expired: 'red',
+};
 
 const columns = computed(() => [
   {
@@ -442,7 +447,21 @@ const columns = computed(() => [
     customRender: ({ text }) => $t(`status_chart.${text}`) || text,
   },
   {
-    title: $t("action"),
+    title: $t('validityStatus.name'),
+    dataIndex: 'validityStatus',
+    key: 'validityStatus',
+    width: '11%',
+    align: 'center',
+    customRender: ({ text }) => {
+      return h(
+        ATag,
+        { color: validityStatusColor[text] || 'default' },
+        () => $t(`validityStatus.${text}`) || text
+      );
+    },
+  },
+  {
+    title: $t("common.actions"),
     dataIndex: "action",
     key: "action",
     width: "300px",

@@ -145,6 +145,11 @@
                     </div>
                   </div>
                 </template>
+                <template v-else-if="column.key === 'validityStatus'">
+                  <a-tag :color="validityStatusColor[record.validityStatus] || 'default'">
+                    {{ $t('validityStatus.' + record.validityStatus) || record.validityStatus }}
+                  </a-tag>
+                </template>
                 <template v-else-if="column.key === 'actions'">
                   <a-space>
                     <template
@@ -383,7 +388,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, reactive, nextTick } from "vue";
+import { ref, computed, onMounted, reactive, nextTick,h } from "vue";
 import { useStore } from "vuex";
 import { useRouter } from "vue-router";
 import {
@@ -463,6 +468,12 @@ const submittingUpdate = computed(
   () => store.getters["kpiValues/isSubmittingUpdate"]
 );
 
+const validityStatusColor = {
+  active: 'green',
+  expiring_soon: 'orange',
+  expired: 'red',
+};
+
 const groupedPersonalKpis = computed(() => {
   const grouped = {};
   if (!myAssignments.value || myAssignments.value.length === 0) return grouped;
@@ -525,7 +536,21 @@ const myPersonalKpiColumns = computed(() => [
     customRender: ({ text }) => $t(`status_chart.${text}`) || text,
   },
   {
-    title: $t("actions"),
+    title: $t('validityStatus.name'),
+    dataIndex: 'validityStatus',
+    key: 'validityStatus',
+    width: '11%',
+    align: 'center',
+    customRender: ({ text }) => {
+      return h(
+        ATag,
+        { color: validityStatusColor[text] || 'default' },
+        () => $t(`validityStatus.${text}`) || text
+      );
+    },
+  },
+  {
+    title: $t("common.actions"),
     key: "actions",
     align: "center",
     width: "15%",

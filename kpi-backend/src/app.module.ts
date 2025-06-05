@@ -20,6 +20,8 @@ import { Role } from './entities/role.entity';
 import { Permission } from './entities/permission.entity';
 import { ReviewCycleModule } from './review-cycle/review-cycle.module';
 import { KpiReviewModule } from './evaluation/kpi-review.module';
+import { ScheduleModule } from '@nestjs/schedule';
+import { KpiFormulaModule } from './kpi-formula/kpi-formula.module';
 
 @Module({
   imports: [
@@ -27,6 +29,7 @@ import { KpiReviewModule } from './evaluation/kpi-review.module';
       isGlobal: true,
     }),
     EventEmitterModule.forRoot(),
+    ScheduleModule.forRoot(), // Thêm dòng này để bật scheduler
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService): TypeOrmModuleOptions => {
@@ -61,6 +64,7 @@ import { KpiReviewModule } from './evaluation/kpi-review.module';
     ReviewCycleModule,
     KpiReviewModule,
     RolesModule,
+    KpiFormulaModule,
   ],
 })
 export class AppModule {}

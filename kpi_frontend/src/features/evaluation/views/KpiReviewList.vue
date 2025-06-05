@@ -30,19 +30,9 @@
       </a-table>
     </div>
     <a-empty v-if="!normalizedReviews.length && !loading" :description="$t('noDataMatch')" />
-    <ReviewFormModal 
-      v-if="showReviewForm" 
-      :review="selectedReview" 
-      :visible="showReviewForm" 
-      @close="closeReviewForm" 
-      @saved="onReviewSaved" 
-      @show-history="onShowHistoryFromModal" 
-      modal-class="modern-modal" />
-    <ReviewHistoryModal 
-      v-if="showHistory" 
-      :review="selectedReview" 
-      :visible="showHistory" 
-      @close="closeHistory" 
+    <ReviewFormModal v-if="showReviewForm" :review="selectedReview" :visible="showReviewForm" @close="closeReviewForm"
+      @saved="onReviewSaved" @show-history="onShowHistoryFromModal" modal-class="modern-modal" />
+    <ReviewHistoryModal v-if="showHistory" :review="selectedReview" :visible="showHistory" @close="closeHistory"
       class="modern-modal" />
   </div>
 </template>

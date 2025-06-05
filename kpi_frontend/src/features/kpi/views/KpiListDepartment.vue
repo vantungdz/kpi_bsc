@@ -147,6 +147,17 @@
                       colors: ['#008FFB', '#B9E5FF'],
                       dataLabels: {
                         enabled: true,
+                        formatter: function(val, opts) {
+                          // Only show percent if actual > 0 and target > 0
+                          const actual = parseFloat(opts.w.config.series[0]);
+                          const target = actual + parseFloat(opts.w.config.series[1]);
+                          if (!target || isNaN(target)) return '--';
+                          if (!actual || isNaN(actual)) return '0%';
+                          let percent = Math.round((actual / target) * 100);
+                          if (percent > 100) percent = 100;
+                          if (percent < 0) percent = 0;
+                          return percent + '%';
+                        },
                         style: {
                           fontSize: '12px',
                           colors: ['black'],
@@ -155,11 +166,8 @@
                       legend: { show: false },
                     }"
                     :series="[
-                      parseFloat(record.actual) || 0,
-                      Math.max(
-                        parseFloat(record.target) - parseFloat(record.actual),
-                        0
-                      ),
+                      (parseFloat(record.actual) && parseFloat(record.actual) > 0) ? parseFloat(record.actual) : 0,
+                      (parseFloat(record.target) && parseFloat(record.target) > 0) ? Math.max(parseFloat(record.target) - parseFloat(record.actual), 0) : 0,
                     ]"
                   />
                 </template>
@@ -193,6 +201,12 @@
                     :color="getStatusColor(record.status)"
                   >
                     {{ $t("status_chart." + record.status) || record.status }}
+                  </a-tag>
+                </template>
+
+                <template v-else-if="column.dataIndex === 'validityStatus'">
+                  <a-tag :color="validityStatusColor[record.validityStatus] || 'default'">
+                    {{ $t('validityStatus.' + record.validityStatus) || record.validityStatus }}
                   </a-tag>
                 </template>
 
@@ -256,10 +270,26 @@
   </div>
 </template>
 <script setup>
-import { reactive, computed, onMounted, ref, watch } from "vue";
+import { reactive, computed, onMounted, ref, watch, h } from "vue";
 import { useStore } from "vuex";
 import { useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
+import {
+  Button as AButton,
+  Input as AInput,
+  Select as ASelect,
+  SelectOption as ASelectOption,
+  DatePicker as ADatePicker,
+  Row as ARow,
+  Col as ACol,
+  FormItem as AFormItem,
+  Alert as AAlert,
+  Spin as ASpin,
+  Collapse as ACollapse,
+  CollapsePanel as ACollapsePanel,
+  Table as ATable,
+  Tag as ATag,
+} from "ant-design-vue";
 import {
   PlusOutlined,
   ScheduleOutlined,
@@ -321,6 +351,23 @@ const localFilters = reactive({
   endDate: "",
 });
 
+const validityStatusColor = {
+  active: 'green',
+  expiring_soon: 'orange',
+  expired: 'red',
+};
+
+const renderProgress = (record) => {
+  const actual = parseFloat(record.actual);
+  const target = parseFloat(record.target);
+  if (!target || isNaN(target)) return '--';
+  if (!actual || isNaN(actual)) return '0%';
+  let percent = Math.round((actual / target) * 100);
+  if (percent > 100) percent = 100;
+  if (percent < 0) percent = 0;
+  return `${percent}%`;
+};
+
 const columns = computed(() => [
   {
     title: $t("kpiName"),
@@ -333,6 +380,7 @@ const columns = computed(() => [
     dataIndex: "chart",
     key: "chart",
     width: "10%",
+    customRender: ({ record }) => renderProgress(record),
   },
   {
     title: $t("startDate"),
@@ -346,7 +394,7 @@ const columns = computed(() => [
     title: $t("target"),
     dataIndex: "target",
     key: "target",
-    width: "11%",
+    width: "10%",
   },
   {
     title: $t("actual"),
@@ -363,10 +411,24 @@ const columns = computed(() => [
     customRender: ({ text }) => $t(`status_chart.${text}`) || text,
   },
   {
-    title: $t("action"),
+    title: $t('validityStatus.name'),
+    dataIndex: 'validityStatus',
+    key: 'validityStatus',
+    width: '8%',
+    align: 'center',
+    customRender: ({ text }) => {
+      return h(
+        ATag,
+        { color: validityStatusColor[text] || 'default' },
+        () => $t(`validityStatus.${text}`) || text
+      );
+    },
+  },
+  {
+    title: $t("common.actions"),
     dataIndex: "action",
     key: "action",
-    width: "13%",
+    width: "15%",
     rowClassName: "action-column-cell",
   },
 ]);
@@ -564,6 +626,7 @@ const departmentGroups = computed(() => {
         actual: actualValue.toString(),
         unit: kpiDetails.kpiUnit,
         status: assignment.status || "Unknown",
+        validityStatus: kpi.validityStatus || "active", // <--- Add this line
       };
 
       groupedData[assignmentDepartmentId].data[perspectiveKey].push(rowData);

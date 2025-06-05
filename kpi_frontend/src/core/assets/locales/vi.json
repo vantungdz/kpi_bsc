@@ -96,6 +96,7 @@
   "employeeFeedbackDate": "Ngày Phản hồi của Nhân viên",
   "employeeFeedbackContent": "Nội dung Phản hồi của Nhân viên",
   "awaitingEmployeeFeedback": "Đang chờ nhân viên phản hồi.",
+  "managerReviewed": "Quản lý đã đánh giá",
   "employeeFeedbackPendingStatus": "Chờ phản hồi nhân viên",
   "evaluation": "Đánh giá",
   "companyKpiList": "Danh sách KPI công ty",
@@ -224,6 +225,12 @@
   "selectKpiTemplate": "Chọn một KPI để sử dụng làm mẫu...",
   "perspective": "Tiêu chí BSC",
   "pleaseSelectPerspective": "Vui lòng chọn tiêu chí ",
+  "pleaseSelectCalculationFormula": "Vui lòng chọn công thức tính toán",
+  "pleaseSelectKpiType": "Vui lòng chọn loại KPI",
+  "pleaseSelectUnit": "Vui lòng chọn đơn vị",
+  "targetMustBeNonNegative": "Mục tiêu phải là số không âm.",
+  "pleaseSelectStartDate": "Vui lòng chọn ngày bắt đầu",
+  "pleaseSelectEndDate": "Vui lòng chọn ngày kết thúc",
   "kpiName": "Tên KPI",
   "pleaseEnterKpiName": "Vui lòng nhập tên KPI",
   "calculationFormula": "Công thức Tính toán",
@@ -452,6 +459,34 @@
     "COMPLETED": "Hoàn thành",
     "undefined": "Chưa đánh giá"
   },
+  "endDateMustBeAfterStartDate": "Ngày kết thúc phải sau ngày bắt đầu.",
+  "endDateAtLeastOneWeek": "Ngày kết thúc phải ít nhất một tuần sau ngày bắt đầu.",
+  "endDateAtLeastOneMonth": "Ngày kết thúc phải ít nhất một tháng sau ngày bắt đầu.",
+  "endDateAtLeastOneQuarter": "Ngày kết thúc phải ít nhất một quý (3 tháng) sau ngày bắt đầu.",
+  "endDateAtLeastOneYear": "Ngày kết thúc phải ít nhất một năm sau ngày bắt đầu.",
+  "manageDepartmentSectionAssignments": "Quản lý Phân công Phòng ban/Bộ phận",
+  "assignedUnit": "Đơn vị được Giao",
+  "targetValue": "Giá trị Mục tiêu",
+  "latestActual": "Giá trị Thực tế Mới nhất",
+  "status": "Trạng thái",
+  "addAssignment": "Thêm Phân công",
+  "addEditUserAssignment": "Thêm/Sửa Phân công Người dùng",
+  "manageDirectUserAssignments": "Quản lý Phân công Người dùng Trực tiếp",
+  "addDepartmentSectionAssignment": "Thêm Phân công Phòng ban/Bộ phận",
+  "assignTo": "Gán cho",
+  "user": "Người dùng",
+  "addDepartmentAssignment": "Thêm Phân công Phòng ban",
+  "addSectionAssignment": "Thêm Phân công Bộ phận",
+  "addUserAssignment": "Thêm Phân công Người dùng",
+  "assignUsersInDepartmentSections": "Gán Người dùng trong Phòng ban/Bộ phận",
+  "filterByDepartment": "Lọc theo Phòng ban",
+  "filterBySection": "Lọc theo Bộ phận",
+  "selectDepartmentOrSectionToLoadUsers": "Chọn Phòng ban hoặc Bộ phận để tải danh sách người dùng.",
+  "selectUsers": "Chọn Người dùng",
+  "setTargetAndWeight": "Đặt Mục tiêu và Trọng số",
+  "assignKpiToUsers": "Gán KPI cho Người dùng",
+  "manageUserAssignments": "Quản lý Phân công Người dùng",
+  "assignKpiToUsersInSection": "Gán KPI cho Người dùng trong Bộ phận",
   "departmentAssignments": "Phân công Phòng ban",
   "sectionAssignments": "Phân công Bộ phận",
   "directUserAssignments": "Phân công Người dùng Trực tiếp",
@@ -627,6 +662,7 @@
     "createError": "Tạo chu kỳ thất bại."
   },
   "common": {
+    "add": "Thêm",
     "save": "Lưu",
     "edit": "Sửa",
     "delete": "Xoá",
@@ -699,7 +735,7 @@
     "toggle-status_kpi": "Bật/tắt trạng thái KPI, cho phép người dùng chuyển đổi trạng thái của KPI giữa 'Đang hoạt động' và 'Không hoạt động'.",
     "copy-template_kpi": "Sao chép KPI làm mẫu, cho phép người dùng sao chép các KPI đã được tạo để sử dụng làm mẫu cho các KPI mới."
   },
-  "employeePerformanceHistory" : {
+  "employeePerformanceHistory": {
     "title": "Lịch sử hiệu suất nhân viên",
     "employee": "Nhân viên",
     "fromYear": "Từ năm",
@@ -725,7 +761,7 @@
     "report": "Báo cáo",
     "admin": "Quản trị"
   },
-  "statusReview":{
+  "statusReview": {
     "self_reviewed": "Đã tự đánh giá",
     "section_reviewed": "Đã đánh giá cấp bộ phận",
     "department_reviewed": "Đã đánh giá cấp phòng",
@@ -757,5 +793,62 @@
     "errorCreate": "Lỗi khi tạo tiêu chí",
     "errorUpdate": "Lỗi khi cập nhật tiêu chí",
     "errorDelete": "Lỗi khi xóa tiêu chí"
+  },
+  "validityStatus": {
+    "name": "Trạng thái Hiệu lực",
+    "active": "Còn hiệu lực",
+    "expired": "Đã hết hạn",
+    "expiring_soon": "Sắp hết hạn"
+  },
+  "formulaManagement": "Quản lý Công thức Tính toán KPI",
+  "formula": {
+    "title": "Quản lý công thức tính toán KPI",
+    "name": "Tên công thức",
+    "namePlaceholder": "Nhập tên công thức",
+    "nameRequired": "Tên công thức bắt buộc",
+    "code": "Mã công thức",
+    "codePlaceholder": "Nhập mã duy nhất",
+    "codeRequired": "Mã công thức bắt buộc",
+    "expression": "Biểu thức",
+    "expressionPlaceholder": "VD: (sum(values)/sum(targets))*100",
+    "expressionRequired": "Biểu thức bắt buộc",
+    "description": "Mô tả",
+    "descriptionPlaceholder": "Mô tả công thức (không bắt buộc)",
+    "listTitle": "Danh sách công thức",
+    "deleteConfirm": "Bạn chắc chắn muốn xóa công thức này?",
+    "empty": "Chưa có công thức nào",
+    "tooltipTitle": "Quy ước biểu thức:",
+    "tooltip": {
+      "values": "<b>values</b>: danh sách giá trị thực tế ...",
+      "targets": "<b>targets</b>: danh sách giá trị mục tiêu",
+      "weight": "<b>weight</b>: trọng số của KPI (0-100)",
+      "sum": "<b>sum(arr)</b>: tổng các phần tử",
+      "average": "<b>average(arr)</b>: trung bình cộng",
+      "minmax": "<b>min(arr)</b>, <b>max(arr)</b>: giá trị nhỏ nhất/lớn nhất",
+      "exampleLabel": "Ví dụ:",
+      "example": "(sum(values)/sum(targets))*100"
+    }
+  },
+  "page404": {
+    "title": "404",
+    "company": "IVC - KPI Management System",
+    "bscFinance": "Tài chính",
+    "bscCustomer": "Khách hàng",
+    "bscInternal": "Nội bộ",
+    "bscLearning": "Học hỏi & Phát triển",
+    "subtitle": "Rất tiếc, trang bạn truy cập không tồn tại trong hệ thống quản lý KPI của IVC.",
+    "backHome": "Quay về trang chủ"
+  },
+  "page500":{
+    "title": "500",
+    "company": "IVC - KPI Management System",
+    "message": "Đã xảy ra lỗi hệ thống. Vui lòng thử lại sau.",
+    "backHome": "Quay về trang chủ"
+  },
+  "page403": {
+    "title": "403",
+    "company": "IVC - KPI Management System",
+    "message": "Bạn không có quyền truy cập trang này.",
+    "backHome": "Quay về trang chủ"
   }
 }

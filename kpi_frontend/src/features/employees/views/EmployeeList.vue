@@ -296,6 +296,68 @@
         />
       </div>
     </a-modal>
+    <a-drawer
+      :open="isDetailDrawerVisible"
+      :title="$t('employeeDetail')"
+      @close="closeDetailDrawer"
+      width="420px"
+      placement="right"
+      destroyOnClose
+      class="employee-detail-drawer"
+    >
+      <div style="display: flex; flex-direction: column; align-items: center; margin-bottom: 18px;">
+        <a-avatar
+          :size="96"
+          :src="detailEmployee?.avatarUrl || undefined"
+          style="margin-bottom: 12px; background: #e3e7ef; font-size: 2.5rem;"
+        >
+          <template v-if="!detailEmployee?.avatarUrl">
+            <user-outlined />
+          </template>
+        </a-avatar>
+        <div class="drawer-title" style="margin-bottom: 2px;">
+          {{ detailEmployee?.first_name || '' }} {{ detailEmployee?.last_name || '' }}
+        </div>
+        <div class="drawer-sub">
+          {{ detailEmployee?.username || $t('noData') }}
+        </div>
+      </div>
+      <a-descriptions
+        v-if="detailEmployee"
+        bordered
+        :column="1"
+        size="middle"
+        :label-style="{ fontWeight: 'bold', minWidth: '120px' }"
+        :content-style="{ minWidth: '180px' }"
+      >
+        <a-descriptions-item :label="$t('email')">
+          <mail-outlined style="margin-right: 4px" />{{ detailEmployee.email || $t('noData') }}
+        </a-descriptions-item>
+        <a-descriptions-item :label="$t('role')">
+          <safety-certificate-outlined style="margin-right: 4px" />
+          <template v-if="Array.isArray(detailEmployee?.roles) && detailEmployee.roles.length">
+            <a-tag
+              v-for="role in detailEmployee.roles"
+              :key="role.id || role.name || role"
+              :color="roleColor(role)"
+              style="margin-right: 4px; margin-bottom: 2px"
+            >
+              {{ typeof role === 'string' ? role : role?.name || $t('noData') }}
+            </a-tag>
+          </template>
+          <span v-else style="color: #aaa">{{ $t('noRole') }}</span>
+        </a-descriptions-item>
+        <a-descriptions-item :label="$t('departmentLabel')">
+          <apartment-outlined style="margin-right: 4px" />{{ detailEmployee.department?.name || $t('noData') }}
+        </a-descriptions-item>
+        <a-descriptions-item :label="$t('section')">
+          <cluster-outlined style="margin-right: 4px" />{{ detailEmployee.section?.name || $t('noData') }}
+        </a-descriptions-item>
+        <a-descriptions-item :label="$t('createdAt')">
+          <calendar-outlined style="margin-right: 4px" />{{ formatDate(detailEmployee.created_at) }}
+        </a-descriptions-item>
+      </a-descriptions>
+    </a-drawer>
   </div>
 </template>
 
@@ -335,6 +397,7 @@ import {
   CalendarOutlined,
 } from "@ant-design/icons-vue";
 import { RBAC_ACTIONS, RBAC_RESOURCES } from "@/core/constants/rbac.constants";
+import dayjs from 'dayjs';
 
 const { t: $t } = useI18n();
 const store = useStore();
@@ -392,6 +455,7 @@ const filterSection = ref();
 const isUploadModalVisible = ref(false);
 const isAddEditModalVisible = ref(false);
 const isDetailModalVisible = ref(false);
+const isDetailDrawerVisible = ref(false);
 const isResetPasswordModalVisible = ref(false);
 const fileList = ref([]);
 const uploading = ref(false);
@@ -727,10 +791,10 @@ const viewDetail = async (employee) => {
     "employees/fetchUserById",
     employee.id
   );
-  isDetailModalVisible.value = true;
+  isDetailDrawerVisible.value = true;
 };
-const closeDetailModal = () => {
-  isDetailModalVisible.value = false;
+const closeDetailDrawer = () => {
+  isDetailDrawerVisible.value = false;
   detailEmployee.value = null;
 };
 const exportExcel = async () => {
@@ -949,6 +1013,19 @@ const columns = computed(() => [
     align: "center",
   },
 ]);
+function formatDate(date) {
+  if (!date) return $t('noData');
+  return dayjs(date).isValid() ? dayjs(date).format('DD/MM/YYYY HH:mm') : date;
+}
+function roleColor(role) {
+  const name = typeof role === 'string' ? role : role?.name;
+  if (!name) return 'default';
+  if (name.toLowerCase().includes('admin')) return 'red';
+  if (name.toLowerCase().includes('manager')) return 'blue';
+  if (name.toLowerCase().includes('department')) return 'purple';
+  if (name.toLowerCase().includes('section')) return 'cyan';
+  return 'geekblue';
+}
 </script>
 
 <style scoped>
@@ -965,5 +1042,35 @@ const columns = computed(() => [
   margin-bottom: 12px;
   display: flex;
   gap: 8px;
+}
+.employee-detail-drawer {
+  padding: 8px 0 0 0;
+}
+.drawer-title {
+  font-size: 1.35rem;
+  font-weight: 700;
+  margin-bottom: 2px;
+  color: #1a237e;
+}
+.drawer-sub {
+  font-size: 1rem;
+  color: #607d8b;
+  margin-bottom: 12px;
+}
+.drawer-section {
+  margin-bottom: 14px;
+  display: flex;
+  align-items: flex-start;
+}
+.drawer-label {
+  min-width: 110px;
+  font-weight: 600;
+  color: #455a64;
+  flex-shrink: 0;
+}
+.drawer-value {
+  flex: 1;
+  color: #222;
+  word-break: break-word;
 }
 </style>

@@ -10,6 +10,7 @@ import {
 import { Perspective } from './perspective.entity';
 import { KPIAssignment } from './kpi-assignment.entity';
 import { Employee } from './employee.entity';
+import { KpiFormula } from './kpi-formula.entity';
 
 export enum KpiDefinitionStatus {
   DRAFT = 'DRAFT',
@@ -26,14 +27,6 @@ export class Kpi {
 
   @Column()
   name: string;
-
-  @Column({
-    type: 'varchar',
-    length: 20,
-    default: 'sum',
-    enum: ['sum', 'average', 'percentage'],
-  })
-  calculation_type: string;
 
   @Column()
   type: string;
@@ -121,4 +114,11 @@ export class Kpi {
     eager: true,
   })
   assignments: KPIAssignment[];
+
+  @ManyToOne(() => KpiFormula, { nullable: true, eager: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'formula_id' })
+  formula?: KpiFormula;
+
+  @Column({ nullable: true })
+  formula_id?: number;
 }

@@ -10,6 +10,8 @@ import store from "@/core/store";
 import { watch } from "vue";
 import FlagIcon from "vue-flag-icon";
 import { connectNotificationSocket, disconnectNotificationSocket } from "@/core/services/socket";
+import { setupGlobalErrorHandler } from "@/core/utils/errorHandler";
+import '@/core/utils/axios-interceptor';
 
 let notificationSocket = null;
 
@@ -45,6 +47,9 @@ app.use(router);
 app.use(store);
 app.use(Antd);
 app.use(i18n);
+
+// Thiết lập global error handler
+setupGlobalErrorHandler(app);
 
 watch(
   () => i18n.global.locale,

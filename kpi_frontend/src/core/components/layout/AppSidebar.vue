@@ -159,6 +159,12 @@
               <span>{{ $t('createSection') }}</span>
             </router-link>
           </a-menu-item>
+          <a-menu-item key="admin-formula-management" :title="$t('formulaManagement')">
+            <router-link to="/admin/formula-management">
+              <appstore-outlined />
+              <span>{{ $t('formulaManagement') }}</span>
+            </router-link>
+          </a-menu-item>
         </a-sub-menu>
       </a-menu>
       <div class="sidebar-toggle-area">
@@ -330,6 +336,8 @@ const canViewApprovalsReviewSubMenu = computed(() => canViewApprovals.value);
   overflow-x: hidden;
   border-right: none !important;
   padding-top: 8px;
+  /* Đảm bảo không bị che bởi toggle-area */
+  margin-bottom: 56px; /* Thêm khoảng trống phía dưới cho toggle button */
 }
 .sidebar-toggle-area {
   width: 100%;
@@ -341,7 +349,9 @@ const canViewApprovalsReviewSubMenu = computed(() => canViewApprovals.value);
   position: absolute;
   left: 0;
   bottom: 0;
-  z-index: 10;
+  z-index: 20;
+  /* Thêm nền mờ để tránh chữ menu bị lẫn với nút */
+  background: linear-gradient(0deg, #fff 80%, #e3f2fd00 100%);
 }
 .sidebar-toggle {
   color: #1976d2;
@@ -505,7 +515,9 @@ const canViewApprovalsReviewSubMenu = computed(() => canViewApprovals.value);
   position: absolute;
   left: 0;
   bottom: 0;
-  z-index: 10;
+  z-index: 20;
+  /* Thêm nền mờ để tránh chữ menu bị lẫn với nút */
+  background: linear-gradient(0deg, #fff 80%, #e3f2fd00 100%);
 }
 .sidebar-toggle {
   color: #1976d2;

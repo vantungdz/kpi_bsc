@@ -22,6 +22,7 @@ export enum NotificationType {
   REVIEW_PENDING_EMPLOYEE_FEEDBACK = 'REVIEW_PENDING_EMPLOYEE_FEEDBACK', // Gửi cho NV khi QL review xong, chờ NV phản hồi
   REVIEW_EMPLOYEE_RESPONDED = 'REVIEW_EMPLOYEE_RESPONDED', // Gửi cho QL khi NV đã phản hồi
   REVIEW_COMPLETED = 'REVIEW_COMPLETED', // Gửi cho NV khi QL hoàn tất review
+  KPI_EXPIRY = 'KPI_EXPIRY', // Thông báo KPI sắp hết hạn/hết hạn
   // Add other notification types as needed
 }
 

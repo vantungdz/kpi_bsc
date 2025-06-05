@@ -55,10 +55,6 @@ export class CreateKpiDto {
   name: string;
 
   @IsString()
-  @Expose({ name: 'calculation_type' })
-  calculationType: string;
-
-  @IsString()
   type: string;
 
   @IsOptional()
