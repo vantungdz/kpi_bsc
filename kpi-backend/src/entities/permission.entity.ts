@@ -28,6 +28,9 @@ export class Permission {
   @Column({ nullable: true })
   userId?: number;
 
+  @Column({ length: 50, nullable: true })
+  scope?: string; // e.g. 'company', 'department', 'section', 'manager', 'admin'
+
   @CreateDateColumn()
   createdAt: Date;
 

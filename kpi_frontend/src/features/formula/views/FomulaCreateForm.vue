@@ -1,73 +1,111 @@
 <!-- filepath: e:\project\kpi-frontend\src\features\formula\views\FormulaManageForm.vue -->
 <template>
-    <a-card class="formula-manage-form">
-        <h2 class="form-title">{{ $t('formula.title') }}</h2>
-        <a-divider />
-        <a-form :model="form" :rules="rules" ref="formRef" layout="vertical" @finish="handleSubmit">
-            <a-row :gutter="24">
-                <a-col :xs="24" :md="12">
-                    <a-form-item :label="$t('formula.name')" name="name">
-                        <a-input v-model:value="form.name" :placeholder="$t('formula.namePlaceholder')" />
-                    </a-form-item>
-                </a-col>
-                <a-col :xs="24" :md="12">
-                    <a-form-item :label="$t('formula.code')" name="code">
-                        <a-input v-model:value="form.code" :placeholder="$t('formula.codePlaceholder')" />
-                    </a-form-item>
-                </a-col>
-            </a-row>
-            <a-form-item :label="$t('formula.expression')" name="expression">
-                <div style="display: flex; align-items: center; gap: 8px;">
-                    <a-input v-model:value="form.expression" :placeholder="$t('formula.expressionPlaceholder')" />
-                    <a-tooltip placement="top" :mouseEnterDelay="0.1" overlayClassName="formula-tooltip">
-                        <template #title>
-                            <div style="max-width:320px;">
-                                <b>{{ $t('formula.tooltipTitle') }}</b><br />
-                                <ul style="padding-left:18px;">
-                                    <li v-html="$t('formula.tooltip.values')"></li>
-                                    <li v-html="$t('formula.tooltip.targets')"></li>
-                                    <li v-html="$t('formula.tooltip.weight')"></li>
-                                    <li v-html="$t('formula.tooltip.sum')"></li>
-                                    <li v-html="$t('formula.tooltip.average')"></li>
-                                    <li v-html="$t('formula.tooltip.minmax')"></li>
-                                </ul>
-                                <b>{{ $t('formula.tooltip.exampleLabel') }}</b>
-                                <code>{{ $t('formula.tooltip.example') }}</code>
-                            </div>
-                        </template>
-                        <a-button type="text" size="small" class="tooltip-btn">
-                            <span class="tooltip-icon">?</span>
-                        </a-button>
-                    </a-tooltip>
-                </div>
-            </a-form-item>
-            <a-form-item :label="$t('formula.description')" name="description">
-                <a-textarea v-model:value="form.description" :placeholder="$t('formula.descriptionPlaceholder')" />
-            </a-form-item>
-            <a-form-item>
-                <a-button type="primary" html-type="submit" :loading="loading" class="main-btn">
-                    {{ isEdit ? $t('common.update') : $t('common.add') }}
-                </a-button>
-                <a-button v-if="isEdit" style="margin-left: 8px" @click="resetForm" class="cancel-btn">{{
-                    $t('common.cancel') }}</a-button>
-            </a-form-item>
-        </a-form>
-        <a-divider />
-        <div>
-            <h3 class="list-title">{{ $t('formula.listTitle') }}</h3>
-            <a-table :data-source="formulaList" :columns="formulaColumns" row-key="id" size="small" :pagination="false"
-                bordered v-if="formulaList && formulaList.length" class="formula-table">
-                <template #actions="{ record }">
-                    <a-button size="small" type="link" @click="editFormula(record)">{{ $t('common.edit') }}</a-button>
-                    <a-popconfirm :title="$t('formula.deleteConfirm')" :ok-text="$t('common.delete')"
-                        :cancel-text="$t('common.cancel')" @confirm="() => deleteFormula(record)">
-                        <a-button size="small" type="link" danger>{{ $t('common.delete') }}</a-button>
-                    </a-popconfirm>
-                </template>
-            </a-table>
-            <a-empty v-else :description="$t('common.empty')" />
+  <a-card class="formula-manage-form">
+    <div class="form-header">
+      <a-avatar class="form-header-icon" size="large" style="background: linear-gradient(135deg, #1976d2 60%, #42a5f5 100%)">
+        <template #icon>
+          <CalculatorOutlined />
+        </template>
+      </a-avatar>
+      <h2 class="form-title">{{ $t('formula.title') }}</h2>
+    </div>
+    <a-divider />
+    <a-form :model="form" :rules="rules" ref="formRef" layout="vertical" @finish="handleSubmit">
+      <a-row :gutter="20">
+        <a-col :xs="24" :md="12">
+          <a-form-item :label="$t('formula.name')" name="name">
+            <a-input v-model:value="form.name" :placeholder="$t('formula.namePlaceholder')">
+              <template #prefix>
+                <EditOutlined />
+              </template>
+            </a-input>
+          </a-form-item>
+        </a-col>
+        <a-col :xs="24" :md="12">
+          <a-form-item :label="$t('formula.code')" name="code">
+            <a-input v-model:value="form.code" :placeholder="$t('formula.codePlaceholder')">
+              <template #prefix>
+                <BarcodeOutlined />
+              </template>
+            </a-input>
+          </a-form-item>
+        </a-col>
+      </a-row>
+      <a-form-item :label="$t('formula.expression')" name="expression">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <a-input v-model:value="form.expression" :placeholder="$t('formula.expressionPlaceholder')">
+            <template #prefix>
+              <FunctionOutlined />
+            </template>
+          </a-input>
+          <a-tooltip placement="top" :mouseEnterDelay="0.1" overlayClassName="formula-tooltip">
+            <template #title>
+              <div style="max-width:320px;">
+                <b>{{ $t('formula.tooltipTitle') }}</b><br />
+                <ul style="padding-left:18px;">
+                  <li v-html="$t('formula.tooltip.values')"></li>
+                  <li v-html="$t('formula.tooltip.targets')"></li>
+                  <li v-html="$t('formula.tooltip.weight')"></li>
+                  <li v-html="$t('formula.tooltip.sum')"></li>
+                  <li v-html="$t('formula.tooltip.average')"></li>
+                  <li v-html="$t('formula.tooltip.minmax')"></li>
+                </ul>
+                <b>{{ $t('formula.tooltip.exampleLabel') }}</b>
+                <code>{{ $t('formula.tooltip.example') }}</code>
+              </div>
+            </template>
+            <a-button type="text" size="small" class="tooltip-btn">
+              <span class="tooltip-icon"><QuestionCircleOutlined /></span>
+            </a-button>
+          </a-tooltip>
         </div>
-    </a-card>
+      </a-form-item>
+      <a-form-item :label="$t('formula.description')" name="description">
+        <a-textarea v-model:value="form.description" :placeholder="$t('formula.descriptionPlaceholder')">
+          <template #prefix>
+            <FileTextOutlined />
+          </template>
+        </a-textarea>
+      </a-form-item>
+      <a-form-item>
+        <a-button type="default" html-type="submit" :loading="loading" class="main-btn-modern" size="middle" shape="round">
+          <template #icon>
+            <SaveOutlined />
+          </template>
+          {{ isEdit ? $t('common.update') : $t('common.add') }}
+        </a-button>
+        <a-button v-if="isEdit" @click="resetForm" class="cancel-btn-modern" size="middle" shape="round" style="margin-left: 8px">
+          <template #icon>
+            <CloseOutlined />
+          </template>
+          {{ $t('common.cancel') }}
+        </a-button>
+      </a-form-item>
+    </a-form>
+    <a-divider />
+    <div>
+      <h3 class="list-title"><CalculatorOutlined style="margin-right:6px;" />{{ $t('formula.listTitle') }}</h3>
+      <a-table :data-source="formulaList" :columns="formulaColumns" row-key="id" size="small" :pagination="false"
+        bordered v-if="formulaList && formulaList.length" class="formula-table">
+        <template #actions="{ record }">
+          <a-tooltip :title="$t('common.edit')">
+            <a-button size="small" type="text" @click="editFormula(record)">
+              <template #icon><EditOutlined /></template>
+            </a-button>
+          </a-tooltip>
+          <a-popconfirm :title="$t('formula.deleteConfirm')" :ok-text="$t('common.delete')"
+            :cancel-text="$t('common.cancel')" @confirm="() => deleteFormula(record)">
+            <a-tooltip :title="$t('common.delete')">
+              <a-button size="small" type="text" danger>
+                <template #icon><DeleteOutlined /></template>
+              </a-button>
+            </a-tooltip>
+          </a-popconfirm>
+        </template>
+      </a-table>
+      <a-empty v-else :description="$t('common.empty')" />
+    </div>
+  </a-card>
 </template>
 
 <script setup>
@@ -75,6 +113,7 @@ import { ref, onMounted, computed } from "vue";
 import { message } from "ant-design-vue";
 import { useStore } from "vuex";
 import { useI18n } from 'vue-i18n';
+import { CalculatorOutlined, EditOutlined, BarcodeOutlined, FunctionOutlined, FileTextOutlined, SaveOutlined, CloseOutlined, DeleteOutlined, QuestionCircleOutlined } from '@ant-design/icons-vue';
 
 const { t: $t } = useI18n();
 
@@ -167,124 +206,116 @@ onMounted(async () => {
 
 <style scoped>
 .formula-manage-form {
-    margin: 32px auto 0 auto;
-    background: #fff;
-    border-radius: 18px;
-    box-shadow: 0 6px 32px #1976d21a;
-    padding: 40px 40px 28px 40px;
-    max-width: 1000px;
-    transition: box-shadow 0.2s;
-    border: 1px solid #e3eaf3;
+  margin: 24px auto 0 auto;
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 2px 16px #e3eaf355;
+  padding: 24px 24px 16px 24px;
+  max-width: 70%;
+  border: 1px solid #f0f3fa;
+  transition: box-shadow 0.2s;
 }
-
+.form-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 0.5em;
+  justify-content: center;
+}
+.form-header-icon {
+  box-shadow: 0 2px 8px #e3eaf399;
+}
 .form-title {
-    font-size: 2rem;
-    font-weight: 700;
-    margin-bottom: 0.5em;
-    text-align: center;
-    letter-spacing: 0.5px;
-    color: #1976d2;
-    text-shadow: 0 2px 8px #e3eaf3;
+  font-size: 1.25rem;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  margin: 0;
+  color: #1976d2;
+  text-shadow: none;
 }
-
 .list-title {
-    font-size: 1.2rem;
-    font-weight: 600;
-    margin-bottom: 12px;
-    color: #1976d2;
+  font-size: 1.08rem;
+  font-weight: 600;
+  margin-bottom: 10px;
+  color: #1976d2;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
-
 .ant-form-item {
-    margin-bottom: 20px;
+  margin-bottom: 15px;
 }
-
-.main-btn {
-    min-width: 120px;
-    font-weight: 600;
-    background: linear-gradient(90deg, #1976d2 60%, #42a5f5 100%);
-    border: none;
-    color: #fff;
-    box-shadow: 0 2px 8px #1976d255;
-    border-radius: 6px;
-    transition: background 0.2s, box-shadow 0.2s;
+.main-btn-modern {
+  min-width: 100px;
+  font-weight: 500;
+  border-radius: 18px;
+  height: 36px;
+  background: #fafdff;
+  color: #1976d2;
+  border: 1.5px solid #b3d1f7;
+  box-shadow: none;
+  transition: all 0.18s;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
-.main-btn:hover {
-    background: linear-gradient(90deg, #1565c0 60%, #1976d2 100%);
-    color: #fff;
-    box-shadow: 0 4px 16px #1976d255;
+.main-btn-modern:hover, .main-btn-modern:focus {
+  background: #e3f2fd;
+  color: #1565c0;
+  border-color: #90caf9;
 }
-.cancel-btn {
-    min-width: 80px;
-    border-radius: 6px;
-    border: 1px solid #b0bec5;
-    color: #1976d2;
-    background: #f5faff;
-    font-weight: 500;
-    transition: background 0.2s, color 0.2s;
+.cancel-btn-modern {
+  min-width: 80px;
+  border-radius: 18px;
+  border: 1px solid #e3eaf3;
+  color: #1976d2;
+  background: #fafdff;
+  font-weight: 400;
+  margin-left: 8px;
+  height: 36px;
+  transition: background 0.2s, color 0.2s;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
-.cancel-btn:hover {
-    background: #e3eaf3;
-    color: #1565c0;
+.cancel-btn-modern:hover {
+  background: #e3eaf3;
+  color: #1565c0;
 }
-
 .formula-table {
-    border-radius: 12px;
-    overflow: hidden;
-    box-shadow: 0 2px 12px #e3eaf355;
-    margin-bottom: 12px;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px #e3eaf333;
+  margin-bottom: 10px;
 }
 .formula-table .ant-table-thead > tr > th {
-    background: #f5faff;
-    color: #1976d2;
-    font-weight: 600;
-    font-size: 1rem;
+  background: #fafdff;
+  color: #1976d2;
+  font-weight: 500;
+  font-size: 0.98rem;
 }
 .formula-table .ant-table-tbody > tr:hover > td {
-    background: #e3f2fd55;
-    transition: background 0.2s;
+  background: #e3f2fd55;
+  transition: background 0.2s;
 }
 .formula-table .ant-table-tbody > tr > td {
-    font-size: 0.98rem;
-    padding: 10px 8px;
+  font-size: 0.97rem;
+  padding: 8px 7px;
 }
-
 .ant-empty-description {
-    color: #b0bec5;
-    font-size: 1.1rem;
+  color: #b0bec5;
+  font-size: 1.05rem;
 }
-
 .formula-tooltip .ant-tooltip-inner,
 :deep(.formula-tooltip .ant-tooltip-inner) {
   background: #fafdff !important;
   color: #222;
-  border-radius: 12px;
-  box-shadow: 0 4px 24px #1976d233;
-  padding: 18px 22px 16px 22px;
-  min-width: 320px;
-  max-width: 400px;
-  font-size: 1rem;
-}
-.tooltip-content {
-  text-align: left;
-}
-.tooltip-title {
-  font-weight: 700;
-  color: #1976d2;
-  margin-bottom: 6px;
-  font-size: 1.08em;
-}
-.tooltip-content ul {
-  margin: 0 0 8px 0;
-  padding-left: 20px;
-}
-.tooltip-content li {
-  margin-bottom: 2px;
-  font-size: 0.98em;
-}
-.tooltip-example {
-  margin-top: 8px;
-  color: #333;
-  font-size: 0.98em;
+  border-radius: 10px;
+  box-shadow: 0 2px 12px #1976d233;
+  padding: 14px 18px 12px 18px;
+  min-width: 260px;
+  max-width: 340px;
+  font-size: 0.98rem;
 }
 .tooltip-btn {
   padding: 0;
@@ -297,14 +328,14 @@ onMounted(async () => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
   background: linear-gradient(135deg, #1976d2 70%, #42a5f5 100%);
   color: #fff;
-  font-size: 18px;
+  font-size: 14px;
   font-weight: bold;
-  box-shadow: 0 2px 8px #1976d255;
+  box-shadow: 0 1px 4px #1976d233;
   border: 2px solid #fff;
   transition: background 0.2s;
 }

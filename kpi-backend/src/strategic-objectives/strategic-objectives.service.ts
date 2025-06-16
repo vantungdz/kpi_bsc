@@ -1,0 +1,397 @@
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { StrategicObjective } from '../entities/strategic-objective.entity';
+import { CreateStrategicObjectiveDto, UpdateStrategicObjectiveDto } from './dto/strategic-objective.dto';
+import { Perspective } from '../entities/perspective.entity';
+import { Kpi } from '../entities/kpi.entity';
+
+@Injectable()
+export class StrategicObjectivesService {
+  constructor(
+    @InjectRepository(StrategicObjective)
+    private readonly strategicObjectiveRepository: Repository<StrategicObjective>,
+    @InjectRepository(Perspective)
+    private readonly perspectiveRepository: Repository<Perspective>,
+    @InjectRepository(Kpi)
+    private readonly kpiRepository: Repository<Kpi>,
+  ) {}
+
+  async create(dto: CreateStrategicObjectiveDto): Promise<StrategicObjective> {
+    const perspective = await this.perspectiveRepository.findOne({
+      where: { id: dto.perspectiveId },
+    });
+    if (!perspective) throw new NotFoundException('Perspective not found');
+    const obj = this.strategicObjectiveRepository.create({
+      ...dto,
+      perspective,
+    });
+    const saved = await this.strategicObjectiveRepository.save(obj);
+
+    // Xử lý liên kết KPI: chỉ set liên kết nếu có KPI được chọn
+    if (dto.kpiIds && Array.isArray(dto.kpiIds) && dto.kpiIds.length > 0) {
+      await this.kpiRepository.update(dto.kpiIds, {
+        strategicObjective: saved,
+      });
+    }
+
+    const result = await this.strategicObjectiveRepository.findOne({
+      where: { id: saved.id },
+      relations: ['perspective', 'kpis'],
+    });
+    if (!result)
+      throw new NotFoundException('Strategic Objective not found after create');
+    return result;
+  }
+
+  // Hàm tính tiến độ trung bình các KPI liên kết
+  private calcObjectiveProgress(obj: StrategicObjective): number {
+    if (!obj.kpis || obj.kpis.length === 0) {
+      return 0;
+    }
+    const progresses = obj.kpis.map((kpi) => {
+      const actual =
+        typeof (kpi as any).actual_value === 'string'
+          ? parseFloat((kpi as any).actual_value)
+          : (kpi as any).actual_value;
+      let target =
+        typeof (kpi as any).target === 'string'
+          ? parseFloat((kpi as any).target)
+          : (kpi as any).target;
+      const progressField = (kpi as any).progress;
+      // Nếu công thức là percent hoặc expression có *100 thì target = 100
+      if (
+        kpi.formula &&
+        (kpi.formula.code === 'percent' ||
+          (kpi.formula.expression && kpi.formula.expression.includes('*100')))
+      ) {
+        target = 100;
+      }
+      if (
+        typeof actual === 'number' &&
+        typeof target === 'number' &&
+        target > 0
+      ) {
+        const percent = Math.min(100, Math.round((actual / target) * 100));
+        return percent;
+      }
+      if (typeof progressField === 'number') {
+        return progressField;
+      }
+      return 0;
+    });
+    // Nếu chỉ có 1 KPI, trả về đúng tiến độ KPI đó
+    if (progresses.length === 1) {
+      return progresses[0];
+    }
+    // Nếu trung bình < 1%, trả về 0
+    const avg = progresses.reduce((a, b) => a + b, 0) / progresses.length;
+    if (avg < 1) return 0;
+    return Math.round(avg);
+  }
+
+  async findAll(): Promise<any[]> {
+    const list = await this.strategicObjectiveRepository.find({
+      relations: ['perspective', 'kpis'],
+    });
+    for (const obj of list) {
+      if (obj.kpis && obj.kpis.length > 0) {
+        const kpiIds = obj.kpis.map((k) => k.id);
+        obj.kpis = await this.enrichKpisWithActualValue(kpiIds);
+      }
+    }
+    return list.map((obj) => {
+      const progress = this.calcObjectiveProgress(obj);
+      // Tính cảnh báo sớm cho mục tiêu chiến lược (dựa trên tiến độ trung bình các KPI)
+      let warningLevel = 'none';
+      let warningMessage = '';
+      let expectedProgress = 0;
+      if (obj.startDate && obj.endDate) {
+        const now = new Date();
+        const start = new Date(obj.startDate);
+        const end = new Date(obj.endDate);
+        if (now > start && end > start) {
+          const total = end.getTime() - start.getTime();
+          const passed = now.getTime() - start.getTime();
+          expectedProgress = Math.min(100, Math.round((passed / total) * 100));
+        }
+      }
+      if (progress < expectedProgress - 10) {
+        warningLevel = 'danger';
+        warningMessage = `Tiến độ mục tiêu (${progress}%) thấp hơn kỳ vọng (${expectedProgress}%)!`;
+      } else if (progress < expectedProgress) {
+        warningLevel = 'warning';
+        warningMessage = `Tiến độ mục tiêu (${progress}%) chưa đạt kỳ vọng (${expectedProgress}%)!`;
+      }
+      return {
+        ...obj,
+        kpis: obj.kpis || [],
+        progress,
+        warningLevel,
+        warningMessage,
+      };
+    });
+  }
+
+  async findOne(id: number): Promise<any> {
+    const obj = await this.strategicObjectiveRepository.findOne({
+      where: { id },
+      relations: ['perspective', 'kpis'],
+    });
+    if (!obj) throw new NotFoundException('Strategic Objective not found');
+    if (!obj.kpis) obj.kpis = [];
+    if (obj.kpis.length > 0) {
+      const kpiIds = obj.kpis.map((k) => k.id);
+      obj.kpis = await this.enrichKpisWithActualValue(kpiIds);
+    }
+    // Tính cảnh báo sớm cho mục tiêu chiến lược (dựa trên tiến độ trung bình các KPI)
+    let warningLevel = 'none';
+    let warningMessage = '';
+    let expectedProgress = 0;
+    if (obj.startDate && obj.endDate) {
+      const now = new Date();
+      const start = new Date(obj.startDate);
+      const end = new Date(obj.endDate);
+      if (now > start && end > start) {
+        const total = end.getTime() - start.getTime();
+        const passed = now.getTime() - start.getTime();
+        expectedProgress = Math.min(100, Math.round((passed / total) * 100));
+      }
+    }
+    const progress = this.calcObjectiveProgress(obj);
+    if (progress < expectedProgress - 10) {
+      warningLevel = 'danger';
+      warningMessage = `Tiến độ mục tiêu (${progress}%) thấp hơn kỳ vọng (${expectedProgress}%)!`;
+    } else if (progress < expectedProgress) {
+      warningLevel = 'warning';
+      warningMessage = `Tiến độ mục tiêu (${progress}%) chưa đạt kỳ vọng (${expectedProgress}%)!`;
+    }
+    return {
+      ...obj,
+      progress,
+      warningLevel,
+      warningMessage,
+    };
+  }
+
+  async update(id: number, dto: UpdateStrategicObjectiveDto): Promise<any> {
+    // Log toàn bộ payload nhận được
+    // Lấy entity gốc (không trả về object đã thêm progress)
+    const obj = await this.strategicObjectiveRepository.findOne({
+      where: { id },
+      relations: ['perspective', 'kpis'],
+    });
+    if (!obj) throw new NotFoundException('Strategic Objective not found');
+    if (dto.perspectiveId) {
+      const perspective = await this.perspectiveRepository.findOne({
+        where: { id: dto.perspectiveId },
+      });
+      if (!perspective) throw new NotFoundException('Perspective not found');
+      obj.perspective = perspective;
+    }
+    // Loại bỏ perspectiveId và kpiIds khỏi dto trước khi gán vào obj
+    const { perspectiveId, kpiIds, ...rest } = dto;
+    Object.assign(obj, rest);
+    const saved = await this.strategicObjectiveRepository.save(obj);
+    // Xử lý liên kết KPI
+    const safeKpiIds = dto.kpiIds ?? [];
+    if (Array.isArray(safeKpiIds)) {
+      // Xóa liên kết các KPI không còn trong kpiIds
+      if (obj.kpis && obj.kpis.length > 0) {
+        const kpiIdsToUnlink = obj.kpis
+          .map(k => k.id)
+          .filter(id => !safeKpiIds.includes(id));
+        if (kpiIdsToUnlink.length > 0) {
+          // Sửa: dùng type assertion để set strategicObjective: null (TypeORM nullable relation)
+          const updateResult = await this.kpiRepository.update(kpiIdsToUnlink, { strategicObjective: null } as any);
+        }
+      }
+      // Gán strategicObjective cho các KPI mới (nếu có)
+      if (safeKpiIds.length > 0) {
+        const updateResult2 = await this.kpiRepository.update(safeKpiIds, {
+          strategicObjective: saved,
+        });
+      }
+    }
+    // Lấy lại object mới nhất và trả về kèm progress và cảnh báo
+    const result = await this.strategicObjectiveRepository.findOne({
+      where: { id: saved.id },
+      relations: ['perspective', 'kpis'],
+    });
+    if (!result)
+      throw new NotFoundException('Strategic Objective not found after update');
+    // Đảm bảo luôn trả về danh sách KPI mới nhất (kể cả khi đã xóa hết liên kết)
+    if (result.kpis && result.kpis.length > 0) {
+      const kpiIds = result.kpis.map((k) => k.id);
+      result.kpis = await this.enrichKpisWithActualValue(kpiIds);
+    } else {
+      result.kpis = [];
+    }
+    // Lấy lại object mới nhất và trả về kèm progress và cảnh báo
+    const progress = this.calcObjectiveProgress(result);
+    // Tính cảnh báo sớm cho mục tiêu chiến lược (dựa trên tiến độ trung bình các KPI)
+    let warningLevel = 'none';
+    let warningMessage = '';
+    let expectedProgress = 0;
+    if (result.startDate && result.endDate) {
+      const now = new Date();
+      const start = new Date(result.startDate);
+      const end = new Date(result.endDate);
+      if (now > start && end > start) {
+        const total = end.getTime() - start.getTime();
+        const passed = now.getTime() - start.getTime();
+        expectedProgress = Math.min(100, Math.round((passed / total) * 100));
+      }
+    }
+    if (progress < expectedProgress - 10) {
+      warningLevel = 'danger';
+      warningMessage = `Tiến độ mục tiêu (${progress}%) thấp hơn kỳ vọng (${expectedProgress}%)!`;
+    } else if (progress < expectedProgress) {
+      warningLevel = 'warning';
+      warningMessage = `Tiến độ mục tiêu (${progress}%) chưa đạt kỳ vọng (${expectedProgress}%)!`;
+    }
+    return {
+      ...result,
+      progress,
+      warningLevel,
+      warningMessage,
+    };
+  }
+
+  async remove(id: number): Promise<void> {
+    const obj = await this.findOne(id);
+    // Chỉ clear liên kết nếu thực sự có KPI đang liên kết
+    const linkedKpis = await this.kpiRepository.find({
+      where: { strategicObjective: obj },
+    });
+    if (linkedKpis.length > 0) {
+      await this.kpiRepository.update(
+        { strategicObjective: obj },
+        { strategicObjective: undefined },
+      );
+    }
+    await this.strategicObjectiveRepository.remove(obj);
+  }
+
+  async enrichKpisWithActualValue(kpiIds: number[]): Promise<any[]> {
+    if (!kpiIds || kpiIds.length === 0) return [];
+    // Dùng QueryBuilder để join sâu assignments và kpiValues
+    const kpis = await this.kpiRepository
+      .createQueryBuilder('kpi')
+      .leftJoinAndSelect('kpi.formula', 'formula')
+      .leftJoinAndSelect('kpi.assignments', 'assignment')
+      .leftJoinAndSelect(
+        'assignment.kpiValues',
+        'kpiValue',
+        'kpiValue.status = :status',
+        { status: 'APPROVED' },
+      )
+      .where('kpi.id IN (:...kpiIds)', { kpiIds })
+      .getMany();
+    return kpis.map((kpi) => {
+      // Tính actual_value từ các assignment và kpiValues có status APPROVED
+      const activeAssignments =
+        kpi.assignments?.filter((a) => !a.deleted_at) || [];
+      // Lấy tất cả giá trị đã duyệt
+      const approvedValues = activeAssignments
+        .flatMap((a) => (a.kpiValues || []).filter((v) => v.status === 'APPROVED'))
+        .map((v) => Number(v.value) || 0);
+      const allTargets = activeAssignments.map((a) => Number(a.targetValue) || 0);
+      let actual_value = 0;
+      let progress = 0;
+      if (kpi.formula && kpi.formula.expression) {
+        try {
+          const scope = {
+            values: approvedValues,
+            targets: allTargets,
+            target: Number(kpi.target) || 0,
+            weight: Number(kpi.weight) || 0,
+          };
+          const result = require('mathjs').evaluate(kpi.formula.expression, scope);
+          actual_value = typeof result === 'number' && !isNaN(result) ? parseFloat(result.toFixed(2)) : 0;
+          // Tính progress %
+          if (kpi.formula.code === 'percent' || (kpi.formula.expression && kpi.formula.expression.includes('*100'))) {
+            progress = Math.round(actual_value);
+          } else if (typeof actual_value === 'number' && typeof scope.target === 'number' && scope.target > 0) {
+            progress = Math.round((actual_value / scope.target) * 100);
+          } else {
+            progress = 0;
+          }
+        } catch (err) {
+          actual_value = 0;
+          progress = 0;
+        }
+      } else {
+        actual_value = approvedValues.length > 0 ? approvedValues.reduce((sum, val) => sum + val, 0) / approvedValues.length : 0;
+        if (typeof actual_value === 'number' && typeof kpi.target === 'number' && kpi.target > 0) {
+          progress = Math.round((actual_value / Number(kpi.target)) * 100);
+        } else {
+          progress = 0;
+        }
+      }
+      // Tính cảnh báo sớm cho KPI
+      let warningLevel = 'none';
+      let warningMessage = '';
+      // Giả sử kỳ vọng: tiến độ >= % thời gian đã trôi qua
+      let expectedProgress = 0;
+      if (kpi.start_date && kpi.end_date) {
+        const now = new Date();
+        const start = new Date(kpi.start_date);
+        const end = new Date(kpi.end_date);
+        if (now > start && end > start) {
+          const total = end.getTime() - start.getTime();
+          const passed = now.getTime() - start.getTime();
+          expectedProgress = Math.min(100, Math.round((passed / total) * 100));
+        }
+      }
+      if (progress < expectedProgress - 10) {
+        warningLevel = 'danger';
+        warningMessage = `Tiến độ KPI (${progress}%) thấp hơn kỳ vọng (${expectedProgress}%)!`;
+      } else if (progress < expectedProgress) {
+        warningLevel = 'warning';
+        warningMessage = `Tiến độ KPI (${progress}%) chưa đạt kỳ vọng (${expectedProgress}%)!`;
+      }
+      return { ...kpi, actual_value, progress, warningLevel, warningMessage };
+    });
+  }
+
+  async statsByStatusAndPerspective() {
+    // Lấy tất cả mục tiêu cùng góc nhìn và trạng thái
+    const all = await this.strategicObjectiveRepository.find({
+      relations: ['perspective'],
+    });
+    // Gom nhóm theo trạng thái và góc nhìn
+    const result = {};
+    for (const obj of all) {
+      const perspective = obj.perspective?.name;
+      if (!result[perspective])
+        result[perspective] = { perspective, active: 0, inactive: 0 };
+      if (obj.isActive) result[perspective].active++;
+      else result[perspective].inactive++;
+    }
+    return Object.values(result);
+  }
+
+  async statsProgressDistribution() {
+    // Lấy tất cả mục tiêu cùng progress
+    const all = await this.findAll();
+    // Phân nhóm theo mức độ hoàn thành
+    const buckets = [
+      { label: '0-25%', min: 0, max: 25, count: 0 },
+      { label: '26-50%', min: 26, max: 50, count: 0 },
+      { label: '51-75%', min: 51, max: 75, count: 0 },
+      { label: '76-99%', min: 76, max: 99, count: 0 },
+      { label: '100%', min: 100, max: 100, count: 0 },
+    ];
+    for (const obj of all) {
+      const progress = obj.progress || 0;
+      for (const b of buckets) {
+        if (progress >= b.min && progress <= b.max) {
+          b.count++;
+          break;
+        }
+      }
+    }
+    return buckets;
+  }
+}

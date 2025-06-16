@@ -22,6 +22,11 @@ import { ReviewCycleModule } from './review-cycle/review-cycle.module';
 import { KpiReviewModule } from './evaluation/kpi-review.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { KpiFormulaModule } from './kpi-formula/kpi-formula.module';
+import { StrategicObjectivesModule } from './strategic-objectives/strategic-objectives.module';
+import { AuditLogModule } from './audit-log/audit-log.module';
+import { CompetencyModule } from './competency/competency.module';
+import { EmployeeSkillModule } from './employee-skill/employee-skill.module';
+import { PersonalGoalModule } from './personal-goal/personal-goal.module';
 
 @Module({
   imports: [
@@ -38,7 +43,7 @@ import { KpiFormulaModule } from './kpi-formula/kpi-formula.module';
           host: 'localhost',
           port: 5432,
           username: 'postgres',
-          password: 'tomcat',
+          password: '12345678',
           database: 'kpi_management',
           entities: [__dirname + '/**/*.entity{.ts,.js}'],
           synchronize: true,
@@ -65,6 +70,11 @@ import { KpiFormulaModule } from './kpi-formula/kpi-formula.module';
     KpiReviewModule,
     RolesModule,
     KpiFormulaModule,
+    StrategicObjectivesModule,
+    AuditLogModule,
+    CompetencyModule,
+    EmployeeSkillModule,
+    PersonalGoalModule,
   ],
 })
 export class AppModule {}

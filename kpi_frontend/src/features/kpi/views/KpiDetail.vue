@@ -871,34 +871,38 @@ const userPermissions = computed(
  * Helper kiểm tra quyền động RBAC FE (resource:action)
  * @param {string} action
  * @param {string} resource
+ * @param {string} scope
  * @returns {boolean}
  */
-function hasPermission(action, resource) {
+function hasPermission(action, resource, scope) {
   return userPermissions.value.some(
-    (p) => p.action === action && p.resource === resource
+    (p) =>
+      p.action === action &&
+      p.resource === resource &&
+      (scope ? p.scope === scope : true)
   );
 }
 
 // Kiểm tra quyền động cho các action quản trị KPI
 const canToggleStatus = computed(() =>
-  hasPermission(RBAC_ACTIONS.TOGGLE_STATUS, RBAC_RESOURCES.KPI)
+  hasPermission(RBAC_ACTIONS.TOGGLE_STATUS, RBAC_RESOURCES.KPI, 'company')
 );
-
 // Copy KPI làm template
 const canCopyTemplate = computed(() =>
-  hasPermission(RBAC_ACTIONS.COPY_TEMPLATE, RBAC_RESOURCES.KPI)
+  hasPermission(RBAC_ACTIONS.COPY_TEMPLATE, RBAC_RESOURCES.KPI, 'company')
 );
 
+// Phân quyền assign cho từng cấp
 const canAssignDepartment = computed(() =>
-  hasPermission(RBAC_ACTIONS.ASSIGN, RBAC_RESOURCES.KPI_COMPANY)
+  hasPermission(RBAC_ACTIONS.ASSIGN, RBAC_RESOURCES.KPI, 'company')
 );
 
 const canAssignSection = computed(() =>
-  hasPermission(RBAC_ACTIONS.ASSIGN, RBAC_RESOURCES.KPI_DEPARTMENT)
+  hasPermission(RBAC_ACTIONS.ASSIGN, RBAC_RESOURCES.KPI, 'department')
 );
 
 const canAssignEmployees = computed(() =>
-  hasPermission(RBAC_ACTIONS.ASSIGN, RBAC_RESOURCES.KPI_SECTION)
+  hasPermission(RBAC_ACTIONS.ASSIGN, RBAC_RESOURCES.KPI, 'section')
 );
 
 const sectionNameFromContext = computed(() => {
@@ -1668,7 +1672,7 @@ const shouldShowUserAssignmentsInDepartmentSectionsCard = computed(() => {
   if (sections.length === 0) return false;
 
   // Kiểm tra quyền động RBAC
-  if (!hasPermission(RBAC_ACTIONS.ASSIGN, RBAC_RESOURCES.KPI_SECTION)) return false;
+  if (!hasPermission(RBAC_ACTIONS.ASSIGN, RBAC_RESOURCES.KPI, 'section')) return false;
 
   return true;
 });
@@ -1700,9 +1704,7 @@ const shouldShowDirectUserAssignmentCard = computed(() => {
   }
 
   // Kiểm tra quyền động RBAC
-  if (!hasPermission(RBAC_ACTIONS.ASSIGN, RBAC_RESOURCES.KPI_SECTION)) {
-    return false;
-  }
+  if (!hasPermission(RBAC_ACTIONS.ASSIGN, RBAC_RESOURCES.KPI, 'section')) return false;
 
   // Nếu cần kiểm tra thêm quyền quản lý phòng ban, có thể bổ sung điều kiện động ở đây (nếu có logic custom)
   // Ví dụ: nếu muốn chỉ cho phép user thuộc phòng ban này thì:
@@ -1720,7 +1722,7 @@ const shouldShowSectionUserAssignmentCard = computed(() => {
   if (!kpi || !user || !sectionId) return false;
 
   // Kiểm tra quyền động RBAC: phải có quyền ASSIGN trên KPI_SECTION
-  if (!hasPermission(RBAC_ACTIONS.ASSIGN, RBAC_RESOURCES.KPI_SECTION)) return false;
+  if (!hasPermission(RBAC_ACTIONS.ASSIGN, RBAC_RESOURCES.KPI, 'section')) return false;
 
   // Nếu muốn chỉ cho phép user thuộc section đó thì kiểm tra thêm:
   // if (user.sectionId && user.sectionId !== sectionId) return false;

@@ -374,23 +374,33 @@ export class DashboardsService {
     return { submitted, updated };
   }
 
+  // Helper: check if user has a permission (resource, action, scope)
+  private userHasPermission(user: Employee, resource: string, action: string, scope?: string): boolean {
+    if (!user || !user.roles) return false;
+    for (const role of user.roles) {
+      if (role && Array.isArray(role.permissions)) {
+        if (
+          role.permissions.some(
+            (p) =>
+              p.resource === resource &&
+              p.action === action &&
+              (!scope || p.scope === scope)
+          )
+        ) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
   private hasDynamicRole(
     currentUser: Employee,
-    rolePattern: string,
-    scopeId?: number,
+    resource: string,
+    action: string,
+    scope?: string,
   ): boolean {
-    // rolePattern ví dụ: 'kpi:view:company', 'kpi:view:department', ...
-    const userRoles: string[] = Array.isArray(currentUser.roles)
-      ? currentUser.roles.map((r: any) => (typeof r === 'string' ? r : r?.name))
-      : [];
-    // Nếu có scopeId, kiểm tra role dạng 'kpi:view:department:3' (nếu bạn muốn phân biệt theo id cụ thể)
-    if (scopeId !== undefined) {
-      return (
-        userRoles.includes(`${rolePattern}:${scopeId}`) ||
-        userRoles.includes(rolePattern)
-      );
-    }
-    return userRoles.includes(rolePattern);
+    return this.userHasPermission(currentUser, resource, action, scope);
   }
 
   private applyRoleBasedFilters<
@@ -406,11 +416,11 @@ export class DashboardsService {
     },
   ): boolean {
     // Ưu tiên quyền cao nhất
-    if (this.hasDynamicRole(currentUser, 'kpi:view:company')) {
+    if (this.hasDynamicRole(currentUser, 'kpi', 'view', 'company')) {
       return true;
     }
     if (
-      this.hasDynamicRole(currentUser, 'kpi:view:department') &&
+      this.hasDynamicRole(currentUser, 'kpi', 'view', 'department') &&
       currentUser.departmentId
     ) {
       query.andWhere(
@@ -420,7 +430,7 @@ export class DashboardsService {
       return true;
     }
     if (
-      this.hasDynamicRole(currentUser, 'kpi:view:section') &&
+      this.hasDynamicRole(currentUser, 'kpi', 'view', 'section') &&
       currentUser.sectionId
     ) {
       query.andWhere(
@@ -429,7 +439,7 @@ export class DashboardsService {
       );
       return true;
     }
-    if (this.hasDynamicRole(currentUser, 'kpi:view:personal')) {
+    if (this.hasDynamicRole(currentUser, 'kpi', 'view', 'personal')) {
       query.andWhere(`${aliases.assignedEmployeeAlias}.id = :userId`, {
         userId: currentUser.id,
       });
@@ -484,7 +494,8 @@ export class DashboardsService {
         ],
       });
 
-    if (userRoles.includes('manager') && currentUser.departmentId) {
+    // Replace userRoles.includes checks with permission checks
+    if (this.userHasPermission(currentUser, 'kpi-value', 'approve', 'manager') && currentUser.departmentId) {
       pendingValuesQuery.andWhere(
         new Brackets((qb) => {
           qb.where('assignedDepartment.id = :userDeptId', {
@@ -498,7 +509,7 @@ export class DashboardsService {
             });
         }),
       );
-    } else if (userRoles.includes('department') && currentUser.departmentId) {
+    } else if (this.userHasPermission(currentUser, 'kpi-value', 'approve', 'department') && currentUser.departmentId) {
       pendingValuesQuery.andWhere(
         new Brackets((qb) => {
           qb.where('departmentOfAssignedSection.id = :userDeptId', {
@@ -508,11 +519,11 @@ export class DashboardsService {
           });
         }),
       );
-    } else if (userRoles.includes('section') && currentUser.sectionId) {
+    } else if (this.userHasPermission(currentUser, 'kpi-value', 'approve', 'section') && currentUser.sectionId) {
       pendingValuesQuery.andWhere('assignedSection.id = :sectionId', {
         sectionId: currentUser.sectionId,
       });
-    } else if (userRoles.includes('user')) {
+    } else if (this.userHasPermission(currentUser, 'kpi-value', 'approve', 'user')) {
       pendingValuesQuery.andWhere('assignedEmployee.id = :userId', {
         userId: currentUser.id,
       });

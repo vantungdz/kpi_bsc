@@ -12,6 +12,7 @@ import {
   NotFoundException,
   ParseIntPipe,
   UnauthorizedException,
+  BadRequestException,
 } from '@nestjs/common';
 import { KpisService } from './kpis.service';
 import { Kpi } from '../entities/kpi.entity';
@@ -27,11 +28,15 @@ import { CreateKpiDto } from './dto/create_kpi_dto';
 import { error } from 'console';
 import { Employee } from 'src/entities/employee.entity';
 import { getKpiStatus } from './kpis.service';
+import { AuditLogService } from '../audit-log/audit-log.service';
 
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('kpis')
 export class KpisController {
-  constructor(private readonly kpisService: KpisService) {}
+  constructor(
+    private readonly kpisService: KpisService,
+    private readonly auditLogService: AuditLogService,
+  ) {}
 
   @Get('my-kpis')
   @ApiOperation({ summary: "Get the logged-in user's KPIs" })
@@ -65,7 +70,7 @@ export class KpisController {
     type: [Department],
   })
   async getKpisAssignedToDepartments(
-    @Req() req: Request & { user?: { id: number } },
+    @Req() req: Request & { user?: { id: number; username?: string } },
   ) {
     if (!req.user?.id)
       throw new UnauthorizedException('User not authenticated.');
@@ -77,7 +82,6 @@ export class KpisController {
       ...kpi,
       validityStatus: getKpiStatus(kpi.start_date, kpi.end_date),
     }));
-    return { data: dataWithValidity };
   }
 
   @Get('/sections')
@@ -88,7 +92,7 @@ export class KpisController {
     type: [Section],
   })
   async getKpisAssignedToSections(
-    @Req() req: Request & { user?: { id: number } },
+    @Req() req: Request & { user?: { id: number; username?: string } },
   ) {
     if (!req.user?.id)
       throw new UnauthorizedException('User not authenticated.');
@@ -226,11 +230,19 @@ export class KpisController {
   @Post('/createKpi')
   async create(
     @Body() body: any,
-    @Req() req: Request & { user?: { id: number } },
+    @Req() req: Request & { user?: { id: number; username?: string } },
   ): Promise<Kpi> {
     if (!req.user?.id)
       throw new UnauthorizedException('User not authenticated.');
-    return this.kpisService.create(body, req.user.id);
+    const result = await this.kpisService.create(body, req.user.id);
+    await this.auditLogService.logAction({
+      action: 'CREATE',
+      resource: 'KPI',
+      userId: req.user.id,
+      username: req.user.username,
+      data: body,
+    });
+    return result;
   }
 
   @Patch(':id')
@@ -246,91 +258,130 @@ export class KpisController {
   async update(
     @Param('id') id: string,
     @Body() update: Partial<Kpi>,
-    @Req() req: Request & { user?: { id: number } },
+    @Req() req: Request & { user?: { id: number; username?: string } },
   ): Promise<Kpi> {
     if (!req.user?.id)
       throw new UnauthorizedException('User not authenticated.');
-    return this.kpisService.update(+id, update, req.user.id);
+    const result = await this.kpisService.update(+id, update, req.user.id);
+    await this.auditLogService.logAction({
+      action: 'UPDATE',
+      resource: 'KPI',
+      userId: req.user.id,
+      username: req.user.username,
+      data: { id: +id, ...update },
+    });
+    return result;
   }
 
   @Delete(':id')
   async delete(
     @Param('id') id: string,
-    @Req() req: Request & { user?: { id: number } },
+    @Req() req: Request & { user?: { id: number; username?: string } },
   ): Promise<void> {
     if (!req.user?.id)
       throw new UnauthorizedException('User not authenticated.');
-    // Lấy loại KPI trước khi xóa
-    const kpi = await this.kpisService['kpisRepository'].findOne({
-      where: { id: +id },
-    });
+    const kpi = await this.kpisService['kpisRepository'].findOne({ where: { id: +id } });
     let kpiType: 'company' | 'department' | 'section' | 'employee' = 'company';
     if (
       kpi &&
-      ['company', 'department', 'section', 'personal', 'employee'].includes(
-        kpi.type,
-      )
+      ['company', 'department', 'section', 'personal', 'employee'].includes(kpi.type)
     ) {
-      kpiType =
-        kpi.type === 'personal'
-          ? 'employee'
-          : (kpi.type as 'company' | 'department' | 'section' | 'employee');
+      kpiType = kpi.type === 'personal' ? 'employee' : (kpi.type as 'company' | 'department' | 'section' | 'employee');
     }
-    return this.kpisService.softDelete(+id, req.user.id, kpiType);
+    await this.kpisService.softDelete(+id, req.user.id, kpiType);
+    await this.auditLogService.logAction({
+      action: 'DELETE',
+      resource: 'KPI',
+      userId: req.user.id,
+      username: req.user.username,
+      data: { id: +id, kpiType },
+    });
   }
 
   @Post(':id/sections/assignments')
   async saveDepartmentAndSectionAssignments(
     @Param('id') kpiId: number,
-    @Body()
-    body: {
-      assignments: {
-        assigned_to_department?: number;
-        assigned_to_section?: number;
-        targetValue: number;
-        assignmentId?: number;
-      }[];
-    },
-    @Req() req: Request & { user?: { id: number } },
+    @Body() body: { assignments: { assigned_to_department?: number; assigned_to_section?: number; targetValue: number; assignmentId?: number; }[] },
+    @Req() req: Request & { user?: { id: number; username?: string } },
   ): Promise<void> {
     if (!req.user?.id)
       throw new UnauthorizedException('User not authenticated.');
-    return this.kpisService.saveDepartmentAndSectionAssignments(
+    // Kiểm tra giá trị assignments trước khi log
+    if (!Array.isArray(body.assignments) || body.assignments.length === 0) {
+      await this.auditLogService.logAction({
+        action: 'ASSIGN',
+        resource: 'KPI_ASSIGNMENT_DEPARTMENT_SECTION',
+        userId: req.user.id,
+        username: req.user.username,
+        data: { kpiId, assignments: 'EMPTY_OR_INVALID' },
+      });
+      throw new BadRequestException('Assignments array is empty or invalid');
+    }
+    await this.kpisService.saveDepartmentAndSectionAssignments(
       kpiId,
       body.assignments,
       req.user.id,
     );
+    await this.auditLogService.logAction({
+      action: 'ASSIGN',
+      resource: 'KPI_ASSIGNMENT_DEPARTMENT_SECTION',
+      userId: req.user.id,
+      username: req.user.username,
+      data: { kpiId, assignments: body.assignments },
+    });
   }
 
   @Post(':id/assignments')
   async saveUserAssignments(
     @Param('id') kpiId: number,
-    @Body()
-    body: {
-      assignments: { user_id: number; target: number }[];
-    },
+    @Body() body: { assignments: { user_id: number; target: number }[] },
     @Req() req: Request & { user?: Employee },
   ) {
     if (!req.user) throw new UnauthorizedException('User not authenticated.');
-    return this.kpisService.saveUserAssignments(
+    // Kiểm tra giá trị assignments trước khi log
+    if (!Array.isArray(body.assignments) || body.assignments.length === 0) {
+      await this.auditLogService.logAction({
+        action: 'ASSIGN',
+        resource: 'KPI_ASSIGNMENT_USER',
+        userId: req.user.id,
+        username: req.user.username,
+        data: { kpiId, assignments: 'EMPTY_OR_INVALID' },
+      });
+      throw new BadRequestException('Assignments array is empty or invalid');
+    }
+    await this.kpisService.saveUserAssignments(
       kpiId,
       body.assignments,
       req.user,
     );
+    await this.auditLogService.logAction({
+      action: 'ASSIGN',
+      resource: 'KPI_ASSIGNMENT_USER',
+      userId: req.user.id,
+      username: req.user.username,
+      data: { kpiId, assignments: body.assignments },
+    });
   }
 
   @Delete(':kpiId/sections/:sectionId')
   async deleteSectionAssignment(
     @Param('kpiId') kpiId: number,
     @Param('sectionId') sectionId: number,
-    @Req() req: Request & { user?: { id: number } },
+    @Req() req: Request & { user?: { id: number; username?: string } },
   ): Promise<void> {
     if (!req.user?.id)
       throw new UnauthorizedException('User not authenticated.');
-    return this.kpisService.deleteSectionAssignment(
+    await this.kpisService.deleteSectionAssignment(
       kpiId,
       sectionId,
       req.user.id,
     );
+    await this.auditLogService.logAction({
+      action: 'DELETE_ASSIGNMENT',
+      resource: 'KPI_ASSIGNMENT_SECTION',
+      userId: req.user.id,
+      username: req.user.username,
+      data: { kpiId, sectionId },
+    });
   }
 }

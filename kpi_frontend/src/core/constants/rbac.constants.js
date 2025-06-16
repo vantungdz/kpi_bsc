@@ -15,16 +15,14 @@ export const RBAC_ACTIONS = {
 };
 
 export const RBAC_RESOURCES = {
-  KPI:"kpi",
-  KPI_COMPANY: "kpi:company",
-  KPI_DEPARTMENT: "kpi:department",
-  KPI_SECTION: "kpi:section",
-  KPI_EMPLOYEE: "kpi:employee",
+  KPI: "kpi",
   KPI_VALUE: "kpi-value",
+  KPI_REVIEW: "kpi-review",
   EMPLOYEE_COMPANY: "employee:company",
   REPORT: "report",
   DASHBOARD: "dashboard",
   ADMIN: "admin",
+  EMPLOYEE: "employee",
 };
 
 export const ROLES = {

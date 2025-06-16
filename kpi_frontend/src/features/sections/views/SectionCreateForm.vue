@@ -1,120 +1,133 @@
 <template>
   <a-card class="section-create-form">
-    <h2 class="form-title">{{ $t("createSection") }}</h2>
+    <div class="form-header">
+      <a-avatar class="form-header-icon" size="large" style="background: linear-gradient(135deg, #1890ff 60%, #e6f7ff 100%)">
+        <template #icon>
+          <AppstoreOutlined />
+        </template>
+      </a-avatar>
+      <h2 class="form-title">{{ $t("createSection") }}</h2>
+    </div>
     <a-divider />
-    <a-form
-      :model="form"
-      :rules="rules"
-      ref="formRef"
-      layout="vertical"
-      @finish="handleSubmit"
-    >
+    <a-form :model="form" :rules="rules" ref="formRef" layout="vertical" @finish="handleSubmit">
       <a-row :gutter="16">
         <a-col :xs="24" :md="12">
           <a-form-item :label="$t('sectionName')" name="name">
-            <a-input
-              v-model:value="form.name"
-              :placeholder="$t('enterSectionName')"
-            />
+            <a-input v-model:value="form.name" :placeholder="$t('enterSectionName')">
+              <template #prefix>
+                <AppstoreOutlined />
+              </template>
+            </a-input>
           </a-form-item>
         </a-col>
         <a-col :xs="24" :md="12">
           <a-form-item :label="$t('manager')" name="managerId">
-            <a-select
-              v-model:value="form.managerId"
-              :placeholder="$t('selectManager')"
-              :options="managerOptions"
+            <a-select v-model:value="form.managerId" :placeholder="$t('selectManager')" :options="managerOptions"
               :loading="loadingManagers"
               show-search
               :filter-option="filterManagerOption"
-            />
+              >
+              <template #suffixIcon>
+                <UserOutlined />
+              </template>
+            </a-select>
           </a-form-item>
         </a-col>
       </a-row>
       <a-form-item :label="$t('department')" name="departmentId">
-        <a-select
-          v-model:value="form.departmentId"
-          :placeholder="$t('selectDepartment')"
-          :options="departmentOptions"
-        />
+        <a-select v-model:value="form.departmentId" :placeholder="$t('selectDepartment')" :options="departmentOptions">
+          <template #suffixIcon>
+            <ApartmentOutlined />
+          </template>
+        </a-select>
       </a-form-item>
       <a-form-item>
-        <a-button type="primary" html-type="submit" :loading="loading">{{
-          $t("create")
-        }}</a-button>
+        <a-button type="default" html-type="submit" :loading="loading" class="create-btn-modern" size="middle" shape="round">
+          <template #icon>
+            <PlusOutlined />
+          </template>
+          {{ $t("common.create") }}
+        </a-button>
       </a-form-item>
     </a-form>
     <a-divider />
     <div>
-      <h3 style="margin-bottom: 12px">{{ $t("sectionList") }}</h3>
-      <a-table
-        :data-source="sectionList"
-        :columns="sectionColumns"
-        row-key="id"
-        size="small"
-        :pagination="false"
-        bordered
-        v-if="sectionList && sectionList.length"
-      >
+      <h3 class="list-title">{{ $t("sectionList") }}</h3>
+      <a-table :data-source="sectionList" :columns="sectionColumns" row-key="id" size="small" :pagination="false"
+        bordered v-if="sectionList && sectionList.length">
         <template #actions="{ record }">
-          <a-button size="small" type="link" @click="() => editSection(record)">{{ $t('edit') }}</a-button>
-          <a-popconfirm
-            :title="$t('confirmDelete')"
-            :ok-text="$t('delete')"
-            :cancel-text="$t('cancel')"
-            @confirm="() => deleteSection(record)"
-          >
-            <a-button size="small" type="link" danger>{{ $t('delete') }}</a-button>
+          <a-tooltip :title="t('common.edit')">
+            <a-button size="small" type="text" @click="() => editSection(record)">
+              <template #icon><EditOutlined /></template>
+            </a-button>
+          </a-tooltip>
+          <a-popconfirm :title="t('confirmDelete')" :ok-text="t('common.delete')" :cancel-text="t('common.cancel')"
+            @confirm="() => deleteSection(record)">
+            <a-tooltip :title="t('common.delete')">
+              <a-button size="small" type="text" danger>
+                <template #icon><DeleteOutlined /></template>
+              </a-button>
+            </a-tooltip>
           </a-popconfirm>
         </template>
       </a-table>
       <a-empty v-else :description="$t('noSections')" />
     </div>
-    <a-modal
-      v-model:visible="showEditModal"
-      :title="$t('editSection')"
-      :confirm-loading="editLoading"
+    <a-modal v-model:visible="showEditModal" :title="$t('editSection')" :confirm-loading="editLoading"
       @ok="handleUpdateSection"
       @cancel="closeEditModal"
       destroy-on-close
-    >
-      <a-form
-        :model="editForm"
-        :rules="rules"
-        ref="editFormRef"
-        layout="vertical"
-        @finish="handleUpdateSection"
       >
+      <a-form :model="editForm" :rules="rules" ref="editFormRef" layout="vertical" @finish="handleUpdateSection">
         <a-row :gutter="16">
           <a-col :xs="24" :md="12">
             <a-form-item :label="$t('sectionName')" name="name">
-              <a-input
-                v-model:value="editForm.name"
-                :placeholder="$t('enterSectionName')"
-              />
+              <a-input v-model:value="editForm.name" :placeholder="$t('enterSectionName')">
+                <template #prefix>
+                  <AppstoreOutlined />
+                </template>
+              </a-input>
             </a-form-item>
           </a-col>
           <a-col :xs="24" :md="12">
             <a-form-item :label="$t('manager')" name="managerId">
-              <a-select
-                v-model:value="editForm.managerId"
-                :placeholder="$t('selectManager')"
-                :options="managerOptions"
+              <a-select v-model:value="editForm.managerId" :placeholder="$t('selectManager')" :options="managerOptions"
                 :loading="loadingManagers"
                 show-search
                 :filter-option="filterManagerOption"
-              />
+                >
+                <template #suffixIcon>
+                  <UserOutlined />
+                </template>
+              </a-select>
             </a-form-item>
           </a-col>
         </a-row>
         <a-form-item :label="$t('department')" name="departmentId">
-          <a-select
-            v-model:value="editForm.departmentId"
-            :placeholder="$t('selectDepartment')"
-            :options="departmentOptions"
-          />
+          <a-select v-model:value="editForm.departmentId" :placeholder="$t('selectDepartment')" :options="departmentOptions">
+            <template #suffixIcon>
+              <ApartmentOutlined />
+            </template>
+          </a-select>
         </a-form-item>
       </a-form>
+    </a-modal>
+    <a-modal
+      v-model:visible="showWarningModal"
+      :title="$t('warning')"
+      @ok="handleWarningConfirm"
+      @cancel="handleWarningCancel"
+      ok-type="danger"
+      :ok-text="$t('common.continue')"
+      :cancel-text="$t('common.cancel')"
+      >
+      <div style="color: #faad14; font-weight: 500;">
+        <span>{{ warningMessage }}</span>
+      </div>
+      <div v-if="pendingSectionData && managerOptions.length">
+        <br />
+        <span style="font-size: 0.95em; color: #888;">{{$t('managerAssignmentWarningDetail')}}</span>
+      </div>
     </a-modal>
   </a-card>
 </template>
@@ -124,6 +137,7 @@ import { ref, onMounted, computed } from "vue";
 import { useI18n } from "vue-i18n";
 import { message } from "ant-design-vue";
 import { useStore } from "vuex";
+import { AppstoreOutlined, ApartmentOutlined, UserOutlined, PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons-vue';
 
 const { t } = useI18n();
 const store = useStore();
@@ -137,6 +151,9 @@ const departmentOptions = ref([]);
 const loadingManagers = ref(false);
 const managerOptions = ref([]);
 const showEditModal = ref(false);
+const showWarningModal = ref(false);
+const warningMessage = ref("");
+const pendingSectionData = ref(null);
 
 const rules = {
   name: [
@@ -266,19 +283,63 @@ onMounted(async () => {
   await store.dispatch("sections/fetchSections");
 });
 
-const handleSubmit = async () => {
+const handleWarningConfirm = async () => {
+  if (!pendingSectionData.value) return;
   loading.value = true;
   try {
-    // Gọi API tạo section thực sự
-    await store.dispatch("sections/createSection", {
-      name: form.value.name,
-      departmentId: form.value.departmentId,
-      managerId: form.value.managerId,
+    const res = await store.dispatch("sections/createSection", {
+      ...pendingSectionData.value,
+      forceUpdateManager: true,
     });
+    if (res && res.warning) {
+      // Nếu vẫn còn warning, tiếp tục hiển thị modal (trường hợp backend trả warning lặp)
+      warningMessage.value = res.warning;
+      showWarningModal.value = true;
+      loading.value = false;
+      return;
+    }
     message.success(t("sectionCreatedSuccess"));
     form.value = { name: "", departmentId: null, managerId: null };
     formRef.value?.resetFields();
     await store.dispatch("sections/fetchSections");
+    await store.dispatch("employees/fetchUsers", { force: true });
+  } catch (e) {
+    message.error(e?.message || t("sectionCreatedError"));
+  } finally {
+    loading.value = false;
+    showWarningModal.value = false;
+    pendingSectionData.value = null;
+  }
+};
+
+const handleWarningCancel = () => {
+  showWarningModal.value = false;
+  pendingSectionData.value = null;
+};
+
+const handleSubmit = async () => {
+  loading.value = true;
+  try {
+    const payload = {
+      name: form.value.name,
+      departmentId: form.value.departmentId,
+      managerId: form.value.managerId,
+    };
+    const res = await store.dispatch("sections/createSection", payload);
+    if (res && res.warning) {
+      // Nếu có warning, chỉ hiển thị modal, KHÔNG reset form, KHÔNG tạo section
+      warningMessage.value = res.warning;
+      showWarningModal.value = true;
+      pendingSectionData.value = payload;
+      loading.value = false;
+      return;
+    }
+    // Nếu không có warning, mới reset form và thông báo thành công
+    message.success(t("sectionCreatedSuccess"));
+    form.value = { name: "", departmentId: null, managerId: null };
+    formRef.value?.resetFields();
+    await store.dispatch("sections/fetchSections");
+    await store.dispatch("employees/fetchUsers", { force: true });
   } catch (e) {
     message.error(e?.message || t("sectionCreatedError"));
   } finally {
@@ -295,15 +356,50 @@ const handleSubmit = async () => {
   box-shadow: 0 4px 24px #e6f7ff55;
   padding: 36px 32px 24px 32px;
   transition: box-shadow 0.2s;
+  max-width: 70%;
+}
+.form-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 0.5em;
+  justify-content: center;
+}
+.form-header-icon {
+  box-shadow: 0 2px 8px #e6f7ff99;
 }
 .form-title {
   font-size: 1.5rem;
   font-weight: 600;
-  margin-bottom: 0.5em;
-  text-align: center;
   letter-spacing: 0.5px;
+  margin: 0;
 }
-.ant-form-item {
-  margin-bottom: 18px;
+.create-btn-modern {
+  min-width: 110px;
+  font-size: 1rem;
+  font-weight: 500;
+  border-radius: 20px;
+  height: 38px;
+  background: #f4f8ff;
+  color: #1890ff;
+  border: 1.5px solid #e6f7ff;
+  box-shadow: none;
+  transition: all 0.18s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.create-btn-modern:hover, .create-btn-modern:focus {
+  background: #e6f7ff;
+  color: #1677ff;
+  border-color: #91d5ff;
+}
+.list-title {
+  margin-bottom: 12px;
+  font-size: 1.15rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 </style>

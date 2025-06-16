@@ -20,7 +20,7 @@ export class SectionsService {
     private readonly employeesService: EmployeesService, // Inject EmployeesService
   ) {}
 
-  async create(createSectionDto: any): Promise<Section> {
+  async create(createSectionDto: any): Promise<Section | { warning: string, employee: any }> {
     const created = this.sectionRepository.create(createSectionDto);
     const section = Array.isArray(created) ? created[0] : created;
     if (createSectionDto.departmentId) {
@@ -28,15 +28,35 @@ export class SectionsService {
     }
     if (createSectionDto.managerId) {
       section.managerId = createSectionDto.managerId;
+      const manager = await this.employeesService.findOne(createSectionDto.managerId);
+      const hasOtherSection = !!manager.sectionId;
+      // Nếu forceUpdateManager thì luôn cho phép tạo section, bỏ qua warning
+      if (hasOtherSection && !createSectionDto.forceUpdateManager) {
+        return {
+          warning: `Nhân viên này đã là quản lý section khác. Nếu tiếp tục, section cũ sẽ bị thay đổi.`,
+          employee: manager
+        };
+      }
     }
+    // Lưu section khi không có warning hoặc đã force
     const savedSection = await this.sectionRepository.save(section);
-    // Update manager's roles if managerId exists
+    // Nếu có manager, cập nhật lại thông tin manager
     if (createSectionDto.managerId) {
       const manager = await this.employeesService.findOne(createSectionDto.managerId);
-      const currentRoles = manager.roles?.map(r => typeof r === 'string' ? r : r.name) || [];
-      if (!currentRoles.includes('section')) {
-        await this.employeesService.updateRoles(manager.id, [...currentRoles, 'section']);
+      // Nếu manager đã có sectionId (section cũ), cập nhật section cũ về managerId = null
+      if (manager.sectionId && manager.sectionId !== savedSection.id) {
+        const oldSection = await this.sectionRepository.findOne({ where: { id: manager.sectionId } });
+        if (oldSection && oldSection.managerId === manager.id) {
+          oldSection.managerId = null;
+          await this.sectionRepository.save(oldSection);
+        }
       }
+      await this.employeesService.updateEmployee(createSectionDto.managerId, {
+        departmentId: savedSection.department?.id,
+        sectionId: savedSection.id,
+        roles: ['manager' as any],
+        _mergeRoles: true
+      });
     }
     return savedSection;
   }
@@ -98,7 +118,7 @@ export class SectionsService {
     return sections;
   }
 
-  async update(id: number, updateSectionDto: any): Promise<Section> {
+  async update(id: number, updateSectionDto: any): Promise<Section | { warning: string, employee: any }> {
     const section = await this.sectionRepository.findOne({ where: { id } });
     if (!section) {
       throw new NotFoundException('Section not found');
@@ -111,16 +131,26 @@ export class SectionsService {
     }
     if (updateSectionDto.managerId !== undefined) {
       section.managerId = updateSectionDto.managerId;
+      // Kiểm tra trạng thái manager
+      const manager = await this.employeesService.findOne(updateSectionDto.managerId);
+      const hasOtherSection = manager.sectionId && manager.sectionId !== section.id;
+      if (hasOtherSection && !updateSectionDto.forceUpdateManager) {
+        return {
+          warning: `Nhân viên này đã là quản lý section khác. Nếu tiếp tục, section cũ sẽ bị thay đổi.`,
+          employee: manager
+        };
+      }
+      // Nếu forceUpdateManager hoặc chưa có section, cập nhật lại
+      console.log(`[SectionService] Gọi updateEmployee cho managerId=${manager.id} với departmentId=${section.department?.id}, sectionId=${section.id}, roles=['manager']`);
+      const updatedManager = await this.employeesService.updateEmployee(manager.id, {
+        departmentId: section.department?.id,
+        sectionId: section.id,
+        roles: ['manager' as any],
+        _mergeRoles: true
+      });
+      console.log(`[SectionService] Kết quả updateEmployee: managerId=${updatedManager.id}, departmentId=${updatedManager.departmentId}, sectionId=${updatedManager.sectionId}, roles=${JSON.stringify(updatedManager.roles)}`);
     }
     const saved = await this.sectionRepository.save(section);
-    // Update manager's roles nếu cần
-    if (updateSectionDto.managerId) {
-      const manager = await this.employeesService.findOne(updateSectionDto.managerId);
-      const currentRoles = manager.roles?.map(r => typeof r === 'string' ? r : r.name) || [];
-      if (!currentRoles.includes('section')) {
-        await this.employeesService.updateRoles(manager.id, [...currentRoles, 'section']);
-      }
-    }
     return saved;
   }
 

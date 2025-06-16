@@ -10,14 +10,17 @@ import { EmployeesModule } from '../employees/employees.module'; // If Notificat
 import { NotificationGateway } from './notification.gateway';
 import { KpiExpiryScheduler } from './kpi-expiry.scheduler';
 import { KpisModule } from '../kpis/kpis.module';
+import { ReviewReminderScheduler } from './review-reminder.scheduler';
+import { ReviewSummaryScheduler } from './review-summary.scheduler';
+import { KpiReview } from '../entities/kpi-review.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Notification, Employee]), // Add other entities if NotificationService interacts with them
+    TypeOrmModule.forFeature([Notification, Employee, KpiReview]), // Thêm KpiReview để inject repository cho scheduler
     EmployeesModule, // Needed if NotificationEventListener injects EmployeesService
     KpisModule, // Thêm dòng này để inject KpisService
   ],
-  providers: [NotificationService, NotificationEventListener, NotificationGateway, KpiExpiryScheduler], // Add scheduler
+  providers: [NotificationService, NotificationEventListener, NotificationGateway, KpiExpiryScheduler, ReviewReminderScheduler, ReviewSummaryScheduler], // Add scheduler
   controllers: [NotificationsController],
   exports: [NotificationService, NotificationGateway], // Export if other modules need to directly use NotificationService
 })

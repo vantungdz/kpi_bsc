@@ -34,7 +34,7 @@ export class Section {
   manager: Employee;
 
   @Column({ nullable: true })
-  managerId: number;
+  managerId: number | null;
 
   @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
   created_at: Date;

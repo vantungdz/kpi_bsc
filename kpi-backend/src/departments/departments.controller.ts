@@ -21,7 +21,7 @@ export class DepartmentsController {
   constructor(private readonly departmentService: DepartmentsService) {}
 
   @Post()
-  async create(@Body() createDepartmentDto: any): Promise<Department> {
+  async create(@Body() createDepartmentDto: any): Promise<Department | { warning: string, employee: any }> {
     return this.departmentService.create(createDepartmentDto);
   }
 
@@ -39,7 +39,7 @@ export class DepartmentsController {
   async update(
     @Param('id') id: number,
     @Body() updateDepartmentDto: any,
-  ): Promise<Department> {
+  ): Promise<Department | { warning: string, employee: any }> {
     return this.departmentService.update(id, updateDepartmentDto);
   }
 

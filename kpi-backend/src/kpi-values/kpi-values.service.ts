@@ -925,7 +925,28 @@ export class KpiValuesService {
     return kpiValue;
   }
 
-  // Helper kiểm tra quyền động resource:action:scope
+  // Helper: check if user has a permission (resource, action, scope)
+  private userHasPermission(user: Employee, resource: string, action: string, scope?: string): boolean {
+    if (!user || !user.roles) return false;
+    // Each role may have permissions array
+    for (const role of user.roles) {
+      if (role && Array.isArray(role.permissions)) {
+        if (
+          role.permissions.some(
+            (p) =>
+              p.resource === resource &&
+              p.action === action &&
+              (!scope || p.scope === scope)
+          )
+        ) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  // Helper kiểm tra quyền động resource:action:scope (RBAC)
   private async hasDynamicRole(
     user: Employee,
     resource: string,
@@ -934,16 +955,12 @@ export class KpiValuesService {
     assignment?: any,
   ): Promise<boolean> {
     if (!user || !user.roles) return false;
-    const userRoles: string[] = Array.isArray(user.roles)
-      ? user.roles.map((r: any) => (typeof r === 'string' ? r : r?.name))
-      : [];
-    // Admin/manager luôn có quyền
-    if (userRoles.includes('admin') || userRoles.includes('manager'))
-      return true;
-    // Gom nhóm scope
+    // Check permission via RBAC
+    if (this.userHasPermission(user, resource, action, scope)) return true;
+    // Optionally, fallback to assignment-based checks for legacy support
     if (scope === 'section') {
       return (
-        userRoles.includes('section') &&
+        this.userHasPermission(user, resource, action, 'section') &&
         user.sectionId &&
         assignment &&
         (assignment.assigned_to_section === user.sectionId ||
@@ -952,7 +969,7 @@ export class KpiValuesService {
     }
     if (scope === 'department') {
       return (
-        userRoles.includes('department') &&
+        this.userHasPermission(user, resource, action, 'department') &&
         user.departmentId &&
         assignment &&
         (assignment.assigned_to_department === user.departmentId ||
@@ -1001,20 +1018,15 @@ export class KpiValuesService {
   }
 
   async getPendingApprovals(user: Employee): Promise<KpiValue[]> {
-    if (
-      !user ||
-      !user.roles ||
-      !Array.isArray(user.roles) ||
-      user.roles.length === 0
-    ) {
-      throw new UnauthorizedException(
-        'Invalid user data for fetching pending approvals.',
-      );
+    if (!user || !user.roles || !Array.isArray(user.roles) || user.roles.length === 0) {
+      throw new UnauthorizedException('Invalid user data for fetching pending approvals.');
     }
-    const userRoles: string[] = user.roles.map((r: any) =>
-      typeof r === 'string' ? r : r?.name,
-    );
-    // Ưu tiên quyền cao nhất: admin > manager > department > section
+    // Use RBAC permissions instead of hardcoded roles
+    const canApproveSection = this.userHasPermission(user, 'kpi-value', 'approve', 'section');
+    const canApproveDepartment = this.userHasPermission(user, 'kpi-value', 'approve', 'department');
+    const canApproveManager = this.userHasPermission(user, 'kpi-value', 'approve', 'manager');
+    const canApproveAdmin = this.userHasPermission(user, 'kpi-value', 'approve', 'admin');
+
     const query = this.kpiValuesRepository
       .createQueryBuilder('kpiValue')
       .innerJoinAndSelect('kpiValue.kpiAssignment', 'assignment')
@@ -1022,81 +1034,60 @@ export class KpiValuesService {
       .leftJoinAndSelect('assignment.employee', 'assignedEmployee')
       .leftJoinAndSelect('assignment.section', 'assignedSection')
       .leftJoinAndSelect('assignment.department', 'assignedDepartment')
-      .leftJoinAndSelect(
-        'assignedSection.department',
-        'departmentOfAssignedSection',
-      )
+      .leftJoinAndSelect('assignedSection.department', 'departmentOfAssignedSection')
       .leftJoinAndSelect('assignedEmployee.section', 'employeeSection')
       .leftJoinAndSelect('assignedEmployee.department', 'employeeDepartment')
       .leftJoinAndSelect('kpi.perspective', 'perspective');
 
-    // Định nghĩa filter cho từng role
-    const roleFilters: Record<string, () => void> = {
-      section: () => {
-        if (!user.sectionId) return;
-        query
-          .where('kpiValue.status = :status', {
-            status: KpiValueStatus.PENDING_SECTION_APPROVAL,
-          })
-          .andWhere(
-            new Brackets((qb) => {
-              qb.where('assignment.assigned_to_section = :sectionId', {
-                sectionId: user.sectionId,
-              }).orWhere('assignedEmployee.sectionId = :sectionId', {
-                sectionId: user.sectionId,
-              });
-            }),
-          );
-      },
-      department: () => {
-        if (!user.departmentId) return;
-        query
-          .where('kpiValue.status = :status', {
-            status: KpiValueStatus.PENDING_DEPT_APPROVAL,
-          })
-          .andWhere(
-            new Brackets((qb) => {
-              qb.where('assignment.assigned_to_department = :deptId', {
+    // RBAC-based filters
+    let applied = false;
+    if (canApproveAdmin) {
+      query.where('kpiValue.status IN (:...statuses)', {
+        statuses: [
+          KpiValueStatus.PENDING_SECTION_APPROVAL,
+          KpiValueStatus.PENDING_DEPT_APPROVAL,
+          KpiValueStatus.PENDING_MANAGER_APPROVAL,
+        ],
+      });
+      applied = true;
+    } else if (canApproveManager) {
+      query.where('kpiValue.status = :status', {
+        status: KpiValueStatus.PENDING_MANAGER_APPROVAL,
+      });
+      applied = true;
+    } else if (canApproveDepartment && user.departmentId) {
+      query
+        .where('kpiValue.status = :status', {
+          status: KpiValueStatus.PENDING_DEPT_APPROVAL,
+        })
+        .andWhere(
+          new Brackets((qb) => {
+            qb.where('assignment.assigned_to_department = :deptId', {
+              deptId: user.departmentId,
+            })
+              .orWhere('departmentOfAssignedSection.id = :deptId', {
                 deptId: user.departmentId,
               })
-                .orWhere('departmentOfAssignedSection.id = :deptId', {
-                  deptId: user.departmentId,
-                })
-                .orWhere('assignedEmployee.departmentId = :deptId', {
-                  deptId: user.departmentId,
-                });
-            }),
-          );
-      },
-      manager: () => {
-        query.where('kpiValue.status = :status', {
-          status: KpiValueStatus.PENDING_MANAGER_APPROVAL,
-        });
-      },
-      admin: () => {
-        query.where('kpiValue.status IN (:...statuses)', {
-          statuses: [
-            KpiValueStatus.PENDING_SECTION_APPROVAL,
-            KpiValueStatus.PENDING_DEPT_APPROVAL,
-            KpiValueStatus.PENDING_MANAGER_APPROVAL,
-          ],
-        });
-      },
-    };
-
-    // Ưu tiên quyền cao nhất
-    let applied = false;
-    if (userRoles.includes('admin')) {
-      roleFilters.admin();
+              .orWhere('assignedEmployee.departmentId = :deptId', {
+                deptId: user.departmentId,
+              });
+          }),
+        );
       applied = true;
-    } else if (userRoles.includes('manager')) {
-      roleFilters.manager();
-      applied = true;
-    } else if (userRoles.includes('department')) {
-      roleFilters.department();
-      applied = true;
-    } else if (userRoles.includes('section')) {
-      roleFilters.section();
+    } else if (canApproveSection && user.sectionId) {
+      query
+        .where('kpiValue.status = :status', {
+          status: KpiValueStatus.PENDING_SECTION_APPROVAL,
+        })
+        .andWhere(
+          new Brackets((qb) => {
+            qb.where('assignment.assigned_to_section = :sectionId', {
+              sectionId: user.sectionId,
+            }).orWhere('assignedEmployee.sectionId = :sectionId', {
+              sectionId: user.sectionId,
+            });
+          }),
+        );
       applied = true;
     }
     if (!applied) {

@@ -1,31 +1,53 @@
 <template>
   <div class="employee-list" v-if="canViewEmployee">
     <div class="header">
-      <h2>{{ $t("employeeListTitle") }}</h2>
-      <div>
+      <h2
+        style="
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          color: #1a237e;
+          font-weight: 700;
+        "
+      >
+        <user-outlined
+          style="font-size: 1.5em; color: #1976d2; margin-right: 4px"
+        />
+        {{ $t("employeeListTitle") }}
+      </h2>
+      <div style="display: flex; align-items: center; gap: 8px">
         <a-input-search
           v-model:value="searchText"
           :placeholder="$t('searchEmployeePlaceholder')"
           style="width: 220px; margin-right: 8px"
           @search="onSearch"
           allow-clear
-        />
-        <a-button type="primary" @click="openAddModal" v-if="canCreateEmployee">
-          {{ $t("addEmployee") }}
+        >
+          <template #prefix>
+            <search-outlined style="color: #1976d2" />
+          </template>
+        </a-input-search>
+        <a-button
+          type="primary"
+          @click="openAddModal"
+          v-if="canCreateEmployee"
+          style="display: flex; align-items: center; gap: 4px"
+        >
+          <user-add-outlined /> {{ $t("addEmployee") }}
         </a-button>
         <a-button
-          style="margin-left: 8px"
+          style="margin-left: 8px; display: flex; align-items: center; gap: 4px"
           @click="openUploadModal"
           v-if="canCreateEmployee"
         >
-          {{ $t("uploadEmployeeExcel") }}
+          <upload-outlined /> {{ $t("uploadEmployeeExcel") }}
         </a-button>
         <a-button
-          style="margin-left: 8px"
+          style="margin-left: 8px; display: flex; align-items: center; gap: 4px"
           @click="exportExcel"
           v-if="canCreateEmployee"
         >
-          {{ $t("exportExcel") }}
+          <file-excel-outlined /> {{ $t("exportExcel") }}
         </a-button>
       </div>
     </div>
@@ -36,12 +58,16 @@
         allow-clear
         style="width: 140px; margin-right: 8px"
       >
+        <template #suffixIcon>
+          <safety-certificate-outlined style="color: #1976d2" />
+        </template>
         <a-select-option
-          v-for="role in roles"
-          :key="role.value"
-          :value="role.value"
-          >{{ $t(role.label) }}</a-select-option
-        >
+              v-for="role in roles"
+              :key="role.id"
+              :value="role.name"
+            >
+              {{ $t(role.name) }}
+            </a-select-option>
       </a-select>
       <a-select
         v-model:value="filterDepartment"
@@ -49,6 +75,9 @@
         allow-clear
         style="width: 160px; margin-right: 8px"
       >
+        <template #suffixIcon>
+          <apartment-outlined style="color: #1976d2" />
+        </template>
         <a-select-option
           v-for="dept in departmentList"
           :key="dept.id"
@@ -62,6 +91,9 @@
         allow-clear
         style="width: 160px"
       >
+        <template #suffixIcon>
+          <cluster-outlined style="color: #1976d2" />
+        </template>
         <a-select-option
           v-for="sec in sectionList"
           :key="sec.id"
@@ -101,19 +133,22 @@
           username: [{ required: true, message: $t('usernameRequired') }],
           email: [
             { required: true, message: $t('emailRequired') },
-            { type: 'email', message: $t('emailInvalid') }
+            { type: 'email', message: $t('emailInvalid') },
           ],
           first_name: [{ required: true, message: $t('firstNameRequired') }],
           last_name: [{ required: true, message: $t('lastNameRequired') }],
           roles: [{ required: true, message: $t('roleRequired') }],
-          departmentId: [{ required: true, message: $t('departmentRequired') }],
-          sectionId: [{ required: true, message: $t('sectionRequired') }],
-          password: [{ required: !editEmployee, message: $t('passwordRequired') }],
+          password: [
+            { required: !editEmployee, message: $t('passwordRequired') },
+          ],
         }"
         layout="vertical"
       >
         <a-form-item :label="$t('username')" name="username">
-          <a-input v-model:value="employeeForm.username" :disabled="!!editEmployee" />
+          <a-input
+            v-model:value="employeeForm.username"
+            :disabled="!!editEmployee"
+          />
         </a-form-item>
         <a-form-item :label="$t('email')" name="email">
           <a-input v-model:value="employeeForm.email" />
@@ -125,27 +160,47 @@
           <a-input v-model:value="employeeForm.last_name" />
         </a-form-item>
         <a-form-item :label="$t('role')" name="roles">
-          <a-select v-model:value="employeeForm.roles" mode="multiple" allow-clear>
-            <a-select-option v-for="role in roles" :key="role.value" :value="role.value">
-              {{ $t(role.label) }}
+          <a-select
+            v-model:value="employeeForm.roles"
+            mode="multiple"
+            allow-clear
+          >
+            <a-select-option
+              v-for="role in roles"
+              :key="role.id"
+              :value="role.name"
+            >
+              {{ $t(role.name) }}
             </a-select-option>
           </a-select>
         </a-form-item>
         <a-form-item :label="$t('departmentLabel')" name="departmentId">
           <a-select v-model:value="employeeForm.departmentId" allow-clear>
-            <a-select-option v-for="dept in departmentList" :key="dept.id" :value="dept.id">
+            <a-select-option
+              v-for="dept in departmentList"
+              :key="dept.id"
+              :value="dept.id"
+            >
               {{ dept.name }}
             </a-select-option>
           </a-select>
         </a-form-item>
         <a-form-item :label="$t('section')" name="sectionId">
           <a-select v-model:value="employeeForm.sectionId" allow-clear>
-            <a-select-option v-for="sec in sectionListForForm" :key="sec.id" :value="Number(sec.id)">
+            <a-select-option
+              v-for="sec in sectionListForForm"
+              :key="sec.id"
+              :value="Number(sec.id)"
+            >
               {{ sec.name }}
             </a-select-option>
           </a-select>
         </a-form-item>
-        <a-form-item v-if="!editEmployee" :label="$t('password')" name="password">
+        <a-form-item
+          v-if="!editEmployee"
+          :label="$t('password')"
+          name="password"
+        >
           <a-input-password v-model:value="employeeForm.password" />
         </a-form-item>
       </a-form>
@@ -298,28 +353,38 @@
     </a-modal>
     <a-drawer
       :open="isDetailDrawerVisible"
-      :title="$t('employeeDetail')"
+      :title="null"
       @close="closeDetailDrawer"
-      width="420px"
+      width="480px"
       placement="right"
       destroyOnClose
       class="employee-detail-drawer"
     >
-      <div style="display: flex; flex-direction: column; align-items: center; margin-bottom: 18px;">
+      <div class="drawer-header">
         <a-avatar
           :size="96"
           :src="detailEmployee?.avatarUrl || undefined"
-          style="margin-bottom: 12px; background: #e3e7ef; font-size: 2.5rem;"
+          style="
+            margin-bottom: 12px;
+            background: #e3e7ef;
+            font-size: 2.5rem;
+            box-shadow: 0 2px 8px #e3eaf344;
+          "
         >
           <template v-if="!detailEmployee?.avatarUrl">
             <user-outlined />
           </template>
         </a-avatar>
-        <div class="drawer-title" style="margin-bottom: 2px;">
-          {{ detailEmployee?.first_name || '' }} {{ detailEmployee?.last_name || '' }}
+        <div class="drawer-title">
+          <idcard-outlined
+            style="margin-right: 6px; color: #1976d2; font-size: 1.1em"
+          />
+          {{ detailEmployee?.first_name || "" }}
+          {{ detailEmployee?.last_name || "" }}
         </div>
         <div class="drawer-sub">
-          {{ detailEmployee?.username || $t('noData') }}
+          <user-outlined style="margin-right: 4px; color: #607d8b" />
+          {{ detailEmployee?.username || $t("noData") }}
         </div>
       </div>
       <a-descriptions
@@ -327,36 +392,91 @@
         bordered
         :column="1"
         size="middle"
-        :label-style="{ fontWeight: 'bold', minWidth: '120px' }"
-        :content-style="{ minWidth: '180px' }"
+        :label-style="{
+          fontWeight: 'bold',
+          minWidth: '120px',
+          background: '#f5f8fd',
+          color: '#1976d2',
+        }"
+        :content-style="{ minWidth: '180px', background: '#fff' }"
+        class="drawer-desc"
       >
         <a-descriptions-item :label="$t('email')">
-          <mail-outlined style="margin-right: 4px" />{{ detailEmployee.email || $t('noData') }}
+          <mail-outlined style="margin-right: 4px; color: #1976d2" />{{
+            detailEmployee.email || $t("noData")
+          }}
         </a-descriptions-item>
         <a-descriptions-item :label="$t('role')">
-          <safety-certificate-outlined style="margin-right: 4px" />
-          <template v-if="Array.isArray(detailEmployee?.roles) && detailEmployee.roles.length">
+          <safety-certificate-outlined
+            style="margin-right: 4px; color: #1976d2"
+          />
+          <template
+            v-if="
+              Array.isArray(detailEmployee?.roles) &&
+              detailEmployee.roles.length
+            "
+          >
             <a-tag
               v-for="role in detailEmployee.roles"
               :key="role.id || role.name || role"
               :color="roleColor(role)"
               style="margin-right: 4px; margin-bottom: 2px"
             >
-              {{ typeof role === 'string' ? role : role?.name || $t('noData') }}
+              {{ typeof role === "string" ? role : role?.name || $t("noData") }}
             </a-tag>
           </template>
-          <span v-else style="color: #aaa">{{ $t('noRole') }}</span>
+          <span v-else style="color: #aaa">{{ $t("noRole") }}</span>
         </a-descriptions-item>
         <a-descriptions-item :label="$t('departmentLabel')">
-          <apartment-outlined style="margin-right: 4px" />{{ detailEmployee.department?.name || $t('noData') }}
+          <apartment-outlined style="margin-right: 4px; color: #1976d2" />{{
+            detailEmployee.department?.name || $t("noData")
+          }}
         </a-descriptions-item>
         <a-descriptions-item :label="$t('section')">
-          <cluster-outlined style="margin-right: 4px" />{{ detailEmployee.section?.name || $t('noData') }}
+          <cluster-outlined style="margin-right: 4px; color: #1976d2" />{{
+            detailEmployee.section?.name || $t("noData")
+          }}
         </a-descriptions-item>
         <a-descriptions-item :label="$t('createdAt')">
-          <calendar-outlined style="margin-right: 4px" />{{ formatDate(detailEmployee.created_at) }}
+          <calendar-outlined style="margin-right: 4px; color: #1976d2" />{{
+            formatDate(detailEmployee.created_at)
+          }}
         </a-descriptions-item>
       </a-descriptions>
+      <div
+        v-if="
+          detailEmployee &&
+          detailEmployee.skills &&
+          detailEmployee.skills.length
+        "
+        class="employee-skill-block"
+      >
+        <div class="skill-block-title">
+          <star-outlined
+            style="margin-right: 6px; color: #faad14; font-size: 1.1em"
+          />{{ $t("employeeSkill.skills") }}
+        </div>
+        <div class="skill-list">
+          <div
+            v-for="skill in detailEmployee.skills"
+            :key="skill.skillId"
+            class="skill-item"
+          >
+            <span class="skill-name"
+              ><star-outlined style="margin-right: 3px; color: #faad14" />{{
+                skill.skillName
+              }}</span
+            >
+            <a-rate
+              :value="skill.level"
+              :count="5"
+              allow-half
+              disabled
+              style="margin-left: 10px; font-size: 1.1em"
+            />
+          </div>
+        </div>
+      </div>
     </a-drawer>
   </div>
 </template>
@@ -395,34 +515,42 @@ import {
   ApartmentOutlined,
   ClusterOutlined,
   CalendarOutlined,
+  StarOutlined,
+  SearchOutlined,
+  UserAddOutlined,
+  FileExcelOutlined,
 } from "@ant-design/icons-vue";
 import { RBAC_ACTIONS, RBAC_RESOURCES } from "@/core/constants/rbac.constants";
-import dayjs from 'dayjs';
+import dayjs from "dayjs";
 
 const { t: $t } = useI18n();
 const store = useStore();
 const userPermissions = computed(
   () => store.getters["auth/user"]?.permissions || []
 );
-function hasPermission(action, resource) {
+function hasPermission(action, resource, scope) {
   return userPermissions.value?.some(
-    (p) => p.action?.trim() === action && p.resource?.trim() === resource
+    (p) =>
+      p.action?.trim() === action &&
+      p.resource?.trim() === resource &&
+      (scope ? p.scope?.trim() === scope : true)
   );
 }
+
 const canCreateEmployee = computed(() =>
-  hasPermission(RBAC_ACTIONS.CREATE, RBAC_RESOURCES.EMPLOYEE_COMPANY)
+  hasPermission(RBAC_ACTIONS.CREATE, RBAC_RESOURCES.EMPLOYEE, "company")
 );
 const canEditEmployee = computed(() =>
-  hasPermission(RBAC_ACTIONS.UPDATE, RBAC_RESOURCES.EMPLOYEE_COMPANY)
+  hasPermission(RBAC_ACTIONS.UPDATE, RBAC_RESOURCES.EMPLOYEE, "company")
 );
 const canDeleteEmployee = computed(() =>
-  hasPermission(RBAC_ACTIONS.DELETE, RBAC_RESOURCES.EMPLOYEE_COMPANY)
+  hasPermission(RBAC_ACTIONS.DELETE, RBAC_RESOURCES.EMPLOYEE, "company")
 );
 const canResetPassword = computed(() =>
-  hasPermission(RBAC_ACTIONS.UPDATE, RBAC_RESOURCES.EMPLOYEE_COMPANY)
+  hasPermission(RBAC_ACTIONS.UPDATE, RBAC_RESOURCES.EMPLOYEE, "company")
 );
 const canViewEmployee = computed(() =>
-  hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.EMPLOYEE_COMPANY)
+  hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.EMPLOYEE, "company")
 );
 
 const employees = computed(() => store.getters["employees/userList"]);
@@ -477,13 +605,7 @@ const employeeForm = ref({
 
 const isEditingEmployee = ref(false);
 
-const roles = [
-  { value: "admin", label: "admin" },
-  { value: "manager", label: "manager" },
-  { value: "department", label: "department" },
-  { value: "section", label: "section" },
-  { value: "employee", label: "employee" },
-];
+const roles = computed(() => store.getters["roles/roleList"] || []);
 const pagination = ref({ pageSize: 10, current: 1, showSizeChanger: true });
 
 const filteredEmployees = computed(() => {
@@ -632,13 +754,26 @@ const openAddModal = () => {
 };
 // Helper lấy sectionId từ employee, fallback nhiều trường hợp
 function getSectionIdFromEmployee(employee) {
-  if (employee.sectionId !== undefined && employee.sectionId !== null) return Number(employee.sectionId);
-  if (employee.section && employee.section.id !== undefined && employee.section.id !== null) return Number(employee.section.id);
+  if (employee.sectionId !== undefined && employee.sectionId !== null)
+    return Number(employee.sectionId);
+  if (
+    employee.section &&
+    employee.section.id !== undefined &&
+    employee.section.id !== null
+  )
+    return Number(employee.section.id);
   // Fallback nếu có mảng sections (ít gặp)
-  if (Array.isArray(employee.sections) && employee.sections.length > 0 && employee.sections[0].id !== undefined) return Number(employee.sections[0].id);
+  if (
+    Array.isArray(employee.sections) &&
+    employee.sections.length > 0 &&
+    employee.sections[0].id !== undefined
+  )
+    return Number(employee.sections[0].id);
   // Fallback nếu có section_code và sectionListForForm
   if (employee.section_code && sectionListForForm.value) {
-    const found = sectionListForForm.value.find(sec => sec.code === employee.section_code);
+    const found = sectionListForForm.value.find(
+      (sec) => sec.code === employee.section_code
+    );
     if (found) return Number(found.id);
   }
   return undefined;
@@ -648,23 +783,29 @@ const openEditModal = async (employee) => {
   isEditingEmployee.value = true;
   editEmployee.value = employee;
   // Gán từng trường một để tránh bị ghi đè sectionId
-  employeeForm.value.username = employee.username || '';
-  employeeForm.value.email = employee.email || '';
-  employeeForm.value.first_name = employee.first_name || '';
-  employeeForm.value.last_name = employee.last_name || '';
+  employeeForm.value.username = employee.username || "";
+  employeeForm.value.email = employee.email || "";
+  employeeForm.value.first_name = employee.first_name || "";
+  employeeForm.value.last_name = employee.last_name || "";
   employeeForm.value.roles = Array.isArray(employee.roles)
     ? employee.roles.map((r) => (typeof r === "string" ? r : r?.name))
     : employee.role?.name
       ? [employee.role.name]
       : [];
-  employeeForm.value.departmentId = Number(employee.department?.id) || undefined;
+  employeeForm.value.departmentId =
+    Number(employee.department?.id) || undefined;
   employeeForm.value.sectionId = getSectionIdFromEmployee(employee);
-  employeeForm.value.password = '';
+  employeeForm.value.password = "";
   // Đảm bảo sectionListForForm luôn chứa section của nhân viên
   if (employee.department?.id) {
-    const sections = store.getters["sections/sectionsByDepartment"](employee.department.id);
+    const sections = store.getters["sections/sectionsByDepartment"](
+      employee.department.id
+    );
     if (!sections || !sections.length) {
-      await store.dispatch("sections/fetchSectionsByDepartment", employee.department.id);
+      await store.dispatch(
+        "sections/fetchSectionsByDepartment",
+        employee.department.id
+      );
     }
   }
   isAddEditModalVisible.value = true;
@@ -718,6 +859,13 @@ const handleAddEditEmployee = async () => {
     formData.roles = (formData.roles || [])
       .map((r) => (typeof r === "string" ? r : r?.name))
       .filter(Boolean);
+    // Ensure departmentId/sectionId are null if empty/undefined
+    if (formData.departmentId === undefined || formData.departmentId === "" || formData.departmentId === 0) {
+      formData.departmentId = null;
+    }
+    if (formData.sectionId === undefined || formData.sectionId === "" || formData.sectionId === 0) {
+      formData.sectionId = null;
+    }
     if (editEmployee.value) {
       await store.dispatch("employees/updateEmployee", {
         ...formData,
@@ -924,6 +1072,7 @@ const exportExcel = async () => {
   notification.success({ message: $t("exportExcelSuccess") });
 };
 onMounted(async () => {
+  await store.dispatch("roles/fetchRoles"); // Fetch roles from backend
   await store.dispatch("employees/fetchUsers", { force: true });
   await store.dispatch("departments/fetchDepartments");
   await store.dispatch("sections/fetchSections");
@@ -1014,63 +1163,114 @@ const columns = computed(() => [
   },
 ]);
 function formatDate(date) {
-  if (!date) return $t('noData');
-  return dayjs(date).isValid() ? dayjs(date).format('DD/MM/YYYY HH:mm') : date;
+  if (!date) return $t("noData");
+  return dayjs(date).isValid() ? dayjs(date).format("DD/MM/YYYY HH:mm") : date;
 }
 function roleColor(role) {
-  const name = typeof role === 'string' ? role : role?.name;
-  if (!name) return 'default';
-  if (name.toLowerCase().includes('admin')) return 'red';
-  if (name.toLowerCase().includes('manager')) return 'blue';
-  if (name.toLowerCase().includes('department')) return 'purple';
-  if (name.toLowerCase().includes('section')) return 'cyan';
-  return 'geekblue';
+  const name = typeof role === "string" ? role : role?.name;
+  if (!name) return "default";
+  if (name.toLowerCase().includes("admin")) return "red";
+  if (name.toLowerCase().includes("manager")) return "blue";
+  if (name.toLowerCase().includes("department")) return "purple";
+  if (name.toLowerCase().includes("section")) return "cyan";
+  return "geekblue";
 }
 </script>
 
 <style scoped>
 .employee-list {
-  padding: 20px;
+  padding: 24px 24px 16px 24px;
+  background: #fafdff;
+  border-radius: 14px;
+  box-shadow: 0 2px 16px #e3eaf322;
 }
 .header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 15px;
+  margin-bottom: 18px;
+  border-bottom: 1.5px solid #e3e7ef;
+  padding-bottom: 10px;
 }
 .filters {
-  margin-bottom: 12px;
+  margin-bottom: 16px;
   display: flex;
-  gap: 8px;
+  gap: 10px;
+  background: #f5f8fd;
+  border-radius: 8px;
+  padding: 10px 14px 6px 14px;
+  box-shadow: 0 1px 4px #e3eaf311;
 }
 .employee-detail-drawer {
   padding: 8px 0 0 0;
+}
+.drawer-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 18px;
+  padding-top: 8px;
+  border-bottom: 1.5px solid #e3e7ef;
+  padding-bottom: 12px;
+  background: #fafdff;
+  border-radius: 0 0 12px 12px;
+  box-shadow: 0 2px 8px #e3eaf322;
 }
 .drawer-title {
   font-size: 1.35rem;
   font-weight: 700;
   margin-bottom: 2px;
-  color: #1a237e;
+  color: #1976d2;
+  display: flex;
+  align-items: center;
 }
 .drawer-sub {
   font-size: 1rem;
   color: #607d8b;
   margin-bottom: 12px;
-}
-.drawer-section {
-  margin-bottom: 14px;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
 }
-.drawer-label {
-  min-width: 110px;
+.drawer-desc {
+  margin-bottom: 18px;
+  margin-top: 8px;
+  background: #fafdff;
+  border-radius: 10px;
+  box-shadow: 0 1px 4px #e3eaf311;
+  padding: 10px 0 10px 0;
+}
+.employee-skill-block {
+  margin-top: 18px;
+  padding: 14px 12px 10px 12px;
+  background: #fafdff;
+  border-radius: 10px;
+  box-shadow: 0 2px 8px #e3eaf322;
+}
+.skill-block-title {
+  font-size: 1.08rem;
   font-weight: 600;
-  color: #455a64;
-  flex-shrink: 0;
+  color: #1976d2;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
 }
-.drawer-value {
-  flex: 1;
+.skill-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.skill-item {
+  display: flex;
+  align-items: center;
+  font-size: 1rem;
+  color: #333;
+  padding: 2px 0;
+}
+.skill-name {
+  min-width: 120px;
+  font-weight: 500;
   color: #222;
-  word-break: break-word;
+  display: flex;
+  align-items: center;
 }
 </style>

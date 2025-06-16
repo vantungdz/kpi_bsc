@@ -24,12 +24,16 @@ import { RolesGuard } from 'src/auth/guards/roles.guard';
 import { Roles } from 'src/auth/guards/roles.decorator';
 import { ApiOperation, ApiResponse, ApiBody, ApiTags } from '@nestjs/swagger';
 import { RejectValueDto } from './dto/reject-value.dto';
+import { AuditLogService } from '../audit-log/audit-log.service';
 
 @ApiTags('KPI Values')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('kpi-values')
 export class KpiValuesController {
-  constructor(private readonly kpiValuesService: KpiValuesService) {}
+  constructor(
+    private readonly kpiValuesService: KpiValuesService,
+    private readonly auditLogService: AuditLogService,
+  ) {}
 
   @Get()
   @ApiOperation({ summary: 'Lấy danh sách tất cả KpiValue' })
@@ -110,7 +114,15 @@ export class KpiValuesController {
     if (!req.user?.id) {
       throw new UnauthorizedException('User not authenticated.');
     }
-    return this.kpiValuesService.approveValueBySection(valueId, req.user.id);
+    const result = await this.kpiValuesService.approveValueBySection(valueId, req.user.id);
+    await this.auditLogService.logAction({
+      action: 'APPROVE_SECTION',
+      resource: 'KPI_VALUE',
+      userId: req.user.id,
+      username: req.user.username,
+      data: { valueId },
+    });
+    return result;
   }
 
   @Post(':valueId/reject-section')
@@ -125,11 +137,19 @@ export class KpiValuesController {
     if (!req.user?.id) {
       throw new UnauthorizedException('User not authenticated.');
     }
-    return this.kpiValuesService.rejectValueBySection(
+    const result = await this.kpiValuesService.rejectValueBySection(
       valueId,
       rejectDto.reason,
       req.user.id,
     );
+    await this.auditLogService.logAction({
+      action: 'REJECT_SECTION',
+      resource: 'KPI_VALUE',
+      userId: req.user.id,
+      username: req.user.username,
+      data: { valueId, ...rejectDto },
+    });
+    return result;
   }
 
   @Post(':valueId/approve-department')
@@ -142,7 +162,15 @@ export class KpiValuesController {
     if (!req.user?.id) {
       throw new UnauthorizedException('User not authenticated.');
     }
-    return this.kpiValuesService.approveValueByDepartment(valueId, req.user.id);
+    const result = await this.kpiValuesService.approveValueByDepartment(valueId, req.user.id);
+    await this.auditLogService.logAction({
+      action: 'APPROVE_DEPARTMENT',
+      resource: 'KPI_VALUE',
+      userId: req.user.id,
+      username: req.user.username,
+      data: { valueId },
+    });
+    return result;
   }
 
   @Post(':valueId/reject-department')
@@ -157,11 +185,19 @@ export class KpiValuesController {
     if (!req.user?.id) {
       throw new UnauthorizedException('User not authenticated.');
     }
-    return this.kpiValuesService.rejectValueByDepartment(
+    const result = await this.kpiValuesService.rejectValueByDepartment(
       valueId,
       rejectDto.reason,
       req.user.id,
     );
+    await this.auditLogService.logAction({
+      action: 'REJECT_DEPARTMENT',
+      resource: 'KPI_VALUE',
+      userId: req.user.id,
+      username: req.user.username,
+      data: { valueId, ...rejectDto },
+    });
+    return result;
   }
 
   @Post(':valueId/approve-manager')
@@ -174,7 +210,15 @@ export class KpiValuesController {
     if (!req.user?.id) {
       throw new UnauthorizedException('User not authenticated.');
     }
-    return this.kpiValuesService.approveValueByManager(valueId, req.user.id);
+    const result = await this.kpiValuesService.approveValueByManager(valueId, req.user.id);
+    await this.auditLogService.logAction({
+      action: 'APPROVE_MANAGER',
+      resource: 'KPI_VALUE',
+      userId: req.user.id,
+      username: req.user.username,
+      data: { valueId },
+    });
+    return result;
   }
 
   @Post(':valueId/reject-manager')
@@ -189,11 +233,19 @@ export class KpiValuesController {
     if (!req.user?.id) {
       throw new UnauthorizedException('User not authenticated.');
     }
-    return this.kpiValuesService.rejectValueByManager(
+    const result = await this.kpiValuesService.rejectValueByManager(
       valueId,
       rejectDto.reason,
       req.user.id,
     );
+    await this.auditLogService.logAction({
+      action: 'REJECT_MANAGER',
+      resource: 'KPI_VALUE',
+      userId: req.user.id,
+      username: req.user.username,
+      data: { valueId, ...rejectDto },
+    });
+    return result;
   }
 
   @Patch(':id')
@@ -207,7 +259,15 @@ export class KpiValuesController {
     if (!req.user?.id) {
       throw new UnauthorizedException('User not authenticated.');
     }
-    return this.kpiValuesService.update(id, updateData, req.user.id);
+    const result = await this.kpiValuesService.update(id, updateData, req.user.id);
+    await this.auditLogService.logAction({
+      action: 'UPDATE',
+      resource: 'KPI_VALUE',
+      userId: req.user.id,
+      username: req.user.username,
+      data: { id, ...updateData },
+    });
+    return result;
   }
 
   @Patch(':id/approve/:role')
@@ -247,5 +307,12 @@ export class KpiValuesController {
       throw new UnauthorizedException('User not authenticated.');
     }
     await this.kpiValuesService.delete(id, req.user.id);
+    await this.auditLogService.logAction({
+      action: 'DELETE',
+      resource: 'KPI_VALUE',
+      userId: req.user.id,
+      username: req.user.username,
+      data: { id },
+    });
   }
 }

@@ -2,7 +2,10 @@
   <div class="kpi-personal-list-page">
     <a-card>
       <template #title>
-        {{ $t("myAssignedKpis") }}
+        <span style="display:flex;align-items:center;gap:8px;">
+          <history-outlined style="color:#1890ff;font-size:20px;" />
+          <span>{{ $t("myAssignedKpis") }}</span>
+        </span>
       </template>
       <template #extra>
         <a-button
@@ -47,6 +50,7 @@
         <a-collapse
           v-model:activeKey="activePanelKeys"
           expandIconPosition="end"
+          class="kpi-collapse-modern"
         >
           <a-collapse-panel
             v-for="(kpiList, perspectiveId) in groupedPersonalKpis"
@@ -58,8 +62,9 @@
               :data-source="kpiList"
               :row-key="'id'"
               :pagination="false"
-              size="small"
+              size="middle"
               bordered
+              class="kpi-table-modern"
               :scroll="{ x: 'max-content' }"
             >
               <template #bodyCell="{ column, record }">
@@ -71,73 +76,49 @@
                         params: { id: record.id },
                       })
                     "
-                    style="cursor: pointer; color: #1890ff"
+                    style="cursor: pointer; color: #1890ff; font-weight: 500;"
                   >
                     {{ record.name }}
                   </a>
                 </template>
                 <template v-else-if="column.key === 'level'">
-                  <a-tag :color="getKpiLevelColor(record.created_by_type)">
+                  <a-tag :color="getKpiLevelColor(record.created_by_type)" style="font-weight:500;">
                     {{ record.created_by_type?.toUpperCase() || "" }}
                   </a-tag>
                 </template>
                 <template v-else-if="column.key === 'target'">
-                  {{ getTargetValue(record)?.toLocaleString() ?? "" }}
-                  <span v-if="record.unit">
-                    {{ record.unit }}
-                  </span>
+                  <div style="text-align:right;">{{ getTargetValue(record)?.toLocaleString() ?? "" }}<span v-if="record.unit"> {{ record.unit }}</span></div>
                 </template>
                 <template v-else-if="column.key === 'value'">
-                  {{ getApprovedValue(record)?.toLocaleString() ?? "-" }}
+                  <div style="text-align:right;">{{ getApprovedValue(record)?.toLocaleString() ?? "-" }}</div>
                 </template>
                 <template v-else-if="column.key === 'progress'">
-                  <template :set="APPROVEDVal = getApprovedValue(record)">
-                  </template>
-                  <template :set="targetVal = getTargetValue(record)">
-                  </template>
-                  <a-progress
-                    v-if="
-                      targetVal != null &&
-                      APPROVEDVal != null &&
-                      targetVal !== 0
-                    "
-                    :percent="calculateProgress(APPROVEDVal, targetVal)"
-                    size="small"
-                    status="active"
-                  />
-                  <span v-else> - </span>
+                  <template :set="APPROVEDVal = getApprovedValue(record)"></template>
+                  <template :set="targetVal = getTargetValue(record)"></template>
+                  <div style="text-align:center;">
+                    <a-progress
+                      v-if="targetVal != null && APPROVEDVal != null && targetVal !== 0"
+                      :percent="calculateProgress(APPROVEDVal, targetVal)"
+                      size="small"
+                      status="active"
+                      :strokeColor="{ from: '#108ee9', to: '#87d068' }"
+                      style="width:90px;"
+                    />
+                    <span v-else> - </span>
+                  </div>
                 </template>
                 <template v-else-if="column.key === 'status'">
-                  <template
-                    :set="
-                      latestValue = findLatestKpiValue(
-                        getRelevantAssignment(record)
-                      )
-                    "
-                  >
-                  </template>
-                  <div>
-                    <a-tag :color="getValueStatusColor(latestValue?.status)">
+                  <template :set="latestValue = findLatestKpiValue(getRelevantAssignment(record))"></template>
+                  <div style="text-align:center;">
+                    <a-tag :color="getValueStatusColor(latestValue?.status)" style="font-weight:500;font-size:13px;">
                       {{ getValueStatusText(latestValue?.status) }}
                     </a-tag>
                     <div
-                      v-if="
-                        latestValue?.rejection_reason &&
-                        latestValue.status?.startsWith('REJECTED')
-                      "
+                      v-if="latestValue?.rejection_reason && latestValue.status?.startsWith('REJECTED')"
                       style="margin-top: 4px"
                     >
-                      <a-tooltip
-                        placement="topLeft"
-                        :title="latestValue.rejection_reason"
-                      >
-                        <span
-                          style="
-                            color: #ff4d4f;
-                            font-size: 0.85em;
-                            cursor: help;
-                          "
-                        >
+                      <a-tooltip placement="topLeft" :title="latestValue.rejection_reason">
+                        <span style="color: #ff4d4f; font-size: 0.85em; cursor: help;">
                           <info-circle-outlined style="margin-right: 4px" />
                           {{ $t("rejectionReason") }}
                         </span>
@@ -146,45 +127,36 @@
                   </div>
                 </template>
                 <template v-else-if="column.key === 'validityStatus'">
-                  <a-tag :color="validityStatusColor[record.validityStatus] || 'default'">
+                  <a-tag :color="validityStatusColor[record.validityStatus] || 'default'" style="font-weight:500;">
                     {{ $t('validityStatus.' + record.validityStatus) || record.validityStatus }}
                   </a-tag>
                 </template>
                 <template v-else-if="column.key === 'actions'">
-                  <a-space>
-                    <template
-                      :set="
-                        latestValueForActions = findLatestKpiValue(
-                          getRelevantAssignment(record)
-                        )
-                      "
-                    >
-                    </template>
-                    <a-button
-                      type="primary"
-                      size="small"
-                      @click="openSubmitUpdateModal(record)"
-                      :disabled="
-                        isSubmitDisabled(latestValueForActions, record.status)
-                      "
-                      :loading="
-                        submittingUpdate &&
-                        currentSubmittingAssignment?.assignment_id ===
-                          getRelevantAssignment(record)?.id
-                      "
-                    >
-                      {{ submitButtonText(latestValueForActions) }}
-                    </a-button>
-                    <a-tooltip :title="$t('viewUpdateApprovalHistory')">
+                  <div style="text-align:center;">
+                    <a-space>
+                      <template :set="latestValueForActions = findLatestKpiValue(getRelevantAssignment(record))"></template>
                       <a-button
-                        type="default"
+                        type="primary"
                         size="small"
-                        @click="openHistoryModal(record)"
+                        @click="openSubmitUpdateModal(record)"
+                        :disabled="isSubmitDisabled(latestValueForActions, record.status)"
+                        :loading="submittingUpdate && currentSubmittingAssignment?.assignment_id === getRelevantAssignment(record)?.id"
+                        style="min-width:110px;"
                       >
-                        <history-outlined />
+                        <upload-outlined style="margin-right:4px;" />
+                        {{ submitButtonText(latestValueForActions) }}
                       </a-button>
-                    </a-tooltip>
-                  </a-space>
+                      <a-tooltip :title="$t('viewUpdateApprovalHistory')">
+                        <a-button
+                          type="default"
+                          size="small"
+                          @click="openHistoryModal(record)"
+                        >
+                          <history-outlined />
+                        </a-button>
+                      </a-tooltip>
+                    </a-space>
+                  </div>
                 </template>
               </template>
             </a-table>
@@ -417,6 +389,7 @@ import {
   MinusCircleOutlined,
   InfoCircleOutlined,
   HistoryOutlined,
+  UploadOutlined
 } from "@ant-design/icons-vue";
 import dayjs from "dayjs";
 import {
@@ -435,13 +408,16 @@ const router = useRouter();
 const actualUser = computed(() => store.getters["auth/user"]);
 
 const userPermissions = computed(() => actualUser.value?.permissions || []);
-function hasPermission(action, resource) {
+function hasPermission(action, resource, scope) {
   return userPermissions.value?.some(
-    (p) => p.action === action && p.resource === resource
+    (p) =>
+      p.action === action &&
+      p.resource === resource &&
+      (scope ? p.scope === scope : true)
   );
 }
 const canCreatePersonalKpi = computed(() =>
-  hasPermission(RBAC_ACTIONS.CREATE, RBAC_RESOURCES.KPI_EMPLOYEE)
+  hasPermission(RBAC_ACTIONS.CREATE, RBAC_RESOURCES.KPI)
 );
 
 const loadingMyAssignments = ref(false);
@@ -560,7 +536,7 @@ const myPersonalKpiColumns = computed(() => [
 
 const historyColumns = computed(() => [
   { title: $t("timestamp"), key: "timestamp", width: 140 },
-  { title: $t("action"), dataIndex: "action", key: "action", width: 180 },
+  { title: $t("common.actions"), dataIndex: "action", key: "action", width: 180 },
   {
     title: $t("value"),
     dataIndex: "value",
@@ -945,5 +921,41 @@ onMounted(() => {
 
 .mb-2 {
   margin-bottom: 0.75rem;
+}
+
+.kpi-table-modern .ant-table {
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fff;
+}
+.kpi-table-modern .ant-table-thead > tr > th {
+  background: #e6f7ff;
+  font-weight: 600;
+  font-size: 15px;
+  text-align: center;
+  border-bottom: 1px solid #91d5ff;
+}
+.kpi-table-modern .ant-table-tbody > tr > td {
+  padding: 10px 8px;
+  font-size: 14px;
+  vertical-align: middle;
+}
+.kpi-table-modern .ant-table-tbody > tr:hover > td {
+  background: #fafafa;
+}
+.kpi-collapse-modern .ant-collapse-item {
+  border-radius: 8px;
+  margin-bottom: 10px;
+  overflow: hidden;
+  border: 1px solid #e6f7ff;
+}
+.kpi-collapse-modern .ant-collapse-header {
+  background: #f0f5ff;
+  font-weight: bold;
+  font-size: 16px;
+}
+.goal-status-tag {
+  border-radius: 6px;
+  padding: 2px 12px;
 }
 </style>

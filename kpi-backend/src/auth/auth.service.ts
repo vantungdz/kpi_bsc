@@ -3,6 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import { EmployeesService } from 'src/employees/employees.service';
 import { LoginDto } from './dto/login.dto';
 import * as bcrypt from 'bcrypt';
+import { AuditLogService } from '../audit-log/audit-log.service';
 
 @Injectable()
 export class AuthService {
@@ -10,6 +11,7 @@ export class AuthService {
   constructor(
     private jwtService: JwtService,
     private usersService: EmployeesService,
+    private auditLogService: AuditLogService,
   ) {}
 
   async login(loginDto: LoginDto) {
@@ -18,6 +20,12 @@ export class AuthService {
     );
 
     if (!user) {
+      await this.auditLogService.logAction({
+        action: 'login_failed',
+        resource: 'auth',
+        username: loginDto.username,
+        data: { reason: 'user_not_found' },
+      });
       throw new UnauthorizedException('Invalid credentials');
     }
 
@@ -27,6 +35,13 @@ export class AuthService {
     );
 
     if (!isPasswordMatching) {
+      await this.auditLogService.logAction({
+        action: 'login_failed',
+        resource: 'auth',
+        userId: user.id,
+        username: user.username,
+        data: { reason: 'wrong_password' },
+      });
       throw new UnauthorizedException('Invalid credentials');
     }
 
@@ -34,6 +49,14 @@ export class AuthService {
     const userWithPermissions = await this.usersService.findOneWithPermissions(
       user.id,
     );
+
+    await this.auditLogService.logAction({
+      action: 'login_success',
+      resource: 'auth',
+      userId: user.id,
+      username: user.username,
+      data: { loginAt: new Date() },
+    });
 
     const payload = {
       id: user.id,
@@ -47,5 +70,15 @@ export class AuthService {
       access_token: this.jwtService.sign(payload),
       user: userWithPermissions,
     };
+  }
+
+  async logout(userId: number) {
+    await this.auditLogService.logAction({
+      action: 'logout',
+      resource: 'auth',
+      userId,
+      data: { logoutAt: new Date() },
+    });
+    return { message: 'Logout successful' };
   }
 }

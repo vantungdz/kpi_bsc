@@ -37,6 +37,13 @@ import FomulaCreateForm from "@/features/formula/views/FomulaCreateForm.vue";
 import PageNotFound from "@/features/common/PageNotFound.vue";
 import PageForbidden from "@/features/common/PageForbidden.vue";
 import PageServerError from "@/features/common/PageServerError.vue";
+import StrategicObjectivesView from '../../features/strategic-objectives/views/StrategicObjectivesView.vue';
+import StrategicObjectivesStats from "@/features/dashboard/views/StrategicObjectivesStats.vue";
+import AuditLogView from '@/features/dashboard/views/AuditLogView.vue';
+import CompetencyList from '../../features/competency/views/CompetencyList.vue';
+import EmployeeSkillList from "../../features/competency/views/EmployeeSkillList.vue";
+import PersonalGoalList from '../../features/personal-goal/views/PersonalGoalList.vue';
+import PersonalGoalListEmployee from '../../features/personal-goal/views/PersonalGoalListEmployee.vue';
 
 const routes = [
   {
@@ -77,25 +84,99 @@ const routes = [
     path: "/dashboard/kpi-process-stats",
     name: "KpiProcessStats",
     component: KpiProcessStatistics,
-    meta: { requiresAuth: true },
+    meta: {
+      requiresAuth: true,
+      permissions: [
+        {
+          action: RBAC_ACTIONS.VIEW,
+          resource: RBAC_RESOURCES.DASHBOARD,
+        },
+      ],
+    },
   },
   {
     path: "/dashboard/kpi-inventory-stats",
     name: "KpiInventoryStatistics",
     component: KpiInventoryStatistics,
-    meta: { requiresAuth: true },
+    meta: {
+      requiresAuth: true,
+      permissions: [
+        {
+          action: RBAC_ACTIONS.VIEW,
+          resource: RBAC_RESOURCES.DASHBOARD,
+        },
+      ],
+    },
   },
   {
     path: "/dashboard/user-activity-stats",
     name: "UserActivityStatistics",
     component: UserActivityStatistics,
-    meta: { requiresAuth: true },
+    meta: {
+      requiresAuth: true,
+      permissions: [
+        {
+          action: RBAC_ACTIONS.VIEW,
+          resource: RBAC_RESOURCES.DASHBOARD,
+        },
+      ],
+    },
   },
   {
     path: "/dashboard/kpi-performance-overview",
     name: "KpiPerformanceOverview",
     component: KpiPerformanceOverview,
-    meta: { requiresAuth: true },
+    meta: {
+      requiresAuth: true,
+      permissions: [
+        {
+          action: RBAC_ACTIONS.VIEW,
+          resource: RBAC_RESOURCES.DASHBOARD,
+        },
+      ],
+    },
+  },
+  {
+    path: "/dashboard/employee-performance-history",
+    name: "EmployeePerformanceHistory",
+    component: EmployeePerformanceHistory,
+    meta: {
+      requiresAuth: true,
+      permissions: [
+        {
+          action: RBAC_ACTIONS.VIEW,
+          resource: RBAC_RESOURCES.DASHBOARD,
+        },
+      ],
+    },
+  },
+  {
+    path: "/dashboard/strategic-objectives-stats",
+    name: "StrategicObjectivesStats",
+    component: StrategicObjectivesStats,
+    meta: {
+      requiresAuth: true,
+      permissions: [
+        {
+          action: RBAC_ACTIONS.VIEW,
+          resource: RBAC_RESOURCES.DASHBOARD,
+        },
+      ],
+    },
+  },
+  {
+    path: "/dashboard/audit-log",
+    name: "AuditLogView",
+    component: AuditLogView,
+    meta: {
+      requiresAuth: true,
+      permissions: [
+        {
+          action: RBAC_ACTIONS.VIEW,
+          resource: RBAC_RESOURCES.DASHBOARD,
+        },
+      ],
+    },
   },
   {
     path: "/profile",
@@ -121,7 +202,11 @@ const routes = [
         meta: {
           requiresAuth: true,
           permissions: [
-            { action: RBAC_ACTIONS.VIEW, resource: RBAC_RESOURCES.KPI_COMPANY },
+            {
+              action: RBAC_ACTIONS.VIEW,
+              resource: RBAC_RESOURCES.KPI,
+              scope: "company",
+            },
           ],
         },
       },
@@ -134,7 +219,8 @@ const routes = [
           permissions: [
             {
               action: RBAC_ACTIONS.VIEW,
-              resource: RBAC_RESOURCES.KPI_DEPARTMENT,
+              resource: RBAC_RESOURCES.KPI,
+              scope: "department",
             },
           ],
         },
@@ -153,7 +239,11 @@ const routes = [
         meta: {
           requiresAuth: true,
           permissions: [
-            { action: RBAC_ACTIONS.VIEW, resource: RBAC_RESOURCES.KPI_SECTION },
+            {
+              action: RBAC_ACTIONS.VIEW,
+              resource: RBAC_RESOURCES.KPI,
+              scope: "section",
+            },
           ],
         },
       },
@@ -190,6 +280,17 @@ const routes = [
         {
           action: RBAC_ACTIONS.VIEW,
           resource: RBAC_RESOURCES.KPI_VALUE,
+          scope: "section",
+        },
+        {
+          action: RBAC_ACTIONS.VIEW,
+          resource: RBAC_RESOURCES.KPI_VALUE,
+          scope: "department",
+        },
+        {
+          action: RBAC_ACTIONS.VIEW,
+          resource: RBAC_RESOURCES.KPI_VALUE,
+          scope: "manager",
         },
       ],
     },
@@ -217,7 +318,8 @@ const routes = [
       permissions: [
         {
           action: RBAC_ACTIONS.VIEW,
-          resource: RBAC_RESOURCES.EMPLOYEE_COMPANY,
+          resource: "employee",
+          scope: "company",
         },
       ],
     },
@@ -237,7 +339,8 @@ const routes = [
       permissions: [
         {
           action: RBAC_ACTIONS.VIEW,
-          resource: RBAC_RESOURCES.EMPLOYEE_COMPANY,
+          resource: RBAC_RESOURCES.KPI,
+          scope: "company",
         },
       ],
     },
@@ -285,7 +388,18 @@ const routes = [
       permissions: [
         {
           action: RBAC_ACTIONS.VIEW,
-          resource: RBAC_RESOURCES.KPI_VALUE,
+          resource: RBAC_RESOURCES.KPI_REVIEW,
+          scope: "section",
+        },
+        {
+          action: RBAC_ACTIONS.VIEW,
+          resource: RBAC_RESOURCES.KPI_REVIEW,
+          scope: "department",
+        },
+        {
+          action: RBAC_ACTIONS.VIEW,
+          resource: RBAC_RESOURCES.KPI_REVIEW,
+          scope: "manager",
         },
       ],
     },
@@ -339,20 +453,10 @@ const routes = [
     meta: {
       requiresAuth: true,
       permissions: [
-        { action: RBAC_ACTIONS.VIEW, resource: RBAC_RESOURCES.KPI_EMPLOYEE },
-      ],
-    },
-  },
-  {
-    path: "/dashboard/employee-performance-history",
-    name: "EmployeePerformanceHistory",
-    component: EmployeePerformanceHistory,
-    meta: {
-      requiresAuth: true,
-      permissions: [
         {
           action: RBAC_ACTIONS.VIEW,
-          resource: RBAC_RESOURCES.EMPLOYEE_COMPANY,
+          resource: RBAC_RESOURCES.KPI,
+          scope: "employee",
         },
       ],
     },
@@ -386,6 +490,69 @@ const routes = [
     },
   },
   {
+    path: "/strategic-objectives",
+    name: "StrategicObjectives",
+    component: StrategicObjectivesView,
+    meta: {
+      requiresAuth: true,
+      permissions: [
+        {
+          action: RBAC_ACTIONS.VIEW,
+          resource: RBAC_RESOURCES.DASHBOARD,
+        },
+      ],
+    },
+  },
+  {
+    path: '/competencies',
+    name: 'CompetencyList',
+    component: CompetencyList,
+    meta: {
+      requiresAuth: true,
+      permissions: [
+        {
+          action: RBAC_ACTIONS.VIEW,
+          resource: RBAC_RESOURCES.ADMIN,
+        },
+      ],
+    },
+  },
+  {
+    path: '/employee-skill',
+    name: 'EmployeeSkillList',
+    component: EmployeeSkillList,
+    meta: {
+      requiresAuth: true,
+      permissions: [
+        {
+          action: RBAC_ACTIONS.VIEW,
+          resource: RBAC_RESOURCES.ADMIN,
+        },
+      ],
+    },
+  },
+  {
+    path: '/personal-goals',
+    name: 'PersonalGoalList',
+    component: PersonalGoalList,
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/personal-goals/employee-management',
+    name: 'PersonalGoalListEmployee',
+    component: PersonalGoalListEmployee,
+    meta: {
+      requiresAuth: true,
+      permissions: [
+        {
+          action: RBAC_ACTIONS.VIEW,
+          resource: RBAC_RESOURCES.KPI, // hoặc PERSONAL_GOAL nếu có
+        },
+      ],
+    },
+  },
+
+  {
     path: "/403",
     name: "PageForbidden",
     component: PageForbidden,
@@ -405,9 +572,12 @@ const routes = [
   },
 ];
 
-function hasPermission(userPermissions, action, resource) {
+function hasPermission(userPermissions, action, resource, scope) {
   return userPermissions?.some(
-    (p) => p.action?.trim() === action && p.resource?.trim() === resource
+    (p) =>
+      p.action?.trim() === action &&
+      p.resource?.trim() === resource &&
+      (scope ? p.scope?.trim() === scope : true)
   );
 }
 
@@ -436,8 +606,8 @@ router.beforeEach((to, from, next) => {
       Array.isArray(requiredPermissions) &&
       requiredPermissions.length > 0
     ) {
-      const ok = requiredPermissions.every((perm) =>
-        hasPermission(userPermissions, perm.action, perm.resource)
+      const ok = requiredPermissions.some((perm) =>
+        hasPermission(userPermissions, perm.action, perm.resource, perm.scope)
       );
       if (!ok) {
         next({ name: "PageForbidden" });

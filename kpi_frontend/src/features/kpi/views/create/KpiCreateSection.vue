@@ -287,14 +287,16 @@ const canAccessCreatePage = computed(() =>
   userPermissions.value.some(
     (p) =>
       p.action?.trim() === RBAC_ACTIONS.CREATE &&
-      p.resource?.trim() === RBAC_RESOURCES.KPI_SECTION
+      p.resource?.trim() === RBAC_RESOURCES.KPI &&
+      p.scope === "section"
   )
 );
 const canAssignDirectlyToUser = computed(() =>
   userPermissions.value.some(
     (p) =>
       p.action?.trim() === RBAC_ACTIONS.ASSIGN &&
-      p.resource?.trim() === RBAC_RESOURCES.KPI_SECTION
+      p.resource?.trim() === RBAC_RESOURCES.KPI &&
+      p.scope === "section"
   )
 );
 

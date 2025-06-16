@@ -11,6 +11,7 @@ import { Perspective } from './perspective.entity';
 import { KPIAssignment } from './kpi-assignment.entity';
 import { Employee } from './employee.entity';
 import { KpiFormula } from './kpi-formula.entity';
+import { StrategicObjective } from './strategic-objective.entity';
 
 export enum KpiDefinitionStatus {
   DRAFT = 'DRAFT',
@@ -121,4 +122,7 @@ export class Kpi {
 
   @Column({ nullable: true })
   formula_id?: number;
+
+  @ManyToOne(() => StrategicObjective, (so) => so.kpis, { nullable: true, onDelete: 'SET NULL' })
+  strategicObjective: StrategicObjective;
 }

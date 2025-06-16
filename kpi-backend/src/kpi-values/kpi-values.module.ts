@@ -6,6 +6,7 @@ import { KpiValuesController } from './kpi-values.controller';
 import { KpiValueHistory } from 'src/entities/kpi-value-history.entity';
 import { KPIAssignment } from 'src/entities/kpi-assignment.entity';
 import { Employee } from '../entities/employee.entity';
+import { AuditLogModule } from '../audit-log/audit-log.module';
 
 @Module({
   imports: [
@@ -15,8 +16,10 @@ import { Employee } from '../entities/employee.entity';
       KPIAssignment,
       Employee,
     ]),
+    AuditLogModule,
   ],
   providers: [KpiValuesService],
   controllers: [KpiValuesController],
+  exports: [KpiValuesService], // Thêm dòng này để export service
 })
 export class KpiValuesModule {}

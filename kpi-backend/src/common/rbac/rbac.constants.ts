@@ -15,11 +15,7 @@ export const RBAC_ACTIONS = {
 };
 
 export const RBAC_RESOURCES = {
-  KPI:"kpi",
-  KPI_COMPANY: "kpi:company",
-  KPI_DEPARTMENT: "kpi:department",
-  KPI_SECTION: "kpi:section",
-  KPI_EMPLOYEE: "kpi:employee",
+  KPI: "kpi",
   KPI_VALUE: "kpi-value",
   EMPLOYEE_COMPANY: "employee:company",
   REPORT: "report",

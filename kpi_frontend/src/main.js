@@ -12,6 +12,17 @@ import FlagIcon from "vue-flag-icon";
 import { connectNotificationSocket, disconnectNotificationSocket } from "@/core/services/socket";
 import { setupGlobalErrorHandler } from "@/core/utils/errorHandler";
 import '@/core/utils/axios-interceptor';
+import '@fortawesome/fontawesome-free/css/all.min.css'; // Import Font Awesome
+
+// Patch ResizeObserver loop error (ẩn hoàn toàn warning này)
+const resizeObserverErrMsg = 'ResizeObserver loop completed with undelivered notifications';
+const realConsoleError = window.console.error;
+window.console.error = function(msg, ...args) {
+  if (typeof msg === 'string' && msg.includes(resizeObserverErrMsg)) {
+    return;
+  }
+  realConsoleError.apply(window.console, [msg, ...args]);
+};
 
 let notificationSocket = null;
 

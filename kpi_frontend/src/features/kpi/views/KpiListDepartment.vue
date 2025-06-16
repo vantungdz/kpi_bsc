@@ -1,70 +1,85 @@
 <template>
   <div class="kpi-department-list-page">
-    <div class="list-header">
-      <h2>{{ $t("departmentKpiList") }}</h2>
-
-      <div class="action-buttons" v-if="canCreateDepartmentKpi">
-        <a-button type="primary" style="float: bottom" @click="goToCreateKpi">
+    <div class="list-header-modern">
+      <schedule-outlined class="header-icon" />
+      <div class="header-title-group">
+        <h2>{{ $t("departmentKpiList") }}</h2>
+        <div class="header-desc">{{ $t('departmentKpiListDesc') || $t('departmentKpiList') }}</div>
+      </div>
+      <div class="action-buttons right-align" v-if="canCreateDepartmentKpi">
+        <a-button type="primary" @click="goToCreateKpi">
           <plus-outlined /> {{ $t("createNewKpi") }}
         </a-button>
       </div>
     </div>
-
-    <div class="filter-controls">
-      <a-row :gutter="[22]">
-        <a-col :span="6">
-          <a-form-item :label="$t('search')">
-            <a-input
-              v-model:value="localFilters.name"
-              :placeholder="$t('kpiNamePlaceholder')"
-              @pressEnter="applyFilters"
-            />
-          </a-form-item>
-        </a-col>
-
-        <a-col :span="5">
-          <a-form-item :label="$t('department')">
-            <a-select
-              v-model:value="localFilters.departmentId"
-              style="width: 100%"
-              @change="applyFilters"
-            >
-              <a-select-option :value="null">{{
-                $t("allDepartments")
-              }}</a-select-option>
-              <a-select-option
-                v-for="department in departmentList"
-                :key="department.id"
-                :value="department.id"
+    <a-card class="filter-card-modern">
+      <a-form layout="vertical" class="filter-form-modern">
+        <a-row :gutter="[16, 0]" align="middle" style="flex-wrap: wrap;">
+          <a-col :span="6">
+            <a-form-item :label="$t('search')" class="filter-label-top">
+              <a-input
+                v-model:value="localFilters.name"
+                :placeholder="$t('kpiNamePlaceholder')"
+                @pressEnter="applyFilters"
+                allow-clear
+                size="middle"
               >
-                {{ department.name }}
-              </a-select-option>
-            </a-select>
-          </a-form-item>
-        </a-col>
-
-        <a-col :span="4">
-          <a-form-item :label="$t('startDate')">
-            <a-date-picker
-              v-model:value="localFilters.startDate"
-              style="width: 100%"
-              @change="applyFilters"
-            />
-          </a-form-item>
-        </a-col>
-
-        <a-col :span="4">
-          <a-form-item :label="$t('endDate')">
-            <a-date-picker
-              v-model:value="localFilters.endDate"
-              style="width: 100%"
-              @change="applyFilters"
-            />
-          </a-form-item>
-        </a-col>
-      </a-row>
-    </div>
-
+                <template #prefix><schedule-outlined /></template>
+              </a-input>
+            </a-form-item>
+          </a-col>
+          <a-col :span="5">
+            <a-form-item :label="$t('department')" class="filter-label-top">
+              <a-select
+                v-model:value="localFilters.departmentId"
+                style="width: 100%"
+                allow-clear
+                size="middle"
+                @change="applyFilters"
+              >
+                <template #suffixIcon><team-outlined /></template>
+                <a-select-option :value="null">{{ $t("allDepartments") }}</a-select-option>
+                <a-select-option
+                  v-for="department in departmentList"
+                  :key="department.id"
+                  :value="department.id"
+                >
+                  {{ department.name }}
+                </a-select-option>
+              </a-select>
+            </a-form-item>
+          </a-col>
+          <a-col :span="4">
+            <a-form-item :label="$t('startDate')" class="filter-label-top">
+              <a-date-picker
+                v-model:value="localFilters.startDate"
+                style="width: 100%"
+                allow-clear
+                size="middle"
+                @change="applyFilters"
+              />
+            </a-form-item>
+          </a-col>
+          <a-col :span="4">
+            <a-form-item :label="$t('endDate')" class="filter-label-top">
+              <a-date-picker
+                v-model:value="localFilters.endDate"
+                style="width: 100%"
+                allow-clear
+                size="middle"
+                @change="applyFilters"
+              />
+            </a-form-item>
+          </a-col>
+          <a-col :span="5" style="display: flex; align-items: flex-end; height: 100%;">
+            <div class="filter-btn-group">
+              <a-button type="primary" @click="applyFilters" size="middle">{{ $t('apply') }}</a-button>
+              <a-button @click="() => { localFilters.name = ''; localFilters.departmentId = null; localFilters.startDate = ''; localFilters.endDate = ''; applyFilters(); }" size="middle">{{ $t('reset') }}</a-button>
+            </div>
+          </a-col>
+        </a-row>
+      </a-form>
+    </a-card>
     <div style="margin-top: 20px; margin-bottom: 20px">
       <a-alert
         v-if="loading"
@@ -74,7 +89,6 @@
       >
         <template #icon> <a-spin /> </template>
       </a-alert>
-
       <a-alert
         v-else-if="error"
         type="error"
@@ -82,7 +96,6 @@
         show-icon
         closable
       />
-
       <a-alert
         v-else-if="isDisplayResult && departmentGroups.length === 0"
         type="warning"
@@ -90,7 +103,6 @@
         show-icon
         closable
       />
-
       <a-alert
         v-if="deletedKpiName"
         type="success"
@@ -100,20 +112,19 @@
         @close="deletedKpiName = null"
       />
     </div>
-
     <div class="data-container">
       <div
         v-for="(departmentItem, departmentIndex) in departmentGroups"
         :key="'dept-' + departmentIndex"
         class="mb-8"
       >
-        <h4 style="margin-top: 10px" class="text-lg font-bold mb-2">
+        <h4 style="margin-top: 10px" class="text-lg font-bold mb-2 department-header-modern">
           {{ $t("departmentHeader", { name: departmentItem.department }) }}
         </h4>
-
         <a-collapse
           v-model:activeKey="activePanelKeys"
           expandIconPosition="end"
+          class="kpi-collapse-modern"
         >
           <a-collapse-panel
             v-for="(
@@ -130,12 +141,12 @@
               :rowClassName="rowClassName"
               size="small"
               bordered
+              class="kpi-table-modern department-table-modern"
             >
               <template #bodyCell="{ column, record }">
                 <template v-if="column.dataIndex === 'kpiName'">
-                  <span>{{ record.kpiName }}</span>
+                  <span class="kpi-name">{{ record.kpiName }}</span>
                 </template>
-
                 <template v-else-if="column.dataIndex === 'chart'">
                   <ApexChart
                     type="donut"
@@ -148,7 +159,6 @@
                       dataLabels: {
                         enabled: true,
                         formatter: function(val, opts) {
-                          // Only show percent if actual > 0 and target > 0
                           const actual = parseFloat(opts.w.config.series[0]);
                           const target = actual + parseFloat(opts.w.config.series[1]);
                           if (!target || isNaN(target)) return '--';
@@ -172,88 +182,79 @@
                   />
                 </template>
                 <template v-else-if="column.dataIndex === 'startDate'">
-                  <span>{{ record.startDate }}</span>
+                  <span class="kpi-date">{{ record.startDate }}</span>
                 </template>
-
                 <template v-else-if="column.dataIndex === 'endDate'">
-                  <span>{{ record.endDate }}</span>
+                  <span class="kpi-date">{{ record.endDate }}</span>
                 </template>
-
                 <template v-else-if="column.dataIndex === 'weight'">
                   <span>{{ record.weight }}</span>
                 </template>
-
                 <template v-else-if="column.dataIndex === 'target'">
-                  <span>{{
-                    `${Number(record.target).toLocaleString()} ${record.unit}`
-                  }}</span>
+                  <span class="kpi-value">{{ `${Number(record.target).toLocaleString()} ${record.unit}` }}</span>
                 </template>
-
                 <template v-else-if="column.dataIndex === 'actual'">
-                  <span>{{
-                    `${Number(record.actual).toLocaleString()} ${record.unit}`
-                  }}</span>
+                  <span class="kpi-value kpi-actual">{{ `${Number(record.actual).toLocaleString()} ${record.unit}` }}</span>
                 </template>
-
                 <template v-else-if="column.dataIndex === 'status'">
                   <a-tag
                     :bordered="false"
                     :color="getStatusColor(record.status)"
+                    class="goal-status-tag"
                   >
                     {{ $t("status_chart." + record.status) || record.status }}
                   </a-tag>
                 </template>
-
                 <template v-else-if="column.dataIndex === 'validityStatus'">
                   <a-tag :color="validityStatusColor[record.validityStatus] || 'default'">
                     {{ $t('validityStatus.' + record.validityStatus) || record.validityStatus }}
                   </a-tag>
                 </template>
-
                 <template v-else-if="column.dataIndex === 'action'">
-                  <a-tooltip :title="$t('viewDetails')">
-                    <a-button
-                      type="default"
-                      class="kpi-actions-button"
-                      @click="
-                        $router.push({
-                          name: 'KpiDetail',
-                          params: { id: record.kpiId },
-                          query: { contextDepartmentId: record.departmentId },
-                        })
-                      "
-                    >
-                      <schedule-outlined /> {{ $t("details") }}
-                    </a-button>
-                  </a-tooltip>
-                  <a-tooltip :title="$t('copyKpi')">
-                    <a-button
-                      type="dashed"
-                      size="small"
-                      @click="handleCopyKpi(record)"
-                      v-if="canCopyDepartmentKpi"
-                    >
-                      <copy-outlined /> {{ $t("copy") }}
-                    </a-button>
-                  </a-tooltip>
-                  <a-tooltip :title="$t('deleteKpi')">
-                    <a-button
-                      danger
-                      class="kpi-actions-button"
-                      @click="
-                        showConfirmDeleteDialog(record.key, record.kpiName)
-                      "
-                      v-if="canDeleteDepartmentKpi"
-                    >
-                      <delete-outlined /> {{ $t("delete") }}
-                    </a-button>
-                  </a-tooltip>
+                  <div style="text-align:center;">
+                    <a-tooltip :title="$t('viewDetails')">
+                      <a-button
+                        type="default"
+                        class="kpi-actions-button"
+                        @click="
+                          $router.push({
+                            name: 'KpiDetail',
+                            params: { id: record.kpiId },
+                            query: { contextDepartmentId: record.departmentId },
+                          })
+                        "
+                      >
+                        <schedule-outlined /> {{ $t("details") }}
+                      </a-button>
+                    </a-tooltip>
+                    <a-tooltip :title="$t('copyKpi')">
+                      <a-button
+                        type="dashed"
+                        size="small"
+                        @click="handleCopyKpi(record)"
+                        v-if="canCopyDepartmentKpi"
+                      >
+                        <copy-outlined /> {{ $t("copy") }}
+                      </a-button>
+                    </a-tooltip>
+                    <a-tooltip :title="$t('deleteKpi')">
+                      <a-button
+                        danger
+                        class="kpi-actions-button"
+                        @click="
+                          showConfirmDeleteDialog(record.key, record.kpiName)
+                        "
+                        v-if="canDeleteDepartmentKpi"
+                      >
+                        <delete-outlined /> {{ $t("delete") }}
+                      </a-button>
+                    </a-tooltip>
+                  </div>
                 </template>
               </template>
             </a-table>
           </a-collapse-panel>
         </a-collapse>
-
         <a-modal
           danger
           v-model:open="isDeleteModalVisible"
@@ -265,10 +266,10 @@
         </a-modal>
       </div>
     </div>
-
     <router-view></router-view>
   </div>
 </template>
+
 <script setup>
 import { reactive, computed, onMounted, ref, watch, h } from "vue";
 import { useStore } from "vuex";
@@ -289,10 +290,12 @@ import {
   CollapsePanel as ACollapsePanel,
   Table as ATable,
   Tag as ATag,
+  Card as ACard,
 } from "ant-design-vue";
 import {
-  PlusOutlined,
+  TeamOutlined,
   ScheduleOutlined,
+  PlusOutlined,
   DeleteOutlined,
   CopyOutlined,
 } from "@ant-design/icons-vue";
@@ -319,19 +322,23 @@ const departmentKpiList = computed(
 const userPermissions = computed(
   () => store.getters["auth/user"]?.permissions || []
 );
-function hasPermission(action, resource) {
+function hasPermission(action, resource, scope) {
   return userPermissions.value?.some(
-    (p) => p.action === action && p.resource === resource
+    (p) =>
+      p.action === action &&
+      p.resource === resource &&
+      (scope ? p.scope === scope : true)
   );
 }
 const canCreateDepartmentKpi = computed(() =>
-  hasPermission(RBAC_ACTIONS.CREATE, RBAC_RESOURCES.KPI_DEPARTMENT)
+  hasPermission(RBAC_ACTIONS.CREATE, RBAC_RESOURCES.KPI, 'department')
 );
 const canCopyDepartmentKpi = computed(() =>
-  hasPermission(RBAC_ACTIONS.COPY_TEMPLATE, RBAC_RESOURCES.KPI)
+  hasPermission(RBAC_ACTIONS.COPY_TEMPLATE, RBAC_RESOURCES.KPI, 'company')
 );
+
 const canDeleteDepartmentKpi = computed(() =>
-  hasPermission(RBAC_ACTIONS.DELETE, RBAC_RESOURCES.KPI)
+  hasPermission(RBAC_ACTIONS.DELETE, RBAC_RESOURCES.KPI, 'company')
 );
 
 const isDepartmentUser = computed(() => effectiveRole.value === "department");
@@ -642,7 +649,6 @@ const departmentGroups = computed(() => {
         sortedMap[perspectiveKey] = deptGroup.data[perspectiveKey];
         return sortedMap;
       }, {});
-
     // Update actualSum to sum of kpi.actual_value for KPIs in this department group
     const actualSum = Object.values(deptGroup.data)
       .flat()
@@ -651,7 +657,6 @@ const departmentGroups = computed(() => {
         const actualVal = parseFloat(row.actual) || 0;
         return sum + actualVal;
       }, 0);
-
     return {
       department: deptGroup.department,
       data: sortedPerspectives,
@@ -717,4 +722,120 @@ onMounted(async () => {
 });
 </script>
 
-<style scoped></style>
+<style scoped>
+.kpi-department-list-page {
+  padding: 24px;
+  background: #f6f8fa;
+  min-height: 100vh;
+}
+.list-header-modern {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-bottom: 18px;
+  justify-content: space-between;
+}
+.header-icon {
+  font-size: 32px;
+  color: #2563eb;
+  background: #e0e7ff;
+  border-radius: 50%;
+  padding: 8px;
+}
+.header-title-group {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.header-desc {
+  color: #64748b;
+  font-size: 15px;
+  margin-top: 2px;
+}
+.action-buttons.right-align {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+}
+.filter-form-modern {
+  margin-bottom: 0;
+}
+.filter-label-top .ant-form-item-label {
+  display: block;
+  text-align: left !important;
+  margin-bottom: 4px;
+  font-weight: 500;
+  color: #334155;
+  font-size: 15px;
+}
+.filter-card-modern {
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  margin-bottom: 18px;
+  padding: 10px 18px 2px 18px;
+}
+.filter-btn-group {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  height: 40px;
+}
+@media (max-width: 1200px) {
+  .filter-btn-group {
+    flex-direction: column;
+    align-items: flex-start;
+    height: auto;
+    gap: 4px;
+  }
+}
+.kpi-table-modern {
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  margin-bottom: 0;
+}
+.department-table-modern {
+  margin-bottom: 0;
+}
+.kpi-row-hover:hover {
+  background: #f0fdfa !important;
+  cursor: pointer;
+}
+.kpi-value {
+  font-weight: 500;
+  color: #2563eb;
+}
+.kpi-actual {
+  color: #059669;
+}
+.kpi-date {
+  color: #64748b;
+  font-size: 13px;
+}
+.kpi-name {
+  font-weight: 500;
+  color: #0f172a;
+}
+.goal-status-tag {
+  font-weight: 500;
+  font-size: 13px;
+  padding: 0 10px;
+  border-radius: 8px;
+}
+.kpi-actions-button {
+  border-radius: 6px;
+}
+.kpi-collapse-modern {
+  background: #f9fafb;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  margin-bottom: 18px;
+}
+.department-header-modern {
+  color: #2563eb;
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+</style>

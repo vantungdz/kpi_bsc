@@ -8,6 +8,9 @@ import { KPIAssignment } from '../entities/kpi-assignment.entity';
 import { KpiValue, KpiValueStatus } from '../entities/kpi-value.entity';
 import { Employee } from '../entities/employee.entity';
 import { KpiReviewHistory } from '../entities/kpi-review-history.entity';
+import { NotificationService } from '../notification/notification.service';
+import { NotificationType } from '../entities/notification.entity';
+import { EmployeesService } from '../employees/employees.service';
 
 @Injectable()
 export class KpiReviewService {
@@ -22,6 +25,8 @@ export class KpiReviewService {
     private readonly kpiValueRepository: Repository<KpiValue>,
     @InjectRepository(KpiReviewHistory)
     private readonly kpiReviewHistoryRepository: Repository<KpiReviewHistory>,
+    private readonly notificationService: NotificationService,
+    private readonly employeesService: EmployeesService,
   ) {}
 
   /**
@@ -31,13 +36,34 @@ export class KpiReviewService {
    * @returns Danh sách KPI reviews
    */
 
+  /**
+   * Helper to check if a user has a specific permission (RBAC)
+   */
+  private userHasPermission(user: Employee, resource: string, action: string, scope?: string): boolean {
+    if (!user || !user.roles) return false;
+    for (const role of user.roles) {
+      if (role && Array.isArray(role.permissions)) {
+        if (
+          role.permissions.some(
+            (p) =>
+              p.resource === resource &&
+              p.action === action &&
+              (!scope || p.scope === scope)
+          )
+        ) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
   async getKpiReviews(filter: any, reqUser?: any): Promise<any[]> {
     // Nếu có user truyền vào, lọc theo quyền
     if (reqUser) {
       // Always extract role as string
-      const role =
-        typeof reqUser.role === 'string' ? reqUser.role : reqUser.role?.name;
-      // List of statuses that are considered 'submitted' or further
+      // const role = typeof reqUser.role === 'string' ? reqUser.role : reqUser.role?.name;
+      // Use permission-based checks instead of role
       const allowedStatuses = [
         ReviewStatus.SELF_REVIEWED,
         ReviewStatus.SECTION_REVIEWED,
@@ -49,7 +75,7 @@ export class KpiReviewService {
         ReviewStatus.DEPARTMENT_REJECTED,
         ReviewStatus.MANAGER_REJECTED,
       ];
-      if (role === 'section') {
+      if (this.userHasPermission(reqUser, 'kpi-review', 'view', 'section')) {
         // Lấy tất cả employee thuộc section/department mà section này quản lý
         const employees = await this.kpiReviewRepository.manager.find(
           Employee,
@@ -77,7 +103,7 @@ export class KpiReviewService {
               : null,
         }));
       }
-      if (role === 'department') {
+      if (this.userHasPermission(reqUser, 'kpi-review', 'view', 'department')) {
         // Lấy tất cả employee thuộc department mà department này quản lý
         const employees = await this.kpiReviewRepository.manager.find(
           Employee,
@@ -104,7 +130,10 @@ export class KpiReviewService {
               : null,
         }));
       }
-      if (role === 'manager' || role === 'admin') {
+      if (
+        this.userHasPermission(reqUser, 'kpi-review', 'view', 'manager') ||
+        this.userHasPermission(reqUser, 'kpi-review', 'view', 'admin')
+      ) {
         // Trả về tất cả review đã gửi (not PENDING)
         const reviews = await this.kpiReviewRepository.find({
           where: {
@@ -312,16 +341,20 @@ export class KpiReviewService {
       // Lấy review hiện tại
       const review = await this.kpiReviewRepository.findOne({
         where: { id: item.id, employee: { id: userId }, cycle: body.cycle },
-        relations: ['kpi', 'employee'],
+        relations: ['kpi', 'employee', 'section'],
       });
       if (!review) continue;
       // Nếu chưa self-review thì cập nhật status
       let status = review.status;
-      if (status === ReviewStatus.PENDING ||
+      let isFirstSelfReview = false;
+      if (
+        status === ReviewStatus.PENDING ||
         status === ReviewStatus.SECTION_REJECTED ||
         status === ReviewStatus.DEPARTMENT_REJECTED ||
-        status === ReviewStatus.MANAGER_REJECTED) {
+        status === ReviewStatus.MANAGER_REJECTED
+      ) {
         status = ReviewStatus.SELF_REVIEWED;
+        isFirstSelfReview = true;
       }
       await this.kpiReviewRepository.update(
         { id: item.id, employee: { id: userId }, cycle: body.cycle },
@@ -337,6 +370,20 @@ export class KpiReviewService {
         reviewedBy: userId,
         createdAt: new Date(),
       });
+      // Gửi notification cho section leader nếu là lần đầu self-review
+      if (isFirstSelfReview && review.section && review.section.id) {
+        const sectionLeader = await this.employeesService.findLeaderOfSection(review.section.id);
+        if (sectionLeader) {
+          await this.notificationService.createNotification(
+            sectionLeader.id,
+            NotificationType.REVIEW_PENDING_SECTION_REVIEW,
+            `Nhân viên ${review.employee.first_name || ''} ${review.employee.last_name || ''} đã tự đánh giá KPI "${review.kpi.name}". Chờ duyệt từ section leader!`,
+            review.id,
+            'KPI_REVIEW',
+            review.kpi.id,
+          );
+        }
+      }
     }
     // Return updated reviews for the user/cycle so frontend can refresh
     return this.getMyKpisForReview(userId, body.cycle);
@@ -349,10 +396,15 @@ export class KpiReviewService {
       sectionScore: number;
       sectionComment: string;
     },
-    role?: string // Thêm tham số role để kiểm tra quyền
+    user?: Employee // Pass user object for permission check
   ) {
-    // Nếu role là admin/manager/department thì không cho phép dùng API này
-    if (role && ['admin', 'manager', 'department'].includes(role)) {
+    // Use permission-based check instead of role
+    if (
+      user &&
+      (this.userHasPermission(user, 'kpi-review', 'approve', 'admin') ||
+        this.userHasPermission(user, 'kpi-review', 'approve', 'manager') ||
+        this.userHasPermission(user, 'kpi-review', 'approve', 'department'))
+    ) {
       throw new Error(
         'Không được dùng API section review cho vai trò admin/manager/department. Hãy dùng đúng API duyệt theo quyền.'
       );
@@ -392,6 +444,20 @@ export class KpiReviewService {
       reviewedBy: sectionUserId,
       createdAt: new Date(),
     });
+    // Gửi notification cho department leader nếu có
+    if (review.department && review.department.id) {
+      const deptLeader = await this.employeesService.findManagerOfDepartment(review.department.id);
+      if (deptLeader) {
+        await this.notificationService.createNotification(
+          deptLeader.id,
+          NotificationType.REVIEW_PENDING_DEPARTMENT_REVIEW,
+          `Section leader đã duyệt KPI "${review.kpi.name}" của nhân viên ${review.employee.first_name || ''} ${review.employee.last_name || ''}. Chờ duyệt từ department leader!`,
+          review.id,
+          'KPI_REVIEW',
+          review.kpi.id,
+        );
+      }
+    }
     return review;
   }
 
@@ -406,7 +472,7 @@ export class KpiReviewService {
   ) {
     const review = await this.kpiReviewRepository.findOne({
       where: { id: body.reviewId },
-      relations: ['kpi', 'employee'],
+      relations: ['kpi', 'employee', 'department'],
     });
     if (!review) throw new Error('Review not found');
     // Cho phép department duyệt nếu status là SELF_REVIEWED, SECTION_REVIEWED, hoặc DEPARTMENT_REVIEWED (skip-level)
@@ -439,6 +505,18 @@ export class KpiReviewService {
       reviewedBy: departmentUserId,
       createdAt: new Date(),
     });
+    // Gửi notification cho manager nếu có
+    const manager = await this.employeesService.findManagerOfDepartment(review.department.id);
+    if (manager) {
+      await this.notificationService.createNotification(
+        manager.id,
+        NotificationType.REVIEW_PENDING_MANAGER_REVIEW,
+        `Department leader đã duyệt KPI "${review.kpi.name}" của nhân viên ${review.employee.first_name || ''} ${review.employee.last_name || ''}. Chờ duyệt từ manager!`,
+        review.id,
+        'KPI_REVIEW',
+        review.kpi.id,
+      );
+    }
     return review;
   }
 
@@ -487,6 +565,15 @@ export class KpiReviewService {
       reviewedBy: managerUserId,
       createdAt: new Date(),
     });
+    // Gửi notification cho nhân viên: chờ phản hồi
+    await this.notificationService.createNotification(
+      review.employee.id,
+      NotificationType.REVIEW_PENDING_EMPLOYEE_FEEDBACK,
+      `KPI "${review.kpi.name}" đã được quản lý đánh giá. Vui lòng phản hồi đánh giá này!`,
+      review.id,
+      'KPI_REVIEW',
+      review.kpi.id,
+    );
     return review;
   }
 
@@ -516,6 +603,26 @@ export class KpiReviewService {
       reviewedBy: employeeId,
       createdAt: new Date(),
     });
+    // Gửi notification cho manager: nhân viên đã phản hồi
+    let managerId: number | null = null;
+    if (review.department && review.department.id) {
+      const manager = await this.employeesService.findManagerOfDepartment(review.department.id);
+      if (manager) managerId = manager.id;
+    }
+    if (!managerId && review.section && review.section.id) {
+      const sectionLeader = await this.employeesService.findLeaderOfSection(review.section.id);
+      if (sectionLeader) managerId = sectionLeader.id;
+    }
+    if (managerId) {
+      await this.notificationService.createNotification(
+        managerId,
+        NotificationType.REVIEW_EMPLOYEE_RESPONDED,
+        `Nhân viên ${review.employee.first_name || ''} ${review.employee.last_name || ''} đã phản hồi đánh giá KPI "${review.kpi.name}".`,
+        review.id,
+        'KPI_REVIEW',
+        review.kpi.id,
+      );
+    }
     return review;
   }
 
@@ -541,6 +648,15 @@ export class KpiReviewService {
       reviewedBy: userId,
       createdAt: new Date(),
     });
+    // Gửi notification cho nhân viên: review đã hoàn tất
+    await this.notificationService.createNotification(
+      review.employee.id,
+      NotificationType.REVIEW_COMPLETED,
+      `Đánh giá KPI "${review.kpi.name}" đã hoàn tất.`,
+      review.id,
+      'KPI_REVIEW',
+      review.kpi.id,
+    );
     return review;
   }
 
@@ -603,14 +719,14 @@ export class KpiReviewService {
    */
   async submitReviewByRole(
     userId: number,
-    role: string,
+    user: Employee, // Pass user object for permission check
     body: {
       reviewId: number;
       score: number;
       comment: string;
     }
   ) {
-    if (!role) throw new Error('Thiếu thông tin vai trò người duyệt');
+    if (!user) throw new Error('Thiếu thông tin người duyệt');
     // Lấy review hiện tại để xác định trạng thái
     const review = await this.kpiReviewRepository.findOne({
       where: { id: body.reviewId },
@@ -620,27 +736,30 @@ export class KpiReviewService {
     if (review.status === ReviewStatus.COMPLETED) {
       throw new Error('Review đã hoàn thành, không thể duyệt tiếp');
     }
-    // Ưu tiên role cao nhất: admin > manager > department > section
-    if (role === 'admin' || role === 'manager') {
+    // Ưu tiên quyền cao nhất: admin > manager > department > section
+    if (
+      this.userHasPermission(user, 'kpi-review', 'approve', 'admin') ||
+      this.userHasPermission(user, 'kpi-review', 'approve', 'manager')
+    ) {
       return this.submitManagerReview(userId, {
         reviewId: body.reviewId,
         managerScore: body.score,
         managerComment: body.comment,
       });
     }
-    if (role === 'department') {
+    if (this.userHasPermission(user, 'kpi-review', 'approve', 'department')) {
       return this.submitDepartmentReview(userId, {
         reviewId: body.reviewId,
         departmentScore: body.score,
         departmentComment: body.comment,
       });
     }
-    if (role === 'section') {
+    if (this.userHasPermission(user, 'kpi-review', 'approve', 'section')) {
       return this.submitSectionReview(userId, {
         reviewId: body.reviewId,
         sectionScore: body.score,
         sectionComment: body.comment,
-      }, 'section');
+      }, user);
     }
     throw new Error('Vai trò không hợp lệ để duyệt KPI');
   }
@@ -653,13 +772,13 @@ export class KpiReviewService {
    */
   async rejectReviewByRole(
     userId: number,
-    role: string,
+    user: Employee, // Pass user object for permission check
     body: {
       reviewId: number;
       rejectionReason: string;
     }
   ) {
-    if (!role) throw new Error('Thiếu thông tin vai trò người từ chối');
+    if (!user) throw new Error('Thiếu thông tin người từ chối');
     const review = await this.kpiReviewRepository.findOne({
       where: { id: body.reviewId },
       relations: ['kpi', 'employee', 'department', 'section'],
@@ -669,11 +788,14 @@ export class KpiReviewService {
       throw new Error('Review đã hoàn thành, không thể từ chối');
     }
     let newStatus: ReviewStatus;
-    if (role === 'admin' || role === 'manager') {
+    if (
+      this.userHasPermission(user, 'kpi-review', 'approve', 'admin') ||
+      this.userHasPermission(user, 'kpi-review', 'approve', 'manager')
+    ) {
       newStatus = ReviewStatus.MANAGER_REJECTED;
-    } else if (role === 'department') {
+    } else if (this.userHasPermission(user, 'kpi-review', 'approve', 'department')) {
       newStatus = ReviewStatus.DEPARTMENT_REJECTED;
-    } else if (role === 'section') {
+    } else if (this.userHasPermission(user, 'kpi-review', 'approve', 'section')) {
       newStatus = ReviewStatus.SECTION_REJECTED;
     } else {
       throw new Error('Vai trò không hợp lệ để từ chối KPI');
@@ -694,6 +816,25 @@ export class KpiReviewService {
       createdAt: new Date(),
     };
     await this.kpiReviewHistoryRepository.save(history);
+    // Gửi notification cho nhân viên khi bị từ chối
+    let rejectType: NotificationType | null = null;
+    if (newStatus === ReviewStatus.SECTION_REJECTED) {
+      rejectType = NotificationType.REVIEW_REJECTED_BY_SECTION;
+    } else if (newStatus === ReviewStatus.DEPARTMENT_REJECTED) {
+      rejectType = NotificationType.REVIEW_REJECTED_BY_DEPARTMENT;
+    } else if (newStatus === ReviewStatus.MANAGER_REJECTED) {
+      rejectType = NotificationType.REVIEW_REJECTED_BY_MANAGER;
+    }
+    if (rejectType) {
+      await this.notificationService.createNotification(
+        review.employee.id,
+        rejectType,
+        `Đánh giá KPI "${review.kpi.name}" của bạn đã bị từ chối. Lý do: ${body.rejectionReason}`,
+        review.id,
+        'KPI_REVIEW',
+        review.kpi.id,
+      );
+    }
     return review;
   }
 }

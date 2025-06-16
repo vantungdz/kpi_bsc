@@ -374,21 +374,24 @@ const canAccessCreatePage = computed(() =>
   userPermissions.value.some(
     (p) =>
       p.action?.trim() === RBAC_ACTIONS.CREATE &&
-      p.resource?.trim() === RBAC_RESOURCES.KPI_COMPANY
+      p.resource?.trim() === RBAC_RESOURCES.KPI &&
+      p.scope === "company"
   )
 );
 const canAssignDirectlyToUser = computed(() =>
   userPermissions.value.some(
     (p) =>
       p.action?.trim() === RBAC_ACTIONS.ASSIGN &&
-      p.resource?.trim() === RBAC_RESOURCES.KPI_COMPANY
+      p.resource?.trim() === RBAC_RESOURCES.KPI &&
+      p.scope === "company"
   )
 );
 const canAssignToUnits = computed(() =>
   userPermissions.value.some(
     (p) =>
       p.action?.trim() === RBAC_ACTIONS.ASSIGN &&
-      p.resource?.trim() === RBAC_RESOURCES.KPI_COMPANY
+      p.resource?.trim() === RBAC_RESOURCES.KPI &&
+      p.scope === "company"
   )
 );
 

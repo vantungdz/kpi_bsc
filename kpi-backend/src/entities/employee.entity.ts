@@ -18,6 +18,8 @@ import { KpiReview } from './kpi-review.entity';
 import { Permission } from './permission.entity';
 import { Policy } from './policy.entity';
 import { Role } from './role.entity';
+import { Competency } from './competency.entity';
+import { EmployeeSkill } from '../employee-skill/employee-skill.entity';
 
 @Entity('employees')
 export class Employee {
@@ -82,4 +84,15 @@ export class Employee {
 
   @OneToMany(() => KpiReview, (review) => review.reviewedBy)
   kpiReviews: KpiReview[];
+
+  @ManyToMany(() => Competency, (competency) => competency.employees, { cascade: true })
+  @JoinTable({
+    name: 'employee_competencies',
+    joinColumn: { name: 'employee_id', referencedColumnName: 'id' },
+    inverseJoinColumn: { name: 'competency_id', referencedColumnName: 'id' },
+  })
+  competencies: Competency[];
+
+  @OneToMany(() => EmployeeSkill, (es) => es.employee)
+  skills: EmployeeSkill[];
 }

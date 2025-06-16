@@ -254,11 +254,15 @@ const loadingError = computed(
 const userPermissions = computed(
   () => store.getters["auth/user"]?.permissions || []
 );
-function hasPermission(action, resource) {
+function hasPermission(action, resource, scope) {
   return userPermissions.value?.some(
-    (p) => p.action === action && p.resource === resource
+    (p) =>
+      p.action?.trim() === action &&
+      p.resource?.trim() === resource &&
+      (scope ? p.scope?.trim() === scope : true)
   );
 }
+
 const canViewDashboard = computed(
   () =>
     hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.DASHBOARD) 

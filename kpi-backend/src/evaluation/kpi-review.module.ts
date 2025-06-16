@@ -7,10 +7,14 @@ import { KpiReviewController } from './kpi-review.controller';
 import { KPIAssignment } from '../entities/kpi-assignment.entity';
 import { KpiValue } from '../entities/kpi-value.entity';
 import { KpiReviewHistory } from '../entities/kpi-review-history.entity';
+import { NotificationModule } from '../notification/notification.module';
+import { EmployeesModule } from '../employees/employees.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([KpiReview, Kpi, KPIAssignment, KpiValue, KpiReviewHistory]),
+    NotificationModule, // Import NotificationModule to provide NotificationService
+    EmployeesModule, // Import EmployeesModule to provide EmployeesService
   ],
   providers: [KpiReviewService],
   controllers: [KpiReviewController],

@@ -1,25 +1,51 @@
 <template>
   <div class="kpi-review-list" v-if="canViewKpiReview">
-    <h2 class="kpi-title">{{ $t("kpiReviewListTitle") }}</h2>
+    <h2 class="kpi-title">
+      <span style="display: flex; align-items: center; gap: 8px;">
+        <icon-trophy-two-tone style="font-size: 1.6em; color: #409eff; margin-right: 6px;" />
+        {{ $t("kpiReviewListTitle") }}
+      </span>
+    </h2>
     <div class="filters modern-filters">
-      <a-select v-model:value="selectedCycle" :options="cycleOptions" :placeholder="$t('selectCycle')"
-        class="modern-filter-input" />
-      <a-select v-model:value="selectedStatus" :options="statusOptions" :placeholder="$t('reviewStatus')"
-        class="modern-filter-input" />
-      <a-input v-model:value="searchText" :placeholder="$t('searchKpiEmployee')" class="modern-filter-input" />
+      <a-input-group compact style="display: flex; gap: 12px; width: 100%;">
+        <a-select v-model:value="selectedCycle" :options="cycleOptions" :placeholder="$t('selectCycle')"
+          class="modern-filter-input" style="flex: 1; min-width: 160px;">
+          <template #suffixIcon>
+            <icon-calendar-outlined />
+          </template>
+        </a-select>
+        <a-select v-model:value="selectedStatus" :options="statusOptions" :placeholder="$t('reviewStatus')"
+          class="modern-filter-input" style="flex: 1; min-width: 160px;">
+          <template #suffixIcon>
+            <icon-filter-outlined />
+          </template>
+        </a-select>
+        <a-input v-model:value="searchText" :placeholder="$t('searchKpiEmployee')" class="modern-filter-input" style="flex: 2; min-width: 180px;">
+          <template #prefix>
+            <icon-search-outlined />
+          </template>
+        </a-input>
+      </a-input-group>
     </div>
     <div class="modern-table-wrapper">
       <a-table :columns="columns" :data-source="normalizedReviews" row-key="id" :loading="loading" bordered
         class="modern-table" style="margin-top: 24px" :pagination="{ pageSize: 10, showSizeChanger: true }">
         <template #bodyCell="slotProps">
           <template v-if="slotProps.column && slotProps.column.key === 'actions'">
-            <a-button type="primary" size="small" @click="openReviewForm(slotProps.record.raw)" class="action-btn"
-              v-if="canReview">{{ $t("review") }}</a-button>
-            <a-button type="default" size="small" @click="viewHistory(slotProps.record.raw)" class="action-btn">{{
-              $t("reviewHistory") }}</a-button>
+            <a-tooltip :title="$t('review')" v-if="canReview">
+              <a-button type="primary" size="small" @click="openReviewForm(slotProps.record.raw)" class="action-btn icon-btn">
+                <icon-edit-outlined />
+              </a-button>
+            </a-tooltip>
+            <a-tooltip :title="$t('reviewHistory')">
+              <a-button type="default" size="small" @click="viewHistory(slotProps.record.raw)" class="action-btn icon-btn">
+                <icon-history-outlined />
+              </a-button>
+            </a-tooltip>
           </template>
           <template v-else-if="slotProps.column && slotProps.column.key === 'status'">
             <span v-if="slotProps.record.status" :class="['status-tag', slotProps.record.status.toLowerCase()]">
+              <component :is="statusIcon(slotProps.record.status)" style="margin-right: 6px; font-size: 1.1em; vertical-align: middle;" />
               {{ $t('statusReview.' + slotProps.record.status.toLowerCase()) }}
             </span>
           </template>
@@ -29,7 +55,6 @@
         </template>
       </a-table>
     </div>
-    <a-empty v-if="!normalizedReviews.length && !loading" :description="$t('noDataMatch')" />
     <ReviewFormModal v-if="showReviewForm" :review="selectedReview" :visible="showReviewForm" @close="closeReviewForm"
       @saved="onReviewSaved" @show-history="onShowHistoryFromModal" modal-class="modern-modal" />
     <ReviewHistoryModal v-if="showHistory" :review="selectedReview" :visible="showHistory" @close="closeHistory"
@@ -48,6 +73,22 @@ import ReviewHistoryModal from "./ReviewHistoryModal.vue";
 import { useI18n } from "vue-i18n";
 import { useStore } from "vuex";
 import { RBAC_ACTIONS, RBAC_RESOURCES } from "@/core/constants/rbac.constants";
+// Ant Design Vue icons
+import {
+  TrophyTwoTone as IconTrophyTwoTone,
+  CalendarOutlined as IconCalendarOutlined,
+  FilterOutlined as IconFilterOutlined,
+  SearchOutlined as IconSearchOutlined,
+  EditOutlined as IconEditOutlined,
+  HistoryOutlined as IconHistoryOutlined,
+  CheckCircleTwoTone as IconCheckCircleTwoTone,
+  ClockCircleTwoTone as IconClockCircleTwoTone,
+  SyncOutlined as IconSyncOutlined,
+  SmileTwoTone as IconSmileTwoTone,
+  UserSwitchOutlined as IconUserSwitchOutlined,
+  UserOutlined as IconUserOutlined,
+  ExclamationCircleTwoTone as IconExclamationCircleTwoTone,
+} from '@ant-design/icons-vue';
 
 const { t } = useI18n();
 
@@ -177,19 +218,44 @@ const store = useStore();
 const userPermissions = computed(
   () => store.getters["auth/user"]?.permissions || []
 );
-function hasPermission(action, resource) {
+function hasPermission(action, resource, scopes) {
+  if (!Array.isArray(scopes)) scopes = [scopes];
   return userPermissions.value?.some(
-    (p) => p.action === action && p.resource === resource
+    (p) =>
+      p.action === action &&
+      p.resource === resource &&
+      (scopes[0] ? scopes.includes(p.scope) : true)
   );
 }
-const canViewKpiReview = computed(
-  () =>
-    hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.KPI_VALUE) 
+const canViewKpiReview = computed(() =>
+  hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.KPI_REVIEW, ['section', 'department', 'manager'])
 );
-const canReview = computed(
-  () =>
-    hasPermission(RBAC_ACTIONS.APPROVE, RBAC_RESOURCES.KPI_VALUE)
+const canReview = computed(() =>
+  hasPermission(RBAC_ACTIONS.APPROVE, RBAC_RESOURCES.KPI_REVIEW, ['section', 'department', 'manager'])
 );
+
+// Status icon mapping
+const statusIcon = (status) => {
+  switch ((status || '').toLowerCase()) {
+    case 'pending':
+      return IconClockCircleTwoTone;
+    case 'self_reviewed':
+      return IconUserOutlined;
+    case 'section_reviewed':
+      return IconUserSwitchOutlined;
+    case 'department_reviewed':
+      return IconSyncOutlined;
+    case 'manager_reviewed':
+      return IconCheckCircleTwoTone;
+    case 'awaitingemployeefeedback':
+    case 'employee_feedback':
+      return IconSmileTwoTone;
+    case 'completed':
+      return IconCheckCircleTwoTone;
+    default:
+      return IconExclamationCircleTwoTone;
+  }
+};
 
 // Đảm bảo fetchReviews chỉ gọi sau khi fetchCycles xong
 onMounted(async () => {
@@ -209,6 +275,8 @@ onMounted(async () => {
   font-weight: 700;
   margin-bottom: 24px;
   color: #1a237e;
+  display: flex;
+  align-items: center;
 }
 .filters.modern-filters {
   display: flex;
@@ -275,7 +343,9 @@ onMounted(async () => {
   border-bottom: 1px solid #f0f0f0;
 }
 .status-tag {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   padding: 2px 12px;
   border-radius: 12px;
   font-size: 13px;
@@ -313,6 +383,19 @@ onMounted(async () => {
 }
 .action-btn:last-child {
   margin-right: 0;
+}
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 8px;
+  font-size: 1.1em;
+  border-radius: 8px;
+  box-shadow: 0 1px 2px #e6f7ff11;
+  transition: background 0.15s;
+}
+.icon-btn:hover {
+  background: #e6f7ff;
 }
 /* Modal custom style */
 :deep(.modern-modal .ant-modal-content) {

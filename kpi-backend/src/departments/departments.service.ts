@@ -2,7 +2,7 @@
 import { Injectable, UnauthorizedException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Department } from 'src/entities/department.entity';
-import { Employee } from 'src/entities/employee.entity';
+import { Employee } from '../entities/employee.entity';
 import { Repository } from 'typeorm';
 import { EmployeesService } from '../employees/employees.service';
 
@@ -14,21 +14,36 @@ export class DepartmentsService {
     private readonly employeesService: EmployeesService, // Inject EmployeesService
   ) {}
 
-  async create(createDepartmentDto: any): Promise<Department> {
+  async create(createDepartmentDto: any): Promise<Department | { warning: string, employee: any }> {
     const created = this.departmentRepository.create(createDepartmentDto);
     const department = Array.isArray(created) ? created[0] : created;
     if (createDepartmentDto.managerId) {
-      department.manager = { id: createDepartmentDto.managerId } as Employee; // Sửa ở đây
+      department.manager = { id: createDepartmentDto.managerId } as Employee;
     }
-    const savedDepartment = await this.departmentRepository.save(department);
-    // Update manager's roles if managerId exists
+    // Kiểm tra trạng thái manager
     if (createDepartmentDto.managerId) {
       const manager = await this.employeesService.findOne(createDepartmentDto.managerId);
-      const currentRoles = manager.roles?.map(r => typeof r === 'string' ? r : r.name) || [];
-      if (!currentRoles.includes('department')) {
-        await this.employeesService.updateRoles(manager.id, [...currentRoles, 'department']);
+      const hasOtherDepartment = manager.departmentId && manager.departmentId !== department.id;
+      const hasSection = manager.sectionId != null;
+      let sectionNotInDepartment = false;
+      if (hasSection && manager.section?.department?.id && manager.section.department.id !== department.id) {
+        sectionNotInDepartment = true;
       }
+      if ((hasOtherDepartment || sectionNotInDepartment) && !createDepartmentDto.forceUpdateManager) {
+        return {
+          warning: 'MANAGER_HAS_OTHER_DEPARTMENT_OR_SECTION',
+          employee: manager
+        };
+      }
+      // Nếu forceUpdateManager hoặc chưa có phòng ban/section, cập nhật lại
+      await this.employeesService.updateEmployee(manager.id, {
+        departmentId: department.id,
+        sectionId: undefined,
+        roles: ['manager' as any],
+        _mergeRoles: true
+      });
     }
+    const savedDepartment = await this.departmentRepository.save(department);
     return savedDepartment;
   }
 
@@ -70,7 +85,7 @@ export class DepartmentsService {
     return user;
   }
 
-  async update(id: number, updateDepartmentDto: any): Promise<Department> {
+  async update(id: number, updateDepartmentDto: any): Promise<Department | { warning: string, employee: any }> {
     const department = await this.departmentRepository.findOne({ where: { id } });
     if (!department) {
       throw new UnauthorizedException('Department not found');
@@ -80,16 +95,43 @@ export class DepartmentsService {
     }
     if (updateDepartmentDto.managerId !== undefined) {
       department.manager = { id: updateDepartmentDto.managerId } as Employee;
+      // Kiểm tra trạng thái manager
+      const manager = await this.employeesService.findOne(updateDepartmentDto.managerId);
+      const hasOtherDepartment = manager.departmentId && manager.departmentId !== department.id;
+      const hasSection = manager.sectionId != null;
+      let sectionNotInDepartment = false;
+      if (hasSection && manager.section?.department?.id && manager.section.department.id !== department.id) {
+        sectionNotInDepartment = true;
+      }
+      if ((hasOtherDepartment || sectionNotInDepartment) && !updateDepartmentDto.forceUpdateManager) {
+        return {
+          warning: 'MANAGER_HAS_OTHER_DEPARTMENT_OR_SECTION',
+          employee: manager
+        };
+      }
+      // Nếu forceUpdateManager hoặc chưa có phòng ban/section, cập nhật lại
+      // 1. Clear managerId from old department if needed
+      if (hasOtherDepartment) {
+        const oldDepartment = await this.departmentRepository.findOne({ where: { id: manager.departmentId } });
+        if (oldDepartment && oldDepartment.managerId === manager.id) {
+          oldDepartment.managerId = null;
+          await this.departmentRepository.save(oldDepartment);
+        }
+      }
+      // 2. Update all sections in this department to set managerId = updateDepartmentDto.managerId (optional, if required)
+      const sections = await this.departmentRepository.manager.getRepository('Section').find({ where: { department: { id: department.id } } });
+      for (const section of sections) {
+        section.managerId = updateDepartmentDto.managerId;
+        await this.departmentRepository.manager.getRepository('Section').save(section);
+      }
+      await this.employeesService.updateEmployee(manager.id, {
+        departmentId: department.id,
+        sectionId: undefined,
+        roles: ['manager' as any],
+        _mergeRoles: true
+      });
     }
     const saved = await this.departmentRepository.save(department);
-    // Update manager's roles nếu cần
-    if (updateDepartmentDto.managerId) {
-      const manager = await this.employeesService.findOne(updateDepartmentDto.managerId);
-      const currentRoles = manager.roles?.map(r => typeof r === 'string' ? r : r.name) || [];
-      if (!currentRoles.includes('department')) {
-        await this.employeesService.updateRoles(manager.id, [...currentRoles, 'department']);
-      }
-    }
     return saved;
   }
 

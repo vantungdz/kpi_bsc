@@ -13,6 +13,12 @@
             <span>{{ $t('dashboard') }}</span>
           </router-link>
         </a-menu-item>
+        <a-menu-item key="audit-log" v-if="canViewDashboard" :title="$t('auditLog')">
+          <router-link to="/dashboard/audit-log">
+            <audit-outlined />
+            <span>Audit Log</span>
+          </router-link>
+        </a-menu-item>
 
         <!-- 2. My Area (Sub-menu) -->
         <div class="menu-group-title" v-if="!collapsed ">{{ $t('sidebarGroup.myArea') }}</div>
@@ -27,6 +33,12 @@
             <router-link to="/personal">
               <profile-outlined />
               <span>{{ $t("myPersonalKpis") }}</span>
+            </router-link>
+          </a-menu-item>
+          <a-menu-item key="personal-goals" :title="$t('personalGoalMenu')">
+            <router-link to="/personal-goals">
+              <check-square-outlined />
+              <span>{{ $t('personalGoalMenu') }}</span>
             </router-link>
           </a-menu-item>
           <a-menu-item key="my-kpi-self-review" :title="$t('myKpiSelfReview')">
@@ -73,6 +85,13 @@
             <router-link to="/kpis/employee-management">
               <team-outlined />
               <span>{{ $t('employeeKpiManagement') }}</span>
+            </router-link>
+          </a-menu-item>
+          <a-menu-item key="personal-goals-employee-management" v-if="canViewKpiEmployeeLevel || canViewAdminMenu"
+            :title="$t('personalGoal.employeeGoalManagement')">
+            <router-link to="/personal-goals/employee-management">
+              <team-outlined />
+              <span>{{ $t('personalGoal.employeeGoalManagement') }}</span>
             </router-link>
           </a-menu-item>
         </a-sub-menu>
@@ -165,7 +184,27 @@
               <span>{{ $t('formulaManagement') }}</span>
             </router-link>
           </a-menu-item>
+          <a-menu-item key="admin-competency" :title="$t('skillManagement')">
+            <router-link to="/competencies">
+              <appstore-outlined />
+              <span>{{ $t('skillManagement') }}</span>
+            </router-link>
+          </a-menu-item>
+          <a-menu-item key="admin-employee-skill" :title="$t('employeeSkill.title')">
+            <router-link to="/employee-skill">
+              <appstore-outlined />
+              <span>{{ $t('employeeSkill.title') }}</span>
+            </router-link>
+          </a-menu-item>
         </a-sub-menu>
+        <div class="menu-group-title" v-if="!collapsed && canViewStrategicObjectives">{{ $t('sidebarGroup.strategic') }}
+        </div>
+        <a-menu-item key="strategic-objectives" v-if="canViewStrategicObjectives">
+          <router-link to="/strategic-objectives">
+            <appstore-outlined />
+            <span>{{ $t('strategicObjectives') }}</span>
+          </router-link>
+        </a-menu-item>
       </a-menu>
       <div class="sidebar-toggle-area">
         <a-button class="sidebar-toggle" type="text" @click="toggleSidebar">
@@ -223,55 +262,82 @@ const user = computed(() => store.getters["auth/user"]);
 
 // Lấy permissions đã tổng hợp từ backend (ưu tiên từ user.roles nếu có)
 const userPermissions = computed(() => user.value?.permissions || []);
-function hasPermission(action, resource) {
+
+function hasPermission(action, resource, scope) {
   return userPermissions.value?.some(
-    (p) => p.action?.trim() === action && p.resource?.trim() === resource
+    (p) =>
+      p.action?.trim() === action &&
+      p.resource?.trim() === resource &&
+      (scope ? p.scope?.trim() === scope : true)
   );
 }
 
 // Sử dụng resource hợp lệ từ RBAC_RESOURCES
+function hasKpiScopePermission(action, scope) {
+  return userPermissions.value?.some(
+    (p) => p.action?.trim() === action && p.resource?.trim() === RBAC_RESOURCES.KPI && p.scope === scope
+  );
+}
+
+function hasApprovalScopePermission(action, scope) {
+  return userPermissions.value?.some(
+    (p) => p.action?.trim() === action && p.resource?.trim() === RBAC_RESOURCES.KPI_VALUE && p.scope === scope
+  );
+}
+
+function hasKpiReviewScopePermission(action, scope) {
+  return userPermissions.value?.some(
+    (p) => p.action?.trim() === action && p.resource?.trim() === RBAC_RESOURCES.KPI_REVIEW && p.scope === scope
+  );
+}
+
 const canViewDashboard = computed(
-  () =>
-    hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.DASHBOARD)
+  () => hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.DASHBOARD)
 );
 const canViewCompanyLevel = computed(() =>
-  hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.KPI_COMPANY)
+  hasKpiScopePermission(RBAC_ACTIONS.VIEW, 'company')
 );
 const canViewDepartmentLevel = computed(() =>
-  hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.KPI_DEPARTMENT)
+  hasKpiScopePermission(RBAC_ACTIONS.VIEW, 'department')
 );
 const canViewSectionLevel = computed(() =>
-  hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.KPI_SECTION)
+  hasKpiScopePermission(RBAC_ACTIONS.VIEW, 'section')
 );
 
 const canViewInactiveKpiList = computed(() =>
-  hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.EMPLOYEE_COMPANY)
+  hasKpiScopePermission(RBAC_ACTIONS.VIEW, 'company')
 );
 
 const canViewEmployeeList = computed(() =>
-  hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.EMPLOYEE_COMPANY)
+  hasPermission(RBAC_ACTIONS.VIEW, 'employee' , 'company')
 );
 
-const canViewApprovals = computed(
-  () =>
-    hasPermission(RBAC_ACTIONS.APPROVE, RBAC_RESOURCES.KPI_VALUE)
+const canViewApprovals = computed(() =>
+  ['section', 'department', 'manager'].some(scope =>
+    hasApprovalScopePermission(RBAC_ACTIONS.VIEW, scope)
+  )
 );
+
 const canViewReport = computed(
-  () =>
-    hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.REPORT) 
+  () => hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.REPORT)
 );
-const canViewKpiReview = computed(
-  () =>
-    hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.KPI_VALUE)
+
+const canViewKpiReview = computed(() =>
+  ['section', 'department', 'manager'].some(scope =>
+    hasKpiReviewScopePermission(RBAC_ACTIONS.VIEW, scope)
+  )
 );
 
 const canViewKpiEmployeeLevel = computed(() =>
-  hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.KPI_EMPLOYEE)
+  hasKpiScopePermission(RBAC_ACTIONS.VIEW, 'employee')
 );
 
 const canViewAdminMenu = computed(
-  () =>
-    hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.ADMIN)
+  () => hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.ADMIN)
+);
+
+const canViewStrategicObjectives = computed(() =>
+  () => hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.DASHBOARD)
 );
 
 const canViewKpiManagementSubMenu = computed(

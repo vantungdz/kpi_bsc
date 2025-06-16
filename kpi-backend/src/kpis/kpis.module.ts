@@ -10,6 +10,7 @@ import { Perspective } from 'src/entities/perspective.entity';
 import { Department } from 'src/entities/department.entity';
 import { Section } from 'src/entities/section.entity';
 import { KPIAssignment } from 'src/entities/kpi-assignment.entity';
+import { AuditLogModule } from '../audit-log/audit-log.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { KPIAssignment } from 'src/entities/kpi-assignment.entity';
       Section,
       KPIAssignment,
     ]),
+    AuditLogModule,
   ],
   providers: [KpisService],
   controllers: [KpisController],

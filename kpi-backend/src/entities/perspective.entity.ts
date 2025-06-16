@@ -1,5 +1,6 @@
 import { Entity, PrimaryGeneratedColumn, Column, OneToMany } from 'typeorm';
 import { Kpi } from './kpi.entity';
+import { StrategicObjective } from './strategic-objective.entity';
 
 // perspective.entity.ts
 @Entity('perspectives')
@@ -21,4 +22,7 @@ export class Perspective {
 
   @OneToMany(() => Kpi, (kpi) => kpi.perspective)
   kpis: Kpi[];
+
+  @OneToMany(() => StrategicObjective, (so) => so.perspective)
+  strategicObjectives: StrategicObjective[];
 }

@@ -1,13 +1,18 @@
 <template>
   <div class="kpi-employee-list-page">
-    <div class="list-header">
-      <h2>{{ t('kpiEmployee.employeeManagement') }}</h2>
+    <div class="list-header-modern">
+      <schedule-outlined class="header-icon" />
+      <div>
+        <h2>{{ t('kpiEmployee.employeeManagement') }}</h2>
+        <div class="header-desc">{{ t('kpiEmployee.employeeManagementDesc') || t('kpiEmployee.employeeKpis') }}</div>
+      </div>
     </div>
-    <div class="filter-controls">
+    <a-card class="filter-card-modern">
       <a-row :gutter="[22]">
         <a-col :span="5">
           <a-form-item :label="t('kpiEmployee.department')">
             <a-select v-model:value="employeeFilters.departmentId" style="width: 100%;" :disabled="isDepartmentRole || isSectionRole">
+              <template #suffixIcon><team-outlined /></template>
               <a-select-option value="">{{ t('common.all') }}</a-select-option>
               <a-select-option v-for="department in departmentList" :key="department.id" :value="department.id">
                 {{ department.name }}
@@ -18,6 +23,7 @@
         <a-col :span="5">
           <a-form-item :label="t('kpiEmployee.section')">
             <a-select v-model:value="employeeFilters.sectionId" style="width: 100%;" :disabled="isSectionRole">
+              <template #suffixIcon><apartment-outlined /></template>
               <a-select-option value="">{{ t('common.all') }}</a-select-option>
               <a-select-option v-for="section in sectionList" :key="section.id" :value="section.id">
                 {{ section.name }}
@@ -35,7 +41,9 @@
               :filter-option="filterEmployeeOption"
               style="width: 100%;"
             >
+              <template #suffixIcon><user-outlined /></template>
               <a-select-option v-for="emp in filteredEmployees" :key="emp.id" :value="emp.first_name + ' ' + emp.last_name">
+                <a-avatar :size="20" :src="emp.avatar || undefined" style="margin-right:6px;" />
                 {{ emp.first_name }} {{ emp.last_name }}
               </a-select-option>
             </a-select>
@@ -52,7 +60,7 @@
           </a-button>
         </a-col>
       </a-row>
-    </div>
+    </a-card>
     <div style="margin-top: 20px; margin-bottom: 20px;">
       <a-alert v-if="loadingEmployees" :message="t('kpiEmployee.loadingEmployees')" type="info" show-icon>
         <template #icon>
@@ -69,31 +77,51 @@
       :pagination="false"
       :loading="loadingEmployees"
       @rowClick="onEmployeeRowClick"
+      class="kpi-table-modern employee-table-modern"
+      :rowClassName="() => 'employee-row-hover'"
       style="margin-bottom: 24px;"
     >
       <template #bodyCell="{ column, record }">
-        <template v-if="column.dataIndex === 'department'">
+        <template v-if="column.dataIndex === 'fullName'">
+          <a-avatar :size="28" :src="record.avatar || undefined" style="margin-right:8px;vertical-align:middle;" />
+          <span class="kpi-name">{{ record.first_name }} {{ record.last_name }}</span>
+        </template>
+        <template v-else-if="column.dataIndex === 'department'">
           {{ record.department ? record.department.name : '--' }}
         </template>
-        <template v-if="column.dataIndex === 'section'">
+        <template v-else-if="column.dataIndex === 'section'">
           {{ record.section ? record.section.name : '--' }}
         </template>
-        <template v-if="column.dataIndex === 'action'">
-          <a-button type="primary" @click.stop="openKpiModal(record)">
-            <schedule-outlined /> {{ t('kpiEmployee.viewKpis') }}
-          </a-button>
+        <template v-else-if="column.dataIndex === 'action'">
+          <div style="text-align:center;">
+            <a-button type="primary" @click.stop="openKpiModal(record)">
+              <schedule-outlined /> {{ t('kpiEmployee.viewKpis') }}
+            </a-button>
+          </div>
+        </template>
+        <template v-else>
+          <span>{{ record[column.dataIndex] || '--' }}</span>
         </template>
       </template>
     </a-table>
     <a-modal
       v-model:open="isKpiModalVisible"
-      :title="selectedEmployee ? t('kpiEmployee.kpisOf', { name: selectedEmployee.first_name + ' ' + selectedEmployee.last_name }) : t('kpiEmployee.employeeKpis')"
+      :title="selectedEmployee ? modalTitle : t('kpiEmployee.employeeKpis')"
       width="70%"
       @cancel="handleKpiModalCancel"
       :footer="null"
       centered
-      class="kpi-modal-modern"
+      class="kpi-modal-modern goal-modal-modern"
     >
+      <template #title>
+        <div class="goal-modal-header">
+          <a-avatar :size="40" :src="selectedEmployee?.avatar || undefined" style="margin-right:12px;" />
+          <div>
+            <div class="goal-modal-title">{{ selectedEmployee ? selectedEmployee.first_name + ' ' + selectedEmployee.last_name : '' }}</div>
+            <div class="goal-modal-desc">{{ t('kpiEmployee.kpisOf', { name: selectedEmployee ? selectedEmployee.first_name + ' ' + selectedEmployee.last_name : '' }) }}</div>
+          </div>
+        </div>
+      </template>
       <div v-if="loadingKpis" class="kpi-modal-loading">
         <a-spin size="large" />
         <span style="margin-left: 12px;">{{ t('kpiEmployee.loadingKpis') }}</span>
@@ -111,14 +139,14 @@
             :pagination="false"
             size="middle"
             :customRow="() => {}"
-            class="kpi-table-modern"
+            class="kpi-table-modern goal-table-modern"
             bordered
             :scroll="{ x: 900 }"
           >
             <template #bodyCell="{ column, record }">
               <template v-if="column.key === 'status'">
-                <a-tag :bordered="false" :color="getStatusColor(record.status)" style="font-weight: 500; font-size: 13px;">
-                  {{ record.status }}
+                <a-tag :bordered="false" :color="getStatusColor(record.status)" class="goal-status-tag">
+                  <span class="goal-status-text">{{ record.status }}</span>
                 </a-tag>
               </template>
               <template v-else-if="column.key === 'target'">
@@ -135,6 +163,9 @@
               </template>
               <template v-else-if="column.key === 'name'">
                 <span class="kpi-name">{{ record.name || '--' }}</span>
+              </template>
+              <template v-else>
+                <span>{{ record[column.dataIndex] || '--' }}</span>
               </template>
             </template>
           </a-table>
@@ -162,18 +193,23 @@ import {
 import { FilterOutlined, ReloadOutlined, ScheduleOutlined } from '@ant-design/icons-vue';
 import { KpiDefinitionStatus } from '@/core/constants/kpiStatus';
 import { RBAC_ACTIONS, RBAC_RESOURCES } from '@/core/constants/rbac.constants';
+import { TeamOutlined, ApartmentOutlined, UserOutlined } from '@ant-design/icons-vue';
+import { Avatar as AAvatar, Card as ACard } from 'ant-design-vue';
 
 const { t } = useI18n();
 const store = useStore();
 
 // RBAC: Only manager/leader can view employees they manage
 const userPermissions = computed(() => store.getters['auth/user']?.permissions || []);
-function hasPermission(action, resource) {
+function hasPermission(action, resource, scope) {
   return userPermissions.value?.some(
-    (p) => p.action === action && p.resource === resource
+    (p) =>
+      p.action === action &&
+      p.resource === resource &&
+      (scope ? p.scope === scope : true)
   );
 }
-const canViewEmployeeKpi = computed(() => hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.KPI_EMPLOYEE));
+const canViewEmployeeKpi = computed(() => hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.KPI, 'employee'));
 
 // --- Employee List State ---
 const employeeFilters = reactive({
@@ -292,6 +328,8 @@ const kpiColumns = computed(() => [
   { title: t('kpiEmployee.endDate'), dataIndex: 'end_date', key: 'end_date', width: '12%' },
 ]);
 
+const modalTitle = computed(() => selectedEmployee.value ? `${selectedEmployee.value.first_name} ${selectedEmployee.value.last_name}` : t('kpiEmployee.employeeKpis'));
+
 const openKpiModal = async (employee) => {
   selectedEmployee.value = employee;
   isKpiModalVisible.value = true;
@@ -406,38 +444,83 @@ function handleKpiModalCancel() {
 <style scoped>
 .kpi-employee-list-page {
   padding: 24px;
+  background: #f6f8fa;
+  min-height: 100vh;
 }
-.kpi-modal-modern {
-  border-radius: 16px !important;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.18);
-  padding: 0 0 16px 0;
+.list-header-modern {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-bottom: 18px;
 }
-.kpi-modal-modern .ant-modal-content {
+.header-icon {
+  font-size: 32px;
+  color: #2563eb;
+  background: #e0e7ff;
+  border-radius: 50%;
+  padding: 8px;
+}
+.header-desc {
+  color: #64748b;
+  font-size: 15px;
+  margin-top: 2px;
+}
+.filter-card-modern {
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  margin-bottom: 18px;
+  padding: 18px 18px 6px 18px;
+}
+.employee-table-modern {
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  margin-bottom: 0;
+}
+.employee-row-hover:hover {
+  background: #f0fdfa !important;
+  cursor: pointer;
+}
+.goal-modal-modern .ant-modal-content {
   border-radius: 16px;
   background: #f9fafb;
   box-shadow: 0 8px 32px rgba(0,0,0,0.18);
 }
-.kpi-modal-modern .ant-modal-header {
-  border-radius: 16px 16px 0 0;
-  background: linear-gradient(90deg, #e0e7ff 0%, #f0fdfa 100%);
-  border-bottom: 1px solid #e5e7eb;
+.goal-modal-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
-.kpi-modal-modern .ant-modal-title {
-  font-size: 20px;
+.goal-modal-title {
+  font-size: 18px;
   font-weight: 600;
   color: #1e293b;
+}
+.goal-modal-desc {
+  color: #64748b;
+  font-size: 14px;
+}
+.goal-table-modern {
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  margin-bottom: 0;
+}
+.goal-status-tag {
+  font-weight: 500;
+  font-size: 13px;
+  padding: 0 10px;
+  border-radius: 8px;
+}
+.goal-status-text {
+  letter-spacing: 0.5px;
 }
 .kpi-modal-loading {
   display: flex;
   align-items: center;
   justify-content: center;
   min-height: 180px;
-}
-.kpi-table-modern {
-  background: #fff;
-  border-radius: 10px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
-  margin-bottom: 0;
 }
 .kpi-table-modern .ant-table-thead > tr > th {
   background: #f1f5f9;

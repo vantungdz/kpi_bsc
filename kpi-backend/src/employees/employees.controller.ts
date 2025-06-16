@@ -72,12 +72,14 @@ export class EmployeesController {
   @ApiOperation({ summary: 'Get employee details by ID' })
   @ApiResponse({ status: 200, description: 'Employee found', type: Employee })
   @ApiResponse({ status: 404, description: 'Employee not found' })
-  async findOne(@Param('id', ParseIntPipe) id: number): Promise<Employee> {
+  async findOne(@Param('id', ParseIntPipe) id: number): Promise<any> {
     const employee = await this.employeeService.findOne(id);
     if (!employee) {
       throw new NotFoundException(`Employee with ID ${id} not found`);
     }
-    return employee;
+    // Lấy skill và level của nhân viên
+    const skills = await this.employeeService.getEmployeeSkillsWithLevel(id);
+    return { ...employee, skills };
   }
 
   @Delete(':id')

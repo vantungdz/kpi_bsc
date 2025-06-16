@@ -10,6 +10,11 @@ const state = {
 
 const getters = {
   userList: (state) => state.userList,
+  employeeOptions: (state) =>
+  state.userList.map((u) => ({
+    label: [u.first_name, u.last_name].filter(Boolean).join(' ').trim() || u.username || 'No Name',
+    value: u.id,
+  })),
   usersBySection: (state) => (sectionId) =>
     state.usersBySection[String(sectionId)] || [],
   usersByDepartment: (state) => (departmentId) =>

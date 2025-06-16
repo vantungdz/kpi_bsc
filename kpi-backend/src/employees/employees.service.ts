@@ -25,6 +25,8 @@ import { KPIAssignment } from '../entities/kpi-assignment.entity';
 import { KpiValue, KpiValueStatus } from '../entities/kpi-value.entity';
 import { KpiReview } from '../entities/kpi-review.entity';
 import { Kpi } from '../entities/kpi.entity';
+import { EmployeeSkill } from '../employee-skill/employee-skill.entity';
+import { Competency } from '../entities/competency.entity';
 
 interface EmployeeFilterOptions {
   departmentId?: number;
@@ -41,10 +43,15 @@ export class EmployeesService {
     @InjectRepository(Role)
     private readonly roleRepository: Repository<Role>,
     private readonly dataSource: DataSource,
+    @InjectRepository(EmployeeSkill)
+    private readonly employeeSkillRepo: Repository<EmployeeSkill>,
+    @InjectRepository(Competency)
+    private readonly competencyRepo: Repository<Competency>,
   ) {}
 
   async create(
     createEmployeeDto: Partial<Employee & { roles?: string[] | number[] }>,
+    actor?: { id?: number; username?: string } // Thêm thông tin người thao tác nếu có
   ): Promise<Employee> {
     const {
       username,
@@ -95,7 +102,8 @@ export class EmployeesService {
       ...restOfDto,
       roles: roleEntities,
     } as DeepPartial<Employee>);
-    return this.employeeRepository.save(employee);
+    const saved = await this.employeeRepository.save(employee);
+    return saved;
   }
 
   // Helper: get all role names of user
@@ -183,6 +191,7 @@ export class EmployeesService {
         (role.permissions || []).map((p) => ({
           action: p.action,
           resource: p.resource,
+          scope: p.scope, // Thêm dòng này
         })),
       );
     }
@@ -248,7 +257,7 @@ export class EmployeesService {
       .getOne();
   }
 
-  async remove(id: number): Promise<void> {
+  async remove(id: number, actor?: { id?: number; username?: string }): Promise<void> {
     const employee = await this.employeeRepository.findOneBy({ id });
     if (!employee) {
       throw new NotFoundException(`Employee with ID ${id} not found`);
@@ -425,11 +434,39 @@ export class EmployeesService {
     return employee;
   }
 
+  /**
+   * Add a role to an employee if missing (by name or id), preserving existing roles.
+   */
+  async addRoleIfMissing(employee: Employee, roleNameOrId: string | number): Promise<Employee> {
+    await this.employeeRepository.findOneOrFail({ where: { id: employee.id }, relations: ['roles'] });
+    let role: Role | undefined;
+    if (typeof roleNameOrId === 'number') {
+      const found = await this.roleRepository.findOneBy({ id: roleNameOrId });
+      role = found === null ? undefined : found;
+    } else {
+      const found = await this.roleRepository.findOneBy({ name: String(roleNameOrId) });
+      role = found === null ? undefined : found;
+    }
+    if (!role) throw new NotFoundException('Role not found');
+    if (!employee.roles) employee.roles = [];
+    const hasRole = employee.roles.some(r => (typeof r === 'string' ? r : r?.name) === role.name || r?.id === role.id);
+    if (!hasRole) {
+      employee.roles.push(role);
+      await this.employeeRepository.save(employee);
+    }
+    return employee;
+  }
+
+  /**
+   * Update employee, optionally merging roles instead of replacing.
+   * If updateDto._mergeRoles is true, will add any roles in updateDto.roles that are missing, but keep existing roles.
+   */
   async updateEmployee(
     id: number,
-    updateDto: Partial<Employee & { roles?: (string | number)[] }>,
+    updateDto: Partial<Employee & { roles?: (string | number)[], _mergeRoles?: boolean }>,
+    actor?: { id?: number; username?: string }
   ): Promise<Employee> {
-    const employee = await this.employeeRepository.findOneBy({ id });
+    const employee = await this.employeeRepository.findOne({ where: { id }, relations: ['roles'] });
     if (!employee) throw new NotFoundException('Employee not found');
     // Không cho update username/email trùng
     if (updateDto.username && updateDto.username !== employee.username) {
@@ -460,15 +497,43 @@ export class EmployeesService {
       if (roleEntities.length !== updateDto.roles.length) {
         throw new NotFoundException('One or more roles not found');
       }
-      employee.roles = roleEntities;
+      if (updateDto._mergeRoles) {
+        // Merge: add any missing roles, keep existing
+        const existingRoles = employee.roles || [];
+        const existingRoleNames = existingRoles.map(r => r.name);
+        const mergedRoles = [...existingRoles];
+        for (const role of roleEntities) {
+          if (!existingRoleNames.includes(role.name)) {
+            mergedRoles.push(role);
+          }
+        }
+        employee.roles = mergedRoles;
+      } else {
+        // Replace
+        employee.roles = roleEntities;
+      }
       delete updateDto.roles;
+      delete updateDto._mergeRoles;
     }
     // Xóa các trường object department, section, team nếu có trong payload
     delete (updateDto as any).department;
     delete (updateDto as any).section;
     delete (updateDto as any).team;
+
+    // Explicitly handle clearing departmentId/sectionId
+    if ('departmentId' in updateDto && updateDto.departmentId === null) {
+      employee.departmentId = null as any;
+      employee.department = null as any;
+    }
+    if ('sectionId' in updateDto && updateDto.sectionId === null) {
+      employee.sectionId = null as any;
+      employee.section = null as any;
+    }
+
+    console.log(`[EmployeesService] updateEmployee: id=${id}, updateDto=${JSON.stringify(updateDto)}`);
     Object.assign(employee, updateDto);
     await this.employeeRepository.save(employee);
+    console.log(`[EmployeesService] updateEmployee result: id=${employee.id}, departmentId=${employee.departmentId}, sectionId=${employee.sectionId}, roles=${JSON.stringify(employee.roles)}`);
     return employee;
   }
 
@@ -576,5 +641,20 @@ export class EmployeesService {
       department: employee.department?.name,
       years,
     };
+  }
+
+  async getEmployeeSkillsWithLevel(employeeId: number) {
+    // Lấy tất cả kỹ năng của nhân viên kèm competency
+    const skills = await this.employeeSkillRepo.find({
+      where: { employee: { id: employeeId } },
+      relations: ['competency'],
+    });
+    return skills.map((s) => ({
+      skillId: s.competency?.id,
+      skillName: s.competency?.name,
+      group: s.competency?.group,
+      level: s.level,
+      note: s.note,
+    }));
   }
 }

@@ -20,5 +20,5 @@ export class Department {
   manager: Employee;
 
   @Column({ nullable: true })
-  managerId: number;
+  managerId: number | null;
 }

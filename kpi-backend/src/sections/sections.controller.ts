@@ -13,7 +13,6 @@ import { SectionsService } from './sections.service';
 import { Section } from 'src/entities/section.entity';
 import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
 import { RolesGuard } from 'src/auth/guards/roles.guard';
-import { Roles } from 'src/auth/guards/roles.decorator';
 
 @Controller('sections')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -21,7 +20,7 @@ export class SectionsController {
   constructor(private readonly sectionService: SectionsService) {}
 
   @Post()
-  async create(@Body() createSectionDto: any): Promise<Section> {
+  async create(@Body() createSectionDto: any): Promise<Section | { warning: string; employee: any }> {
     return this.sectionService.create(createSectionDto);
   }
 
@@ -43,7 +42,7 @@ export class SectionsController {
   async update(
     @Param('id') id: number,
     @Body() updateSectionDto: any,
-  ): Promise<Section> {
+  ): Promise<Section | { warning: string; employee: any }> {
     return this.sectionService.update(id, updateSectionDto);
   }
 

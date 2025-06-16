@@ -13,12 +13,18 @@ import myKpiReviews from "@/features/evaluation/store/myKpiReviews";
 import roles from "@/features/roles/store/roles";
 import loading from "@/store/loading";
 import formula from "@/features/formula/store/fomula";
+import strategicObjectives from "@/features/strategic-objectives/store/storeStrategicObjectives";
+import auditLog from "@/features/dashboard/store/auditLog";
+import competency from "@/features/competency/store/competency";
+import employeeSkill from "@/features/competency/store/employeeSkill";
+import personalGoal from "@/features/personal-goal/store/personalGoal";
 
 const store = createStore({
   modules: {
     loading,
     auth,
     dashboard,
+    auditLog,
     notifications,
     kpis,
     departments,
@@ -30,6 +36,10 @@ const store = createStore({
     myKpiReviews,
     roles,
     formula,
+    strategicObjectives,
+    competency,
+    employeeSkill,
+    personalGoal,
   },
 });
 

@@ -81,6 +81,26 @@ export class KpisService {
       throw new UnauthorizedException(`No permission: ${action} ${resource}`);
   }
 
+  // Helper: check if user has a permission (resource, action, scope)
+  private userHasPermission(user: Employee, resource: string, action: string, scope?: string): boolean {
+    if (!user || !user.roles) return false;
+    for (const role of user.roles) {
+      if (role && Array.isArray(role.permissions)) {
+        if (
+          role.permissions.some(
+            (p) =>
+              p.resource === resource &&
+              p.action === action &&
+              (!scope || p.scope === scope)
+          )
+        ) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
   async getKpisByEmployeeId(
     employeeId: number,
     userId: number,
@@ -268,16 +288,10 @@ export class KpisService {
     const { page = 1, limit = 15 } = filterDto;
     let effectiveDepartmentId: number | null = departmentId;
 
-    // Lấy danh sách role name
-    const userRoles: string[] = Array.isArray(loggedInUser.roles)
-      ? loggedInUser.roles.map((r: any) =>
-          typeof r === 'string' ? r : r?.name,
-        )
-      : [];
-    // Ưu tiên quyền cao nhất: admin > manager > department > section
-    if (userRoles.includes('department')) {
+    // Use RBAC permission instead of role string
+    if (this.userHasPermission(loggedInUser, 'kpi', 'view', 'department')) {
       effectiveDepartmentId = loggedInUser.departmentId;
-    } else if (userRoles.includes('section')) {
+    } else if (this.userHasPermission(loggedInUser, 'kpi', 'view', 'section')) {
       effectiveDepartmentId = loggedInUser.department?.id || null;
     }
 
@@ -314,7 +328,7 @@ export class KpisService {
             });
         }),
       );
-    } else if (!userRoles.includes('admin') && !userRoles.includes('manager')) {
+    } else if (!this.userHasPermission(loggedInUser, 'kpi', 'view', 'admin') && !this.userHasPermission(loggedInUser, 'kpi', 'view', 'manager')) {
       return {
         data: [],
         pagination: {
@@ -551,6 +565,20 @@ export class KpisService {
       itemsPerPage: number;
     };
   }> {
+    // Ensure loggedInUser always has roles and permissions loaded
+    if (!loggedInUser.roles || !Array.isArray(loggedInUser.roles) ||
+      loggedInUser.roles.some((role: any) => !role.permissions)) {
+      // Reload user with roles and permissions from DB
+      const userWithRoles = await this.employeeRepository.findOne({
+        where: { id: loggedInUser.id },
+        relations: ['roles', 'roles.permissions'],
+      });
+      if (userWithRoles) {
+        loggedInUser.roles = userWithRoles.roles;
+      }
+    }
+    // Log user info và role (dùng roles nếu có)
+    console.log('[KPI][getSectionKpis] User:', loggedInUser?.id, loggedInUser?.username, 'Roles:', loggedInUser?.roles);
     const { page = 1, limit = 15 } = filterDto;
     let effectiveSectionId: number | null = Number(sectionIdParam);
     let effectiveDepartmentId: number | null = filterDto.departmentId ?? null;
@@ -573,12 +601,6 @@ export class KpisService {
       .where('kpi.deleted_at IS NULL')
       .andWhere('assignment.deleted_at IS NULL');
 
-    // Lấy danh sách role name
-    const userRoles: string[] = Array.isArray(loggedInUser.roles)
-      ? loggedInUser.roles.map((r: any) =>
-          typeof r === 'string' ? r : r?.name,
-        )
-      : [];
     if (effectiveDepartmentId !== null && effectiveDepartmentId !== 0) {
       query.andWhere(
         new Brackets((qb) => {
@@ -600,10 +622,11 @@ export class KpisService {
         }),
       );
     } else {
+      // Sửa lại: cho phép các quyền view kpi company/department/section/employee đều được xem tất cả section
       if (
-        userRoles.includes('admin') ||
-        userRoles.includes('manager') ||
-        userRoles.includes('department')
+        this.userHasPermission(loggedInUser, 'kpi', 'view', 'company') ||
+        this.userHasPermission(loggedInUser, 'kpi', 'view', 'department') ||
+        this.userHasPermission(loggedInUser, 'kpi', 'view', 'section')
       ) {
         query.andWhere(
           new Brackets((qb) => {
@@ -612,7 +635,7 @@ export class KpisService {
             );
           }),
         );
-      } else if (!userRoles.includes('section')) {
+      } else {
         return {
           data: [],
           pagination: {
@@ -667,6 +690,9 @@ export class KpisService {
       .skip((page - 1) * limit)
       .take(limit)
       .getManyAndCount();
+    // Log số lượng assignment thực tế lấy được từ DB
+    const totalAssignments = data.reduce((sum, kpi) => sum + (Array.isArray(kpi.assignments) ? kpi.assignments.length : 0), 0);
+    console.log('[KPI][getSectionKpis] Query assignments count:', totalAssignments, 'KPI count:', data.length);
 
     const dataWithSectionActuals = data.map((kpi) => {
       const actuals_by_section_id: { [sectionId: number]: number | null } = {};
@@ -1325,6 +1351,10 @@ export class KpisService {
     assignments: { user_id: number; target: number; weight?: number }[],
     loggedInUser: Employee,
   ): Promise<KPIAssignment[]> {
+    // Kiểm tra giá trị assignments trước khi xử lý
+    if (!Array.isArray(assignments) || assignments.length === 0) {
+      throw new BadRequestException('Assignments array is empty or invalid');
+    }
     const kpi = await this.kpisRepository.findOne({ where: { id: kpiId } });
     if (!kpi) {
       throw new NotFoundException(`KPI with ID ${kpiId} not found`);
@@ -1466,6 +1496,10 @@ export class KpisService {
     }[],
     userId: number,
   ): Promise<void> {
+    // Kiểm tra giá trị assignmentsData trước khi xử lý
+    if (!Array.isArray(assignmentsData) || assignmentsData.length === 0) {
+      throw new BadRequestException('Assignments array is empty or invalid');
+    }
     const assignmentRepo = this.dataSource.getRepository(KPIAssignment);
 
     return await this.dataSource.transaction(async (manager) => {

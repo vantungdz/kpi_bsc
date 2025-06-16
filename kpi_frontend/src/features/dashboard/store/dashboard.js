@@ -26,6 +26,12 @@ const state = {
 
   kpiInventoryStats: null,
   kpiInventoryError: null,
+
+  // Thêm state cho báo cáo mục tiêu chiến lược
+  objectiveStatusPerspectiveStats: null,
+  objectiveStatusPerspectiveStatsError: null,
+  objectiveProgressDistributionStats: null,
+  objectiveProgressDistributionStatsError: null,
 };
 
 const getters = {
@@ -52,6 +58,12 @@ const getters = {
 
   getKpiInventoryStats: (state) => state.kpiInventoryStats,
   getKpiInventoryError: (state) => state.kpiInventoryError,
+
+  // Thêm getters cho báo cáo mục tiêu chiến lược
+  getObjectiveStatusPerspectiveStats: (state) => state.objectiveStatusPerspectiveStats,
+  getObjectiveStatusPerspectiveStatsError: (state) => state.objectiveStatusPerspectiveStatsError,
+  getObjectiveProgressDistributionStats: (state) => state.objectiveProgressDistributionStats,
+  getObjectiveProgressDistributionStatsError: (state) => state.objectiveProgressDistributionStatsError,
 };
 
 const actions = {
@@ -282,6 +294,54 @@ const actions = {
       await store.dispatch("loading/stopLoading");
     }
   },
+
+  async fetchObjectiveStatusPerspectiveStats({ commit }) {
+    await store.dispatch("loading/startLoading");
+    commit("SET_OBJECTIVE_STATUS_PERSPECTIVE_STATS_ERROR", null);
+    commit("SET_OBJECTIVE_STATUS_PERSPECTIVE_STATS", null);
+    try {
+      const response = await apiClient.get("/strategic-objectives/stats/by-status-perspective");
+      commit("SET_OBJECTIVE_STATUS_PERSPECTIVE_STATS", response.data || null);
+      return response.data;
+    } catch (error) {
+      const errorMsg =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to fetch objective status/perspective statistics.";
+      commit("SET_OBJECTIVE_STATUS_PERSPECTIVE_STATS_ERROR", errorMsg);
+      notification.error({
+        message: "Loading Stats Failed",
+        description: errorMsg,
+      });
+      return null;
+    } finally {
+      await store.dispatch("loading/stopLoading");
+    }
+  },
+
+  async fetchObjectiveProgressDistributionStats({ commit }) {
+    await store.dispatch("loading/startLoading");
+    commit("SET_OBJECTIVE_PROGRESS_DISTRIBUTION_STATS_ERROR", null);
+    commit("SET_OBJECTIVE_PROGRESS_DISTRIBUTION_STATS", null);
+    try {
+      const response = await apiClient.get("/strategic-objectives/stats/progress-distribution");
+      commit("SET_OBJECTIVE_PROGRESS_DISTRIBUTION_STATS", response.data || null);
+      return response.data;
+    } catch (error) {
+      const errorMsg =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to fetch objective progress distribution statistics.";
+      commit("SET_OBJECTIVE_PROGRESS_DISTRIBUTION_STATS_ERROR", errorMsg);
+      notification.error({
+        message: "Loading Stats Failed",
+        description: errorMsg,
+      });
+      return null;
+    } finally {
+      await store.dispatch("loading/stopLoading");
+    }
+  },
 };
 
 const mutations = {
@@ -339,6 +399,20 @@ const mutations = {
   },
   SET_KPI_INVENTORY_ERROR(state, error) {
     state.kpiInventoryError = error;
+  },
+
+  // Thêm mutations cho báo cáo mục tiêu chiến lược
+  SET_OBJECTIVE_STATUS_PERSPECTIVE_STATS(state, stats) {
+    state.objectiveStatusPerspectiveStats = stats;
+  },
+  SET_OBJECTIVE_STATUS_PERSPECTIVE_STATS_ERROR(state, error) {
+    state.objectiveStatusPerspectiveStatsError = error;
+  },
+  SET_OBJECTIVE_PROGRESS_DISTRIBUTION_STATS(state, stats) {
+    state.objectiveProgressDistributionStats = stats;
+  },
+  SET_OBJECTIVE_PROGRESS_DISTRIBUTION_STATS_ERROR(state, error) {
+    state.objectiveProgressDistributionStatsError = error;
   },
 };
 

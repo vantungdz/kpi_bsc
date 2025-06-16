@@ -40,9 +40,12 @@ const router = useRouter();
 
 const user = computed(() => store.getters['auth/user']);
 const userPermissions = computed(() => user.value?.permissions || []);
-function hasPermission(action, resource) {
+function hasPermission(action, resource, scope) {
   return userPermissions.value?.some(
-    (p) => p.action?.trim() === action && p.resource?.trim() === resource
+    (p) =>
+      p.action?.trim() === action &&
+      p.resource?.trim() === resource &&
+      (scope ? p.scope?.trim() === scope : true)
   );
 }
 
@@ -52,7 +55,7 @@ const features = [
     icon: DashboardOutlined,
     label: 'dashboard',
     route: '/dashboard',
-    permission: () => hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.DASHBOARD),
+    permission: () => hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.DASHBOARD, 'global'),
   },
   {
     key: 'kpi-management',
@@ -60,37 +63,40 @@ const features = [
     label: 'kpiManagement',
     route: '/kpis/company',
     permission: () =>
-      hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.KPI_COMPANY) ||
-      hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.KPI_DEPARTMENT) ||
-      hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.KPI_SECTION),
+      hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.KPI, 'company') ||
+      hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.KPI, 'department') ||
+      hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.KPI, 'section'),
   },
   {
     key: 'approvals',
     icon: AuditOutlined,
     label: 'approvalsAndReviews',
     route: '/approvals',
-    permission: () => hasPermission(RBAC_ACTIONS.APPROVE, RBAC_RESOURCES.KPI_VALUE),
+    permission: () =>
+      hasPermission(RBAC_ACTIONS.APPROVE, RBAC_RESOURCES.KPI_VALUE, 'section') ||
+      hasPermission(RBAC_ACTIONS.APPROVE, RBAC_RESOURCES.KPI_VALUE, 'department') ||
+      hasPermission(RBAC_ACTIONS.APPROVE, RBAC_RESOURCES.KPI_VALUE, 'manager'),
   },
   {
     key: 'employee-list',
     icon: TeamOutlined,
     label: 'employeeList',
     route: '/employees',
-    permission: () => hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.EMPLOYEE_COMPANY),
+    permission: () => hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.EMPLOYEE, 'company'),
   },
   {
     key: 'report',
     icon: BarChartOutlined,
     label: 'reportGenerator',
     route: '/report-generator',
-    permission: () => hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.REPORT),
+    permission: () => hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.REPORT, 'global'),
   },
   {
     key: 'admin',
     icon: SettingOutlined,
     label: 'administration',
     route: '/user-role-manager',
-    permission: () => hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.ADMIN),
+    permission: () => hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.ADMIN, 'global'),
   },
 ];
 

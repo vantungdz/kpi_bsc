@@ -23,6 +23,12 @@ export enum NotificationType {
   REVIEW_EMPLOYEE_RESPONDED = 'REVIEW_EMPLOYEE_RESPONDED', // Gửi cho QL khi NV đã phản hồi
   REVIEW_COMPLETED = 'REVIEW_COMPLETED', // Gửi cho NV khi QL hoàn tất review
   KPI_EXPIRY = 'KPI_EXPIRY', // Thông báo KPI sắp hết hạn/hết hạn
+  REVIEW_PENDING_SECTION_REVIEW = 'REVIEW_PENDING_SECTION_REVIEW', // Gửi cho section leader khi nhân viên tự đánh giá xong
+  REVIEW_PENDING_DEPARTMENT_REVIEW = 'REVIEW_PENDING_DEPARTMENT_REVIEW', // Gửi cho department leader khi section duyệt xong
+  REVIEW_PENDING_MANAGER_REVIEW = 'REVIEW_PENDING_MANAGER_REVIEW', // Gửi cho manager khi department duyệt xong
+  REVIEW_REJECTED_BY_SECTION = 'REVIEW_REJECTED_BY_SECTION', // Gửi cho nhân viên khi bị section từ chối
+  REVIEW_REJECTED_BY_DEPARTMENT = 'REVIEW_REJECTED_BY_DEPARTMENT', // Gửi cho nhân viên khi bị department từ chối
+  REVIEW_REJECTED_BY_MANAGER = 'REVIEW_REJECTED_BY_MANAGER', // Gửi cho nhân viên khi bị manager từ chối
   // Add other notification types as needed
 }
 

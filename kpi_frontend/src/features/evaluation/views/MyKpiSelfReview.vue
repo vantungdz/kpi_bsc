@@ -1,73 +1,70 @@
 <template>
   <div class="my-kpi-self-review">
-    <h2>{{ $t("personalKpiReview") }}</h2>
-    <a-alert v-if="successMessage" type="success" :message="successMessage" show-icon closable
-      @close="successMessage = ''" />
-    <a-alert v-if="errorMessage" type="error" :message="errorMessage" show-icon closable @close="errorMessage = ''" />
-    <div class="filters">
-      <a-select v-model="selectedCycle" :options="cycleOptions" placeholder="{{ $t('selectCycle') }}"
-        style="width: 200px; margin-right: 16px" @change="onCycleChange" />
-    </div>
-    <a-table :columns="columns" :data-source="kpis" row-key="id" bordered class="kpi-table" style="
-        margin-top: 32px;
-        background: #fff;
-        border-radius: 12px;
-        box-shadow: 0 2px 8px #f0f1f2;
-      " :loading="loading" :pagination="false">
-      <template #bodyCell="{ column, record, index }">
-        <template v-if="column.key === 'targetValue'">
-          <span>{{ Number(record.targetValue).toLocaleString() }} {{ record.kpi.unit }}</span>
-        </template>
-        <template v-if="column.key === 'actualValue'">
-          <span>{{ Number(record.actualValue).toLocaleString() }} {{ record.kpi.unit }}</span>
-        </template>
-        <template v-if="column.key === 'selfScore'">
-          <a-rate :value="record.selfScore" :count="5" allow-half
-            :disabled="loading || !EDITABLE_STATUSES.includes(record.status)"
-            @change="(value) => updateKpi(index, 'selfScore', value)" style="font-size: 20px" />
-        </template>
-        <template v-else-if="column.key === 'selfComment'">
-          <a-textarea :value="record.selfComment" rows="2" :placeholder="$t('selfComment')"
-            :disabled="loading || !EDITABLE_STATUSES.includes(record.status)"
-            @input="(event) => updateKpi(index, 'selfComment', event.target.value)" style="
-              background: #f9fafb;
-              border-radius: 6px;
-              border: 1px solid #e5e7eb;
-              font-size: 15px;
-            " />
-        </template>
-        <template v-else-if="column.key === 'status'">
-          <a-tag :color="getStatusColor(record.status, record)"
-            style="font-size: 14px; padding: 2px 12px; border-radius: 8px">
-            {{ getStatusText(record.status, record) }}
-            <span v-if="record.status === 'REJECTED'" style="color:#ff4d4f; font-weight:600; margin-left:6px">({{
-              $t('rejected') }})</span>
-          </a-tag>
-        </template>
-        <template v-else-if="column.key === 'actions'">
-          <div v-if="record.status === 'EMPLOYEE_FEEDBACK'">
-            <a-button type="primary" size="small" @click="openFeedbackModal(record, index)"
-              style="border-radius: 6px">{{ $t("viewAndFeedback") }}</a-button>
-          </div>
-          <div v-else-if="record.status === 'MANAGER_REVIEWED'">
-            <span style="color: #faad14; font-weight: 500">{{
-              $t("waitingManagerConfirm")
-              }}</span>
-          </div>
-          <div v-else-if="record.status === 'COMPLETED'">
-            <span style="color: #52c41a; font-weight: 500">{{
-              $t("completed")
-              }}</span>
-            <a-button type="link" size="small" @click="openDetailModal(record)"
-              style="margin-left: 8px; color: #1890ff">{{ $t("viewDetails") }}</a-button>
-          </div>
-        </template>
+    <a-card
+      :headStyle="{ background: '#e6f7ff', borderRadius: '12px 12px 0 0', border: 'none' }"
+      :bodyStyle="{ padding: '32px 32px 24px 32px', borderRadius: '0 0 12px 12px', background: '#fff' }"
+      style="box-shadow:0 2px 8px #91d5ff33;border-radius:12px;"
+    >
+      <template #title>
+        <span style="display:flex;align-items:center;gap:10px;">
+          <solution-outlined style="color:#1890ff;font-size:22px;" />
+          <span style="font-size:20px;font-weight:600;">{{ $t('personalKpiReview') }}</span>
+        </span>
       </template>
-    </a-table>
-    <a-button type="primary" @click="submitSelfReview" :loading="loading" style="margin-top: 24px"
-      :disabled="!canSubmit || loading" v-if="kpis.some((k) => EDITABLE_STATUSES.includes(k.status))">
-      {{ $t("submitReview") }}
-    </a-button>
+      <a-alert v-if="successMessage" type="success" :message="successMessage" show-icon closable @close="successMessage = ''" style="margin-bottom:12px;" />
+      <a-alert v-if="errorMessage" type="error" :message="errorMessage" show-icon closable @close="errorMessage = ''" style="margin-bottom:12px;" />
+      <div class="filters-modern" style="max-width:unset;margin-left:0;margin-right:0;">
+        <a-select v-model="selectedCycle" :options="cycleOptions" :placeholder="$t('selectCycle')" style="width: 220px;" @change="onCycleChange" />
+      </div>
+      <a-table
+        :columns="columns"
+        :data-source="kpis"
+        row-key="id"
+        bordered
+        class="kpi-table-modern"
+        style="margin-top: 32px;width:100%;"
+        :loading="loading"
+        :pagination="false"
+      >
+        <template #bodyCell="{ column, record, index }">
+          <template v-if="column.key === 'targetValue'">
+            <span style="font-weight:500;">{{ Number(record.targetValue).toLocaleString() }} {{ record.kpi.unit }}</span>
+          </template>
+          <template v-else-if="column.key === 'actualValue'">
+            <span style="font-weight:500;">{{ Number(record.actualValue).toLocaleString() }} {{ record.kpi.unit }}</span>
+          </template>
+          <template v-else-if="column.key === 'selfScore'">
+            <a-rate :value="record.selfScore" :count="5" allow-half :disabled="loading || !EDITABLE_STATUSES.includes(record.status)" @change="(value) => updateKpi(index, 'selfScore', value)" style="font-size: 20px" />
+          </template>
+          <template v-else-if="column.key === 'selfComment'">
+            <a-textarea :value="record.selfComment" rows="2" :placeholder="$t('selfComment')" :disabled="loading || !EDITABLE_STATUSES.includes(record.status)" style="background: #f9fafb; border-radius: 6px; border: 1px solid #e5e7eb; font-size: 15px;" @input="(event) => updateKpi(index, 'selfComment', event.target.value)" />
+          </template>
+          <template v-else-if="column.key === 'status'">
+            <a-tag :color="getStatusColor(record.status, record)" style="font-size: 14px; padding: 2px 12px; border-radius: 8px; font-weight:500;">
+              {{ getStatusText(record.status, record) }}
+              <span v-if="record.status === 'REJECTED'" style="color:#ff4d4f; font-weight:600; margin-left:6px">({{ $t('rejected') }})</span>
+            </a-tag>
+          </template>
+          <template v-else-if="column.key === 'actions'">
+            <div style="text-align:center;">
+              <a-button v-if="record.status === 'EMPLOYEE_FEEDBACK'" type="primary" size="small" @click="openFeedbackModal(record, index)" style="border-radius: 6px;min-width:120px;">
+                <solution-outlined style="margin-right:4px;" />{{ $t('viewAndFeedback') }}
+              </a-button>
+              <span v-else-if="record.status === 'MANAGER_REVIEWED'" style="color: #faad14; font-weight: 500">{{ $t('waitingManagerConfirm') }}</span>
+              <span v-else-if="record.status === 'COMPLETED'" style="color: #52c41a; font-weight: 500">{{ $t('completed') }}</span>
+              <a-button v-if="record.status === 'COMPLETED'" type="link" size="small" @click="openDetailModal(record)" style="margin-left: 8px; color: #1890ff">
+                <solution-outlined /> {{ $t('viewDetails') }}
+              </a-button>
+            </div>
+          </template>
+        </template>
+      </a-table>
+      <div style="text-align:center;">
+        <a-button type="primary" @click="submitSelfReview" :loading="loading" style="margin-top: 24px;min-width:180px;font-weight:600;" :disabled="!canSubmit || loading" v-if="kpis.some((k) => EDITABLE_STATUSES.includes(k.status))">
+          <upload-outlined style="margin-right:4px;" />{{ $t('submitReview') }}
+        </a-button>
+      </div>
+    </a-card>
     <a-modal v-model:open="feedbackModal.visible" :title="$t('kpiFeedbackTitle')" :footer="null" width="540px"
       @cancel="closeFeedbackModal" destroyOnClose>
       <div v-if="feedbackModal.record" class="feedback-modal-content-v2">
@@ -204,7 +201,7 @@ import {
   getReviewCycles,
   submitEmployeeFeedback,
 } from "@/core/services/kpiReviewApi";
-import { TeamOutlined, ApartmentOutlined, SolutionOutlined } from '@ant-design/icons-vue';
+import { TeamOutlined, ApartmentOutlined, SolutionOutlined, UploadOutlined } from '@ant-design/icons-vue';
 
 const store = useStore();
 const { t } = useI18n();
@@ -447,40 +444,49 @@ onMounted(() => {
   background: #f5f6fa;
   min-height: 100vh;
 }
-.filters {
+.filters-modern {
   margin-bottom: 24px;
   display: flex;
   align-items: center;
   background: #fff;
-  padding: 24px 32px 16px 32px;
+  padding: 20px 32px 12px 32px;
   border-radius: 12px;
-  box-shadow: 0 2px 8px #f0f1f2;
+  box-shadow: 0 2px 8px #e6f7ff44;
+  max-width: unset;
+  margin-left: 0;
+  margin-right: 0;
 }
-.kpi-table {
-  font-size: 15px;
+.kpi-table-modern .ant-table {
   border-radius: 12px;
+  overflow: hidden;
   background: #fff;
 }
-.kpi-table th {
-  background: #f0f2f5 !important;
+.kpi-table-modern .ant-table-thead > tr > th {
+  background: #e6f7ff;
   font-weight: 600;
   font-size: 15px;
   color: #222;
-  border-radius: 0;
+  border-bottom: 1px solid #91d5ff;
+  text-align: center;
 }
-.kpi-table td {
+.kpi-table-modern .ant-table-tbody > tr > td {
   background: #fff;
   border-bottom: 1px solid #f0f1f2;
   vertical-align: middle;
+  font-size: 15px;
+  text-align: center;
 }
-.kpi-table .ant-rate {
+.kpi-table-modern .ant-table-tbody > tr:hover > td {
+  background: #f0f5ff;
+}
+.kpi-table-modern .ant-rate {
   color: #faad14;
 }
-.kpi-table .ant-btn-link {
+.kpi-table-modern .ant-btn-link {
   color: #1890ff;
   font-weight: 500;
 }
-.kpi-table .ant-btn-primary {
+.kpi-table-modern .ant-btn-primary {
   background: linear-gradient(90deg, #1890ff 0%, #40a9ff 100%);
   border: none;
 }

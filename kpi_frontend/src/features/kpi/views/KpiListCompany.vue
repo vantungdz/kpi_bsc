@@ -1,191 +1,159 @@
 <template>
   <div class="kpi-company-list-page">
-    <div class="list-header">
-      <h2>{{ $t("companyKpiList") }}</h2>
-      <div class="action-buttons">
-        <a-button
-          type="primary"
-          @click="goToCreateKpi"
-          style="float: bottom"
-          v-if="canCreateCompanyKpiCompany"
-        >
+    <div class="list-header-modern">
+      <schedule-outlined class="header-icon" />
+      <div class="header-title-group">
+        <h2>{{ $t("companyKpiList") }}</h2>
+        <div class="header-desc">{{ $t('companyKpiListDesc') || $t('companyKpiList') }}</div>
+      </div>
+      <div class="action-buttons right-align">
+        <a-button type="primary" @click="goToCreateKpi" v-if="canCreateCompanyKpiCompany">
           <plus-outlined /> {{ $t("createNewKpi") }}
         </a-button>
       </div>
     </div>
-    <div class="filter-controls">
-      <a-row :gutter="[22]">
-        <a-col :span="6">
-          <a-form-item :label="$t('search')">
-            <a-input
-              :placeholder="$t('kpiNamePlaceholder')"
-              v-model:value="localFilters.name"
-              @pressEnter="applyFilters"
-            />
-          </a-form-item>
-        </a-col>
-        <a-col :span="5">
-          <a-form-item :label="$t('department')">
-            <a-select
-              v-model:value="localFilters.departmentId"
-              style="width: 100%"
-            >
-              <a-select-option value="">{{ $t("all") }}</a-select-option>
-              <a-select-option
-                v-for="department in departmentList"
-                :key="department.id"
-                :value="department.id"
-              >
-                {{ department.name }}
-              </a-select-option>
-            </a-select>
-          </a-form-item>
-        </a-col>
-        <a-col :span="4">
-          <a-form-item :label="$t('startDate')">
-            <a-date-picker
-              v-model:value="localFilters.startDate"
-              style="width: 100%"
-            />
-          </a-form-item>
-        </a-col>
-        <a-col :span="4">
-          <a-form-item :label="$t('endDate')">
-            <a-date-picker
-              v-model:value="localFilters.endDate"
-              style="width: 100%"
-            />
-          </a-form-item>
-        </a-col>
-      </a-row>
-    </div>
-
+    <a-card class="filter-card-modern">
+      <a-form layout="vertical" class="filter-form-modern">
+        <a-row :gutter="[16, 0]" align="middle" style="flex-wrap: wrap;">
+          <a-col :span="6">
+            <a-form-item :label="$t('search')" class="filter-label-top">
+              <a-input :placeholder="$t('kpiNamePlaceholder')" v-model:value="localFilters.name"
+                @pressEnter="applyFilters" allow-clear size="middle">
+                <template #prefix><schedule-outlined /></template>
+              </a-input>
+            </a-form-item>
+          </a-col>
+          <a-col :span="5">
+            <a-form-item :label="$t('department')" class="filter-label-top">
+              <a-select v-model:value="localFilters.departmentId" style="width: 100%" allow-clear size="middle">
+                <template #suffixIcon><team-outlined /></template>
+                <a-select-option value="">{{ $t('all') }}</a-select-option>
+                <a-select-option v-for="department in departmentList" :key="department.id" :value="department.id">
+                  {{ department.name }}
+                </a-select-option>
+              </a-select>
+            </a-form-item>
+          </a-col>
+          <a-col :span="4">
+            <a-form-item :label="$t('startDate')" class="filter-label-top">
+              <a-date-picker v-model:value="localFilters.startDate" style="width: 100%" allow-clear size="middle" />
+            </a-form-item>
+          </a-col>
+          <a-col :span="4">
+            <a-form-item :label="$t('endDate')" class="filter-label-top">
+              <a-date-picker v-model:value="localFilters.endDate" style="width: 100%" allow-clear size="middle" />
+            </a-form-item>
+          </a-col>
+          <a-col :span="5" style="display: flex; align-items: flex-end; height: 100%;">
+            <div class="filter-btn-group">
+              <a-button type="primary" @click="applyFilters" size="middle">{{ $t('apply') }}</a-button>
+              <a-button
+                @click="() => { localFilters.name = ''; localFilters.departmentId = ''; localFilters.startDate = null; localFilters.endDate = null; applyFilters(); }"
+                size="middle">{{ $t('reset') }}</a-button>
+            </div>
+          </a-col>
+        </a-row>
+      </a-form>
+    </a-card>
     <div style="margin-top: 20px; margin-bottom: 20px">
-      <a-alert
-        v-if="loading"
-        :message="$t('loadingKpis')"
-        type="info"
-        show-icon
-      >
+      <a-alert v-if="loading" :message="$t('loadingKpis')" type="info" show-icon>
         <template #icon> <a-spin /> </template>
       </a-alert>
-      <a-alert
-        v-else-if="error"
-        :message="error"
-        type="error"
-        show-icon
-        closable
-      />
-      <a-alert
-        v-else-if="kpis.length === 0"
-        :message="$t('noKpisFound')"
-        type="warning"
-        show-icon
-        closable
-      />
-      <a-alert
-        v-if="deletedKpiName"
-        :message="$t('kpiDeleted', { name: deletedKpiName })"
-        type="success"
-        closable
-        @close="deletedKpiName = null"
-        show-icon
-      />
-      <a-alert
-        v-if="toggleStatusError"
-        :message="$t('toggleStatusError')"
-        :description="toggleStatusError"
-        type="error"
-        show-icon
-        closable
-        @close="clearToggleError"
-        style="margin-top: 10px"
-      />
+      <a-alert v-else-if="error" :message="error" type="error" show-icon closable />
+      <a-alert v-else-if="kpis.length === 0" :message="$t('noKpisFound')" type="warning" show-icon closable />
+      <a-alert v-if="deletedKpiName" :message="$t('kpiDeleted', { name: deletedKpiName })" type="success" closable
+        @close="deletedKpiName = null" show-icon />
+      <a-alert v-if="toggleStatusError" :message="$t('toggleStatusError')" :description="toggleStatusError" type="error"
+        show-icon closable @close="clearToggleError" style="margin-top: 10px" />
     </div>
-
     <div v-if="groupedKpis" class="data-container">
-      <a-collapse v-model:activeKey="activePanelKeys" expandIconPosition="end">
-        <a-collapse-panel
-          v-for="(kpiList, perspectiveId) in groupedKpis"
-          :key="perspectiveId"
-          :header="
+      <a-collapse v-model:activeKey="activePanelKeys" expandIconPosition="end" class="kpi-collapse-modern">
+        <a-collapse-panel v-for="(kpiList, perspectiveId) in groupedKpis" :key="perspectiveId" :header="
             $t('perspectiveHeader', {
               id: kpiList[0]?.perspective?.id || perspectiveId,
               name: kpiList[0]?.perspective?.name || $t('uncategorized'),
               count: kpiList ? kpiList.length : 0,
             })
-          "
-          accordion
-        >
+          " accordion>
           <div v-if="kpiList && kpiList.length > 0">
-            <a-table
-              :columns="columns"
-              :data-source="kpiList"
-              row-key="id"
-              :pagination="false"
-              :size="'small'"
-              bordered
-            >
+            <a-table :columns="columns" :data-source="kpiList" row-key="id" :pagination="false" :size="'small'" bordered
+              class="kpi-table-modern company-table-modern" :rowClassName="() => 'kpi-row-hover'">
               <template #bodyCell="{ column, record }">
-                <template v-if="column.dataIndex === 'target'">
-                  {{ Number(record.target).toLocaleString() }}
-                  {{ record.unit || "" }}
+                <template v-if="column.dataIndex === 'department'">
+                  <avatar-group>
+                    <template
+                      v-for="assignment in (Array.isArray(record.assignments) ? record.assignments.filter(a => a.assigned_to_department && a.department) : [])"
+                      :key="assignment.id">
+                      <a-tooltip :title="assignment.department.name">
+                        <a-avatar style="background-color: #1890ff;">{{ assignment.department.name[0] }}</a-avatar>
+                      </a-tooltip>
+                    </template>
+                  </avatar-group>
+                </template>
+                <template v-else-if="column.dataIndex === 'section'">
+                  <avatar-group>
+                    <template
+                      v-for="assignment in (Array.isArray(record.assignments) ? record.assignments.filter(a => a.assigned_to_section && a.section) : [])"
+                      :key="assignment.id">
+                      <a-tooltip :title="assignment.section.name">
+                        <a-avatar style="background-color: #1890ff;">{{ assignment.section.name[0] }}</a-avatar>
+                      </a-tooltip>
+                    </template>
+                  </avatar-group>
+                </template>
+                <template v-else-if="column.dataIndex === 'employee'">
+                  <avatar-group>
+                    <template
+                      v-for="assignment in (Array.isArray(record.assignments) ? record.assignments.filter(a => a.assigned_to_employee && a.employee) : [])"
+                      :key="assignment.id">
+                      <a-tooltip :title="assignment.employee.first_name + ' ' + assignment.employee.last_name">
+                        <a-avatar style="background-color: #f56a00;">{{ assignment.employee.first_name[0] }}</a-avatar>
+                      </a-tooltip>
+                    </template>
+                  </avatar-group>
+                </template>
+                <template v-else-if="column.dataIndex === 'target'">
+                  <span class="kpi-value">{{ Number(record.target).toLocaleString() }} {{ record.unit || "" }}</span>
                 </template>
                 <template v-else-if="column.key === 'status'">
-                  <a-tag
-                    :color="getKpiDefinitionStatusColor(record.status)"
-                    style="margin-right: 8px"
-                  >
-                    {{
-                      $t("status_chart." + record.status) ||
-                      getKpiDefinitionStatusText(record.status)
-                    }}
+                  <a-tag :color="getKpiDefinitionStatusColor(record.status)" class="goal-status-tag">
+                    {{ $t("status_chart." + record.status) || getKpiDefinitionStatusText(record.status) }}
                   </a-tag>
-                  <a-switch
-                    v-if="canToggleStatusKpiCompany"
-                    :checked="record.status === KpiDefinitionStatus.APPROVED"
+                  <a-switch v-if="canToggleStatusKpiCompany" :checked="record.status === KpiDefinitionStatus.APPROVED"
                     :loading="isToggling && currentToggleKpiId === record.id"
-                    :disabled="isToggling && currentToggleKpiId !== record.id"
-                    :checked-children="$t('on')"
-                    :un-checked-children="$t('off')"
-                    size="small"
-                    @change="() => handleToggleStatus(record.id)"
-                    :title="$t('toggleStatus')"
-                  />
+                    :disabled="isToggling && currentToggleKpiId !== record.id" :checked-children="$t('on')"
+                    :un-checked-children="$t('off')" size="small" @change="() => handleToggleStatus(record.id)"
+                    :title="$t('toggleStatus')" />
+                </template>
+                <template v-else-if="column.dataIndex === 'validityStatus'">
+                  <a-tag :color="validityStatusColor[record.validityStatus] || 'default'">
+                    {{ $t('validityStatus.' + record.validityStatus) || record.validityStatus }}
+                  </a-tag>
                 </template>
                 <template v-else-if="column.dataIndex === 'action'">
-                  <a-space>
-                    <a-tooltip :title="$t('viewDetails')">
-                      <a-button
-                        type="default"
-                        size="small"
-                        class="kpi-actions-button"
-                        @click="goToDetail(record)"
-                      >
-                        <schedule-outlined /> {{ $t("details") }}
-                      </a-button>
-                    </a-tooltip>
-                    <a-tooltip :title="$t('copyKpi')">
-                      <a-button
-                        type="dashed"
-                        size="small"
-                        @click="handleCopyKpi(record)"
-                        v-if="canCopyCompanyKpi"
-                      >
-                        <copy-outlined /> {{ $t("copy") }}
-                      </a-button>
-                    </a-tooltip>
-                    <a-tooltip :title="$t('deleteKpi')">
-                      <a-button
-                        danger
-                        size="small"
-                        class="kpi-actions-button"
-                        v-if="canDeleteCompanyKpiCompany"
-                        @click="showConfirmDeleteDialog(record.id, record.name)"
-                        ><delete-outlined /> {{ $t("delete") }}</a-button
-                      >
-                    </a-tooltip>
-                  </a-space>
+                  <div style="text-align:center;">
+                    <a-space>
+                      <a-tooltip :title="$t('viewDetails')">
+                        <a-button type="default" size="small" class="kpi-actions-button" @click="goToDetail(record)">
+                          <schedule-outlined /> {{ $t("details") }}
+                        </a-button>
+                      </a-tooltip>
+                      <a-tooltip :title="$t('copyKpi')">
+                        <a-button type="dashed" size="small" @click="handleCopyKpi(record)" v-if="canCopyCompanyKpi">
+                          <copy-outlined /> {{ $t("copy") }}
+                        </a-button>
+                      </a-tooltip>
+                      <a-tooltip :title="$t('deleteKpi')">
+                        <a-button danger size="small" class="kpi-actions-button" v-if="canDeleteCompanyKpiCompany"
+                          @click="showConfirmDeleteDialog(record.id, record.name)">
+                          <delete-outlined /> {{ $t("delete") }}
+                        </a-button>
+                      </a-tooltip>
+                    </a-space>
+                  </div>
+                </template>
+                <template v-else>
+                  <span>{{ record[column.dataIndex] || '--' }}</span>
                 </template>
               </template>
             </a-table>
@@ -195,13 +163,8 @@
       </a-collapse>
     </div>
     <a-empty v-else-if="!loading && !error" :description="$t('noKpisFound')" />
-    <a-modal
-      danger
-      v-model:open="isDeleteModalVisible"
-      :title="$t('confirmDialog')"
-      @ok="handleDeleteKpi"
-      @cancel="isDeleteModalVisible = false"
-    >
+    <a-modal danger v-model:open="isDeleteModalVisible" :title="$t('confirmDialog')" @ok="handleDeleteKpi"
+      @cancel="isDeleteModalVisible = false">
       <p>{{ $t("confirmDelete", { name: selectedKpiName }) }}</p>
     </a-modal>
   </div>
@@ -232,6 +195,7 @@ import {
   Empty as AEmpty,
   Avatar,
   Tooltip,
+  Card as ACard,
 } from "ant-design-vue";
 import {
   PlusOutlined,
@@ -239,6 +203,7 @@ import {
   CopyOutlined,
   DeleteOutlined,
   notification,
+  TeamOutlined,
 } from "@ant-design/icons-vue";
 import dayjs from "dayjs";
 import {
@@ -269,22 +234,25 @@ const currentToggleKpiId = ref(null);
 const userPermissions = computed(
   () => store.getters["auth/user"]?.permissions || []
 );
-function hasPermission(action, resource) {
+function hasPermission(action, resource, scope) {
   return userPermissions.value?.some(
-    (p) => p.action === action && p.resource === resource
+    (p) =>
+      p.action === action &&
+      p.resource === resource &&
+      (scope ? p.scope === scope : true)
   );
 }
 const canCreateCompanyKpiCompany = computed(() =>
-  hasPermission(RBAC_ACTIONS.CREATE, RBAC_RESOURCES.KPI_COMPANY)
+  hasPermission(RBAC_ACTIONS.CREATE, RBAC_RESOURCES.KPI, 'company')
 );
 const canDeleteCompanyKpiCompany = computed(() =>
-  hasPermission(RBAC_ACTIONS.DELETE, RBAC_RESOURCES.KPI)
+  hasPermission(RBAC_ACTIONS.DELETE, RBAC_RESOURCES.KPI, 'company')
 );
 const canCopyCompanyKpi = computed(() =>
-  hasPermission(RBAC_ACTIONS.COPY_TEMPLATE, RBAC_RESOURCES.KPI)
+  hasPermission(RBAC_ACTIONS.COPY_TEMPLATE, RBAC_RESOURCES.KPI, 'company')
 );
 const canToggleStatusKpiCompany = computed(() =>
-  hasPermission(RBAC_ACTIONS.TOGGLE_STATUS, RBAC_RESOURCES.KPI)
+  hasPermission(RBAC_ACTIONS.TOGGLE_STATUS, RBAC_RESOURCES.KPI, 'company')
 );
 
 const loading = computed(() => store.getters["kpis/isLoading"]);
@@ -450,7 +418,7 @@ const columns = computed(() => [
     title: $t('validityStatus.name'),
     dataIndex: 'validityStatus',
     key: 'validityStatus',
-    width: '11%',
+    width: '8%',
     align: 'center',
     customRender: ({ text }) => {
       return h(
@@ -590,4 +558,140 @@ onMounted(async () => {
 });
 </script>
 
-<style scoped></style>
+<style scoped>
+.kpi-company-list-page {
+  padding: 24px;
+  background: #f6f8fa;
+  min-height: 100vh;
+}
+.list-header-modern {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-bottom: 18px;
+  justify-content: space-between;
+}
+.header-icon {
+  font-size: 32px;
+  color: #2563eb;
+  background: #e0e7ff;
+  border-radius: 50%;
+  padding: 8px;
+}
+.header-title-group {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.header-desc {
+  color: #64748b;
+  font-size: 15px;
+  margin-top: 2px;
+}
+.action-buttons.right-align {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+}
+.filter-card-modern {
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  margin-bottom: 18px;
+  padding: 10px 18px 2px 18px;
+}
+.kpi-table-modern {
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  margin-bottom: 0;
+}
+.company-table-modern {
+  margin-bottom: 0;
+}
+.kpi-row-hover:hover {
+  background: #f0fdfa !important;
+  cursor: pointer;
+}
+.kpi-value {
+  font-weight: 500;
+  color: #2563eb;
+}
+.goal-status-tag {
+  font-weight: 500;
+  font-size: 13px;
+  padding: 0 10px;
+  border-radius: 8px;
+}
+.goal-status-text {
+  letter-spacing: 0.5px;
+}
+.kpi-actions-button {
+  border-radius: 6px;
+}
+.kpi-collapse-modern {
+  background: #f9fafb;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  margin-bottom: 18px;
+}
+.kpi-table-modern .ant-table-cell .ant-avatar-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  justify-content: flex-start;
+}
+.kpi-table-modern .ant-avatar {
+  min-width: 28px;
+  min-height: 28px;
+  font-size: 15px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.kpi-table-modern .ant-table-cell {
+  vertical-align: middle;
+}
+.filter-label {
+  font-weight: 500;
+  margin-bottom: 4px;
+  display: block;
+  color: #334155;
+  font-size: 15px;
+}
+.filter-label-top .ant-form-item-label {
+  display: block;
+  text-align: left !important;
+  margin-bottom: 4px;
+  font-weight: 500;
+  color: #334155;
+  font-size: 15px;
+}
+.filter-form-modern {
+  margin-bottom: 0;
+}
+.filter-btn-group {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  height: 40px;
+}
+@media (max-width: 1200px) {
+  .filter-btn-group {
+    flex-direction: column;
+    align-items: flex-start;
+    height: auto;
+    gap: 4px;
+  }
+}
+.validity-status-pill {
+  font-weight: 600 !important;
+  border-radius: 999px !important;
+  font-size: 13px !important;
+  padding: 2px 16px !important;
+  letter-spacing: 0.5px;
+  text-transform: capitalize;
+  border: none !important;
+  display: inline-block;
+}
+</style>

@@ -164,6 +164,7 @@ const actions = {
         name: payload.name,
         departmentId: payload.departmentId,
         managerId: payload.managerId,
+        ...(payload.forceUpdateManager ? { forceUpdateManager: payload.forceUpdateManager } : {}),
       });
       await dispatch("fetchSections", { forceRefresh: true });
       return res.data;

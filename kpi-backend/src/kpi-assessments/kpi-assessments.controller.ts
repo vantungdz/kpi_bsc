@@ -15,17 +15,30 @@ import { AuthGuard } from '@nestjs/passport';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/guards/roles.decorator';
+import { AuditLogService } from '../audit-log/audit-log.service';
 
 @Controller('kpi-assignments')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class KpiAssignmentsController {
-  constructor(private readonly kpiAssignmentsService: KpiAssignmentsService) {}
+  constructor(
+    private readonly kpiAssignmentsService: KpiAssignmentsService,
+    private readonly auditLogService: AuditLogService,
+  ) {}
 
   @Get()
   async getMyAssignedKpis(
     @Query('employeeid') employeeId: string,
+    @Body('username') username?: string,
   ): Promise<KPIAssignment[]> {
-    return this.kpiAssignmentsService.getUserAssignedKpis(Number(employeeId));
+    const result = await this.kpiAssignmentsService.getUserAssignedKpis(Number(employeeId));
+    await this.auditLogService.logAction({
+      action: 'VIEW_ASSIGNMENT',
+      resource: 'KPI_ASSIGNMENT',
+      userId: Number(employeeId),
+      username,
+      data: {},
+    });
+    return result;
   }
 
   @Post('submit-target/:assignmentId')
@@ -33,12 +46,21 @@ export class KpiAssignmentsController {
     @Param('assignmentId') assignmentId: string,
     @Body('target') target: number,
     @Body('userId') userId: number,
+    @Body('username') username?: string,
   ): Promise<KPIAssignment> {
-    return this.kpiAssignmentsService.submitTarget(
+    const result = await this.kpiAssignmentsService.submitTarget(
       Number(assignmentId),
       target,
       userId,
     );
+    await this.auditLogService.logAction({
+      action: 'SUBMIT_TARGET',
+      resource: 'KPI_ASSIGNMENT',
+      userId,
+      username,
+      data: { assignmentId: Number(assignmentId), target },
+    });
+    return result;
   }
 
   @Get('approved')
@@ -47,7 +69,14 @@ export class KpiAssignmentsController {
   }
 
   @Delete(':id')
-  async delete(@Param('id') id: string): Promise<void> {
-    return this.kpiAssignmentsService.softDelete(+id);
+  async delete(@Param('id') id: string, @Body('userId') userId?: number, @Body('username') username?: string): Promise<void> {
+    await this.kpiAssignmentsService.softDelete(+id);
+    await this.auditLogService.logAction({
+      action: 'DELETE',
+      resource: 'KPI_ASSIGNMENT',
+      userId,
+      username,
+      data: { id: +id },
+    });
   }
 }

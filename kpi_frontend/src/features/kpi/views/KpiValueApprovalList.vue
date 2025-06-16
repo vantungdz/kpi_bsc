@@ -1,6 +1,6 @@
 <template>
   <div class="kpi-value-approval-list-page">
-    <a-card :title="cardTitle" :bordered="false">
+    <a-card :title="cardTitleWithIcon" :bordered="false">
       <a-spin :spinning="isLoadingPending" :tip="$t('loadingList')">
         <a-alert
           v-if="loadingError"
@@ -20,71 +20,63 @@
           bordered
           size="small"
           :scroll="{ x: 'max-content' }"
+          class="modern-table"
         >
           <template #bodyCell="{ column, record }">
             <template v-if="column.key === 'kpiName'">
-              <!-- Bỏ comment dòng log dưới đây để kiểm tra dữ liệu của từng record trong console -->
-              {{
-                console.log(
-                  "KPI Name cell record:",
-                  record,
-                  "Attempted KPI Name:",
-                  record.kpiAssignment?.kpi?.name
-                )
-              }}
               <a-tooltip :title="record.kpiAssignment?.kpi?.name">
-                <span>{{
-                  record.kpiAssignment?.kpi?.name || $t("unknownKpiName")
-                }}</span>
+                <span>
+                  <trophy-two-tone style="font-size: 1em; margin-right: 4px; color: #409eff;" />
+                  {{ record.kpiAssignment?.kpi?.name || $t('unknownKpiName') }}
+                </span>
               </a-tooltip>
             </template>
 
             <template v-else-if="column.key === 'employee'">
               <span>
-                {{ record.kpiAssignment?.employee?.first_name || "" }}
-                {{ record.kpiAssignment?.employee?.last_name || "" }}
-                ({{ record.kpiAssignment?.employee?.username || "" }})
+                <user-outlined style="margin-right: 4px; color: #b37feb;" />
+                {{ record.kpiAssignment?.employee?.first_name || '' }}
+                {{ record.kpiAssignment?.employee?.last_name || '' }}
+                ({{ record.kpiAssignment?.employee?.username || '' }})
               </span>
             </template>
 
             <template v-else-if="column.key === 'value'">
-              {{ record.value?.toLocaleString() ?? "" }}
-              <span v-if="record.kpiAssignment?.kpi?.unit">
-                {{ record.kpiAssignment.kpi.unit }}</span
-              >
+              <span>
+                <calculator-outlined style="margin-right: 4px; color: #faad14;" />
+                {{ record.value?.toLocaleString() ?? '' }}
+                <span v-if="record.kpiAssignment?.kpi?.unit">
+                  {{ record.kpiAssignment.kpi.unit }}
+                </span>
+              </span>
             </template>
 
             <template v-else-if="column.key === 'target'">
-              <span
-                v-if="
-                  record.kpiAssignment?.targetValue !== null &&
-                  record.kpiAssignment?.targetValue !== undefined
-                "
-              >
+              <span v-if="record.kpiAssignment?.targetValue !== null && record.kpiAssignment?.targetValue !== undefined">
+                <flag-two-tone style="margin-right: 4px; color: #52c41a;" />
                 {{ Number(record.kpiAssignment.targetValue)?.toLocaleString() }}
                 <span v-if="record.kpiAssignment?.kpi?.unit">
-                  {{ record.kpiAssignment.kpi.unit }}</span
-                >
+                  {{ record.kpiAssignment.kpi.unit }}
+                </span>
               </span>
               <span v-else></span>
             </template>
 
             <template v-else-if="column.key === 'submittedAt'">
-              {{
-                formatDate(
-                  record.timestamp || record.updated_at || record.created_at
-                )
-              }}
+              <clock-circle-two-tone style="margin-right: 4px; color: #1890ff;" />
+              {{ formatDate(record.timestamp || record.updated_at || record.created_at) }}
             </template>
 
             <template v-else-if="column.key === 'notes'">
               <a-tooltip :title="record.notes">
+                <file-text-outlined style="margin-right: 4px; color: #13c2c2;" />
                 <span>{{ truncateText(record.notes, 50) }}</span>
               </a-tooltip>
             </template>
 
             <template v-else-if="column.key === 'status'">
-              <a-tag :color="getValueStatusColor(record.status)">
+              <a-tag :color="getValueStatusColor(record.status)" class="status-tag">
+                <component :is="statusIcon(record.status)" style="margin-right: 6px; font-size: 1.1em; vertical-align: middle;" />
                 {{ getValueStatusText(record.status) }}
               </a-tag>
             </template>
@@ -96,8 +88,9 @@
                   size="small"
                   @click="openDetailModal(record)"
                   :title="$t('viewDetailsAndHistory')"
+                  class="icon-btn"
                 >
-                  <eye-outlined /> {{ $t("details") }}
+                  <eye-outlined /> {{ $t('details') }}
                 </a-button>
                 <a-button
                   type="primary"
@@ -107,8 +100,9 @@
                   :disabled="isProcessing && currentActionItemId !== record.id"
                   :title="$t('approve')"
                   v-if="canApproveKpiValue"
+                  class="icon-btn"
                 >
-                  <check-outlined /> {{ $t("approve") }}
+                  <check-circle-two-tone two-tone-color="#52c41a" /> {{ $t('approve') }}
                 </a-button>
                 <a-button
                   danger
@@ -117,8 +111,9 @@
                   :disabled="isProcessing"
                   :title="$t('reject')"
                   v-if="canRejectKpiValue"
+                  class="icon-btn"
                 >
-                  <close-outlined /> {{ $t("reject") }}
+                  <close-circle-two-tone two-tone-color="#ff4d4f" /> {{ $t('reject') }}
                 </a-button>
               </a-space>
             </template>
@@ -128,7 +123,11 @@
         <a-empty
           v-if="!loadingError && pendingItems.length === 0"
           :description="$t('noPendingItems')"
-        />
+        >
+          <template #image>
+            <frown-two-tone style="font-size: 3em; color: #bfbfbf;" />
+          </template>
+        </a-empty>
       </a-spin>
     </a-card>
 
@@ -335,7 +334,7 @@
 
 <script setup>
 // Vue core imports
-import { ref, computed, onMounted } from "vue";
+import { ref, computed, onMounted, h } from "vue";
 // Vuex store
 import { useStore } from "vuex";
 // Ant Design Vue components and icons
@@ -355,9 +354,19 @@ import {
   notification,
 } from "ant-design-vue";
 import {
-  CheckOutlined,
-  CloseOutlined,
+  TrophyTwoTone,
+  UserOutlined,
+  CalculatorOutlined,
+  FlagTwoTone,
+  ClockCircleTwoTone,
+  FileTextOutlined,
+  CheckCircleTwoTone,
+  CloseCircleTwoTone,
   EyeOutlined,
+  FrownTwoTone,
+  SmileTwoTone,
+  ExclamationCircleTwoTone,
+  SyncOutlined,
 } from "@ant-design/icons-vue";
 // Utilities
 import dayjs from "dayjs";
@@ -409,20 +418,39 @@ const cardTitle = computed(() => {
   return $t("defaultApprovalTitle");
 });
 
+// Card title with icon
+const cardTitleWithIcon = computed(() =>
+  h(
+    'span',
+    { style: 'display: flex; align-items: center; gap: 8px;' },
+    [
+      h(TrophyTwoTone, { style: 'font-size: 1.4em; color: #409eff; marginRight: "6px"' }),
+      cardTitle.value
+    ]
+  )
+);
+
 // Permission-related computed properties
 const userPermissions = computed(() => currentUser.value?.permissions || []);
-function hasPermission(action, resource) {
+function hasPermission(action, resource, scope) {
   return userPermissions.value?.some(
-    (p) => p.action === action && p.resource === resource
+    (p) =>
+      p.action === action &&
+      p.resource === resource &&
+      (scope ? p.scope === scope : true)
   );
 }
 const canApproveKpiValue = computed(
   () =>
-    hasPermission(RBAC_ACTIONS.APPROVE, RBAC_RESOURCES.KPI_VALUE)
+    ['section', 'department', 'manager'].some(scope =>
+      hasPermission(RBAC_ACTIONS.APPROVE, RBAC_RESOURCES.KPI_VALUE, scope)
+    )
 );
 const canRejectKpiValue = computed(
   () =>
-    hasPermission(RBAC_ACTIONS.REJECT, RBAC_RESOURCES.KPI_VALUE) 
+    ['section', 'department', 'manager'].some(scope =>
+      hasPermission(RBAC_ACTIONS.REJECT, RBAC_RESOURCES.KPI_VALUE, scope)
+    )
 );
 
 // Table columns definitions extracted outside component logic
@@ -480,7 +508,7 @@ const columns = computed(() => [
 
 const historyColumns = computed(() => [
   { title: $t("timestamp"), key: "timestamp", width: 140 },
-  { title: $t("action"), dataIndex: "action", key: "action", width: 180 },
+  { title: $t("common.actions"), dataIndex: "action", key: "action", width: 180 },
   {
     title: $t("value"),
     dataIndex: "value",
@@ -543,6 +571,24 @@ const getValueStatusText = (status) => {
 
 const getValueStatusColor = (status) => {
   return KpiValueStatusColor[status] || "default";
+};
+
+// Status icon mapping
+const statusIcon = (status) => {
+  switch ((status || '').toLowerCase()) {
+    case 'pending_section_approval':
+      return SyncOutlined;
+    case 'pending_dept_approval':
+      return SyncOutlined;
+    case 'pending_manager_approval':
+      return SyncOutlined;
+    case 'approved':
+      return SmileTwoTone;
+    case 'rejected':
+      return ExclamationCircleTwoTone;
+    default:
+      return ExclamationCircleTwoTone;
+  }
 };
 
 // Fetch pending KPI approval items
@@ -764,7 +810,35 @@ onMounted(() => {
 </script>
 
 <style scoped>
-/* Thêm CSS tùy chỉnh nếu cần */
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 8px;
+  font-size: 1.1em;
+  border-radius: 8px;
+  box-shadow: 0 1px 2px #e6f7ff11;
+  transition: background 0.15s;
+}
+.icon-btn:hover {
+  background: #e6f7ff;
+}
+.status-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 12px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #fff;
+  text-transform: capitalize;
+}
+.modern-table {
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px #e6f7ff33;
+}
 .ant-table-actions {
   text-align: center;
 }

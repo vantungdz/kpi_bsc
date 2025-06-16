@@ -1,69 +1,24 @@
 <template>
   <div class="dashboard-overview-container">
     <LoadingOverlay :visible="loading" />
-    <h1>{{ $t("dashboardOverview") }}</h1>
-    <a-row :gutter="[16, 24]">
-      <a-col :xs="24" :sm="12" :md="8" :lg="6">
-        <router-link to="/dashboard/kpi-process-stats">
-          <a-card hoverable class="dashboard-block-card card-kpi-stats">
+    <div class="dashboard-header">
+      <bar-chart-outlined class="dashboard-header-icon" />
+      <span class="dashboard-header-title">{{ $t("dashboardOverview") }}</span>
+    </div>
+    <a-row :gutter="[24, 32]" class="dashboard-row">
+      <a-col v-for="card in dashboardCards" :key="card.key" :xs="24" :sm="12" :md="8" :lg="6">
+        <router-link :to="card.to">
+          <a-card hoverable :class="['dashboard-block-card', card.class]">
             <template #title>
-              <line-chart-outlined /> {{ $t("kpiProcessStats") }}
+              <component :is="card.icon" /> {{ $t(card.title) }}
             </template>
-            <p>
-              {{ $t("kpiProcessStatsDescription") }}
-            </p>
-          </a-card>
-        </router-link>
-      </a-col>
-      <!-- Thêm Card mới cho User Activity Stats -->
-      <a-col :xs="24" :sm="12" :md="8" :lg="6">
-        <router-link to="/dashboard/user-activity-stats">
-          <a-card hoverable class="dashboard-block-card card-user-activity-stats">
-            <template #title>
-              <user-switch-outlined /> {{ $t("userActivityStats") }}
-            </template>
-            <p>
-              {{ $t("userActivityStatsDescription") }}
-            </p>
-          </a-card>
-        </router-link>
-      </a-col>
-      <!-- Thêm Card mới cho KPI Performance Overview -->
-      <a-col :xs="24" :sm="12" :md="8" :lg="6">
-        <router-link to="/dashboard/kpi-performance-overview">
-          <a-card hoverable class="dashboard-block-card card-kpi-performance">
-            <template #title>
-              <bar-chart-outlined /> {{ $t("kpiPerformanceOverview") }}
-            </template>
-            <p>
-              {{ $t("kpiPerformanceOverviewDescription") }}
-            </p>
-          </a-card>
-        </router-link>
-      </a-col>
-      <!-- Thêm Card mới cho Tổng quan Kho KPI -->
-      <a-col :xs="24" :sm="12" :md="8" :lg="6">
-        <router-link to="/dashboard/kpi-inventory-stats">
-          <a-card hoverable class="dashboard-block-card card-kpi-inventory">
-            <template #title>
-              <appstore-outlined /> {{ $t("kpiInventoryOverview") }}
-            </template>
-            <p>
-              {{ $t("kpiInventoryOverviewDescription") }}
-            </p>
-          </a-card>
-        </router-link>
-      </a-col>
-      <!-- Thêm Card mới cho Lịch sử hiệu suất nhân viên -->
-      <a-col :xs="24" :sm="12" :md="8" :lg="6">
-        <router-link to="/dashboard/employee-performance-history">
-          <a-card hoverable class="dashboard-block-card card-employee-performance-history">
-            <template #title>
-              <bar-chart-outlined /> {{ $t("employeePerformanceHistory.title") }}
-            </template>
-            <p>
-              {{ $t("employeePerformanceHistoryDescription") }}
-            </p>
+            <div class="dashboard-card-content">
+              <p>{{ $t(card.desc) }}</p>
+              <div class="dashboard-card-action">
+                <span>{{ $t('viewDetail') }}</span>
+                <arrow-right-outlined />
+              </div>
+            </div>
           </a-card>
         </router-link>
       </a-col>
@@ -77,32 +32,165 @@ import {
   UserSwitchOutlined,
   BarChartOutlined,
   AppstoreOutlined,
+  ArrowRightOutlined,
 } from "@ant-design/icons-vue";
 import { useStore } from "vuex";
 import { computed } from "vue";
+import {
+  Chart as ChartJS,
+  Title,
+  Tooltip,
+  Legend,
+  BarElement,
+  CategoryScale,
+  LinearScale,
+  ArcElement
+} from 'chart.js';
+ChartJS.register(Title, Tooltip, Legend, BarElement, CategoryScale, LinearScale, ArcElement);
 
 const store = useStore();
 const loading = computed(() => store.getters["loading/isLoading"]);
+
+const dashboardCards = [
+  {
+    key: 'kpi-stats',
+    to: '/dashboard/kpi-process-stats',
+    icon: LineChartOutlined,
+    title: 'kpiProcessStats',
+    desc: 'kpiProcessStatsDescription',
+    class: 'card-kpi-stats',
+  },
+  {
+    key: 'user-activity',
+    to: '/dashboard/user-activity-stats',
+    icon: UserSwitchOutlined,
+    title: 'userActivityStats',
+    desc: 'userActivityStatsDescription',
+    class: 'card-user-activity-stats',
+  },
+  {
+    key: 'kpi-performance',
+    to: '/dashboard/kpi-performance-overview',
+    icon: BarChartOutlined,
+    title: 'kpiPerformanceOverview',
+    desc: 'kpiPerformanceOverviewDescription',
+    class: 'card-kpi-performance',
+  },
+  {
+    key: 'kpi-inventory',
+    to: '/dashboard/kpi-inventory-stats',
+    icon: AppstoreOutlined,
+    title: 'kpiInventoryOverview',
+    desc: 'kpiInventoryOverviewDescription',
+    class: 'card-kpi-inventory',
+  },
+  {
+    key: 'employee-performance-history',
+    to: '/dashboard/employee-performance-history',
+    icon: BarChartOutlined,
+    title: 'employeePerformanceHistory.title',
+    desc: 'employeePerformanceHistoryDescription',
+    class: 'card-employee-performance-history',
+  },
+  {
+    key: 'objective-stats',
+    to: '/dashboard/strategic-objectives-stats',
+    icon: BarChartOutlined,
+    title: 'strategicObjectivesStats',
+    desc: 'strategicObjectivesStatsDescription',
+    class: 'card-objective-stats',
+  },
+];
 </script>
 
 <style scoped>
 .dashboard-overview-container {
-  padding: 24px;
+  padding: 32px 32px 24px 32px;
+  background: #fafdff;
+  min-height: 100vh;
 }
-
-.dashboard-overview-container :deep(.ant-col > a) {
+.dashboard-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 32px;
+  padding-bottom: 10px;
+  border-bottom: 2px solid #e3e7ef;
+}
+.dashboard-header-icon {
+  font-size: 2.2em;
+  color: #1976d2;
+  background: #e3e7ef;
+  border-radius: 50%;
+  padding: 10px;
+  box-shadow: 0 2px 8px #e3eaf322;
+}
+.dashboard-header-title {
+  font-size: 2rem;
+  font-weight: 800;
+  color: #1a237e;
+  letter-spacing: 1px;
+}
+.dashboard-row {
+  margin-top: 8px;
+}
+.dashboard-block-card {
+  min-height: 170px;
+  border-radius: 16px;
+  box-shadow: 0 4px 18px #e3eaf322;
+  transition: all 0.3s cubic-bezier(.25,.8,.25,1);
   display: flex;
   flex-direction: column;
-  height: 100%;
+  justify-content: space-between;
+  border: none;
 }
-
-.dashboard-block-card {
-  min-height: 150px;
+.dashboard-block-card:hover {
+  transform: translateY(-7px) scale(1.03);
+  box-shadow: 0 8px 32px #1976d233;
+}
+.dashboard-block-card .ant-card-head {
+  font-size: 1.15em;
+  font-weight: bold;
+  border-radius: 16px 16px 0 0;
+  padding: 16px 20px 10px 20px;
+}
+.dashboard-block-card :deep(.ant-card-body) {
   flex-grow: 1;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  transition: all 0.3s ease;
+  padding: 18px 20px 12px 20px;
+}
+.dashboard-card-content {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  height: 100%;
+}
+.dashboard-card-action {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #1976d2;
+  font-weight: 600;
+  font-size: 1.02em;
+  margin-top: 18px;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+.dashboard-card-action:hover {
+  color: #0050b3;
+}
+.dashboard-block-card .ant-card-head-title,
+.dashboard-block-card :deep(.anticon) {
+  color: #1976d2;
+}
+.dashboard-block-card p {
+  font-size: 1.01em;
+  color: #333;
+  margin-top: 8px;
+  margin-bottom: 0;
+  font-weight: 500;
 }
 
 .card-kpi-stats {
@@ -209,31 +297,20 @@ const loading = computed(() => store.getters["loading/isLoading"]);
   color: #d4380d;
 }
 
-.dashboard-block-card:hover {
-  transform: translateY(-5px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+.card-objective-stats {
+  border-left: 5px solid #eb2f96; /* Màu hồng đậm */
 }
-
-.dashboard-block-card .ant-card-head {
-  flex-shrink: 0;
-  font-size: 1.1em;
-  font-weight: bold;
+.card-objective-stats :deep(.ant-card-head) {
+  background-color: #fff0f6; /* Màu nền nhạt của hồng đậm */
 }
-
-.dashboard-block-card :deep(.ant-card-body) {
-  flex-grow: 1;
-  display: flex;
-  flex-direction: column;
+.card-objective-stats :deep(.ant-card-body) {
+  background-color: #fff5f0; /* Màu nền rất nhạt của hồng đậm */
 }
-
-.dashboard-block-card p {
-  font-size: 0.9em;
-  color: #555;
-  margin-top: 8px;
+.card-objective-stats .ant-card-head-title,
+.card-objective-stats :deep(.anticon) {
+  color: #a50034; /* Màu chữ đậm của hồng đậm */
 }
-
-a {
-  text-decoration: none;
-  color: inherit;
+.card-objective-stats p {
+  color: #c41d3b; /* Màu chữ vừa của hồng đậm */
 }
 </style>

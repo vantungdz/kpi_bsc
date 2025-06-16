@@ -59,4 +59,15 @@ export class AuthController {
     // Lấy user kèm role, department, section, team, và permissions
     return await this.employeesService.findOneWithPermissions(userId);
   }
+
+  @Post('logout')
+  async logout(@Req() req: Request) {
+    // Lấy userId từ JWT hoặc session
+    const userId = (req.user as any)?.id;
+    if (!userId) {
+      throw new UnauthorizedException('User not authenticated');
+    }
+    // Gọi hàm logout trong service (có log thao tác)
+    return await this.authService.logout(userId);
+  }
 }

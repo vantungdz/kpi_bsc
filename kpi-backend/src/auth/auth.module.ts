@@ -5,6 +5,7 @@ import { AuthController } from './auth.controller';
 import { JwtStrategy } from './jwt.strategy';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { EmployeesModule } from 'src/employees/employees.module';
+import { AuditLogService } from '../audit-log/audit-log.service';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { EmployeesModule } from 'src/employees/employees.module';
       inject: [ConfigService],
     }),
     EmployeesModule,
+    require('../audit-log/audit-log.module').AuditLogModule,
   ],
   providers: [AuthService, JwtStrategy],
   controllers: [AuthController],
