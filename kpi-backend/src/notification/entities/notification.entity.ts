@@ -9,8 +9,8 @@ import {
   DeleteDateColumn,
   Index,
 } from 'typeorm';
-import { Employee } from './employee.entity';
-import { Section } from './section.entity'; // Added import
+import { Employee } from '../../employees/entities/employee.entity';
+import { Section } from '../../sections/entities/section.entity'; // Added import
 
 export enum NotificationType {
   NEW_KPI_ASSIGNMENT = 'NEW_KPI_ASSIGNMENT',

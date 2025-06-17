@@ -11,14 +11,14 @@ import {
 } from '@nestjs/common';
 import { NotificationService } from './notification.service';
 import { JwtAuthGuard } from 'src/auth/jwt-auth.guard'; // Đảm bảo đường dẫn đúng
-import { Employee } from 'src/entities/employee.entity'; // Đảm bảo đường dẫn đúng
+import { Employee } from 'src/employees/entities/employee.entity'; // Đảm bảo đường dẫn đúng
 import {
   ApiTags,
   ApiOperation,
   ApiResponse,
   ApiBearerAuth,
 } from '@nestjs/swagger';
-import { Notification } from 'src/entities/notification.entity';
+import { Notification } from 'src/notification/entities/notification.entity';
 
 @ApiTags('Notifications')
 @ApiBearerAuth() // Cho Swagger UI biết cần JWT token

@@ -1,15 +1,15 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, IsNull, In } from 'typeorm';
-import { KpiReview, ReviewStatus } from '../entities/kpi-review.entity';
+import { KpiReview, ReviewStatus } from './entities/kpi-review.entity';
 import { CreateKpiReviewDto, UpdateKpiReviewDto } from './dto/kpi-review.dto';
-import { Kpi } from '../entities/kpi.entity';
-import { KPIAssignment } from '../entities/kpi-assignment.entity';
-import { KpiValue, KpiValueStatus } from '../entities/kpi-value.entity';
-import { Employee } from '../entities/employee.entity';
-import { KpiReviewHistory } from '../entities/kpi-review-history.entity';
+import { Kpi } from '../kpis/entities/kpi.entity';
+import { KPIAssignment } from '../kpi-assessments/entities/kpi-assignment.entity';
+import { KpiValue, KpiValueStatus } from '../kpi-values/entities/kpi-value.entity';
+import { Employee } from '../employees/entities/employee.entity';
+import { KpiReviewHistory } from '../kpi-evaluations/entities/kpi-review-history.entity';
 import { NotificationService } from '../notification/notification.service';
-import { NotificationType } from '../entities/notification.entity';
+import { NotificationType } from '../notification/entities/notification.entity';
 import { EmployeesService } from '../employees/employees.service';
 
 @Injectable()

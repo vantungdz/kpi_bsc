@@ -8,7 +8,7 @@ import {
   ConnectedSocket,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { Notification } from '../entities/notification.entity';
+import { Notification } from '../notification/entities/notification.entity'; // Adjust the import path as necessary
 import { Logger } from '@nestjs/common';
 
 @WebSocketGateway({

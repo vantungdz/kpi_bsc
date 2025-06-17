@@ -9,7 +9,7 @@ import {
   PERMISSION_METADATA_KEY,
   PermissionMeta,
 } from './permission.decorator';
-import { Employee } from '../../entities/employee.entity';
+import { Employee } from '../../employees/entities/employee.entity';
 
 @Injectable()
 export class PermissionGuard implements CanActivate {

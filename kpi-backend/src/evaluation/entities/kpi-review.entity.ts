@@ -6,11 +6,11 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { Employee } from './employee.entity';
-import { Department } from './department.entity';
-import { Section } from './section.entity';
-import { Kpi } from './kpi.entity';
-import { KPIAssignment } from './kpi-assignment.entity';
+import { Employee } from '../../employees/entities/employee.entity';
+import { Department } from '../../departments/entities/department.entity';
+import { Section } from '../../sections/entities/section.entity';
+import { Kpi } from '../../kpis/entities/kpi.entity';
+import { KPIAssignment } from '../../kpi-assessments/entities/kpi-assignment.entity';
 
 export enum ReviewStatus {
   PENDING = 'PENDING',

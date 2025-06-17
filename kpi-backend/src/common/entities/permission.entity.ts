@@ -1,5 +1,5 @@
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, CreateDateColumn, UpdateDateColumn } from 'typeorm';
-import { Employee } from './employee.entity';
+import { Employee } from '../../employees/entities/employee.entity';
 
 @Entity('permissions')
 export class Permission {

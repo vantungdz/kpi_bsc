@@ -8,18 +8,14 @@ import {
   ManyToMany,
   JoinTable,
 } from 'typeorm';
-import { KpiValue } from './kpi-value.entity';
-import { KpiEvaluation } from './kpi-evaluation.entity';
-import { Department } from './department.entity';
-import { Section } from './section.entity';
-import { Team } from './team.entity';
-import { Notification } from './notification.entity';
-import { KpiReview } from './kpi-review.entity';
-import { Permission } from './permission.entity';
-import { Policy } from './policy.entity';
-import { Role } from './role.entity';
-import { Competency } from './competency.entity';
-import { EmployeeSkill } from '../employee-skill/employee-skill.entity';
+import { Department } from '../../departments/entities/department.entity';
+import { Section } from '../../sections/entities/section.entity';
+import { Team } from '../../teams/entities/team.entity';
+import { Notification } from '../../notification/entities/notification.entity';
+import { KpiReview } from '../../evaluation/entities/kpi-review.entity';
+import { Role } from '../../roles/entities/role.entity';
+import { Competency } from '../../competency/entities/competency.entity';
+import { EmployeeSkill } from '../../employee-skill/entities/employee-skill.entity';
 
 @Entity('employees')
 export class Employee {

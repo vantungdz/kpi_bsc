@@ -7,11 +7,11 @@ import {
   JoinColumn,
   DeleteDateColumn,
 } from 'typeorm';
-import { Perspective } from './perspective.entity';
-import { KPIAssignment } from './kpi-assignment.entity';
-import { Employee } from './employee.entity';
-import { KpiFormula } from './kpi-formula.entity';
-import { StrategicObjective } from './strategic-objective.entity';
+import { Perspective } from '../../perspective/entities/perspective.entity';
+import { KPIAssignment } from '../../kpi-assessments/entities/kpi-assignment.entity';
+import { Employee } from '../../employees/entities/employee.entity';
+import { KpiFormula } from '../../kpi-formula/entities/kpi-formula.entity';
+import { StrategicObjective } from '../../strategic-objectives/entities/strategic-objective.entity';
 
 export enum KpiDefinitionStatus {
   DRAFT = 'DRAFT',

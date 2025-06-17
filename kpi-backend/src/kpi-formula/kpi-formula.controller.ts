@@ -1,6 +1,6 @@
 import { Controller, Get, Post, Put, Delete, Param, Body } from '@nestjs/common';
 import { KpiFormulaService } from './kpi-formula.service';
-import { KpiFormula } from '../entities/kpi-formula.entity';
+import { KpiFormula } from './entities/kpi-formula.entity';
 import { CreateKpiFormulaDto, UpdateKpiFormulaDto } from './dto';
 
 @Controller('kpi-formulas')

@@ -15,18 +15,15 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { KpisService } from './kpis.service';
-import { Kpi } from '../entities/kpi.entity';
+import { Kpi } from './entities/kpi.entity';
 import { ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
 import { KpiFilterDto } from './dto/filter-kpi.dto';
-import { KpiEvaluation } from 'src/entities/kpi-evaluation.entity';
+import { KpiEvaluation } from 'src/kpi-evaluations/entities/kpi-evaluation.entity';
 import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
-import { Department } from 'src/entities/department.entity';
-import { Section } from 'src/entities/section.entity';
+import { Department } from 'src/departments/entities/department.entity';
+import { Section } from 'src/sections/entities/section.entity';
 import { RolesGuard } from 'src/auth/guards/roles.guard';
-import { Roles } from 'src/auth/guards/roles.decorator';
-import { CreateKpiDto } from './dto/create_kpi_dto';
-import { error } from 'console';
-import { Employee } from 'src/entities/employee.entity';
+import { Employee } from 'src/employees/entities/employee.entity';
 import { getKpiStatus } from './kpis.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
 

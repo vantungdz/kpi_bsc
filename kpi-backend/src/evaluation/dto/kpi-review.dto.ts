@@ -1,5 +1,5 @@
 import { IsNumber, IsString, IsOptional, IsEnum } from 'class-validator';
-import { ReviewStatus } from '../../entities/kpi-review.entity';
+import { ReviewStatus } from '../entities/kpi-review.entity';
 
 export class CreateKpiReviewDto {
   @IsNumber()

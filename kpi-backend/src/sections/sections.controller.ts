@@ -10,7 +10,7 @@ import {
   Delete,
 } from '@nestjs/common';
 import { SectionsService } from './sections.service';
-import { Section } from 'src/entities/section.entity';
+import { Section } from 'src/sections/entities/section.entity';
 import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
 import { RolesGuard } from 'src/auth/guards/roles.guard';
 

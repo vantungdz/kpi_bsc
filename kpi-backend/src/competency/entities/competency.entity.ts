@@ -1,6 +1,6 @@
 import { Entity, PrimaryGeneratedColumn, Column, ManyToMany, JoinTable, OneToMany } from 'typeorm';
-import { Employee } from '../entities/employee.entity';
-import { EmployeeSkill } from '../employee-skill/employee-skill.entity';
+import { Employee } from '../../employees/entities/employee.entity';
+import { EmployeeSkill } from '../../employee-skill/entities/employee-skill.entity';
 
 @Entity()
 export class Competency {

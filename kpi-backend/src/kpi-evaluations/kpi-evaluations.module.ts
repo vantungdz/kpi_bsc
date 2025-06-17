@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { KpiEvaluation } from '../entities/kpi-evaluation.entity';
+import { KpiEvaluation } from './entities/kpi-evaluation.entity';
 import { KpiEvaluationsService } from './kpi-evaluations.service';
 import { KpiEvaluationsController } from './kpi-evaluations.controller';
 

@@ -5,7 +5,7 @@ import {
   ManyToOne,
   JoinColumn,
 } from 'typeorm';
-import { KPIAssignment } from './kpi-assignment.entity';
+import { KPIAssignment } from '../../kpi-assessments/entities/kpi-assignment.entity';
 
 export enum KpiValueStatus {
   DRAFT = 'DRAFT',

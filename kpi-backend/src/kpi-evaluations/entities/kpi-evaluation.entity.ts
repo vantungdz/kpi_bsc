@@ -6,7 +6,7 @@ import {
   Unique,
   JoinColumn,
 } from 'typeorm';
-import { KPIAssignment } from './kpi-assignment.entity';
+import { KPIAssignment } from '../../kpi-assessments/entities/kpi-assignment.entity';
 
 @Entity('kpi_evaluations')
 @Unique(['evaluatee_id', 'period_end_date'])

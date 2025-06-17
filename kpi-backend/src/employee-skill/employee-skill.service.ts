@@ -1,10 +1,10 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { EmployeeSkill } from './employee-skill.entity';
+import { EmployeeSkill } from './entities/employee-skill.entity';
 import { CreateEmployeeSkillDto, UpdateEmployeeSkillDto } from './dto/employee-skill.dto';
-import { Employee } from '../entities/employee.entity';
-import { Competency } from '../entities/competency.entity';
+import { Employee } from '../employees/entities/employee.entity';
+import { Competency } from '../competency/entities/competency.entity';
 
 @Injectable()
 export class EmployeeSkillService {

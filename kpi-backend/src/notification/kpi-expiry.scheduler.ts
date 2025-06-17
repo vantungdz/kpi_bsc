@@ -2,8 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { KpisService } from '../kpis/kpis.service';
 import { NotificationService } from './notification.service';
-import { NotificationType } from '../entities/notification.entity';
-import { Employee } from '../entities/employee.entity';
+import { NotificationType } from '../notification/entities/notification.entity';
 
 @Injectable()
 export class KpiExpiryScheduler {

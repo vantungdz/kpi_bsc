@@ -8,20 +8,18 @@ import {
   Delete,
   Param,
   Body,
-  NotFoundException,
   Req,
   UseGuards,
   ParseIntPipe,
   UnauthorizedException,
 } from '@nestjs/common';
 import { KpiValuesService } from './kpi-values.service';
-import { KpiValue } from '../entities/kpi-value.entity';
-import { KpiValueHistory } from '../entities/kpi-value-history.entity';
+import { KpiValue } from './entities/kpi-value.entity';
+import { KpiValueHistory } from './entities/kpi-value-history.entity';
 import { Request } from 'express';
-import { Employee } from '../entities/employee.entity';
+import { Employee } from '../employees/entities/employee.entity';
 import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
 import { RolesGuard } from 'src/auth/guards/roles.guard';
-import { Roles } from 'src/auth/guards/roles.decorator';
 import { ApiOperation, ApiResponse, ApiBody, ApiTags } from '@nestjs/swagger';
 import { RejectValueDto } from './dto/reject-value.dto';
 import { AuditLogService } from '../audit-log/audit-log.service';

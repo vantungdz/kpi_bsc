@@ -18,11 +18,10 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { EmployeesService } from './employees.service';
-import { Employee } from 'src/entities/employee.entity';
+import { Employee } from 'src/employees/entities/employee.entity';
 import { ApiOperation, ApiResponse, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
 import { RolesGuard } from 'src/auth/guards/roles.guard';
-import { Roles } from 'src/auth/guards/roles.decorator';
 import { FileInterceptor } from '@nestjs/platform-express';
 import * as XLSX from 'xlsx';
 import { Request } from 'express';

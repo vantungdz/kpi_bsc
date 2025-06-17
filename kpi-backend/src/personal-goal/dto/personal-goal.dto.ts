@@ -1,5 +1,5 @@
 import { IsNotEmpty, IsOptional, IsNumber, IsString, IsDateString, IsEnum, IsArray, ArrayNotEmpty, ArrayUnique } from 'class-validator';
-import { PersonalGoalStatus } from '../personal-goal.entity';
+import { PersonalGoalStatus } from '../entities/personal-goal.entity';
 
 export class CreatePersonalGoalDto {
   @IsNotEmpty()

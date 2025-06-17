@@ -1,6 +1,6 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Perspective } from 'src/entities/perspective.entity';
+import { Perspective } from 'src/perspective/entities/perspective.entity';
 import { Repository } from 'typeorm';
 
 // perspectives.service.ts

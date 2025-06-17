@@ -8,13 +8,11 @@ import {
   Query,
   Delete,
 } from '@nestjs/common';
-import { KpiValue } from '../entities/kpi-value.entity';
+import { KpiValue } from '../kpi-values/entities/kpi-value.entity';
 import { KpiAssignmentsService } from './kpi-assessments.service';
-import { KPIAssignment } from 'src/entities/kpi-assignment.entity';
-import { AuthGuard } from '@nestjs/passport';
+import { KPIAssignment } from 'src/kpi-assessments/entities/kpi-assignment.entity';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
-import { Roles } from '../auth/guards/roles.decorator';
 import { AuditLogService } from '../audit-log/audit-log.service';
 
 @Controller('kpi-assignments')

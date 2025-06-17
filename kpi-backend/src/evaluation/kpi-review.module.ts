@@ -1,12 +1,12 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { KpiReview } from '../entities/kpi-review.entity';
-import { Kpi } from '../entities/kpi.entity';
+import { KpiReview } from './entities/kpi-review.entity';
+import { Kpi } from '../kpis/entities/kpi.entity';
 import { KpiReviewService } from './kpi-review.service';
 import { KpiReviewController } from './kpi-review.controller';
-import { KPIAssignment } from '../entities/kpi-assignment.entity';
-import { KpiValue } from '../entities/kpi-value.entity';
-import { KpiReviewHistory } from '../entities/kpi-review-history.entity';
+import { KPIAssignment } from '../kpi-assessments/entities/kpi-assignment.entity';
+import { KpiValue } from '../kpi-values/entities/kpi-value.entity';
+import { KpiReviewHistory } from '../kpi-evaluations/entities/kpi-review-history.entity';
 import { NotificationModule } from '../notification/notification.module';
 import { EmployeesModule } from '../employees/employees.module';
 

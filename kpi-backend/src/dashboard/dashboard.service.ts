@@ -1,20 +1,16 @@
 import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, Repository, SelectQueryBuilder } from 'typeorm';
-import { Employee } from '../entities/employee.entity';
-import { KpiValueHistory } from '../entities/kpi-value-history.entity';
-import { KpiValue, KpiValueStatus } from '../entities/kpi-value.entity';
-import { Kpi } from '../entities/kpi.entity';
-import { KPIAssignment } from '../entities/kpi-assignment.entity';
-import { Section } from '../entities/section.entity';
-import { Department } from '../entities/department.entity';
+import { Employee } from '../employees/entities/employee.entity';
+import { KpiValueHistory } from '../kpi-values/entities/kpi-value-history.entity';
+import { KpiValue, KpiValueStatus } from '../kpi-values/entities/kpi-value.entity';
+import { Kpi } from '../kpis/entities/kpi.entity';
+import { KPIAssignment } from '../kpi-assessments/entities/kpi-assignment.entity';
 import {
   KpiInventoryDto,
   KpiPerformanceOverviewDto,
   PerformanceByRoleDto,
 } from './dto/dashboard.dto';
-import { Permission } from '../entities/permission.entity';
-import { Role } from '../entities/role.entity';
 
 @Injectable()
 export class DashboardsService {

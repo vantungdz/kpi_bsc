@@ -9,7 +9,7 @@ import {
   ParseIntPipe,
 } from '@nestjs/common';
 import { KpiEvaluationsService } from './kpi-evaluations.service';
-import { KpiEvaluation } from '../entities/kpi-evaluation.entity';
+import { KpiEvaluation } from './entities/kpi-evaluation.entity';
 import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
 import { UseGuards } from '@nestjs/common';
 import { RolesGuard } from '../auth/guards/roles.guard';

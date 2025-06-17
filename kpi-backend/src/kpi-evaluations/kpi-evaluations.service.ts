@@ -1,7 +1,7 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { KpiEvaluation } from '../entities/kpi-evaluation.entity';
+import { KpiEvaluation } from './entities/kpi-evaluation.entity';
 
 @Injectable()
 export class KpiEvaluationsService {

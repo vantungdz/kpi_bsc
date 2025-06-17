@@ -1,12 +1,8 @@
 import { plainToInstance } from 'class-transformer';
-import { Department } from 'src/entities/department.entity';
-import { KPIAssignment } from 'src/entities/kpi-assignment.entity';
-import { Section } from 'src/entities/section.entity';
-import { Team } from 'src/entities/team.entity';
-import { Employee } from '../entities/employee.entity';
-import { KpiValue, KpiValueStatus } from 'src/entities/kpi-value.entity';
-import { Perspective } from 'src/entities/perspective.entity';
-import { Kpi, KpiDefinitionStatus } from 'src/entities/kpi.entity';
+import { KPIAssignment } from 'src/kpi-assessments/entities/kpi-assignment.entity';
+import { Employee } from '../employees/entities/employee.entity';
+import { KpiValueStatus } from 'src/kpi-values/entities/kpi-value.entity';
+import { Kpi, KpiDefinitionStatus } from 'src/kpis/entities/kpi.entity';
 import {
   Brackets,
   DataSource,

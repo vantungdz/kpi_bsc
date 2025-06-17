@@ -8,11 +8,11 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Repository, DataSource, DeepPartial, Brackets } from 'typeorm';
-import { KpiValue, KpiValueStatus } from '../entities/kpi-value.entity';
-import { KpiValueHistory } from '../entities/kpi-value-history.entity';
-import { KPIAssignment } from '../entities/kpi-assignment.entity';
-import { Employee } from '../entities/employee.entity';
-import { Kpi, KpiDefinitionStatus } from '../entities/kpi.entity';
+import { KpiValue, KpiValueStatus } from './entities/kpi-value.entity';
+import { KpiValueHistory } from './entities/kpi-value-history.entity';
+import { KPIAssignment } from '../kpi-assessments/entities/kpi-assignment.entity';
+import { Employee } from '../employees/entities/employee.entity';
+import { KpiDefinitionStatus } from '../kpis/entities/kpi.entity';
 
 @Injectable()
 export class KpiValuesService {

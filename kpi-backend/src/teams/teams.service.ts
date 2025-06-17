@@ -1,7 +1,7 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Team } from '../entities/team.entity';
+import { Team } from './entities/team.entity';
 
 @Injectable()
 export class TeamsService {

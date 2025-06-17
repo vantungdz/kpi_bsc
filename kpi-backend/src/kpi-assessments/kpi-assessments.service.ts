@@ -1,8 +1,8 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { KpiValue, KpiValueStatus } from '../entities/kpi-value.entity';
-import { KPIAssignment } from 'src/entities/kpi-assignment.entity';
+import { KpiValue, KpiValueStatus } from '../kpi-values/entities/kpi-value.entity';
+import { KPIAssignment } from 'src/kpi-assessments/entities/kpi-assignment.entity';
 
 @Injectable()
 export class KpiAssignmentsService {

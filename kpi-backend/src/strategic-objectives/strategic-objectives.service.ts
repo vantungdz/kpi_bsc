@@ -1,10 +1,10 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { StrategicObjective } from '../entities/strategic-objective.entity';
+import { StrategicObjective } from 'src/strategic-objectives/entities/strategic-objective.entity';
 import { CreateStrategicObjectiveDto, UpdateStrategicObjectiveDto } from './dto/strategic-objective.dto';
-import { Perspective } from '../entities/perspective.entity';
-import { Kpi } from '../entities/kpi.entity';
+import { Perspective } from 'src/perspective/entities/perspective.entity';
+import { Kpi } from 'src/kpis/entities/kpi.entity';
 
 @Injectable()
 export class StrategicObjectivesService {

@@ -1,8 +1,11 @@
 import { Entity, PrimaryGeneratedColumn, Column, OneToMany } from 'typeorm';
-import { Kpi } from './kpi.entity';
-import { StrategicObjective } from './strategic-objective.entity';
+import { Kpi } from '../../kpis/entities/kpi.entity';
+import { StrategicObjective } from '../../strategic-objectives/entities/strategic-objective.entity';
 
-// perspective.entity.ts
+/**
+ * Entity đại diện cho một Perspective (góc nhìn chiến lược)
+ * Mỗi perspective có thể chứa nhiều KPI và nhiều StrategicObjective
+ */
 @Entity('perspectives')
 export class Perspective {
   @PrimaryGeneratedColumn()
@@ -20,9 +23,15 @@ export class Perspective {
   @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
   updated_at: Date;
 
+  /**
+   * Danh sách các KPI thuộc perspective này
+   */
   @OneToMany(() => Kpi, (kpi) => kpi.perspective)
   kpis: Kpi[];
 
+  /**
+   * Danh sách các mục tiêu chiến lược thuộc perspective này
+   */
   @OneToMany(() => StrategicObjective, (so) => so.perspective)
   strategicObjectives: StrategicObjective[];
 }

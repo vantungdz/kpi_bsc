@@ -1,11 +1,11 @@
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
-import { PersonalGoal } from './personal-goal.entity';
-import { PersonalGoalKpi } from './personal-goal-kpi.entity';
+import { PersonalGoal } from './entities/personal-goal.entity';
+import { PersonalGoalKpi } from 'src/personal-goal/entities/personal-goal-kpi.entity';
 import { CreatePersonalGoalDto, UpdatePersonalGoalDto } from './dto/personal-goal.dto';
-import { KPIAssignment } from '../entities/kpi-assignment.entity';
-import { KpiValue, KpiValueStatus } from '../entities/kpi-value.entity';
+import { KPIAssignment } from 'src/kpi-assessments/entities/kpi-assignment.entity';
+import { KpiValue, KpiValueStatus } from 'src/kpi-values/entities/kpi-value.entity';
 
 @Injectable()
 export class PersonalGoalService {

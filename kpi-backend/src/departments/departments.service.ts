@@ -1,8 +1,8 @@
 // src/departments/department.service.ts
 import { Injectable, UnauthorizedException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Department } from 'src/entities/department.entity';
-import { Employee } from '../entities/employee.entity';
+import { Department } from 'src/departments/entities/department.entity';
+import { Employee } from 'src/employees/entities/employee.entity';
 import { Repository } from 'typeorm';
 import { EmployeesService } from '../employees/employees.service';
 

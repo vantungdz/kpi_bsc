@@ -1,11 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { NotificationService } from './notification.service';
-import { KPIAssignment } from 'src/entities/kpi-assignment.entity';
-import { KpiValue } from 'src/entities/kpi-value.entity';
+import { KPIAssignment } from 'src/kpi-assessments/entities/kpi-assignment.entity';
+import { KpiValue } from 'src/kpi-values/entities/kpi-value.entity';
 import { EmployeesService } from 'src/employees/employees.service';
-import { NotificationType } from 'src/entities/notification.entity';
-import { Employee } from 'src/entities/employee.entity';
+import { NotificationType } from 'src/notification/entities/notification.entity';
+import { Employee } from 'src/employees/entities/employee.entity';
 import { NotificationGateway } from './notification.gateway';
 
 @Injectable()

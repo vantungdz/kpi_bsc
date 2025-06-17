@@ -1,8 +1,10 @@
-import { entities } from './../entities/index';
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, CreateDateColumn, UpdateDateColumn, OneToMany } from 'typeorm';
-import { Employee } from '../entities/employee.entity';
+import { Employee } from '../../employees/entities/employee.entity';
 import { PersonalGoalKpi } from './personal-goal-kpi.entity';
 
+/**
+ * Trạng thái của mục tiêu cá nhân
+ */
 export enum PersonalGoalStatus {
   NOT_STARTED = 'not_started',
   IN_PROGRESS = 'in_progress',
@@ -10,6 +12,9 @@ export enum PersonalGoalStatus {
   CANCELLED = 'cancelled',
 }
 
+/**
+ * Entity đại diện cho một mục tiêu cá nhân của nhân viên
+ */
 @Entity('personal_goals')
 export class PersonalGoal {
   @PrimaryGeneratedColumn()
@@ -18,6 +23,9 @@ export class PersonalGoal {
   @Column()
   employeeId: number;
 
+  /**
+   * Liên kết tới nhân viên sở hữu mục tiêu này
+   */
   @ManyToOne(() => Employee, { onDelete: 'CASCADE' })
   employee: Employee;
 
@@ -27,6 +35,9 @@ export class PersonalGoal {
   @Column({ type: 'text', nullable: true })
   description: string;
 
+  /**
+   * Danh sách các KPI liên kết với mục tiêu cá nhân này
+   */
   @OneToMany(() => PersonalGoalKpi, (pgk) => pgk.personalGoal, { cascade: true })
   kpiLinks: PersonalGoalKpi[];
 

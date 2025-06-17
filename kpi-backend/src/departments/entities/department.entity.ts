@@ -1,6 +1,6 @@
 import { Entity, PrimaryGeneratedColumn, Column, OneToMany, ManyToOne } from 'typeorm';
-import { Section } from './section.entity';
-import { Employee } from './employee.entity';
+import { Section } from 'src/sections/entities/section.entity';
+import { Employee } from 'src/employees/entities/employee.entity';
 
 @Entity('departments')
 export class Department {

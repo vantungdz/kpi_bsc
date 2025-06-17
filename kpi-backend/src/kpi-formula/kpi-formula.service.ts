@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { KpiFormula } from '../entities/kpi-formula.entity';
+import { KpiFormula } from './entities/kpi-formula.entity';
 import { evaluate } from 'mathjs';
 
 @Injectable()

@@ -1,15 +1,13 @@
 import {
   Injectable,
-  UnauthorizedException,
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Section } from 'src/entities/section.entity';
-import { Department } from 'src/entities/department.entity';
-import { Employee } from 'src/entities/employee.entity';
+import { Section } from 'src/sections/entities/section.entity';
+import { Department } from 'src/departments/entities/department.entity';
+import { Employee } from 'src/employees/entities/employee.entity';
 import { EmployeesService } from '../employees/employees.service';
-
 import { Repository } from 'typeorm';
 
 @Injectable()
@@ -20,6 +18,13 @@ export class SectionsService {
     private readonly employeesService: EmployeesService, // Inject EmployeesService
   ) {}
 
+  /**
+   * Tạo mới một section.
+   * Nếu manager đã quản lý section khác, trả về warning (trừ khi forceUpdateManager).
+   * Nếu có manager, cập nhật lại thông tin manager và section cũ (nếu có).
+   * @param createSectionDto Dữ liệu tạo section
+   * @returns Section đã tạo hoặc warning nếu manager đã quản lý section khác
+   */
   async create(createSectionDto: any): Promise<Section | { warning: string, employee: any }> {
     const created = this.sectionRepository.create(createSectionDto);
     const section = Array.isArray(created) ? created[0] : created;
@@ -61,10 +66,19 @@ export class SectionsService {
     return savedSection;
   }
 
+  /**
+   * Lấy tất cả section, kèm thông tin department liên quan.
+   * @returns Danh sách section
+   */
   async findAll(): Promise<Section[]> {
     return this.sectionRepository.find({ relations: ['department'] });
   }
 
+  /**
+   * Lấy thông tin một section theo id, kèm thông tin department.
+   * @param id Section id
+   * @returns Section hoặc throw NotFoundException nếu không tồn tại
+   */
   async findOne(id: number): Promise<Section> {
     const section = await this.sectionRepository.findOne({
       where: { id },
@@ -79,9 +93,10 @@ export class SectionsService {
 
   /**
    * Lấy danh sách sections, có thể lọc theo departmentId.
-   * Luôn tải kèm thông tin department liên quan.
+   * Luôn tải kèm thông tin department và manager liên quan.
+   * Nếu thiếu manager, tự động tìm employee có role 'section' và sectionId tương ứng.
    * @param departmentId ID của department để lọc (tùy chọn)
-   * @returns Promise<Section[]> Danh sách sections kèm thông tin department
+   * @returns Danh sách sections kèm thông tin department, manager
    */
   async getFilteredSections(departmentId?: number): Promise<Section[]> {
     let sections: Section[] = [];
@@ -98,16 +113,16 @@ export class SectionsService {
       });
     }
 
-    // Auto-populate manager if missing, by finding employee with role 'section' and sectionId = section.id
+    // Auto-populate manager nếu thiếu
     for (const section of sections) {
       if (!section.managerId) {
-        // Tìm employee có roles chứa 'section' và sectionId = section.id
+        // Tìm employee có roles chứa 'manager' và sectionId = section.id
         const manager = await this.sectionRepository.manager
           .getRepository(Employee)
           .createQueryBuilder('employee')
           .leftJoinAndSelect('employee.roles', 'role')
           .where('employee.sectionId = :sectionId', { sectionId: section.id })
-          .andWhere('role.name = :roleName', { roleName: 'section' })
+          .andWhere('role.name = :roleName', { roleName: 'manager' })
           .getOne();
         if (manager) {
           section.manager = manager;
@@ -118,6 +133,13 @@ export class SectionsService {
     return sections;
   }
 
+  /**
+   * Cập nhật thông tin section.
+   * Nếu đổi manager, kiểm tra trạng thái manager và cập nhật lại thông tin liên quan.
+   * @param id Section id
+   * @param updateSectionDto Dữ liệu cập nhật
+   * @returns Section đã cập nhật hoặc warning nếu manager đã quản lý section khác
+   */
   async update(id: number, updateSectionDto: any): Promise<Section | { warning: string, employee: any }> {
     const section = await this.sectionRepository.findOne({ where: { id } });
     if (!section) {
@@ -141,19 +163,22 @@ export class SectionsService {
         };
       }
       // Nếu forceUpdateManager hoặc chưa có section, cập nhật lại
-      console.log(`[SectionService] Gọi updateEmployee cho managerId=${manager.id} với departmentId=${section.department?.id}, sectionId=${section.id}, roles=['manager']`);
-      const updatedManager = await this.employeesService.updateEmployee(manager.id, {
+      await this.employeesService.updateEmployee(manager.id, {
         departmentId: section.department?.id,
         sectionId: section.id,
         roles: ['manager' as any],
         _mergeRoles: true
       });
-      console.log(`[SectionService] Kết quả updateEmployee: managerId=${updatedManager.id}, departmentId=${updatedManager.departmentId}, sectionId=${updatedManager.sectionId}, roles=${JSON.stringify(updatedManager.roles)}`);
     }
     const saved = await this.sectionRepository.save(section);
     return saved;
   }
 
+  /**
+   * Xóa section nếu không còn nhân viên nào thuộc section này.
+   * Nếu còn nhân viên, throw BadRequestException.
+   * @param id Section id
+   */
   async remove(id: number): Promise<void> {
     // Kiểm tra còn nhân viên nào thuộc section này không
     const employeeCount = await this.sectionRepository.manager

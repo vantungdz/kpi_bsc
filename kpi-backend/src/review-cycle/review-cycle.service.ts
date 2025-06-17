@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { ReviewCycle } from '../entities/review-cycle.entity';
+import { ReviewCycle } from './entities/review-cycle.entity';
 
 @Injectable()
 export class ReviewCycleService {

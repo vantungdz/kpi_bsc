@@ -5,16 +5,11 @@ import {
   Param,
   Body,
   UseGuards,
-  NotFoundException,
   Delete,
   Post,
   Req,
 } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { Role } from '../entities';
 import { PermissionGuard } from '../common/rbac/permission.guard';
-import { Permission } from '../common/rbac/permission.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesService } from './roles.service';
 

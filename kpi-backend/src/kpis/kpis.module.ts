@@ -2,14 +2,14 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { KpisService } from './kpis.service';
 import { KpisController } from './kpis.controller';
-import { Kpi } from '../entities/kpi.entity';
-import { KpiValue } from '../entities/kpi-value.entity';
-import { KpiEvaluation } from '../entities/kpi-evaluation.entity';
-import { Employee } from '../entities/employee.entity';
-import { Perspective } from 'src/entities/perspective.entity';
-import { Department } from 'src/entities/department.entity';
-import { Section } from 'src/entities/section.entity';
-import { KPIAssignment } from 'src/entities/kpi-assignment.entity';
+import { Kpi } from './entities/kpi.entity';
+import { KpiValue } from '../kpi-values/entities/kpi-value.entity';
+import { KpiEvaluation } from '../kpi-evaluations/entities/kpi-evaluation.entity';
+import { Employee } from '../employees/entities/employee.entity';
+import { Perspective } from '../perspective/entities/perspective.entity';
+import { Department } from '../departments/entities/department.entity';
+import { Section } from '../sections/entities/section.entity';
+import { KPIAssignment } from '../kpi-assessments/entities/kpi-assignment.entity';
 import { AuditLogModule } from '../audit-log/audit-log.module';
 
 @Module({

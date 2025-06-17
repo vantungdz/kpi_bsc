@@ -1,8 +1,8 @@
 // e:\project\kpi-backend\src\notification\notification.module.ts
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { Notification } from '../entities/notification.entity';
-import { Employee } from '../entities/employee.entity'; // If used by service/listener
+import { Notification } from 'src/notification/entities/notification.entity'; // Adjust the path as necessary
+import { Employee } from 'src/employees/entities/employee.entity'; // If used by service/listener
 import { NotificationService } from './notification.service';
 import { NotificationEventListener } from './notification.listener'; // Assuming you have this
 import { NotificationsController } from './notification.controller';
@@ -12,7 +12,7 @@ import { KpiExpiryScheduler } from './kpi-expiry.scheduler';
 import { KpisModule } from '../kpis/kpis.module';
 import { ReviewReminderScheduler } from './review-reminder.scheduler';
 import { ReviewSummaryScheduler } from './review-summary.scheduler';
-import { KpiReview } from '../entities/kpi-review.entity';
+import { KpiReview } from '../evaluation/entities/kpi-review.entity'; // Adjust the path as necessary
 
 @Module({
   imports: [

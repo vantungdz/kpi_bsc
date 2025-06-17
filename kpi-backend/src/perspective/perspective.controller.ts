@@ -9,7 +9,7 @@ import {
   Put,
   Delete,
 } from '@nestjs/common';
-import { Perspective } from 'src/entities/perspective.entity';
+import { Perspective } from 'src/perspective/entities/perspective.entity';
 import { PerspectiveService } from './perspective.service';
 import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
 import { RolesGuard } from 'src/auth/guards/roles.guard';

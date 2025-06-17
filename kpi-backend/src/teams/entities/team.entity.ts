@@ -5,8 +5,8 @@ import {
   ManyToOne,
   OneToMany,
 } from 'typeorm';
-import { Section } from './section.entity';
-import { Employee } from './employee.entity';
+import { Section } from 'src/sections/entities/section.entity';
+import { Employee } from 'src/employees/entities/employee.entity';
 
 @Entity('teams')
 export class Team {

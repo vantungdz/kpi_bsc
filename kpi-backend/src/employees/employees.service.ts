@@ -7,8 +7,8 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Logger } from '@nestjs/common'; // Import Logger
-import { Employee } from 'src/entities/employee.entity';
-import { Role } from 'src/entities/role.entity';
+import { Employee } from 'src/employees/entities/employee.entity';
+import { Role } from 'src/roles/entities/role.entity';
 import {
   Repository,
   FindManyOptions,
@@ -21,12 +21,12 @@ import {
 import * as XLSX from 'xlsx';
 import * as bcrypt from 'bcrypt';
 import { EmployeePerformanceHistoryDto, EmployeePerformanceYearDto } from './dto/employee-performance-history.dto';
-import { KPIAssignment } from '../entities/kpi-assignment.entity';
-import { KpiValue, KpiValueStatus } from '../entities/kpi-value.entity';
-import { KpiReview } from '../entities/kpi-review.entity';
-import { Kpi } from '../entities/kpi.entity';
-import { EmployeeSkill } from '../employee-skill/employee-skill.entity';
-import { Competency } from '../entities/competency.entity';
+import { KPIAssignment } from 'src/kpi-assessments/entities/kpi-assignment.entity';
+import { KpiValue, KpiValueStatus } from 'src/kpi-values/entities/kpi-value.entity';
+import { KpiReview } from 'src/evaluation/entities/kpi-review.entity';
+import { Kpi } from 'src/kpis/entities/kpi.entity';
+import { EmployeeSkill } from 'src/employee-skill/entities/employee-skill.entity';
+import { Competency } from 'src/competency/entities/competency.entity';
 
 interface EmployeeFilterOptions {
   departmentId?: number;

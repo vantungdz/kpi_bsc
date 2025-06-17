@@ -2,10 +2,9 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { Repository, LessThan, Not, In } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
-import { KpiReview, ReviewStatus } from '../entities/kpi-review.entity';
+import { KpiReview, ReviewStatus } from '../evaluation/entities/kpi-review.entity';
 import { NotificationService } from './notification.service';
-import { NotificationType } from '../entities/notification.entity';
-import { Employee } from '../entities/employee.entity';
+import { NotificationType } from './entities/notification.entity';
 import { EmployeesService } from '../employees/employees.service';
 
 @Injectable()

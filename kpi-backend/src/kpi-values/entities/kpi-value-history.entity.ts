@@ -6,8 +6,8 @@ import {
   JoinColumn,
 } from 'typeorm';
 import { KpiValue, KpiValueStatus } from './kpi-value.entity'; // Import KpiValueStatus
-import { Employee } from './employee.entity';
-import { KPIAssignment } from './kpi-assignment.entity';
+import { Employee } from '../../employees/entities/employee.entity';
+import { KPIAssignment } from '../../kpi-assessments/entities/kpi-assignment.entity';
 
 @Entity('kpi_value_history')
 export class KpiValueHistory {

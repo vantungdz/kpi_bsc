@@ -2,8 +2,7 @@ import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { POLICY_CHECK_KEY } from './policy.decorator';
 import { getRepository } from 'typeorm';
-import { Policy } from '../../entities/policy.entity';
-import { Employee } from '../../entities/employee.entity';
+import { Employee } from 'src/employees/entities/employee.entity';
 
 @Injectable()
 export class PolicyGuard implements CanActivate {

@@ -9,13 +9,13 @@ import {
   OneToMany,
   DeleteDateColumn,
 } from 'typeorm';
-import { Kpi } from './kpi.entity';
-import { Employee } from './employee.entity';
-import { Department } from './department.entity';
-import { Section } from './section.entity';
-import { Team } from './team.entity';
-import { KpiValue } from './kpi-value.entity';
-import { KpiReview } from './kpi-review.entity';
+import { Kpi } from '../../kpis/entities/kpi.entity';
+import { Employee } from '../../employees/entities/employee.entity';
+import { Department } from '../../departments/entities/department.entity';
+import { Section } from '../../sections/entities/section.entity';
+import { Team } from '../../teams/entities/team.entity';
+import { KpiValue } from '../../kpi-values/entities/kpi-value.entity';
+import { KpiReview } from '../../evaluation/entities/kpi-review.entity';
 
 @Entity('kpi_assignment')
 export class KPIAssignment {

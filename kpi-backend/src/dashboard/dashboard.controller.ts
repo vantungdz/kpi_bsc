@@ -12,8 +12,7 @@ import { ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Request } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
-import { Roles } from '../auth/guards/roles.decorator';
-import { Employee } from '../entities/employee.entity';
+import { Employee } from '../employees/entities/employee.entity';
 import { DashboardsService } from './dashboard.service';
 import {
   KpiInventoryDto,

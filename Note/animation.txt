@@ -1,146 +1,45 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Welcome Animation Fixed</title>
-<style>
-  /* Reset & basics */
-  * {
-    box-sizing: border-box;
-  }
-  body, html {
-    margin: 0; padding: 0; height: 100%;
-    font-family: 'Poppins', sans-serif;
-    background: #f0f4f8;
-    color: #222;
-  }
+-- Xóa toàn bộ dữ liệu và reset lại id về 1
+TRUNCATE TABLE permissions RESTART IDENTITY;
 
-  /* Fullscreen container */
-  #welcome-overlay {
-    position: fixed;
-    inset: 0;
-    background: radial-gradient(ellipse at center, #1a1a3d 0%, #0a0a1a 100%);
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    overflow: hidden;
-    z-index: 10000;
-    user-select: none;
-    transition: opacity 1s ease;
-    opacity: 1;
-    pointer-events: all;
-  }
-
-  /* When overlay is hidden */
-  #welcome-overlay.hidden {
-    opacity: 0;
-    pointer-events: none;
-  }
-
-  /* Glowing welcome text */
-  .welcome-text {
-    font-size: 4rem;
-    font-weight: 900;
-    letter-spacing: 0.15em;
-    text-align: center;
-    color: #80c7ff;
-    text-transform: uppercase;
-    filter: drop-shadow(0 0 8px #80c7ff);
-    animation: flickerGlow 3s ease-in-out infinite alternate,
-               popInScale 1.2s ease forwards;
-  }
-
-  /* Glow flicker animation */
-  @keyframes flickerGlow {
-    0%, 100% {
-      text-shadow:
-        0 0 8px #80c7ff,
-        0 0 20px #337acc,
-        0 0 30px #337acc,
-        0 0 40px #337acc,
-        0 0 50px #337acc;
-      color: #80c7ff;
-    }
-    50% {
-      text-shadow:
-        0 0 12px #a3d6ff,
-        0 0 24px #63a4ff,
-        0 0 36px #3279e7,
-        0 0 48px #105adf,
-        0 0 60px #0a40bf;
-      color: #a3d6ff;
-    }
-  }
-  /* Pop in scale on load */
-  @keyframes popInScale {
-    0% {
-      opacity: 0; 
-      transform: scale(0.5);
-    }
-    100% {
-      opacity: 1;
-      transform: scale(1);
-    }
-  }
-
-  /* Subtext */
-  .sub-text {
-    font-size: 1.25rem;
-    letter-spacing: 0.1em;
-    color: #a0c8ffdd;
-    margin-top: 10px;
-    opacity: 0;               /* Ẩn lúc đầu */
-    animation: fadeUp 1.5s ease forwards 1.2s;
-  }
-  @keyframes fadeUp {
-    from {
-      opacity: 0;
-      transform: translateY(20px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
-
-  /* Content behind overlay (demo) */
-  #main-content {
-    padding: 2rem;
-    text-align: center;
-  }
-</style>
-</head>
-<body>
-
-<div id="welcome-overlay" role="banner" aria-label="Welcome animation">
-  <div class="welcome-text" aria-live="polite">Welcome to KPI Management</div>
-  <div class="sub-text">Let's achieve great goals together</div>
-</div>
-
-<div id="main-content" style="display:none;">
-  <h1>Trang chính của dự án KPI</h1>
-  <p>Đây là nội dung chính của dự án, hiện ra sau khi animation kết thúc.</p>
-</div>
-
-<script>
-  const overlay = document.getElementById('welcome-overlay');
-  const mainContent = document.getElementById('main-content');
-
-  // Sau 5 giây ẩn overlay với hiệu ứng mờ
-  setTimeout(() => {
-    overlay.classList.add('hidden');
-
-    // Sau hiệu ứng mờ 1s, ẩn hoàn toàn overlay và hiển thị nội dung chính
-    setTimeout(() => {
-      overlay.style.display = 'none';
-      mainContent.style.display = 'block';
-    }, 1000);
-  }, 5000);
-
-</script>
-
-</body>
-</html>
-
+-- Import lại dữ liệu (không cần cột id, id sẽ tự tăng)
+INSERT INTO permissions (action, resource, scope) VALUES
+('view', 'dashboard', 'global'),
+('view', 'kpi', 'company'),
+('view', 'kpi', 'department'),
+('view', 'kpi', 'section'),
+('view', 'employee', 'company'),
+('view', 'report', 'global'),
+('view', 'kpi-value', 'department'),
+('view', 'admin', 'global'),
+('view', 'kpi', 'employee'),
+('create', 'employee', 'company'),
+('view', 'kpi-value','manager'),
+('view', 'kpi-value','section'),
+('create', 'kpi', 'company'),
+('create', 'kpi', 'employee'),
+('create', 'kpi', 'department'),
+('create', 'kpi', 'section'),
+('delete', 'employee', 'company'),
+('delete', 'kpi', 'company'),
+('update', 'employee', 'company'),
+('assign', 'kpi', 'company'),
+('assign', 'kpi', 'department'),
+('assign', 'kpi', 'section'),
+('copy-template', 'kpi', 'company'),
+('toggle-status', 'kpi', 'company'),
+('export', 'report', 'global'),
+('approve', 'kpi-value','section'),
+('approve', 'kpi-value','department'),
+('approve', 'kpi-value','manager'),
+('reject', 'kpi-value','section'),
+('reject', 'kpi-value','department'),
+('reject', 'kpi-value','manager'),
+('view', 'kpi-review','section'),
+('view', 'kpi-review','department'),
+('view', 'kpi-review','manager'),
+('approve', 'kpi-review','section'),
+('approve', 'kpi-review','department'),
+('approve', 'kpi-review','manager'),
+('reject', 'kpi-review','section'),
+('reject', 'kpi-review','department'),
+('reject', 'kpi-review','manager');
