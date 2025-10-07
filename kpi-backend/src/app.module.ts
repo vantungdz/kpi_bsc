@@ -37,19 +37,17 @@ import { PersonalGoalModule } from './personal-goal/personal-goal.module';
     ScheduleModule.forRoot(), // Thêm dòng này để bật scheduler
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
-      useFactory: (configService: ConfigService): TypeOrmModuleOptions => {
-        return {
-          type: 'postgres',
-          host: 'localhost',
-          port: 5432,
-          username: 'postgres',
-          password: '12345678',
-          database: 'kpi_management',
-          entities: [__dirname + '/**/*.entity{.ts,.js}'],
-          synchronize: true,
-          logging: true,
-        };
-      },
+      useFactory: (config: ConfigService): TypeOrmModuleOptions => ({
+        type: 'postgres',
+        host: config.get('DB_HOST'),
+        port: config.get<number>('DB_PORT'),
+        username: config.get('DB_USERNAME'),
+        password: config.get('DB_PASSWORD'),
+        database: config.get('DB_DATABASE'),
+        entities: [__dirname + '/**/*.entity{.ts,.js}'],
+        synchronize: true, // dev only
+        logging: true,
+      }),
       inject: [ConfigService],
     }),
     DashboardsModule,

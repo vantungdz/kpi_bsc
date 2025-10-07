@@ -4,7 +4,10 @@
   </template>
   <template v-else>
     <!-- Layout ngoài cùng chiếm đúng 100% chiều cao viewport và không tự cuộn -->
-    <a-layout style="height: 100vh; overflow: hidden" class="app-layout-wrapper">
+    <a-layout
+      style="height: 100vh; overflow: hidden"
+      class="app-layout-wrapper"
+    >
       <AppSidebar v-if="isAuthenticated" />
 
       <!-- Layout này sẽ chứa header, content, và footer -->
@@ -13,12 +16,15 @@
 
         <!-- Khu vực nội dung chính, phần này sẽ cuộn -->
         <a-layout-content class="site-layout-content">
-          <div v-if="isAuthenticating" style="
+          <div
+            v-if="isAuthenticating"
+            style="
               display: flex;
               justify-content: center;
               align-items: center;
               height: calc(100vh - 100px);
-            ">
+            "
+          >
             <LoadingOverlay :visible="loading" message="Loading user data..." />
           </div>
           <div v-else id="app">
@@ -29,8 +35,11 @@
         </a-layout-content>
 
         <!-- Footer sẽ nằm ở dưới cùng của site-layout -->
-        <a-layout-footer class="site-layout-footer" style="text-align: center; padding: 13px 50px; background: #f0f2f5">
-          {{ $t('footerText', { year: new Date().getFullYear() }) }}
+        <a-layout-footer
+          class="site-layout-footer"
+          style="text-align: center; padding: 13px 50px; background: #f0f2f5"
+        >
+          {{ $t("footerText", { year: new Date().getFullYear() }) }}
         </a-layout-footer>
       </a-layout>
     </a-layout>
@@ -44,8 +53,8 @@ import AppHeader from "@/core/components/layout/AppHeader.vue";
 import AppSidebar from "@/core/components/layout/AppSidebar.vue";
 import LoadingOverlay from "@/core/components/common/LoadingOverlay.vue";
 import { useI18nLocale } from "@/core/i18n";
-import { useRoute } from 'vue-router';
-import PageNotFound from '@/features/common/PageNotFound.vue';
+import { useRoute } from "vue-router";
+import PageNotFound from "@/features/common/PageNotFound.vue";
 
 import {
   Layout as ALayout,
@@ -98,7 +107,6 @@ watch(i18nLocale, () => {
   const app = getCurrentInstance();
   if (app) app.proxy.$forceUpdate();
 });
-
 </script>
 
 <style>
@@ -129,13 +137,16 @@ watch(i18nLocale, () => {
   flex-shrink: 0; /* Ngăn footer co lại */
 }
 
-.fade-page-enter-active, .fade-page-leave-active {
-  transition: opacity 0.45s cubic-bezier(0.4,0,0.2,1);
+.fade-page-enter-active,
+.fade-page-leave-active {
+  transition: opacity 0.45s cubic-bezier(0.4, 0, 0.2, 1);
 }
-.fade-page-enter-from, .fade-page-leave-to {
+.fade-page-enter-from,
+.fade-page-leave-to {
   opacity: 0;
 }
-.fade-page-enter-to, .fade-page-leave-from {
+.fade-page-enter-to,
+.fade-page-leave-from {
   opacity: 1;
 }
 </style>
