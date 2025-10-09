@@ -14,7 +14,7 @@ import { setupGlobalErrorHandler } from "@/core/utils/errorHandler";
 import '@/core/utils/axios-interceptor';
 import '@fortawesome/fontawesome-free/css/all.min.css'; // Import Font Awesome
 
-// Patch ResizeObserver loop error (ẩn hoàn toàn warning này)
+// Patch ResizeObserver loop error (completely hide this warning)
 const resizeObserverErrMsg = 'ResizeObserver loop completed with undelivered notifications';
 const realConsoleError = window.console.error;
 window.console.error = function(msg, ...args) {
@@ -27,10 +27,10 @@ window.console.error = function(msg, ...args) {
 let notificationSocket = null;
 
 function setupNotificationSocket(store) {
-  // Lấy userId từ store
+  // Get userId from store
   const user = store.getters["auth/user"];
   if (!user || !user.id) return;
-  if (notificationSocket) return; // Đã kết nối rồi
+  if (notificationSocket) return; // Already connected
 
   notificationSocket = connectNotificationSocket(user.id);
 
@@ -38,7 +38,7 @@ function setupNotificationSocket(store) {
   });
 
   notificationSocket.on("notification", (data) => {
-    // Gửi vào store để xử lý realtime
+    // Send to store for realtime processing
     store.dispatch("notifications/handleRealtimeNotification", data);
   });
 
@@ -59,7 +59,7 @@ app.use(store);
 app.use(Antd);
 app.use(i18n);
 
-// Thiết lập global error handler
+// Setup global error handler
 setupGlobalErrorHandler(app);
 
 watch(
@@ -70,7 +70,7 @@ watch(
   }
 );
 
-// Tự động kết nối khi user đăng nhập, ngắt khi logout
+// Auto connect when user logs in, disconnect when logout
 const storeInstance = app.config.globalProperties.$store || app._context.provides.store || app.store;
 if (storeInstance) {
   storeInstance.watch(

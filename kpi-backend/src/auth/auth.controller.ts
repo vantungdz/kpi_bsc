@@ -21,16 +21,25 @@ export class AuthController {
   ) {}
 
   @Post('login')
-  async login(@Body() user: LoginDto) {
-    // Đăng nhập và lấy user kèm permissions đầy đủ cho từng role
-    const result = await this.authService.login(user);
+  async login(@Body() user: LoginDto, @Req() req: Request) {
+    // Lấy thông tin device và IP
+    const deviceInfo = req.headers['user-agent'] || 'Unknown Device';
+    const ipAddress = req.ip || req.socket.remoteAddress || 'Unknown IP';
+
+    // Login and get user with full permissions for each role
+    const result = await this.authService.login(
+      user,
+      deviceInfo,
+      ipAddress,
+      deviceInfo,
+    );
     if (result && result.user) {
-      // Lấy lại roles kèm permissions
+      // Get roles with permissions
       if (Array.isArray(result.user.roles) && result.user.roles.length > 0) {
         const roleIds = result.user.roles.map((r: any) =>
           typeof r === 'object' ? r.id : r,
         );
-        // Lấy roles kèm permissions từ DB
+        // Get roles with permissions from DB
         const rolesWithPerms = await this.employeesService[
           'roleRepository'
         ].find({
@@ -49,24 +58,37 @@ export class AuthController {
   }
 
   @UseGuards(AuthGuard('jwt'))
+  @Get('sessions')
+  async getUserSessions(@Req() req: Request): Promise<any> {
+    const userId = (req.user as any)?.id;
+    if (!userId) {
+      throw new UnauthorizedException('User not authenticated');
+    }
+    // Get active sessions for user
+    return await this.authService.getUserActiveSessions(userId);
+  }
+
+  @UseGuards(AuthGuard('jwt'))
   @Get('profile')
   async getProfile(@Req() req: Request): Promise<any> {
     const userId = (req.user as any)?.id;
     if (!userId) {
       throw new UnauthorizedException('User not authenticated');
     }
-    // Lấy user kèm role, department, section, team, và permissions
+    // Get user with role, department, section, team, and permissions
     return await this.employeesService.findOneWithPermissions(userId);
   }
 
   @Post('logout')
   async logout(@Req() req: Request) {
-    // Lấy userId từ JWT hoặc session
+    // Get userId và sessionId từ JWT
     const userId = (req.user as any)?.id;
+    const sessionId = (req.user as any)?.sessionId;
+
     if (!userId) {
       throw new UnauthorizedException('User not authenticated');
     }
-    // Gọi hàm logout trong service (có log thao tác)
-    return await this.authService.logout(userId);
+    // Call logout function in service (with operation logging)
+    return await this.authService.logout(userId, sessionId);
   }
 }

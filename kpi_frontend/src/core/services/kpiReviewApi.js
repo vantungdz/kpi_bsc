@@ -37,11 +37,8 @@ export async function submitEmployeeFeedback(reviewId, employeeFeedback) {
 }
 
 export async function getKpiReviewHistory(review) {
-  // Ưu tiên lấy theo review.id, nếu không có thì lấy theo kpi.id và cycle
+  
   if (review && review.id) {
-    // Nếu backend có API /kpi-review/history/:reviewId thì dùng dòng dưới:
-    // const res = await apiClient.get(`/kpi-review/history/${review.id}`);
-    // Nếu backend chỉ có /kpi-review/history/:kpiId/:cycle:
     const res = await apiClient.get(
       `/kpi-review/history/${review.kpi?.id}/${review.cycle}`
     );
@@ -51,7 +48,6 @@ export async function getKpiReviewHistory(review) {
 }
 
 export async function submitReviewByRole(reviewId, score, comment) {
-  // Gọi API tổng quát cho nhảy bậc review
   return apiClient.post(`/kpi-review/submit-review`, {
     reviewId,
     score,
@@ -60,7 +56,7 @@ export async function submitReviewByRole(reviewId, score, comment) {
 }
 
 export async function rejectReviewByRole(reviewId, rejectionReason) {
-  // Gọi API tổng quát cho từ chối review theo vai trò cao nhất
+  
   return apiClient.post(`/kpi-review/reject`, {
     reviewId,
     rejectionReason,

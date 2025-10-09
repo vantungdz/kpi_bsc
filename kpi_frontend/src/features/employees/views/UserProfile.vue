@@ -35,11 +35,12 @@
             >
               <a-tag
                 v-for="role in userRoles"
-                :key="role"
-                color="geekblue"
+                :key="role.id || role.name"
+                color="blue"
                 style="margin-right: 8px"
+                :title="role.description"
               >
-                {{ $t(roleLabelMap[role]) || role }}
+                {{ role.name }}
               </a-tag>
             </a-descriptions-item>
             <a-descriptions-item :label="$t('department')">{{
@@ -50,8 +51,8 @@
             }}</a-descriptions-item>
             <a-descriptions-item :label="$t('dateJoined')">
               {{
-                user.date_joined
-                  ? formatDate(user.date_joined)
+                user.updated_at
+                  ? formatDate(user.updated_at)
                   : $t("noInformation")
               }}
             </a-descriptions-item>
@@ -81,28 +82,22 @@ import {
 const store = useStore();
 
 const user = computed(() => store.getters["auth/user"]);
-// Chuẩn hóa lấy mảng roles (string)
+
 const userRoles = computed(() => {
   if (!user.value) return [];
   if (Array.isArray(user.value.roles)) {
-    return user.value.roles
-      .map((r) => (typeof r === "string" ? r : r?.name))
-      .filter(Boolean);
+    return user.value.roles.filter((role) => role && role.name);
   }
   if (user.value.role) {
-    if (typeof user.value.role === "string") return [user.value.role];
-    if (typeof user.value.role === "object" && user.value.role?.name)
-      return [user.value.role.name];
+    if (typeof user.value.role === "object" && user.value.role?.name) {
+      return [user.value.role];
+    }
+    if (typeof user.value.role === "string") {
+      return [{ name: user.value.role }];
+    }
   }
   return [];
 });
-const roleLabelMap = {
-  admin: "roleAdmin",
-  manager: "roleManager",
-  department: "roleDepartment",
-  section: "roleSection",
-  employee: "roleEmployee",
-};
 
 const fullName = computed(() => {
   if (!user.value) return "";

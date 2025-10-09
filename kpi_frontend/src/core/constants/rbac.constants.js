@@ -10,7 +10,7 @@ export const RBAC_ACTIONS = {
   APPROVE: "approve",
   REJECT: "reject",
   EXPORT: "export",
-  // Bổ sung action động cho quản trị KPI
+  // Additional dynamic action for KPI management
   COPY_TEMPLATE: "copy-template",
 };
 

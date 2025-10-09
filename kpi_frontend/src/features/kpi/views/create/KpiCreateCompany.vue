@@ -1,34 +1,74 @@
 <template>
   <div v-if="canAccessCreatePage">
-    <a-form ref="formRef" :model="form" :rules="formRules" layout="vertical" @finish="handleChangeCreate"
-      @finishFailed="onFinishFailed">
+    <a-form
+      ref="formRef"
+      :model="form"
+      :rules="formRules"
+      layout="vertical"
+      @finish="handleChangeCreate"
+      @finishFailed="onFinishFailed"
+    >
       <a-row :gutter="12">
         <a-col :span="12">
           <a-form-item :label="$t('useExistingKpiTemplate')" name="templateKpi">
-            <a-select v-model:value="selectedTemplateKpiId" :placeholder="$t('selectKpiTemplate')" show-search
-              allow-clear :options="kpiTemplateOptions" :filter-option="
+            <a-select
+              v-model:value="selectedTemplateKpiId"
+              :placeholder="$t('selectKpiTemplate')"
+              show-search
+              allow-clear
+              :options="kpiTemplateOptions"
+              :filter-option="
                 (input, option) =>
                   option.label.toLowerCase().includes(input.toLowerCase())
-              " :loading="loadingKpiTemplates" style="width: 100%; margin-bottom: 15px" @change="loadKpiTemplate" />
+              "
+              :loading="loadingKpiTemplates"
+              style="width: 100%; margin-bottom: 15px"
+              @change="loadKpiTemplate"
+            />
           </a-form-item>
         </a-col>
       </a-row>
-      <a-form-item class="textLabel" :label="$t('perspective')" name="perspective_id">
-        <a-select v-model:value="form.perspective_id" :placeholder="$t('selectPerspective')">
-          <a-select-option v-for="perspective in perspectiveList" :key="perspective.id" :value="perspective.id">{{
-            perspective.name }}</a-select-option>
+      <a-form-item
+        class="textLabel"
+        :label="$t('perspective')"
+        name="perspective_id"
+      >
+        <a-select
+          v-model:value="form.perspective_id"
+          :placeholder="$t('selectPerspective')"
+        >
+          <a-select-option
+            v-for="perspective in perspectiveList"
+            :key="perspective.id"
+            :value="perspective.id"
+            >{{ perspective.name }}</a-select-option
+          >
         </a-select>
       </a-form-item>
       <a-row :gutter="12">
         <a-col :span="12">
           <a-form-item class="textLabel" :label="$t('kpiName')" name="name">
-            <a-input v-model:value="form.name" :placeholder="$t('enterKpiName')" />
+            <a-input
+              v-model:value="form.name"
+              :placeholder="$t('enterKpiName')"
+            />
           </a-form-item>
         </a-col>
         <a-col :span="12">
-          <a-form-item class="textLabel" :label="$t('calculationFormula')" name="formula_id">
-            <a-select v-model:value="form.formula_id" :placeholder="$t('selectCalculationFormula')">
-              <a-select-option v-for="formula in formulaList" :key="formula.id" :value="formula.id">
+          <a-form-item
+            class="textLabel"
+            :label="$t('calculationFormula')"
+            name="formula_id"
+          >
+            <a-select
+              v-model:value="form.formula_id"
+              :placeholder="$t('selectCalculationFormula')"
+            >
+              <a-select-option
+                v-for="formula in formulaList"
+                :key="formula.id"
+                :value="formula.id"
+              >
                 {{ formula.name }}
               </a-select-option>
             </a-select>
@@ -53,7 +93,11 @@
         <a-col :span="12">
           <a-form-item class="textLabel" :label="$t('unit')" name="unit">
             <a-select v-model:value="form.unit" :placeholder="$t('selectUnit')">
-              <a-select-option v-for="(unitValue, unitKey) in KpiUnits" :key="unitKey" :value="unitValue">
+              <a-select-option
+                v-for="(unitValue, unitKey) in KpiUnits"
+                :key="unitKey"
+                :value="unitValue"
+              >
                 {{ unitKey }}
               </a-select-option>
             </a-select>
@@ -64,21 +108,30 @@
       <a-row :gutter="12">
         <a-col :span="12">
           <a-form-item class="textLabel" :label="$t('target')" name="target">
-            <a-input v-model:value="form.targetFormatted" :placeholder="$t('enterTarget')"
-              @input="(event) => handleNumericInput('target', event)" />
+            <a-input
+              v-model:value="form.targetFormatted"
+              :placeholder="$t('enterTarget')"
+              @input="(event) => handleNumericInput('target', event)"
+            />
           </a-form-item>
         </a-col>
 
         <a-col :span="12">
           <a-form-item class="textLabel" :label="$t('weight')" name="weight">
-            <a-input v-model:value="form.weight" :placeholder="$t('enterWeight')"
-              @input="(event) => handleNumericInput('weight', event)" />
+            <a-input
+              v-model:value="form.weight"
+              :placeholder="$t('enterWeight')"
+              @input="(event) => handleNumericInput('weight', event)"
+            />
           </a-form-item>
         </a-col>
       </a-row>
 
       <a-form-item class="textLabel" :label="$t('frequency')" name="frequency">
-        <a-select v-model:value="form.frequency" :placeholder="$t('selectFrequency')">
+        <a-select
+          v-model:value="form.frequency"
+          :placeholder="$t('selectFrequency')"
+        >
           <a-select-option value="daily"> {{ $t("daily") }} </a-select-option>
           <a-select-option value="weekly"> {{ $t("weekly") }} </a-select-option>
           <a-select-option value="monthly">
@@ -93,62 +146,131 @@
 
       <a-row :gutter="12">
         <a-col :span="12">
-          <a-form-item class="textLabel" :label="$t('dateStart')" name="start_date">
-            <a-date-picker v-model:value="form.start_date" style="width: 100%" value-format="YYYY-MM-DD" />
+          <a-form-item
+            class="textLabel"
+            :label="$t('dateStart')"
+            name="start_date"
+          >
+            <a-date-picker
+              v-model:value="form.start_date"
+              style="width: 100%"
+              value-format="YYYY-MM-DD"
+            />
           </a-form-item>
         </a-col>
 
         <a-col :span="12">
-          <a-form-item class="textLabel" :label="$t('dateEnd')" name="end_date" :rules="[
-            { required: true, message: $t('pleaseSelectEndDate') },
-            { validator: validateEndDate }]">
-            <a-date-picker v-model:value="form.end_date" style="width: 100%" value-format="YYYY-MM-DD" />
+          <a-form-item
+            class="textLabel"
+            :label="$t('dateEnd')"
+            name="end_date"
+            :rules="[
+              { required: true, message: $t('pleaseSelectEndDate') },
+              { validator: validateEndDate },
+            ]"
+          >
+            <a-date-picker
+              v-model:value="form.end_date"
+              style="width: 100%"
+              value-format="YYYY-MM-DD"
+            />
           </a-form-item>
         </a-col>
       </a-row>
 
-      <a-form-item class="textLabel" :label="$t('description')" name="description">
-        <a-textarea v-model:value="form.description" :placeholder="$t('enterDescription')" allow-clear />
+      <a-form-item
+        class="textLabel"
+        :label="$t('description')"
+        name="description"
+      >
+        <a-textarea
+          v-model:value="form.description"
+          :placeholder="$t('enterDescription')"
+          allow-clear
+        />
       </a-form-item>
 
-      <a-row :gutter="12" style="
+      <a-row
+        :gutter="12"
+        style="
           margin-top: -10px;
           margin-bottom: 16px;
           background: #f0f2f5;
           padding: 8px;
           border-radius: 4px;
-        ">
+        "
+      >
         <a-col :span="8">
-          <a-statistic :title="$t('overallTarget')" :value="overallTargetValue" :precision="2" />
+          <a-statistic
+            :title="$t('overallTarget')"
+            :value="overallTargetValue"
+            :precision="2"
+          />
         </a-col>
 
         <a-col :span="8">
-          <a-statistic :title="$t('totalAssigned')" :value="totalAssignedTarget" :precision="2" />
+          <a-statistic
+            :title="$t('totalAssigned')"
+            :value="totalAssignedTarget"
+            :precision="2"
+          />
         </a-col>
 
         <a-col :span="8">
-          <a-statistic :title="$t('remaining')" :value="remainingTarget" :precision="2"
-            :value-style="isOverAssigned ? { color: '#cf1322' } : {}" />
+          <a-statistic
+            :title="$t('remaining')"
+            :value="remainingTarget"
+            :precision="2"
+            :value-style="isOverAssigned ? { color: '#cf1322' } : {}"
+          />
         </a-col>
       </a-row>
 
-      <a-form-item v-if="canAssignToUnits" class="textLabel" :label="$t('assignToDepartment')" name="section_id_table"
-        :help="$t('assignToDepartmentHelp')" :extra="form.assigned_user_id ? $t('directUserAssignmentCleared') : ''">
-        <a-alert v-if="assignmentError" :message="assignmentError" type="error" show-icon style="margin-bottom: 10px" />
+      <a-form-item
+        v-if="canAssignToUnits"
+        class="textLabel"
+        :label="$t('assignToDepartment')"
+        name="section_id_table"
+        :help="$t('assignToDepartmentHelp')"
+        :extra="form.assigned_user_id ? $t('directUserAssignmentCleared') : ''"
+      >
+        <a-alert
+          v-if="assignmentError"
+          :message="assignmentError"
+          type="error"
+          show-icon
+          style="margin-bottom: 10px"
+        />
 
-        <a-table :columns="columns" :data-source="departmentTreeData" :pagination="false"
-          :row-key="(record) => record.key" :expandable="{ childrenColumnName: 'children' }"
-          :row-selection="rowSelection" :class="{ 'table-disabled': !!form.assigned_user_id }" size="small" bordered>
+        <a-table
+          :columns="columns"
+          :data-source="departmentTreeData"
+          :pagination="false"
+          :row-key="(record) => record.key"
+          :expandable="{ childrenColumnName: 'children' }"
+          :row-selection="rowSelection"
+          :class="{ 'table-disabled': !!form.assigned_user_id }"
+          size="small"
+          bordered
+        >
           <template #target="{ record }">
             <template v-if="record.type === 'department'">
-              <a-input-number v-if="!hasSelectedSections(record.key)" :value="form.targets[record.key]"
-                :placeholder="$t('enterTarget')" :min="0" style="width: 100%" :disabled="
+              <a-input-number
+                v-if="!hasSelectedSections(record.key)"
+                :value="form.targets[record.key]"
+                :placeholder="$t('enterTarget')"
+                :min="0"
+                style="width: 100%"
+                :disabled="
                   !!form.assigned_user_id ||
                   !selectedRowKeys.includes(record.key)
-                " :formatter="
+                "
+                :formatter="
                   (value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
-                " :parser="(value) => String(value).replace(/\$\s?|(,*)/g, '')"
-                @change="(value) => handleTargetChange(record.key, value)" />
+                "
+                :parser="(value) => String(value).replace(/\$\s?|(,*)/g, '')"
+                @change="(value) => handleTargetChange(record.key, value)"
+              />
 
               <span v-else>
                 {{ formatNumber(calculatedDepartmentTargets[record.key] || 0) }}
@@ -156,14 +278,21 @@
             </template>
 
             <template v-else-if="record.type === 'section'">
-              <a-input-number :value="form.targets[record.key]" :placeholder="$t('enterTarget')" :min="0"
-                style="width: 100%" :disabled="
+              <a-input-number
+                :value="form.targets[record.key]"
+                :placeholder="$t('enterTarget')"
+                :min="0"
+                style="width: 100%"
+                :disabled="
                   !!form.assigned_user_id ||
                   !selectedRowKeys.includes(record.key)
-                " :formatter="
+                "
+                :formatter="
                   (value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
-                " :parser="(value) => String(value).replace(/\$\s?|(,*)/g, '')"
-                @change="(value) => handleTargetChange(record.key, value)" />
+                "
+                :parser="(value) => String(value).replace(/\$\s?|(,*)/g, '')"
+                @change="(value) => handleTargetChange(record.key, value)"
+              />
             </template>
           </template>
 
@@ -183,7 +312,12 @@
             {{ $t("clearForm") }}
           </a-button>
 
-          <a-button style="margin-right: 10px" type="primary" html-type="submit" :loading="loading">
+          <a-button
+            style="margin-right: 10px"
+            type="primary"
+            html-type="submit"
+            :loading="loading"
+          >
             {{ $t("saveKpi") }}
           </a-button>
           <a-button type="default" @click="goBack"> {{ $t("back") }} </a-button>
@@ -193,7 +327,12 @@
   </div>
 
   <div v-else>
-    <a-alert :message="$t('accessDenied')" :description="$t('accessDeniedDescription')" type="error" show-icon />
+    <a-alert
+      :message="$t('accessDenied')"
+      :description="$t('accessDeniedDescription')"
+      type="error"
+      show-icon
+    />
 
     <a-button type="default" style="margin-top: 15px" @click="goBack">
       {{ $t("back") }}
@@ -516,7 +655,7 @@ const rowSelection = computed(() => ({
 }));
 
 const overallTargetValue = computed(() => {
-  const target = parseFloat(form.value.target); // Sử dụng giá trị thực tế
+  const target = parseFloat(form.value.target);
   return isNaN(target) ? 0 : target;
 });
 
@@ -589,9 +728,10 @@ const loadKpiTemplate = async (selectedId) => {
       form.value.type = kpiDetail.type || null;
       form.value.unit = kpiDetail.unit || null;
       form.value.target = kpiDetail.target ?? null;
-      form.value.targetFormatted = kpiDetail.target !== null && kpiDetail.target !== undefined
-        ? String(kpiDetail.target).replace(/\B(?=(\d{3})+(?!\d))/g, ",")
-        : "";
+      form.value.targetFormatted =
+        kpiDetail.target !== null && kpiDetail.target !== undefined
+          ? String(kpiDetail.target).replace(/\B(?=(\d{3})+(?!\d))/g, ",")
+          : "";
       form.value.weight = kpiDetail.weight ?? null;
       form.value.frequency = kpiDetail.frequency || null;
       form.value.perspective_id = kpiDetail.perspective?.id || null;
@@ -638,23 +778,20 @@ const handleTargetChange = (key, value) => {
 };
 
 const handleNumericInput = (field, event) => {
-  let value = event.target.value.replace(/[^0-9.]/g, ""); // Loại bỏ ký tự không phải số hoặc dấu chấm
+  let value = event.target.value.replace(/[^0-9.]/g, "");
   const parts = value.split(".");
   if (parts.length > 2) {
-    value = parts[0] + "." + parts.slice(1).join(""); // Xử lý trường hợp có nhiều dấu chấm
+    value = parts[0] + "." + parts.slice(1).join("");
   }
 
-  // Lưu giá trị thực tế (rawTarget)
   const rawValue = parseFloat(value) || 0;
 
-  // Format giá trị hiển thị (formattedTarget)
   const [intPart, decPart] = value.split(".");
   let formatted = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
   if (decPart !== undefined) formatted += "." + decPart;
 
-  // Lưu giá trị thực tế và giá trị format
-  form.value[field] = rawValue; // Lưu giá trị thực tế
-  form.value[`${field}Formatted`] = formatted; // Lưu giá trị format
+  form.value[field] = rawValue;
+  form.value[`${field}Formatted`] = formatted;
 };
 
 const validateWeight = async (_rule, value) => {
@@ -748,9 +885,8 @@ const handleChangeCreate = async () => {
               const sectionData = rawSections.value.find(
                 (rs) => rs.id === s.id
               );
-              // --- SỬA ĐỔI Ở ĐÂY (TRONG FILTER) ---
+
               return sectionData?.department?.id === departmentId;
-              // --- KẾT THÚC SỬA ĐỔI ---
             });
 
           if (
@@ -840,14 +976,22 @@ const handleChangeCreate = async () => {
       },
     };
 
-    // Chỉ xóa các trường nếu chúng không có dữ liệu
-    if (!kpiData.assignments.to_employees || kpiData.assignments.to_employees.length === 0) {
+    if (
+      !kpiData.assignments.to_employees ||
+      kpiData.assignments.to_employees.length === 0
+    ) {
       delete kpiData.assignments.to_employees;
     }
-    if (!kpiData.assignments.to_departments || kpiData.assignments.to_departments.length === 0) {
+    if (
+      !kpiData.assignments.to_departments ||
+      kpiData.assignments.to_departments.length === 0
+    ) {
       delete kpiData.assignments.to_departments;
     }
-    if (!kpiData.assignments.to_sections || kpiData.assignments.to_sections.length === 0) {
+    if (
+      !kpiData.assignments.to_sections ||
+      kpiData.assignments.to_sections.length === 0
+    ) {
       delete kpiData.assignments.to_sections;
     }
 
@@ -861,7 +1005,6 @@ const handleChangeCreate = async () => {
       router.push("/kpis/individual");
     else router.push("/");
   } catch (error) {
-    // --- SỬA ĐỔI KHỐI CATCH (Đảo ngược logic) ---
     const isHandledAssignmentError =
       error instanceof Error && error.message === assignmentError.value;
 
@@ -876,7 +1019,6 @@ const handleChangeCreate = async () => {
         duration: 5,
       });
     }
-    // --- KẾT THÚC SỬA ĐỔI KHỐI CATCH ---
   } finally {
     loading.value = false;
   }
@@ -904,32 +1046,31 @@ const validateEndDate = async (_rule, value) => {
   if (!value || !form.value.start_date) return Promise.resolve();
   const start = dayjs(form.value.start_date);
   const end = dayjs(value);
-  if (end.isBefore(start, 'day')) {
-    return Promise.reject(new Error($t('endDateMustBeAfterStartDate')));
+  if (end.isBefore(start, "day")) {
+    return Promise.reject(new Error($t("endDateMustBeAfterStartDate")));
   }
   const freq = form.value.frequency;
-  if (freq === 'daily') {
-    // Đã kiểm tra ở trên, không cần thêm
+  if (freq === "daily") {
     return Promise.resolve();
   }
-  if (freq === 'weekly') {
-    if (end.diff(start, 'week') < 1) {
-      return Promise.reject(new Error($t('endDateAtLeastOneWeek')));
+  if (freq === "weekly") {
+    if (end.diff(start, "week") < 1) {
+      return Promise.reject(new Error($t("endDateAtLeastOneWeek")));
     }
   }
-  if (freq === 'monthly') {
-    if (end.diff(start, 'month') < 1) {
-      return Promise.reject(new Error($t('endDateAtLeastOneMonth')));
+  if (freq === "monthly") {
+    if (end.diff(start, "month") < 1) {
+      return Promise.reject(new Error($t("endDateAtLeastOneMonth")));
     }
   }
-  if (freq === 'quarterly') {
-    if (end.diff(start, 'month') < 3) {
-      return Promise.reject(new Error($t('endDateAtLeastOneQuarter')));
+  if (freq === "quarterly") {
+    if (end.diff(start, "month") < 3) {
+      return Promise.reject(new Error($t("endDateAtLeastOneQuarter")));
     }
   }
-  if (freq === 'yearly') {
-    if (end.diff(start, 'year') < 1) {
-      return Promise.reject(new Error($t('endDateAtLeastOneYear')));
+  if (freq === "yearly") {
+    if (end.diff(start, "year") < 1) {
+      return Promise.reject(new Error($t("endDateAtLeastOneYear")));
     }
   }
   return Promise.resolve();
@@ -939,67 +1080,67 @@ const formRules = reactive({
   perspective_id: [
     {
       required: true,
-      message: $t('pleaseSelectPerspective'),
+      message: $t("pleaseSelectPerspective"),
     },
   ],
   name: [
     {
       required: true,
-      message: $t('pleaseEnterKpiName'),
-      trigger: 'blur',
+      message: $t("pleaseEnterKpiName"),
+      trigger: "blur",
     },
   ],
   formula_id: [
     {
       required: true,
-      message: $t('pleaseSelectFormula'),
+      message: $t("pleaseSelectFormula"),
     },
   ],
   type: [
     {
       required: true,
-      message: $t('pleaseSelectKpiType'),
+      message: $t("pleaseSelectKpiType"),
     },
   ],
   unit: [
     {
       required: true,
-      message: $t('pleaseSelectUnit'),
+      message: $t("pleaseSelectUnit"),
     },
   ],
   target: [
     {
       required: true,
-      message: $t('pleaseEnterTarget'),
-      trigger: 'blur',
+      message: $t("pleaseEnterTarget"),
+      trigger: "blur",
     },
   ],
   weight: [
     {
       required: true,
-      message: $t('pleaseEnterWeight'),
-      trigger: 'blur',
+      message: $t("pleaseEnterWeight"),
+      trigger: "blur",
     },
     {
       validator: validateWeight,
-      trigger: 'blur',
+      trigger: "blur",
     },
   ],
   frequency: [
     {
       required: true,
-      message: $t('pleaseSelectFrequency'),
+      message: $t("pleaseSelectFrequency"),
     },
   ],
   start_date: [
     {
       required: true,
-      message: $t('pleaseSelectStartDate'),
+      message: $t("pleaseSelectStartDate"),
     },
   ],
   end_date: [
-    { required: true, message: $t('pleaseSelectEndDate') },
-    { validator: validateEndDate, trigger: 'change' },
+    { required: true, message: $t("pleaseSelectEndDate") },
+    { validator: validateEndDate, trigger: "change" },
   ],
 });
 
@@ -1045,7 +1186,7 @@ onMounted(async () => {
       store.dispatch("perspectives/fetchPerspectives"),
       store.dispatch("sections/fetchSections"),
       store.dispatch("kpis/fetchAllKpisForSelect"),
-      store.dispatch("formula/fetchFormulas"), // <-- fetch formulas from DB
+      store.dispatch("formula/fetchFormulas"),
       loadDepartmentTreeData(),
     ]);
     const templateKpiIdFromRoute = route.query.templateKpiId;

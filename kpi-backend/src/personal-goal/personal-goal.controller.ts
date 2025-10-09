@@ -1,12 +1,48 @@
-import { Controller, Get, Post, Patch, Delete, Body, Param, Req, UseGuards, Query } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Delete,
+  Body,
+  Param,
+  Req,
+  UseGuards,
+  Query,
+  ForbiddenException,
+} from '@nestjs/common';
 import { PersonalGoalService } from './personal-goal.service';
-import { CreatePersonalGoalDto, UpdatePersonalGoalDto } from './dto/personal-goal.dto';
+import {
+  CreatePersonalGoalDto,
+  UpdatePersonalGoalDto,
+} from './dto/personal-goal.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { Employee } from '../employees/entities/employee.entity';
 
 @Controller('personal-goals')
 @UseGuards(JwtAuthGuard)
 export class PersonalGoalController {
   constructor(private readonly service: PersonalGoalService) {}
+
+  private userHasPermission(
+    user: Employee,
+    action: string,
+    resource: string,
+    scope?: string,
+  ): boolean {
+    if (!user || !user.roles) return false;
+
+    const allPermissions = user.roles.flatMap((role: any) =>
+      Array.isArray(role.permissions) ? role.permissions : [],
+    );
+
+    return allPermissions.some(
+      (p: any) =>
+        p.resource === resource &&
+        p.action === action &&
+        (!scope || p.scope === scope),
+    );
+  }
 
   @Post()
   create(@Req() req, @Body() dto: CreatePersonalGoalDto) {
@@ -19,22 +55,45 @@ export class PersonalGoalController {
   }
 
   @Get()
-  async findAllOrByEmployee(@Req() req, @Query('employeeId') employeeId?: number) {
-    // Nếu có query employeeId, kiểm tra quyền và trả về mục tiêu của nhân viên đó
+  async findAllOrByEmployee(
+    @Req() req,
+    @Query('employeeId') employeeId?: number,
+  ) {
+    const user: Employee = req.user;
+
     if (employeeId) {
-      // Nếu là admin/manager thì cho phép xem mục tiêu của bất kỳ nhân viên nào
-      const roles = req.user?.roles?.map(r => (typeof r === 'string' ? r : r.name?.toLowerCase?.())) || [];
-      if (roles.includes('admin') || roles.includes('manager')) {
+      const canViewEmployeeGoals = this.userHasPermission(
+        user,
+        'view',
+        'employee',
+        'company',
+      );
+
+      if (canViewEmployeeGoals) {
         return this.service.findAllByEmployee(Number(employeeId));
       }
-      // Nếu là chính mình thì cũng cho phép
-      if (Number(employeeId) === req.user.id) {
+
+      if (Number(employeeId) === user.id) {
         return this.service.findAllByEmployee(Number(employeeId));
       }
-      // Nếu không có quyền
-      throw new Error('Forbidden');
+
+      throw new ForbiddenException(
+        'Insufficient permission to view employee personal goals',
+      );
     }
-    // Nếu không có employeeId, trả về tất cả (chỉ cho admin/manager)
+
+    const canViewAllGoals = this.userHasPermission(
+      user,
+      'view',
+      'employee',
+      'company',
+    );
+    if (!canViewAllGoals) {
+      throw new ForbiddenException(
+        'Insufficient permission to view all personal goals',
+      );
+    }
+
     return this.service.findAll();
   }
 
@@ -44,7 +103,11 @@ export class PersonalGoalController {
   }
 
   @Patch(':id')
-  update(@Param('id') id: number, @Req() req, @Body() dto: UpdatePersonalGoalDto) {
+  update(
+    @Param('id') id: number,
+    @Req() req,
+    @Body() dto: UpdatePersonalGoalDto,
+  ) {
     return this.service.update(Number(id), req.user.id, dto);
   }
 

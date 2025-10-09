@@ -1,20 +1,37 @@
 <template>
-  <a-popover v-model:open="popoverVisible" trigger="click" placement="bottomRight"
-    overlayClassName="notification-popover" :get-popup-container="(trigger) => trigger.parentElement">
+  <a-popover
+    v-model:open="popoverVisible"
+    trigger="click"
+    placement="bottomRight"
+    overlayClassName="notification-popover"
+    :get-popup-container="(trigger) => trigger.parentElement"
+  >
     <template #content>
       <div class="notification-panel">
         <div class="notification-header">
-          <h3>{{ $t('notifications') }}</h3>
-          <a-button v-if="unreadCount > 0" type="link" size="small" @click="handleMarkAllAsRead"
-            :loading="isProcessingMarkAll">
-            {{ $t('markAllAsRead') }}
+          <h3>{{ $t("notifications") }}</h3>
+          <a-button
+            v-if="unreadCount > 0"
+            type="link"
+            size="small"
+            @click="handleMarkAllAsRead"
+            :loading="isProcessingMarkAll"
+          >
+            {{ $t("markAllAsRead") }}
           </a-button>
         </div>
         <a-spin :spinning="isLoadingNotifications" :tip="$t('loading')">
-          <a-list v-if="notifications.length > 0" item-layout="horizontal" :data-source="notifications"
-            class="notification-list">
+          <a-list
+            v-if="notifications.length > 0"
+            item-layout="horizontal"
+            :data-source="notifications"
+            class="notification-list"
+          >
             <template #renderItem="{ item }">
-              <a-list-item :class="{ 'notification-unread': !item.is_read }" @click="handleNotificationClick(item)">
+              <a-list-item
+                :class="{ 'notification-unread': !item.is_read }"
+                @click="handleNotificationClick(item)"
+              >
                 <a-list-item-meta>
                   <template #title>
                     <span class="notification-message">{{ item.message }}</span>
@@ -25,29 +42,51 @@
                     </span>
                   </template>
                   <template #avatar>
-                    <a-avatar :style="{
+                    <a-avatar
+                      :style="{
                         backgroundColor: getNotificationIconColor(item.type),
-                      }">
+                      }"
+                    >
                       <template #icon>
                         <bell-outlined v-if="!item.type" />
-                        <profile-outlined v-if="item.type === 'NEW_KPI_ASSIGNMENT'" />
-                        <check-circle-outlined v-if="item.type === 'KPI_APPROVAL_PENDING'" />
-                        <message-outlined v-if="
+                        <profile-outlined
+                          v-if="item.type === 'NEW_KPI_ASSIGNMENT'"
+                        />
+                        <check-circle-outlined
+                          v-if="item.type === 'KPI_APPROVAL_PENDING'"
+                        />
+                        <message-outlined
+                          v-if="
                             item.type === 'REVIEW_PENDING_EMPLOYEE_FEEDBACK' ||
                             item.type === 'REVIEW_EMPLOYEE_RESPONDED'
-                          " />
-                        <file-done-outlined v-if="item.type === 'REVIEW_COMPLETED'" />
-                        <close-circle-outlined v-if="item.type === 'KPI_VALUE_REJECTED'" style="color: #ff4d4f" />
-                        <check-circle-outlined v-if="item.type === 'KPI_VALUE_APPROVED'" style="color: #52c41a" />
+                          "
+                        />
+                        <file-done-outlined
+                          v-if="item.type === 'REVIEW_COMPLETED'"
+                        />
+                        <close-circle-outlined
+                          v-if="item.type === 'KPI_VALUE_REJECTED'"
+                          style="color: #ff4d4f"
+                        />
+                        <check-circle-outlined
+                          v-if="item.type === 'KPI_VALUE_APPROVED'"
+                          style="color: #52c41a"
+                        />
                       </template>
                     </a-avatar>
                   </template>
                 </a-list-item-meta>
                 <template #actions>
                   <a-tooltip :title="$t('markAsRead')" v-if="!item.is_read">
-                    <a-button type="text" shape="circle" size="small" @click.stop="handleMarkAsRead(item.id)" :loading="
+                    <a-button
+                      type="text"
+                      shape="circle"
+                      size="small"
+                      @click.stop="handleMarkAsRead(item.id)"
+                      :loading="
                         isProcessingMarkOne && currentMarkingId === item.id
-                      ">
+                      "
+                    >
                       <eye-outlined />
                     </a-button>
                   </a-tooltip>
@@ -55,17 +94,24 @@
               </a-list-item>
             </template>
           </a-list>
-          <a-empty v-if="!isLoadingNotifications && notifications.length === 0" :description="$t('noNotifications')"
-            style="padding: 20px 0" />
+          <a-empty
+            v-if="!isLoadingNotifications && notifications.length === 0"
+            :description="$t('noNotifications')"
+            style="padding: 20px 0"
+          />
         </a-spin>
         <div class="notification-footer" v-if="notifications.length > 0">
           <a-button type="link" block @click="viewAllNotifications">
-            {{ $t('viewAllNotifications') }}
+            {{ $t("viewAllNotifications") }}
           </a-button>
         </div>
       </div>
     </template>
-    <a-badge :count="unreadCount" :overflow-count="99" class="notification-badge">
+    <a-badge
+      :count="unreadCount"
+      :overflow-count="99"
+      class="notification-badge"
+    >
       <bell-outlined style="font-size: 20px; cursor: pointer" />
     </a-badge>
   </a-popover>
@@ -93,14 +139,17 @@ import {
   EyeOutlined,
   ProfileOutlined,
   CheckCircleOutlined,
-  MessageOutlined, // Icon cho phản hồi
-  FileDoneOutlined, // Icon cho hoàn tất
-  CloseCircleOutlined
+  MessageOutlined,
+  FileDoneOutlined,
+  CloseCircleOutlined,
 } from "@ant-design/icons-vue";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 import "dayjs/locale/vi";
-import { connectNotificationSocket, disconnectNotificationSocket } from '@/core/services/socket';
+import {
+  connectNotificationSocket,
+  disconnectNotificationSocket,
+} from "@/core/services/socket";
 
 dayjs.extend(relativeTime);
 dayjs.locale("vi");
@@ -128,7 +177,9 @@ onMounted(() => {
 
   const userId = store.getters["auth/user"]?.id;
   if (!userId) {
-    console.error("Error: userId is undefined. Please check Vuex store or authentication state.");
+    console.error(
+      "Error: userId is undefined. Please check Vuex store or authentication state."
+    );
   }
 
   const socket = connectNotificationSocket(userId);
@@ -147,7 +198,6 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
-  // Ngắt kết nối socket khi component bị hủy
   disconnectNotificationSocket();
 });
 
@@ -169,11 +219,11 @@ const getNotificationIconColor = (type) => {
     case "KPI_APPROVAL_PENDING":
       return "#faad14";
     case "REVIEW_PENDING_EMPLOYEE_FEEDBACK":
-      return "#13c2c2"; // Teal
+      return "#13c2c2";
     case "REVIEW_EMPLOYEE_RESPONDED":
-      return "#52c41a"; // Green
+      return "#52c41a";
     case "REVIEW_COMPLETED":
-      return "#722ed1"; // Purple
+      return "#722ed1";
     default:
       return "#bfbfbf";
   }
@@ -183,11 +233,13 @@ const handleNotificationClick = async (notificationItem) => {
   if (!notificationItem.isRead && !notificationItem.is_read) {
     await handleMarkAsRead(notificationItem.id);
   }
-  console.log('Notification Item:', notificationItem);
-  // Ưu tiên camelCase
-  const relatedEntityId = notificationItem.relatedEntityId || notificationItem.related_entity_id;
+  console.log("Notification Item:", notificationItem);
+
+  const relatedEntityId =
+    notificationItem.relatedEntityId || notificationItem.related_entity_id;
   const kpiId = notificationItem.kpiId || notificationItem.kpi_id;
-  const relatedEntityType = notificationItem.relatedEntityType || notificationItem.related_entity_type;
+  const relatedEntityType =
+    notificationItem.relatedEntityType || notificationItem.related_entity_type;
 
   if (relatedEntityId) {
     switch (relatedEntityType) {

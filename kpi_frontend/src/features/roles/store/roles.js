@@ -2,34 +2,24 @@ import apiClient from "@/core/services/api";
 import store from "@/core/store";
 
 const state = {
-  roles: [], // Danh sách các roles
-  error: null, // Lỗi khi tải hoặc xử lý roles
+  roles: [],
+  error: null,
 };
 
 const getters = {
-  // --- Dữ liệu ---
   roleList: (state) => state.roles,
 
-  // --- Trạng thái lỗi ---
   error: (state) => state.error,
-
-  // --- Trạng thái loading ---
-  // Không còn getter `isLoading` vì trạng thái loading được quản lý toàn cục
 };
 
 const mutations = {
-  // --- Dữ liệu ---
   SET_ROLES(state, roles) {
     state.roles = roles || [];
   },
 
-  // --- Trạng thái lỗi ---
   SET_ERROR(state, error) {
     state.error = error ? error.response?.data?.message || error.message : null;
   },
-
-  // --- Trạng thái loading ---
-  // Không còn mutation `SET_LOADING` vì trạng thái loading được quản lý toàn cục
 };
 
 const actions = {

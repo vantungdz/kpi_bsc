@@ -74,11 +74,12 @@ export class KpisController {
     const data = await this.kpisService.getAllKpiAssignedToDepartments(
       req.user.id,
     );
-    // Map each KPI to include validityStatus
+    
     const dataWithValidity = data.map((kpi) => ({
       ...kpi,
       validityStatus: getKpiStatus(kpi.start_date, kpi.end_date),
     }));
+    return { data: dataWithValidity };
   }
 
   @Get('/sections')
@@ -160,7 +161,7 @@ export class KpisController {
     @Query() filterDto: KpiFilterDto,
     @Req() req: Request & { user?: Employee },
   ): Promise<any> {
-    // Fix: use any to avoid type export error
+    
     if (!req.user)
       throw new UnauthorizedException('User not available in request.');
     return this.kpisService.getSectionKpis(sectionId, filterDto, req.user);
@@ -277,13 +278,20 @@ export class KpisController {
   ): Promise<void> {
     if (!req.user?.id)
       throw new UnauthorizedException('User not authenticated.');
-    const kpi = await this.kpisService['kpisRepository'].findOne({ where: { id: +id } });
+    const kpi = await this.kpisService['kpisRepository'].findOne({
+      where: { id: +id },
+    });
     let kpiType: 'company' | 'department' | 'section' | 'employee' = 'company';
     if (
       kpi &&
-      ['company', 'department', 'section', 'personal', 'employee'].includes(kpi.type)
+      ['company', 'department', 'section', 'personal', 'employee'].includes(
+        kpi.type,
+      )
     ) {
-      kpiType = kpi.type === 'personal' ? 'employee' : (kpi.type as 'company' | 'department' | 'section' | 'employee');
+      kpiType =
+        kpi.type === 'personal'
+          ? 'employee'
+          : (kpi.type as 'company' | 'department' | 'section' | 'employee');
     }
     await this.kpisService.softDelete(+id, req.user.id, kpiType);
     await this.auditLogService.logAction({
@@ -298,12 +306,20 @@ export class KpisController {
   @Post(':id/sections/assignments')
   async saveDepartmentAndSectionAssignments(
     @Param('id') kpiId: number,
-    @Body() body: { assignments: { assigned_to_department?: number; assigned_to_section?: number; targetValue: number; assignmentId?: number; }[] },
+    @Body()
+    body: {
+      assignments: {
+        assigned_to_department?: number;
+        assigned_to_section?: number;
+        targetValue: number;
+        assignmentId?: number;
+      }[];
+    },
     @Req() req: Request & { user?: { id: number; username?: string } },
   ): Promise<void> {
     if (!req.user?.id)
       throw new UnauthorizedException('User not authenticated.');
-    // Kiểm tra giá trị assignments trước khi log
+    
     if (!Array.isArray(body.assignments) || body.assignments.length === 0) {
       await this.auditLogService.logAction({
         action: 'ASSIGN',
@@ -335,7 +351,7 @@ export class KpisController {
     @Req() req: Request & { user?: Employee },
   ) {
     if (!req.user) throw new UnauthorizedException('User not authenticated.');
-    // Kiểm tra giá trị assignments trước khi log
+    
     if (!Array.isArray(body.assignments) || body.assignments.length === 0) {
       await this.auditLogService.logAction({
         action: 'ASSIGN',

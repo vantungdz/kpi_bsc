@@ -1,20 +1,55 @@
 <template>
   <div class="my-kpi-self-review">
     <a-card
-      :headStyle="{ background: '#e6f7ff', borderRadius: '12px 12px 0 0', border: 'none' }"
-      :bodyStyle="{ padding: '32px 32px 24px 32px', borderRadius: '0 0 12px 12px', background: '#fff' }"
-      style="box-shadow:0 2px 8px #91d5ff33;border-radius:12px;"
+      :headStyle="{
+        background: '#e6f7ff',
+        borderRadius: '12px 12px 0 0',
+        border: 'none',
+      }"
+      :bodyStyle="{
+        padding: '32px 32px 24px 32px',
+        borderRadius: '0 0 12px 12px',
+        background: '#fff',
+      }"
+      style="box-shadow: 0 2px 8px #91d5ff33; border-radius: 12px"
     >
       <template #title>
-        <span style="display:flex;align-items:center;gap:10px;">
-          <solution-outlined style="color:#1890ff;font-size:22px;" />
-          <span style="font-size:20px;font-weight:600;">{{ $t('personalKpiReview') }}</span>
+        <span style="display: flex; align-items: center; gap: 10px">
+          <solution-outlined style="color: #1890ff; font-size: 22px" />
+          <span style="font-size: 20px; font-weight: 600">{{
+            $t("personalKpiReview")
+          }}</span>
         </span>
       </template>
-      <a-alert v-if="successMessage" type="success" :message="successMessage" show-icon closable @close="successMessage = ''" style="margin-bottom:12px;" />
-      <a-alert v-if="errorMessage" type="error" :message="errorMessage" show-icon closable @close="errorMessage = ''" style="margin-bottom:12px;" />
-      <div class="filters-modern" style="max-width:unset;margin-left:0;margin-right:0;">
-        <a-select v-model="selectedCycle" :options="cycleOptions" :placeholder="$t('selectCycle')" style="width: 220px;" @change="onCycleChange" />
+      <a-alert
+        v-if="successMessage"
+        type="success"
+        :message="successMessage"
+        show-icon
+        closable
+        @close="successMessage = ''"
+        style="margin-bottom: 12px"
+      />
+      <a-alert
+        v-if="errorMessage"
+        type="error"
+        :message="errorMessage"
+        show-icon
+        closable
+        @close="errorMessage = ''"
+        style="margin-bottom: 12px"
+      />
+      <div
+        class="filters-modern"
+        style="max-width: unset; margin-left: 0; margin-right: 0"
+      >
+        <a-select
+          v-model="selectedCycle"
+          :options="cycleOptions"
+          :placeholder="$t('selectCycle')"
+          style="width: 220px"
+          @change="onCycleChange"
+        />
       </div>
       <a-table
         :columns="columns"
@@ -22,168 +57,345 @@
         row-key="id"
         bordered
         class="kpi-table-modern"
-        style="margin-top: 32px;width:100%;"
+        style="margin-top: 32px; width: 100%"
         :loading="loading"
         :pagination="false"
       >
         <template #bodyCell="{ column, record, index }">
           <template v-if="column.key === 'targetValue'">
-            <span style="font-weight:500;">{{ Number(record.targetValue).toLocaleString() }} {{ record.kpi.unit }}</span>
+            <span style="font-weight: 500"
+              >{{ Number(record.targetValue).toLocaleString() }}
+              {{ record.kpi.unit }}</span
+            >
           </template>
           <template v-else-if="column.key === 'actualValue'">
-            <span style="font-weight:500;">{{ Number(record.actualValue).toLocaleString() }} {{ record.kpi.unit }}</span>
+            <span style="font-weight: 500"
+              >{{ Number(record.actualValue).toLocaleString() }}
+              {{ record.kpi.unit }}</span
+            >
           </template>
           <template v-else-if="column.key === 'selfScore'">
-            <a-rate :value="record.selfScore" :count="5" allow-half :disabled="loading || !EDITABLE_STATUSES.includes(record.status)" @change="(value) => updateKpi(index, 'selfScore', value)" style="font-size: 20px" />
+            <a-rate
+              :value="record.selfScore"
+              :count="5"
+              allow-half
+              :disabled="loading || !EDITABLE_STATUSES.includes(record.status)"
+              @change="(value) => updateKpi(index, 'selfScore', value)"
+              style="font-size: 20px"
+            />
           </template>
           <template v-else-if="column.key === 'selfComment'">
-            <a-textarea :value="record.selfComment" rows="2" :placeholder="$t('selfComment')" :disabled="loading || !EDITABLE_STATUSES.includes(record.status)" style="background: #f9fafb; border-radius: 6px; border: 1px solid #e5e7eb; font-size: 15px;" @input="(event) => updateKpi(index, 'selfComment', event.target.value)" />
+            <a-textarea
+              :value="record.selfComment"
+              rows="2"
+              :placeholder="$t('selfComment')"
+              :disabled="loading || !EDITABLE_STATUSES.includes(record.status)"
+              style="
+                background: #f9fafb;
+                border-radius: 6px;
+                border: 1px solid #e5e7eb;
+                font-size: 15px;
+              "
+              @input="
+                (event) => updateKpi(index, 'selfComment', event.target.value)
+              "
+            />
           </template>
           <template v-else-if="column.key === 'status'">
-            <a-tag :color="getStatusColor(record.status, record)" style="font-size: 14px; padding: 2px 12px; border-radius: 8px; font-weight:500;">
+            <a-tag
+              :color="getStatusColor(record.status, record)"
+              style="
+                font-size: 14px;
+                padding: 2px 12px;
+                border-radius: 8px;
+                font-weight: 500;
+              "
+            >
               {{ getStatusText(record.status, record) }}
-              <span v-if="record.status === 'REJECTED'" style="color:#ff4d4f; font-weight:600; margin-left:6px">({{ $t('rejected') }})</span>
+              <span
+                v-if="record.status === 'REJECTED'"
+                style="color: #ff4d4f; font-weight: 600; margin-left: 6px"
+                >({{ $t("rejected") }})</span
+              >
             </a-tag>
           </template>
           <template v-else-if="column.key === 'actions'">
-            <div style="text-align:center;">
-              <a-button v-if="record.status === 'EMPLOYEE_FEEDBACK'" type="primary" size="small" @click="openFeedbackModal(record, index)" style="border-radius: 6px;min-width:120px;">
-                <solution-outlined style="margin-right:4px;" />{{ $t('viewAndFeedback') }}
+            <div style="text-align: center">
+              <a-button
+                v-if="record.status === 'EMPLOYEE_FEEDBACK'"
+                type="primary"
+                size="small"
+                @click="openFeedbackModal(record, index)"
+                style="border-radius: 6px; min-width: 120px"
+              >
+                <solution-outlined style="margin-right: 4px" />{{
+                  $t("viewAndFeedback")
+                }}
               </a-button>
-              <span v-else-if="record.status === 'MANAGER_REVIEWED'" style="color: #faad14; font-weight: 500">{{ $t('waitingManagerConfirm') }}</span>
-              <span v-else-if="record.status === 'COMPLETED'" style="color: #52c41a; font-weight: 500">{{ $t('completed') }}</span>
-              <a-button v-if="record.status === 'COMPLETED'" type="link" size="small" @click="openDetailModal(record)" style="margin-left: 8px; color: #1890ff">
-                <solution-outlined /> {{ $t('viewDetails') }}
+              <span
+                v-else-if="record.status === 'MANAGER_REVIEWED'"
+                style="color: #faad14; font-weight: 500"
+                >{{ $t("waitingManagerConfirm") }}</span
+              >
+              <span
+                v-else-if="record.status === 'COMPLETED'"
+                style="color: #52c41a; font-weight: 500"
+                >{{ $t("completed") }}</span
+              >
+              <a-button
+                v-if="record.status === 'COMPLETED'"
+                type="link"
+                size="small"
+                @click="openDetailModal(record)"
+                style="margin-left: 8px; color: #1890ff"
+              >
+                <solution-outlined /> {{ $t("viewDetails") }}
               </a-button>
             </div>
           </template>
         </template>
       </a-table>
-      <div style="text-align:center;">
-        <a-button type="primary" @click="submitSelfReview" :loading="loading" style="margin-top: 24px;min-width:180px;font-weight:600;" :disabled="!canSubmit || loading" v-if="kpis.some((k) => EDITABLE_STATUSES.includes(k.status))">
-          <upload-outlined style="margin-right:4px;" />{{ $t('submitReview') }}
+      <div style="text-align: center">
+        <a-button
+          type="primary"
+          @click="submitSelfReview"
+          :loading="loading"
+          style="margin-top: 24px; min-width: 180px; font-weight: 600"
+          :disabled="!canSubmit || loading"
+          v-if="kpis.some((k) => EDITABLE_STATUSES.includes(k.status))"
+        >
+          <upload-outlined style="margin-right: 4px" />{{ $t("submitReview") }}
         </a-button>
       </div>
     </a-card>
-    <a-modal v-model:open="feedbackModal.visible" :title="$t('kpiFeedbackTitle')" :footer="null" width="540px"
-      @cancel="closeFeedbackModal" destroyOnClose>
+    <a-modal
+      v-model:open="feedbackModal.visible"
+      :title="$t('kpiFeedbackTitle')"
+      :footer="null"
+      width="540px"
+      @cancel="closeFeedbackModal"
+      destroyOnClose
+    >
       <div v-if="feedbackModal.record" class="feedback-modal-content-v2">
         <div class="feedback-kpi-title">
           <span>{{ feedbackModal.record.kpi?.name }}</span>
         </div>
         <div class="feedback-timeline">
-          <div v-if="feedbackModal.record.sectionScore !== undefined" class="feedback-step section">
+          <div
+            v-if="feedbackModal.record.sectionScore !== undefined"
+            class="feedback-step section"
+          >
             <div class="step-icon section">
-              <TeamOutlined style="color:#13c2c2;font-size:22px;" />
+              <TeamOutlined style="color: #13c2c2; font-size: 22px" />
             </div>
             <div class="step-content">
-              <div class="step-title" style="color:#13c2c2">{{ $t("sectionReview") }}</div>
+              <div class="step-title" style="color: #13c2c2">
+                {{ $t("sectionReview") }}
+              </div>
               <div class="step-score">
-                <a-rate :value="feedbackModal.record.sectionScore" :count="5" allow-half disabled />
+                <a-rate
+                  :value="feedbackModal.record.sectionScore"
+                  :count="5"
+                  allow-half
+                  disabled
+                />
               </div>
               <div class="step-comment">
-                <span>{{ feedbackModal.record.sectionComment || $t("noComment") }}</span>
+                <span>{{
+                  feedbackModal.record.sectionComment || $t("noComment")
+                }}</span>
               </div>
             </div>
           </div>
-          <div v-if="feedbackModal.record.departmentScore !== undefined" class="feedback-step department">
+          <div
+            v-if="feedbackModal.record.departmentScore !== undefined"
+            class="feedback-step department"
+          >
             <div class="step-icon department">
-              <ApartmentOutlined style="color:#1890ff;font-size:22px;" />
+              <ApartmentOutlined style="color: #1890ff; font-size: 22px" />
             </div>
             <div class="step-content">
-              <div class="step-title" style="color:#1890ff">{{ $t("departmentReview") }}</div>
+              <div class="step-title" style="color: #1890ff">
+                {{ $t("departmentReview") }}
+              </div>
               <div class="step-score">
-                <a-rate :value="feedbackModal.record.departmentScore" :count="5" allow-half disabled />
+                <a-rate
+                  :value="feedbackModal.record.departmentScore"
+                  :count="5"
+                  allow-half
+                  disabled
+                />
               </div>
               <div class="step-comment">
-                <span>{{ feedbackModal.record.departmentComment || $t("noComment") }}</span>
+                <span>{{
+                  feedbackModal.record.departmentComment || $t("noComment")
+                }}</span>
               </div>
             </div>
           </div>
-          <div v-if="feedbackModal.record.managerScore !== undefined" class="feedback-step manager">
+          <div
+            v-if="feedbackModal.record.managerScore !== undefined"
+            class="feedback-step manager"
+          >
             <div class="step-icon manager">
-              <SolutionOutlined style="color:#722ed1;font-size:22px;" />
+              <SolutionOutlined style="color: #722ed1; font-size: 22px" />
             </div>
             <div class="step-content">
-              <div class="step-title" style="color:#722ed1">{{ $t("managerReview") }}</div>
+              <div class="step-title" style="color: #722ed1">
+                {{ $t("managerReview") }}
+              </div>
               <div class="step-score">
-                <a-rate :value="feedbackModal.record.managerScore" :count="5" allow-half disabled />
+                <a-rate
+                  :value="feedbackModal.record.managerScore"
+                  :count="5"
+                  allow-half
+                  disabled
+                />
               </div>
               <div class="step-comment">
-                <span>{{ feedbackModal.record.managerComment || $t("noComment") }}</span>
+                <span>{{
+                  feedbackModal.record.managerComment || $t("noComment")
+                }}</span>
               </div>
             </div>
           </div>
         </div>
         <div class="feedback-group-v2">
           <div class="feedback-label">{{ $t("yourFeedback") }}</div>
-          <a-textarea v-model:value="feedbackModal.feedbackInput" rows="3" :placeholder="$t('feedbackPlaceholder')"
-            style="margin-top: 8px" />
+          <a-textarea
+            v-model:value="feedbackModal.feedbackInput"
+            rows="3"
+            :placeholder="$t('feedbackPlaceholder')"
+            style="margin-top: 8px"
+          />
         </div>
         <div style="margin-top: 22px; text-align: right">
-          <a-button type="primary" size="large"
-            style="border-radius: 24px; min-width: 180px; font-weight:600; background: linear-gradient(90deg,#1890ff 0%,#40a9ff 100%); box-shadow:0 2px 8px #1890ff33; border:none;"
-            :loading="feedbackModal.loading" @click="submitEmployeeFeedbackModal">{{ $t("submitFeedback") }}</a-button>
+          <a-button
+            type="primary"
+            size="large"
+            style="
+              border-radius: 24px;
+              min-width: 180px;
+              font-weight: 600;
+              background: linear-gradient(90deg, #1890ff 0%, #40a9ff 100%);
+              box-shadow: 0 2px 8px #1890ff33;
+              border: none;
+            "
+            :loading="feedbackModal.loading"
+            @click="submitEmployeeFeedbackModal"
+            >{{ $t("submitFeedback") }}</a-button
+          >
         </div>
       </div>
     </a-modal>
-    <a-modal v-model:open="detailModal.visible" :title="$t('kpiReviewDetailTitle')" :footer="null" width="540px"
-      @cancel="closeDetailModal" destroyOnClose class="kpi-detail-modal">
+    <a-modal
+      v-model:open="detailModal.visible"
+      :title="$t('kpiReviewDetailTitle')"
+      :footer="null"
+      width="540px"
+      @cancel="closeDetailModal"
+      destroyOnClose
+      class="kpi-detail-modal"
+    >
       <div v-if="detailModal.record" class="kpi-detail-content-v2">
-        <div class="kpi-detail-title-v2">{{ detailModal.record.kpi?.name }}</div>
+        <div class="kpi-detail-title-v2">
+          {{ detailModal.record.kpi?.name }}
+        </div>
         <div class="kpi-detail-grid-v2">
           <div class="kpi-detail-card">
             <div class="kpi-detail-label-v2">
-              <TeamOutlined style="color:#13c2c2;font-size:18px;margin-right:6px;" />{{ $t('selfScore') }}
+              <TeamOutlined
+                style="color: #13c2c2; font-size: 18px; margin-right: 6px"
+              />{{ $t("selfScore") }}
             </div>
-            <a-rate :value="detailModal.record.selfScore" :count="5" allow-half disabled />
+            <a-rate
+              :value="detailModal.record.selfScore"
+              :count="5"
+              allow-half
+              disabled
+            />
           </div>
           <div class="kpi-detail-card">
-            <div class="kpi-detail-label-v2">{{ $t('selfComment') }}</div>
-            <div class="kpi-detail-value-v2">{{ detailModal.record.selfComment || $t('noComment') }}</div>
+            <div class="kpi-detail-label-v2">{{ $t("selfComment") }}</div>
+            <div class="kpi-detail-value-v2">
+              {{ detailModal.record.selfComment || $t("noComment") }}
+            </div>
           </div>
           <template v-if="detailModal.record.sectionScore !== undefined">
             <div class="kpi-detail-card">
               <div class="kpi-detail-label-v2">
-                <TeamOutlined style="color:#13c2c2;font-size:18px;margin-right:6px;" />{{ $t('sectionScore') }}
+                <TeamOutlined
+                  style="color: #13c2c2; font-size: 18px; margin-right: 6px"
+                />{{ $t("sectionScore") }}
               </div>
-              <a-rate :value="detailModal.record.sectionScore" :count="5" allow-half disabled />
+              <a-rate
+                :value="detailModal.record.sectionScore"
+                :count="5"
+                allow-half
+                disabled
+              />
             </div>
             <div class="kpi-detail-card">
-              <div class="kpi-detail-label-v2">{{ $t('sectionComment') }}</div>
-              <div class="kpi-detail-value-v2">{{ detailModal.record.sectionComment || $t('noComment') }}</div>
+              <div class="kpi-detail-label-v2">{{ $t("sectionComment") }}</div>
+              <div class="kpi-detail-value-v2">
+                {{ detailModal.record.sectionComment || $t("noComment") }}
+              </div>
             </div>
           </template>
           <template v-if="detailModal.record.departmentScore !== undefined">
             <div class="kpi-detail-card">
               <div class="kpi-detail-label-v2">
-                <ApartmentOutlined style="color:#1890ff;font-size:18px;margin-right:6px;" />{{ $t('departmentScore') }}
+                <ApartmentOutlined
+                  style="color: #1890ff; font-size: 18px; margin-right: 6px"
+                />{{ $t("departmentScore") }}
               </div>
-              <a-rate :value="detailModal.record.departmentScore" :count="5" allow-half disabled />
+              <a-rate
+                :value="detailModal.record.departmentScore"
+                :count="5"
+                allow-half
+                disabled
+              />
             </div>
             <div class="kpi-detail-card">
-              <div class="kpi-detail-label-v2">{{ $t('departmentComment') }}</div>
-              <div class="kpi-detail-value-v2">{{ detailModal.record.departmentComment || $t('noComment') }}</div>
+              <div class="kpi-detail-label-v2">
+                {{ $t("departmentComment") }}
+              </div>
+              <div class="kpi-detail-value-v2">
+                {{ detailModal.record.departmentComment || $t("noComment") }}
+              </div>
             </div>
           </template>
           <template v-if="detailModal.record.managerScore !== undefined">
             <div class="kpi-detail-card">
               <div class="kpi-detail-label-v2">
-                <SolutionOutlined style="color:#722ed1;font-size:18px;margin-right:6px;" />{{ $t('managerScore') }}
+                <SolutionOutlined
+                  style="color: #722ed1; font-size: 18px; margin-right: 6px"
+                />{{ $t("managerScore") }}
               </div>
-              <a-rate :value="detailModal.record.managerScore" :count="5" allow-half disabled />
+              <a-rate
+                :value="detailModal.record.managerScore"
+                :count="5"
+                allow-half
+                disabled
+              />
             </div>
             <div class="kpi-detail-card">
-              <div class="kpi-detail-label-v2">{{ $t('managerComment') }}</div>
-              <div class="kpi-detail-value-v2">{{ detailModal.record.managerComment || $t('noComment') }}</div>
+              <div class="kpi-detail-label-v2">{{ $t("managerComment") }}</div>
+              <div class="kpi-detail-value-v2">
+                {{ detailModal.record.managerComment || $t("noComment") }}
+              </div>
             </div>
           </template>
           <template v-if="detailModal.record.employeeFeedback">
             <div class="kpi-detail-card kpi-detail-card-full">
-              <div class="kpi-detail-label-v2" style="color:#faad14">
-                <SolutionOutlined style="color:#faad14;font-size:18px;margin-right:6px;" />{{ $t('yourFeedback') }}
+              <div class="kpi-detail-label-v2" style="color: #faad14">
+                <SolutionOutlined
+                  style="color: #faad14; font-size: 18px; margin-right: 6px"
+                />{{ $t("yourFeedback") }}
               </div>
-              <div class="kpi-detail-value-v2">{{ detailModal.record.employeeFeedback }}</div>
+              <div class="kpi-detail-value-v2">
+                {{ detailModal.record.employeeFeedback }}
+              </div>
             </div>
           </template>
         </div>
@@ -201,7 +413,12 @@ import {
   getReviewCycles,
   submitEmployeeFeedback,
 } from "@/core/services/kpiReviewApi";
-import { TeamOutlined, ApartmentOutlined, SolutionOutlined, UploadOutlined } from '@ant-design/icons-vue';
+import {
+  TeamOutlined,
+  ApartmentOutlined,
+  SolutionOutlined,
+  UploadOutlined,
+} from "@ant-design/icons-vue";
 
 const store = useStore();
 const { t } = useI18n();
@@ -210,7 +427,7 @@ const cycleOptions = ref([]);
 const successMessage = ref("");
 const errorMessage = ref("");
 
-const kpis = ref([]); // Sử dụng ref thay vì computed để có thể gán dữ liệu sau khi fetch
+const kpis = ref([]);
 const loading = ref(false);
 
 const columns = computed(() => [
@@ -257,17 +474,17 @@ const getStatusColor = (status, record) => {
   return "default";
 };
 
-// Khai báo các status cho phép chỉnh sửa self review 1 lần duy nhất
 const EDITABLE_STATUSES = [
-  'PENDING',
-  'SECTION_REJECTED',
-  'DEPARTMENT_REJECTED',
-  'MANAGER_REJECTED'
+  "PENDING",
+  "SECTION_REJECTED",
+  "DEPARTMENT_REJECTED",
+  "MANAGER_REJECTED",
 ];
 
-// Update `canSubmit` to check if all KPIs have valid selfScore and selfComment
 const canSubmit = computed(() => {
-  const editableKpis = kpis.value.filter(kpi => EDITABLE_STATUSES.includes(kpi.status));
+  const editableKpis = kpis.value.filter((kpi) =>
+    EDITABLE_STATUSES.includes(kpi.status)
+  );
   if (!editableKpis.length) return false;
   return editableKpis.every(
     (kpi) =>
@@ -388,20 +605,17 @@ const onCycleChange = (val) => {
   fetchMyKpis();
 };
 
-// Consolidate the `updateKpi` function to ensure reactivity
 const updateKpi = (index, key, value) => {
   kpis.value[index] = {
     ...kpis.value[index],
     [key]: value,
   };
-  kpis.value = [...kpis.value]; // Trigger reactivity
+  kpis.value = [...kpis.value];
 };
 
-// Add a watch to monitor changes in kpis and log updates
 watch(
   kpis,
   (newKpis) => {
-    // Ensure feedback input and loading state are initialized for feedback step
     newKpis.forEach((k) => {
       if (k.status === "EMPLOYEE_FEEDBACK") {
         if (k.employeeFeedbackInput === undefined) k.employeeFeedbackInput = "";
@@ -414,10 +628,8 @@ watch(
   { deep: true }
 );
 
-// Add a reactive variable to manage button status
 const buttonStatus = ref("disabled");
 
-// Watch dependencies to update buttonStatus
 watch(
   [canSubmit, loading, successMessage],
   ([newCanSubmit, newLoading, newSuccessMessage]) => {
@@ -524,7 +736,7 @@ onMounted(() => {
 }
 .kpi-detail-card-full {
   grid-column: span 2;
-  background: linear-gradient(90deg,#fffbe6 60%,#fff1b8 100%);
+  background: linear-gradient(90deg, #fffbe6 60%, #fff1b8 100%);
   box-shadow: 0 2px 8px #ffe58f44;
 }
 .kpi-detail-label-v2 {
@@ -539,10 +751,20 @@ onMounted(() => {
   word-break: break-word;
 }
 @media (max-width: 700px) {
-  .kpi-detail-content-v2 { padding: 4px 0 0 0; }
-  .kpi-detail-title-v2 { font-size: 16px; }
-  .kpi-detail-grid-v2 { grid-template-columns: 1fr; gap: 10px; }
-  .kpi-detail-card, .kpi-detail-card-full { padding: 8px 6px 6px 6px; }
+  .kpi-detail-content-v2 {
+    padding: 4px 0 0 0;
+  }
+  .kpi-detail-title-v2 {
+    font-size: 16px;
+  }
+  .kpi-detail-grid-v2 {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+  .kpi-detail-card,
+  .kpi-detail-card-full {
+    padding: 8px 6px 6px 6px;
+  }
 }
 .feedback-modal-content {
   padding: 8px 2px 0 2px;
@@ -572,12 +794,23 @@ onMounted(() => {
   padding: 14px 20px 12px 14px;
   border-left: 6px solid;
   margin-bottom: 2px;
-  transition: background 0.2s, box-shadow 0.2s;
+  transition:
+    background 0.2s,
+    box-shadow 0.2s;
 }
-.feedback-step.section { border-image: linear-gradient(180deg,#13c2c2,#36e2e2) 1; }
-.feedback-step.department { border-image: linear-gradient(180deg,#1890ff,#40a9ff) 1; }
-.feedback-step.manager { border-image: linear-gradient(180deg,#722ed1,#b37feb) 1; }
-.feedback-step:hover { background: linear-gradient(90deg,#e6f7ff 60%,#f0f5ff 100%); box-shadow: 0 4px 16px #1890ff22; }
+.feedback-step.section {
+  border-image: linear-gradient(180deg, #13c2c2, #36e2e2) 1;
+}
+.feedback-step.department {
+  border-image: linear-gradient(180deg, #1890ff, #40a9ff) 1;
+}
+.feedback-step.manager {
+  border-image: linear-gradient(180deg, #722ed1, #b37feb) 1;
+}
+.feedback-step:hover {
+  background: linear-gradient(90deg, #e6f7ff 60%, #f0f5ff 100%);
+  box-shadow: 0 4px 16px #1890ff22;
+}
 .step-icon {
   font-size: 26px;
   margin-right: 16px;
@@ -591,15 +824,23 @@ onMounted(() => {
   background: #fff;
   box-shadow: 0 1px 4px #e6f7ff44;
 }
-.step-icon.section { background: #e6fffb; }
-.step-icon.department { background: #e6f7ff; }
-.step-icon.manager { background: #f9f0ff; }
+.step-icon.section {
+  background: #e6fffb;
+}
+.step-icon.department {
+  background: #e6f7ff;
+}
+.step-icon.manager {
+  background: #f9f0ff;
+}
 .step-title {
   font-weight: 700;
   margin-bottom: 2px;
   font-size: 16px;
 }
-.step-score { margin-bottom: 2px; }
+.step-score {
+  margin-bottom: 2px;
+}
 .step-comment {
   color: #555;
   font-size: 14px;
@@ -607,7 +848,7 @@ onMounted(() => {
 }
 .feedback-group-v2 {
   margin-top: 20px;
-  background: linear-gradient(90deg,#fffbe6 60%,#fff1b8 100%);
+  background: linear-gradient(90deg, #fffbe6 60%, #fff1b8 100%);
   border-radius: 10px;
   padding: 14px 18px 12px 18px;
   box-shadow: 0 2px 8px #ffe58f44;
@@ -626,10 +867,20 @@ onMounted(() => {
     grid-template-columns: 1fr;
     gap: 12px;
   }
-  .feedback-modal-content-v2 { padding: 4px 0 0 0; }
-  .feedback-kpi-title { font-size: 16px; }
-  .feedback-timeline { gap: 8px; }
-  .feedback-step { padding: 8px 6px 6px 6px; }
-  .feedback-group-v2 { padding: 8px 6px 6px 6px; }
+  .feedback-modal-content-v2 {
+    padding: 4px 0 0 0;
+  }
+  .feedback-kpi-title {
+    font-size: 16px;
+  }
+  .feedback-timeline {
+    gap: 8px;
+  }
+  .feedback-step {
+    padding: 8px 6px 6px 6px;
+  }
+  .feedback-group-v2 {
+    padding: 8px 6px 6px 6px;
+  }
 }
 </style>

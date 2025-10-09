@@ -4,40 +4,69 @@
       <div class="header-left">
         <h2 class="page-title">
           <i class="fa fa-user-shield title-icon"></i>
-          {{ $t('rolePermissionManagement') }}
+          {{ $t("rolePermissionManagement") }}
         </h2>
       </div>
       <div class="header-controls">
         <div class="role-select-group">
-          <label class="role-label">{{ $t('role') }}:</label>
+          <label class="role-label">{{ $t("role") }}:</label>
           <a-select v-model:value="currentRoleId" style="min-width: 220px">
-            <a-select-option v-for="role in rolesWithPermissions" :key="role.id" :value="role.id">
+            <a-select-option
+              v-for="role in rolesWithPermissions"
+              :key="role.id"
+              :value="role.id"
+            >
               {{ roleDisplayName(role.name) }}
             </a-select-option>
           </a-select>
         </div>
-        <a-input v-model:value="searchText" :placeholder="$t('searchPermission')" allow-clear class="search-input" />
-        <a-button type="primary" @click="saveAll" :loading="loading" class="save-btn">
-          <template #icon><i style="margin-right: 6px" class="fa fa-save"></i></template>
-          {{ $t('saveAll') }}
+        <a-input
+          v-model:value="searchText"
+          :placeholder="$t('searchPermission')"
+          allow-clear
+          class="search-input"
+        />
+        <a-button
+          type="primary"
+          @click="saveAll"
+          :loading="loading"
+          class="save-btn"
+        >
+          <template #icon
+            ><i style="margin-right: 6px" class="fa fa-save"></i
+          ></template>
+          {{ $t("saveAll") }}
         </a-button>
       </div>
     </div>
     <div class="permission-group-list">
-      <div v-for="(group) in filteredPermissionGroups" :key="group.label" class="permission-group-block">
+      <div
+        v-for="group in filteredPermissionGroups"
+        :key="group.label"
+        class="permission-group-block"
+      >
         <div class="permission-group-title">
           <i class="fa fa-layer-group group-icon"></i>
           <span>{{ group.label }}</span>
           <span class="group-count">({{ group.permissions.length }})</span>
         </div>
         <div class="permission-group-grid">
-          <div v-for="permission in group.permissions" :key="permission.id" class="permission-group-item">
+          <div
+            v-for="permission in group.permissions"
+            :key="permission.id"
+            class="permission-group-item"
+          >
             <a-switch
               :checked="currentRole.permissionIds.includes(permission.id)"
-              @change="checked => onTogglePermission(currentRole, permission.id, checked)"
+              @change="
+                (checked) =>
+                  onTogglePermission(currentRole, permission.id, checked)
+              "
             />
             <a-tooltip :title="permissionDescription(permission.id)">
-              <span class="perm-label">{{ permissionDisplayName(permission) }}</span>
+              <span class="perm-label">{{
+                permissionDisplayName(permission)
+              }}</span>
             </a-tooltip>
           </div>
         </div>
@@ -47,10 +76,10 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed, watch } from 'vue';
-import { message } from 'ant-design-vue';
-import { useI18n } from 'vue-i18n';
-import { useStore } from 'vuex';
+import { ref, onMounted, computed, watch } from "vue";
+import { message } from "ant-design-vue";
+import { useI18n } from "vue-i18n";
+import { useStore } from "vuex";
 
 const { t } = useI18n();
 const store = useStore();
@@ -58,19 +87,19 @@ const store = useStore();
 const loading = computed(() => store.getters["loading/isLoading"]);
 const rolesWithPermissions = ref([]);
 const allPermissions = ref([]);
-const searchText = ref('');
+const searchText = ref("");
 
 const permissionDisplayName = (permission) => {
   const actionKey = permission.action;
   const resourceKey = permission.resource.replace(/:/g, "_");
-  const scopeKey = permission.scope || '';
-  // Sử dụng key dạng: permission.{action}_{resource}_{scope}
+  const scopeKey = permission.scope || "";
+
   let key = `permission.${actionKey}_${resourceKey}`;
   if (scopeKey) key += `_${scopeKey}`;
   const i18nLabel = t(key);
   if (i18nLabel !== key) return i18nLabel;
-  // Nếu không có key, fallback về dạng mô tả dễ đọc hơn
-  return `${t('action.' + actionKey) || actionKey} - ${t('resource.' + resourceKey) || permission.resource}${scopeKey ? ' - ' + t('scope.' + scopeKey) : ''}`;
+
+  return `${t("action." + actionKey) || actionKey} - ${t("resource." + resourceKey) || permission.resource}${scopeKey ? " - " + t("scope." + scopeKey) : ""}`;
 };
 
 const permissionDescription = (permissionId) => {
@@ -78,14 +107,13 @@ const permissionDescription = (permissionId) => {
   if (!permission) return "";
   const actionKey = permission.action;
   const resourceKey = permission.resource.replace(/:/g, "_");
-  const scopeKey = permission.scope || '';
+  const scopeKey = permission.scope || "";
   let i18nKey = `permissionDesc.${actionKey}_${resourceKey}`;
   if (scopeKey) i18nKey += `_${scopeKey}`;
   const desc = t(i18nKey);
   if (desc === i18nKey) return permissionDisplayName(permission);
   return desc;
 };
-
 
 onMounted(async () => {
   await store.dispatch("loading/startLoading");
@@ -122,18 +150,17 @@ const onTogglePermission = (record, permissionId, checked) => {
 const saveAll = async () => {
   loading.value = true;
   try {
-    // Lưu tất cả các role (gọi API cho từng role)
     await Promise.all(
-      rolesWithPermissions.value.map(role =>
+      rolesWithPermissions.value.map((role) =>
         store.dispatch("employees/updateRolePermissions", {
           roleId: role.id,
-          permissionIds: role.permissionIds
+          permissionIds: role.permissionIds,
         })
       )
     );
-    message.success(t('permissionsUpdatedSuccessfully'));
+    message.success(t("permissionsUpdatedSuccessfully"));
   } catch (error) {
-    message.error(t('errorUpdatingPermissions'));
+    message.error(t("errorUpdatingPermissions"));
   } finally {
     loading.value = false;
   }
@@ -146,58 +173,85 @@ const roleDisplayName = (name) => {
 
 const permissionGroups = computed(() => {
   const groupedActions = [
-    'export', 'toggle-status', 'copy-template', 'delete', 'update'
+    "export",
+    "toggle-status",
+    "copy-template",
+    "delete",
+    "update",
   ];
   const actionOrder = [
-    'view', 'create', 'edit', 'approve', 'reject', 'assign', 'assign_user', 'assign_unit', 'assign_direct_user', 'assign_section', 'personal', 'manage'
+    "view",
+    "create",
+    "edit",
+    "approve",
+    "reject",
+    "assign",
+    "assign_user",
+    "assign_unit",
+    "assign_direct_user",
+    "assign_section",
+    "personal",
+    "manage",
   ];
   const groups = [];
   const usedIds = new Set();
-  actionOrder.forEach(action => {
-    const perms = allPermissions.value.filter(p => p.action === action);
+  actionOrder.forEach((action) => {
+    const perms = allPermissions.value.filter((p) => p.action === action);
     if (perms.length) {
       groups.push({
-        label: t('action.' + action) || action,
-        permissions: perms
+        label: t("action." + action) || action,
+        permissions: perms,
       });
-      perms.forEach(p => usedIds.add(p.id));
+      perms.forEach((p) => usedIds.add(p.id));
     }
   });
-  const specialPerms = allPermissions.value.filter(p => groupedActions.includes(p.action));
+  const specialPerms = allPermissions.value.filter((p) =>
+    groupedActions.includes(p.action)
+  );
   if (specialPerms.length) {
     groups.push({
-      label: t('permissionBlock.special') || 'Hành động đặc biệt',
-      permissions: specialPerms
+      label: t("permissionBlock.special") || "Hành động đặc biệt",
+      permissions: specialPerms,
     });
-    specialPerms.forEach(p => usedIds.add(p.id));
+    specialPerms.forEach((p) => usedIds.add(p.id));
   }
-  const otherPerms = allPermissions.value.filter(p => !usedIds.has(p.id));
+  const otherPerms = allPermissions.value.filter((p) => !usedIds.has(p.id));
   if (otherPerms.length) {
     groups.push({
-      label: t('permissionBlock.other') || 'Khác',
-      permissions: otherPerms
+      label: t("permissionBlock.other") || "Khác",
+      permissions: otherPerms,
     });
   }
   return groups;
 });
 
-const currentRoleId = ref('');
-const currentRole = computed(() => rolesWithPermissions.value.find(r => r.id === currentRoleId.value) || rolesWithPermissions.value[0] || { permissionIds: [] });
-watch(rolesWithPermissions, (val) => {
-  if (val.length && !val.find(r => r.id === currentRoleId.value)) {
-    currentRoleId.value = val[0].id;
-  }
-}, { immediate: true });
+const currentRoleId = ref("");
+const currentRole = computed(
+  () =>
+    rolesWithPermissions.value.find((r) => r.id === currentRoleId.value) ||
+    rolesWithPermissions.value[0] || { permissionIds: [] }
+);
+watch(
+  rolesWithPermissions,
+  (val) => {
+    if (val.length && !val.find((r) => r.id === currentRoleId.value)) {
+      currentRoleId.value = val[0].id;
+    }
+  },
+  { immediate: true }
+);
 
 const filteredPermissionGroups = computed(() => {
   if (!searchText.value) return permissionGroups.value;
   const lower = searchText.value.toLowerCase();
   return permissionGroups.value
-    .map(group => ({
+    .map((group) => ({
       ...group,
-      permissions: group.permissions.filter(p => permissionDisplayName(p).toLowerCase().includes(lower))
+      permissions: group.permissions.filter((p) =>
+        permissionDisplayName(p).toLowerCase().includes(lower)
+      ),
     }))
-    .filter(group => group.permissions.length > 0);
+    .filter((group) => group.permissions.length > 0);
 });
 </script>
 
@@ -248,7 +302,7 @@ const filteredPermissionGroups = computed(() => {
   font-size: 1.08em;
   padding: 0 22px;
   border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(22,119,255,0.08);
+  box-shadow: 0 2px 8px rgba(22, 119, 255, 0.08);
 }
 
 .page-title {
@@ -273,7 +327,7 @@ const filteredPermissionGroups = computed(() => {
 .permission-group-block {
   background: #f8fafc;
   border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(22,119,255,0.06);
+  box-shadow: 0 2px 8px rgba(22, 119, 255, 0.06);
   padding: 18px 18px 12px 18px;
 }
 .permission-group-title {
@@ -309,7 +363,7 @@ const filteredPermissionGroups = computed(() => {
   background: #fff;
   border-radius: 7px;
   padding: 8px 14px;
-  box-shadow: 0 1px 4px rgba(22,119,255,0.04);
+  box-shadow: 0 1px 4px rgba(22, 119, 255, 0.04);
   border: 1px solid #e3eaf7;
   margin-bottom: 8px;
 }
@@ -323,7 +377,7 @@ const filteredPermissionGroups = computed(() => {
 .permission-table-wrapper {
   background: #fff;
   border-radius: 14px;
-  box-shadow: 0 2px 12px rgba(0,32,128,0.06);
+  box-shadow: 0 2px 12px rgba(0, 32, 128, 0.06);
   padding: 18px 12px 18px 12px;
   margin-top: 8px;
   overflow-x: auto;
@@ -334,7 +388,8 @@ const filteredPermissionGroups = computed(() => {
   border-collapse: collapse;
   background: #fff;
 }
-.permission-table-ui th, .permission-table-ui td {
+.permission-table-ui th,
+.permission-table-ui td {
   border: 1px solid #e3eaf7;
   padding: 10px 8px;
   font-size: 1em;
@@ -379,7 +434,8 @@ const filteredPermissionGroups = computed(() => {
   .search-input {
     width: 100%;
   }
-  .permission-table-ui th, .permission-table-ui td {
+  .permission-table-ui th,
+  .permission-table-ui td {
     font-size: 0.95em;
     padding: 7px 4px;
   }

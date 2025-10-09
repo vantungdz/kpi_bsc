@@ -1,8 +1,6 @@
-// Ví dụ: src/constants/kpiStatus.js
-
 export const KpiValueStatus = Object.freeze({
-  DRAFT: "DRAFT", // Nếu có dùng
-  SUBMITTED: "SUBMITTED", // Có thể đây là trạng thái đầu tiên sau submit?
+  DRAFT: "DRAFT", 
+  SUBMITTED: "SUBMITTED", 
   PENDING_SECTION_APPROVAL: "PENDING_SECTION_APPROVAL",
   PENDING_DEPT_APPROVAL: "PENDING_DEPT_APPROVAL",
   PENDING_MANAGER_APPROVAL: "PENDING_MANAGER_APPROVAL",
@@ -12,7 +10,6 @@ export const KpiValueStatus = Object.freeze({
   REJECTED_BY_MANAGER: "REJECTED_BY_MANAGER",
 });
 
-// Bạn cũng có thể định nghĩa thêm text hoặc màu sắc tương ứng ở đây nếu muốn
 export const getKpiValueStatusText = (t) => ({
   [KpiValueStatus.DRAFT]: t("draft"),
   [KpiValueStatus.SUBMITTED]: t("submitted"),
@@ -48,6 +45,6 @@ export const KpiDefinitionStatusText = (t) => ({
 });
 
 export const KpiDefinitionStatusColor = {
-  [KpiDefinitionStatus.DRAFT]: "default", // Màu xám hoặc vàng
-  [KpiDefinitionStatus.APPROVED]: "success", // Màu xanh lá
+  [KpiDefinitionStatus.DRAFT]: "default", 
+  [KpiDefinitionStatus.APPROVED]: "success", 
 };

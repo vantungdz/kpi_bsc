@@ -5,7 +5,10 @@ import { KpiReview, ReviewStatus } from './entities/kpi-review.entity';
 import { CreateKpiReviewDto, UpdateKpiReviewDto } from './dto/kpi-review.dto';
 import { Kpi } from '../kpis/entities/kpi.entity';
 import { KPIAssignment } from '../kpi-assessments/entities/kpi-assignment.entity';
-import { KpiValue, KpiValueStatus } from '../kpi-values/entities/kpi-value.entity';
+import {
+  KpiValue,
+  KpiValueStatus,
+} from '../kpi-values/entities/kpi-value.entity';
 import { Employee } from '../employees/entities/employee.entity';
 import { KpiReviewHistory } from '../kpi-evaluations/entities/kpi-review-history.entity';
 import { NotificationService } from '../notification/notification.service';
@@ -39,7 +42,12 @@ export class KpiReviewService {
   /**
    * Helper to check if a user has a specific permission (RBAC)
    */
-  private userHasPermission(user: Employee, resource: string, action: string, scope?: string): boolean {
+  private userHasPermission(
+    user: Employee,
+    resource: string,
+    action: string,
+    scope?: string,
+  ): boolean {
     if (!user || !user.roles) return false;
     for (const role of user.roles) {
       if (role && Array.isArray(role.permissions)) {
@@ -48,7 +56,7 @@ export class KpiReviewService {
             (p) =>
               p.resource === resource &&
               p.action === action &&
-              (!scope || p.scope === scope)
+              (!scope || p.scope === scope),
           )
         ) {
           return true;
@@ -59,11 +67,7 @@ export class KpiReviewService {
   }
 
   async getKpiReviews(filter: any, reqUser?: any): Promise<any[]> {
-    // Nếu có user truyền vào, lọc theo quyền
     if (reqUser) {
-      // Always extract role as string
-      // const role = typeof reqUser.role === 'string' ? reqUser.role : reqUser.role?.name;
-      // Use permission-based checks instead of role
       const allowedStatuses = [
         ReviewStatus.SELF_REVIEWED,
         ReviewStatus.SECTION_REVIEWED,
@@ -76,7 +80,6 @@ export class KpiReviewService {
         ReviewStatus.MANAGER_REJECTED,
       ];
       if (this.userHasPermission(reqUser, 'kpi-review', 'view', 'section')) {
-        // Lấy tất cả employee thuộc section/department mà section này quản lý
         const employees = await this.kpiReviewRepository.manager.find(
           Employee,
           {
@@ -104,7 +107,6 @@ export class KpiReviewService {
         }));
       }
       if (this.userHasPermission(reqUser, 'kpi-review', 'view', 'department')) {
-        // Lấy tất cả employee thuộc department mà department này quản lý
         const employees = await this.kpiReviewRepository.manager.find(
           Employee,
           {
@@ -134,7 +136,6 @@ export class KpiReviewService {
         this.userHasPermission(reqUser, 'kpi-review', 'view', 'manager') ||
         this.userHasPermission(reqUser, 'kpi-review', 'view', 'admin')
       ) {
-        // Trả về tất cả review đã gửi (not PENDING)
         const reviews = await this.kpiReviewRepository.find({
           where: {
             ...filter,
@@ -150,7 +151,7 @@ export class KpiReviewService {
               : null,
         }));
       }
-      // Employee chỉ xem review của chính mình
+
       const reviews = await this.kpiReviewRepository.find({
         where: {
           ...filter,
@@ -167,7 +168,7 @@ export class KpiReviewService {
             : null,
       }));
     }
-    // Nếu không truyền user, lấy tất cả theo filter nhưng loại PENDING
+
     const reviews = await this.kpiReviewRepository.find({
       where: {
         ...filter,
@@ -191,15 +192,12 @@ export class KpiReviewService {
     }));
   }
 
-  // Hàm giả lập lấy danh sách employeeIds mà manager quản lý
   async getManagedEmployeeIds(managerId: number): Promise<number[]> {
-    // 1. Lấy các section mà manager này quản lý
     const sectionRepo =
       this.kpiReviewRepository.manager.getRepository('Section');
     const managedSections = await sectionRepo.find({ where: { managerId } });
     const sectionIds = managedSections.map((s: any) => s.id);
 
-    // 2. Lấy các department mà manager này quản lý
     const departmentRepo =
       this.kpiReviewRepository.manager.getRepository('Department');
     const managedDepartments = await departmentRepo.find({
@@ -207,7 +205,6 @@ export class KpiReviewService {
     });
     const departmentIds = managedDepartments.map((d: any) => d.id);
 
-    // 3. Lấy tất cả employee thuộc các section/department đó hoặc trực tiếp dưới quyền
     const employeeRepo =
       this.kpiReviewRepository.manager.getRepository(Employee);
     const whereClause: any[] = [];
@@ -217,10 +214,9 @@ export class KpiReviewService {
     if (departmentIds.length) {
       whereClause.push({ departmentId: In(departmentIds) });
     }
-    // Trực tiếp dưới quyền
+
     whereClause.push({ managerId });
 
-    // Gộp điều kiện bằng OR
     const employees = await employeeRepo.find({
       where: whereClause.length > 1 ? whereClause : whereClause[0],
     });
@@ -249,37 +245,42 @@ export class KpiReviewService {
     return review;
   }
 
-  // Lấy lịch sử review cho 1 KPI/cycle/employee
   async getKpiReviewHistory(kpiId: number, cycle: string, employeeId?: number) {
     const where: any = { kpiId, cycle };
     if (employeeId) where.employeeId = employeeId;
-    // Lấy lịch sử review
+
     const history = await this.kpiReviewHistoryRepository.find({
       where,
       order: { createdAt: 'ASC' },
     });
-    // Lấy danh sách reviewedBy (userId) duy nhất
-    const reviewerIds = Array.from(new Set(history.map(h => h.reviewedBy).filter(Boolean)));
-    let reviewersMap: Record<number, { id: number, first_name: string, last_name: string }> = {};
+
+    const reviewerIds = Array.from(
+      new Set(history.map((h) => h.reviewedBy).filter(Boolean)),
+    );
+    let reviewersMap: Record<
+      number,
+      { id: number; first_name: string; last_name: string }
+    > = {};
     if (reviewerIds.length) {
-      // Lấy thông tin reviewer từ bảng employee
-      const employees = await this.kpiReviewRepository.manager.getRepository('Employee').findByIds(reviewerIds);
+      const employees = await this.kpiReviewRepository.manager
+        .getRepository('Employee')
+        .findByIds(reviewerIds);
       reviewersMap = employees.reduce((acc, emp) => {
         acc[emp.id] = emp;
         return acc;
       }, {});
     }
-    // Gắn reviewerName vào từng bản ghi lịch sử
-    return history.map(h => ({
+
+    return history.map((h) => ({
       ...h,
-      reviewerName: h.reviewedBy && reviewersMap[h.reviewedBy]
-        ? `${reviewersMap[h.reviewedBy].first_name} ${reviewersMap[h.reviewedBy].last_name}`
-        : null
+      reviewerName:
+        h.reviewedBy && reviewersMap[h.reviewedBy]
+          ? `${reviewersMap[h.reviewedBy].first_name} ${reviewersMap[h.reviewedBy].last_name}`
+          : null,
     }));
   }
 
   async getMyKpisForReview(userId: number, cycle: string) {
-    // 1. Lấy các assignment đã được duyệt cho user này
     const assignments = await this.kpiAssignmentRepository.find({
       where: {
         assigned_to_employee: userId,
@@ -291,7 +292,7 @@ export class KpiReviewService {
     const result: KpiReview[] = [];
     for (const assignment of assignments) {
       if (!assignment.kpi) continue;
-      // 2. Lấy actual value đã được duyệt gần nhất cho assignment này
+
       const approvedValues = (assignment.kpiValues || []).filter(
         (v) => v.status === KpiValueStatus.APPROVED,
       );
@@ -300,13 +301,12 @@ export class KpiReviewService {
         (a, b) =>
           new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
       )[0];
-      // 3. Kiểm tra đã có review cho assignment/cycle chưa
+
       let review = await this.kpiReviewRepository.findOne({
         where: { assignment: { id: assignment.id }, cycle },
         relations: ['kpi', 'assignment'],
       });
       if (!review) {
-        // 4. Nếu chưa có thì tạo mới
         const reviewData: any = {
           kpi: { id: assignment.kpi.id },
           assignment: { id: assignment.id },
@@ -338,13 +338,12 @@ export class KpiReviewService {
     },
   ) {
     for (const item of body.kpis) {
-      // Lấy review hiện tại
       const review = await this.kpiReviewRepository.findOne({
         where: { id: item.id, employee: { id: userId }, cycle: body.cycle },
         relations: ['kpi', 'employee', 'section'],
       });
       if (!review) continue;
-      // Nếu chưa self-review thì cập nhật status
+
       let status = review.status;
       let isFirstSelfReview = false;
       if (
@@ -370,9 +369,11 @@ export class KpiReviewService {
         reviewedBy: userId,
         createdAt: new Date(),
       });
-      // Gửi notification cho section leader nếu là lần đầu self-review
+
       if (isFirstSelfReview && review.section && review.section.id) {
-        const sectionLeader = await this.employeesService.findLeaderOfSection(review.section.id);
+        const sectionLeader = await this.employeesService.findLeaderOfSection(
+          review.section.id,
+        );
         if (sectionLeader) {
           await this.notificationService.createNotification(
             sectionLeader.id,
@@ -385,20 +386,19 @@ export class KpiReviewService {
         }
       }
     }
-    // Return updated reviews for the user/cycle so frontend can refresh
+
     return this.getMyKpisForReview(userId, body.cycle);
   }
 
   async submitSectionReview(
-    sectionUserId: number, // id của user section đang duyệt
+    sectionUserId: number,
     body: {
       reviewId: number;
       sectionScore: number;
       sectionComment: string;
     },
-    user?: Employee // Pass user object for permission check
+    user?: Employee,
   ) {
-    // Use permission-based check instead of role
     if (
       user &&
       (this.userHasPermission(user, 'kpi-review', 'approve', 'admin') ||
@@ -406,7 +406,7 @@ export class KpiReviewService {
         this.userHasPermission(user, 'kpi-review', 'approve', 'department'))
     ) {
       throw new Error(
-        'Không được dùng API section review cho vai trò admin/manager/department. Hãy dùng đúng API duyệt theo quyền.'
+        'Không được dùng API section review cho vai trò admin/manager/department. Hãy dùng đúng API duyệt theo quyền.',
       );
     }
     const review = await this.kpiReviewRepository.findOne({
@@ -414,16 +414,15 @@ export class KpiReviewService {
       relations: ['kpi', 'employee'],
     });
     if (!review) throw new Error('Review not found');
-    // Nếu review gắn với section, không cho phép section đó tự duyệt
+
     if (review.section && review.section.id) {
-      // Lấy thông tin user section đang duyệt
       if (review.section.id === sectionUserId) {
         throw new Error(
           'Section không được tự duyệt review do chính section mình tạo ra. Chỉ cấp trên mới được duyệt.',
         );
       }
     }
-    // Chỉ cho phép section duyệt khi status là SELF_REVIEWED
+
     if (review.status !== ReviewStatus.SELF_REVIEWED) {
       throw new Error('Chỉ được duyệt khi đã tự đánh giá');
     }
@@ -444,9 +443,11 @@ export class KpiReviewService {
       reviewedBy: sectionUserId,
       createdAt: new Date(),
     });
-    // Gửi notification cho department leader nếu có
+
     if (review.department && review.department.id) {
-      const deptLeader = await this.employeesService.findManagerOfDepartment(review.department.id);
+      const deptLeader = await this.employeesService.findManagerOfDepartment(
+        review.department.id,
+      );
       if (deptLeader) {
         await this.notificationService.createNotification(
           deptLeader.id,
@@ -461,7 +462,6 @@ export class KpiReviewService {
     return review;
   }
 
-  // Department review (skip-level approval supported)
   async submitDepartmentReview(
     departmentUserId: number,
     body: {
@@ -475,7 +475,7 @@ export class KpiReviewService {
       relations: ['kpi', 'employee', 'department'],
     });
     if (!review) throw new Error('Review not found');
-    // Cho phép department duyệt nếu status là SELF_REVIEWED, SECTION_REVIEWED, hoặc DEPARTMENT_REVIEWED (skip-level)
+
     if (
       ![
         ReviewStatus.SELF_REVIEWED,
@@ -492,7 +492,7 @@ export class KpiReviewService {
     }
     review.departmentScore = body.departmentScore;
     review.departmentComment = body.departmentComment;
-    // Khi department duyệt (dù nhảy bậc hay không), luôn set status = DEPARTMENT_REVIEWED
+
     review.status = ReviewStatus.DEPARTMENT_REVIEWED;
     await this.kpiReviewRepository.save(review);
     await this.kpiReviewHistoryRepository.save({
@@ -505,8 +505,10 @@ export class KpiReviewService {
       reviewedBy: departmentUserId,
       createdAt: new Date(),
     });
-    // Gửi notification cho manager nếu có
-    const manager = await this.employeesService.findManagerOfDepartment(review.department.id);
+
+    const manager = await this.employeesService.findManagerOfDepartment(
+      review.department.id,
+    );
     if (manager) {
       await this.notificationService.createNotification(
         manager.id,
@@ -520,7 +522,6 @@ export class KpiReviewService {
     return review;
   }
 
-  // Manager review (skip-level approval supported)
   async submitManagerReview(
     managerUserId: number,
     body: {
@@ -534,7 +535,7 @@ export class KpiReviewService {
       relations: ['kpi', 'employee'],
     });
     if (!review) throw new Error('Review not found');
-    // Cho phép manager duyệt nếu status là SELF_REVIEWED, SECTION_REVIEWED, DEPARTMENT_REVIEWED, hoặc MANAGER_REVIEWED (skip-level)
+
     if (
       ![
         ReviewStatus.SELF_REVIEWED,
@@ -552,7 +553,7 @@ export class KpiReviewService {
     }
     review.managerScore = body.managerScore;
     review.managerComment = body.managerComment;
-    // Sau khi manager duyệt, chuyển sang EMPLOYEE_FEEDBACK
+
     review.status = ReviewStatus.EMPLOYEE_FEEDBACK;
     await this.kpiReviewRepository.save(review);
     await this.kpiReviewHistoryRepository.save({
@@ -565,7 +566,7 @@ export class KpiReviewService {
       reviewedBy: managerUserId,
       createdAt: new Date(),
     });
-    // Gửi notification cho nhân viên: chờ phản hồi
+
     await this.notificationService.createNotification(
       review.employee.id,
       NotificationType.REVIEW_PENDING_EMPLOYEE_FEEDBACK,
@@ -577,7 +578,6 @@ export class KpiReviewService {
     return review;
   }
 
-  // Nhân viên feedback
   async submitEmployeeFeedback(
     employeeId: number,
     body: { reviewId: number; employeeFeedback: string },
@@ -591,7 +591,7 @@ export class KpiReviewService {
       throw new Error('Chỉ feedback khi trạng thái là EMPLOYEE_FEEDBACK');
     }
     review.employeeFeedback = body.employeeFeedback;
-    review.status = ReviewStatus.MANAGER_REVIEWED; // Chờ quản lý xác nhận hoàn thành
+    review.status = ReviewStatus.MANAGER_REVIEWED;
     await this.kpiReviewRepository.save(review);
     await this.kpiReviewHistoryRepository.save({
       kpiId: review.kpi.id,
@@ -603,14 +603,18 @@ export class KpiReviewService {
       reviewedBy: employeeId,
       createdAt: new Date(),
     });
-    // Gửi notification cho manager: nhân viên đã phản hồi
+
     let managerId: number | null = null;
     if (review.department && review.department.id) {
-      const manager = await this.employeesService.findManagerOfDepartment(review.department.id);
+      const manager = await this.employeesService.findManagerOfDepartment(
+        review.department.id,
+      );
       if (manager) managerId = manager.id;
     }
     if (!managerId && review.section && review.section.id) {
-      const sectionLeader = await this.employeesService.findLeaderOfSection(review.section.id);
+      const sectionLeader = await this.employeesService.findLeaderOfSection(
+        review.section.id,
+      );
       if (sectionLeader) managerId = sectionLeader.id;
     }
     if (managerId) {
@@ -626,7 +630,6 @@ export class KpiReviewService {
     return review;
   }
 
-  // Quản lý xác nhận hoàn thành
   async completeReview(reviewId: number, userId: number) {
     const review = await this.kpiReviewRepository.findOne({
       where: { id: reviewId },
@@ -648,7 +651,7 @@ export class KpiReviewService {
       reviewedBy: userId,
       createdAt: new Date(),
     });
-    // Gửi notification cho nhân viên: review đã hoàn tất
+
     await this.notificationService.createNotification(
       review.employee.id,
       NotificationType.REVIEW_COMPLETED,
@@ -669,7 +672,6 @@ export class KpiReviewService {
       relations: ['kpi', 'employee', 'department', 'section'],
     });
 
-    // Fetch selfComment and selfScore for each review
     for (const review of reviews) {
       const selfReview = await this.kpiReviewRepository.findOne({
         where: {
@@ -719,15 +721,15 @@ export class KpiReviewService {
    */
   async submitReviewByRole(
     userId: number,
-    user: Employee, // Pass user object for permission check
+    user: Employee,
     body: {
       reviewId: number;
       score: number;
       comment: string;
-    }
+    },
   ) {
     if (!user) throw new Error('Thiếu thông tin người duyệt');
-    // Lấy review hiện tại để xác định trạng thái
+
     const review = await this.kpiReviewRepository.findOne({
       where: { id: body.reviewId },
       relations: ['kpi', 'employee', 'department', 'section'],
@@ -736,7 +738,7 @@ export class KpiReviewService {
     if (review.status === ReviewStatus.COMPLETED) {
       throw new Error('Review đã hoàn thành, không thể duyệt tiếp');
     }
-    // Ưu tiên quyền cao nhất: admin > manager > department > section
+
     if (
       this.userHasPermission(user, 'kpi-review', 'approve', 'admin') ||
       this.userHasPermission(user, 'kpi-review', 'approve', 'manager')
@@ -755,11 +757,15 @@ export class KpiReviewService {
       });
     }
     if (this.userHasPermission(user, 'kpi-review', 'approve', 'section')) {
-      return this.submitSectionReview(userId, {
-        reviewId: body.reviewId,
-        sectionScore: body.score,
-        sectionComment: body.comment,
-      }, user);
+      return this.submitSectionReview(
+        userId,
+        {
+          reviewId: body.reviewId,
+          sectionScore: body.score,
+          sectionComment: body.comment,
+        },
+        user,
+      );
     }
     throw new Error('Vai trò không hợp lệ để duyệt KPI');
   }
@@ -772,11 +778,11 @@ export class KpiReviewService {
    */
   async rejectReviewByRole(
     userId: number,
-    user: Employee, // Pass user object for permission check
+    user: Employee,
     body: {
       reviewId: number;
       rejectionReason: string;
-    }
+    },
   ) {
     if (!user) throw new Error('Thiếu thông tin người từ chối');
     const review = await this.kpiReviewRepository.findOne({
@@ -793,9 +799,13 @@ export class KpiReviewService {
       this.userHasPermission(user, 'kpi-review', 'approve', 'manager')
     ) {
       newStatus = ReviewStatus.MANAGER_REJECTED;
-    } else if (this.userHasPermission(user, 'kpi-review', 'approve', 'department')) {
+    } else if (
+      this.userHasPermission(user, 'kpi-review', 'approve', 'department')
+    ) {
       newStatus = ReviewStatus.DEPARTMENT_REJECTED;
-    } else if (this.userHasPermission(user, 'kpi-review', 'approve', 'section')) {
+    } else if (
+      this.userHasPermission(user, 'kpi-review', 'approve', 'section')
+    ) {
       newStatus = ReviewStatus.SECTION_REJECTED;
     } else {
       throw new Error('Vai trò không hợp lệ để từ chối KPI');
@@ -803,7 +813,7 @@ export class KpiReviewService {
     review.status = newStatus;
     review.rejectionReason = body.rejectionReason;
     await this.kpiReviewRepository.save(review);
-    // Save review history (single object, not array)
+
     const history: Partial<KpiReviewHistory> = {
       kpiId: review.kpi.id,
       employeeId: review.employee.id,
@@ -816,7 +826,7 @@ export class KpiReviewService {
       createdAt: new Date(),
     };
     await this.kpiReviewHistoryRepository.save(history);
-    // Gửi notification cho nhân viên khi bị từ chối
+
     let rejectType: NotificationType | null = null;
     if (newStatus === ReviewStatus.SECTION_REJECTED) {
       rejectType = NotificationType.REVIEW_REJECTED_BY_SECTION;
@@ -841,7 +851,7 @@ export class KpiReviewService {
 
 function getFinalScore(review: KpiReview | null | undefined): number | null {
   if (!review) return null;
-  // Ưu tiên theo workflow: COMPLETED > EMPLOYEE_FEEDBACK > MANAGER_REVIEWED > DEPARTMENT_REVIEWED > SECTION_REVIEWED > SELF_REVIEWED
+
   if (
     review.managerScore != null &&
     [
@@ -858,10 +868,16 @@ function getFinalScore(review: KpiReview | null | undefined): number | null {
   ) {
     return review.departmentScore;
   }
-  if (review.sectionScore != null && review.status === ReviewStatus.SECTION_REVIEWED) {
+  if (
+    review.sectionScore != null &&
+    review.status === ReviewStatus.SECTION_REVIEWED
+  ) {
     return review.sectionScore;
   }
-  if (review.selfScore != null && review.status === ReviewStatus.SELF_REVIEWED) {
+  if (
+    review.selfScore != null &&
+    review.status === ReviewStatus.SELF_REVIEWED
+  ) {
     return review.selfScore;
   }
   return null;

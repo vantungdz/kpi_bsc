@@ -18,6 +18,7 @@ import auditLog from "@/features/dashboard/store/auditLog";
 import competency from "@/features/competency/store/competency";
 import employeeSkill from "@/features/competency/store/employeeSkill";
 import personalGoal from "@/features/personal-goal/store/personalGoal";
+import documents from "@/features/documents/store/documents";
 
 const store = createStore({
   modules: {
@@ -40,6 +41,7 @@ const store = createStore({
     competency,
     employeeSkill,
     personalGoal,
+    documents,
   },
 });
 

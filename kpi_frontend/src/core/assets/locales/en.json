@@ -30,6 +30,7 @@
   "sendPasswordResetLink": "Send Password Reset Link",
   "backToLogin": "Back to Login",
   "dashboard": "Dashboard",
+  "auditLog": "Audit Log",
   "myArea": "Employee Area",
   "kpiManagement": "KPI Management",
   "approvalsAndReviews": "Approvals & Reviews",
@@ -87,7 +88,7 @@
   "kpiInventorySummary": "KPI Inventory Summary",
   "totalKpiDefinitions": "Total KPI Definitions",
   "totalKpiDefinitionsDescription": "The total number of KPI definitions available.",
-  "assignmentRemovedForUser": "Assignment removed for user",
+  "assignmentRemovedForUser": "The assignment for user {user} has been removed",
   "assignmentUpdated": "Assignment updated",
   "assignmentUpdatedSuccessfully": "Assignment updated successfully!",
   "totalKpiAssignments": "Total KPI Assignments",
@@ -638,8 +639,9 @@
   "enterNewPasswordOrLeaveBlank": "Enter new password or leave blank to keep current password",
   "exportExcelNotImplemented": "Export to Excel not implemented yet.",
   "searchEmployeePlaceholder": "Search employee by name, email, or ID...",
-  "importResult": "Import Result",
-  "importErrorDetails": "Import Error Details",
+  "importResult": "Successfully imported {successCount} employees. Errors: {errorCount}.",
+  "importErrorDetails": "Details of first {count} errors:\n{details}",
+  "importErrorDetailsTitle": "Details of first {count} errors:",
   "deleteEmployeeConfirm": "Are you sure you want to delete this employee?",
   "uploadFailed": "Upload Failed",
   "uploadErrorDefault": "Upload Error Default",
@@ -687,7 +689,15 @@
     "toggle-status_kpi_company": "Toggle Status KPI (Company)",
     "export_report_global": "Export Report (Global)",
     "delete_employee_company": "Delete Employee (Company)",
-    "update_employee_company": "Update Employee (Company)"
+    "update_employee_company": "Update Employee (Company)",
+    "view_employee_section": "View Employee (Section)",
+    "view_employee_department": "View Employee (Department)",
+    "update_kpi_company": "Update KPI (Company)",
+    "update_kpi_department": "Update KPI (Department)",
+    "update_kpi_section": "Update KPI (Section)",
+    "update_kpi_employee": "Update KPI (Employee)",
+    "delete_kpi_department": "Delete KPI (Department)",
+    "delete_kpi_section": "Delete KPI (Section)"
   },
   "permissionDesc": {
     "view_kpi-review_section": "Allows viewing KPI reviews within the section scope.",
@@ -729,7 +739,15 @@
     "toggle-status_kpi_company": "Allows toggling KPI status at the company level.",
     "export_report_global": "Allows exporting reports at the global level.",
     "delete_employee_company": "Allows deleting employees at the company level.",
-    "update_employee_company": "Allows updating employees at the company level."
+    "update_employee_company": "Allows updating employees at the company level.",
+    "view_employee_section": "Allows viewing employees within the section scope.",
+    "view_employee_department": "Allows viewing employees within the department scope.",
+    "update_kpi_company": "Allows updating KPIs at the company level.",
+    "update_kpi_department": "Allows updating KPIs at the department level.",
+    "update_kpi_section": "Allows updating KPIs at the section level.",
+    "update_kpi_employee": "Allows updating KPIs for employees.",
+    "delete_kpi_department": "Allows deleting KPIs at the department level.",
+    "delete_kpi_section": "Allows deleting KPIs at the section level."
   },
   "permissionsUpdatedSuccessfully": "Permissions updated successfully!",
   "errorUpdatingPermissions": "Error updating permissions.",
@@ -771,6 +789,7 @@
     "delete": "Delete",
     "create": "Create",
     "cancel": "Cancel",
+    "update": "Update",
     "actions": "Actions",
     "apply": "Apply",
     "reset": "Reset",
@@ -779,7 +798,12 @@
     "approve": "Approve",
     "empty": "Empty",
     "warning": "Warning",
-    "continue": "Continue"
+    "continue": "Continue",
+    "requiredFieldsMissing": "Please fill in all required fields!",
+    "updateSuccess": "Update successful!",
+    "addSuccess": "Add successful!",
+    "deleteSuccess": "Delete successful!",
+    "deleteError": "Delete failed!"
   },
   "warning": {
     "MANAGER_HAS_OTHER_DEPARTMENT_OR_SECTION": "This employee already belongs to another department or section. If you continue, the old department and section will be removed."
@@ -815,6 +839,7 @@
   "roleRequired": "Role is required.",
   "sectionRequired": "Section is required.",
   "validationError": "Validation Error",
+  "invalidTarget": "Invalid target value",
   "formReferenceMissing": "Form reference is missing.",
   "pleaseCheckFormFields": "Please check the form fields for errors.",
   "personalGoalMenu": "Personal Goals",
@@ -844,7 +869,8 @@
     "employee": "Employee",
     "report": "Report",
     "admin": "Administration",
-    "strategic": "Strategic Management"
+    "strategic": "Strategic Management",
+    "documents": "Document Management"
   },
   "statusReview": {
     "self_reviewed": "Self Reviewed",
@@ -944,6 +970,29 @@
       "minmax": "<b>min(arr)</b>, <b>max(arr)</b>: minimum/maximum value",
       "exampleLabel": "Example:",
       "example": "(sum(values)/sum(targets))*100"
+    },
+    "codeTooltip": {
+      "title": "Code generation guidelines:",
+      "rule1": "Use uppercase letters only (A-Z)",
+      "rule2": "Use numbers only (0-9)",
+      "rule3": "Use underscores only (_)",
+      "example": "Examples: FORMULA_001, CALC_AVERAGE",
+      "autoGenerate": "Code will be auto-generated from formula name"
+    },
+    "nameTooltip": {
+      "title": "Formula name guidelines:",
+      "rule1": "Length between 2 and 100 characters",
+      "rule2": "Use letters (including Vietnamese), numbers, and spaces only",
+      "rule3": "Allowed characters: - _ . , ( )",
+      "example": "Examples: Average Score Calculation, KPI Sales 2024",
+      "note": "Code will be automatically generated from formula name"
+    },
+    "validation": {
+      "codeFormat": "Code can only contain uppercase letters, numbers and underscores",
+      "codeDuplicate": "Code already exists, please choose a different one",
+      "nameLength": "Formula name must be between 2 and 100 characters",
+      "nameFormat": "Formula name can only contain letters (including Vietnamese), numbers, spaces and characters: - _ . , ( )",
+      "nameDuplicate": "Formula name already exists, please choose a different one"
     }
   },
   "page404": {
@@ -999,6 +1048,14 @@
     "assign": "Assign"
   },
   "personalGoal": {
+    "msgDeleteSuccess": "Personal goal deleted successfully.",
+    "addTitle": "Add Personal Goal",
+    "namePlaceholder": "Enter personal goal name",
+    "descriptionPlaceholder": "Enter personal goal description",
+    "kpiLinkedPlaceholder": "Select KPI to link with this personal goal",
+    "targetValuePlaceholder": "Enter target value for the linked KPI",
+    "startDate": "Start Date",
+    "endDate": "End Date",
     "employeeGoalManagement": "Personal Goal Management",
     "viewGoals": "View Goals",
     "goalsOf": "Goals of {name}",
@@ -1072,5 +1129,29 @@
     "msgError": "An error occurred",
     "msgDeleteSuccess": "Skill removed from employee successfully",
     "msgDeleteError": "Delete failed"
+  },
+  "documents": {
+    "file": "File",
+    "upload": "Upload Document",
+    "selectFile": "Select File",
+    "descPlaceholder": "Enter document description (optional)",
+    "searchPlaceholder": "Search documents by name, type, or description...",
+    "namePlaceholder": "Enter document name",
+    "title": "Document Management",
+    "typeAll": "All Types",
+    "typeGuide": "Guide",
+    "typePolicy": "Policy",
+    "typeTemplate": "Template",
+    "typeGeneral": "General",
+    "name": "Document Name",
+    "type": "Type",
+    "description": "Description",
+    "createdBy": "Created By",
+    "createdAt": "Created At",
+    "action": "Action",
+    "preview": "Preview",
+    "download": "Download",
+    "delete": "Delete",
+    "confirmDelete": "Are you sure you want to delete this document?"
   }
 }

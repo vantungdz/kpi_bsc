@@ -29,8 +29,8 @@ const state = {
   submittingUserDeletion: false,
   userDeletionError: null,
 
-  isSavingUserAssignment: false, // State mới cho saveUserAssignments
-  saveUserAssignmentError: null, // State lỗi mới cho saveUserAssignments
+  isSavingUserAssignment: false,
+  saveUserAssignmentError: null,
 
   loading: false,
   loadingAll: false,
@@ -79,8 +79,8 @@ const getters = {
   isSubmittingUserDeletion: (state) => state.submittingUserDeletion,
   userDeletionError: (state) => state.userDeletionError,
 
-  isSavingUserAssignment: (state) => state.isSavingUserAssignment, // Getter mới
-  saveUserAssignmentError: (state) => state.saveUserAssignmentError, // Getter mới
+  isSavingUserAssignment: (state) => state.isSavingUserAssignment,
+  saveUserAssignmentError: (state) => state.saveUserAssignmentError,
 
   isLoading: (state) => state.loading,
   error: (state) => state.error,
@@ -175,11 +175,9 @@ const mutations = {
   },
 
   SET_SAVING_USER_ASSIGNMENT_LOADING(state, isLoading) {
-    // Mutation mới
     state.isSavingUserAssignment = isLoading;
   },
   SET_SAVE_USER_ASSIGNMENT_ERROR(state, error) {
-    // Mutation mới
     state.saveUserAssignmentError = error
       ? error.response?.data?.message ||
         error.message ||
@@ -225,14 +223,11 @@ const mutations = {
   },
   UPDATE_KPI(state, updatedKpi) {
     if (!updatedKpi) return;
-
-    // Cập nhật trong danh sách chính
     const index = state.kpis.findIndex((k) => k.id === updatedKpi.id);
     if (index !== -1) {
       state.kpis.splice(index, 1, { ...state.kpis[index], ...updatedKpi });
     }
 
-    // Cập nhật trong danh sách select
     const indexAll = state.kpisAllForSelect.findIndex(
       (k) => k.id === updatedKpi.id
     );
@@ -244,7 +239,6 @@ const mutations = {
       });
     }
 
-    // Cập nhật chi tiết nếu đang xem
     if (state.currentKpi && state.currentKpi.id === updatedKpi.id) {
       state.currentKpi = { ...state.currentKpi, ...updatedKpi };
     }
@@ -338,22 +332,12 @@ const actions = {
   async fetchSectionKpis({ commit }, filterParams) {
     commit("SET_LOADING", true);
     commit("SET_ERROR", null);
-    commit("SET_SECTION_KPIS", null); // Reset data trước khi fetch
+    commit("SET_SECTION_KPIS", null);
 
     try {
-      // Lấy sectionIdForApi từ filterParams để đưa vào path của URL.
-      // Tên thuộc tính này (sectionIdForApi) phải khớp với tên bạn đã đặt
-      // trong component KpiListSection.vue khi gửi filtersToSend.
       const sectionIdInPath = filterParams.sectionIdForApi;
-
-      // Tạo một bản sao của filterParams để làm queryParams.
       const queryParams = { ...filterParams };
-
-      // Xóa sectionIdForApi khỏi queryParams vì nó đã được dùng trong path.
       delete queryParams.sectionIdForApi;
-
-      // Ánh xạ departmentIdForQuery thành departmentId nếu backend KpiFilterDto mong đợi 'departmentId'.
-      // Đồng thời, xóa departmentIdForQuery khỏi queryParams sau khi đã ánh xạ.
       if (
         queryParams.departmentIdForQuery !== undefined &&
         queryParams.departmentIdForQuery !== null
@@ -361,30 +345,22 @@ const actions = {
         queryParams.departmentId = queryParams.departmentIdForQuery;
         delete queryParams.departmentIdForQuery;
       }
-      // Các tham số khác như name, startDate, endDate sẽ được giữ nguyên nếu tên của chúng
-      // trong filterParams (được truyền từ KpiListSection.vue) đã khớp với KpiFilterDto ở backend.
-      // Ví dụ: nếu KpiListSection.vue gửi { name: "abc" }, và KpiFilterDto có thuộc tính `name`,
-      // thì queryParams.name sẽ được gửi đi.
-
       const url = `/kpis/sections/${sectionIdInPath}`;
 
       const response = await apiClient.get(url, {
-        params: queryParams, // Gửi các filter còn lại dưới dạng query parameters
+        params: queryParams,
       });
-
-      // Mutation SET_SECTION_KPIS cần xử lý đúng cấu trúc response.data
-      // (ví dụ: response.data có thể là { data: Kpi[], pagination: {...} } hoặc chỉ là Kpi[])
       commit("SET_SECTION_KPIS", response.data);
 
-      return response.data; // Trả về dữ liệu để component có thể sử dụng nếu cần
+      return response.data;
     } catch (error) {
       console.error(
         "ACTION fetchSectionKpis: Lỗi khi fetch section KPIs:",
         error.response || error
       );
       commit("SET_ERROR", error);
-      commit("SET_SECTION_KPIS", null); // Đặt lại data nếu có lỗi
-      throw error; // Ném lỗi để component có thể bắt và xử lý
+      commit("SET_SECTION_KPIS", null);
+      throw error;
     } finally {
       commit("SET_LOADING", false);
     }
@@ -406,7 +382,7 @@ const actions = {
       ) {
         url += `/${departmentId}`;
       }
-      // Remove departmentId from filters to avoid duplication
+
       const { ...queryFilters } = filters;
       const response = await apiClient.get(url, { params: queryFilters });
       commit("SET_DEPARTMENT_KPI_LIST", response.data);
@@ -576,8 +552,8 @@ const actions = {
     { commit, dispatch },
     { kpiId, assignmentsArray }
   ) {
-    commit("SET_SUBMITTING_DEPARTMENT_SECTION_ASSIGNMENT", true); // Đảm bảo mutation này tồn tại
-    commit("SET_DEPARTMENT_SECTION_ASSIGNMENT_SAVE_ERROR", null); // Đảm bảo mutation này tồn tại
+    commit("SET_SUBMITTING_DEPARTMENT_SECTION_ASSIGNMENT", true);
+    commit("SET_DEPARTMENT_SECTION_ASSIGNMENT_SAVE_ERROR", null);
     try {
       const response = await apiClient.post(
         `/kpis/${kpiId}/sections/assignments`,
@@ -610,7 +586,6 @@ const actions = {
         `/kpis/${kpiId}/assignments`,
         assignmentsPayload
       );
-      notification.success({ message: "User Assignment saved successfully!" });
       await dispatch("fetchKpiDetail", kpiId);
       return response.data;
     } catch (error) {
@@ -618,7 +593,7 @@ const actions = {
         error.response?.data?.message ||
         error.message ||
         "Failed to save user assignment.";
-      commit("SET_SAVE_USER_ASSIGNMENT_ERROR", errorMsg); // Sử dụng mutation mới
+      commit("SET_SAVE_USER_ASSIGNMENT_ERROR", errorMsg);
       notification.error({ message: "Save Failed", description: errorMsg });
       throw error;
     } finally {
@@ -670,9 +645,6 @@ const actions = {
 
     try {
       await apiClient.delete(`/kpi-assignments/${assignmentId}`);
-      notification.success({
-        message: "User Assignment deleted successfully!",
-      });
 
       try {
         await dispatch("fetchKpiDetail", kpiId);
@@ -735,9 +707,6 @@ const actions = {
         `/kpi-assignments/${assignmentId}/updates`,
         updateData
       );
-      notification.success({
-        message: "Progress update submitted successfully!",
-      });
 
       return response.data;
     } catch (error) {
@@ -754,21 +723,17 @@ const actions = {
   },
 
   async toggleKpiStatus({ commit }, { kpiId }) {
-    // Bỏ dispatch
     commit("SET_TOGGLING_KPI_STATUS", true);
     commit("SET_TOGGLE_KPI_STATUS_ERROR", null);
     try {
-      // Gọi API, response chứa Kpi đã cập nhật status
       const response = await apiClient.patch(`/kpis/${kpiId}/toggle-status`);
       const updatedKpi = response.data;
 
       if (updatedKpi && updatedKpi.status) {
-        // Chỉ cần commit mutation để cập nhật state đồng bộ
         commit("UPDATE_SINGLE_KPI_STATUS", {
           kpiId: kpiId,
           newStatus: updatedKpi.status,
         });
-        notification.success({ message: "KPI status updated successfully!" });
         return updatedKpi;
       } else {
         throw new Error("Invalid response received after toggling status.");
@@ -779,7 +744,12 @@ const actions = {
         error.message ||
         "Failed to toggle KPI status.";
       commit("SET_TOGGLE_KPI_STATUS_ERROR", errorMsg);
-      notification.error({ message: "Update Failed", description: errorMsg });
+
+      // Only show notification if it's not a permission error (already handled by API interceptor)
+      if (!errorMsg.includes("No permission")) {
+        notification.error({ message: "Update Failed", description: errorMsg });
+      }
+
       throw error;
     } finally {
       commit("SET_TOGGLING_KPI_STATUS", false);

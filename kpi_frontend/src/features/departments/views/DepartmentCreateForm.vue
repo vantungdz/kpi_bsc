@@ -1,7 +1,11 @@
 <template>
   <a-card class="department-create-form">
     <div class="form-header">
-      <a-avatar class="form-header-icon" size="large" style="background: linear-gradient(135deg, #1890ff 60%, #e6f7ff 100%)">
+      <a-avatar
+        class="form-header-icon"
+        size="large"
+        style="background: linear-gradient(135deg, #1890ff 60%, #e6f7ff 100%)"
+      >
         <template #icon>
           <ApartmentOutlined />
         </template>
@@ -9,11 +13,20 @@
       <h2 class="form-title">{{ $t("createDepartment") }}</h2>
     </div>
     <a-divider />
-    <a-form :model="form" :rules="rules" ref="formRef" layout="vertical" @finish="handleSubmit">
+    <a-form
+      :model="form"
+      :rules="rules"
+      ref="formRef"
+      layout="vertical"
+      @finish="handleSubmit"
+    >
       <a-row :gutter="16">
         <a-col :xs="24" :md="12">
           <a-form-item :label="$t('departmentName')" name="name">
-            <a-input v-model:value="form.name" :placeholder="$t('enterDepartmentName')">
+            <a-input
+              v-model:value="form.name"
+              :placeholder="$t('enterDepartmentName')"
+            >
               <template #prefix>
                 <ApartmentOutlined />
               </template>
@@ -22,11 +35,14 @@
         </a-col>
         <a-col :xs="24" :md="12">
           <a-form-item :label="$t('manager')" name="managerId">
-            <a-select v-model:value="form.managerId" :placeholder="$t('selectManager')" :options="managerOptions"
+            <a-select
+              v-model:value="form.managerId"
+              :placeholder="$t('selectManager')"
+              :options="managerOptions"
               :loading="loading"
               show-search
               :filter-option="filterManagerOption"
-              >
+            >
               <template #suffixIcon>
                 <UserOutlined />
               </template>
@@ -35,7 +51,14 @@
         </a-col>
       </a-row>
       <a-form-item>
-        <a-button type="default" html-type="submit" :loading="loading" class="create-btn-modern" size="middle" shape="round">
+        <a-button
+          type="default"
+          html-type="submit"
+          :loading="loading"
+          class="create-btn-modern"
+          size="middle"
+          shape="round"
+        >
           <template #icon>
             <PlusOutlined />
           </template>
@@ -46,15 +69,29 @@
     <a-divider />
     <div>
       <h3 class="list-title">{{ $t("departmentList") }}</h3>
-      <a-table :data-source="departmentList" :columns="departmentColumns" row-key="id" size="small" :pagination="false"
-        bordered v-if="departmentList && departmentList.length">
+      <a-table
+        :data-source="departmentList"
+        :columns="departmentColumns"
+        row-key="id"
+        size="small"
+        :pagination="false"
+        bordered
+        v-if="departmentList && departmentList.length"
+      >
         <template #managerName="{ record }">
-          <a-avatar v-if="record.manager" size="small" style="background: #e6f7ff; color: #1890ff; margin-right: 6px">
+          <a-avatar
+            v-if="record.manager"
+            size="small"
+            style="background: #e6f7ff; color: #1890ff; margin-right: 6px"
+          >
             <template #icon>
               <UserOutlined />
             </template>
           </a-avatar>
-          <span>{{ record.manager?.first_name }} {{ record.manager?.last_name }}</span>
+          <span
+            >{{ record.manager?.first_name }}
+            {{ record.manager?.last_name }}</span
+          >
         </template>
         <template #actions="{ record }">
           <a-tooltip :title="t('common.edit')">
@@ -62,8 +99,12 @@
               <template #icon><EditOutlined /></template>
             </a-button>
           </a-tooltip>
-          <a-popconfirm :title="t('confirmDelete')" :ok-text="t('common.delete')" :cancel-text="t('common.cancel')"
-            @confirm="deleteDepartment(record)">
+          <a-popconfirm
+            :title="t('confirmDelete')"
+            :ok-text="t('common.delete')"
+            :cancel-text="t('common.cancel')"
+            @confirm="deleteDepartment(record)"
+          >
             <a-tooltip :title="t('common.delete')">
               <a-button size="small" type="text" danger>
                 <template #icon><DeleteOutlined /></template>
@@ -76,25 +117,40 @@
     </div>
   </a-card>
 
-  <a-modal v-model:visible="showEditModal" :title="$t('editDepartment')" :confirm-loading="loading"
+  <a-modal
+    v-model:visible="showEditModal"
+    :title="$t('editDepartment')"
+    :confirm-loading="loading"
     @ok="handleUpdateDepartment"
     @cancel="closeEditModal"
     destroy-on-close
+  >
+    <a-form
+      :model="editForm"
+      :rules="rules"
+      ref="editFormRef"
+      layout="vertical"
+      @finish="handleUpdateDepartment"
     >
-    <a-form :model="editForm" :rules="rules" ref="editFormRef" layout="vertical" @finish="handleUpdateDepartment">
       <a-form-item :label="$t('departmentName')" name="name">
-        <a-input v-model:value="editForm.name" :placeholder="$t('enterDepartmentName')">
+        <a-input
+          v-model:value="editForm.name"
+          :placeholder="$t('enterDepartmentName')"
+        >
           <template #prefix>
             <ApartmentOutlined />
           </template>
         </a-input>
       </a-form-item>
       <a-form-item :label="$t('manager')" name="managerId">
-        <a-select v-model:value="editForm.managerId" :placeholder="$t('selectManager')" :options="managerOptions"
+        <a-select
+          v-model:value="editForm.managerId"
+          :placeholder="$t('selectManager')"
+          :options="managerOptions"
           :loading="loading"
           show-search
           :filter-option="filterManagerOption"
-          >
+        >
           <template #suffixIcon>
             <UserOutlined />
           </template>
@@ -103,8 +159,15 @@
     </a-form>
   </a-modal>
 
-  <a-modal v-model:visible="warningModal" :title="$t('common.warning')" @ok="handleWarningOk" @cancel="handleWarningCancel" :ok-text="$t('common.continue')" :cancel-text="$t('common.cancel')">
-    <div style="color: #d46b08; font-weight: 500;">
+  <a-modal
+    v-model:visible="warningModal"
+    :title="$t('common.warning')"
+    @ok="handleWarningOk"
+    @cancel="handleWarningCancel"
+    :ok-text="$t('common.continue')"
+    :cancel-text="$t('common.cancel')"
+  >
+    <div style="color: #d46b08; font-weight: 500">
       {{ warningMessage }}
     </div>
   </a-modal>
@@ -115,7 +178,13 @@ import { ref, onMounted, computed } from "vue";
 import { useI18n } from "vue-i18n";
 import { message } from "ant-design-vue";
 import { useStore } from "vuex";
-import { ApartmentOutlined, UserOutlined, PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons-vue';
+import {
+  ApartmentOutlined,
+  UserOutlined,
+  PlusOutlined,
+  EditOutlined,
+  DeleteOutlined,
+} from "@ant-design/icons-vue";
 
 const { t } = useI18n();
 const store = useStore();
@@ -144,7 +213,7 @@ const filterManagerOption = (input, option) => {
   return option.label.toLowerCase().includes(input.toLowerCase());
 };
 
-const loading = computed(() => store.getters["loading/isLoading"]); // Sử dụng loading toàn cục
+const loading = computed(() => store.getters["loading/isLoading"]);
 
 const fetchManagers = async () => {
   await store.dispatch("loading/startLoading");
@@ -189,7 +258,7 @@ const editDepartment = (record) => {
     name: record.name,
     managerId: record.manager?.id || null,
   };
-  // Reset cảnh báo
+
   warningModal.value = false;
   warningMessage.value = "";
   warningPayload.value = null;
@@ -201,7 +270,7 @@ const closeEditModal = () => {
   showEditModal.value = false;
   editForm.value = { id: null, name: "", managerId: null };
   editFormRef.value?.resetFields();
-  // Reset cảnh báo
+
   warningModal.value = false;
   warningMessage.value = "";
   warningPayload.value = null;
@@ -219,7 +288,8 @@ const handleUpdateDepartment = async () => {
       },
     });
     if (res && res.warning) {
-      warningMessage.value = t('warning.' + res.warning) || t('warning.default');
+      warningMessage.value =
+        t("warning." + res.warning) || t("warning.default");
       warningPayload.value = {
         id: editForm.value.id,
         data: {
@@ -229,8 +299,8 @@ const handleUpdateDepartment = async () => {
         },
       };
       isEditMode.value = true;
-      showEditModal.value = false; // Đóng modal sửa trước
-      warningModal.value = true;   // Mở modal cảnh báo
+      showEditModal.value = false;
+      warningModal.value = true;
       return;
     }
     message.success(t("departmentUpdatedSuccess"));
@@ -251,7 +321,8 @@ const handleSubmit = async () => {
       managerId: form.value.managerId,
     });
     if (res && res.warning) {
-      warningMessage.value = t('warning.' + res.warning) || t('warning.default');
+      warningMessage.value =
+        t("warning." + res.warning) || t("warning.default");
       warningPayload.value = {
         name: form.value.name,
         managerId: form.value.managerId,
@@ -277,11 +348,17 @@ const handleWarningOk = async () => {
   await store.dispatch("loading/startLoading");
   try {
     if (isEditMode.value) {
-      await store.dispatch("departments/updateDepartment", warningPayload.value);
+      await store.dispatch(
+        "departments/updateDepartment",
+        warningPayload.value
+      );
       message.success(t("departmentUpdatedSuccess"));
       closeEditModal();
     } else {
-      await store.dispatch("departments/createDepartment", warningPayload.value);
+      await store.dispatch(
+        "departments/createDepartment",
+        warningPayload.value
+      );
       message.success(t("departmentCreatedSuccess"));
       form.value = { name: "", managerId: null };
       formRef.value?.resetFields();
@@ -297,7 +374,7 @@ const handleWarningOk = async () => {
 const handleWarningCancel = () => {
   warningModal.value = false;
   if (isEditMode.value) {
-    showEditModal.value = true; // Mở lại modal sửa nếu đang ở edit mode
+    showEditModal.value = true;
   }
   isEditMode.value = false;
 };
@@ -365,7 +442,8 @@ onMounted(async () => {
   align-items: center;
   gap: 6px;
 }
-.create-btn-modern:hover, .create-btn-modern:focus {
+.create-btn-modern:hover,
+.create-btn-modern:focus {
   background: #e6f7ff;
   color: #1677ff;
   border-color: #91d5ff;

@@ -8,6 +8,27 @@ import { Employee } from 'src/employees/entities/employee.entity';
 export class PolicyGuard implements CanActivate {
   constructor(private readonly reflector: Reflector) {}
 
+  // Helper: check if user has a permission (action, resource, scope)
+  private userHasPermission(user: Employee, action: string, resource: string, scope?: string): boolean {
+    if (!user || !user.roles) return false;
+    
+    // Get all permissions from all roles
+    const allPermissions = user.roles.flatMap(role => {
+      if (role && Array.isArray(role.permissions)) {
+        return role.permissions;
+      }
+      return [];
+    });
+    
+    // Check permission
+    return allPermissions.some(
+      (p) =>
+        p.action === action &&
+        p.resource === resource &&
+        (!scope || p.scope === scope)
+    );
+  }
+
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const policyMeta = this.reflector.get<{ policy: string; options?: any }>(
       POLICY_CHECK_KEY,
@@ -19,21 +40,18 @@ export class PolicyGuard implements CanActivate {
     const user: Employee = request.user;
     if (!user) return false;
 
-    // Ví dụ: kiểm tra user có phải là manager của phòng ban options.departmentId không
+    // Example: check if user is manager of department options.departmentId
     if (policy === 'isManagerOfDepartment') {
-      // Kiểm tra user có ít nhất 1 role là 'manager'
-      const userRoles = Array.isArray(user.roles)
-        ? user.roles.map((r: any) => (typeof r === 'string' ? r : r?.name))
-        : [];
-      if (!userRoles.includes('manager')) return false;
+      // Check if user has department management permission
+      if (!this.userHasPermission(user, 'view', 'kpi', 'department')) return false;
       if (options?.departmentId && user.departmentId !== options.departmentId)
         return false;
       return true;
     }
 
-    // Ví dụ: ABAC - kiểm tra user có phải là owner của resource không
+    // Example: ABAC - check if user is owner of resource
     if (policy === 'isOwner') {
-      // options.resourceUserIdField: tên trường userId của resource (ví dụ: createdBy, ownerId, ...)
+      // options.resourceUserIdField: name of userId field in resource (e.g., createdBy, ownerId, ...)
       const resource = request.resource || request.body || request.params;
       const userIdField = options?.resourceUserIdField || 'userId';
       const resourceUserId = resource?.[userIdField];
@@ -42,7 +60,7 @@ export class PolicyGuard implements CanActivate {
       return true;
     }
 
-    // Ví dụ: ABAC - kiểm tra user có thuộc cùng phòng ban với resource không
+    // Example: ABAC - check if user belongs to same department as resource
     if (policy === 'sameDepartment') {
       const resource = request.resource || request.body || request.params;
       const resourceDeptId = resource?.departmentId;
@@ -51,10 +69,10 @@ export class PolicyGuard implements CanActivate {
       return true;
     }
 
-    // Có thể mở rộng nhiều policy động khác ở đây
+    // Can extend more dynamic policies here
     // ...
 
-    // Nếu không match policy nào thì từ chối
+    // If no policy matches, deny access
     return false;
   }
 }

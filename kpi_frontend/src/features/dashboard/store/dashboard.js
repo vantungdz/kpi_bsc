@@ -1,6 +1,6 @@
 import apiClient from "@/core/services/api";
 import { notification } from "ant-design-vue";
-import store from "@/core/store"; // Để dispatch loading toàn cục
+import store from "@/core/store";
 
 const state = {
   kpiAwaitingApprovalStats: { total: 0, byLevel: [] },
@@ -27,7 +27,6 @@ const state = {
   kpiInventoryStats: null,
   kpiInventoryError: null,
 
-  // Thêm state cho báo cáo mục tiêu chiến lược
   objectiveStatusPerspectiveStats: null,
   objectiveStatusPerspectiveStatsError: null,
   objectiveProgressDistributionStats: null,
@@ -59,11 +58,14 @@ const getters = {
   getKpiInventoryStats: (state) => state.kpiInventoryStats,
   getKpiInventoryError: (state) => state.kpiInventoryError,
 
-  // Thêm getters cho báo cáo mục tiêu chiến lược
-  getObjectiveStatusPerspectiveStats: (state) => state.objectiveStatusPerspectiveStats,
-  getObjectiveStatusPerspectiveStatsError: (state) => state.objectiveStatusPerspectiveStatsError,
-  getObjectiveProgressDistributionStats: (state) => state.objectiveProgressDistributionStats,
-  getObjectiveProgressDistributionStatsError: (state) => state.objectiveProgressDistributionStatsError,
+  getObjectiveStatusPerspectiveStats: (state) =>
+    state.objectiveStatusPerspectiveStats,
+  getObjectiveStatusPerspectiveStatsError: (state) =>
+    state.objectiveStatusPerspectiveStatsError,
+  getObjectiveProgressDistributionStats: (state) =>
+    state.objectiveProgressDistributionStats,
+  getObjectiveProgressDistributionStatsError: (state) =>
+    state.objectiveProgressDistributionStatsError,
 };
 
 const actions = {
@@ -300,7 +302,9 @@ const actions = {
     commit("SET_OBJECTIVE_STATUS_PERSPECTIVE_STATS_ERROR", null);
     commit("SET_OBJECTIVE_STATUS_PERSPECTIVE_STATS", null);
     try {
-      const response = await apiClient.get("/strategic-objectives/stats/by-status-perspective");
+      const response = await apiClient.get(
+        "/strategic-objectives/stats/by-status-perspective"
+      );
       commit("SET_OBJECTIVE_STATUS_PERSPECTIVE_STATS", response.data || null);
       return response.data;
     } catch (error) {
@@ -324,8 +328,13 @@ const actions = {
     commit("SET_OBJECTIVE_PROGRESS_DISTRIBUTION_STATS_ERROR", null);
     commit("SET_OBJECTIVE_PROGRESS_DISTRIBUTION_STATS", null);
     try {
-      const response = await apiClient.get("/strategic-objectives/stats/progress-distribution");
-      commit("SET_OBJECTIVE_PROGRESS_DISTRIBUTION_STATS", response.data || null);
+      const response = await apiClient.get(
+        "/strategic-objectives/stats/progress-distribution"
+      );
+      commit(
+        "SET_OBJECTIVE_PROGRESS_DISTRIBUTION_STATS",
+        response.data || null
+      );
       return response.data;
     } catch (error) {
       const errorMsg =
@@ -401,7 +410,6 @@ const mutations = {
     state.kpiInventoryError = error;
   },
 
-  // Thêm mutations cho báo cáo mục tiêu chiến lược
   SET_OBJECTIVE_STATUS_PERSPECTIVE_STATS(state, stats) {
     state.objectiveStatusPerspectiveStats = stats;
   },

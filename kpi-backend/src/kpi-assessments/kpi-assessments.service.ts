@@ -1,7 +1,10 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { KpiValue, KpiValueStatus } from '../kpi-values/entities/kpi-value.entity';
+import {
+  KpiValue,
+  KpiValueStatus,
+} from '../kpi-values/entities/kpi-value.entity';
 import { KPIAssignment } from 'src/kpi-assessments/entities/kpi-assignment.entity';
 
 @Injectable()
@@ -16,11 +19,10 @@ export class KpiAssignmentsService {
   async getUserAssignedKpis(employeeId: number): Promise<KPIAssignment[]> {
     return this.kpiAssignmentRepository.find({
       where: { employee_id: employeeId },
-      relations: ['kpi', 'kpi.assignments'], // Include related KPI details if needed
+      relations: ['kpi', 'kpi.assignments'],
     });
   }
 
-  // Nhân viên cập nhật target và submit
   async submitTarget(
     assignmentId: number,
     target: number,
@@ -41,7 +43,6 @@ export class KpiAssignmentsService {
     return this.kpiAssignmentRepository.save(assignment);
   }
 
-  // Lấy danh sách KPI đã phê duyệt
   async getApprovedKpiValues(): Promise<KpiValue[]> {
     return this.kpiValueRepository.find({
       where: { status: KpiValueStatus.APPROVED },

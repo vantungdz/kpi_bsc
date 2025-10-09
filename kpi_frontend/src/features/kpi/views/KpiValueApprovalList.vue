@@ -26,25 +26,29 @@
             <template v-if="column.key === 'kpiName'">
               <a-tooltip :title="record.kpiAssignment?.kpi?.name">
                 <span>
-                  <trophy-two-tone style="font-size: 1em; margin-right: 4px; color: #409eff;" />
-                  {{ record.kpiAssignment?.kpi?.name || $t('unknownKpiName') }}
+                  <trophy-two-tone
+                    style="font-size: 1em; margin-right: 4px; color: #409eff"
+                  />
+                  {{ record.kpiAssignment?.kpi?.name || $t("unknownKpiName") }}
                 </span>
               </a-tooltip>
             </template>
 
             <template v-else-if="column.key === 'employee'">
               <span>
-                <user-outlined style="margin-right: 4px; color: #b37feb;" />
-                {{ record.kpiAssignment?.employee?.first_name || '' }}
-                {{ record.kpiAssignment?.employee?.last_name || '' }}
-                ({{ record.kpiAssignment?.employee?.username || '' }})
+                <user-outlined style="margin-right: 4px; color: #b37feb" />
+                {{ record.kpiAssignment?.employee?.first_name || "" }}
+                {{ record.kpiAssignment?.employee?.last_name || "" }}
+                ({{ record.kpiAssignment?.employee?.username || "" }})
               </span>
             </template>
 
             <template v-else-if="column.key === 'value'">
               <span>
-                <calculator-outlined style="margin-right: 4px; color: #faad14;" />
-                {{ record.value?.toLocaleString() ?? '' }}
+                <calculator-outlined
+                  style="margin-right: 4px; color: #faad14"
+                />
+                {{ record.value?.toLocaleString() ?? "" }}
                 <span v-if="record.kpiAssignment?.kpi?.unit">
                   {{ record.kpiAssignment.kpi.unit }}
                 </span>
@@ -52,8 +56,13 @@
             </template>
 
             <template v-else-if="column.key === 'target'">
-              <span v-if="record.kpiAssignment?.targetValue !== null && record.kpiAssignment?.targetValue !== undefined">
-                <flag-two-tone style="margin-right: 4px; color: #52c41a;" />
+              <span
+                v-if="
+                  record.kpiAssignment?.targetValue !== null &&
+                  record.kpiAssignment?.targetValue !== undefined
+                "
+              >
+                <flag-two-tone style="margin-right: 4px; color: #52c41a" />
                 {{ Number(record.kpiAssignment.targetValue)?.toLocaleString() }}
                 <span v-if="record.kpiAssignment?.kpi?.unit">
                   {{ record.kpiAssignment.kpi.unit }}
@@ -63,20 +72,36 @@
             </template>
 
             <template v-else-if="column.key === 'submittedAt'">
-              <clock-circle-two-tone style="margin-right: 4px; color: #1890ff;" />
-              {{ formatDate(record.timestamp || record.updated_at || record.created_at) }}
+              <clock-circle-two-tone
+                style="margin-right: 4px; color: #1890ff"
+              />
+              {{
+                formatDate(
+                  record.timestamp || record.updated_at || record.created_at
+                )
+              }}
             </template>
 
             <template v-else-if="column.key === 'notes'">
               <a-tooltip :title="record.notes">
-                <file-text-outlined style="margin-right: 4px; color: #13c2c2;" />
+                <file-text-outlined style="margin-right: 4px; color: #13c2c2" />
                 <span>{{ truncateText(record.notes, 50) }}</span>
               </a-tooltip>
             </template>
 
             <template v-else-if="column.key === 'status'">
-              <a-tag :color="getValueStatusColor(record.status)" class="status-tag">
-                <component :is="statusIcon(record.status)" style="margin-right: 6px; font-size: 1.1em; vertical-align: middle;" />
+              <a-tag
+                :color="getValueStatusColor(record.status)"
+                class="status-tag"
+              >
+                <component
+                  :is="statusIcon(record.status)"
+                  style="
+                    margin-right: 6px;
+                    font-size: 1.1em;
+                    vertical-align: middle;
+                  "
+                />
                 {{ getValueStatusText(record.status) }}
               </a-tag>
             </template>
@@ -90,7 +115,7 @@
                   :title="$t('viewDetailsAndHistory')"
                   class="icon-btn"
                 >
-                  <eye-outlined /> {{ $t('details') }}
+                  <eye-outlined /> {{ $t("details") }}
                 </a-button>
                 <a-button
                   type="primary"
@@ -102,7 +127,8 @@
                   v-if="canApproveKpiValue"
                   class="icon-btn"
                 >
-                  <check-circle-two-tone two-tone-color="#52c41a" /> {{ $t('approve') }}
+                  <check-circle-two-tone two-tone-color="#52c41a" />
+                  {{ $t("approve") }}
                 </a-button>
                 <a-button
                   danger
@@ -113,7 +139,8 @@
                   v-if="canRejectKpiValue"
                   class="icon-btn"
                 >
-                  <close-circle-two-tone two-tone-color="#ff4d4f" /> {{ $t('reject') }}
+                  <close-circle-two-tone two-tone-color="#ff4d4f" />
+                  {{ $t("reject") }}
                 </a-button>
               </a-space>
             </template>
@@ -125,7 +152,7 @@
           :description="$t('noPendingItems')"
         >
           <template #image>
-            <frown-two-tone style="font-size: 3em; color: #bfbfbf;" />
+            <frown-two-tone style="font-size: 3em; color: #bfbfbf" />
           </template>
         </a-empty>
       </a-spin>
@@ -420,14 +447,12 @@ const cardTitle = computed(() => {
 
 // Card title with icon
 const cardTitleWithIcon = computed(() =>
-  h(
-    'span',
-    { style: 'display: flex; align-items: center; gap: 8px;' },
-    [
-      h(TrophyTwoTone, { style: 'font-size: 1.4em; color: #409eff; marginRight: "6px"' }),
-      cardTitle.value
-    ]
-  )
+  h("span", { style: "display: flex; align-items: center; gap: 8px;" }, [
+    h(TrophyTwoTone, {
+      style: 'font-size: 1.4em; color: #409eff; marginRight: "6px"',
+    }),
+    cardTitle.value,
+  ])
 );
 
 // Permission-related computed properties
@@ -440,18 +465,31 @@ function hasPermission(action, resource, scope) {
       (scope ? p.scope === scope : true)
   );
 }
-const canApproveKpiValue = computed(
-  () =>
-    ['section', 'department', 'manager'].some(scope =>
-      hasPermission(RBAC_ACTIONS.APPROVE, RBAC_RESOURCES.KPI_VALUE, scope)
-    )
-);
-const canRejectKpiValue = computed(
-  () =>
-    ['section', 'department', 'manager'].some(scope =>
-      hasPermission(RBAC_ACTIONS.REJECT, RBAC_RESOURCES.KPI_VALUE, scope)
-    )
-);
+const canApproveKpiValue = computed(() => {
+  // Check if user has any approval permission for KPI values
+  return (
+    hasPermission(RBAC_ACTIONS.APPROVE, RBAC_RESOURCES.KPI_VALUE, "section") ||
+    hasPermission(
+      RBAC_ACTIONS.APPROVE,
+      RBAC_RESOURCES.KPI_VALUE,
+      "department"
+    ) ||
+    hasPermission(RBAC_ACTIONS.APPROVE, RBAC_RESOURCES.KPI_VALUE, "manager")
+  );
+});
+
+const canRejectKpiValue = computed(() => {
+  // Check if user has any rejection permission for KPI values
+  return (
+    hasPermission(RBAC_ACTIONS.REJECT, RBAC_RESOURCES.KPI_VALUE, "section") ||
+    hasPermission(
+      RBAC_ACTIONS.REJECT,
+      RBAC_RESOURCES.KPI_VALUE,
+      "department"
+    ) ||
+    hasPermission(RBAC_ACTIONS.REJECT, RBAC_RESOURCES.KPI_VALUE, "manager")
+  );
+});
 
 // Table columns definitions extracted outside component logic
 const columns = computed(() => [
@@ -508,7 +546,12 @@ const columns = computed(() => [
 
 const historyColumns = computed(() => [
   { title: $t("timestamp"), key: "timestamp", width: 140 },
-  { title: $t("common.actions"), dataIndex: "action", key: "action", width: 180 },
+  {
+    title: $t("common.actions"),
+    dataIndex: "action",
+    key: "action",
+    width: 180,
+  },
   {
     title: $t("value"),
     dataIndex: "value",
@@ -575,16 +618,16 @@ const getValueStatusColor = (status) => {
 
 // Status icon mapping
 const statusIcon = (status) => {
-  switch ((status || '').toLowerCase()) {
-    case 'pending_section_approval':
+  switch ((status || "").toLowerCase()) {
+    case "pending_section_approval":
       return SyncOutlined;
-    case 'pending_dept_approval':
+    case "pending_dept_approval":
       return SyncOutlined;
-    case 'pending_manager_approval':
+    case "pending_manager_approval":
       return SyncOutlined;
-    case 'approved':
+    case "approved":
       return SmileTwoTone;
-    case 'rejected':
+    case "rejected":
       return ExclamationCircleTwoTone;
     default:
       return ExclamationCircleTwoTone;

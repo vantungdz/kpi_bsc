@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { KpiFormula } from './entities/kpi-formula.entity';
@@ -25,7 +29,9 @@ export class KpiFormulaService {
     if (data.code) {
       const existed = await this.formulaRepo.findOneBy({ code: data.code });
       if (existed) {
-        throw new BadRequestException('Mã công thức đã tồn tại. Vui lòng chọn mã khác.');
+        throw new BadRequestException(
+          'Mã công thức đã tồn tại. Vui lòng chọn mã khác.',
+        );
       }
     }
     if (data.expression) {
@@ -39,7 +45,9 @@ export class KpiFormulaService {
     if (data.code) {
       const existed = await this.formulaRepo.findOneBy({ code: data.code });
       if (existed && existed.id !== id) {
-        throw new BadRequestException('Mã công thức đã tồn tại. Vui lòng chọn mã khác.');
+        throw new BadRequestException(
+          'Mã công thức đã tồn tại. Vui lòng chọn mã khác.',
+        );
       }
     }
     if (data.expression) {
@@ -55,10 +63,8 @@ export class KpiFormulaService {
     await this.formulaRepo.remove(formula);
   }
 
-  // Validate expression với mathjs
   private validateFormulaExpression(expression: string) {
     try {
-      // Dùng biến mẫu phổ biến cho KPI
       const scope = {
         values: [1, 2, 3],
         targets: [1, 2, 3],

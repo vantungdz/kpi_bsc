@@ -17,11 +17,11 @@ export class RolesGuard implements CanActivate {
     if (!user) {
       return false;
     }
-    // Chuẩn hóa: user.roles có thể là ["kpi:manager:company", ...]
+    // Normalize: user.roles can be ["kpi:manager:company", ...]
     const userRoles: string[] = Array.isArray(user.roles)
       ? user.roles.map((r: any) => (typeof r === 'string' ? r : r?.name))
       : [];
-    // So khớp động: chỉ cần user có 1 role trùng với requiredRoles
+    // Dynamic matching: user only needs 1 role matching requiredRoles
     return userRoles.some((role) => requiredRoles.includes(role));
   }
 }

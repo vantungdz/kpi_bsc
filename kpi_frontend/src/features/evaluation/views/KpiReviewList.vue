@@ -1,26 +1,43 @@
 <template>
   <div class="kpi-review-list" v-if="canViewKpiReview">
     <h2 class="kpi-title">
-      <span style="display: flex; align-items: center; gap: 8px;">
-        <icon-trophy-two-tone style="font-size: 1.6em; color: #409eff; margin-right: 6px;" />
+      <span style="display: flex; align-items: center; gap: 8px">
+        <icon-trophy-two-tone
+          style="font-size: 1.6em; color: #409eff; margin-right: 6px"
+        />
         {{ $t("kpiReviewListTitle") }}
       </span>
     </h2>
     <div class="filters modern-filters">
-      <a-input-group compact style="display: flex; gap: 12px; width: 100%;">
-        <a-select v-model:value="selectedCycle" :options="cycleOptions" :placeholder="$t('selectCycle')"
-          class="modern-filter-input" style="flex: 1; min-width: 160px;">
+      <a-input-group compact style="display: flex; gap: 12px; width: 100%">
+        <a-select
+          v-model:value="selectedCycle"
+          :options="cycleOptions"
+          :placeholder="$t('selectCycle')"
+          class="modern-filter-input"
+          style="flex: 1; min-width: 160px"
+        >
           <template #suffixIcon>
             <icon-calendar-outlined />
           </template>
         </a-select>
-        <a-select v-model:value="selectedStatus" :options="statusOptions" :placeholder="$t('reviewStatus')"
-          class="modern-filter-input" style="flex: 1; min-width: 160px;">
+        <a-select
+          v-model:value="selectedStatus"
+          :options="statusOptions"
+          :placeholder="$t('reviewStatus')"
+          class="modern-filter-input"
+          style="flex: 1; min-width: 160px"
+        >
           <template #suffixIcon>
             <icon-filter-outlined />
           </template>
         </a-select>
-        <a-input v-model:value="searchText" :placeholder="$t('searchKpiEmployee')" class="modern-filter-input" style="flex: 2; min-width: 180px;">
+        <a-input
+          v-model:value="searchText"
+          :placeholder="$t('searchKpiEmployee')"
+          class="modern-filter-input"
+          style="flex: 2; min-width: 180px"
+        >
           <template #prefix>
             <icon-search-outlined />
           </template>
@@ -28,25 +45,57 @@
       </a-input-group>
     </div>
     <div class="modern-table-wrapper">
-      <a-table :columns="columns" :data-source="normalizedReviews" row-key="id" :loading="loading" bordered
-        class="modern-table" style="margin-top: 24px" :pagination="{ pageSize: 10, showSizeChanger: true }">
+      <a-table
+        :columns="columns"
+        :data-source="normalizedReviews"
+        row-key="id"
+        :loading="loading"
+        bordered
+        class="modern-table"
+        style="margin-top: 24px"
+        :pagination="{ pageSize: 10, showSizeChanger: true }"
+      >
         <template #bodyCell="slotProps">
-          <template v-if="slotProps.column && slotProps.column.key === 'actions'">
+          <template
+            v-if="slotProps.column && slotProps.column.key === 'actions'"
+          >
             <a-tooltip :title="$t('review')" v-if="canReview">
-              <a-button type="primary" size="small" @click="openReviewForm(slotProps.record.raw)" class="action-btn icon-btn">
+              <a-button
+                type="primary"
+                size="small"
+                @click="openReviewForm(slotProps.record.raw)"
+                class="action-btn icon-btn"
+              >
                 <icon-edit-outlined />
               </a-button>
             </a-tooltip>
             <a-tooltip :title="$t('reviewHistory')">
-              <a-button type="default" size="small" @click="viewHistory(slotProps.record.raw)" class="action-btn icon-btn">
+              <a-button
+                type="default"
+                size="small"
+                @click="viewHistory(slotProps.record.raw)"
+                class="action-btn icon-btn"
+              >
                 <icon-history-outlined />
               </a-button>
             </a-tooltip>
           </template>
-          <template v-else-if="slotProps.column && slotProps.column.key === 'status'">
-            <span v-if="slotProps.record.status" :class="['status-tag', slotProps.record.status.toLowerCase()]">
-              <component :is="statusIcon(slotProps.record.status)" style="margin-right: 6px; font-size: 1.1em; vertical-align: middle;" />
-              {{ $t('statusReview.' + slotProps.record.status.toLowerCase()) }}
+          <template
+            v-else-if="slotProps.column && slotProps.column.key === 'status'"
+          >
+            <span
+              v-if="slotProps.record.status"
+              :class="['status-tag', slotProps.record.status.toLowerCase()]"
+            >
+              <component
+                :is="statusIcon(slotProps.record.status)"
+                style="
+                  margin-right: 6px;
+                  font-size: 1.1em;
+                  vertical-align: middle;
+                "
+              />
+              {{ $t("statusReview." + slotProps.record.status.toLowerCase()) }}
             </span>
           </template>
           <template v-else>
@@ -55,10 +104,22 @@
         </template>
       </a-table>
     </div>
-    <ReviewFormModal v-if="showReviewForm" :review="selectedReview" :visible="showReviewForm" @close="closeReviewForm"
-      @saved="onReviewSaved" @show-history="onShowHistoryFromModal" modal-class="modern-modal" />
-    <ReviewHistoryModal v-if="showHistory" :review="selectedReview" :visible="showHistory" @close="closeHistory"
-      class="modern-modal" />
+    <ReviewFormModal
+      v-if="showReviewForm"
+      :review="selectedReview"
+      :visible="showReviewForm"
+      @close="closeReviewForm"
+      @saved="onReviewSaved"
+      @show-history="onShowHistoryFromModal"
+      modal-class="modern-modal"
+    />
+    <ReviewHistoryModal
+      v-if="showHistory"
+      :review="selectedReview"
+      :visible="showHistory"
+      @close="closeHistory"
+      class="modern-modal"
+    />
   </div>
 </template>
 
@@ -73,7 +134,7 @@ import ReviewHistoryModal from "./ReviewHistoryModal.vue";
 import { useI18n } from "vue-i18n";
 import { useStore } from "vuex";
 import { RBAC_ACTIONS, RBAC_RESOURCES } from "@/core/constants/rbac.constants";
-// Ant Design Vue icons
+
 import {
   TrophyTwoTone as IconTrophyTwoTone,
   CalendarOutlined as IconCalendarOutlined,
@@ -88,7 +149,7 @@ import {
   UserSwitchOutlined as IconUserSwitchOutlined,
   UserOutlined as IconUserOutlined,
   ExclamationCircleTwoTone as IconExclamationCircleTwoTone,
-} from '@ant-design/icons-vue';
+} from "@ant-design/icons-vue";
 
 const { t } = useI18n();
 
@@ -109,7 +170,7 @@ const statusOptions = [
   { label: t("completed"), value: "COMPLETED" },
 ];
 const manualSearch = ref(false);
-const lastModal = ref(null); // 'review' hoặc 'history'
+const lastModal = ref(null);
 
 const columns = computed(() => [
   { title: t("kpiName"), key: "kpiName", dataIndex: "kpiName" },
@@ -132,7 +193,9 @@ const filteredReviews = computed(() => {
     data = data.filter(
       (r) =>
         r.kpi?.name?.toLowerCase().includes(s) ||
-        (`${r.employee?.first_name || ''} ${r.employee?.last_name || ''}`.toLowerCase().includes(s))
+        `${r.employee?.first_name || ""} ${r.employee?.last_name || ""}`
+          .toLowerCase()
+          .includes(s)
     );
   }
   return data;
@@ -143,34 +206,40 @@ const normalizedReviews = computed(() => {
     id: r.id,
     kpiName: r.kpi.name || "",
     employee: `${r.employee?.first_name} ${r.employee?.last_name}` || "",
-    targetValue: `${Number(r.targetValue).toLocaleString()} ${r.kpi.unit}` ?? "",
-    actualValue: `${Number(r.actualValue).toLocaleString()} ${r.kpi.unit}` ?? "",
+    targetValue:
+      `${Number(r.targetValue).toLocaleString()} ${r.kpi.unit}` ?? "",
+    actualValue:
+      `${Number(r.actualValue).toLocaleString()} ${r.kpi.unit}` ?? "",
     status: r.status || "",
-    score: `${Number(r.score).toLocaleString()} `?? "",
-    raw: r, // giữ lại bản gốc để truyền cho modal nếu cần
+    score: `${Number(r.score).toLocaleString()} ` ?? "",
+    raw: r,
   }));
 });
 
 const fetchReviews = async () => {
   store.dispatch("loading/startLoading");
   try {
-    console.log('[KPI Review] fetchReviews selectedCycle:', selectedCycle.value, 'selectedStatus:', selectedStatus.value);
+    console.log(
+      "[KPI Review] fetchReviews selectedCycle:",
+      selectedCycle.value,
+      "selectedStatus:",
+      selectedStatus.value
+    );
     const params = {
       cycle: selectedCycle.value,
-      status: selectedStatus.value
+      status: selectedStatus.value,
     };
-    // Chỉ truyền search nếu bấm nút search
+
     if (searchText.value && manualSearch.value) {
       params.search = searchText.value;
     }
-    console.log('[KPI Review] Params gửi lên API:', params); // Thêm log debug
+    console.log("[KPI Review] Params gửi lên API:", params);
     const res = await getKpiReviewList(params);
     reviews.value = res;
   } finally {
     store.dispatch("loading/stopLoading");
   }
 };
-
 
 const fetchCycles = async () => {
   const res = await getReviewCycles();
@@ -180,7 +249,7 @@ const fetchCycles = async () => {
 const openReviewForm = (review) => {
   selectedReview.value = review;
   showReviewForm.value = true;
-  lastModal.value = 'review';
+  lastModal.value = "review";
 };
 const closeReviewForm = () => {
   showReviewForm.value = false;
@@ -194,12 +263,12 @@ const onReviewSaved = () => {
 const viewHistory = (review) => {
   selectedReview.value = review;
   showHistory.value = true;
-  lastModal.value = 'history';
+  lastModal.value = "history";
 };
 const closeHistory = () => {
   showHistory.value = false;
-  // Nếu vừa chuyển từ modal review sang thì mở lại modal review
-  if (lastModal.value === 'review') {
+
+  if (lastModal.value === "review") {
     showReviewForm.value = true;
     lastModal.value = null;
   } else {
@@ -211,7 +280,7 @@ const closeHistory = () => {
 const onShowHistoryFromModal = () => {
   showReviewForm.value = false;
   showHistory.value = true;
-  lastModal.value = 'review';
+  lastModal.value = "review";
 };
 
 const store = useStore();
@@ -227,43 +296,53 @@ function hasPermission(action, resource, scopes) {
       (scopes[0] ? scopes.includes(p.scope) : true)
   );
 }
-const canViewKpiReview = computed(() =>
-  hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.KPI_REVIEW, ['section', 'department', 'manager'])
-);
-const canReview = computed(() =>
-  hasPermission(RBAC_ACTIONS.APPROVE, RBAC_RESOURCES.KPI_REVIEW, ['section', 'department', 'manager'])
-);
+const canViewKpiReview = computed(() => {
+  return (
+    hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.KPI_REVIEW, "section") ||
+    hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.KPI_REVIEW, "department") ||
+    hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.KPI_REVIEW, "manager")
+  );
+});
 
-// Status icon mapping
+const canReview = computed(() => {
+  return (
+    hasPermission(RBAC_ACTIONS.APPROVE, RBAC_RESOURCES.KPI_REVIEW, "section") ||
+    hasPermission(
+      RBAC_ACTIONS.APPROVE,
+      RBAC_RESOURCES.KPI_REVIEW,
+      "department"
+    ) ||
+    hasPermission(RBAC_ACTIONS.APPROVE, RBAC_RESOURCES.KPI_REVIEW, "manager")
+  );
+});
+
 const statusIcon = (status) => {
-  switch ((status || '').toLowerCase()) {
-    case 'pending':
+  switch ((status || "").toLowerCase()) {
+    case "pending":
       return IconClockCircleTwoTone;
-    case 'self_reviewed':
+    case "self_reviewed":
       return IconUserOutlined;
-    case 'section_reviewed':
+    case "section_reviewed":
       return IconUserSwitchOutlined;
-    case 'department_reviewed':
+    case "department_reviewed":
       return IconSyncOutlined;
-    case 'manager_reviewed':
+    case "manager_reviewed":
       return IconCheckCircleTwoTone;
-    case 'awaitingemployeefeedback':
-    case 'employee_feedback':
+    case "awaitingemployeefeedback":
+    case "employee_feedback":
       return IconSmileTwoTone;
-    case 'completed':
+    case "completed":
       return IconCheckCircleTwoTone;
     default:
       return IconExclamationCircleTwoTone;
   }
 };
 
-// Đảm bảo fetchReviews chỉ gọi sau khi fetchCycles xong
 onMounted(async () => {
-  console.log('[KPI Review] onMounted');
+  console.log("[KPI Review] onMounted");
   await fetchCycles();
   fetchReviews();
 });
-
 </script>
 
 <style scoped>

@@ -180,18 +180,22 @@ export class KpiValuesService {
 
         let initialStatusAfterSubmit: KpiValueStatus;
 
-        // Lấy danh sách role name
-        const userRoles: string[] = Array.isArray(submitter.roles)
-          ? submitter.roles.map((r: any) =>
-              typeof r === 'string' ? r : r?.name,
-            )
-          : [];
-        // Ưu tiên quyền cao nhất
-        if (userRoles.includes('admin') || userRoles.includes('manager')) {
+        if (
+          this.userHasPermission(submitter, 'kpi-value', 'approve', 'manager')
+        ) {
           initialStatusAfterSubmit = KpiValueStatus.APPROVED;
-        } else if (userRoles.includes('department')) {
+        } else if (
+          this.userHasPermission(
+            submitter,
+            'kpi-value',
+            'approve',
+            'department',
+          )
+        ) {
           initialStatusAfterSubmit = KpiValueStatus.PENDING_MANAGER_APPROVAL;
-        } else if (userRoles.includes('section')) {
+        } else if (
+          this.userHasPermission(submitter, 'kpi-value', 'approve', 'section')
+        ) {
           initialStatusAfterSubmit = KpiValueStatus.PENDING_DEPT_APPROVAL;
         } else {
           initialStatusAfterSubmit = KpiValueStatus.PENDING_SECTION_APPROVAL;
@@ -321,14 +325,15 @@ export class KpiValuesService {
         `Cannot perform Section Approval on value with status '${kpiValue.status}'. Expected '${KpiValueStatus.PENDING_SECTION_APPROVAL}'.`,
       );
     }
-    // Quyết định trạng thái tiếp theo
-    const userRoles: string[] = Array.isArray(user.roles)
-      ? user.roles.map((r: any) => (typeof r === 'string' ? r : r?.name))
-      : [];
-    const newStatus =
-      userRoles.includes('manager') || userRoles.includes('admin')
-        ? KpiValueStatus.APPROVED
-        : KpiValueStatus.PENDING_DEPT_APPROVAL;
+
+    const newStatus = this.userHasPermission(
+      user,
+      'kpi-value',
+      'approve',
+      'manager',
+    )
+      ? KpiValueStatus.APPROVED
+      : KpiValueStatus.PENDING_DEPT_APPROVAL;
     kpiValue.status = newStatus;
     kpiValue.updated_at = new Date();
     kpiValue.updated_by = userId;
@@ -425,16 +430,15 @@ export class KpiValuesService {
     if (!reason || reason.trim() === '') {
       throw new BadRequestException('Rejection reason is required.');
     }
-    // Quyết định trạng thái tiếp theo
-    const userRoles: string[] = Array.isArray(user.roles)
-      ? user.roles.map((r: any) => (typeof r === 'string' ? r : r?.name))
-      : [];
+
     let newStatus: KpiValueStatus;
     let logAction: string;
-    if (userRoles.includes('admin') || userRoles.includes('manager')) {
+    if (this.userHasPermission(user, 'kpi-value', 'reject', 'manager')) {
       newStatus = KpiValueStatus.REJECTED_BY_MANAGER;
       logAction = 'REJECT_MANAGER';
-    } else if (userRoles.includes('department')) {
+    } else if (
+      this.userHasPermission(user, 'kpi-value', 'reject', 'department')
+    ) {
       newStatus = KpiValueStatus.REJECTED_BY_DEPT;
       logAction = 'REJECT_DEPT';
     } else {
@@ -459,8 +463,11 @@ export class KpiValuesService {
       .where('assignment.id = :id', { id: rejectedValue.kpi_assigment_id })
       .getOne();
     if (!assignmentFound) {
-      console.error('No assignment found for ID:', rejectedValue.kpi_assigment_id);
-    } 
+      console.error(
+        'No assignment found for ID:',
+        rejectedValue.kpi_assigment_id,
+      );
+    }
     if (assignmentFound && assignmentFound.employee_id) {
       this.eventEmitter.emit('kpi_value.rejected_by_user', {
         kpiValue: rejectedValue,
@@ -513,13 +520,15 @@ export class KpiValuesService {
         `Cannot perform Department Approval on value with status '${kpiValue.status}'. Expected '${KpiValueStatus.PENDING_DEPT_APPROVAL}' or lower.`,
       );
     }
-    const userRoles: string[] = Array.isArray(user.roles)
-      ? user.roles.map((r: any) => (typeof r === 'string' ? r : r?.name))
-      : [];
-    const newStatus =
-      userRoles.includes('manager') || userRoles.includes('admin')
-        ? KpiValueStatus.APPROVED
-        : KpiValueStatus.PENDING_MANAGER_APPROVAL;
+
+    const newStatus = this.userHasPermission(
+      user,
+      'kpi-value',
+      'approve',
+      'manager',
+    )
+      ? KpiValueStatus.APPROVED
+      : KpiValueStatus.PENDING_MANAGER_APPROVAL;
     kpiValue.status = newStatus;
     kpiValue.updated_at = new Date();
     kpiValue.updated_by = userId;
@@ -623,15 +632,15 @@ export class KpiValuesService {
     if (!reason || reason.trim() === '') {
       throw new BadRequestException('Rejection reason is required.');
     }
-    const userRoles: string[] = Array.isArray(user.roles)
-      ? user.roles.map((r: any) => (typeof r === 'string' ? r : r?.name))
-      : [];
+
     let newStatus: KpiValueStatus;
     let logAction: string;
-    if (userRoles.includes('admin') || userRoles.includes('manager')) {
+    if (this.userHasPermission(user, 'kpi-value', 'reject', 'manager')) {
       newStatus = KpiValueStatus.REJECTED_BY_MANAGER;
       logAction = 'REJECT_MANAGER';
-    } else if (userRoles.includes('department')) {
+    } else if (
+      this.userHasPermission(user, 'kpi-value', 'reject', 'department')
+    ) {
       newStatus = KpiValueStatus.REJECTED_BY_DEPT;
       logAction = 'REJECT_DEPT';
     } else {
@@ -656,8 +665,11 @@ export class KpiValuesService {
       .where('assignment.id = :id', { id: rejectedValue.kpi_assigment_id })
       .getOne();
     if (!assignmentFound) {
-      console.error('No assignment found for ID:', rejectedValue.kpi_assigment_id);
-    } 
+      console.error(
+        'No assignment found for ID:',
+        rejectedValue.kpi_assigment_id,
+      );
+    }
     if (assignmentFound && assignmentFound.employee_id) {
       this.eventEmitter.emit('kpi_value.rejected_by_user', {
         kpiValue: rejectedValue,
@@ -797,12 +809,10 @@ export class KpiValuesService {
     if (!reason || reason.trim() === '') {
       throw new BadRequestException('Rejection reason is required.');
     }
-    const userRoles: string[] = Array.isArray(user.roles)
-      ? user.roles.map((r: any) => (typeof r === 'string' ? r : r?.name))
-      : [];
+
     let newStatus: KpiValueStatus;
     let logAction: string;
-    if (userRoles.includes('admin') || userRoles.includes('manager')) {
+    if (this.userHasPermission(user, 'kpi-value', 'reject', 'manager')) {
       newStatus = KpiValueStatus.REJECTED_BY_MANAGER;
       logAction = 'REJECT_MANAGER';
     } else {
@@ -840,43 +850,46 @@ export class KpiValuesService {
     return rejectedValue;
   }
 
-  async approveKpiReview(
-    id: number,
-    approverRoles: string[],
-  ): Promise<KpiValue> {
+  async approveKpiReview(id: number, approver: Employee): Promise<KpiValue> {
     const kpiValue = await this.findOne(id);
     if (!kpiValue) {
       throw new NotFoundException(`KPI Value with ID ${id} not found.`);
     }
-    // Ưu tiên quyền cao nhất
-    if (approverRoles.includes('admin') || approverRoles.includes('manager')) {
+
+    if (this.userHasPermission(approver, 'kpi-value', 'approve', 'manager')) {
       kpiValue.status = KpiValueStatus.APPROVED;
-    } else if (approverRoles.includes('department')) {
+    } else if (
+      this.userHasPermission(approver, 'kpi-value', 'approve', 'department')
+    ) {
       kpiValue.status = KpiValueStatus.PENDING_MANAGER_APPROVAL;
-    } else if (approverRoles.includes('section')) {
+    } else if (
+      this.userHasPermission(approver, 'kpi-value', 'approve', 'section')
+    ) {
       kpiValue.status = KpiValueStatus.PENDING_DEPT_APPROVAL;
     } else {
-      throw new BadRequestException('Invalid approver role.');
+      throw new BadRequestException('Invalid approver permission.');
     }
     return await this.kpiValuesRepository.save(kpiValue);
   }
 
-  async rejectKpiReview(
-    id: number,
-    approverRoles: string[],
-  ): Promise<KpiValue> {
+  async rejectKpiReview(id: number, approver: Employee): Promise<KpiValue> {
     const kpiValue = await this.findOne(id);
     if (!kpiValue) {
       throw new NotFoundException(`KPI Value with ID ${id} not found.`);
     }
-    if (approverRoles.includes('admin') || approverRoles.includes('manager')) {
+
+    if (this.userHasPermission(approver, 'kpi-value', 'reject', 'manager')) {
       kpiValue.status = KpiValueStatus.REJECTED_BY_MANAGER;
-    } else if (approverRoles.includes('department')) {
+    } else if (
+      this.userHasPermission(approver, 'kpi-value', 'reject', 'department')
+    ) {
       kpiValue.status = KpiValueStatus.REJECTED_BY_DEPT;
-    } else if (approverRoles.includes('section')) {
+    } else if (
+      this.userHasPermission(approver, 'kpi-value', 'reject', 'section')
+    ) {
       kpiValue.status = KpiValueStatus.REJECTED_BY_SECTION;
     } else {
-      throw new BadRequestException('Invalid approver role.');
+      throw new BadRequestException('Invalid approver permission.');
     }
     return await this.kpiValuesRepository.save(kpiValue);
   }
@@ -925,10 +938,14 @@ export class KpiValuesService {
     return kpiValue;
   }
 
-  // Helper: check if user has a permission (resource, action, scope)
-  private userHasPermission(user: Employee, resource: string, action: string, scope?: string): boolean {
+  private userHasPermission(
+    user: Employee,
+    resource: string,
+    action: string,
+    scope?: string,
+  ): boolean {
     if (!user || !user.roles) return false;
-    // Each role may have permissions array
+
     for (const role of user.roles) {
       if (role && Array.isArray(role.permissions)) {
         if (
@@ -936,7 +953,7 @@ export class KpiValuesService {
             (p) =>
               p.resource === resource &&
               p.action === action &&
-              (!scope || p.scope === scope)
+              (!scope || p.scope === scope),
           )
         ) {
           return true;
@@ -946,7 +963,6 @@ export class KpiValuesService {
     return false;
   }
 
-  // Helper kiểm tra quyền động resource:action:scope (RBAC)
   private async hasDynamicRole(
     user: Employee,
     resource: string,
@@ -955,9 +971,9 @@ export class KpiValuesService {
     assignment?: any,
   ): Promise<boolean> {
     if (!user || !user.roles) return false;
-    // Check permission via RBAC
+
     if (this.userHasPermission(user, resource, action, scope)) return true;
-    // Optionally, fallback to assignment-based checks for legacy support
+
     if (scope === 'section') {
       return (
         this.userHasPermission(user, resource, action, 'section') &&
@@ -1018,14 +1034,41 @@ export class KpiValuesService {
   }
 
   async getPendingApprovals(user: Employee): Promise<KpiValue[]> {
-    if (!user || !user.roles || !Array.isArray(user.roles) || user.roles.length === 0) {
-      throw new UnauthorizedException('Invalid user data for fetching pending approvals.');
+    if (
+      !user ||
+      !user.roles ||
+      !Array.isArray(user.roles) ||
+      user.roles.length === 0
+    ) {
+      throw new UnauthorizedException(
+        'Invalid user data for fetching pending approvals.',
+      );
     }
-    // Use RBAC permissions instead of hardcoded roles
-    const canApproveSection = this.userHasPermission(user, 'kpi-value', 'approve', 'section');
-    const canApproveDepartment = this.userHasPermission(user, 'kpi-value', 'approve', 'department');
-    const canApproveManager = this.userHasPermission(user, 'kpi-value', 'approve', 'manager');
-    const canApproveAdmin = this.userHasPermission(user, 'kpi-value', 'approve', 'admin');
+
+    const canApproveSection = this.userHasPermission(
+      user,
+      'kpi-value',
+      'approve',
+      'section',
+    );
+    const canApproveDepartment = this.userHasPermission(
+      user,
+      'kpi-value',
+      'approve',
+      'department',
+    );
+    const canApproveManager = this.userHasPermission(
+      user,
+      'kpi-value',
+      'approve',
+      'manager',
+    );
+    const canApproveAdmin = this.userHasPermission(
+      user,
+      'kpi-value',
+      'approve',
+      'admin',
+    );
 
     const query = this.kpiValuesRepository
       .createQueryBuilder('kpiValue')
@@ -1034,12 +1077,14 @@ export class KpiValuesService {
       .leftJoinAndSelect('assignment.employee', 'assignedEmployee')
       .leftJoinAndSelect('assignment.section', 'assignedSection')
       .leftJoinAndSelect('assignment.department', 'assignedDepartment')
-      .leftJoinAndSelect('assignedSection.department', 'departmentOfAssignedSection')
+      .leftJoinAndSelect(
+        'assignedSection.department',
+        'departmentOfAssignedSection',
+      )
       .leftJoinAndSelect('assignedEmployee.section', 'employeeSection')
       .leftJoinAndSelect('assignedEmployee.department', 'employeeDepartment')
       .leftJoinAndSelect('kpi.perspective', 'perspective');
 
-    // RBAC-based filters
     let applied = false;
     if (canApproveAdmin) {
       query.where('kpiValue.status IN (:...statuses)', {

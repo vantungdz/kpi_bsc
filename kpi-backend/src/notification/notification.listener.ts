@@ -13,13 +13,9 @@ export class NotificationEventListener {
   private readonly logger = new Logger(NotificationEventListener.name);
   constructor(
     private readonly notificationService: NotificationService,
-    private readonly employeeService: EmployeesService, // Các hàm service này phải trả về user với role là entity, không dùng string
-    private readonly notificationGateway: NotificationGateway, // Inject gateway
+    private readonly employeeService: EmployeesService,
+    private readonly notificationGateway: NotificationGateway,
   ) {}
-
-  // Lưu ý: KHÔNG kiểm tra role dạng string ở bất kỳ đâu trong listener này.
-  // Nếu cần gửi thông báo cho nhóm role (admin, manager, leader...), phải gọi các hàm service đã chuẩn hóa entity role,
-  // ví dụ: findAllAdmins, findLeaderOfSection, findManagerOfDepartment, ...
 
   @OnEvent('kpi.assigned')
   async handleKpiAssigned(payload: {
@@ -30,12 +26,15 @@ export class NotificationEventListener {
       const notification = await this.notificationService.createNotification(
         payload.assignment.assigned_to_employee,
         NotificationType.NEW_KPI_ASSIGNMENT,
-        `Bạn có KPI mới: ${payload.kpiName}`,
+        `You have a new KPI: ${payload.kpiName}`,
         payload.assignment.id,
         'KPI_ASSIGNMENT',
         payload.assignment.kpi_id,
       );
-      this.notificationGateway.sendNotificationToUser(payload.assignment.assigned_to_employee, notification);
+      this.notificationGateway.sendNotificationToUser(
+        payload.assignment.assigned_to_employee,
+        notification,
+      );
     }
   }
 
@@ -53,7 +52,6 @@ export class NotificationEventListener {
     let notifiedSectionLeaderId: number | null = null;
 
     if (payload.submitter.sectionId) {
-      // Hàm findLeaderOfSection phải trả về leader với role là entity
       const sectionLeader = await this.employeeService.findLeaderOfSection(
         payload.submitter.sectionId,
       );
@@ -62,32 +60,38 @@ export class NotificationEventListener {
         const notification = await this.notificationService.createNotification(
           sectionLeader.id,
           NotificationType.KPI_APPROVAL_PENDING,
-          `KPI "${payload.kpiName}" của ${payload.submitter.first_name} ${payload.submitter.last_name} đang chờ bạn duyệt.`,
+          `KPI "${payload.kpiName}" by ${payload.submitter.first_name} ${payload.submitter.last_name} is waiting for your approval.`,
           payload.kpiValue.id,
           'KPI_VALUE',
           payload.kpiId,
         );
-        this.notificationGateway.sendNotificationToUser(sectionLeader.id, notification);
+        this.notificationGateway.sendNotificationToUser(
+          sectionLeader.id,
+          notification,
+        );
         this.logger.log(
           `Notification sent to Section Leader: ${sectionLeader.username} for KPI: ${payload.kpiName}`,
         );
       }
     }
 
-    // Hàm findAllAdmins phải trả về danh sách admin với role là entity
     const adminUsers = await this.employeeService.findAllAdmins();
     if (adminUsers && adminUsers.length > 0) {
       for (const admin of adminUsers) {
         if (admin.id !== notifiedSectionLeaderId) {
-          const notification = await this.notificationService.createNotification(
+          const notification =
+            await this.notificationService.createNotification(
+              admin.id,
+              NotificationType.KPI_APPROVAL_PENDING,
+              `[Admin View] KPI "${payload.kpiName}" by ${payload.submitter.first_name} ${payload.submitter.last_name} has been submitted and is waiting for Section Leader approval.`,
+              payload.kpiValue.id,
+              'KPI_VALUE',
+              payload.kpiId,
+            );
+          this.notificationGateway.sendNotificationToUser(
             admin.id,
-            NotificationType.KPI_APPROVAL_PENDING,
-            `[Admin View] KPI "${payload.kpiName}" của ${payload.submitter.first_name} ${payload.submitter.last_name} đã được submit và đang chờ Section Leader duyệt.`,
-            payload.kpiValue.id,
-            'KPI_VALUE',
-            payload.kpiId,
+            notification,
           );
-          this.notificationGateway.sendNotificationToUser(admin.id, notification);
           this.logger.log(
             `Notification sent to Admin: ${admin.username} for KPI: ${payload.kpiName}`,
           );
@@ -111,12 +115,15 @@ export class NotificationEventListener {
     const notification = await this.notificationService.createNotification(
       payload.submitterId,
       NotificationType.KPI_VALUE_APPROVED,
-      `Giá trị bạn submit cho KPI "${payload.kpiName}" đã được duyệt.`,
+      `The value you submitted for KPI "${payload.kpiName}" has been approved.`,
       payload.kpiValue.id,
       'KPI_VALUE',
       payload.kpiValue.kpiAssignment?.kpi_id,
     );
-    this.notificationGateway.sendNotificationToUser(payload.submitterId, notification);
+    this.notificationGateway.sendNotificationToUser(
+      payload.submitterId,
+      notification,
+    );
   }
 
   @OnEvent('kpi_value.rejected_by_user')
@@ -129,12 +136,15 @@ export class NotificationEventListener {
     const notification = await this.notificationService.createNotification(
       payload.submitterId,
       NotificationType.KPI_VALUE_REJECTED,
-      `Giá trị bạn submit cho KPI "${payload.kpiName}" đã bị từ chối. Lý do: ${payload.reason}`,
+      `The value you submitted for KPI "${payload.kpiName}" has been rejected. Reason: ${payload.reason}`,
       payload.kpiValue.id,
       'KPI_VALUE',
       payload.kpiValue.kpiAssignment?.kpi_id,
     );
-    this.notificationGateway.sendNotificationToUser(payload.submitterId, notification);
+    this.notificationGateway.sendNotificationToUser(
+      payload.submitterId,
+      notification,
+    );
   }
 
   @OnEvent('kpi_value.submitted_for_dept_approval')
@@ -154,19 +164,21 @@ export class NotificationEventListener {
       payload.submitter.departmentId;
 
     if (departmentId) {
-      // Hàm findManagerOfDepartment phải trả về manager với role là entity
       const departmentManager =
         await this.employeeService.findManagerOfDepartment(departmentId);
       if (departmentManager) {
         const notification = await this.notificationService.createNotification(
           departmentManager.id,
           NotificationType.KPI_APPROVAL_PENDING,
-          `KPI "${payload.kpiName}" của ${payload.submitter.first_name} ${payload.submitter.last_name} (Section đã duyệt) đang chờ Department duyệt.`,
+          `KPI "${payload.kpiName}" by ${payload.submitter.first_name} ${payload.submitter.last_name} (Section approved) is waiting for Department approval.`,
           payload.kpiValue.id,
           'KPI_VALUE',
           payload.kpiId,
         );
-        this.notificationGateway.sendNotificationToUser(departmentManager.id, notification);
+        this.notificationGateway.sendNotificationToUser(
+          departmentManager.id,
+          notification,
+        );
         this.logger.log(
           `Notification sent to Department Manager: ${departmentManager.username} for KPI: ${payload.kpiName}`,
         );
@@ -190,14 +202,13 @@ export class NotificationEventListener {
       `Caught event: kpi_value.submitted_for_manager_approval for KPI: ${payload.kpiName} by ${payload.submitter.username}`,
     );
 
-    // Hàm findAllAdmins phải trả về danh sách admin với role là entity
     const adminUsers = await this.employeeService.findAllAdmins();
     if (adminUsers && adminUsers.length > 0) {
       for (const admin of adminUsers) {
         const notification = await this.notificationService.createNotification(
           admin.id,
           NotificationType.KPI_APPROVAL_PENDING,
-          `KPI "${payload.kpiName}" của ${payload.submitter.first_name} ${payload.submitter.last_name} (Department đã duyệt) đang chờ bạn (Admin/Manager) duyệt.`,
+          `KPI "${payload.kpiName}" by ${payload.submitter.first_name} ${payload.submitter.last_name} (Department approved) is waiting for your approval (Admin/Manager).`,
           payload.kpiValue.id,
           'KPI_VALUE',
           payload.kpiId,
@@ -213,5 +224,4 @@ export class NotificationEventListener {
       );
     }
   }
-
 }

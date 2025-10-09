@@ -3,16 +3,16 @@ import apiClient from "@/core/services/api";
 const state = {
   goals: [],
   loading: false,
-  // Lưu mục tiêu cá nhân theo employeeId
+
   goalsByEmployee: {},
-  // Lưu employeeId cuối cùng để getter lấy đúng danh sách
+
   _lastEmployeeId: null,
 };
 
 const getters = {
   personalGoals: (state) => state.goals,
   personalGoalLoading: (state) => state.loading,
-  // Lấy danh sách mục tiêu cá nhân của nhân viên theo employeeId cuối cùng fetch
+
   employeeGoalList: (state) =>
     state._lastEmployeeId
       ? state.goalsByEmployee[state._lastEmployeeId] || []
@@ -63,7 +63,7 @@ const actions = {
         params: { employeeId },
       });
       commit("setGoalsByEmployee", { employeeId, goals: res.data });
-      // Lưu employeeId cuối cùng để getter lấy đúng danh sách
+
       state._lastEmployeeId = employeeId;
     } catch (err) {
       commit("setGoalsByEmployee", { employeeId, goals: [] });

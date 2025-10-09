@@ -42,9 +42,18 @@
             </a-menu-item>
           </a-menu>
         </template>
-        <a-button class="lang-btn lang-btn-ghost" type="text" :title="$t(currentLanguageDisplay.nameKey)">
-          <flag :iso="currentLanguageDisplay.countryCode" style="font-size: 1.15em; margin-right: 6px;" />
-          <span class="lang-code">{{ currentLocale.value ? currentLocale.value.toUpperCase() : '' }}</span>
+        <a-button
+          class="lang-btn lang-btn-ghost"
+          type="text"
+          :title="$t(currentLanguageDisplay.nameKey)"
+        >
+          <flag
+            :iso="currentLanguageDisplay.countryCode"
+            style="font-size: 1.15em; margin-right: 6px"
+          />
+          <span class="lang-code">{{
+            currentLocale.value ? currentLocale.value.toUpperCase() : ""
+          }}</span>
         </a-button>
       </a-dropdown>
     </div>
@@ -76,7 +85,7 @@ const router = useRouter();
 const currentLocale = useCurrentLocale();
 
 const availableLanguages = [
-  { code: "en", nameKey: "english", countryCode: "us" }, 
+  { code: "en", nameKey: "english", countryCode: "us" },
   { code: "vi", nameKey: "vietnamese", countryCode: "vn" },
   { code: "ja", nameKey: "japanese", countryCode: "jp" },
 ];
@@ -86,9 +95,8 @@ const currentLanguageDisplay = computed(() => {
   if (lang) {
     return { ...lang, name: $t(lang.nameKey) };
   }
-  // Fallback nếu currentLocale không nằm trong availableLanguages
-  // Điều này không nên xảy ra nếu locale được quản lý đúng cách
-  const fallbackLang = availableLanguages[0]; // Hoặc một ngôn ngữ mặc định cụ thể
+
+  const fallbackLang = availableLanguages[0];
   return { ...fallbackLang, name: $t(fallbackLang.nameKey) };
 });
 
@@ -135,7 +143,7 @@ const handleMenuClick = ({ key }) => {
     handleLogout();
   } else if (key === MENU_KEYS.PROFILE) {
     router.push(ROUTES.PROFILE);
-  } 
+  }
 };
 
 const handleLogout = () => {
@@ -170,7 +178,9 @@ function changeLanguage(lang) {
   font-size: 1.7em;
   font-weight: 700;
   letter-spacing: 0.5px;
-  text-shadow: 0 1px 0 #fff, 0 1.5px 2px #b2ebf2;
+  text-shadow:
+    0 1px 0 #fff,
+    0 1.5px 2px #b2ebf2;
   margin-left: 0;
 }
 
@@ -202,7 +212,9 @@ function changeLanguage(lang) {
   padding: 0 14px;
   height: 48px;
   border-radius: 8px;
-  transition: background 0.2s, box-shadow 0.2s;
+  transition:
+    background 0.2s,
+    box-shadow 0.2s;
   box-shadow: 0 1px 4px 0 rgba(0, 0, 0, 0.03);
 }
 
@@ -244,7 +256,9 @@ function changeLanguage(lang) {
   min-width: 48px;
   display: flex;
   align-items: center;
-  transition: color 0.18s, background 0.18s;
+  transition:
+    color 0.18s,
+    background 0.18s;
 }
 .lang-btn-ghost:hover,
 .lang-btn-ghost:focus {
@@ -261,7 +275,8 @@ function changeLanguage(lang) {
 :deep(.ant-dropdown-menu) {
   opacity: 1;
   transform: scale(1);
-  transition: opacity 0.22s cubic-bezier(0.4, 0, 0.2, 1),
+  transition:
+    opacity 0.22s cubic-bezier(0.4, 0, 0.2, 1),
     transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
 }
 :deep(.ant-slide-down-appear),

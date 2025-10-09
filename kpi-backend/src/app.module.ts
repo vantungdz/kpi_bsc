@@ -34,7 +34,7 @@ import { PersonalGoalModule } from './personal-goal/personal-goal.module';
       isGlobal: true,
     }),
     EventEmitterModule.forRoot(),
-    ScheduleModule.forRoot(), // Thêm dòng này để bật scheduler
+    ScheduleModule.forRoot(),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: (config: ConfigService): TypeOrmModuleOptions => ({

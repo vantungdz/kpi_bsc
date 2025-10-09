@@ -40,10 +40,19 @@ const actions = {
       return res.data;
     } catch (error) {
       commit("SET_FORMULA_ERROR", error);
-      notification.error({
-        message: "Lỗi tải công thức",
-        description: error.message || "Không thể tải danh sách công thức.",
-      });
+
+      // Only show notification if it's not a permission error (already handled by API interceptor)
+      const errorMsg =
+        error.response?.data?.message ||
+        error.message ||
+        "Không thể tải danh sách công thức.";
+      if (!errorMsg.includes("No permission")) {
+        notification.error({
+          message: "Lỗi tải công thức",
+          description: errorMsg,
+        });
+      }
+
       throw error;
     } finally {
       commit("SET_FORMULA_LOADING", false);

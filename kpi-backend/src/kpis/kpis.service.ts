@@ -53,7 +53,6 @@ export class KpisService {
     private eventEmitter: EventEmitter2,
   ) {}
 
-  // Helper kiểm tra permission động
   private async checkPermission(
     userId: number,
     action: string,
@@ -64,7 +63,7 @@ export class KpisService {
       relations: ['roles', 'roles.permissions'],
     });
     if (!user) throw new UnauthorizedException('User not found.');
-    // Gộp tất cả permissions từ các role
+
     const allPermissions = Array.isArray(user.roles)
       ? user.roles.flatMap((role: any) =>
           Array.isArray(role.permissions) ? role.permissions : [],
@@ -77,8 +76,12 @@ export class KpisService {
       throw new UnauthorizedException(`No permission: ${action} ${resource}`);
   }
 
-  // Helper: check if user has a permission (resource, action, scope)
-  private userHasPermission(user: Employee, resource: string, action: string, scope?: string): boolean {
+  private userHasPermission(
+    user: Employee,
+    resource: string,
+    action: string,
+    scope?: string,
+  ): boolean {
     if (!user || !user.roles) return false;
     for (const role of user.roles) {
       if (role && Array.isArray(role.permissions)) {
@@ -87,7 +90,7 @@ export class KpisService {
             (p) =>
               p.resource === resource &&
               p.action === action &&
-              (!scope || p.scope === scope)
+              (!scope || p.scope === scope),
           )
         ) {
           return true;
@@ -142,7 +145,7 @@ export class KpisService {
       .leftJoinAndSelect('kpi.perspective', 'perspective')
       .leftJoinAndSelect('assignment.kpiValues', 'kpiValue')
       .leftJoinAndSelect('kpi.createdBy', 'createdBy')
-      .leftJoinAndSelect('kpi.formula', 'formula') // join formula entity
+      .leftJoinAndSelect('kpi.formula', 'formula')
       .where('kpi.deleted_at IS NULL');
 
     query.andWhere('assignment.deleted_at IS NULL');
@@ -216,7 +219,6 @@ export class KpisService {
       .take(limit)
       .getManyAndCount();
 
-    // Refactored: Use mathjs to evaluate dynamic formula.expression
     const dataWithActualValue = data.map((kpi) => {
       const activeAssignments = kpi.assignments.filter(
         (assignment) =>
@@ -231,7 +233,6 @@ export class KpisService {
       let actual_value = 0;
       if (kpi.formula && kpi.formula.expression) {
         try {
-          // Các biến truyền vào cho công thức
           const scope = {
             values: allValues,
             targets: allTargets,
@@ -247,7 +248,6 @@ export class KpisService {
           actual_value = 0;
         }
       } else {
-        // fallback legacy logic if no formula
         actual_value =
           allValues.length > 0
             ? allValues.reduce((sum, val) => sum + val, 0) / allValues.length
@@ -284,7 +284,6 @@ export class KpisService {
     const { page = 1, limit = 15 } = filterDto;
     let effectiveDepartmentId: number | null = departmentId;
 
-    // Use RBAC permission instead of role string
     if (this.userHasPermission(loggedInUser, 'kpi', 'view', 'department')) {
       effectiveDepartmentId = loggedInUser.departmentId;
     } else if (this.userHasPermission(loggedInUser, 'kpi', 'view', 'section')) {
@@ -324,7 +323,10 @@ export class KpisService {
             });
         }),
       );
-    } else if (!this.userHasPermission(loggedInUser, 'kpi', 'view', 'admin') && !this.userHasPermission(loggedInUser, 'kpi', 'view', 'manager')) {
+    } else if (
+      !this.userHasPermission(loggedInUser, 'kpi', 'view', 'admin') &&
+      !this.userHasPermission(loggedInUser, 'kpi', 'view', 'manager')
+    ) {
       return {
         data: [],
         pagination: {
@@ -503,8 +505,6 @@ export class KpisService {
   }
 
   async getKpiComparisonData(userId: number): Promise<{ data: any[] }> {
-    // Fetch all KPIs assigned to departments for the user
-    // Use repository query to get all department KPIs with assignments and formula
     const kpis = await this.kpisRepository.find({
       where: {},
       relations: [
@@ -561,10 +561,11 @@ export class KpisService {
       itemsPerPage: number;
     };
   }> {
-    // Ensure loggedInUser always has roles and permissions loaded
-    if (!loggedInUser.roles || !Array.isArray(loggedInUser.roles) ||
-      loggedInUser.roles.some((role: any) => !role.permissions)) {
-      // Reload user with roles and permissions from DB
+    if (
+      !loggedInUser.roles ||
+      !Array.isArray(loggedInUser.roles) ||
+      loggedInUser.roles.some((role: any) => !role.permissions)
+    ) {
       const userWithRoles = await this.employeeRepository.findOne({
         where: { id: loggedInUser.id },
         relations: ['roles', 'roles.permissions'],
@@ -573,8 +574,14 @@ export class KpisService {
         loggedInUser.roles = userWithRoles.roles;
       }
     }
-    // Log user info và role (dùng roles nếu có)
-    console.log('[KPI][getSectionKpis] User:', loggedInUser?.id, loggedInUser?.username, 'Roles:', loggedInUser?.roles);
+
+    console.log(
+      '[KPI][getSectionKpis] User:',
+      loggedInUser?.id,
+      loggedInUser?.username,
+      'Roles:',
+      loggedInUser?.roles,
+    );
     const { page = 1, limit = 15 } = filterDto;
     let effectiveSectionId: number | null = Number(sectionIdParam);
     let effectiveDepartmentId: number | null = filterDto.departmentId ?? null;
@@ -618,7 +625,6 @@ export class KpisService {
         }),
       );
     } else {
-      // Sửa lại: cho phép các quyền view kpi company/department/section/employee đều được xem tất cả section
       if (
         this.userHasPermission(loggedInUser, 'kpi', 'view', 'company') ||
         this.userHasPermission(loggedInUser, 'kpi', 'view', 'department') ||
@@ -686,9 +692,18 @@ export class KpisService {
       .skip((page - 1) * limit)
       .take(limit)
       .getManyAndCount();
-    // Log số lượng assignment thực tế lấy được từ DB
-    const totalAssignments = data.reduce((sum, kpi) => sum + (Array.isArray(kpi.assignments) ? kpi.assignments.length : 0), 0);
-    console.log('[KPI][getSectionKpis] Query assignments count:', totalAssignments, 'KPI count:', data.length);
+
+    const totalAssignments = data.reduce(
+      (sum, kpi) =>
+        sum + (Array.isArray(kpi.assignments) ? kpi.assignments.length : 0),
+      0,
+    );
+    console.log(
+      '[KPI][getSectionKpis] Query assignments count:',
+      totalAssignments,
+      'KPI count:',
+      data.length,
+    );
 
     const dataWithSectionActuals = data.map((kpi) => {
       const actuals_by_section_id: { [sectionId: number]: number | null } = {};
@@ -850,7 +865,6 @@ export class KpisService {
       .take(limit)
       .getManyAndCount();
 
-    // Add validityStatus to each KPI
     const dataWithValidityStatus = data.map((kpi) => {
       const validityStatus = getKpiStatus(kpi.start_date, kpi.end_date);
       return { ...kpi, validityStatus };
@@ -866,7 +880,6 @@ export class KpisService {
     return { data: dataWithValidityStatus, pagination };
   }
 
-  // Helper to evaluate formula expression using mathjs
   private evaluateFormulaExpression(
     expression: string,
     variables: Record<string, any>,
@@ -889,6 +902,7 @@ export class KpisService {
     const kpi = await this.kpisRepository
       .createQueryBuilder('kpi')
       .leftJoinAndSelect('kpi.perspective', 'perspective')
+      .leftJoinAndSelect('kpi.createdBy', 'createdBy')
       .leftJoinAndSelect(
         'kpi.assignments',
         'assignment',
@@ -914,7 +928,6 @@ export class KpisService {
       kpi.assignments = [];
     }
 
-    // Map employeeId -> { value, target }
     const employeeLatestApprovedValues = new Map<
       number,
       { value: number | null; target: number | null }
@@ -948,13 +961,12 @@ export class KpisService {
 
     const processedAssignments = kpi.assignments.map((assignment) => {
       let calculatedActualValue: number | null = null;
-      // For employee assignment: just get the latest approved value
+
       if (assignment.assigned_to_employee) {
         calculatedActualValue =
           employeeLatestApprovedValues.get(assignment.assigned_to_employee)
             ?.value ?? null;
       } else if (assignment.assigned_to_section) {
-        // For section: collect all employee values in this section
         const sectionId = assignment.assigned_to_section;
         const relevantValues: number[] = [];
         const relevantTargets: number[] = [];
@@ -974,7 +986,7 @@ export class KpisService {
             }
           }
         });
-        // Use formula if present, else fallback to average
+
         if (kpi.formula && kpi.formula.expression) {
           try {
             const scope = {
@@ -999,7 +1011,6 @@ export class KpisService {
               : 0;
         }
       } else if (assignment.assigned_to_department) {
-        // For department: collect all employee values in this department
         const departmentId = assignment.assigned_to_department;
         const relevantValues: number[] = [];
         const relevantTargets: number[] = [];
@@ -1019,7 +1030,7 @@ export class KpisService {
             }
           }
         });
-        // Use formula if present, else fallback to average
+
         if (kpi.formula && kpi.formula.expression) {
           try {
             const scope = {
@@ -1167,7 +1178,6 @@ export class KpisService {
   }
 
   async create(createKpiDto: CreateKpiDto, userId: number): Promise<Kpi> {
-    // Phân biệt quyền CREATE động theo loại KPI
     const type = createKpiDto?.assignments?.from || 'company';
     return await this.kpisRepository.manager.transaction(
       async (manager): Promise<Kpi> => {
@@ -1180,10 +1190,9 @@ export class KpisService {
         if (createdByType === 'company') {
         }
 
-        // Refactored: Use formula_id instead of calculation_type
         const kpiEntityToSave = manager.getRepository(Kpi).create({
           ...kpiData,
-          formula_id: kpiData.formula_id || kpiData.formulaId, // persist formula_id
+          formula_id: kpiData.formula_id || kpiData.formulaId,
           perspective_id: kpiData.perspectiveId || kpiData.perspective_id,
           start_date: kpiData.startDate || kpiData.start_date,
           end_date: kpiData.endDate || kpiData.end_date,
@@ -1276,7 +1285,6 @@ export class KpisService {
             : null;
           employeeAssignment.weight = kpiData.weight;
 
-          // Gắn phòng ban của nhân viên vào assignment
           if (employee?.department) {
             employeeAssignment.assigned_to_department = employee.department.id;
           }
@@ -1317,15 +1325,14 @@ export class KpisService {
   }
 
   async update(id: number, update: Partial<Kpi>, userId: number): Promise<Kpi> {
-    // Lấy loại KPI để kiểm tra quyền động
     const kpi = await this.kpisRepository.findOne({ where: { id } });
-    // Refactored: Remove calculation_type, support formula_id
+
     const updatePayload: Partial<Kpi> = { ...update };
     if ((update as any).formula_id || (update as any).formulaId) {
       updatePayload.formula_id =
         (update as any).formula_id || (update as any).formulaId;
     }
-    // Remove calculation_type if present
+
     if ('calculation_type' in updatePayload) {
       delete (updatePayload as any).calculation_type;
     }
@@ -1347,7 +1354,6 @@ export class KpisService {
     assignments: { user_id: number; target: number; weight?: number }[],
     loggedInUser: Employee,
   ): Promise<KPIAssignment[]> {
-    // Kiểm tra giá trị assignments trước khi xử lý
     if (!Array.isArray(assignments) || assignments.length === 0) {
       throw new BadRequestException('Assignments array is empty or invalid');
     }
@@ -1376,13 +1382,7 @@ export class KpisService {
     const assignmentsToSave: KPIAssignment[] = [];
 
     for (const incomingAssignment of assignments) {
-      // Lấy roles của user
-      const userRoles: string[] = Array.isArray(loggedInUser.roles)
-        ? loggedInUser.roles.map((r: any) =>
-            typeof r === 'string' ? r : r?.name,
-          )
-        : [];
-      if (userRoles.includes('section')) {
+      if (this.userHasPermission(loggedInUser, 'kpi', 'assign', 'section')) {
         if (!loggedInUser.sectionId) {
           throw new UnauthorizedException(
             'You are not assigned to a section and cannot assign KPIs.',
@@ -1448,7 +1448,6 @@ export class KpisService {
       }
     });
 
-    // Return updated assignments for this KPI
     const updatedAssignmentsList = await this.kpiAssignmentRepository.find({
       where: { kpi_id: kpiId },
       relations: ['employee'],
@@ -1461,7 +1460,6 @@ export class KpisService {
     sectionId: number,
     userId: number,
   ): Promise<void> {
-    // Lấy assignment để xác định loại KPI (department/section)
     const assignment = await this.kpiAssignmentRepository.findOne({
       where: { kpi_id: kpiId, assigned_to_section: sectionId },
       relations: ['kpi'],
@@ -1492,7 +1490,6 @@ export class KpisService {
     }[],
     userId: number,
   ): Promise<void> {
-    // Kiểm tra giá trị assignmentsData trước khi xử lý
     if (!Array.isArray(assignmentsData) || assignmentsData.length === 0) {
       throw new BadRequestException('Assignments array is empty or invalid');
     }
@@ -1629,7 +1626,7 @@ export class KpisService {
       for (const assignment of kpi.assignments) {
         if (assignment.assigned_to_employee)
           userIds.add(assignment.assigned_to_employee);
-        // Có thể mở rộng: lấy leader/manager của phòng ban/section nếu cần
+
         if (assignment.department && assignment.department.managerId)
           userIds.add(assignment.department.managerId);
         if (assignment.section && assignment.section.leaderId)
@@ -1655,7 +1652,6 @@ export class KpisService {
         throw new NotFoundException(`KPI with ID ${id} not found`);
       }
 
-      // Lấy user và roles (ManyToMany)
       const user = await employeeRepo.findOne({
         where: { id: userId },
         relations: ['roles', 'roles.permissions'],
@@ -1663,7 +1659,7 @@ export class KpisService {
       if (!user) {
         throw new UnauthorizedException('User not found.');
       }
-      // Gộp tất cả permissions từ các role
+
       const allPermissions = Array.isArray(user.roles)
         ? user.roles.flatMap((role: any) =>
             Array.isArray(role.permissions) ? role.permissions : [],
@@ -1705,12 +1701,20 @@ export class KpisService {
   }
 }
 
-export function getKpiStatus(startDate: string | Date | null, endDate: string | Date | null): 'active' | 'expired' | 'expiring_soon' {
+export function getKpiStatus(
+  startDate: string | Date | null,
+  endDate: string | Date | null,
+): 'active' | 'expired' | 'expiring_soon' {
   const now = new Date();
   const start = startDate ? new Date(startDate) : null;
   const end = endDate ? new Date(endDate) : null;
   if (end && now > end) return 'expired';
-  if (end && now >= new Date(end.getTime() - 7 * 24 * 60 * 60 * 1000) && now <= end) return 'expiring_soon'; // 7 days before end
-  if (start && now < start) return 'expired'; // Not yet started, treat as expired/inactive
+  if (
+    end &&
+    now >= new Date(end.getTime() - 7 * 24 * 60 * 60 * 1000) &&
+    now <= end
+  )
+    return 'expiring_soon';
+  if (start && now < start) return 'expired';
   return 'active';
 }

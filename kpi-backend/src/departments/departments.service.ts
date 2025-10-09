@@ -1,5 +1,8 @@
-// src/departments/department.service.ts
-import { Injectable, UnauthorizedException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  UnauthorizedException,
+  BadRequestException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Department } from 'src/departments/entities/department.entity';
 import { Employee } from 'src/employees/entities/employee.entity';
@@ -11,36 +14,48 @@ export class DepartmentsService {
   constructor(
     @InjectRepository(Department)
     private readonly departmentRepository: Repository<Department>,
-    private readonly employeesService: EmployeesService, // Inject EmployeesService
+    private readonly employeesService: EmployeesService,
   ) {}
 
-  async create(createDepartmentDto: any): Promise<Department | { warning: string, employee: any }> {
+  async create(
+    createDepartmentDto: any,
+  ): Promise<Department | { warning: string; employee: any }> {
     const created = this.departmentRepository.create(createDepartmentDto);
     const department = Array.isArray(created) ? created[0] : created;
     if (createDepartmentDto.managerId) {
       department.manager = { id: createDepartmentDto.managerId } as Employee;
     }
-    // Kiểm tra trạng thái manager
+
     if (createDepartmentDto.managerId) {
-      const manager = await this.employeesService.findOne(createDepartmentDto.managerId);
-      const hasOtherDepartment = manager.departmentId && manager.departmentId !== department.id;
+      const manager = await this.employeesService.findOne(
+        createDepartmentDto.managerId,
+      );
+      const hasOtherDepartment =
+        manager.departmentId && manager.departmentId !== department.id;
       const hasSection = manager.sectionId != null;
       let sectionNotInDepartment = false;
-      if (hasSection && manager.section?.department?.id && manager.section.department.id !== department.id) {
+      if (
+        hasSection &&
+        manager.section?.department?.id &&
+        manager.section.department.id !== department.id
+      ) {
         sectionNotInDepartment = true;
       }
-      if ((hasOtherDepartment || sectionNotInDepartment) && !createDepartmentDto.forceUpdateManager) {
+      if (
+        (hasOtherDepartment || sectionNotInDepartment) &&
+        !createDepartmentDto.forceUpdateManager
+      ) {
         return {
           warning: 'MANAGER_HAS_OTHER_DEPARTMENT_OR_SECTION',
-          employee: manager
+          employee: manager,
         };
       }
-      // Nếu forceUpdateManager hoặc chưa có phòng ban/section, cập nhật lại
+
       await this.employeesService.updateEmployee(manager.id, {
         departmentId: department.id,
         sectionId: undefined,
         roles: ['manager' as any],
-        _mergeRoles: true
+        _mergeRoles: true,
       });
     }
     const savedDepartment = await this.departmentRepository.save(department);
@@ -51,10 +66,9 @@ export class DepartmentsService {
     const departments = await this.departmentRepository.find({
       relations: ['manager'],
     });
-    // Auto-populate manager if missing, by finding employee with role 'department' and departmentId = department.id
+
     for (const department of departments) {
       if (!department.managerId) {
-        // Sửa: dùng QueryBuilder join với roles
         const manager = await this.departmentRepository.manager
           .getRepository(Employee)
           .createQueryBuilder('employee')
@@ -85,8 +99,13 @@ export class DepartmentsService {
     return user;
   }
 
-  async update(id: number, updateDepartmentDto: any): Promise<Department | { warning: string, employee: any }> {
-    const department = await this.departmentRepository.findOne({ where: { id } });
+  async update(
+    id: number,
+    updateDepartmentDto: any,
+  ): Promise<Department | { warning: string; employee: any }> {
+    const department = await this.departmentRepository.findOne({
+      where: { id },
+    });
     if (!department) {
       throw new UnauthorizedException('Department not found');
     }
@@ -95,40 +114,55 @@ export class DepartmentsService {
     }
     if (updateDepartmentDto.managerId !== undefined) {
       department.manager = { id: updateDepartmentDto.managerId } as Employee;
-      // Kiểm tra trạng thái manager
-      const manager = await this.employeesService.findOne(updateDepartmentDto.managerId);
-      const hasOtherDepartment = manager.departmentId && manager.departmentId !== department.id;
+
+      const manager = await this.employeesService.findOne(
+        updateDepartmentDto.managerId,
+      );
+      const hasOtherDepartment =
+        manager.departmentId && manager.departmentId !== department.id;
       const hasSection = manager.sectionId != null;
       let sectionNotInDepartment = false;
-      if (hasSection && manager.section?.department?.id && manager.section.department.id !== department.id) {
+      if (
+        hasSection &&
+        manager.section?.department?.id &&
+        manager.section.department.id !== department.id
+      ) {
         sectionNotInDepartment = true;
       }
-      if ((hasOtherDepartment || sectionNotInDepartment) && !updateDepartmentDto.forceUpdateManager) {
+      if (
+        (hasOtherDepartment || sectionNotInDepartment) &&
+        !updateDepartmentDto.forceUpdateManager
+      ) {
         return {
           warning: 'MANAGER_HAS_OTHER_DEPARTMENT_OR_SECTION',
-          employee: manager
+          employee: manager,
         };
       }
-      // Nếu forceUpdateManager hoặc chưa có phòng ban/section, cập nhật lại
-      // 1. Clear managerId from old department if needed
+
       if (hasOtherDepartment) {
-        const oldDepartment = await this.departmentRepository.findOne({ where: { id: manager.departmentId } });
+        const oldDepartment = await this.departmentRepository.findOne({
+          where: { id: manager.departmentId },
+        });
         if (oldDepartment && oldDepartment.managerId === manager.id) {
           oldDepartment.managerId = null;
           await this.departmentRepository.save(oldDepartment);
         }
       }
-      // 2. Update all sections in this department to set managerId = updateDepartmentDto.managerId (optional, if required)
-      const sections = await this.departmentRepository.manager.getRepository('Section').find({ where: { department: { id: department.id } } });
+
+      const sections = await this.departmentRepository.manager
+        .getRepository('Section')
+        .find({ where: { department: { id: department.id } } });
       for (const section of sections) {
         section.managerId = updateDepartmentDto.managerId;
-        await this.departmentRepository.manager.getRepository('Section').save(section);
+        await this.departmentRepository.manager
+          .getRepository('Section')
+          .save(section);
       }
       await this.employeesService.updateEmployee(manager.id, {
         departmentId: department.id,
         sectionId: undefined,
         roles: ['manager' as any],
-        _mergeRoles: true
+        _mergeRoles: true,
       });
     }
     const saved = await this.departmentRepository.save(department);
@@ -136,19 +170,22 @@ export class DepartmentsService {
   }
 
   async remove(id: number): Promise<void> {
-    // Kiểm tra còn section nào thuộc department này không
     const sectionCount = await this.departmentRepository.manager
       .getRepository('Section')
       .count({ where: { department: { id } } });
     if (sectionCount > 0) {
-      throw new BadRequestException('Không thể xóa phòng ban: vẫn còn section thuộc phòng ban này.');
+      throw new BadRequestException(
+        'Không thể xóa phòng ban: vẫn còn section thuộc phòng ban này.',
+      );
     }
-    // Kiểm tra còn nhân viên nào thuộc department này không
+
     const employeeCount = await this.departmentRepository.manager
       .getRepository('Employee')
       .count({ where: { department: { id } } });
     if (employeeCount > 0) {
-      throw new BadRequestException('Không thể xóa phòng ban: vẫn còn nhân viên thuộc phòng ban này.');
+      throw new BadRequestException(
+        'Không thể xóa phòng ban: vẫn còn nhân viên thuộc phòng ban này.',
+      );
     }
     await this.departmentRepository.delete(id);
   }

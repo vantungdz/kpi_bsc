@@ -4,6 +4,7 @@ import { EmployeesService } from 'src/employees/employees.service';
 import { LoginDto } from './dto/login.dto';
 import * as bcrypt from 'bcrypt';
 import { AuditLogService } from '../audit-log/audit-log.service';
+import { SessionService } from './session.service';
 
 @Injectable()
 export class AuthService {
@@ -12,9 +13,15 @@ export class AuthService {
     private jwtService: JwtService,
     private usersService: EmployeesService,
     private auditLogService: AuditLogService,
+    private sessionService: SessionService,
   ) {}
 
-  async login(loginDto: LoginDto) {
+  async login(
+    loginDto: LoginDto,
+    deviceInfo?: string,
+    ipAddress?: string,
+    userAgent?: string,
+  ) {
     const user = await this.usersService.findOneByUsernameOrEmailForAuth(
       loginDto.username,
     );
@@ -45,9 +52,17 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    // Lấy user kèm permissions (RBAC entity)
+    // Get user with permissions (RBAC entity)
     const userWithPermissions = await this.usersService.findOneWithPermissions(
       user.id,
+    );
+
+    // Tạo session mới và logout tất cả session cũ
+    const sessionId = await this.sessionService.createSession(
+      user.id,
+      deviceInfo || 'Unknown Device',
+      ipAddress || 'Unknown IP',
+      userAgent || 'Unknown User Agent',
     );
 
     await this.auditLogService.logAction({
@@ -55,29 +70,50 @@ export class AuthService {
       resource: 'auth',
       userId: user.id,
       username: user.username,
-      data: { loginAt: new Date() },
+      data: {
+        loginAt: new Date(),
+        sessionId,
+        deviceInfo,
+        ipAddress,
+      },
     });
 
     const payload = {
       id: user.id,
       username: user.username,
+      sessionId, // Thêm sessionId vào JWT payload
       roles: Array.isArray(user.roles)
         ? user.roles.map((r: any) => (typeof r === 'string' ? r : r?.name))
-        : [], // Truyền mảng roles vào JWT
+        : [], // Pass roles array to JWT
     };
 
     return {
       access_token: this.jwtService.sign(payload),
       user: userWithPermissions,
+      sessionId,
     };
   }
 
-  async logout(userId: number) {
+  async getUserActiveSessions(userId: number) {
+    return await this.sessionService.getUserActiveSessions(userId);
+  }
+
+  async logout(userId: number, sessionId?: string) {
+    // Logout session cụ thể hoặc tất cả sessions của user
+    if (sessionId) {
+      await this.sessionService.logoutSession(sessionId);
+    } else {
+      await this.sessionService.logoutAllUserSessions(userId);
+    }
+
     await this.auditLogService.logAction({
       action: 'logout',
       resource: 'auth',
       userId,
-      data: { logoutAt: new Date() },
+      data: {
+        logoutAt: new Date(),
+        sessionId,
+      },
     });
     return { message: 'Logout successful' };
   }

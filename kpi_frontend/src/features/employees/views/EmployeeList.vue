@@ -62,12 +62,12 @@
           <safety-certificate-outlined style="color: #1976d2" />
         </template>
         <a-select-option
-              v-for="role in roles"
-              :key="role.id"
-              :value="role.name"
-            >
-              {{ $t(role.name) }}
-            </a-select-option>
+          v-for="role in roles"
+          :key="role.id"
+          :value="role.name"
+        >
+          {{ $t(role.name) }}
+        </a-select-option>
       </a-select>
       <a-select
         v-model:value="filterDepartment"
@@ -419,7 +419,7 @@
             <a-tag
               v-for="role in detailEmployee.roles"
               :key="role.id || role.name || role"
-              :color="roleColor(role)"
+              :color="roleColor()"
               style="margin-right: 4px; margin-bottom: 2px"
             >
               {{ typeof role === "string" ? role : role?.name || $t("noData") }}
@@ -620,7 +620,7 @@ const filteredEmployees = computed(() => {
         e.last_name?.toLowerCase().includes(search)
     );
   }
-  // Filter theo role: kiểm tra user có thuộc role đó không (mảng roles)
+
   if (filterRole.value) {
     list = list.filter((e) => {
       if (Array.isArray(e.roles)) {
@@ -686,8 +686,9 @@ const handleUpload = async () => {
     const notificationMessage =
       response?.message ||
       $t("importResult", { successCount, errorCount: responseErrors.length });
-    let notificationDescription = "";
+    // Show detailed error modal if there are errors
     if (responseErrors.length > 0) {
+      const errorCount = Math.min(3, responseErrors.length);
       const errorDetails = responseErrors
         .slice(0, 3)
         .map((err) => {
@@ -708,24 +709,24 @@ const handleUpload = async () => {
                 : "Problematic row data";
             }
           } else rowIdentifier = "Details for a row unavailable";
-          return `  • ${rowIdentifier}: ${err.error}`;
+          return `• ${rowIdentifier}: ${err.error}`;
         })
         .join("\n");
-      notificationDescription = $t("importErrorDetails", {
-        count: Math.min(3, responseErrors.length),
-        details: errorDetails,
+
+      const errorMessage = `${$t("importErrorDetailsTitle", { count: errorCount })}\n${errorDetails}`;
+
+      AModal.error({
+        title: notificationMessage,
+        content: errorMessage,
+        width: 600,
+        style: { whiteSpace: "pre-line" },
+      });
+    } else {
+      notification.success({
+        message: notificationMessage,
+        duration: 4.5,
       });
     }
-    const notificationConfig = {
-      message: notificationMessage,
-      description: notificationDescription,
-      duration: responseErrors.length > 0 ? 10 : 4.5,
-    };
-    if (responseErrors.length > 0 && successCount === 0)
-      notification.error(notificationConfig);
-    else if (responseErrors.length > 0 && successCount > 0)
-      notification.warning(notificationConfig);
-    else notification.success(notificationConfig);
     await store.dispatch("employees/fetchUsers", { force: true });
   } catch (error) {
     notification.error({
@@ -752,7 +753,7 @@ const openAddModal = () => {
   });
   isAddEditModalVisible.value = true;
 };
-// Helper lấy sectionId từ employee, fallback nhiều trường hợp
+
 function getSectionIdFromEmployee(employee) {
   if (employee.sectionId !== undefined && employee.sectionId !== null)
     return Number(employee.sectionId);
@@ -762,14 +763,14 @@ function getSectionIdFromEmployee(employee) {
     employee.section.id !== null
   )
     return Number(employee.section.id);
-  // Fallback nếu có mảng sections (ít gặp)
+
   if (
     Array.isArray(employee.sections) &&
     employee.sections.length > 0 &&
     employee.sections[0].id !== undefined
   )
     return Number(employee.sections[0].id);
-  // Fallback nếu có section_code và sectionListForForm
+
   if (employee.section_code && sectionListForForm.value) {
     const found = sectionListForForm.value.find(
       (sec) => sec.code === employee.section_code
@@ -782,7 +783,7 @@ function getSectionIdFromEmployee(employee) {
 const openEditModal = async (employee) => {
   isEditingEmployee.value = true;
   editEmployee.value = employee;
-  // Gán từng trường một để tránh bị ghi đè sectionId
+
   employeeForm.value.username = employee.username || "";
   employeeForm.value.email = employee.email || "";
   employeeForm.value.first_name = employee.first_name || "";
@@ -796,7 +797,7 @@ const openEditModal = async (employee) => {
     Number(employee.department?.id) || undefined;
   employeeForm.value.sectionId = getSectionIdFromEmployee(employee);
   employeeForm.value.password = "";
-  // Đảm bảo sectionListForForm luôn chứa section của nhân viên
+
   if (employee.department?.id) {
     const sections = store.getters["sections/sectionsByDepartment"](
       employee.department.id
@@ -829,7 +830,6 @@ const closeAddEditModal = () => {
 };
 const addEditEmployeeFormRef = ref();
 
-// Update the form to use Ant Design's built-in validation for required fields.
 const submitAddEditEmployeeForm = () => {
   if (!addEditEmployeeFormRef.value) {
     notification.error({
@@ -854,16 +854,23 @@ const submitAddEditEmployeeForm = () => {
 const handleAddEditEmployee = async () => {
   savingEmployee.value = true;
   try {
-    // Đảm bảo roles là mảng string
     const formData = { ...employeeForm.value };
     formData.roles = (formData.roles || [])
       .map((r) => (typeof r === "string" ? r : r?.name))
       .filter(Boolean);
-    // Ensure departmentId/sectionId are null if empty/undefined
-    if (formData.departmentId === undefined || formData.departmentId === "" || formData.departmentId === 0) {
+
+    if (
+      formData.departmentId === undefined ||
+      formData.departmentId === "" ||
+      formData.departmentId === 0
+    ) {
       formData.departmentId = null;
     }
-    if (formData.sectionId === undefined || formData.sectionId === "" || formData.sectionId === 0) {
+    if (
+      formData.sectionId === undefined ||
+      formData.sectionId === "" ||
+      formData.sectionId === 0
+    ) {
       formData.sectionId = null;
     }
     if (editEmployee.value) {
@@ -946,25 +953,39 @@ const closeDetailDrawer = () => {
   detailEmployee.value = null;
 };
 const exportExcel = async () => {
-  const data = filteredEmployees.value.map((e) => ({
-    Username: e.username,
-    Email: e.email,
-    "First Name": e.first_name,
-    "Last Name": e.last_name,
-    Role: $t(e.role?.name || "employee"),
-    Department: e.department?.name || "",
-    Section: e.section?.name || "",
-  }));
+  const data = filteredEmployees.value.map((e) => {
+    // Handle multiple roles
+    let roleText = "";
+    if (Array.isArray(e.roles) && e.roles.length > 0) {
+      roleText = e.roles
+        .map((r) => $t(typeof r === "string" ? r : r?.name))
+        .join(", ");
+    } else if (e.role) {
+      roleText = $t(typeof e.role === "string" ? e.role : e.role?.name);
+    } else {
+      roleText = $t("noRole");
+    }
+
+    return {
+      Username: e.username,
+      Email: e.email,
+      "First Name": e.first_name,
+      "Last Name": e.last_name,
+      Role: roleText,
+      Department: e.department?.name || "",
+      Section: e.section?.name || "",
+    };
+  });
   if (data.length === 0) {
     notification.info({ message: $t("noDataToExport") });
     return;
   }
-  // Tạo workbook và worksheet
+
   const workbook = new ExcelJS.Workbook();
   const worksheet = workbook.addWorksheet("Employees", {
-    views: [{ state: "frozen", ySplit: 2 }], // freeze 2 dòng đầu
+    views: [{ state: "frozen", ySplit: 2 }],
   });
-  // Định nghĩa cột
+
   const columns = [
     { header: "Username", key: "Username", width: 18 },
     { header: "Email", key: "Email", width: 30 },
@@ -975,7 +996,7 @@ const exportExcel = async () => {
     { header: "Section", key: "Section", width: 22 },
   ];
   worksheet.columns = columns;
-  // Thêm title
+
   const title = "Danh sách nhân viên";
   worksheet.mergeCells(1, 1, 1, columns.length);
   const titleCell = worksheet.getCell(1, 1);
@@ -989,12 +1010,12 @@ const exportExcel = async () => {
     right: { style: "thin", color: { argb: "FFBFBFBF" } },
   };
   worksheet.getRow(1).height = 32;
-  // Thêm header row thủ công vào dòng 2
+
   worksheet.insertRow(
     2,
     columns.map((col) => col.header)
   );
-  // Header style (dòng 2)
+
   worksheet.getRow(2).eachCell((cell) => {
     cell.font = {
       name: "Arial",
@@ -1019,11 +1040,11 @@ const exportExcel = async () => {
       right: { style: "thin", color: { argb: "FFBFBFBF" } },
     };
   });
-  // Thêm dữ liệu bắt đầu từ dòng 3
+
   data.forEach((row) => worksheet.addRow(row));
-  // Style cho toàn bộ bảng
+
   worksheet.eachRow((row, rowNumber) => {
-    if (rowNumber === 1) return; // đã style title riêng
+    if (rowNumber === 1) return;
     row.height = 24;
     row.eachCell((cell) => {
       cell.font = cell.font || { name: "Arial", size: 12 };
@@ -1039,7 +1060,7 @@ const exportExcel = async () => {
         right: { style: "thin", color: { argb: "FFBFBFBF" } },
       };
     });
-    // Căn giữa cho header
+
     if (rowNumber === 2)
       row.alignment = {
         vertical: "middle",
@@ -1047,14 +1068,14 @@ const exportExcel = async () => {
         wrapText: true,
       };
   });
-  // Freeze header
+
   worksheet.views = [{ state: "frozen", ySplit: 2 }];
-  // Auto filter cho vùng dữ liệu (bắt đầu từ dòng 2)
+
   worksheet.autoFilter = {
     from: "A2",
     to: String.fromCharCode(65 + columns.length - 1) + "2",
   };
-  // Xuất file
+
   const buffer = await workbook.xlsx.writeBuffer();
   const blob = new Blob([buffer], {
     type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -1072,18 +1093,18 @@ const exportExcel = async () => {
   notification.success({ message: $t("exportExcelSuccess") });
 };
 onMounted(async () => {
-  await store.dispatch("roles/fetchRoles"); // Fetch roles from backend
+  await store.dispatch("roles/fetchRoles");
   await store.dispatch("employees/fetchUsers", { force: true });
   await store.dispatch("departments/fetchDepartments");
   await store.dispatch("sections/fetchSections");
 });
-// Khi chọn department thì fetch section theo department nếu chưa có
+
 watch(
   () => filterDepartment.value,
   async (newVal) => {
     if (newVal) {
       await store.dispatch("sections/fetchSectionsByDepartment", newVal);
-      filterSection.value = undefined; // reset section filter khi đổi department
+      filterSection.value = undefined;
     }
   }
 );
@@ -1134,7 +1155,7 @@ const columns = computed(() => [
     sorter: (a, b) =>
       (a.section?.name || "").localeCompare(b.section?.name || ""),
   },
-  // Hiển thị tất cả roles, phân cách phẩy
+
   {
     title: $t("role"),
     dataIndex: "role",
@@ -1166,14 +1187,8 @@ function formatDate(date) {
   if (!date) return $t("noData");
   return dayjs(date).isValid() ? dayjs(date).format("DD/MM/YYYY HH:mm") : date;
 }
-function roleColor(role) {
-  const name = typeof role === "string" ? role : role?.name;
-  if (!name) return "default";
-  if (name.toLowerCase().includes("admin")) return "red";
-  if (name.toLowerCase().includes("manager")) return "blue";
-  if (name.toLowerCase().includes("department")) return "purple";
-  if (name.toLowerCase().includes("section")) return "cyan";
-  return "geekblue";
+function roleColor() {
+  return "blue";
 }
 </script>
 

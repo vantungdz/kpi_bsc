@@ -2,47 +2,85 @@
 <template>
   <a-card class="formula-manage-form">
     <div class="form-header">
-      <a-avatar class="form-header-icon" size="large" style="background: linear-gradient(135deg, #1976d2 60%, #42a5f5 100%)">
+      <a-avatar
+        class="form-header-icon"
+        size="large"
+        style="background: linear-gradient(135deg, #1976d2 60%, #42a5f5 100%)"
+      >
         <template #icon>
           <CalculatorOutlined />
         </template>
       </a-avatar>
-      <h2 class="form-title">{{ $t('formula.title') }}</h2>
+      <h2 class="form-title">{{ $t("formula.title") }}</h2>
     </div>
     <a-divider />
-    <a-form :model="form" :rules="rules" ref="formRef" layout="vertical" @finish="handleSubmit">
+    <a-form
+      :model="form"
+      :rules="rules"
+      ref="formRef"
+      layout="vertical"
+      @finish="handleSubmit"
+    >
       <a-row :gutter="20">
-        <a-col :xs="24" :md="12">
+        <a-col :xs="24">
           <a-form-item :label="$t('formula.name')" name="name">
-            <a-input v-model:value="form.name" :placeholder="$t('formula.namePlaceholder')">
-              <template #prefix>
-                <EditOutlined />
-              </template>
-            </a-input>
-          </a-form-item>
-        </a-col>
-        <a-col :xs="24" :md="12">
-          <a-form-item :label="$t('formula.code')" name="code">
-            <a-input v-model:value="form.code" :placeholder="$t('formula.codePlaceholder')">
-              <template #prefix>
-                <BarcodeOutlined />
-              </template>
-            </a-input>
+            <div style="display: flex; align-items: center; gap: 8px">
+              <a-input
+                v-model:value="form.name"
+                :placeholder="$t('formula.namePlaceholder')"
+              >
+                <template #prefix>
+                  <EditOutlined />
+                </template>
+              </a-input>
+              <a-tooltip
+                placement="top"
+                :mouseEnterDelay="0.1"
+                overlayClassName="name-tooltip"
+              >
+                <template #title>
+                  <div style="max-width: 280px">
+                    <b>{{ $t("formula.nameTooltip.title") }}</b
+                    ><br />
+                    <ul style="padding-left: 18px; margin: 8px 0">
+                      <li>{{ $t("formula.nameTooltip.rule1") }}</li>
+                      <li>{{ $t("formula.nameTooltip.rule2") }}</li>
+                      <li>{{ $t("formula.nameTooltip.rule3") }}</li>
+                      <li>{{ $t("formula.nameTooltip.example") }}</li>
+                    </ul>
+                    <small style="color: #666">{{
+                      $t("formula.nameTooltip.note")
+                    }}</small>
+                  </div>
+                </template>
+                <a-button type="text" size="small" class="tooltip-btn">
+                  <span class="tooltip-icon"><InfoCircleOutlined /></span>
+                </a-button>
+              </a-tooltip>
+            </div>
           </a-form-item>
         </a-col>
       </a-row>
       <a-form-item :label="$t('formula.expression')" name="expression">
-        <div style="display: flex; align-items: center; gap: 8px;">
-          <a-input v-model:value="form.expression" :placeholder="$t('formula.expressionPlaceholder')">
+        <div style="display: flex; align-items: center; gap: 8px">
+          <a-input
+            v-model:value="form.expression"
+            :placeholder="$t('formula.expressionPlaceholder')"
+          >
             <template #prefix>
               <FunctionOutlined />
             </template>
           </a-input>
-          <a-tooltip placement="top" :mouseEnterDelay="0.1" overlayClassName="formula-tooltip">
+          <a-tooltip
+            placement="top"
+            :mouseEnterDelay="0.1"
+            overlayClassName="formula-tooltip"
+          >
             <template #title>
-              <div style="max-width:320px;">
-                <b>{{ $t('formula.tooltipTitle') }}</b><br />
-                <ul style="padding-left:18px;">
+              <div style="max-width: 320px">
+                <b>{{ $t("formula.tooltipTitle") }}</b
+                ><br />
+                <ul style="padding-left: 18px">
                   <li v-html="$t('formula.tooltip.values')"></li>
                   <li v-html="$t('formula.tooltip.targets')"></li>
                   <li v-html="$t('formula.tooltip.weight')"></li>
@@ -50,8 +88,8 @@
                   <li v-html="$t('formula.tooltip.average')"></li>
                   <li v-html="$t('formula.tooltip.minmax')"></li>
                 </ul>
-                <b>{{ $t('formula.tooltip.exampleLabel') }}</b>
-                <code>{{ $t('formula.tooltip.example') }}</code>
+                <b>{{ $t("formula.tooltip.exampleLabel") }}</b>
+                <code>{{ $t("formula.tooltip.example") }}</code>
               </div>
             </template>
             <a-button type="text" size="small" class="tooltip-btn">
@@ -61,40 +99,73 @@
         </div>
       </a-form-item>
       <a-form-item :label="$t('formula.description')" name="description">
-        <a-textarea v-model:value="form.description" :placeholder="$t('formula.descriptionPlaceholder')">
+        <a-textarea
+          v-model:value="form.description"
+          :placeholder="$t('formula.descriptionPlaceholder')"
+        >
           <template #prefix>
             <FileTextOutlined />
           </template>
         </a-textarea>
       </a-form-item>
       <a-form-item>
-        <a-button type="default" html-type="submit" :loading="loading" class="main-btn-modern" size="middle" shape="round">
+        <a-button
+          type="default"
+          html-type="submit"
+          :loading="loading"
+          class="main-btn-modern"
+          size="middle"
+          shape="round"
+        >
           <template #icon>
             <SaveOutlined />
           </template>
-          {{ isEdit ? $t('common.update') : $t('common.add') }}
+          {{ isEdit ? $t("common.update") : $t("common.add") }}
         </a-button>
-        <a-button v-if="isEdit" @click="resetForm" class="cancel-btn-modern" size="middle" shape="round" style="margin-left: 8px">
+        <a-button
+          v-if="isEdit"
+          @click="resetForm"
+          class="cancel-btn-modern"
+          size="middle"
+          shape="round"
+          style="margin-left: 8px"
+        >
           <template #icon>
             <CloseOutlined />
           </template>
-          {{ $t('common.cancel') }}
+          {{ $t("common.cancel") }}
         </a-button>
       </a-form-item>
     </a-form>
     <a-divider />
     <div>
-      <h3 class="list-title"><CalculatorOutlined style="margin-right:6px;" />{{ $t('formula.listTitle') }}</h3>
-      <a-table :data-source="formulaList" :columns="formulaColumns" row-key="id" size="small" :pagination="false"
-        bordered v-if="formulaList && formulaList.length" class="formula-table">
+      <h3 class="list-title">
+        <CalculatorOutlined style="margin-right: 6px" />{{
+          $t("formula.listTitle")
+        }}
+      </h3>
+      <a-table
+        :data-source="formulaList"
+        :columns="formulaColumns"
+        row-key="id"
+        size="small"
+        :pagination="false"
+        bordered
+        v-if="formulaList && formulaList.length"
+        class="formula-table"
+      >
         <template #actions="{ record }">
           <a-tooltip :title="$t('common.edit')">
             <a-button size="small" type="text" @click="editFormula(record)">
               <template #icon><EditOutlined /></template>
             </a-button>
           </a-tooltip>
-          <a-popconfirm :title="$t('formula.deleteConfirm')" :ok-text="$t('common.delete')"
-            :cancel-text="$t('common.cancel')" @confirm="() => deleteFormula(record)">
+          <a-popconfirm
+            :title="$t('formula.deleteConfirm')"
+            :ok-text="$t('common.delete')"
+            :cancel-text="$t('common.cancel')"
+            @confirm="() => deleteFormula(record)"
+          >
             <a-tooltip :title="$t('common.delete')">
               <a-button size="small" type="text" danger>
                 <template #icon><DeleteOutlined /></template>
@@ -109,98 +180,194 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from "vue";
+import { ref, onMounted, computed, watch } from "vue";
 import { message } from "ant-design-vue";
 import { useStore } from "vuex";
-import { useI18n } from 'vue-i18n';
-import { CalculatorOutlined, EditOutlined, BarcodeOutlined, FunctionOutlined, FileTextOutlined, SaveOutlined, CloseOutlined, DeleteOutlined, QuestionCircleOutlined } from '@ant-design/icons-vue';
+import { useI18n } from "vue-i18n";
+import {
+  CalculatorOutlined,
+  EditOutlined,
+  FunctionOutlined,
+  FileTextOutlined,
+  SaveOutlined,
+  CloseOutlined,
+  DeleteOutlined,
+  QuestionCircleOutlined,
+  InfoCircleOutlined,
+} from "@ant-design/icons-vue";
 
 const { t: $t } = useI18n();
 
 const store = useStore();
 const formRef = ref();
 const form = ref({
+  id: null,
+  name: "",
+  code: "",
+  expression: "",
+  description: "",
+});
+const loading = computed(() => store.getters["formula/isFormulaLoading"]);
+const isEdit = ref(false);
+
+// Helper functions for code generation and validation
+const generateCodeFromName = (name) => {
+  if (!name) return "";
+  return name
+    .toUpperCase()
+    .replace(/[^A-Z0-9\s]/g, "") // Remove special characters except spaces
+    .replace(/\s+/g, "_") // Replace spaces with underscores
+    .replace(/_+/g, "_") // Replace multiple underscores with single
+    .replace(/^_|_$/g, ""); // Remove leading/trailing underscores
+};
+
+const validateNameFormat = (name) => {
+  if (!name) return true; // Empty is handled by required rule
+  // Allow letters (including Vietnamese), numbers, spaces, and common punctuation
+  // Use Unicode property escapes for better Vietnamese support
+  const nameRegex = /^[\p{L}\p{N}\s\-_.,()]+$/u;
+  return nameRegex.test(name);
+};
+
+const validateNameLength = (name) => {
+  if (!name) return true;
+  return name.length >= 2 && name.length <= 100;
+};
+
+const checkNameDuplicate = (name, currentId = null) => {
+  if (!name) return true;
+  const existingFormulas = formulaList.value || [];
+  return !existingFormulas.some(
+    (formula) =>
+      formula.name.toLowerCase() === name.toLowerCase() &&
+      formula.id !== currentId
+  );
+};
+
+const rules = {
+  name: [
+    { required: true, message: $t("formula.nameRequired"), trigger: "blur" },
+    {
+      validator: (rule, value) => {
+        if (!validateNameLength(value)) {
+          return Promise.reject($t("formula.validation.nameLength"));
+        }
+        if (!validateNameFormat(value)) {
+          return Promise.reject($t("formula.validation.nameFormat"));
+        }
+        if (!checkNameDuplicate(value, form.value.id)) {
+          return Promise.reject($t("formula.validation.nameDuplicate"));
+        }
+        return Promise.resolve();
+      },
+      trigger: "blur",
+    },
+  ],
+  expression: [
+    {
+      required: true,
+      message: $t("formula.expressionRequired"),
+      trigger: "blur",
+    },
+  ],
+};
+
+const formulaList = computed(() => store.getters["formula/getFormulas"] || []);
+const formulaColumns = computed(() => [
+  { title: $t("formula.name"), dataIndex: "name", key: "name" },
+  { title: $t("formula.code"), dataIndex: "code", key: "code" },
+  {
+    title: $t("formula.expression"),
+    dataIndex: "expression",
+    key: "expression",
+  },
+  {
+    title: $t("formula.description"),
+    dataIndex: "description",
+    key: "description",
+  },
+  {
+    title: $t("common.actions"),
+    key: "actions",
+    slots: { customRender: "actions" },
+    width: 120,
+  },
+]);
+
+// Watch for name changes to auto-generate code
+watch(
+  () => form.value.name,
+  (newName) => {
+    if (newName) {
+      form.value.code = generateCodeFromName(newName);
+    }
+  }
+);
+
+const resetForm = () => {
+  isEdit.value = false;
+  form.value = {
     id: null,
     name: "",
     code: "",
     expression: "",
     description: "",
-});
-const loading = computed(() => store.getters["formula/isFormulaLoading"]);
-const isEdit = ref(false);
-
-const rules = {
-    name: [{ required: true, message: $t('formula.nameRequired'), trigger: "blur" }],
-    code: [{ required: true, message: $t('formula.codeRequired'), trigger: "blur" }],
-    expression: [{ required: true, message: $t('formula.expressionRequired'), trigger: "blur" }],
-};
-
-const formulaList = computed(() => store.getters["formula/getFormulas"] || []);
-const formulaColumns = computed(() => [
-    { title: $t('formula.name'), dataIndex: "name", key: "name" },
-    { title: $t('formula.code'), dataIndex: "code", key: "code" },
-    { title: $t('formula.expression'), dataIndex: "expression", key: "expression" },
-    { title: $t('formula.description'), dataIndex: "description", key: "description" },
-    {
-        title: $t('common.actions'),
-        key: "actions",
-        slots: { customRender: "actions" },
-        width: 120,
-    },
-]);
-
-const resetForm = () => {
-    isEdit.value = false;
-    form.value = { id: null, name: "", code: "", expression: "", description: "" };
-    formRef.value?.resetFields();
+  };
+  formRef.value?.resetFields();
 };
 
 const editFormula = (record) => {
-    isEdit.value = true;
-    form.value = { ...record };
-    formRef.value?.clearValidate();
+  isEdit.value = true;
+  form.value = { ...record };
+  formRef.value?.clearValidate();
 };
 
 const handleSubmit = async () => {
-    if (!form.value.name || !form.value.code || !form.value.expression) {
-        message.error("Vui lòng nhập đầy đủ thông tin bắt buộc!");
-        return;
+  if (!form.value.name || !form.value.expression) {
+    message.error($t("common.requiredFieldsMissing"));
+    return;
+  }
+
+  // Ensure code is generated before submit
+  if (!form.value.code && form.value.name) {
+    form.value.code = generateCodeFromName(form.value.name);
+  }
+
+  try {
+    if (isEdit.value) {
+      await store.dispatch("formula/updateFormula", {
+        id: form.value.id,
+        updateData: {
+          name: form.value.name,
+          code: form.value.code,
+          expression: form.value.expression,
+          description: form.value.description,
+        },
+      });
+      message.success($t("common.updateSuccess"));
+    } else {
+      await store.dispatch("formula/addFormula", form.value);
+      message.success($t("common.addSuccess"));
     }
-    try {
-        if (isEdit.value) {
-            await store.dispatch("formula/updateFormula", {
-                id: form.value.id,
-                updateData: {
-                    name: form.value.name,
-                    code: form.value.code,
-                    expression: form.value.expression,
-                    description: form.value.description,
-                },
-            });
-            message.success("Cập nhật công thức thành công!");
-        } else {
-            await store.dispatch("formula/addFormula", form.value);
-            message.success("Thêm công thức thành công!");
-        }
-        resetForm();
-        await store.dispatch("formula/fetchFormulas");
-    } catch (e) {
-        // lỗi đã được notification trong store
-    }
+    resetForm();
+    await store.dispatch("formula/fetchFormulas");
+  } catch (e) {
+    console.error(e);
+  }
 };
 
 const deleteFormula = async (record) => {
-    try {
-        await store.dispatch("formula/deleteFormula", record.id);
-        message.success("Xóa công thức thành công!");
-        await store.dispatch("formula/fetchFormulas");
-    } catch (e) {
-        message.error(e?.message || "Xóa công thức thất bại!");
-    }
+  try {
+    await store.dispatch("formula/deleteFormula", record.id);
+    message.success($t("common.deleteSuccess"));
+    await store.dispatch("formula/fetchFormulas");
+  } catch (e) {
+    message.error(e?.message || $t("common.deleteError"));
+  }
 };
 
 onMounted(async () => {
-    await store.dispatch("formula/fetchFormulas");
+  await store.dispatch("formula/fetchFormulas");
 });
 </script>
 
@@ -259,7 +426,8 @@ onMounted(async () => {
   align-items: center;
   gap: 6px;
 }
-.main-btn-modern:hover, .main-btn-modern:focus {
+.main-btn-modern:hover,
+.main-btn-modern:focus {
   background: #e3f2fd;
   color: #1565c0;
   border-color: #90caf9;
@@ -273,7 +441,9 @@ onMounted(async () => {
   font-weight: 400;
   margin-left: 8px;
   height: 36px;
-  transition: background 0.2s, color 0.2s;
+  transition:
+    background 0.2s,
+    color 0.2s;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -307,7 +477,11 @@ onMounted(async () => {
   font-size: 1.05rem;
 }
 .formula-tooltip .ant-tooltip-inner,
-:deep(.formula-tooltip .ant-tooltip-inner) {
+:deep(.formula-tooltip .ant-tooltip-inner),
+.code-tooltip .ant-tooltip-inner,
+:deep(.code-tooltip .ant-tooltip-inner),
+.name-tooltip .ant-tooltip-inner,
+:deep(.name-tooltip .ant-tooltip-inner) {
   background: #fafdff !important;
   color: #222;
   border-radius: 10px;

@@ -28,7 +28,6 @@ export class PerspectiveService {
   }
 
   async create(perspective: Partial<Perspective>): Promise<Perspective> {
-    // Loại bỏ id nếu được cung cấp để tránh vi phạm khóa chính
     const { id, ...data } = perspective;
     const newPerspective = this.perspectivesRepository.create(data);
     return await this.perspectivesRepository.save(newPerspective);

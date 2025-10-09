@@ -44,6 +44,7 @@ import CompetencyList from '../../features/competency/views/CompetencyList.vue';
 import EmployeeSkillList from "../../features/competency/views/EmployeeSkillList.vue";
 import PersonalGoalList from '../../features/personal-goal/views/PersonalGoalList.vue';
 import PersonalGoalListEmployee from '../../features/personal-goal/views/PersonalGoalListEmployee.vue';
+import Documents from '@/features/documents/views/DocumentsList.vue';
 
 const routes = [
   {
@@ -546,12 +547,16 @@ const routes = [
       permissions: [
         {
           action: RBAC_ACTIONS.VIEW,
-          resource: RBAC_RESOURCES.KPI, // hoặc PERSONAL_GOAL nếu có
+          resource: RBAC_RESOURCES.KPI, // or PERSONAL_GOAL if available
         },
       ],
     },
   },
-
+  {
+    path: '/documents',
+    name: 'DocumentsList',
+    component: Documents,
+  },
   {
     path: "/403",
     name: "PageForbidden",
@@ -570,6 +575,7 @@ const routes = [
     component: PageNotFound,
     meta: { requiresAuth: false },
   },
+ 
 ];
 
 function hasPermission(userPermissions, action, resource, scope) {
@@ -598,7 +604,7 @@ router.beforeEach((to, from, next) => {
   if (requiresAuth && !isAuthenticated) {
     next({ name: "LoginPage", query: { redirect: to.fullPath } });
   } else {
-    // Kiểm tra permission động nếu có
+    // Check dynamic permissions if available
     const userPermissions = store.getters["auth/user"]?.permissions || [];
     const requiredPermissions = to.meta.permissions;
     if (

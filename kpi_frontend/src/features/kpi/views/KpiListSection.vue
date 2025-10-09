@@ -4,7 +4,9 @@
       <schedule-outlined class="header-icon" />
       <div class="header-title-group">
         <h2>{{ $t("sectionKpiList") }}</h2>
-        <div class="header-desc">{{ $t('sectionKpiListDesc') || $t('sectionKpiList') }}</div>
+        <div class="header-desc">
+          {{ $t("sectionKpiListDesc") || $t("sectionKpiList") }}
+        </div>
       </div>
       <div class="action-buttons right-align">
         <a-button
@@ -18,7 +20,7 @@
     </div>
     <a-card class="filter-card-modern">
       <a-form layout="vertical" class="filter-form-modern">
-        <a-row :gutter="[16, 0]" align="middle" style="flex-wrap: wrap;">
+        <a-row :gutter="[16, 0]" align="middle" style="flex-wrap: wrap">
           <a-col :span="5">
             <a-form-item :label="$t('search')" class="filter-label-top">
               <a-input
@@ -38,15 +40,24 @@
                 v-model:value="localFilters.departmentId"
                 style="width: 100%"
                 @change="handleDepartmentChange"
-                :disabled="(isSectionUser && !!currentUser?.departmentId) || isDepartmentUser"
+                :disabled="
+                  (isSectionUser && !!currentUser?.departmentId) ||
+                  isDepartmentUser
+                "
                 allow-clear
                 size="middle"
               >
                 <template #suffixIcon><team-outlined /></template>
                 <a-select-option
-                  v-if="!((isSectionUser && !!currentUser?.departmentId) || isDepartmentUser)"
+                  v-if="
+                    !(
+                      (isSectionUser && !!currentUser?.departmentId) ||
+                      isDepartmentUser
+                    )
+                  "
                   :value="null"
-                >{{ $t('allDepartments') }}</a-select-option>
+                  >{{ $t("allDepartments") }}</a-select-option
+                >
                 <a-select-option
                   v-for="department in departmentList"
                   :key="department.id"
@@ -66,7 +77,9 @@
                 allow-clear
                 size="middle"
               >
-                <a-select-option v-if="!isSectionUser" :value="0">{{ $t('allSections') }}</a-select-option>
+                <a-select-option v-if="!isSectionUser" :value="0">{{
+                  $t("allSections")
+                }}</a-select-option>
                 <a-select-option
                   v-for="section in selectSectionList"
                   :key="section.id"
@@ -99,10 +112,28 @@
               />
             </a-form-item>
           </a-col>
-          <a-col :span="4" style="display: flex; align-items: flex-end; height: 100%;">
+          <a-col
+            :span="4"
+            style="display: flex; align-items: flex-end; height: 100%"
+          >
             <div class="filter-btn-group">
-              <a-button type="primary" @click="applyFilters" size="middle">{{ $t('apply') }}</a-button>
-              <a-button @click="() => { localFilters.name = ''; localFilters.departmentId = null; localFilters.sectionId = 0; localFilters.startDate = ''; localFilters.endDate = ''; applyFilters(); }" size="middle">{{ $t('reset') }}</a-button>
+              <a-button type="primary" @click="applyFilters" size="middle">{{
+                $t("apply")
+              }}</a-button>
+              <a-button
+                @click="
+                  () => {
+                    localFilters.name = '';
+                    localFilters.departmentId = null;
+                    localFilters.sectionId = 0;
+                    localFilters.startDate = '';
+                    localFilters.endDate = '';
+                    applyFilters();
+                  }
+                "
+                size="middle"
+                >{{ $t("reset") }}</a-button
+              >
             </div>
           </a-col>
         </a-row>
@@ -184,9 +215,10 @@
                       colors: ['#008FFB', '#B9E5FF'],
                       dataLabels: {
                         enabled: true,
-                        formatter: function(val, opts) {
+                        formatter: function (val, opts) {
                           const actual = parseFloat(opts.w.config.series[0]);
-                          const target = actual + parseFloat(opts.w.config.series[1]);
+                          const target =
+                            actual + parseFloat(opts.w.config.series[1]);
                           if (!target || isNaN(target)) return '--';
                           if (!actual || isNaN(actual)) return '0%';
                           let percent = Math.round((actual / target) * 100);
@@ -202,8 +234,16 @@
                       legend: { show: false },
                     }"
                     :series="[
-                      (parseFloat(record.actual) && parseFloat(record.actual) > 0) ? parseFloat(record.actual) : 0,
-                      (parseFloat(record.target) && parseFloat(record.target) > 0) ? Math.max(parseFloat(record.target) - parseFloat(record.actual), 0) : 0,
+                      parseFloat(record.actual) && parseFloat(record.actual) > 0
+                        ? parseFloat(record.actual)
+                        : 0,
+                      parseFloat(record.target) && parseFloat(record.target) > 0
+                        ? Math.max(
+                            parseFloat(record.target) -
+                              parseFloat(record.actual),
+                            0
+                          )
+                        : 0,
                     ]"
                   />
                 </template>
@@ -220,10 +260,14 @@
                   <span>{{ record.weight }}</span>
                 </template>
                 <template v-else-if="column.dataIndex === 'target'">
-                  <span class="kpi-value">{{ `${Number(record.target).toLocaleString()} ${record.unit}` }}</span>
+                  <span class="kpi-value">{{
+                    `${Number(record.target).toLocaleString()} ${record.unit}`
+                  }}</span>
                 </template>
                 <template v-else-if="column.dataIndex === 'actual'">
-                  <span class="kpi-value kpi-actual">{{ `${Number(record.actual).toLocaleString()} ${record.unit}` }}</span>
+                  <span class="kpi-value kpi-actual">{{
+                    `${Number(record.actual).toLocaleString()} ${record.unit}`
+                  }}</span>
                 </template>
                 <template v-else-if="column.dataIndex === 'status'">
                   <a-tag
@@ -235,12 +279,19 @@
                   </a-tag>
                 </template>
                 <template v-else-if="column.dataIndex === 'validityStatus'">
-                  <a-tag :color="validityStatusColor[record.validityStatus] || 'default'">
-                    {{ $t('validityStatus.' + record.validityStatus) || record.validityStatus }}
+                  <a-tag
+                    :color="
+                      validityStatusColor[record.validityStatus] || 'default'
+                    "
+                  >
+                    {{
+                      $t("validityStatus." + record.validityStatus) ||
+                      record.validityStatus
+                    }}
                   </a-tag>
                 </template>
                 <template v-else-if="column.dataIndex === 'action'">
-                  <div style="text-align:center;">
+                  <div style="text-align: center">
                     <a-tooltip :title="$t('viewDetails')">
                       <a-button
                         type="default"
@@ -301,10 +352,11 @@
 </template>
 
 <script setup>
-import { reactive, computed, onMounted, ref, watch,h } from "vue";
+import { reactive, computed, onMounted, ref, watch, h } from "vue";
 import { useStore } from "vuex";
 import { useRouter } from "vue-router";
-import { useI18n } from "vue-i18n";import {
+import { useI18n } from "vue-i18n";
+import {
   Button as AButton,
   Input as AInput,
   Select as ASelect,
@@ -317,14 +369,14 @@ import { useI18n } from "vue-i18n";import {
   CollapsePanel as ACollapsePanel,
   Table as ATable,
   Tag as ATag,
-  Card as ACard
+  Card as ACard,
 } from "ant-design-vue";
 import {
   TeamOutlined,
   ScheduleOutlined,
   PlusOutlined,
   DeleteOutlined,
-  CopyOutlined
+  CopyOutlined,
 } from "@ant-design/icons-vue";
 import { KpiDefinitionStatus } from "@/core/constants/kpiStatus";
 import { notification } from "ant-design-vue";
@@ -357,7 +409,7 @@ function hasPermission(action, resource, scope) {
       (scope ? p.scope === scope : true)
   );
 }
-// Chỉ giữ lại các biến kiểm tra quyền động thực sự sử dụng trên UI
+
 const canCopySectionKpi = computed(() =>
   hasPermission(RBAC_ACTIONS.COPY_TEMPLATE, RBAC_RESOURCES.KPI, "company")
 );
@@ -365,7 +417,7 @@ const canCreateSectionKpiSection = computed(() =>
   hasPermission(RBAC_ACTIONS.CREATE, RBAC_RESOURCES.KPI, "section")
 );
 const canDeleteSectionKpiSection = computed(() =>
-  hasPermission(RBAC_ACTIONS.DELETE, RBAC_RESOURCES.KPI , 'company')
+  hasPermission(RBAC_ACTIONS.DELETE, RBAC_RESOURCES.KPI, "company")
 );
 
 const selectSectionList = ref([]);
@@ -382,8 +434,8 @@ const activePanelKeys = ref([]);
 
 const localFilters = reactive({
   name: "",
-  departmentId: null, // Sẽ được đặt trong onMounted
-  sectionId: null, // Sẽ được đặt trong onMounted, 0 có thể có nghĩa là "All" cho admin/manager
+  departmentId: null,
+  sectionId: null,
   startDate: "",
   endDate: "",
 });
@@ -576,7 +628,7 @@ const sectionGroups = computed(() => {
         })(),
         unit: kpiDetails.kpiUnit,
         status: displayStatus,
-        validityStatus: kpi.validityStatus || "active", // <--- Add this line
+        validityStatus: kpi.validityStatus || "active",
       };
       groupedData[sectionId].data[perspectiveKey].push(rowData);
     });
@@ -614,11 +666,10 @@ const applyFilters = async () => {
       ? null
       : Number(localFilters.departmentId);
 
-  // Ensure sectionIdForApi is null if localFilters.sectionId is 0 (All Sections), null, or NaN-producing, otherwise use the number.
   const sectionIdForPath =
     localFilters.sectionId === null ||
     Number.isNaN(Number(localFilters.sectionId))
-      ? 0 // Mặc định là 0 nếu không hợp lệ, vì 0 có nghĩa là "all" trong ngữ cảnh này cho department
+      ? 0
       : Number(localFilters.sectionId);
 
   try {
@@ -642,7 +693,7 @@ const applyFilters = async () => {
 
 const handleDepartmentChange = async () => {
   if (isDepartmentUser.value && currentUser.value?.departmentId) {
-    localFilters.departmentId = currentUser.value.departmentId; // Gán phòng ban cố định
+    localFilters.departmentId = currentUser.value.departmentId;
     notification.info({
       message: "Thông báo",
       description: "Bạn chỉ có thể xem các bộ phận trong phòng ban của mình.",
@@ -660,7 +711,7 @@ const handleDepartmentChange = async () => {
         store.getters["sections/sectionsByDepartment"](
           localFilters.departmentId
         ) || [];
-      // Nếu section hiện tại không thuộc department mới, reset về 0 (All)
+
       if (
         localFilters.sectionId &&
         !selectSectionList.value.some((s) => s.id === localFilters.sectionId)
@@ -731,16 +782,16 @@ const handleDeleteKpi = () => {
 };
 
 const validityStatusColor = {
-  active: 'green',
-  expiring_soon: 'orange',
-  expired: 'red',
+  active: "green",
+  expiring_soon: "orange",
+  expired: "red",
 };
 
 const renderProgress = (record) => {
   const actual = parseFloat(record.actual);
   const target = parseFloat(record.target);
-  if (!target || isNaN(target)) return '--';
-  if (!actual || isNaN(actual)) return '0%';
+  if (!target || isNaN(target)) return "--";
+  if (!actual || isNaN(actual)) return "0%";
   let percent = Math.round((actual / target) * 100);
   if (percent > 100) percent = 100;
   if (percent < 0) percent = 0;
@@ -794,15 +845,15 @@ const columns = computed(() => [
     width: "8%",
   },
   {
-    title: $t('validityStatus.name'),
-    dataIndex: 'validityStatus',
-    key: 'validityStatus',
-    width: '8%',
-    align: 'center',
+    title: $t("validityStatus.name"),
+    dataIndex: "validityStatus",
+    key: "validityStatus",
+    width: "8%",
+    align: "center",
     customRender: ({ text }) => {
       return h(
         ATag,
-        { color: validityStatusColor[text] || 'default' },
+        { color: validityStatusColor[text] || "default" },
         () => $t(`validityStatus.${text}`) || text
       );
     },
@@ -827,7 +878,7 @@ const rowClassName = (record) => {
 watch(
   sectionGroups,
   (newGroups) => {
-    console.log('KPI Section List - sectionGroups:', newGroups);
+    console.log("KPI Section List - sectionGroups:", newGroups);
     const keys = [];
     if (Array.isArray(newGroups)) {
       newGroups.forEach((sectionGroup, sectionIndex) => {
@@ -855,12 +906,12 @@ watch(
 onMounted(async () => {
   try {
     await store.dispatch("departments/fetchDepartments");
-    // Luôn để mặc định là ALL phòng ban khi vào lần đầu
+
     localFilters.departmentId = null;
     await store.dispatch("sections/fetchSections");
     selectSectionList.value = store.getters["sections/sectionList"] || [];
     localFilters.sectionId = 0;
-    await applyFilters(); // Tải dữ liệu KPI ban đầu
+    await applyFilters();
   } catch (err) {
     error.value = err.message || "Failed to fetch initial data.";
   }
@@ -916,7 +967,7 @@ onMounted(async () => {
 .filter-card-modern {
   background: #fff;
   border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
   margin-bottom: 18px;
   padding: 10px 14px 2px 14px;
   max-width: 98%;
@@ -938,7 +989,7 @@ onMounted(async () => {
 .kpi-table-modern {
   background: #fff;
   border-radius: 10px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
   margin-bottom: 0;
 }
 .section-table-modern {
@@ -975,7 +1026,7 @@ onMounted(async () => {
 .kpi-collapse-modern {
   background: #f9fafb;
   border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
   margin-bottom: 18px;
 }
 .section-header-modern {

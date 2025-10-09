@@ -1,45 +1,36 @@
-/* src/assets/styles/main.css */
 
-/* --- Global Box Sizing (Recommended) --- */
 *,
 *::before,
 *::after {
   box-sizing: border-box;
 }
 
-/* Định nghĩa biến màu Global */
 :root {
-  --brand-primary: #0056b3; /* <<< THAY BẰNG MÃ MÀU CHÍNH CỦA BẠN */
-  --brand-primary-hover: #004494; /* <<< THAY BẰNG MÀU HOVER CỦA BẠN */
+  --brand-primary: #0056b3;
+  --brand-primary-hover: #004494;
   --brand-link: var(--brand-primary);
-  /* Thêm các biến màu khác nếu cần */
 }
 
-/* --- Reset & Base Styles --- */
 html,
 body {
   height: 100%;
   margin: 0;
   padding: 0;
-  overflow: hidden; /* Ngăn cuộn ở mức html, body */
+  overflow: hidden;
 }
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   margin: 0;
   padding: 0;
   background-color: #f8f9fa;
-  /* Light grey background */
   color: #212529;
-  /* Default text color */
   line-height: 1.5;
   font-size: 16px;
-  /* Base font size */
 }
 
 a {
   text-decoration: none;
   color: #0d6efd;
-  /* Bootstrap primary blue */
   transition: color 0.15s ease-in-out, text-decoration 0.15s ease-in-out;
 }
 
@@ -85,15 +76,11 @@ button {
   background-color: #e9ecef;
   border: 1px solid #ced4da;
   padding: 0.375rem 0.75rem;
-  /* ~ 6px 12px */
   font-size: 1rem;
   border-radius: 0.25rem;
-  /* ~ 4px */
   transition: color 0.15s ease-in-out, background-color 0.15s ease-in-out, border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
   margin-right: 0.25rem;
-  /* ~ 4px */
   margin-bottom: 0.25rem;
-  /* Add margin bottom */
 }
 
 button:hover {
@@ -104,10 +91,8 @@ button:hover {
 button:focus {
   outline: 0;
   box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
-  /* Focus ring */
 }
 
-/* Primary Button Style */
 button.btn-primary,
 button[type="submit"] {
   color: #fff;
@@ -120,7 +105,6 @@ button.btn-primary:hover {
   border-color: #0a58ca;
 }
 
-/* Secondary Button Style */
 button.btn-secondary {
   color: #fff;
   background-color: #6c757d;
@@ -132,7 +116,6 @@ button.btn-secondary:hover {
   border-color: #565e64;
 }
 
-/* Edit Button Style */
 button.edit-btn {
   color: #000;
   background-color: #ffc107;
@@ -144,7 +127,6 @@ button.edit-btn:hover {
   border-color: #ffc720;
 }
 
-/* Delete Button Style */
 button.delete-btn {
   color: #fff;
   background-color: #dc3545;
@@ -165,14 +147,12 @@ table {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
   border-radius: 0.25rem;
   overflow: hidden;
-  /* Giúp bo góc table hoạt động */
 }
 
 th,
 td {
   border: 1px solid #dee2e6;
   padding: 0.75rem;
-  /* ~ 12px */
   text-align: left;
   vertical-align: top;
 }
@@ -189,7 +169,6 @@ tbody tr:hover {
 
 label {
   display: inline-block;
-  /* Hoặc block tùy ngữ cảnh */
   margin-bottom: 0.5rem;
   font-weight: 500;
   color: #495057;
@@ -204,7 +183,6 @@ select,
 textarea {
   display: block;
   width: 100%;
-  /* Chiếm toàn bộ chiều rộng container */
   padding: 0.375rem 0.75rem;
   font-size: 1rem;
   font-weight: 400;
@@ -214,20 +192,16 @@ textarea {
   background-clip: padding-box;
   border: 1px solid #ced4da;
   appearance: none;
-  /* Tắt giao diện mặc định của trình duyệt */
   border-radius: 0.25rem;
   transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
   box-sizing: border-box;
-  /* Quan trọng để padding không làm tăng kích thước */
 }
 
 input[type="date"] {
   width: auto;
-  /* Date input thường không cần full width */
 }
 
 select {
-  /* Thêm mũi tên cho select box nếu cần */
   background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23343a40' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e");
   background-repeat: no-repeat;
   background-position: right 0.75rem center;
@@ -244,12 +218,9 @@ textarea:focus {
 
 textarea {
   min-height: calc(1.5em + 0.75rem + 2px);
-  /* Chiều cao tối thiểu */
   resize: vertical;
-  /* Cho phép thay đổi chiều cao dọc */
 }
 
-/* --- Layout Chính --- */
 .container {
   display: flex;
 }
@@ -259,10 +230,8 @@ main,
   flex-grow: 1;
   padding: 20px;
   background-color: #f8f9fa;
-  /* Đã có height và overflow trong DefaultLayout.vue */
 }
 
-/* --- Header (Style cho component AppHeader.vue) --- */
 .app-header {
   background-color: #fff;
   padding: 10px 20px;
@@ -273,10 +242,8 @@ main,
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
   height: 60px;
   position: sticky;
-  /* Giữ header cố định khi cuộn */
   top: 0;
   z-index: 1020;
-  /* Đảm bảo header nằm trên */
 }
 
 .logo {
@@ -364,18 +331,14 @@ header nav ul li a.router-link-exact-active {
   text-decoration: underline;
 }
 
-/* --- Sidebar (Style cho component AppSidebar.vue) --- */
 .app-sidebar {
   width: 250px;
   background-color: #343a40;
   padding: 20px 0;
   color: #adb5bd;
-  /* height: calc(100vh - 61px); */ /* <<< BÌNH LUẬN HOẶC XÓA DÒNG NÀY */
-  /* AppSidebar.vue đã có height: 100vh cho .app-sidebar-component */
   overflow-y: auto;
   flex-shrink: 0;
   transition: width 0.3s ease;
-  /* Nếu muốn có hiệu ứng ẩn/hiện */
 }
 
 .app-sidebar ul {
@@ -423,7 +386,6 @@ header nav ul li a.router-link-exact-active {
   background-color: rgba(255, 255, 255, 0.05);
 }
 
-/* Nền mờ cho cấp con */
 .app-sidebar ul ul ul {
   padding-left: 15px;
   background-color: rgba(255, 255, 255, 0.08);
@@ -447,7 +409,6 @@ header nav ul li a.router-link-exact-active {
 
 .app-sidebar .toggle-icon {
   margin-left: auto;
-  /* Đẩy icon sang phải */
   padding-left: 10px;
   transition: transform 0.2s;
 }
@@ -468,7 +429,6 @@ header nav ul li a.router-link-exact-active {
   text-align: left;
 }
 
-/* --- Các Section Chung --- */
 .detail-section,
 .form-container,
 .report-container,
@@ -476,10 +436,8 @@ header nav ul li a.router-link-exact-active {
   background-color: #fff;
   padding: 20px;
   border-radius: 0.3rem;
-  /* ~ 5px */
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
   margin-bottom: 1.5rem;
-  /* ~ 24px */
 }
 
 .filters {
@@ -489,7 +447,6 @@ header nav ul li a.router-link-exact-active {
   padding-bottom: 5px;
 }
 
-/* Giảm padding bottom của filter */
 .filters label,
 .filters select,
 .filters input,
@@ -499,13 +456,7 @@ header nav ul li a.router-link-exact-active {
 }
 
 .filter-controls {
-  /* position: fixed; */
-  /* top: 50px;
-  left: 200px; */
-  /* width: 100%; */
   background-color: #ececec;
-  /* Hoặc màu nền phù hợp */
-  /* z-index: 1000; */
   padding: 25px;
   padding-bottom: 0px;
 }
@@ -516,7 +467,6 @@ header nav ul li a.router-link-exact-active {
   height: 600px;
 }
 
-/* --- Status Indicators --- */
 .status-good {
   color: #198754;
   font-weight: bold;
@@ -532,7 +482,6 @@ header nav ul li a.router-link-exact-active {
   font-weight: bold;
 }
 
-/* --- KPI Detail Specific --- */
 .kpi-info p {
   margin: 8px 0;
   color: #495057;
@@ -566,7 +515,6 @@ header nav ul li a.router-link-exact-active {
   color: #0d6efd;
 }
 
-/* --- KPI Evaluation Specific --- */
 .kpi-evaluations {
   border-top: 1px solid #dee2e6;
   padding-top: 20px;
@@ -623,11 +571,9 @@ header nav ul li a.router-link-exact-active {
   border: none;
 }
 
-/* --- Chart Placeholders --- */
 .chart-container img {
   width: 100%;
   height: 250px;
-  /* Hoặc chiều cao mong muốn */
   background: #eee;
   display: flex;
   align-items: center;
@@ -652,11 +598,8 @@ header nav ul li a.router-link-exact-active {
 :deep(.action-column-cell) {
   display: flex;
   justify-content: center;
-  /* Horizontally center */
   align-items: center;
-  /* Vertically center (optional) */
   gap: 6px;
-  /* Optional: Adds space between the buttons */
 }
 
 .kpi-actions-button {
@@ -671,20 +614,15 @@ header nav ul li a.router-link-exact-active {
   color: rgb(49, 130, 252) !important;
 }
 
-/* Target the cells with the specific className */
 :deep(.action-column-cell) {
   display: flex;
   justify-content: center;
-  /* Horizontally center */
   align-items: center;
-  /* Vertically center (optional) */
   gap: 6px;
-  /* Optional: Adds space between the buttons */
 }
 
 :global(.ant-table-row.row-parent td) {
   font-weight: bold;
-  /* background-color: #e6f7ff; */
 }
 
 :global(.ant-collapse-header-text) {
@@ -697,23 +635,20 @@ body {
   margin: 0;
   padding: 0;
   background-color: #f8f9fa;
-  /* Light grey background */
   color: #212529;
-  /* Default text color */
   line-height: 1.5;
   font-size: 16px;
-  /* Base font size */
 }
 
   a {
     text-decoration: none;
-    color: var(--brand-link); /* Sử dụng biến màu link */
+    color: var(--brand-link);
     transition: color 0.15s ease-in-out, text-decoration 0.15s ease-in-out;
   }
 
   a:hover {
     text-decoration: underline;
-    color: var(--brand-primary-hover); /* Sử dụng biến màu hover */
+    color: var(--brand-primary-hover);
   }
 
   h1, h2, h3, h4, h5, h6 {
@@ -727,7 +662,6 @@ body {
   h3 { font-size: 1.5rem; }
   h4 { font-size: 1.25rem; }
 
-/* --- Base Button Style --- */
   button {
     display: inline-block;
     font-weight: 400;
@@ -738,7 +672,7 @@ body {
     vertical-align: middle;
     cursor: pointer;
     user-select: none;
-    background-color: #e9ecef; /* Màu nền mặc định */
+    background-color: #e9ecef;
     border: 1px solid #ced4da;
     padding: 0.375rem 0.75rem;
     font-size: 1rem;
@@ -755,29 +689,24 @@ body {
 
   button:focus {
     outline: 0;
-    /* Có thể dùng màu brand cho focus ring */
-    box-shadow: 0 0 0 0.25rem color-mix(in srgb, var(--brand-primary) 25%, transparent);
-    /* Hoặc dùng rgba: box-shadow: 0 0 0 0.25rem rgba(0, 86, 179, 0.25); */
   }
 
-/* --- Primary Button Style (Dùng biến CSS) --- */
   button.btn-primary,
-  button[type="submit"].ant-btn-primary, /* Tăng độ ưu tiên cho Ant Button */
-  button[type="submit"]:not(.ant-btn) /* Áp dụng cho nút submit thường */
+  button[type="submit"].ant-btn-primary,
+  button[type="submit"]:not(.ant-btn)
    {
-    color: #fff; /* Đảm bảo chữ trắng */
-    background-color: var(--brand-primary); /* <<< Sử dụng biến */
-    border-color: var(--brand-primary);    /* <<< Sử dụng biến */
+    color: #fff;
+    background-color: var(--brand-primary);
+    border-color: var(--brand-primary);
   }
   button.btn-primary:hover,
   button[type="submit"].ant-btn-primary:hover,
   button[type="submit"]:not(.ant-btn):hover
   {
-    background-color: var(--brand-primary-hover); /* <<< Sử dụng biến */
-    border-color: var(--brand-primary-hover);    /* <<< Sử dụng biến */
+    background-color: var(--brand-primary-hover);
+    border-color: var(--brand-primary-hover);
   }
 
-/* --- Secondary Button Style --- */
   button.btn-secondary {
     color: #fff;
     background-color: #6c757d;
@@ -788,7 +717,6 @@ body {
       border-color: #565e64;
   }
 
-/* --- Edit Button Style --- */
   button.edit-btn {
       color: #000;
       background-color: #ffc107;
@@ -799,7 +727,6 @@ body {
       border-color: #ffc720;
   }
 
-/* --- Delete Button Style --- */
   button.delete-btn {
       color: #fff;
       background-color: #dc3545;
@@ -811,7 +738,6 @@ body {
   }
 
 
-/* --- Table Style --- */
   table {
     width: 100%;
     border-collapse: collapse;
@@ -819,12 +745,12 @@ body {
     margin-bottom: 1rem;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
     border-radius: 0.25rem;
-    overflow: hidden; /* Giúp bo góc table hoạt động */
+    overflow: hidden;
   }
 
   th, td {
     border: 1px solid #dee2e6;
-    padding: 0.75rem; /* ~ 12px */
+    padding: 0.75rem;
     text-align: left;
     vertical-align: top;
   }
@@ -839,9 +765,8 @@ body {
     background-color: rgba(0, 0, 0, 0.04);
   }
 
-/* --- Form Element Styles --- */
   label {
-    display: inline-block; /* Hoặc block tùy ngữ cảnh */
+    display: inline-block;
     margin-bottom: 0.5rem;
     font-weight: 500;
     color: #495057;
@@ -855,7 +780,7 @@ body {
   select,
   textarea {
     display: block;
-    width: 100%; /* Chiếm toàn bộ chiều rộng container */
+    width: 100%;
     padding: 0.375rem 0.75rem;
     font-size: 1rem;
     font-weight: 400;
@@ -864,18 +789,16 @@ body {
     background-color: #fff;
     background-clip: padding-box;
     border: 1px solid #ced4da;
-    appearance: none; /* Tắt giao diện mặc định của trình duyệt */
+    appearance: none;
     border-radius: 0.25rem;
     transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
-    /* box-sizing: border-box; Đã thêm global */
   }
 
   input[type="date"]{
-      width: auto; /* Date input thường không cần full width */
+      width: auto;
   }
 
   select {
-      /* Thêm mũi tên cho select box nếu cần */
       background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23343a40' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e");
       background-repeat: no-repeat;
       background-position: right 0.75rem center;
@@ -885,34 +808,30 @@ body {
   input:focus,
   select:focus,
   textarea:focus {
-    border-color: #86b7fe; /* Có thể đổi thành var(--brand-primary) nếu muốn */
+    border-color: #86b7fe;
     outline: 0;
-    box-shadow: 0 0 0 0.25rem color-mix(in srgb, var(--brand-primary) 25%, transparent); /* Dùng biến màu */
+    box-shadow: 0 0 0 0.25rem color-mix(in srgb, var(--brand-primary) 25%, transparent);
   }
 
   textarea {
-    min-height: calc(1.5em + 0.75rem + 2px); /* Chiều cao tối thiểu */
-    resize: vertical; /* Cho phép thay đổi chiều cao dọc */
+    min-height: calc(1.5em + 0.75rem + 2px);
+    resize: vertical;
   }
 
-/* --- Layout Chính --- */
   .container {
     display: flex;
   }
 
-/* --- Sửa lỗi thanh cuộn dọc --- */
-/* Target thẻ main hoặc class content-area (nếu bạn dùng) VÀ .ant-layout-content */
   main, .content-area, .ant-layout-content {
-    flex-grow: 1; /* Đảm bảo nó chiếm hết không gian còn lại */
-    padding: 20px; /* Giữ padding của bạn */
-    background-color: #f8f9fa; /* Giữ màu nền của bạn */
-    min-width: 0; /* Cho phép co lại theo chiều ngang */
-    overflow-x: auto; /* Xử lý tràn ngang bên trong nó */
-    overflow-y: auto; /* <<< THÊM VÀO: Xử lý tràn dọc bên trong nó */
+    flex-grow: 1;
+    padding: 20px;
+    background-color: #f8f9fa;
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: auto;
   }
 
-/* --- Header --- */
-  .app-header { /* Style cho <AppHeader/> nếu cần */
+  .app-header {
     background-color: #fff;
     padding: 10px 20px;
     display: flex;
@@ -920,10 +839,10 @@ body {
     align-items: center;
     border-bottom: 1px solid #dee2e6;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-    height: 61px; /* Điều chỉnh nếu header của bạn khác 61px */
-    position: sticky; /* Giữ header cố định khi cuộn */
+    height: 61px;
+    position: sticky;
     top: 0;
-    z-index: 1020; /* Đảm bảo header nằm trên */
+    z-index: 1020;
   }
   .logo { display: flex; align-items: center; }
   .logo img { height: 40px; margin-right: 10px; }
@@ -934,47 +853,12 @@ body {
   header nav ul li a:hover { color: var(--brand-link); text-decoration: none;}
   header nav ul li a.router-link-exact-active { color: var(--brand-link); border-bottom: 2px solid var(--brand-primary); }
   .user-info { display: flex; align-items: center; color: #495057; }
-  .user-info i.fas { margin-right: 15px; font-size: 1.1em; color: #6c757d; cursor: pointer; } /* FontAwesome icon */
+  .user-info i.fas { margin-right: 15px; font-size: 1.1em; color: #6c757d; cursor: pointer; }
   .user-info .avatar { width: 35px; height: 35px; border-radius: 50%; margin-left: 10px; margin-right: 5px; object-fit: cover; }
   .user-info span { font-weight: 500; margin-right: 15px; }
   .logout-btn { background: none; border: none; color: #dc3545; cursor: pointer; font-weight: bold; padding: 5px; margin-left: 5px;}
   .logout-btn:hover { text-decoration: underline; }
 
-
-/* --- Sidebar --- */
-  /* Các style này có thể không áp dụng vì bạn dùng <a-layout-sider> */
-  /* Nếu muốn tùy chỉnh Sider của Ant Design, hãy dùng :deep() trong AppSidebar.vue
-     hoặc target trực tiếp class .ant-layout-sider, .ant-layout-sider-children */
-  /*
-  .app-sidebar {
-    width: 250px;
-    background-color: #343a40;
-    padding: 20px 0;
-    color: #adb5bd;
-    height: calc(100vh - 61px); // Chiều cao trừ header
-    overflow-y: auto; // Cho phép cuộn bên trong sidebar nếu menu dài
-    flex-shrink: 0;
-    transition: width 0.3s ease;
-  }
-  .app-sidebar ul { list-style: none; padding: 0; margin: 0; }
-  .app-sidebar ul li { margin-bottom: 2px; }
-  .app-sidebar ul li > span,
-  .app-sidebar ul li > a { display: flex; align-items: center; padding: 10px 20px; transition: background-color 0.2s, color 0.2s; color: #adb5bd; text-decoration: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .app-sidebar ul li > span { cursor: pointer; }
-  .app-sidebar ul li > span:hover,
-  .app-sidebar ul li > a:hover { background-color: #495057; color: #fff; }
-  .app-sidebar ul li > a.router-link-exact-active { background-color: var(--brand-primary); color: #fff; }
-  .app-sidebar ul ul { margin-left: 0; display: none; padding: 5px 0 5px 20px; background-color: rgba(255, 255, 255, 0.05); }
-  .app-sidebar ul ul ul { padding-left: 15px; background-color: rgba(255, 255, 255, 0.08); }
-  .app-sidebar ul ul ul ul { padding-left: 10px; background-color: rgba(255, 255, 255, 0.1); }
-  .app-sidebar ul li.has-children.open > ul { display: block; }
-  .app-sidebar i.fas { margin-right: 12px; width: 18px; text-align: center; flex-shrink: 0; }
-  .app-sidebar .toggle-icon { margin-left: auto; padding-left: 10px; transition: transform 0.2s; }
-  .app-sidebar .has-children.open .toggle-icon i { transform: rotate(90deg); }
-  .app-sidebar .divider { height: 1px; background-color: #495057; margin: 15px 20px; font-size: 0.8em; text-transform: uppercase; color: #6c757d; padding-top: 10px; line-height: 0; text-align: left; }
-  */
-
-/* --- Các Section Chung --- */
   .detail-section, .form-container, .report-container, .filters {
       background-color: #fff;
       padding: 20px;
@@ -985,19 +869,16 @@ body {
   .filters { display: flex; flex-wrap: wrap; align-items: center; padding-bottom: 5px;}
   .filters label, .filters select, .filters input, .filters button { margin-bottom: 10px; margin-right: 10px;}
 
-/* --- Status Indicators --- */
   .status-good { color: #198754; font-weight: bold; }
   .status-warning { color: #ffc107; font-weight: bold; }
   .status-bad { color: #dc3545; font-weight: bold; }
 
-/* --- KPI Detail Specific --- */
   .kpi-info p { margin: 8px 0; color: #495057; }
   .kpi-info strong { color: #212529; margin-right: 5px;}
   .team-kpis { display: flex; flex-wrap: wrap; gap: 15px; margin-top: 15px; padding-top: 15px; border-top: 1px solid #eee;}
   .team-kpi-card { border: 1px solid #e9ecef; padding: 10px 15px; border-radius: 4px; background-color: #f8f9fa; min-width: 150px;}
-  .team-kpi-card h4 { margin: 0 0 5px 0; font-size: 0.95em; color: var(--brand-link);} /* Dùng màu link */
+  .team-kpi-card h4 { margin: 0 0 5px 0; font-size: 0.95em; color: var(--brand-link);}
 
-/* --- KPI Evaluation Specific --- */
   .kpi-evaluations { border-top: 1px solid #dee2e6; padding-top: 20px;}
   .kpi-evaluations h3, .kpi-evaluations h4 { margin-bottom: 15px;}
   .evaluation-list table { margin-bottom: 20px; font-size: 0.9em;}
@@ -1006,16 +887,14 @@ body {
   .evaluation-detail { border: 1px solid #dee2e6; background-color: #fff; padding: 15px; margin-top: 15px; border-radius: 5px;}
   .evaluation-detail p { margin: 5px 0;}
   .evaluation-detail .comments-box { background-color: #f8f9fa; border-left: 3px solid #ced4da; padding: 10px; margin-top: 5px; font-style: italic; color: #495057; border-radius: 0 4px 4px 0;}
-  .acknowledge-btn { background-color: var(--brand-primary); color: white; border: none;} /* Dùng màu brand */
+  .acknowledge-btn { background-color: var(--brand-primary); color: white; border: none;}
 
-/* --- Chart Placeholders --- */
   .chart-container img {
       width: 100%; height: 250px; background: #eee; display: flex; align-items: center;
       justify-content: center; color: #aaa; border: 1px dashed #ccc;
       border-radius: 4px; font-style: italic;
   }
 
-/* Hiệu ứng transition width cho Ant Design Sider (sidebar) */
 .ant-layout-sider {
   transition: width 0.35s cubic-bezier(0.4,0,0.2,1), background 0.25s, box-shadow 0.25s !important;
   overflow: hidden !important;

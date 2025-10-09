@@ -11,10 +11,13 @@ const state = {
 const getters = {
   userList: (state) => state.userList,
   employeeOptions: (state) =>
-  state.userList.map((u) => ({
-    label: [u.first_name, u.last_name].filter(Boolean).join(' ').trim() || u.username || 'No Name',
-    value: u.id,
-  })),
+    state.userList.map((u) => ({
+      label:
+        [u.first_name, u.last_name].filter(Boolean).join(" ").trim() ||
+        u.username ||
+        "No Name",
+      value: u.id,
+    })),
   usersBySection: (state) => (sectionId) =>
     state.usersBySection[String(sectionId)] || [],
   usersByDepartment: (state) => (departmentId) =>
@@ -257,7 +260,6 @@ const actions = {
     await store.dispatch("loading/startLoading");
     commit("SET_ERROR", null);
     try {
-      // Đảm bảo chỉ truyền role là entity name (string)
       let payload = { ...updateDto };
       if (payload.role && typeof payload.role === "object") {
         payload.role = payload.role.name;
@@ -280,7 +282,6 @@ const actions = {
     await store.dispatch("loading/startLoading");
     commit("SET_ERROR", null);
     try {
-      // Đảm bảo chỉ truyền role là entity name (string)
       let payload = { ...createDto };
       if (payload.role && typeof payload.role === "object") {
         payload.role = payload.role.name;
@@ -296,7 +297,6 @@ const actions = {
     }
   },
 
-  // --- RBAC Role/Permission Management ---
   async fetchRolesWithPermissions({ commit }) {
     try {
       const res = await apiClient.get("/roles/with-permissions");
@@ -339,7 +339,7 @@ const actions = {
           params: { fromYear, toYear },
         }
       );
-      // Không lưu vào state chung vì dữ liệu này dạng động, trả về luôn
+
       return response.data || [];
     } catch (error) {
       commit("SET_ERROR", error);

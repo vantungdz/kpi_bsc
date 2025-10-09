@@ -1,4 +1,3 @@
-// e:\project\kpi-backend\src\notification\notifications.controller.ts
 import {
   Controller,
   Get,
@@ -10,8 +9,8 @@ import {
   Body,
 } from '@nestjs/common';
 import { NotificationService } from './notification.service';
-import { JwtAuthGuard } from 'src/auth/jwt-auth.guard'; // Đảm bảo đường dẫn đúng
-import { Employee } from 'src/employees/entities/employee.entity'; // Đảm bảo đường dẫn đúng
+import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
+import { Employee } from 'src/employees/entities/employee.entity';
 import {
   ApiTags,
   ApiOperation,
@@ -21,7 +20,7 @@ import {
 import { Notification } from 'src/notification/entities/notification.entity';
 
 @ApiTags('Notifications')
-@ApiBearerAuth() // Cho Swagger UI biết cần JWT token
+@ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 @Controller('notifications')
 export class NotificationsController {
@@ -33,14 +32,8 @@ export class NotificationsController {
     status: 200,
     description: 'List of notifications',
     type: [Notification],
-  }) // Cần định nghĩa DTO cho response nếu phức tạp hơn
-  async getNotifications(
-    @Req() req: { user: Employee },
-    // Thêm các query params cho phân trang nếu cần, ví dụ:
-    // @Query('page', new ParseIntPipe({ optional: true })) page?: number,
-    // @Query('limit', new ParseIntPipe({ optional: true })) limit?: number,
-  ) {
-    // const { page = 1, limit = 10 } = queryParams; // Nếu dùng query params
+  })
+  async getNotifications(@Req() req: { user: Employee }) {
     return this.notificationService.getNotificationsForUser(
       req.user.id /*, page, limit*/,
     );
@@ -54,14 +47,14 @@ export class NotificationsController {
     status: 200,
     description: 'Unread notification count',
     type: Number,
-  }) // Hoặc một DTO { count: number }
+  })
   async getUnreadCount(
     @Req() req: { user: Employee },
   ): Promise<{ count: number }> {
     const count = await this.notificationService.getUnreadNotificationCount(
       req.user.id,
     );
-    return { count }; // Frontend đang mong đợi response.data.count
+    return { count };
   }
 
   @Post(':id/mark-as-read')
@@ -83,7 +76,7 @@ export class NotificationsController {
   @ApiOperation({
     summary: 'Mark all notifications as read for the current user',
   })
-  @ApiResponse({ status: 200, description: 'All notifications marked as read' }) // Có thể trả về số lượng đã update
+  @ApiResponse({ status: 200, description: 'All notifications marked as read' })
   async markAllAsRead(
     @Req() req: { user: Employee },
   ): Promise<{ affected: number }> {

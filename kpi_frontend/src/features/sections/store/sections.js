@@ -2,28 +2,22 @@ import apiClient from "@/core/services/api";
 import store from "@/core/store";
 
 const state = {
-  sections: [], // Danh sách các sections
-  error: null, // Lỗi khi tải hoặc xử lý sections
-  sectionsByDepartment: {}, // Danh sách sections theo department
-  detailError: null, // Lỗi khi tải chi tiết section
+  sections: [],
+  error: null,
+  sectionsByDepartment: {},
+  detailError: null,
 };
 
 const getters = {
-  // --- Dữ liệu ---
   sectionList: (state) => state.sections,
   sectionsByDepartment: (state) => (departmentId) =>
     state.sectionsByDepartment[departmentId] || [],
 
-  // --- Trạng thái lỗi ---
   error: (state) => state.error,
   detailError: (state) => state.detailError,
-
-  // --- Trạng thái loading ---
-  // Không còn getter `isLoading` và `isLoadingDetail` vì trạng thái loading được quản lý toàn cục
 };
 
 const mutations = {
-  // --- Trạng thái lỗi ---
   SET_ERROR(state, error) {
     state.error = error ? error.response?.data?.message || error.message : null;
   },
@@ -33,7 +27,6 @@ const mutations = {
       : null;
   },
 
-  // --- Dữ liệu ---
   SET_SECTIONS(state, sectionsData) {
     state.sections = sectionsData?.data || sectionsData || [];
   },
@@ -44,9 +37,6 @@ const mutations = {
       [key]: sections?.data || sections || [],
     };
   },
-
-  // --- Trạng thái loading ---
-  // Không còn mutation `SET_LOADING` và `SET_LOADING_DETAIL` vì trạng thái loading được quản lý toàn cục
 };
 
 const actions = {
@@ -164,7 +154,9 @@ const actions = {
         name: payload.name,
         departmentId: payload.departmentId,
         managerId: payload.managerId,
-        ...(payload.forceUpdateManager ? { forceUpdateManager: payload.forceUpdateManager } : {}),
+        ...(payload.forceUpdateManager
+          ? { forceUpdateManager: payload.forceUpdateManager }
+          : {}),
       });
       await dispatch("fetchSections", { forceRefresh: true });
       return res.data;

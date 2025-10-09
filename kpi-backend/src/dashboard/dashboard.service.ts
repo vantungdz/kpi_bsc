@@ -411,7 +411,7 @@ export class DashboardsService {
       assignedDirectlyToDepartmentAlias?: string;
     },
   ): boolean {
-    // Ưu tiên quyền cao nhất
+    // Prioritize highest permission level
     if (this.hasDynamicRole(currentUser, 'kpi', 'view', 'company')) {
       return true;
     }
@@ -464,10 +464,6 @@ export class DashboardsService {
     this.logger.debug(
       `[getTopPendingApproversStats] Called by user: ${currentUser.id}, limit: ${limit}`,
     );
-    // Đặt khai báo userRoles lên đầu mỗi hàm cần dùng
-    const userRoles: string[] = Array.isArray(currentUser.roles)
-      ? currentUser.roles.map((r: any) => (typeof r === 'string' ? r : r?.name))
-      : [];
 
     const pendingValuesQuery = this.kpiValuesRepository
       .createQueryBuilder('kpiValue')
@@ -490,7 +486,7 @@ export class DashboardsService {
         ],
       });
 
-    // Replace userRoles.includes checks with permission checks
+    // Check dashboard view permissions by scope from high to low
     if (this.userHasPermission(currentUser, 'kpi-value', 'approve', 'manager') && currentUser.departmentId) {
       pendingValuesQuery.andWhere(
         new Brackets((qb) => {
@@ -658,26 +654,32 @@ export class DashboardsService {
       .andWhere('history.changed_at >= :sinceDate', { sinceDate })
       .andWhere('kpi_for_count.deleted_at IS NULL');
 
-    // Đặt khai báo userRoles lên đầu mỗi hàm cần dùng
-    const userRoles: string[] = Array.isArray(currentUser.roles)
-      ? currentUser.roles.map((r: any) => (typeof r === 'string' ? r : r?.name))
-      : [];
-    if (userRoles.includes('manager') && currentUser.departmentId) {
-      topEntitiesQuery.andWhere('submitter.departmentId = :userDepartmentId', {
-        userDepartmentId: currentUser.departmentId,
-      });
-    } else if (userRoles.includes('department') && currentUser.departmentId) {
-      topEntitiesQuery.andWhere('submitter.departmentId = :userDepartmentId', {
-        userDepartmentId: currentUser.departmentId,
-      });
-    } else if (userRoles.includes('section') && currentUser.sectionId) {
-      topEntitiesQuery.andWhere('submitter.sectionId = :userSectionId', {
-        userSectionId: currentUser.sectionId,
-      });
-    } else if (userRoles.includes('user')) {
-      topEntitiesQuery.andWhere('submitter.id = :userId', {
-        userId: currentUser.id,
-      });
+    // Check dashboard view permissions by scope from high to low
+    // Admin/Manager with global permission can view all entities without restrictions
+    if (!this.userHasPermission(currentUser, 'view', 'dashboard', 'global')) {
+      // Apply restrictions based on user permission level
+      if (this.userHasPermission(currentUser, 'view', 'kpi', 'department') && currentUser.departmentId) {
+        // Department Manager: Only view entities in department
+        topEntitiesQuery.andWhere('submitter.departmentId = :userDepartmentId', {
+          userDepartmentId: currentUser.departmentId,
+        });
+      } else if (this.userHasPermission(currentUser, 'view', 'kpi', 'section') && currentUser.sectionId) {
+        // Section Manager: Only view entities in section
+        topEntitiesQuery.andWhere('submitter.sectionId = :userSectionId', {
+          userSectionId: currentUser.sectionId,
+        });
+      } else if (this.userHasPermission(currentUser, 'view', 'kpi', 'employee')) {
+        // Employee: Only view own information
+        topEntitiesQuery.andWhere('submitter.id = :userId', {
+          userId: currentUser.id,
+        });
+      } else {
+        // No permission to view dashboard
+        this.logger.warn(
+          `User ${currentUser.id} has no permission to view dashboard stats.`,
+        );
+        return [];
+      }
     }
 
     switch (entityType) {
@@ -774,7 +776,8 @@ export class DashboardsService {
           );
         }
 
-        if (userRoles.includes('manager') && currentUser.departmentId) {
+        // Check KPI details view permissions by scope
+        if (this.userHasPermission(currentUser, 'view', 'kpi', 'department') && currentUser.departmentId) {
           kpiDetailsQuery.andWhere(
             'submitter_detail.departmentId = :managerDeptId',
             { managerDeptId: currentUser.departmentId },
@@ -933,11 +936,10 @@ export class DashboardsService {
           )
         : 0;
 
+    // Check performance view permissions by scope
     const performanceByRole: PerformanceByRoleDto[] = [];
-    const userRoles: string[] = Array.isArray(currentUser.roles)
-      ? currentUser.roles.map((r: any) => (typeof r === 'string' ? r : r?.name))
-      : [];
-    if (userRoles.includes('admin') || userRoles.includes('manager')) {
+    if (this.userHasPermission(currentUser, 'view', 'dashboard', 'global') || 
+        this.userHasPermission(currentUser, 'view', 'kpi', 'department')) {
       const performanceMap = new Map<
         number,
         {
@@ -961,7 +963,7 @@ export class DashboardsService {
 
         if (departmentId) {
           if (
-            userRoles.includes('manager') &&
+            this.userHasPermission(currentUser, 'view', 'kpi', 'department') &&
             currentUser.departmentId !== departmentId
           ) {
             continue;
@@ -1026,20 +1028,15 @@ export class DashboardsService {
   }
 
   async getKpiInventoryStats(currentUser: Employee): Promise<KpiInventoryDto> {
-    // Đặt khai báo userRoles lên đầu mỗi hàm cần dùng
-    const userRoles: string[] = Array.isArray(currentUser.roles)
-      ? currentUser.roles.map((r: any) => (typeof r === 'string' ? r : r?.name))
-      : [];
-
     this.logger.debug(
-      `[getKpiInventoryStats] Called by user: ${currentUser.id} with roles: ${userRoles.join(',')}`,
+      `[getKpiInventoryStats] Called by user: ${currentUser.id}`,
     );
 
     const totalKpiDefinitionsQuery = this.kpisRepository
       .createQueryBuilder('kpi')
       .where('kpi.deleted_at IS NULL');
 
-    if (userRoles.includes('manager') && currentUser.departmentId) {
+    if (this.userHasPermission(currentUser, 'view', 'kpi', 'department') && currentUser.departmentId) {
       totalKpiDefinitionsQuery
         .innerJoin(
           'kpi.assignments',

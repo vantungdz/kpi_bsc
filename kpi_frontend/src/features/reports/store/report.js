@@ -1,6 +1,6 @@
 import apiClient from "@/core/services/api";
 import { notification } from "ant-design-vue";
-import store from "@/core/store"; // Dùng store chính để dispatch loading toàn cục
+import store from "@/core/store";
 
 const state = {
   error: null,
@@ -31,7 +31,6 @@ const actions = {
         responseType: "blob",
       });
 
-      // Lấy tên file thực tế từ header nếu có
       let fileName = `report.${fileFormat === "excel" ? "xlsx" : fileFormat}`;
       const disposition = response.headers["content-disposition"];
       if (disposition) {
@@ -55,11 +54,17 @@ const actions = {
       return true;
     } catch (error) {
       commit("setError", error);
-      dispatch("showErrorNotification", {
-        message: "Xuất báo cáo thất bại",
-        description:
-          error.response?.data?.message || "Có lỗi xảy ra khi xuất báo cáo.",
-      });
+
+      // Only show notification if it's not a permission error (already handled by API interceptor)
+      const errorMsg =
+        error.response?.data?.message || "Có lỗi xảy ra khi xuất báo cáo.";
+      if (!errorMsg.includes("No permission")) {
+        dispatch("showErrorNotification", {
+          message: "Xuất báo cáo thất bại",
+          description: errorMsg,
+        });
+      }
+
       throw error;
     } finally {
       await store.dispatch("loading/stopLoading");

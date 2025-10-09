@@ -76,7 +76,6 @@ export class EmployeesController {
     if (!employee) {
       throw new NotFoundException(`Employee with ID ${id} not found`);
     }
-    // Lấy skill và level của nhân viên
     const skills = await this.employeeService.getEmployeeSkillsWithLevel(id);
     return { ...employee, skills };
   }
@@ -149,7 +148,6 @@ export class EmployeesController {
     @Param('id', ParseIntPipe) id: number,
     @Body('role') role: string,
   ): Promise<Employee> {
-    // Gọi updateRoles cho 1 role duy nhất để giữ tương thích
     return this.employeeService.updateRoles(id, [role]);
   }
 
@@ -189,7 +187,6 @@ export class EmployeesController {
     @Req() req,
     @Param('departmentId', ParseIntPipe) departmentId: number,
   ) {
-    // Truyền động departmentId vào policy check
     return { message: `Bạn là manager của phòng ban ${departmentId}!` };
   }
 
@@ -200,6 +197,10 @@ export class EmployeesController {
     @Query('fromYear') fromYear?: number,
     @Query('toYear') toYear?: number,
   ): Promise<EmployeePerformanceHistoryDto> {
-    return this.employeeService.getEmployeePerformanceHistory(id, fromYear, toYear);
+    return this.employeeService.getEmployeePerformanceHistory(
+      id,
+      fromYear,
+      toYear,
+    );
   }
 }

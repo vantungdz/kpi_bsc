@@ -6,12 +6,14 @@ import { Strategy } from 'passport-jwt';
 import { ExtractJwt } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
 import { EmployeesService } from 'src/employees/employees.service';
+import { SessionService } from './session.service';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(
     configService: ConfigService,
     private employeesService: EmployeesService,
+    private sessionService: SessionService,
   ) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
@@ -19,8 +21,23 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
-  async validate(payload: { id: number; username: string; role: string }) {
-    // Sử dụng hàm lấy user kèm permissions
+  async validate(payload: {
+    id: number;
+    username: string;
+    sessionId: string;
+    role: string;
+  }) {
+    // Validate session trước khi validate user
+    if (payload.sessionId) {
+      const session = await this.sessionService.validateSession(
+        payload.sessionId,
+      );
+      if (!session || !session.isActive) {
+        throw new UnauthorizedException('Session expired or invalid');
+      }
+    }
+
+    // Use function to get user with permissions
     const user = await this.employeesService.findOneWithPermissions(payload.id);
 
     if (!user) {

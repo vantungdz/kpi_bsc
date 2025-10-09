@@ -70,7 +70,6 @@ const actions = {
     commit("SET_ERROR", null);
     try {
       const response = await apiClient.post("/departments", payload);
-      // Sau khi tạo thành công, reload danh sách phòng ban
       await dispatch("fetchDepartments", { forceRefresh: true });
       return response.data;
     } catch (error) {

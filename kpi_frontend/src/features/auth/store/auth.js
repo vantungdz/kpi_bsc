@@ -10,6 +10,10 @@ const state = {
     JSON.parse(
       localStorage.getItem("authUser") || sessionStorage.getItem("authUser")
     ) || null,
+  sessionId:
+    localStorage.getItem("sessionId") ||
+    sessionStorage.getItem("sessionId") ||
+    null,
   status: "",
   error: null,
 };
@@ -19,10 +23,10 @@ const getters = {
   authStatus: (state) => state.status,
   user: (state) => state.user,
   token: (state) => state.token,
-  // Chuẩn hóa: trả về user.role?.name (role entity)
+  // Normalize: return user.role?.name (role entity)
   effectiveRole: (state) => state.user?.role?.name || null,
   authError: (state) => state.error,
-  // Chuẩn hóa: trả về mảng roles (string hoặc object)
+  // Normalize: return array of roles (string or object)
   userRoles: (state) => {
     const user = state.user;
     if (!user) return [];
@@ -45,16 +49,21 @@ const mutations = {
     state.status = "loading";
     state.error = null;
   },
-  AUTH_SUCCESS(state, { token, user, remember }) {
+  AUTH_SUCCESS(state, { token, user, sessionId, remember }) {
     state.status = "success";
     state.token = token;
     state.user = user;
+    state.sessionId = sessionId;
     state.error = null;
     const storage = remember ? localStorage : sessionStorage;
     const otherStorage = remember ? sessionStorage : localStorage;
     otherStorage.removeItem("authToken");
     otherStorage.removeItem("authUser");
+    otherStorage.removeItem("sessionId");
     storage.setItem("authToken", token);
+    if (sessionId) {
+      storage.setItem("sessionId", sessionId);
+    }
     if (user) {
       storage.setItem("authUser", JSON.stringify(user));
     } else {
@@ -66,10 +75,13 @@ const mutations = {
     state.status = "error";
     state.token = null;
     state.user = null;
+    state.sessionId = null;
     localStorage.removeItem("authToken");
     localStorage.removeItem("authUser");
+    localStorage.removeItem("sessionId");
     sessionStorage.removeItem("authToken");
     sessionStorage.removeItem("authUser");
+    sessionStorage.removeItem("sessionId");
     delete apiClient.defaults.headers.common["Authorization"];
     const specificMessage =
       errorPayload?.response?.data?.message ||
@@ -81,11 +93,14 @@ const mutations = {
     state.status = "";
     state.token = null;
     state.user = null;
+    state.sessionId = null;
     state.error = null;
     localStorage.removeItem("authToken");
     localStorage.removeItem("authUser");
+    localStorage.removeItem("sessionId");
     sessionStorage.removeItem("authToken");
     sessionStorage.removeItem("authUser");
+    sessionStorage.removeItem("sessionId");
     delete apiClient.defaults.headers.common["Authorization"];
   },
   SET_USER(state, user) {
@@ -110,9 +125,13 @@ const actions = {
       };
       const response = await apiClient.post("/auth/login", apiPayload);
       const token = response.data.access_token;
+      const sessionId = response.data.sessionId;
       if (!token) throw new Error("Token not received.");
 
       localStorage.setItem("authToken", token);
+      if (sessionId) {
+        localStorage.setItem("sessionId", sessionId);
+      }
       apiClient.defaults.headers.common["Authorization"] = `Bearer ${token}`;
 
       let user = null;
@@ -125,7 +144,12 @@ const actions = {
         return false;
       }
 
-      commit("AUTH_SUCCESS", { token, user, remember: credentials.remember });
+      commit("AUTH_SUCCESS", {
+        token,
+        user,
+        sessionId,
+        remember: credentials.remember,
+      });
       return true;
     } catch (error) {
       if (!state.error) {
@@ -157,7 +181,14 @@ const actions = {
     try {
       await dispatch("fetchUserProfileInternal");
     } catch (error) {
-      dispatch("logout");
+      // Only logout if it's a real authentication error, not permission error
+      if (
+        error.response?.status === 401 &&
+        error.response?.data?.message &&
+        !error.response.data.message.includes("No permission")
+      ) {
+        dispatch("logout");
+      }
     }
   },
 };

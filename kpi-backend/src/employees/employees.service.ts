@@ -9,6 +9,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Logger } from '@nestjs/common'; // Import Logger
 import { Employee } from 'src/employees/entities/employee.entity';
 import { Role } from 'src/roles/entities/role.entity';
+import { Department } from 'src/departments/entities/department.entity';
+import { Section } from 'src/sections/entities/section.entity';
 import {
   Repository,
   FindManyOptions,
@@ -20,9 +22,15 @@ import {
 } from 'typeorm';
 import * as XLSX from 'xlsx';
 import * as bcrypt from 'bcrypt';
-import { EmployeePerformanceHistoryDto, EmployeePerformanceYearDto } from './dto/employee-performance-history.dto';
+import {
+  EmployeePerformanceHistoryDto,
+  EmployeePerformanceYearDto,
+} from './dto/employee-performance-history.dto';
 import { KPIAssignment } from 'src/kpi-assessments/entities/kpi-assignment.entity';
-import { KpiValue, KpiValueStatus } from 'src/kpi-values/entities/kpi-value.entity';
+import {
+  KpiValue,
+  KpiValueStatus,
+} from 'src/kpi-values/entities/kpi-value.entity';
 import { KpiReview } from 'src/evaluation/entities/kpi-review.entity';
 import { Kpi } from 'src/kpis/entities/kpi.entity';
 import { EmployeeSkill } from 'src/employee-skill/entities/employee-skill.entity';
@@ -49,9 +57,35 @@ export class EmployeesService {
     private readonly competencyRepo: Repository<Competency>,
   ) {}
 
+  // Helper: check if user has a permission (action, resource, scope)
+  private userHasPermission(
+    user: Employee,
+    action: string,
+    resource: string,
+    scope?: string,
+  ): boolean {
+    if (!user || !user.roles) return false;
+
+    // Get all permissions from all roles
+    const allPermissions = user.roles.flatMap((role) => {
+      if (role && Array.isArray(role.permissions)) {
+        return role.permissions;
+      }
+      return [];
+    });
+
+    // Check permission
+    return allPermissions.some(
+      (p) =>
+        p.action === action &&
+        p.resource === resource &&
+        (!scope || p.scope === scope),
+    );
+  }
+
   async create(
     createEmployeeDto: Partial<Employee & { roles?: string[] | number[] }>,
-    actor?: { id?: number; username?: string } // Thêm thông tin người thao tác nếu có
+    actor?: { id?: number; username?: string }, // Add actor information if available
   ): Promise<Employee> {
     const {
       username,
@@ -82,7 +116,7 @@ export class EmployeesService {
       throw new ConflictException(`Email '${email}' already exists.`);
     }
 
-    // Lấy danh sách role entity
+    // Get list of role entities
     let roleEntities: Role[] = [];
     if (roleNamesOrIds && Array.isArray(roleNamesOrIds)) {
       roleEntities = await this.roleRepository.find({
@@ -123,27 +157,70 @@ export class EmployeesService {
       relations: ['department', 'section', 'team', 'roles'],
     };
 
-    if (
-      loggedInUser &&
-      this.getUserRoleNames(loggedInUser).includes('section')
-    ) {
-      if (!loggedInUser.sectionId) {
+    // Check employee view permissions by scope from high to low
+    if (loggedInUser) {
+      // Load permissions for loggedInUser if not available
+      if (
+        !loggedInUser.roles ||
+        loggedInUser.roles.some((role) => !role.permissions)
+      ) {
+        const userWithPermissions = await this.employeeRepository.findOne({
+          where: { id: loggedInUser.id },
+          relations: ['roles', 'roles.permissions'],
+        });
+        if (userWithPermissions) {
+          loggedInUser.roles = userWithPermissions.roles;
+        }
+      }
+
+      if (this.userHasPermission(loggedInUser, 'view', 'employee', 'company')) {
+        // Admin/HR Manager: View all employees
+        // No restrictions needed
+      } else if (
+        this.userHasPermission(loggedInUser, 'view', 'employee', 'department')
+      ) {
+        // Department Manager: Only view employees in department
+        if (!loggedInUser.departmentId) {
+          this.logger.warn(
+            `Department user ${loggedInUser.id} has no departmentId, returning no employees.`,
+          );
+          return [];
+        }
+        (findOptions.where as any).departmentId = loggedInUser.departmentId;
+      } else if (
+        this.userHasPermission(loggedInUser, 'view', 'employee', 'section')
+      ) {
+        // Section Manager: Only view employees in section
+        if (!loggedInUser.sectionId) {
+          this.logger.warn(
+            `Section user ${loggedInUser.id} has no sectionId, returning no employees.`,
+          );
+          return [];
+        }
+        (findOptions.where as any).sectionId = loggedInUser.sectionId;
+        if (
+          filterOptions.departmentId &&
+          loggedInUser.departmentId &&
+          filterOptions.departmentId !== loggedInUser.departmentId
+        ) {
+          this.logger.warn(
+            `Section user ${loggedInUser.id} (dept ${loggedInUser.departmentId}) tried to filter by department ${filterOptions.departmentId}. Query will be restricted to user's section ${loggedInUser.sectionId}.`,
+          );
+        }
+      } else if (
+        this.userHasPermission(loggedInUser, 'view', 'employee', 'personal')
+      ) {
+        // Employee: Only view own information
+        (findOptions.where as any).id = loggedInUser.id;
+      } else {
+        // No permission to view employees
         this.logger.warn(
-          `Section user ${loggedInUser.id} has no sectionId, returning no employees.`,
+          `User ${loggedInUser.id} has no permission to view employees.`,
         );
         return [];
       }
-      (findOptions.where as any).sectionId = loggedInUser.sectionId;
-      if (
-        filterOptions.departmentId &&
-        loggedInUser.departmentId &&
-        filterOptions.departmentId !== loggedInUser.departmentId
-      ) {
-        this.logger.warn(
-          `Section user ${loggedInUser.id} (dept ${loggedInUser.departmentId}) tried to filter by department ${filterOptions.departmentId}. Query will be restricted to user's section ${loggedInUser.sectionId}.`,
-        );
-      }
     } else {
+      // No logged in user, apply filter options
       if (
         filterOptions.departmentId !== undefined &&
         filterOptions.departmentId !== null
@@ -191,11 +268,11 @@ export class EmployeesService {
         (role.permissions || []).map((p) => ({
           action: p.action,
           resource: p.resource,
-          scope: p.scope, // Thêm dòng này
+          scope: p.scope, // Add this line
         })),
       );
     }
-    // Trả về user kèm permissions (không gán trực tiếp vào entity)
+    // Return user with permissions (not directly assigned to entity)
     return { ...user, permissions };
   }
 
@@ -224,7 +301,7 @@ export class EmployeesService {
     if (!sectionId) {
       return null;
     }
-    // Tìm nhân viên có role là 'section' trong section này
+    // Find employee with 'section' role in this section
     return this.employeeRepository
       .createQueryBuilder('employee')
       .leftJoinAndSelect('employee.roles', 'role')
@@ -234,7 +311,7 @@ export class EmployeesService {
   }
 
   async findAllAdmins(): Promise<Employee[]> {
-    // Tìm tất cả nhân viên có role là 'admin'
+    // Find all employees with 'admin' role
     return this.employeeRepository
       .createQueryBuilder('employee')
       .leftJoinAndSelect('employee.roles', 'role')
@@ -248,7 +325,7 @@ export class EmployeesService {
     if (!departmentId) {
       return null;
     }
-    // Tìm nhân viên có role là 'manager' trong department này
+    // Find employee with 'manager' role in this department
     return this.employeeRepository
       .createQueryBuilder('employee')
       .leftJoinAndSelect('employee.roles', 'role')
@@ -257,7 +334,10 @@ export class EmployeesService {
       .getOne();
   }
 
-  async remove(id: number, actor?: { id?: number; username?: string }): Promise<void> {
+  async remove(
+    id: number,
+    actor?: { id?: number; username?: string },
+  ): Promise<void> {
     const employee = await this.employeeRepository.findOneBy({ id });
     if (!employee) {
       throw new NotFoundException(`Employee with ID ${id} not found`);
@@ -281,19 +361,73 @@ export class EmployeesService {
       const roleRepo = transactionalEntityManager.getRepository(Role);
 
       for (const [index, row] of data.entries()) {
-        const username = row['Username']?.trim();
-        const email = row['Email']?.trim();
-        const password = row['Password']?.trim();
-        // Cho phép nhiều role, phân tách bởi dấu phẩy
-        const roleNames = (
+        const username = row['Username']?.toString().trim();
+        const email = row['Email']?.toString().trim();
+        const password = row['Password']?.toString().trim();
+        // Allow multiple roles, separated by comma
+        let roleNames =
           row['Role']
+            ?.toString()
             ?.split(',')
-            .map((r: string) => r.trim().toLowerCase()) || ['employee']
-        ).filter(Boolean);
-        const firstName = row['First Name']?.trim();
-        const lastName = row['Last Name']?.trim();
-        const departmentId = row['Department ID'];
-        const sectionId = row['Section ID'];
+            .map((r: string) => r.trim())
+            .filter(Boolean) || [];
+
+        // If no role specified, leave empty (no automatic role assignment)
+        const firstName = row['First Name']?.toString().trim();
+        const lastName = row['Last Name']?.toString().trim();
+
+        // Handle Department - support both ID and Name
+        let departmentId = row['Department ID'];
+        let departmentError = '';
+        const departmentName = row['Department Name'] || row['Department'];
+        if (!departmentId && departmentName) {
+          const departmentRepo =
+            transactionalEntityManager.getRepository(Department);
+          const department = await departmentRepo.findOne({
+            where: { name: departmentName.toString().trim() },
+          });
+          if (department) {
+            departmentId = department.id;
+          } else {
+            departmentError = `Department '${departmentName.toString().trim()}' not found`;
+          }
+        } else if (departmentId) {
+          // Validate Department ID exists
+          const departmentRepo =
+            transactionalEntityManager.getRepository(Department);
+          const department = await departmentRepo.findOne({
+            where: { id: departmentId },
+          });
+          if (!department) {
+            departmentError = `Department ID '${departmentId}' not found`;
+          }
+        }
+
+        // Handle Section - support both ID and Name
+        let sectionId = row['Section ID'];
+        let sectionError = '';
+        const sectionName = row['Section Name'] || row['Section'];
+        if (!sectionId && sectionName) {
+          const sectionRepo = transactionalEntityManager.getRepository(Section);
+          const section = await sectionRepo.findOne({
+            where: { name: sectionName.toString().trim() },
+          });
+          if (section) {
+            sectionId = section.id;
+          } else {
+            sectionError = `Section '${sectionName.toString().trim()}' not found`;
+          }
+        } else if (sectionId) {
+          // Validate Section ID exists
+          const sectionRepo = transactionalEntityManager.getRepository(Section);
+          const section = await sectionRepo.findOne({
+            where: { id: sectionId },
+          });
+          if (!section) {
+            sectionError = `Section ID '${sectionId}' not found`;
+          }
+        }
+
         const teamId = row['Team ID'];
 
         if (!username || !email) {
@@ -305,19 +439,82 @@ export class EmployeesService {
           continue;
         }
 
+        // Check for department/section errors
+        if (departmentError || sectionError) {
+          const errors = [departmentError, sectionError].filter(Boolean);
+          results.errors.push({
+            rowNumber: index + 2,
+            rowData: row,
+            error: errors.join('; '),
+          });
+          continue;
+        }
+
         try {
+          // Check for existing username (including deleted ones)
           const existingEmployee = await employeeRepo.findOneBy({ username });
           if (existingEmployee) {
-            results.errors.push({
-              rowNumber: index + 2,
-              rowData: row,
-              error: `Username '${username}' already exists.`,
-            });
-            continue;
+            if (!existingEmployee.isDeleted) {
+              results.errors.push({
+                rowNumber: index + 2,
+                rowData: row,
+                error: `Username '${username}' already exists.`,
+              });
+              continue;
+            } else {
+              // Employee exists but is deleted - restore it instead of creating new
+              existingEmployee.isDeleted = false;
+              existingEmployee.email = email;
+              existingEmployee.password = await bcrypt.hash(
+                password ? password : 'default_password',
+                10,
+              );
+
+              // Only update fields that have values (preserve existing data for empty fields)
+              if (firstName) existingEmployee.first_name = firstName;
+              if (lastName) existingEmployee.last_name = lastName;
+              if (departmentId !== undefined && departmentId !== null) {
+                existingEmployee.departmentId = departmentId;
+              }
+              if (sectionId !== undefined && sectionId !== null) {
+                existingEmployee.sectionId = sectionId;
+              }
+              if (teamId !== undefined && teamId !== null) {
+                existingEmployee.teamId = teamId;
+              }
+
+              // Update roles only if specified
+              if (roleNames && roleNames.length > 0) {
+                const roleEntities = await roleRepo.find({
+                  where: roleNames.map((name) => ({ name })),
+                });
+                if (roleEntities.length !== roleNames.length) {
+                  const foundRoleNames = roleEntities.map((r) => r.name);
+                  const missingRoles = roleNames.filter(
+                    (name) => !foundRoleNames.includes(name),
+                  );
+                  results.errors.push({
+                    rowNumber: index + 2,
+                    rowData: row,
+                    error: `Roles not found: ${missingRoles.join(', ')}`,
+                  });
+                  continue;
+                }
+                existingEmployee.roles = roleEntities;
+              } else {
+                // If no roles specified in Excel, clear existing roles
+                existingEmployee.roles = [];
+              }
+
+              await employeeRepo.save(existingEmployee);
+              results.successCount++;
+              continue;
+            }
           }
 
+          // Check for existing email (only if username is different)
           const existingEmail = await employeeRepo.findOneBy({ email });
-          if (existingEmail) {
+          if (existingEmail && !existingEmail.isDeleted) {
             results.errors.push({
               rowNumber: index + 2,
               rowData: row,
@@ -331,18 +528,26 @@ export class EmployeesService {
             10,
           );
 
-          // Lấy danh sách role entity
+          // Get list of role entities
           let roleEntities: Role[] = [];
           if (roleNames && roleNames.length > 0) {
             roleEntities = await roleRepo.find({
               where: roleNames.map((name) => ({ name })),
             });
             if (roleEntities.length !== roleNames.length) {
-              throw new BadRequestException(
-                `One or more roles do not exist: ${roleNames.join(', ')}`,
+              const foundRoleNames = roleEntities.map((r) => r.name);
+              const missingRoles = roleNames.filter(
+                (name) => !foundRoleNames.includes(name),
               );
+              results.errors.push({
+                rowNumber: index + 2,
+                rowData: row,
+                error: `Roles not found: ${missingRoles.join(', ')}`,
+              });
+              continue;
             }
           }
+          // If no roles specified, roleEntities will be empty array (no roles assigned)
 
           const employeeData: DeepPartial<Employee> = {
             username,
@@ -369,8 +574,8 @@ export class EmployeesService {
       }
     });
 
-    // Giữ lại console.warn này nếu bạn muốn log nội bộ, hoặc có thể bỏ đi
-    // vì message trả về đã đủ chi tiết.
+    // Keep this console.warn if you want internal logging, or remove it
+    // because the returned message is already detailed enough.
     if (
       results.successCount === 0 &&
       data.length > 0 &&
@@ -426,7 +631,7 @@ export class EmployeesService {
   async resetPassword(id: number, newPassword?: string): Promise<Employee> {
     const employee = await this.employeeRepository.findOneBy({ id });
     if (!employee) throw new NotFoundException('Employee not found');
-    // Nếu không truyền newPassword thì tạo random hoặc dùng mặc định
+    // If no newPassword provided, create random or use default
     const password = newPassword || Math.random().toString(36).slice(-8);
     const hashed = await bcrypt.hash(password, 10);
     employee.password = hashed;
@@ -437,19 +642,31 @@ export class EmployeesService {
   /**
    * Add a role to an employee if missing (by name or id), preserving existing roles.
    */
-  async addRoleIfMissing(employee: Employee, roleNameOrId: string | number): Promise<Employee> {
-    await this.employeeRepository.findOneOrFail({ where: { id: employee.id }, relations: ['roles'] });
+  async addRoleIfMissing(
+    employee: Employee,
+    roleNameOrId: string | number,
+  ): Promise<Employee> {
+    await this.employeeRepository.findOneOrFail({
+      where: { id: employee.id },
+      relations: ['roles'],
+    });
     let role: Role | undefined;
     if (typeof roleNameOrId === 'number') {
       const found = await this.roleRepository.findOneBy({ id: roleNameOrId });
       role = found === null ? undefined : found;
     } else {
-      const found = await this.roleRepository.findOneBy({ name: String(roleNameOrId) });
+      const found = await this.roleRepository.findOneBy({
+        name: String(roleNameOrId),
+      });
       role = found === null ? undefined : found;
     }
     if (!role) throw new NotFoundException('Role not found');
     if (!employee.roles) employee.roles = [];
-    const hasRole = employee.roles.some(r => (typeof r === 'string' ? r : r?.name) === role.name || r?.id === role.id);
+    const hasRole = employee.roles.some(
+      (r) =>
+        (typeof r === 'string' ? r : r?.name) === role.name ||
+        r?.id === role.id,
+    );
     if (!hasRole) {
       employee.roles.push(role);
       await this.employeeRepository.save(employee);
@@ -463,12 +680,17 @@ export class EmployeesService {
    */
   async updateEmployee(
     id: number,
-    updateDto: Partial<Employee & { roles?: (string | number)[], _mergeRoles?: boolean }>,
-    actor?: { id?: number; username?: string }
+    updateDto: Partial<
+      Employee & { roles?: (string | number)[]; _mergeRoles?: boolean }
+    >,
+    actor?: { id?: number; username?: string },
   ): Promise<Employee> {
-    const employee = await this.employeeRepository.findOne({ where: { id }, relations: ['roles'] });
+    const employee = await this.employeeRepository.findOne({
+      where: { id },
+      relations: ['roles'],
+    });
     if (!employee) throw new NotFoundException('Employee not found');
-    // Không cho update username/email trùng
+    // Do not allow duplicate username/email
     if (updateDto.username && updateDto.username !== employee.username) {
       const exist = await this.employeeRepository.findOneBy({
         username: updateDto.username,
@@ -481,13 +703,13 @@ export class EmployeesService {
       });
       if (exist) throw new ConflictException('Email already exists');
     }
-    // Nếu có password mới thì hash lại
+    // If new password provided, hash it again
     if (updateDto.password) {
       updateDto.password = await bcrypt.hash(updateDto.password, 10);
     } else {
       delete updateDto.password;
     }
-    // Nếu có trường roles (mảng), lấy entity role
+    // If roles field (array), get role entity
     if (updateDto.roles && Array.isArray(updateDto.roles)) {
       const roleEntities = await this.roleRepository.find({
         where: updateDto.roles.every((r) => typeof r === 'number')
@@ -500,7 +722,7 @@ export class EmployeesService {
       if (updateDto._mergeRoles) {
         // Merge: add any missing roles, keep existing
         const existingRoles = employee.roles || [];
-        const existingRoleNames = existingRoles.map(r => r.name);
+        const existingRoleNames = existingRoles.map((r) => r.name);
         const mergedRoles = [...existingRoles];
         for (const role of roleEntities) {
           if (!existingRoleNames.includes(role.name)) {
@@ -515,7 +737,7 @@ export class EmployeesService {
       delete updateDto.roles;
       delete updateDto._mergeRoles;
     }
-    // Xóa các trường object department, section, team nếu có trong payload
+    // Remove object fields department, section, team if present in payload
     delete (updateDto as any).department;
     delete (updateDto as any).section;
     delete (updateDto as any).team;
@@ -530,10 +752,14 @@ export class EmployeesService {
       employee.section = null as any;
     }
 
-    console.log(`[EmployeesService] updateEmployee: id=${id}, updateDto=${JSON.stringify(updateDto)}`);
+    console.log(
+      `[EmployeesService] updateEmployee: id=${id}, updateDto=${JSON.stringify(updateDto)}`,
+    );
     Object.assign(employee, updateDto);
     await this.employeeRepository.save(employee);
-    console.log(`[EmployeesService] updateEmployee result: id=${employee.id}, departmentId=${employee.departmentId}, sectionId=${employee.sectionId}, roles=${JSON.stringify(employee.roles)}`);
+    console.log(
+      `[EmployeesService] updateEmployee result: id=${employee.id}, departmentId=${employee.departmentId}, sectionId=${employee.sectionId}, roles=${JSON.stringify(employee.roles)}`,
+    );
     return employee;
   }
 
@@ -547,13 +773,13 @@ export class EmployeesService {
       relations: ['department'],
     });
     if (!employee) throw new NotFoundException('Employee not found');
-    // Lấy tất cả assignment của employee
+    // Get all assignments of employee
     const assignmentRepo = this.dataSource.getRepository(KPIAssignment);
     const valueRepo = this.dataSource.getRepository(KpiValue);
     const reviewRepo = this.dataSource.getRepository(KpiReview);
     const kpiRepo = this.dataSource.getRepository(Kpi);
 
-    // Lấy tất cả assignment của employee
+    // Get all assignments of employee
     const assignments = await assignmentRepo.find({
       where: { employee: { id: employeeId } },
       relations: ['kpi'],
@@ -561,22 +787,26 @@ export class EmployeesService {
     if (!assignments.length) {
       return {
         employeeId,
-        fullName: `${employee.first_name || ''} ${employee.last_name || ''}`.trim(),
+        fullName:
+          `${employee.first_name || ''} ${employee.last_name || ''}`.trim(),
         department: employee.department?.name,
         years: [],
       };
     }
-    // Lấy tất cả value đã APPROVED của các assignment này
-    const assignmentIds = assignments.map(a => a.id);
+    // Get all APPROVED values of these assignments
+    const assignmentIds = assignments.map((a) => a.id);
     const values = await valueRepo.find({
       where: {
-        ...(assignmentIds.length ? { kpi_assigment_id: In(assignmentIds) } : {}),
+        ...(assignmentIds.length
+          ? { kpi_assigment_id: In(assignmentIds) }
+          : {}),
         status: KpiValueStatus.APPROVED,
       },
       order: { timestamp: 'ASC' },
     });
-    // Gom theo năm
-    const yearMap: Record<number, { values: KpiValue[]; kpis: Set<number> }> = {};
+    // Group by year
+    const yearMap: Record<number, { values: KpiValue[]; kpis: Set<number> }> =
+      {};
     for (const v of values) {
       const year = v.timestamp.getFullYear();
       if (fromYear && year < fromYear) continue;
@@ -585,13 +815,13 @@ export class EmployeesService {
       yearMap[year].values.push(v);
       yearMap[year].kpis.add(v.kpi_assigment_id);
     }
-    // Tính toán từng năm
+    // Calculate each year
     const years: EmployeePerformanceYearDto[] = [];
     for (const year of Object.keys(yearMap).map(Number).sort()) {
       const yearData = yearMap[year];
-      // Tính điểm trung bình theo tỷ lệ hoàn thành (%)
-      const kpiScores = yearData.values.map(v => {
-        const assignment = assignments.find(a => a.id === v.kpi_assigment_id);
+      // Calculate average score by completion rate (%)
+      const kpiScores = yearData.values.map((v) => {
+        const assignment = assignments.find((a) => a.id === v.kpi_assigment_id);
         const target = assignment?.kpi?.target;
         if (target && Number(target) > 0) {
           return (Number(v.value) / Number(target)) * 100;
@@ -599,14 +829,18 @@ export class EmployeesService {
         return 0;
       });
       const averageKpiScore = kpiScores.length
-        ? parseFloat((kpiScores.reduce((a, b) => a + b, 0) / kpiScores.length).toFixed(2))
+        ? parseFloat(
+            (kpiScores.reduce((a, b) => a + b, 0) / kpiScores.length).toFixed(
+              2,
+            ),
+          )
         : 0;
-      // Đếm số KPI đạt (>= target) và chưa đạt
+      // Count achieved KPIs (>= target) and not achieved
       let achievedCount = 0;
       let notAchievedCount = 0;
       for (const v of yearData.values) {
-        // Lấy target của KPI
-        const assignment = assignments.find(a => a.id === v.kpi_assigment_id);
+        // Get KPI target
+        const assignment = assignments.find((a) => a.id === v.kpi_assigment_id);
         const target = assignment?.kpi?.target;
         if (target !== undefined && target !== null) {
           if (Number(v.value) >= Number(target)) achievedCount++;
@@ -614,9 +848,13 @@ export class EmployeesService {
         }
       }
       const total = achievedCount + notAchievedCount;
-      const achievedRate = total > 0 ? parseFloat(((achievedCount / total) * 100).toFixed(2)) : 0;
-      const notAchievedRate = total > 0 ? parseFloat(((notAchievedCount / total) * 100).toFixed(2)) : 0;
-      // Lấy nhận xét nổi bật (manager review)
+      const achievedRate =
+        total > 0 ? parseFloat(((achievedCount / total) * 100).toFixed(2)) : 0;
+      const notAchievedRate =
+        total > 0
+          ? parseFloat(((notAchievedCount / total) * 100).toFixed(2))
+          : 0;
+      // Get outstanding comments (manager review)
       const reviews = await reviewRepo.find({
         where: {
           employee: { id: employeeId },
@@ -624,7 +862,9 @@ export class EmployeesService {
         },
         order: { id: 'ASC' },
       });
-      const highlightComments = reviews.map(r => r.managerComment).filter(Boolean);
+      const highlightComments = reviews
+        .map((r) => r.managerComment)
+        .filter(Boolean);
       years.push({
         year,
         averageKpiScore,
@@ -637,14 +877,15 @@ export class EmployeesService {
     }
     return {
       employeeId,
-      fullName: `${employee.first_name || ''} ${employee.last_name || ''}`.trim(),
+      fullName:
+        `${employee.first_name || ''} ${employee.last_name || ''}`.trim(),
       department: employee.department?.name,
       years,
     };
   }
 
   async getEmployeeSkillsWithLevel(employeeId: number) {
-    // Lấy tất cả kỹ năng của nhân viên kèm competency
+    // Get all skills of employee with competency
     const skills = await this.employeeSkillRepo.find({
       where: { employee: { id: employeeId } },
       relations: ['competency'],

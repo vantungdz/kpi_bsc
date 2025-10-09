@@ -6,19 +6,19 @@ export class AuditLog {
   id: number;
 
   @Column({ nullable: false })
-  action: string; // Tên thao tác (CREATE, UPDATE, DELETE, LOGIN, EXPORT, ...)
+  action: string; 
 
   @Column({ nullable: false })
-  resource: string; // Đối tượng thao tác (bảng, module, ...)
+  resource: string; 
 
   @Column({ type: 'int', nullable: true })
-  userId: number; // ID người thao tác
+  userId: number; 
 
   @Column({ nullable: true })
-  username: string; // Tên đăng nhập
+  username: string; 
 
   @Column({ type: 'json', nullable: true })
-  data: any; // Dữ liệu liên quan (trước/sau, params, ...)
+  data: any; 
 
   @Column({ nullable: true })
   ip: string;

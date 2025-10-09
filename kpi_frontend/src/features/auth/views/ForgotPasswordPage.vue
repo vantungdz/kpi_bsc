@@ -1,52 +1,79 @@
 <template>
   <div class="forgot-password-container">
     <div class="forgot-password-box">
-      <img src="@/core/assets/logo.png" :alt="$t('logoAlt')" class="logo-image" />
-      <h2>{{ $t('forgotPassword') }}</h2>
-      <a-form ref="formRef" :model="formData" :rules="rules" layout="vertical" @finish="handleRequestReset"
-        @finishFailed="onFinishFailed" style="margin-top: 30px">
-        <a-form-item :label="$t('emailAddress')" name="email" has-feedback :validateTrigger="['change', 'blur']">
-          <a-input v-model:value="formData.email" :placeholder="$t('enterRegisteredEmail')" :disabled="loading"
-            size="large">
+      <img
+        src="@/core/assets/logo.png"
+        :alt="$t('logoAlt')"
+        class="logo-image"
+      />
+      <h2>{{ $t("forgotPassword") }}</h2>
+      <a-form
+        ref="formRef"
+        :model="formData"
+        :rules="rules"
+        layout="vertical"
+        @finish="handleRequestReset"
+        @finishFailed="onFinishFailed"
+        style="margin-top: 30px"
+      >
+        <a-form-item
+          :label="$t('emailAddress')"
+          name="email"
+          has-feedback
+          :validateTrigger="['change', 'blur']"
+        >
+          <a-input
+            v-model:value="formData.email"
+            :placeholder="$t('enterRegisteredEmail')"
+            :disabled="loading"
+            size="large"
+          >
             <template #prefix><mail-outlined /></template>
           </a-input>
         </a-form-item>
 
         <a-form-item v-if="statusMessage">
-          <a-alert :message="statusMessage" :type="isError ? 'error' : 'success'" show-icon />
+          <a-alert
+            :message="statusMessage"
+            :type="isError ? 'error' : 'success'"
+            show-icon
+          />
         </a-form-item>
 
         <a-form-item>
-          <a-button type="primary" html-type="submit" :loading="loading" block size="large">
-            {{ $t('sendPasswordResetLink') }}
+          <a-button
+            type="primary"
+            html-type="submit"
+            :loading="loading"
+            block
+            size="large"
+          >
+            {{ $t("sendPasswordResetLink") }}
           </a-button>
         </a-form-item>
       </a-form>
 
       <div class="back-to-login">
-        <router-link to="/">← {{ $t('backToLogin') }}</router-link>
+        <router-link to="/">← {{ $t("backToLogin") }}</router-link>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-// Vue core imports
 import { ref, reactive, onUnmounted } from "vue";
-// Ant Design Vue components and icons
+
 import { Form, Input, Button, Alert } from "ant-design-vue";
 import { MailOutlined } from "@ant-design/icons-vue";
 
-// Reactive state for form data and UI feedback
 const formData = reactive({
   email: "",
 });
 const formRef = ref();
 const loading = ref(false);
-const statusMessage = ref(""); // Success or error message
-const isError = ref(false); // Flag to indicate error or success
+const statusMessage = ref("");
+const isError = ref(false);
 
-// Validation rules for form inputs
 const rules = reactive({
   email: [
     { required: true, message: "Please input your Email address!" },
@@ -58,29 +85,23 @@ const rules = reactive({
   ],
 });
 
-// Handle form submission for password reset request
 const handleRequestReset = async () => {
   loading.value = true;
-  statusMessage.value = ""; // Clear previous messages
+  statusMessage.value = "";
   isError.value = false;
 
   try {
-    // TODO: Implement store action 'auth/requestPasswordReset(email)'
-    // This action should call backend API to send reset link.
-    // Backend handles email sending. Action only needs to know success or failure.
     console.warn(
       "Store action 'auth/requestPasswordReset' needs to be implemented."
     );
-    // await store.dispatch('auth/requestPasswordReset', values.email); // Actual call
-    await new Promise((resolve) => setTimeout(resolve, 1000)); // Simulate success
 
-    // On success
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+
     statusMessage.value =
       "If an account with that email exists, a password reset link has been sent. Please check your inbox (and spam folder).";
     isError.value = false;
-    formData.email = ""; // Optionally clear email after success
+    formData.email = "";
   } catch (error) {
-    // On failure
     console.error("Password reset request failed:", error);
     statusMessage.value =
       error?.message || "Failed to send reset link. Please try again later.";
@@ -90,14 +111,11 @@ const handleRequestReset = async () => {
   }
 };
 
-
-// Clear messages on component unmount
 onUnmounted(() => {
   statusMessage.value = "";
   isError.value = false;
 });
 
-// Ant Design Vue components registration (if not using auto-import)
 const AForm = Form;
 const AFormItem = Form.Item;
 const AInput = Input;
@@ -111,7 +129,7 @@ const AAlert = Alert;
   --brand-primary-hover: #125ea2;
   --brand-link: #1976d2;
   --brand-primary-bg: #f5faff;
-  --brand-shadow: 0 8px 32px 0 rgba(25, 118, 210, 0.10);
+  --brand-shadow: 0 8px 32px 0 rgba(25, 118, 210, 0.1);
 }
 .forgot-password-container {
   position: fixed;
@@ -133,13 +151,19 @@ const AAlert = Alert;
   max-width: 400px;
   width: 100%;
   text-align: center;
-  animation: fadeIn 0.7s cubic-bezier(.4,0,.2,1);
+  animation: fadeIn 0.7s cubic-bezier(0.4, 0, 0.2, 1);
   max-height: 100vh;
   overflow-y: auto;
 }
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(30px); }
-  to { opacity: 1; transform: none; }
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 .logo-image {
   max-height: 60px;
@@ -166,7 +190,9 @@ const AAlert = Alert;
   border-radius: 8px;
   background: #f5faff;
   border: 1.5px solid #e3f0ff;
-  transition: border-color 0.2s, box-shadow 0.2s;
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s;
 }
 :deep(.ant-input-affix-wrapper-focused),
 :deep(.ant-input-password-affix-wrapper-focused) {
@@ -187,7 +213,10 @@ const AAlert = Alert;
   font-weight: 600;
   font-size: 1.08rem;
   height: 44px;
-  transition: background 0.2s, border 0.2s, transform 0.1s;
+  transition:
+    background 0.2s,
+    border 0.2s,
+    transform 0.1s;
 }
 :deep(.ant-btn-primary) {
   background: linear-gradient(90deg, #1976d2 80%, #2196f3 100%);

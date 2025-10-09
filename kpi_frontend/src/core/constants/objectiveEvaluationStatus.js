@@ -6,7 +6,6 @@ export const ObjectiveEvaluationStatus = {
   REJECTED_BY_SECTION: "REJECTED_BY_SECTION",
   REJECTED_BY_DEPT: "REJECTED_BY_DEPT",
   REJECTED_BY_MANAGER: "REJECTED_BY_MANAGER",
-  // Thêm các trạng thái khác nếu có
 };
 
 export const ObjectiveEvaluationStatusColor = {

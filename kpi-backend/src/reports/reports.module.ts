@@ -9,11 +9,11 @@ import { KpiValuesModule } from '../kpi-values/kpi-values.module';
 
 @Module({
   imports: [
-    KpisModule, // Import KpisModule để sử dụng KpisService
-    EmployeesModule, // Import EmployeesModule để sử dụng EmployeesService
-    DashboardsModule, // Import DashboardsModule để sử dụng DashboardsService
-    StrategicObjectivesModule, // Thêm để inject StrategicObjectivesService
-    KpiValuesModule, // Thêm để inject KpiValuesService
+    KpisModule,
+    EmployeesModule,
+    DashboardsModule,
+    StrategicObjectivesModule,
+    KpiValuesModule,
   ],
   controllers: [ReportsController],
   providers: [ReportsService],

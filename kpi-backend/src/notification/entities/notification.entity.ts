@@ -18,17 +18,17 @@ export enum NotificationType {
   KPI_VALUE_SUBMITTED = 'KPI_VALUE_SUBMITTED',
   KPI_VALUE_APPROVED = 'KPI_VALUE_APPROVED',
   KPI_VALUE_REJECTED = 'KPI_VALUE_REJECTED',
-  // Thêm các loại thông báo cho Review
-  REVIEW_PENDING_EMPLOYEE_FEEDBACK = 'REVIEW_PENDING_EMPLOYEE_FEEDBACK', // Gửi cho NV khi QL review xong, chờ NV phản hồi
-  REVIEW_EMPLOYEE_RESPONDED = 'REVIEW_EMPLOYEE_RESPONDED', // Gửi cho QL khi NV đã phản hồi
-  REVIEW_COMPLETED = 'REVIEW_COMPLETED', // Gửi cho NV khi QL hoàn tất review
-  KPI_EXPIRY = 'KPI_EXPIRY', // Thông báo KPI sắp hết hạn/hết hạn
-  REVIEW_PENDING_SECTION_REVIEW = 'REVIEW_PENDING_SECTION_REVIEW', // Gửi cho section leader khi nhân viên tự đánh giá xong
-  REVIEW_PENDING_DEPARTMENT_REVIEW = 'REVIEW_PENDING_DEPARTMENT_REVIEW', // Gửi cho department leader khi section duyệt xong
-  REVIEW_PENDING_MANAGER_REVIEW = 'REVIEW_PENDING_MANAGER_REVIEW', // Gửi cho manager khi department duyệt xong
-  REVIEW_REJECTED_BY_SECTION = 'REVIEW_REJECTED_BY_SECTION', // Gửi cho nhân viên khi bị section từ chối
-  REVIEW_REJECTED_BY_DEPARTMENT = 'REVIEW_REJECTED_BY_DEPARTMENT', // Gửi cho nhân viên khi bị department từ chối
-  REVIEW_REJECTED_BY_MANAGER = 'REVIEW_REJECTED_BY_MANAGER', // Gửi cho nhân viên khi bị manager từ chối
+  // Add notification types for Review
+  REVIEW_PENDING_EMPLOYEE_FEEDBACK = 'REVIEW_PENDING_EMPLOYEE_FEEDBACK', // Send to employee when manager finishes review, waiting for employee feedback
+  REVIEW_EMPLOYEE_RESPONDED = 'REVIEW_EMPLOYEE_RESPONDED', // Send to manager when employee has responded
+  REVIEW_COMPLETED = 'REVIEW_COMPLETED', // Send to employee when manager completes review
+  KPI_EXPIRY = 'KPI_EXPIRY', // Notification for KPI about to expire/expired
+  REVIEW_PENDING_SECTION_REVIEW = 'REVIEW_PENDING_SECTION_REVIEW', // Send to section leader when employee completes self-evaluation
+  REVIEW_PENDING_DEPARTMENT_REVIEW = 'REVIEW_PENDING_DEPARTMENT_REVIEW', // Send to department leader when section approval is done
+  REVIEW_PENDING_MANAGER_REVIEW = 'REVIEW_PENDING_MANAGER_REVIEW', // Send to manager when department approval is done
+  REVIEW_REJECTED_BY_SECTION = 'REVIEW_REJECTED_BY_SECTION', // Send to employee when rejected by section
+  REVIEW_REJECTED_BY_DEPARTMENT = 'REVIEW_REJECTED_BY_DEPARTMENT', // Send to employee when rejected by department
+  REVIEW_REJECTED_BY_MANAGER = 'REVIEW_REJECTED_BY_MANAGER', // Send to employee when rejected by manager
   // Add other notification types as needed
 }
 

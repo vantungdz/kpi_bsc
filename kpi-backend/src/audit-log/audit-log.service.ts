@@ -19,11 +19,11 @@ export class AuditLogService {
     ip?: string;
   }) {
     let { userId, username } = params;
-    // Nếu thiếu userId hoặc username, cố gắng lấy từ context request (nếu có)
-    // Ưu tiên: nếu có userId mà chưa có username, tự động lấy username từ DB
+    // If missing userId or username, try to get from request context (if available)
+    // Priority: if userId exists but no username, automatically get username from DB
     if (!username && userId) {
       try {
-        // Lấy entity Employee đúng chuẩn
+        // Get Employee entity properly
         const employeeRepo = this.auditLogRepo.manager.getRepository('Employee');
         const employee = await employeeRepo.findOne({ where: { id: userId } });
         if (employee && employee.username) {
@@ -33,7 +33,7 @@ export class AuditLogService {
         // ignore
       }
     }
-    // Nếu vẫn thiếu userId hoặc username, log là null (giữ nguyên behavior)
+    // If still missing userId or username, log as null (keep original behavior)
     const log = this.auditLogRepo.create({
       ...params,
       userId,

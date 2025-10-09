@@ -23,21 +23,26 @@
   >
     <div v-if="review" class="kpi-review-content compact">
       <!-- Steps: Quy trình đánh giá KPI -->
-      <a-steps
-        :current="currentStep"
-        class="kpi-steps"
-        direction="horizontal"
-      >
+      <a-steps :current="currentStep" class="kpi-steps" direction="horizontal">
         <a-step :title="$t('selfReview')">
           <template #icon><user-outlined /></template>
         </a-step>
-        <a-step :title="$t('sectionReview')" :status="rejectedStep === 2 ? 'error' : undefined">
+        <a-step
+          :title="$t('sectionReview')"
+          :status="rejectedStep === 2 ? 'error' : undefined"
+        >
           <template #icon><team-outlined /></template>
         </a-step>
-        <a-step :title="$t('departmentReview')" :status="rejectedStep === 3 ? 'error' : undefined">
+        <a-step
+          :title="$t('departmentReview')"
+          :status="rejectedStep === 3 ? 'error' : undefined"
+        >
           <template #icon><apartment-outlined /></template>
         </a-step>
-        <a-step :title="$t('managerReview')" :status="rejectedStep === 4 ? 'error' : undefined">
+        <a-step
+          :title="$t('managerReview')"
+          :status="rejectedStep === 4 ? 'error' : undefined"
+        >
           <template #icon><solution-outlined /></template>
         </a-step>
         <a-step :title="$t('employeeFeedback')">
@@ -54,15 +59,24 @@
         </div>
         <div>
           <span class="info-label">{{ $t("employee") }}:</span>
-          <span class="info-value">{{ review.employee?.first_name }} {{ review.employee?.last_name }}</span>
+          <span class="info-value"
+            >{{ review.employee?.first_name }}
+            {{ review.employee?.last_name }}</span
+          >
         </div>
         <div>
           <span class="info-label">{{ $t("target") }}:</span>
-          <span class="info-value">{{ Number(review.targetValue).toLocaleString()}} {{ review.kpi.unit }}</span>
+          <span class="info-value"
+            >{{ Number(review.targetValue).toLocaleString() }}
+            {{ review.kpi.unit }}</span
+          >
         </div>
         <div>
           <span class="info-label">{{ $t("actualResult") }}:</span>
-          <span class="info-value">{{ Number(review.actualValue).toLocaleString() }} {{ review.kpi.unit }}</span>
+          <span class="info-value"
+            >{{ Number(review.actualValue).toLocaleString() }}
+            {{ review.kpi.unit }}</span
+          >
         </div>
       </div>
       <div class="review-section pro">
@@ -79,7 +93,9 @@
         </div>
       </div>
       <div v-if="review.sectionScore !== undefined" class="review-section pro">
-        <div class="review-section-title section">{{ $t("sectionReview") }}</div>
+        <div class="review-section-title section">
+          {{ $t("sectionReview") }}
+        </div>
         <div class="review-row">
           <span class="review-label">{{ $t("sectionScore") }}:</span>
           <a-rate :value="review.sectionScore" :count="5" allow-half disabled />
@@ -91,11 +107,21 @@
           </div>
         </div>
       </div>
-      <div v-if="review.departmentScore !== undefined" class="review-section pro">
-        <div class="review-section-title department">{{ $t("departmentReview") }}</div>
+      <div
+        v-if="review.departmentScore !== undefined"
+        class="review-section pro"
+      >
+        <div class="review-section-title department">
+          {{ $t("departmentReview") }}
+        </div>
         <div class="review-row">
           <span class="review-label">{{ $t("departmentScore") }}:</span>
-          <a-rate :value="review.departmentScore" :count="5" allow-half disabled />
+          <a-rate
+            :value="review.departmentScore"
+            :count="5"
+            allow-half
+            disabled
+          />
         </div>
         <div class="review-row">
           <span class="review-label">{{ $t("departmentComment") }}:</span>
@@ -105,7 +131,9 @@
         </div>
       </div>
       <div v-if="review.managerScore !== undefined" class="review-section pro">
-        <div class="review-section-title manager">{{ $t("managerReview") }}</div>
+        <div class="review-section-title manager">
+          {{ $t("managerReview") }}
+        </div>
         <div class="review-row">
           <span class="review-label">{{ $t("managerScore") }}:</span>
           <a-rate :value="review.managerScore" :count="5" allow-half disabled />
@@ -118,15 +146,23 @@
         </div>
       </div>
       <div
-        v-if="review.employeeFeedback && (review.status === 'MANAGER_REVIEWED' || review.status === 'COMPLETED')"
+        v-if="
+          review.employeeFeedback &&
+          (review.status === 'MANAGER_REVIEWED' ||
+            review.status === 'COMPLETED')
+        "
         class="review-section pro"
       >
-        <div class="review-section-title feedback">{{ $t("employeeFeedback") }}</div>
+        <div class="review-section-title feedback">
+          {{ $t("employeeFeedback") }}
+        </div>
         <div class="review-comment">{{ review.employeeFeedback }}</div>
       </div>
       <div v-if="isCurrentUserCanReview">
         <div v-if="isEmployeeCanFeedback" class="review-section pro">
-          <div class="review-section-title feedback">{{ $t("employeeFeedback") }}</div>
+          <div class="review-section-title feedback">
+            {{ $t("employeeFeedback") }}
+          </div>
           <a-textarea
             v-model:value="form.employeeFeedback"
             :placeholder="$t('feedbackPlaceholder')"
@@ -135,12 +171,14 @@
           />
         </div>
         <div v-else-if="isManagerCanComplete" class="review-section pro">
-          <div class="review-section-title completed" style="color: #52c41a;">
+          <div class="review-section-title completed" style="color: #52c41a">
             <span>{{ $t("employeeFeedbackCompleted") }}</span>
           </div>
         </div>
         <div v-else class="review-section pro">
-          <div class="review-section-title your-review">{{ $t("yourReview") }}</div>
+          <div class="review-section-title your-review">
+            {{ $t("yourReview") }}
+          </div>
           <div style="margin: 12px 0">
             <a-rate
               v-model:value="form.score"
@@ -164,9 +202,14 @@
             rows="3"
             :disabled="loading || isCurrentLevelReviewed"
           />
-          <div v-if="isSectionCanReview || isDepartmentCanReview || isManagerCanReview" style="text-align:right; margin-top:8px;">
+          <div
+            v-if="
+              isSectionCanReview || isDepartmentCanReview || isManagerCanReview
+            "
+            style="text-align: right; margin-top: 8px"
+          >
             <a-button danger @click="openRejectModal" :disabled="loading">
-              {{ $t('common.reject') }}
+              {{ $t("common.reject") }}
             </a-button>
           </div>
         </div>
@@ -178,7 +221,12 @@
         <b>{{ $t("reviewed") }}</b>
       </div>
     </div>
-    <div v-if="errorMsg" style="color:#ff4d4f; text-align:center; margin-bottom:8px;">{{ errorMsg }}</div>
+    <div
+      v-if="errorMsg"
+      style="color: #ff4d4f; text-align: center; margin-bottom: 8px"
+    >
+      {{ errorMsg }}
+    </div>
 
     <!-- Reject Modal -->
     <a-modal
@@ -205,12 +253,21 @@
             :disabled="rejectLoading"
           />
         </a-form-item>
-        <div v-if="rejectError" style="color:#ff4d4f; margin-top:-8px; margin-bottom:8px;">{{ rejectError }}</div>
+        <div
+          v-if="rejectError"
+          style="color: #ff4d4f; margin-top: -8px; margin-bottom: 8px"
+        >
+          {{ rejectError }}
+        </div>
       </div>
     </a-modal>
-    <div style="text-align:left; margin-bottom:8px ; margin-left:8px;">
-      <a-button type="link" @click="$emit('show-history')" style="padding:0; color:#1890ff; font-weight:600">
-        {{$t('viewUpdateApprovalHistory')}}
+    <div style="text-align: left; margin-bottom: 8px; margin-left: 8px">
+      <a-button
+        type="link"
+        @click="$emit('show-history')"
+        style="padding: 0; color: #1890ff; font-weight: 600"
+      >
+        {{ $t("viewUpdateApprovalHistory") }}
       </a-button>
     </div>
   </a-modal>
@@ -218,16 +275,23 @@
 
 <script setup>
 import { ref, watch, computed } from "vue";
-import { useI18n } from 'vue-i18n';
+import { useI18n } from "vue-i18n";
 import {
   submitReviewByRole,
   updateKpiReview,
   completeReview,
   submitEmployeeFeedback,
-  rejectReviewByRole // <-- Thêm hàm này
+  rejectReviewByRole,
 } from "@/core/services/kpiReviewApi";
 import { useStore } from "vuex";
-import { UserOutlined, TeamOutlined, ApartmentOutlined, SolutionOutlined, MessageOutlined, SmileOutlined } from '@ant-design/icons-vue';
+import {
+  UserOutlined,
+  TeamOutlined,
+  ApartmentOutlined,
+  SolutionOutlined,
+  MessageOutlined,
+  SmileOutlined,
+} from "@ant-design/icons-vue";
 
 const props = defineProps({
   review: Object,
@@ -243,10 +307,9 @@ const loading = ref(false);
 const store = useStore();
 const errorMsg = ref("");
 const { t: $t } = useI18n();
-// Lấy user từ store giống UserProfile
+
 const user = computed(() => store.getters["auth/user"]);
 
-// Chuẩn hóa lấy mảng roles (string)
 const userRoles = computed(() => {
   if (!user.value) return [];
   if (Array.isArray(user.value.roles)) {
@@ -349,8 +412,9 @@ watch(
   (val) => {
     if (val) {
       let score = val.managerScore || val.score || null;
-      // Nếu score không phải số hợp lệ (NaN, chuỗi, ngoài khoảng 0.5-5) thì set null
-      if (typeof score !== 'number' || isNaN(score) || score < 0.5 || score > 5) score = null;
+
+      if (typeof score !== "number" || isNaN(score) || score < 0.5 || score > 5)
+        score = null;
       form.value = {
         score,
         managerComment: val.managerComment || "",
@@ -362,7 +426,9 @@ watch(
 );
 
 const isValidScore = (score) => {
-  return typeof score === 'number' && !isNaN(score) && score >= 0.5 && score <= 5;
+  return (
+    typeof score === "number" && !isNaN(score) && score >= 0.5 && score <= 5
+  );
 };
 
 const submitReview = async () => {
@@ -371,9 +437,9 @@ const submitReview = async () => {
     isCurrentUserCanReview.value &&
     !isEmployeeCanFeedback.value &&
     !isManagerCanComplete.value &&
-    (!isValidScore(form.value.score))
+    !isValidScore(form.value.score)
   ) {
-    errorMsg.value = $t('scoreRequired');
+    errorMsg.value = $t("scoreRequired");
     return;
   }
   loading.value = true;
@@ -383,7 +449,6 @@ const submitReview = async () => {
       isDepartmentCanReview.value ||
       isManagerCanReview.value
     ) {
-      // Gọi API tổng quát để backend tự quyết định nhảy bậc
       await submitReviewByRole(
         props.review.id,
         form.value.score,
@@ -405,7 +470,6 @@ const submitReview = async () => {
   }
 };
 
-// Steps: xác định bước hiện tại dựa vào review.status
 const statusStepMap = {
   PENDING: 0,
   SELF_REVIEWED: 1,
@@ -415,20 +479,24 @@ const statusStepMap = {
   DEPARTMENT_REJECTED: 3,
   MANAGER_REVIEWED: 4,
   MANAGER_REJECTED: 4,
-  EMPLOYEE_FEEDBACK: 4, // EMPLOYEE_FEEDBACK là bước 5, nhưng MANAGER_REVIEWED cũng có thể là 4
+  EMPLOYEE_FEEDBACK: 4,
   COMPLETED: 5,
 };
 const currentStep = computed(() => {
   if (!props.review || !props.review.status) return 0;
   return statusStepMap[props.review.status] ?? 0;
 });
-// Xác định step bị từ chối
+
 const rejectedStep = computed(() => {
   switch (props.review?.status) {
-    case 'SECTION_REJECTED': return 2;
-    case 'DEPARTMENT_REJECTED': return 3;
-    case 'MANAGER_REJECTED': return 4;
-    default: return null;
+    case "SECTION_REJECTED":
+      return 2;
+    case "DEPARTMENT_REJECTED":
+      return 3;
+    case "MANAGER_REJECTED":
+      return 4;
+    default:
+      return null;
   }
 });
 
@@ -451,7 +519,7 @@ function closeRejectModal() {
 async function handleReject() {
   rejectError.value = "";
   if (!rejectReason.value.trim()) {
-    rejectError.value = $t('rejectionReasonRequired');
+    rejectError.value = $t("rejectionReasonRequired");
     return;
   }
   rejectLoading.value = true;
@@ -460,7 +528,7 @@ async function handleReject() {
     closeRejectModal();
     emit("saved");
   } catch (e) {
-    rejectError.value = e?.response?.data?.message || e?.message || 'Error';
+    rejectError.value = e?.response?.data?.message || e?.message || "Error";
   } finally {
     rejectLoading.value = false;
   }
@@ -533,13 +601,41 @@ async function handleReject() {
   font-size: 15px;
   letter-spacing: 0.2px;
 }
-.review-section-title.self { color: #409eff; border-left: 3px solid #409eff; padding-left: 4px; }
-.review-section-title.section { color: #13c2c2; border-left: 3px solid #13c2c2; padding-left: 4px; }
-.review-section-title.department { color: #1890ff; border-left: 3px solid #1890ff; padding-left: 4px; }
-.review-section-title.manager { color: #722ed1; border-left: 3px solid #722ed1; padding-left: 4px; }
-.review-section-title.feedback { color: #faad14; border-left: 3px solid #faad14; padding-left: 4px; }
-.review-section-title.completed { color: #52c41a; border-left: 3px solid #52c41a; padding-left: 4px; }
-.review-section-title.your-review { color: #1a237e; border-left: 3px solid #1a237e; padding-left: 4px; }
+.review-section-title.self {
+  color: #409eff;
+  border-left: 3px solid #409eff;
+  padding-left: 4px;
+}
+.review-section-title.section {
+  color: #13c2c2;
+  border-left: 3px solid #13c2c2;
+  padding-left: 4px;
+}
+.review-section-title.department {
+  color: #1890ff;
+  border-left: 3px solid #1890ff;
+  padding-left: 4px;
+}
+.review-section-title.manager {
+  color: #722ed1;
+  border-left: 3px solid #722ed1;
+  padding-left: 4px;
+}
+.review-section-title.feedback {
+  color: #faad14;
+  border-left: 3px solid #faad14;
+  padding-left: 4px;
+}
+.review-section-title.completed {
+  color: #52c41a;
+  border-left: 3px solid #52c41a;
+  padding-left: 4px;
+}
+.review-section-title.your-review {
+  color: #1a237e;
+  border-left: 3px solid #1a237e;
+  padding-left: 4px;
+}
 .review-row {
   display: flex;
   align-items: flex-start;

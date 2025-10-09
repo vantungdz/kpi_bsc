@@ -4,12 +4,12 @@ import { ApiProperty } from '@nestjs/swagger';
 
 export class RejectValueDto {
   @ApiProperty({
-    description: 'Lý do từ chối giá trị KPI',
-    example: 'Số liệu chưa chính xác, cần kiểm tra lại nguồn.',
+    description: 'Reason for rejecting KPI value',
+    example: 'Data is not accurate, need to verify the source.',
     required: true,
     maxLength: 500,
   })
-  @IsNotEmpty({ message: 'Lý do từ chối không được để trống' })
+  @IsNotEmpty({ message: 'Rejection reason cannot be empty' })
   @IsString()
   @MaxLength(500)
   reason: string;

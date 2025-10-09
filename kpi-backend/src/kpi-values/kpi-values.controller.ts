@@ -273,8 +273,13 @@ export class KpiValuesController {
   async approveKpiReview(
     @Param('id', ParseIntPipe) id: number,
     @Param('role') role: string,
+    @Req() req: Request,
   ): Promise<KpiValue> {
-    return this.kpiValuesService.approveKpiReview(id, [role.toUpperCase()]);
+    const user: Employee = req.user as Employee;
+    if (!user) {
+      throw new UnauthorizedException('User not found in request');
+    }
+    return this.kpiValuesService.approveKpiReview(id, user);
   }
 
   @Patch(':id/reject/:role')
@@ -282,8 +287,13 @@ export class KpiValuesController {
   async rejectKpiReview(
     @Param('id', ParseIntPipe) id: number,
     @Param('role') role: string,
+    @Req() req: Request,
   ): Promise<KpiValue> {
-    return this.kpiValuesService.rejectKpiReview(id, [role.toUpperCase()]);
+    const user: Employee = req.user as Employee;
+    if (!user) {
+      throw new UnauthorizedException('User not found in request');
+    }
+    return this.kpiValuesService.rejectKpiReview(id, user);
   }
 
   @Patch(':id/resubmit')

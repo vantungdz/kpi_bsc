@@ -1,19 +1,28 @@
 <template>
   <div>
-    <a-card :title="
+    <a-card
+      :title="
         $t('kpiDetailTitle', { name: kpiDetailData?.name || $t('loading') })
-      " style="margin-bottom: 20px">
+      "
+      style="margin-bottom: 20px"
+    >
       <a-skeleton :loading="loadingKpi" active :paragraph="{ rows: 6 }">
         <a-descriptions v-if="kpiDetailData" :column="2" bordered size="small">
           <template #title>
-            <div style="
+            <div
+              style="
                 display: flex;
                 justify-content: space-between;
                 align-items: center;
                 width: 100%;
-              ">
+              "
+            >
               <span>{{ $t("kpiInformation") }}</span>
-              <a-button v-if="kpiDetailData?.id && canCopyTemplate" @click="copyKpiAsTemplate" :disabled="loadingKpi">
+              <a-button
+                v-if="kpiDetailData?.id && canCopyTemplate"
+                @click="copyKpiAsTemplate"
+                :disabled="loadingKpi"
+              >
                 {{ $t("copyAsTemplate") }}
               </a-button>
             </div>
@@ -21,11 +30,15 @@
           <a-descriptions-item :label="$t('id')">
             {{ kpiDetailData.id }}
           </a-descriptions-item>
-          <a-descriptions-item :label="$t('createdByType')">
-            {{ kpiDetailData.created_by_type || "" }}
+          <a-descriptions-item :label="$t('createdBy')">
+            {{
+              kpiDetailData.createdBy
+                ? `${kpiDetailData.createdBy.first_name} ${kpiDetailData.createdBy.last_name}`
+                : ""
+            }}
           </a-descriptions-item>
           <a-descriptions-item :label="$t('frequency')">
-            {{ kpiDetailData.frequency }}
+            {{ getFrequencyText(kpiDetailData.frequency) }}
           </a-descriptions-item>
           <a-descriptions-item :label="$t('perspective')">
             {{ kpiDetailData.perspective?.name || "" }}
@@ -48,15 +61,31 @@
           </a-descriptions-item>
 
           <a-descriptions-item :label="$t('status')" :span="2">
-            <a-tag :color="getKpiDefinitionStatusColor(kpiDetailData.status)" style="margin-right: 10px">
-              {{ getKpiDefinitionStatusText(kpiDetailData.status) }}</a-tag>
-            <a-switch v-if="canToggleStatus && kpiDetailData?.id"
-              :checked="kpiDetailData.status === KpiDefinitionStatus.APPROVED" :loading="isToggling"
-              :disabled="isToggling || loadingKpi" :checked-children="$t('on')" :un-checked-children="$t('off')"
-              size="small" @change="() => handleToggleStatus(kpiDetailData.id)" :title="$t('toggleStatus')" />
-            <div v-if="toggleStatusError" style="color: red; font-size: 0.9em; margin-top: 5px">
+            <a-tag
+              :color="getKpiDefinitionStatusColor(kpiDetailData.status)"
+              style="margin-right: 10px"
+            >
+              {{ getKpiDefinitionStatusText(kpiDetailData.status) }}</a-tag
+            >
+            <a-switch
+              v-if="canToggleStatus && kpiDetailData?.id"
+              :checked="kpiDetailData.status === KpiDefinitionStatus.APPROVED"
+              :loading="isToggling"
+              :disabled="isToggling || loadingKpi"
+              :checked-children="$t('on')"
+              :un-checked-children="$t('off')"
+              size="small"
+              @change="() => handleToggleStatus(kpiDetailData.id)"
+              :title="$t('toggleStatus')"
+            />
+            <div
+              v-if="toggleStatusError"
+              style="color: red; font-size: 0.9em; margin-top: 5px"
+            >
               {{ $t("error") }}: {{ toggleStatusError }}
-              <a @click="clearToggleError" style="margin-left: 5px">({{ $t("clear") }})</a>
+              <a @click="clearToggleError" style="margin-left: 5px"
+                >({{ $t("clear") }})</a
+              >
             </div>
           </a-descriptions-item>
 
@@ -64,51 +93,84 @@
             {{ kpiDetailData.description || "" }}
           </a-descriptions-item>
         </a-descriptions>
-        <a-empty v-else-if="!loadingKpi" :description="$t('couldNotLoadKpiDetails')" />
+        <a-empty
+          v-else-if="!loadingKpi"
+          :description="$t('couldNotLoadKpiDetails')"
+        />
       </a-skeleton>
 
-      <a-row v-if="shouldShowAssignmentStats" :gutter="12" style="
+      <a-row
+        v-if="shouldShowAssignmentStats"
+        :gutter="12"
+        style="
           margin-top: 16px;
           margin-bottom: 16px;
           background: #f0f2f5;
           padding: 8px;
           border-radius: 4px;
-        ">
+        "
+      >
         <a-col :span="8">
-          <a-statistic :title="$t('overallTarget')" :value="overallTargetValueDetail" :precision="2" />
+          <a-statistic
+            :title="$t('overallTarget')"
+            :value="overallTargetValueDetail"
+            :precision="2"
+          />
         </a-col>
         <a-col :span="8">
-          <a-statistic :title="$t('totalAssigned')" :value="totalAssignedTargetDetail" :precision="2" />
+          <a-statistic
+            :title="$t('totalAssigned')"
+            :value="totalAssignedTargetDetail"
+            :precision="2"
+          />
         </a-col>
         <a-col :span="8">
-          <a-statistic :title="$t('remaining')" :value="remainingTargetDetail" :precision="2"
-            :value-style="isOverAssignedDetail ? { color: '#cf1322' } : {}" />
+          <a-statistic
+            :title="$t('remaining')"
+            :value="remainingTargetDetail"
+            :precision="2"
+            :value-style="isOverAssignedDetail ? { color: '#cf1322' } : {}"
+          />
         </a-col>
       </a-row>
     </a-card>
 
     <!-- COMPANY OVERVIEW MODE CARDS -->
     <template v-if="isCompanyOverviewMode">
-      <a-card :title="$t('departmentAssignments')" style="margin-top: 20px" v-if="canAssignDepartment">
+      <a-card
+        :title="$t('departmentAssignments')"
+        style="margin-top: 20px"
+        v-if="canAssignDepartment"
+      >
         <template #extra>
-          <a-button type="primary" @click="openManageDepartmentSectionAssignments">
+          <a-button
+            type="primary"
+            @click="openManageDepartmentSectionAssignments"
+          >
             <plus-outlined /> {{ $t("addDepartmentAssignment") }}
           </a-button>
         </template>
         <a-skeleton :loading="loadingKpi" active :paragraph="{ rows: 3 }">
-          <a-table :columns="departmentSectionAssignmentColumns" :data-source="companyOverviewDepartmentAssignments"
-            row-key="id" size="small" bordered :pagination="false">
+          <a-table
+            :columns="departmentSectionAssignmentColumns"
+            :data-source="companyOverviewDepartmentAssignments"
+            row-key="id"
+            size="small"
+            bordered
+            :pagination="false"
+          >
             <template #bodyCell="{ column, record }">
               <template v-if="column.key === 'assignedUnit'">
                 <span v-if="record.department">{{
                   record.department.name
-                  }}</span>
+                }}</span>
                 <span v-else></span>
               </template>
               <template v-else-if="column.key === 'targetValue'">
                 {{ Number(record.targetValue).toLocaleString() ?? "-" }}
                 <span v-if="kpiDetailData?.unit">
-                  {{ kpiDetailData.unit }}</span>
+                  {{ kpiDetailData.unit }}</span
+                >
               </template>
               <template v-else-if="column.key === 'actual'">
                 {{ Number(record.latest_actual_value).toLocaleString() ?? "-" }}
@@ -122,14 +184,23 @@
               <template v-else-if="column.key === 'actions'">
                 <a-space>
                   <a-tooltip :title="$t('editAssignment')">
-                    <a-button type="primary" ghost shape="circle" size="small"
-                      @click="openEditDepartmentSectionAssignment(record)">
+                    <a-button
+                      type="primary"
+                      ghost
+                      shape="circle"
+                      size="small"
+                      @click="openEditDepartmentSectionAssignment(record)"
+                    >
                       <edit-outlined />
                     </a-button>
                   </a-tooltip>
                   <a-tooltip :title="$t('deleteAssignment')">
-                    <a-button danger shape="circle" size="small"
-                      @click="confirmDeleteDepartmentSectionAssignment(record)">
+                    <a-button
+                      danger
+                      shape="circle"
+                      size="small"
+                      @click="confirmDeleteDepartmentSectionAssignment(record)"
+                    >
                       <delete-outlined />
                     </a-button>
                   </a-tooltip>
@@ -143,20 +214,36 @@
         </a-skeleton>
       </a-card>
 
-      <a-card :title="$t('sectionAssignments')" style="margin-top: 20px" v-if="canAssignSection">
+      <a-card
+        :title="$t('sectionAssignments')"
+        style="margin-top: 20px"
+        v-if="canAssignSection"
+      >
         <template #extra>
-          <a-button type="primary" @click="openManageDepartmentSectionAssignments">
+          <a-button
+            type="primary"
+            @click="openManageDepartmentSectionAssignments"
+          >
             <plus-outlined /> {{ $t("addSectionAssignment") }}
           </a-button>
         </template>
         <a-skeleton :loading="loadingKpi" active :paragraph="{ rows: 3 }">
-          <a-table :columns="departmentSectionAssignmentColumns" :data-source="companyOverviewSectionAssignments"
-            row-key="id" size="small" bordered :pagination="false">
+          <a-table
+            :columns="departmentSectionAssignmentColumns"
+            :data-source="companyOverviewSectionAssignments"
+            row-key="id"
+            size="small"
+            bordered
+            :pagination="false"
+          >
             <template #bodyCell="{ column, record }">
               <template v-if="column.key === 'assignedUnit'">
                 <span v-if="record.section">
                   {{ record.section.name }}
-                  <span v-if="record.section.department" style="font-size: 0.9em; color: #888">
+                  <span
+                    v-if="record.section.department"
+                    style="font-size: 0.9em; color: #888"
+                  >
                     ({{ $t("dept") }}: {{ record.section.department.name }})
                   </span>
                 </span>
@@ -165,7 +252,8 @@
               <template v-else-if="column.key === 'targetValue'">
                 {{ Number(record.targetValue).toLocaleString() ?? "-" }}
                 <span v-if="kpiDetailData?.unit">
-                  {{ kpiDetailData.unit }}</span>
+                  {{ kpiDetailData.unit }}</span
+                >
               </template>
               <template v-else-if="column.key === 'actual'">
                 {{ Number(record.latest_actual_value).toLocaleString() ?? "-" }}
@@ -179,14 +267,23 @@
               <template v-else-if="column.key === 'actions'">
                 <a-space>
                   <a-tooltip :title="$t('editAssignment')">
-                    <a-button type="primary" ghost shape="circle" size="small"
-                      @click="openEditDepartmentSectionAssignment(record)">
+                    <a-button
+                      type="primary"
+                      ghost
+                      shape="circle"
+                      size="small"
+                      @click="openEditDepartmentSectionAssignment(record)"
+                    >
                       <edit-outlined />
                     </a-button>
                   </a-tooltip>
                   <a-tooltip :title="$t('deleteAssignment')">
-                    <a-button danger shape="circle" size="small"
-                      @click="confirmDeleteDepartmentSectionAssignment(record)">
+                    <a-button
+                      danger
+                      shape="circle"
+                      size="small"
+                      @click="confirmDeleteDepartmentSectionAssignment(record)"
+                    >
                       <delete-outlined />
                     </a-button>
                   </a-tooltip>
@@ -197,18 +294,36 @@
         </a-skeleton>
       </a-card>
 
-      <a-card :title="$t('directUserAssignments')" style="margin-top: 20px" v-if="canAssignEmployees">
+      <a-card
+        :title="$t('directUserAssignments')"
+        style="margin-top: 20px"
+        v-if="canAssignEmployees"
+      >
         <template #extra>
           <a-button type="primary" @click="openAssignUserModal">
             <user-add-outlined /> {{ $t("addUserAssignment") }}
           </a-button>
         </template>
-        <a-skeleton :loading="loadingUserAssignments" active :paragraph="{ rows: 3 }">
-          <a-table :columns="userAssignmentColumns" :data-source="companyOverviewUserAssignments" row-key="id"
-            size="small" bordered :pagination="false">
+        <a-skeleton
+          :loading="loadingUserAssignments"
+          active
+          :paragraph="{ rows: 3 }"
+        >
+          <a-table
+            :columns="userAssignmentColumns"
+            :data-source="companyOverviewUserAssignments"
+            row-key="id"
+            size="small"
+            bordered
+            :pagination="false"
+          >
             <template #bodyCell="{ column, record }">
               <template v-if="column.key === 'user'">
-                <a-avatar :src="record.employee?.avatar_url" size="small" style="margin-right: 8px">
+                <a-avatar
+                  :src="record.employee?.avatar_url"
+                  size="small"
+                  style="margin-right: 8px"
+                >
                   {{ record.employee?.first_name?.charAt(0) }}
                 </a-avatar>
                 {{ record.employee?.first_name }}
@@ -239,12 +354,23 @@
               <template v-else-if="column.key === 'actions'">
                 <a-space>
                   <a-tooltip :title="$t('editAssignment')">
-                    <a-button type="primary" ghost shape="circle" size="small" @click="openEditUserModal(record)">
+                    <a-button
+                      type="primary"
+                      ghost
+                      shape="circle"
+                      size="small"
+                      @click="openEditUserModal(record)"
+                    >
                       <edit-outlined />
                     </a-button>
                   </a-tooltip>
                   <a-tooltip :title="$t('deleteAssignment')">
-                    <a-button danger shape="circle" size="small" @click="confirmDeleteUserAssignment(record)">
+                    <a-button
+                      danger
+                      shape="circle"
+                      size="small"
+                      @click="confirmDeleteUserAssignment(record)"
+                    >
                       <delete-outlined />
                     </a-button>
                   </a-tooltip>
@@ -258,35 +384,57 @@
 
     <!-- CONTEXT-SPECIFIC ASSIGNMENT CARDS -->
     <template v-else>
-      <a-card :title="$t('manageDepartmentSectionAssignments')" style="margin-top: 20px"
-        v-if="shouldShowDepartmentSectionAssignmentCard && canAssignSection">
+      <a-card
+        :title="$t('manageDepartmentSectionAssignments')"
+        style="margin-top: 20px"
+        v-if="shouldShowDepartmentSectionAssignmentCard && canAssignSection"
+      >
         <template #extra>
-          <a-button type="primary" @click="openManageDepartmentSectionAssignments">
+          <a-button
+            type="primary"
+            @click="openManageDepartmentSectionAssignments"
+          >
             <template #icon>
               <plus-outlined />
             </template>
             {{ $t("addAssignment") }}
           </a-button>
         </template>
-        <a-skeleton :loading="loadingDepartmentSectionAssignments" active :paragraph="{ rows: 4 }">
-          <a-table :columns="departmentSectionAssignmentColumns" :data-source="filteredAssignmentsForContextDepartment"
-            row-key="id" size="small" bordered :pagination="false">
+        <a-skeleton
+          :loading="loadingDepartmentSectionAssignments"
+          active
+          :paragraph="{ rows: 4 }"
+        >
+          <a-table
+            :columns="departmentSectionAssignmentColumns"
+            :data-source="filteredAssignmentsForContextDepartment"
+            row-key="id"
+            size="small"
+            bordered
+            :pagination="false"
+          >
             <template #bodyCell="{ column, record }">
               <template v-if="column.key === 'assignedUnit'">
-                <span v-if="record.section">{{ record.section.name }} ({{ $t("section") }})</span>
-                <span v-else-if="record.department">{{ record.department.name }} ({{ $t("department") }})</span>
+                <span v-if="record.section"
+                  >{{ record.section.name }} ({{ $t("section") }})</span
+                >
+                <span v-else-if="record.department"
+                  >{{ record.department.name }} ({{ $t("department") }})</span
+                >
                 <span v-else></span>
               </template>
               <template v-else-if="column.key === 'targetValue'">
                 {{ Number(record.targetValue).toLocaleString() ?? "-" }}
                 <span v-if="kpiDetailData?.unit">
-                  {{ kpiDetailData.unit }}</span>
+                  {{ kpiDetailData.unit }}</span
+                >
               </template>
 
               <template v-else-if="column.key === 'actual'">
                 {{ Number(record.latest_actual_value).toLocaleString() ?? "-" }}
                 <span v-if="kpiDetailData?.unit">
-                  {{ kpiDetailData.unit }}</span>
+                  {{ kpiDetailData.unit }}</span
+                >
               </template>
               <template v-else-if="column.key === 'status'">
                 <a-tag :color="getAssignmentStatusColor(record.status)">
@@ -296,14 +444,23 @@
               <template v-else-if="column.key === 'actions'">
                 <a-space>
                   <a-tooltip :title="$t('editAssignment')">
-                    <a-button type="primary" ghost shape="circle" size="small"
-                      @click="openEditDepartmentSectionAssignment(record)">
+                    <a-button
+                      type="primary"
+                      ghost
+                      shape="circle"
+                      size="small"
+                      @click="openEditDepartmentSectionAssignment(record)"
+                    >
                       <edit-outlined />
                     </a-button>
                   </a-tooltip>
                   <a-tooltip :title="$t('deleteAssignment')">
-                    <a-button danger shape="circle" size="small"
-                      @click="confirmDeleteDepartmentSectionAssignment(record)">
+                    <a-button
+                      danger
+                      shape="circle"
+                      size="small"
+                      @click="confirmDeleteDepartmentSectionAssignment(record)"
+                    >
                       <delete-outlined />
                     </a-button>
                   </a-tooltip>
@@ -311,32 +468,66 @@
               </template>
             </template>
           </a-table>
-          <a-empty v-show="
+          <a-empty
+            v-show="
               currentDepartmentSectionAssignments.length === 0 &&
               !loadingDepartmentSectionAssignments
-            " :description="$t('noDepartmentSectionAssignments')" />
+            "
+            :description="$t('noDepartmentSectionAssignments')"
+          />
         </a-skeleton>
       </a-card>
 
-      <a-card :title="$t('manageDirectUserAssignments')" style="margin-top: 20px"
-        v-if="shouldShowUserAssignmentsInDepartmentSectionsCard && canAssignEmployees">
+      <a-card
+        :title="$t('manageDirectUserAssignments')"
+        style="margin-top: 20px"
+        v-if="
+          shouldShowUserAssignmentsInDepartmentSectionsCard &&
+          canAssignEmployees
+        "
+      >
         <template #extra>
-          <a-button type="primary" @click="openAssignUsersInDeptSectionsModal"
-            :disabled="loadingUserAssignments || !kpiDetailData?.id">
+          <a-button
+            type="primary"
+            @click="openAssignUsersInDeptSectionsModal"
+            :disabled="loadingUserAssignments || !kpiDetailData?.id"
+          >
             <template #icon>
               <user-add-outlined />
             </template>
             {{ $t("addEditUserAssignment") }}
           </a-button>
         </template>
-        <a-skeleton :loading="loadingUserAssignments" active :paragraph="{ rows: 4 }">
-          <a-alert v-if="userAssignmentError" :message="userAssignmentError" type="error" show-icon closable
-            @close="clearAssignmentError" style="margin-bottom: 16px" />
-          <a-table :columns="userAssignmentColumns" :data-source="filteredUserAssignmentsInDepartmentSections"
-            row-key="id" size="small" bordered :pagination="false" style="min-height: 180px">
+        <a-skeleton
+          :loading="loadingUserAssignments"
+          active
+          :paragraph="{ rows: 4 }"
+        >
+          <a-alert
+            v-if="userAssignmentError"
+            :message="userAssignmentError"
+            type="error"
+            show-icon
+            closable
+            @close="clearAssignmentError"
+            style="margin-bottom: 16px"
+          />
+          <a-table
+            :columns="userAssignmentColumns"
+            :data-source="filteredUserAssignmentsInDepartmentSections"
+            row-key="id"
+            size="small"
+            bordered
+            :pagination="false"
+            style="min-height: 180px"
+          >
             <template #bodyCell="{ column, record }">
               <template v-if="column.key === 'user'">
-                <a-avatar :src="record.employee?.avatar_url" size="small" style="margin-right: 8px">
+                <a-avatar
+                  :src="record.employee?.avatar_url"
+                  size="small"
+                  style="margin-right: 8px"
+                >
                   {{ record.employee?.first_name?.charAt(0) }}
                 </a-avatar>
                 {{ record.employee?.first_name }}
@@ -358,12 +549,23 @@
               <template v-else-if="column.key === 'actions'">
                 <a-space>
                   <a-tooltip :title="$t('editAssignment')">
-                    <a-button type="primary" ghost shape="circle" size="small" @click="openEditUserModal(record)">
+                    <a-button
+                      type="primary"
+                      ghost
+                      shape="circle"
+                      size="small"
+                      @click="openEditUserModal(record)"
+                    >
                       <edit-outlined />
                     </a-button>
                   </a-tooltip>
                   <a-tooltip :title="$t('deleteAssignment')">
-                    <a-button danger shape="circle" size="small" @click="confirmDeleteUserAssignment(record)">
+                    <a-button
+                      danger
+                      shape="circle"
+                      size="small"
+                      @click="confirmDeleteUserAssignment(record)"
+                    >
                       <delete-outlined />
                     </a-button>
                   </a-tooltip>
@@ -374,30 +576,58 @@
         </a-skeleton>
       </a-card>
 
-      <a-card :title="$t('manageDirectUserAssignments')" style="margin-top: 20px"
-        v-if="shouldShowDirectUserAssignmentCard && canAssignEmployees">
+      <a-card
+        :title="$t('manageDirectUserAssignments')"
+        style="margin-top: 20px"
+        v-if="shouldShowDirectUserAssignmentCard && canAssignEmployees"
+      >
         <template #extra>
-          <a-button type="primary" @click="openAssignUserModal"
-            :disabled="loadingUserAssignments || !kpiDetailData?.id">
+          <a-button
+            type="primary"
+            @click="openAssignUserModal"
+            :disabled="loadingUserAssignments || !kpiDetailData?.id"
+          >
             <template #icon>
               <user-add-outlined />
             </template>
             {{ $t("addEditUserAssignment") }}
           </a-button>
         </template>
-        <a-skeleton :loading="loadingUserAssignments" active :paragraph="{ rows: 4 }">
-          <a-alert v-if="userAssignmentError" :message="userAssignmentError" type="error" show-icon closable
-            @close="clearAssignmentError" style="margin-bottom: 16px" />
-          <a-table v-show="filteredDirectUserAssignments.length > 0" :columns="userAssignmentColumns"
-            :data-source="filteredDirectUserAssignments" row-key="id" size="small" bordered :pagination="false">
+        <a-skeleton
+          :loading="loadingUserAssignments"
+          active
+          :paragraph="{ rows: 4 }"
+        >
+          <a-alert
+            v-if="userAssignmentError"
+            :message="userAssignmentError"
+            type="error"
+            show-icon
+            closable
+            @close="clearAssignmentError"
+            style="margin-bottom: 16px"
+          />
+          <a-table
+            v-show="filteredDirectUserAssignments.length > 0"
+            :columns="userAssignmentColumns"
+            :data-source="filteredDirectUserAssignments"
+            row-key="id"
+            size="small"
+            bordered
+            :pagination="false"
+          >
             <template #bodyCell="{ column, record }">
               <template v-if="column.key === 'user'">
-                <a-avatar :src="record.employee?.avatar_url" size="small" style="margin-right: 8px">
+                <a-avatar
+                  :src="record.employee?.avatar_url"
+                  size="small"
+                  style="margin-right: 8px"
+                >
                   {{ record.employee?.first_name?.charAt(0) }}
                 </a-avatar>
                 {{ record.employee?.first_name }}
                 {{ record.employee?.last_name }} ({{
-                record.employee?.username
+                  record.employee?.username
                 }})
               </template>
               <template v-else-if="column.key === 'target'">
@@ -416,12 +646,23 @@
               <template v-else-if="column.key === 'actions'">
                 <a-space>
                   <a-tooltip :title="$t('editAssignment')">
-                    <a-button type="primary" ghost shape="circle" size="small" @click="openEditUserModal(record)">
+                    <a-button
+                      type="primary"
+                      ghost
+                      shape="circle"
+                      size="small"
+                      @click="openEditUserModal(record)"
+                    >
                       <edit-outlined />
                     </a-button>
                   </a-tooltip>
                   <a-tooltip :title="$t('deleteAssignment')">
-                    <a-button danger shape="circle" size="small" @click="confirmDeleteUserAssignment(record)">
+                    <a-button
+                      danger
+                      shape="circle"
+                      size="small"
+                      @click="confirmDeleteUserAssignment(record)"
+                    >
                       <delete-outlined />
                     </a-button>
                   </a-tooltip>
@@ -429,47 +670,81 @@
               </template>
             </template>
           </a-table>
-          <a-empty v-if="
+          <a-empty
+            v-if="
               companyOverviewUserAssignments.length === 0 &&
               !loadingUserAssignments
-            " :description="$t('noDirectUserAssignments')" />
+            "
+            :description="$t('noDirectUserAssignments')"
+          />
         </a-skeleton>
       </a-card>
 
-      <a-card :title="$t('manageUserAssignments')" style="margin-top: 20px"
-        v-if="shouldShowSectionUserAssignmentCard && canAssignEmployees && contextSectionId">
+      <a-card
+        :title="$t('manageUserAssignments')"
+        style="margin-top: 20px"
+        v-if="
+          shouldShowSectionUserAssignmentCard &&
+          canAssignEmployees &&
+          contextSectionId
+        "
+      >
         <template #extra>
-          <a-button type="primary" @click="openAssignUserModal"
-            :disabled="loadingUserAssignments || !kpiDetailData?.id">
+          <a-button
+            type="primary"
+            @click="openAssignUserModal"
+            :disabled="loadingUserAssignments || !kpiDetailData?.id"
+          >
             <template #icon>
               <user-add-outlined />
             </template>
             {{ $t("addEditUserAssignment") }}
           </a-button>
         </template>
-        <a-skeleton :loading="loadingUserAssignments" active :paragraph="{ rows: 4 }">
-          <a-alert v-if="userAssignmentError" :message="userAssignmentError" type="error" show-icon closable
-            @close="clearAssignmentError" style="margin-bottom: 16px" />
-          <a-table v-show="filteredSectionUserAssignments.length > 0" :columns="userAssignmentColumns"
-            :data-source="filteredSectionUserAssignments" row-key="id" size="small" bordered :pagination="false">
+        <a-skeleton
+          :loading="loadingUserAssignments"
+          active
+          :paragraph="{ rows: 4 }"
+        >
+          <a-alert
+            v-if="userAssignmentError"
+            :message="userAssignmentError"
+            type="error"
+            show-icon
+            closable
+            @close="clearAssignmentError"
+            style="margin-bottom: 16px"
+          />
+          <a-table
+            v-show="filteredSectionUserAssignments.length > 0"
+            :columns="userAssignmentColumns"
+            :data-source="filteredSectionUserAssignments"
+            row-key="id"
+            size="small"
+            bordered
+            :pagination="false"
+          >
             <template #bodyCell="{ column, record }">
               <template v-if="column.key === 'user'">
-                <a-avatar :src="record.employee?.avatar_url" size="small" style="margin-right: 8px">
+                <a-avatar
+                  :src="record.employee?.avatar_url"
+                  size="small"
+                  style="margin-right: 8px"
+                >
                   {{ record.employee?.first_name?.charAt(0) }}
                 </a-avatar>
                 {{ record.employee?.first_name }}
                 {{ record.employee?.last_name }} ({{
-                record.employee?.username
+                  record.employee?.username
                 }})
               </template>
               <template v-else-if="column.key === 'target'">
-                {{
-                Number(record.targetValue).toLocaleString()
-                }}
+                {{ Number(record.targetValue).toLocaleString() }}
                 {{ kpiDetailData?.unit || "" }}
               </template>
               <template v-else-if="column.key === 'actual'">
-                {{ Number(record.latest_actual_value).toLocaleString() ?? "0" }}  {{ kpiDetailData?.unit || "" }}
+                {{ Number(record.latest_actual_value).toLocaleString() ?? "0" }}
+                {{ kpiDetailData?.unit || "" }}
               </template>
               <template v-else-if="column.key === 'status'">
                 <a-tag :color="getAssignmentStatusColor(record.status)">
@@ -479,12 +754,23 @@
               <template v-else-if="column.key === 'actions'">
                 <a-space>
                   <a-tooltip :title="$t('editAssignment')">
-                    <a-button type="primary" ghost shape="circle" size="small" @click="openEditUserModal(record)">
+                    <a-button
+                      type="primary"
+                      ghost
+                      shape="circle"
+                      size="small"
+                      @click="openEditUserModal(record)"
+                    >
                       <edit-outlined />
                     </a-button>
                   </a-tooltip>
                   <a-tooltip :title="$t('deleteAssignment')">
-                    <a-button danger shape="circle" size="small" @click="confirmDeleteUserAssignment(record)">
+                    <a-button
+                      danger
+                      shape="circle"
+                      size="small"
+                      @click="confirmDeleteUserAssignment(record)"
+                    >
                       <delete-outlined />
                     </a-button>
                   </a-tooltip>
@@ -492,51 +778,99 @@
               </template>
             </template>
           </a-table>
-          <a-empty v-show="filteredSectionUserAssignments.length === 0"
-            :description="$t('noSectionUserAssignmentsYet')" />
+          <a-empty
+            v-show="filteredSectionUserAssignments.length === 0"
+            :description="$t('noSectionUserAssignmentsYet')"
+          />
         </a-skeleton>
       </a-card>
     </template>
 
-    <a-modal :open="isAssignUsersInDeptSectionsModalVisible"
-      @update:open="isAssignUsersInDeptSectionsModalVisible = $event" :title="$t('assignUsersInDepartmentSections')"
-      @ok="handleAssignUsersInSection" @cancel="closeAssignUsersInDeptSectionsModal"
-      :confirm-loading="assigningUsersInSection" :width="600">
+    <a-modal
+      :open="isAssignUsersInDeptSectionsModalVisible"
+      @update:open="isAssignUsersInDeptSectionsModalVisible = $event"
+      :title="$t('assignUsersInDepartmentSections')"
+      @ok="handleAssignUsersInSection"
+      @cancel="closeAssignUsersInDeptSectionsModal"
+      :confirm-loading="assigningUsersInSection"
+      :width="600"
+    >
       <a-form layout="vertical">
         <a-form-item :label="$t('selectSection')" required>
-          <a-select v-model:value="selectedSectionIdForUserAssign" :options="sectionsInContextDepartment"
-            :placeholder="$t('selectSection')" @change="fetchUsersInSection" />
+          <a-select
+            v-model:value="selectedSectionIdForUserAssign"
+            :options="sectionsInContextDepartment"
+            :placeholder="$t('selectSection')"
+            @change="fetchUsersInSection"
+          />
         </a-form-item>
         <a-form-item :label="$t('selectUsers')" required>
-          <a-select v-model:value="selectedUserIdsInSection" :options="assignableUsersInSection" mode="multiple"
-            :placeholder="$t('selectUsers')" :disabled="!selectedSectionIdForUserAssign" show-search allow-clear
-            @change="onSelectedUsersInSectionChange" />
+          <a-select
+            v-model:value="selectedUserIdsInSection"
+            :options="assignableUsersInSection"
+            mode="multiple"
+            :placeholder="$t('selectUsers')"
+            :disabled="!selectedSectionIdForUserAssign"
+            show-search
+            allow-clear
+            @change="onSelectedUsersInSectionChange"
+          />
         </a-form-item>
-        <a-table v-if="selectedUserIdsInSection.length" :columns="assignUsersInSectionColumns"
-          :data-source="assignUsersInSectionTableData" row-key="userId" size="small" bordered :pagination="false"
-          style="margin-bottom: 10px">
+        <a-table
+          v-if="selectedUserIdsInSection.length"
+          :columns="assignUsersInSectionColumns"
+          :data-source="assignUsersInSectionTableData"
+          row-key="userId"
+          size="small"
+          bordered
+          :pagination="false"
+          style="margin-bottom: 10px"
+        >
           <template #bodyCell="{ column, record }">
             <template v-if="column.key === 'user'">
-              <a-avatar :src="record.avatar_url" size="small" style="margin-right: 8px">
+              <a-avatar
+                :src="record.avatar_url"
+                size="small"
+                style="margin-right: 8px"
+              >
                 {{ record.name?.charAt(0) }}
               </a-avatar>
               {{ record.name }}
             </template>
             <template v-else-if="column.key === 'target'">
-              <a-input v-model:value="assignUsersInSectionTargetDetails[record.userId]" :placeholder="$t('target')"
-              style="width: 100%" type="number" min="0" />
+              <a-input
+                v-model:value="assignUsersInSectionTargetDetails[record.userId]"
+                :placeholder="$t('target')"
+                style="width: 100%"
+                type="number"
+                min="0"
+              />
             </template>
           </template>
         </a-table>
-        <div v-if="userAssignErrorInSection" style="color: red; margin-bottom: 10px">
+        <div
+          v-if="userAssignErrorInSection"
+          style="color: red; margin-bottom: 10px"
+        >
           {{ userAssignErrorInSection }}
         </div>
       </a-form>
     </a-modal>
 
-    <a-modal :open="isViewEvaluationModalVisible" @update:open="isViewEvaluationModalVisible = $event"
-      :title="$t('kpiEvaluationDetails')" :width="1000" :footer="null" @cancel="closeViewEvaluationModal">
-      <a-descriptions bordered :column="2" v-if="selectedEvaluation.id" size="small">
+    <a-modal
+      :open="isViewEvaluationModalVisible"
+      @update:open="isViewEvaluationModalVisible = $event"
+      :title="$t('kpiEvaluationDetails')"
+      :width="1000"
+      :footer="null"
+      @cancel="closeViewEvaluationModal"
+    >
+      <a-descriptions
+        bordered
+        :column="2"
+        v-if="selectedEvaluation.id"
+        size="small"
+      >
       </a-descriptions>
       <a-empty v-else :description="$t('couldNotLoadEvaluationDetails')" />
       <template #footer>
@@ -546,103 +880,184 @@
       </template>
     </a-modal>
 
-    <a-modal :open="isCreateEvaluationModalVisible" @update:open="isCreateEvaluationModalVisible = $event"
-      :title="$t('createKpiEvaluation')" :width="600" @ok="submitEvaluation" @cancel="closeCreateEvaluationModal"
-      :confirm-loading="submittingEvaluation">
+    <a-modal
+      :open="isCreateEvaluationModalVisible"
+      @update:open="isCreateEvaluationModalVisible = $event"
+      :title="$t('createKpiEvaluation')"
+      :width="600"
+      @ok="submitEvaluation"
+      @cancel="closeCreateEvaluationModal"
+      :confirm-loading="submittingEvaluation"
+    >
       <a-form layout="vertical" :model="newEvaluation"> </a-form>
     </a-modal>
 
-    <a-modal :open="isAssignUserModalVisible" @update:open="isAssignUserModalVisible = $event"
-      :title="assignUserModalTitle" @ok="handleSaveUserAssignment" @cancel="closeAssignUserModal"
-      :confirm-loading="submittingUserAssignment" :width="800" :mask-closable="false" :keyboard="false"
-      :ok-text="$t('common.save')" :cancel-text="$t('common.cancel')" @afterClose="
+    <a-modal
+      :open="isAssignUserModalVisible"
+      @update:open="isAssignUserModalVisible = $event"
+      :title="assignUserModalTitle"
+      @ok="handleSaveUserAssignment"
+      @cancel="closeAssignUserModal"
+      :confirm-loading="submittingUserAssignment"
+      :width="800"
+      :mask-closable="false"
+      :keyboard="false"
+      :ok-text="$t('common.save')"
+      :cancel-text="$t('common.cancel')"
+      @afterClose="
         () => {
           modalFilterDepartmentId = null;
           modalFilterSectionId = null;
         }
-      ">
+      "
+    >
       <a-spin :spinning="loadingAssignableUsers || submittingUserAssignment">
         <div v-if="isCompanyOverviewMode" style="margin-bottom: 20px">
           <a-row :gutter="16">
             <a-col :span="12">
               <a-form-item :label="$t('filterByDepartment')">
-                <a-select v-model:value="modalFilterDepartmentId" :placeholder="$t('selectDepartment')"
-                  style="width: 100%" allow-clear @change="handleModalDepartmentFilterChange" :options="
+                <a-select
+                  v-model:value="modalFilterDepartmentId"
+                  :placeholder="$t('selectDepartment')"
+                  style="width: 100%"
+                  allow-clear
+                  @change="handleModalDepartmentFilterChange"
+                  :options="
                     allDepartments.map((dept) => ({
                       value: dept.id,
                       label: dept.name,
                     }))
-                  " />
+                  "
+                />
               </a-form-item>
             </a-col>
             <a-col :span="12">
               <a-form-item :label="$t('filterBySection')">
-                <a-select v-model:value="modalFilterSectionId" :placeholder="$t('selectSection')" style="width: 100%"
-                  allow-clear :disabled="!modalFilterDepartmentId" @change="handleModalSectionFilterChange" :options="
+                <a-select
+                  v-model:value="modalFilterSectionId"
+                  :placeholder="$t('selectSection')"
+                  style="width: 100%"
+                  allow-clear
+                  :disabled="!modalFilterDepartmentId"
+                  @change="handleModalSectionFilterChange"
+                  :options="
                     modalFilterAssignableSections.map((sect) => ({
                       value: sect.id,
                       label: sect.name,
                     }))
-                  " />
+                  "
+                />
               </a-form-item>
             </a-col>
           </a-row>
-          <a-alert v-if="
+          <a-alert
+            v-if="
               isCompanyOverviewMode &&
               !modalFilterDepartmentId &&
               !modalFilterSectionId &&
               assignableUsers.length === 0 &&
               !loadingAssignableUsers
-            " :message="$t('selectDepartmentOrSectionToLoadUsers')" type="info" show-icon
-            style="margin-bottom: 10px" />
+            "
+            :message="$t('selectDepartmentOrSectionToLoadUsers')"
+            type="info"
+            show-icon
+            style="margin-bottom: 10px"
+          />
         </div>
 
-        <a-descriptions v-if="
+        <a-descriptions
+          v-if="
             isEditingUserAssignment && editingUserAssignmentRecord?.employee
-          " :column="1" size="small" style="margin-bottom: 15px">
+          "
+          :column="1"
+          size="small"
+          style="margin-bottom: 15px"
+        >
           <a-descriptions-item :label="$t('user')">
-            <a-avatar :src="editingUserAssignmentRecord.employee?.avatar_url" size="small" style="margin-right: 8px">
+            <a-avatar
+              :src="editingUserAssignmentRecord.employee?.avatar_url"
+              size="small"
+              style="margin-right: 8px"
+            >
               {{ editingUserAssignmentRecord.employee?.first_name?.charAt(0) }}
             </a-avatar>
             {{ editingUserAssignmentRecord.employee?.first_name }}
             {{ editingUserAssignmentRecord.employee?.last_name }} ({{
-            editingUserAssignmentRecord.employee?.username
+              editingUserAssignmentRecord.employee?.username
             }})
           </a-descriptions-item>
         </a-descriptions>
-        <a-form-item v-if="!isEditingUserAssignment" :label="$t('selectUsers')" required>
-          <a-select v-model:value="selectedUserIds" mode="multiple" :placeholder="$t('searchAndSelectUsers')"
-            style="width: 100%; margin-bottom: 15px" show-search allow-clear :filter-option="
+        <a-form-item
+          v-if="!isEditingUserAssignment"
+          :label="$t('selectUsers')"
+          required
+        >
+          <a-select
+            v-model:value="selectedUserIds"
+            mode="multiple"
+            :placeholder="$t('searchAndSelectUsers')"
+            style="width: 100%; margin-bottom: 15px"
+            show-search
+            allow-clear
+            :filter-option="
               (inputValue, option) =>
                 option.label.toLowerCase().indexOf(inputValue.toLowerCase()) >=
                 0
-            " :options="assignableUserOptions" :loading="loadingAssignableUsers" />
+            "
+            :options="assignableUserOptions"
+            :loading="loadingAssignableUsers"
+          />
         </a-form-item>
         <h4 style="margin-bottom: 10px">{{ $t("setTargetAndWeight") }}</h4>
-        <a-table :columns="modalUserAssignmentInputColumns" :data-source="modalUserDataSource" row-key="userId"
-          size="small" bordered :pagination="false">
+        <a-table
+          :columns="modalUserAssignmentInputColumns"
+          :data-source="modalUserDataSource"
+          row-key="userId"
+          size="small"
+          bordered
+          :pagination="false"
+        >
           <template #bodyCell="{ column, record }">
             <template v-if="column.key === 'user'">
-              <a-avatar :src="record.avatar_url" size="small" style="margin-right: 8px">
+              <a-avatar
+                :src="record.avatar_url"
+                size="small"
+                style="margin-right: 8px"
+              >
                 {{ record.name?.charAt(0) }}
               </a-avatar>
               {{ record.name }}
             </template>
             <template v-if="column.key === 'target'">
-              <a-input v-model:value="userAssignmentDetails[record.userId].target" :placeholder="$t('target')"
-                style="width: 100%" @input="(event) => handleNumericInput('targetValue', event)" />
+              <a-input
+                v-model:value="userAssignmentDetails[record.userId].target"
+                :placeholder="$t('target')"
+                style="width: 100%"
+                @input="(event) => handleNumericInput('targetValue', event)"
+              />
             </template>
           </template>
         </a-table>
-        <div v-if="userAssignmentSubmitError" style="color: red; margin-top: 10px">
+        <div
+          v-if="userAssignmentSubmitError"
+          style="color: red; margin-top: 10px"
+        >
           {{ userAssignmentSubmitError }}
         </div>
       </a-spin>
     </a-modal>
 
-    <a-modal :open="isDeleteUserAssignModalVisible" @update:open="isDeleteUserAssignModalVisible = $event"
-      :title="$t('confirmDeletion')" @ok="handleDeleteUserAssignment" @cancel="isDeleteUserAssignModalVisible = false"
-      :confirm-loading="submittingUserDeletion" :ok-text="$t('delete')" :cancel-text="$t('cancel')" ok-type="danger">
+    <a-modal
+      :open="isDeleteUserAssignModalVisible"
+      @update:open="isDeleteUserAssignModalVisible = $event"
+      :title="$t('confirmDeletion')"
+      @ok="handleDeleteUserAssignment"
+      @cancel="isDeleteUserAssignModalVisible = false"
+      :confirm-loading="submittingUserDeletion"
+      :ok-text="$t('delete')"
+      :cancel-text="$t('cancel')"
+      ok-type="danger"
+    >
       <p v-if="userAssignmentToDelete?.employee">
         {{ $t("confirmRemoveAssignmentForUser") }}
         <strong>
@@ -654,41 +1069,75 @@
       <p v-else>{{ $t("confirmDeleteAssignment") }}</p>
     </a-modal>
 
-    <a-modal :open="isDepartmentSectionAssignmentModalVisible"
-      @update:open="isDepartmentSectionAssignmentModalVisible = $event" :title="
+    <a-modal
+      :open="isDepartmentSectionAssignmentModalVisible"
+      @update:open="isDepartmentSectionAssignmentModalVisible = $event"
+      :title="
         editingDepartmentSectionAssignment
           ? $t('editAssignment')
           : $t('addDepartmentSectionAssignment')
-      " @ok="handleSaveDepartmentSectionAssignment" @cancel="closeManageDepartmentSectionAssignments"
-      :confirm-loading="submittingDepartmentSectionAssignment" :width="600" :mask-closable="false" :keyboard="false"
-      :ok-text="$t('common.save')" :cancel-text="$t('common.cancel')">
-      <a-spin :spinning="
+      "
+      @ok="handleSaveDepartmentSectionAssignment"
+      @cancel="closeManageDepartmentSectionAssignments"
+      :confirm-loading="submittingDepartmentSectionAssignment"
+      :width="600"
+      :mask-closable="false"
+      :keyboard="false"
+      :ok-text="$t('common.save')"
+      :cancel-text="$t('common.cancel')"
+    >
+      <a-spin
+        :spinning="
           /* Cân nhắc thêm state loading riêng khi fetch sections cho modal nếu cần */
           /* loadingDepartmentSectionAssignments || */
           submittingDepartmentSectionAssignment
-        ">
-        <a-form layout="vertical" :model="departmentSectionAssignmentForm" ref="departmentSectionAssignmentFormRef">
+        "
+      >
+        <a-form
+          layout="vertical"
+          :model="departmentSectionAssignmentForm"
+          ref="departmentSectionAssignmentFormRef"
+        >
           <a-form-item :label="$t('assignTo')" name="assignToTarget">
-            <a-select v-model:value="
+            <a-select
+              v-model:value="
                 departmentSectionAssignmentForm.assigned_to_department
-              " :placeholder="$t('selectDepartment')" style="width: 100%; margin-bottom: 10px"
-              @change="handleDepartmentSelectInModal" :disabled="
+              "
+              :placeholder="$t('selectDepartment')"
+              style="width: 100%; margin-bottom: 10px"
+              @change="handleDepartmentSelectInModal"
+              :disabled="
                 !!contextDepartmentId ||
                 editingDepartmentSectionAssignment !== null
-              ">
-              <a-select-option v-for="dept in allDepartments" :key="dept.id" :value="dept.id">
+              "
+            >
+              <a-select-option
+                v-for="dept in allDepartments"
+                :key="dept.id"
+                :value="dept.id"
+              >
                 {{ dept.name }}
               </a-select-option>
             </a-select>
 
             <a-form-item name="assigned_to_section" no-style>
-              <a-select v-model:value="
+              <a-select
+                v-model:value="
                   departmentSectionAssignmentForm.assigned_to_section
-                " :placeholder="$t('selectSectionOptional')" style="width: 100%" :disabled="
+                "
+                :placeholder="$t('selectSectionOptional')"
+                style="width: 100%"
+                :disabled="
                   !departmentSectionAssignmentForm.assigned_to_department ||
                   editingDepartmentSectionAssignment !== null
-                " allow-clear>
-                <a-select-option v-for="section in assignableSections" :key="section.id" :value="section.id">
+                "
+                allow-clear
+              >
+                <a-select-option
+                  v-for="section in assignableSections"
+                  :key="section.id"
+                  :value="section.id"
+                >
                   {{ section.name }}
                 </a-select-option>
               </a-select>
@@ -696,22 +1145,35 @@
           </a-form-item>
 
           <a-form-item :label="$t('target')" required name="targetValue">
-            <a-input v-model:value="departmentSectionAssignmentForm.targetValue" :placeholder="$t('target')"
-              style="width: 100%" @input="(event) => handleNumericInput('targetValue', event)" />
+            <a-input
+              v-model:value="departmentSectionAssignmentForm.targetValue"
+              :placeholder="$t('target')"
+              style="width: 100%"
+              @input="(event) => handleNumericInput('targetValue', event)"
+            />
           </a-form-item>
 
-          <div v-if="departmentSectionAssignmentError" style="color: red; margin-top: 10px">
+          <div
+            v-if="departmentSectionAssignmentError"
+            style="color: red; margin-top: 10px"
+          >
             {{ departmentSectionAssignmentError }}
           </div>
         </a-form>
       </a-spin>
     </a-modal>
 
-    <a-modal :open="isDeleteDepartmentSectionAssignmentModalVisible"
-      @update:open="isDeleteDepartmentSectionAssignmentModalVisible = $event" :title="$t('confirmDeletion')"
-      @ok="handleDeleteDepartmentSectionAssignment" @cancel="isDeleteDepartmentSectionAssignmentModalVisible = false"
-      :confirm-loading="submittingDepartmentSectionDeletion" :ok-text="$t('delete')" :cancel-text="$t('cancel')"
-      ok-type="danger">
+    <a-modal
+      :open="isDeleteDepartmentSectionAssignmentModalVisible"
+      @update:open="isDeleteDepartmentSectionAssignmentModalVisible = $event"
+      :title="$t('confirmDeletion')"
+      @ok="handleDeleteDepartmentSectionAssignment"
+      @cancel="isDeleteDepartmentSectionAssignmentModalVisible = false"
+      :confirm-loading="submittingDepartmentSectionDeletion"
+      :ok-text="$t('delete')"
+      :cancel-text="$t('cancel')"
+      ok-type="danger"
+    >
       <p v-if="departmentSectionAssignmentToDelete">
         {{ $t("confirmRemoveAssignmentFor") }}
         <strong>
@@ -812,14 +1274,11 @@ const contextSectionId = computed(() => {
   return id ? parseInt(id, 10) : null;
 });
 
-
 const isCompanyOverviewMode = computed(() => {
   const noDeptContext = !contextDepartmentId.value;
   const noSectionContext = !contextSectionId.value;
   return noDeptContext && noSectionContext;
 });
-
-console.log("isCompanyOverviewMode", isCompanyOverviewMode.value);
 
 const loadingKpi = computed(() => store.getters["kpis/isLoading"]);
 const kpiDetailData = computed(() => store.getters["kpis/currentKpi"]);
@@ -837,20 +1296,6 @@ const isToggling = computed(() => store.getters["kpis/isTogglingKpiStatus"]);
 const toggleStatusError = computed(
   () => store.getters["kpis/toggleKpiStatusError"]
 );
-
-// const effectiveRole = computed(() => {
-//   const userRoles = currentUser.value?.roles || [];
-
-//   const rolePriority = ["admin", "manager", "department", "section"];
-
-//   for (const role of rolePriority) {
-//     if (userRoles.some((userRole) => userRole.name === role)) {
-//       return role;
-//     }
-//   }
-
-//   return null; // Không có role phù hợp
-// });
 
 const loadingDepartmentSectionAssignments = computed(
   () => store.getters["kpis/isLoadingDepartmentSectionAssignments"] || false
@@ -883,79 +1328,154 @@ function hasPermission(action, resource, scope) {
   );
 }
 
-// Kiểm tra quyền động cho các action quản trị KPI
 const canToggleStatus = computed(() =>
-  hasPermission(RBAC_ACTIONS.TOGGLE_STATUS, RBAC_RESOURCES.KPI, 'company')
-);
-// Copy KPI làm template
-const canCopyTemplate = computed(() =>
-  hasPermission(RBAC_ACTIONS.COPY_TEMPLATE, RBAC_RESOURCES.KPI, 'company')
+  hasPermission(RBAC_ACTIONS.TOGGLE_STATUS, RBAC_RESOURCES.KPI, "company")
 );
 
-// Phân quyền assign cho từng cấp
+const canCopyTemplate = computed(() =>
+  hasPermission(RBAC_ACTIONS.COPY_TEMPLATE, RBAC_RESOURCES.KPI, "company")
+);
+
 const canAssignDepartment = computed(() =>
-  hasPermission(RBAC_ACTIONS.ASSIGN, RBAC_RESOURCES.KPI, 'company')
+  hasPermission(RBAC_ACTIONS.ASSIGN, RBAC_RESOURCES.KPI, "company")
 );
 
 const canAssignSection = computed(() =>
-  hasPermission(RBAC_ACTIONS.ASSIGN, RBAC_RESOURCES.KPI, 'department')
+  hasPermission(RBAC_ACTIONS.ASSIGN, RBAC_RESOURCES.KPI, "department")
 );
 
 const canAssignEmployees = computed(() =>
-  hasPermission(RBAC_ACTIONS.ASSIGN, RBAC_RESOURCES.KPI, 'section')
+  hasPermission(RBAC_ACTIONS.ASSIGN, RBAC_RESOURCES.KPI, "section")
 );
 
 const sectionNameFromContext = computed(() => {
+  // Ưu tiên hiển thị ngữ cảnh nếu có
   const currentSectionId = contextSectionId.value;
-  if (
-    currentSectionId === null ||
-    !Array.isArray(allSections.value) ||
-    allSections.value.length === 0
-  ) {
+  const currentDepartmentId = contextDepartmentId.value;
+
+  // Nếu có contextSectionId, hiển thị section đó
+  if (currentSectionId !== null) {
+    if (!Array.isArray(allSections.value) || allSections.value.length === 0) {
+      return "";
+    }
+    const foundSection = allSections.value.find(
+      (s) => String(s.id) === String(currentSectionId)
+    );
+    return foundSection?.name || "";
+  }
+
+  // Nếu có contextDepartmentId nhưng không có contextSectionId,
+  // có thể hiển thị section đầu tiên của department đó (nếu có)
+  if (currentDepartmentId !== null) {
+    if (!Array.isArray(allSections.value) || allSections.value.length === 0) {
+      return "";
+    }
+    const sectionsInDepartment = allSections.value.filter(
+      (s) =>
+        s.department_id === currentDepartmentId ||
+        s.department?.id === currentDepartmentId
+    );
+    // Chỉ hiển thị nếu department có đúng 1 section
+    if (sectionsInDepartment.length === 1) {
+      return sectionsInDepartment[0].name || "";
+    }
+    // Nếu có nhiều section, không hiển thị để tránh nhầm lẫn
     return "";
   }
-  const foundSection = allSections.value.find(
-    (s) => String(s.id) === String(currentSectionId)
-  );
-  return foundSection?.name || "";
+
+  // Nếu không có ngữ cảnh, hiển thị thông tin thuộc tính của KPI
+  const kpi = kpiDetailData.value;
+  if (!kpi) return "";
+
+  // Nếu KPI được tạo bởi section, hiển thị tên section đó
+  if (kpi.created_by_type === "section" && kpi.created_by) {
+    const section = allSections.value.find(
+      (s) => String(s.id) === String(kpi.created_by)
+    );
+    return section?.name || "";
+  }
+
+  return "";
 });
 
 const departmentNameFromSectionContext = computed(() => {
+  // Ưu tiên hiển thị ngữ cảnh nếu có
   const currentSectionId = contextSectionId.value;
+  const currentDepartmentId = contextDepartmentId.value;
 
-  if (
-    currentSectionId === null ||
-    !Array.isArray(allSections.value) ||
-    allSections.value.length === 0 ||
-    !Array.isArray(allDepartments.value) ||
-    allDepartments.value.length === 0
-  ) {
-    return "";
-  }
-  const section = allSections.value.find(
-    (s) => String(s.id) === String(currentSectionId)
-  );
-  if (!section) {
-    console.warn(
-      `Department Lookup: Không tìm thấy Section với ID ${currentSectionId}.`
+  // Nếu có contextSectionId, hiển thị department của section đó
+  if (currentSectionId !== null) {
+    if (
+      !Array.isArray(allSections.value) ||
+      allSections.value.length === 0 ||
+      !Array.isArray(allDepartments.value) ||
+      allDepartments.value.length === 0
+    ) {
+      return "";
+    }
+    const section = allSections.value.find(
+      (s) => String(s.id) === String(currentSectionId)
     );
-    return "";
+    if (!section) {
+      console.warn(
+        `Department Lookup: Không tìm thấy Section với ID ${currentSectionId}.`
+      );
+      return "";
+    }
+
+    const departmentId = section.department.id;
+    if (departmentId === null || typeof departmentId === "undefined") {
+      return "";
+    }
+    const department = allDepartments.value.find(
+      (d) => String(d.id) === String(departmentId)
+    );
+    if (!department) {
+      console.warn(
+        `Department Lookup: Không tìm thấy Department với ID ${departmentId}.`
+      );
+      return "";
+    }
+    return department.name || "";
   }
 
-  const departmentId = section.department.id;
-  if (departmentId === null || typeof departmentId === "undefined") {
-    return "";
-  }
-  const department = allDepartments.value.find(
-    (d) => String(d.id) === String(departmentId)
-  );
-  if (!department) {
-    console.warn(
-      `Department Lookup: Không tìm thấy Department với ID ${departmentId}.`
+  // Nếu có contextDepartmentId, hiển thị department đó
+  if (currentDepartmentId !== null) {
+    if (
+      !Array.isArray(allDepartments.value) ||
+      allDepartments.value.length === 0
+    ) {
+      return "";
+    }
+    const department = allDepartments.value.find(
+      (d) => String(d.id) === String(currentDepartmentId)
     );
-    return "";
+    return department?.name || "";
   }
-  return department.name || "";
+
+  // Nếu không có ngữ cảnh, hiển thị thông tin thuộc tính của KPI
+  const kpi = kpiDetailData.value;
+  if (!kpi) return "";
+
+  // Nếu KPI được tạo bởi department, hiển thị tên department đó
+  if (kpi.created_by_type === "department" && kpi.created_by) {
+    const department = allDepartments.value.find(
+      (d) => String(d.id) === String(kpi.created_by)
+    );
+    return department?.name || "";
+  }
+
+  // Nếu KPI được tạo bởi section, hiển thị department của section đó
+  if (kpi.created_by_type === "section" && kpi.created_by) {
+    const section = allSections.value.find(
+      (s) => String(s.id) === String(kpi.created_by)
+    );
+    if (section?.department) {
+      return section.department.name || "";
+    }
+  }
+
+  return "";
 });
 
 const departmentHasSections = ref(null);
@@ -1003,10 +1523,10 @@ const assignedUserIdsInSection = computed(() => {
 });
 
 const assignableUsersInSection = computed(() => {
-  // Giả sử bạn đã fetch danh sách users của section này vào biến users
-  const users = store.getters["employees/usersBySection"](
-    selectedSectionIdForUserAssign.value
-  ) || [];
+  const users =
+    store.getters["employees/usersBySection"](
+      selectedSectionIdForUserAssign.value
+    ) || [];
   return users
     .filter((u) => !assignedUserIdsInSection.value.includes(u.id))
     .map((u) => ({
@@ -1041,13 +1561,12 @@ const assignUsersInSectionTableData = computed(() => {
 });
 
 const onSelectedUsersInSectionChange = (userIds) => {
-  // Xóa target của user đã bỏ chọn
   Object.keys(assignUsersInSectionTargetDetails).forEach((uid) => {
     if (!userIds.includes(Number(uid)) && !userIds.includes(uid)) {
       delete assignUsersInSectionTargetDetails[uid];
     }
   });
-  // Đảm bảo có key cho user mới chọn
+
   userIds.forEach((uid) => {
     if (!assignUsersInSectionTargetDetails[uid]) {
       assignUsersInSectionTargetDetails[uid] = null;
@@ -1064,10 +1583,15 @@ const handleAssignUsersInSection = async () => {
     userAssignErrorInSection.value = $t("selectSectionAndUsersRequired");
     return;
   }
-  // Kiểm tra target
+
   for (const userId of selectedUserIdsInSection.value) {
     const target = assignUsersInSectionTargetDetails[userId];
-    if (target === null || target === undefined || target === "" || isNaN(Number(target))) {
+    if (
+      target === null ||
+      target === undefined ||
+      target === "" ||
+      isNaN(Number(target))
+    ) {
       userAssignErrorInSection.value = $t("targetRequiredForEachUser");
       return;
     }
@@ -1110,16 +1634,15 @@ const fetchUsersInSection = async () => {
     );
     assignableUsersInSection.value = Array.isArray(users)
       ? users.map((u) => ({
-        value: u.id,
-        label: `${u.first_name || ""} ${u.last_name || ""} (${u.username})`,
-      }))
+          value: u.id,
+          label: `${u.first_name || ""} ${u.last_name || ""} (${u.username})`,
+        }))
       : [];
   } catch (err) {
     userAssignErrorInSection.value =
       err?.message || $t("failedToLoadAssignableUsers");
   }
 };
-
 
 const departmentSectionAssignmentForm = reactive({
   assigned_to_department: null,
@@ -1542,12 +2065,16 @@ const getKpiDefinitionStatusText = (status) =>
 const getKpiDefinitionStatusColor = (status) =>
   KpiDefinitionStatusColor[status] || "default";
 
+const getFrequencyText = (frequency) => {
+  if (!frequency) return "";
+  return $t(frequency) || frequency;
+};
+
 const clearToggleError = () => {
   store.commit("kpis/SET_TOGGLE_KPI_STATUS_ERROR", null);
 };
 
 const sectionIdForUserAssignmentsCard = computed(() => {
-  // Ưu tiên contextDepartmentId: lấy section đầu tiên thuộc phòng ban đó
   if (contextDepartmentId.value) {
     const sectionsInDepartment = allSections.value.filter(
       (section) =>
@@ -1559,17 +2086,14 @@ const sectionIdForUserAssignmentsCard = computed(() => {
     }
   }
 
-  // Ưu tiên contextSectionId nếu có
   if (contextSectionId.value) {
     return contextSectionId.value;
   }
 
-  // Nếu user hiện tại có sectionId thì lấy sectionId đó
   if (currentUser.value?.sectionId) {
     return currentUser.value.sectionId;
   }
 
-  // Nếu KPI được tạo bởi section thì lấy luôn section đó
   if (
     kpiDetailData.value?.created_by_type === "section" &&
     kpiDetailData.value?.created_by
@@ -1637,7 +2161,6 @@ const filteredUserAssignmentsInDepartmentSections = computed(() => {
     return [];
   }
 
-  // Lấy danh sách sectionId thuộc phòng ban context
   const sectionIdsInDept = sections
     .filter(
       (s) =>
@@ -1647,7 +2170,6 @@ const filteredUserAssignmentsInDepartmentSections = computed(() => {
     .map((s) => s.id);
 
   return allAssignments.filter((assign) => {
-    // Chỉ lấy assignment cho user, có sectionId thuộc phòng ban context
     const isUserAssignment = assign.assigned_to_employee !== null;
     const sectionId = assign.employee?.sectionId;
     return (
@@ -1663,16 +2185,14 @@ const shouldShowUserAssignmentsInDepartmentSectionsCard = computed(() => {
   const deptId = contextDepartmentId.value;
   if (!deptId) return false;
 
-  // Kiểm tra phòng ban có section không
   const sections = allSections.value.filter(
     (s) =>
-      s.department_id === deptId ||
-      (s.department && s.department.id === deptId)
+      s.department_id === deptId || (s.department && s.department.id === deptId)
   );
   if (sections.length === 0) return false;
 
-  // Kiểm tra quyền động RBAC
-  if (!hasPermission(RBAC_ACTIONS.ASSIGN, RBAC_RESOURCES.KPI, 'section')) return false;
+  if (!hasPermission(RBAC_ACTIONS.ASSIGN, RBAC_RESOURCES.KPI, "section"))
+    return false;
 
   return true;
 });
@@ -1680,7 +2200,6 @@ const shouldShowUserAssignmentsInDepartmentSectionsCard = computed(() => {
 const shouldShowDirectUserAssignmentCard = computed(() => {
   const kpi = kpiDetailData.value;
 
-  // Chỉ áp dụng cho KPI tạo bởi phòng ban
   if (!kpi || kpi.created_by_type !== "department") {
     return false;
   }
@@ -1688,7 +2207,6 @@ const shouldShowDirectUserAssignmentCard = computed(() => {
   const departmentId = kpi.created_by;
   const allDepartmentsList = allDepartments.value;
 
-  // Phòng ban phải tồn tại
   const kpiDepartment = Array.isArray(allDepartmentsList)
     ? allDepartmentsList.find((d) => d.id == departmentId)
     : undefined;
@@ -1697,18 +2215,13 @@ const shouldShowDirectUserAssignmentCard = computed(() => {
     return false;
   }
 
-  // Phòng ban không được có section
   const deptHasSections = departmentHasSections.value;
   if (deptHasSections === null || deptHasSections === true) {
     return false;
   }
 
-  // Kiểm tra quyền động RBAC
-  if (!hasPermission(RBAC_ACTIONS.ASSIGN, RBAC_RESOURCES.KPI, 'section')) return false;
-
-  // Nếu cần kiểm tra thêm quyền quản lý phòng ban, có thể bổ sung điều kiện động ở đây (nếu có logic custom)
-  // Ví dụ: nếu muốn chỉ cho phép user thuộc phòng ban này thì:
-  // if (actualUser.value?.department_id !== departmentId) return false;
+  if (!hasPermission(RBAC_ACTIONS.ASSIGN, RBAC_RESOURCES.KPI, "section"))
+    return false;
 
   return true;
 });
@@ -1718,14 +2231,10 @@ const shouldShowSectionUserAssignmentCard = computed(() => {
   const user = currentUser.value;
   const sectionId = sectionIdForUserAssignmentsCard.value;
 
-  // Phải có dữ liệu KPI, user, section context
   if (!kpi || !user || !sectionId) return false;
 
-  // Kiểm tra quyền động RBAC: phải có quyền ASSIGN trên KPI_SECTION
-  if (!hasPermission(RBAC_ACTIONS.ASSIGN, RBAC_RESOURCES.KPI, 'section')) return false;
-
-  // Nếu muốn chỉ cho phép user thuộc section đó thì kiểm tra thêm:
-  // if (user.sectionId && user.sectionId !== sectionId) return false;
+  if (!hasPermission(RBAC_ACTIONS.ASSIGN, RBAC_RESOURCES.KPI, "section"))
+    return false;
 
   return true;
 });
@@ -1826,7 +2335,6 @@ const assignUsersInSectionColumns = computed(() => [
   { title: $t("target"), key: "target", dataIndex: "target", width: "40%" },
 ]);
 
-
 const departmentSectionAssignmentColumns = computed(() => [
   { title: $t("assignedUnit"), key: "assignedUnit", width: "30%" },
   {
@@ -1850,7 +2358,12 @@ const departmentSectionAssignmentColumns = computed(() => [
     width: "15%",
     align: "center",
   },
-  { title: $t("common.actions"), key: "actions", align: "center", width: "100px" },
+  {
+    title: $t("common.actions"),
+    key: "actions",
+    align: "center",
+    width: "150px",
+  },
 ]);
 
 const userAssignmentColumns = computed(() => [
@@ -1858,28 +2371,28 @@ const userAssignmentColumns = computed(() => [
     title: $t("user"),
     key: "user",
     dataIndex: "user",
-    width: "25%",
+    width: "30%",
   },
   {
     title: $t("target"),
     key: "target",
     dataIndex: "target",
     align: "right",
-    width: "25%",
+    width: "15%",
   },
   {
     title: $t("latestActual"),
     key: "actual",
     dataIndex: "latest_actual_value",
     align: "right",
-    width: "20%",
+    width: "15%",
   },
   {
     title: $t("status"),
     key: "status",
     dataIndex: "status",
     align: "center",
-    width: "20%",
+    width: "15%",
   },
   {
     title: $t("common.actions"),
@@ -2030,16 +2543,14 @@ const handleDeleteDepartmentSectionAssignment = async () => {
 
 const handleSaveDepartmentSectionAssignment = async () => {
   const isEditing = !!editingDepartmentSectionAssignment.value;
-  // const hasContext = !!contextDepartmentId.value;
 
-  // Kiểm tra trùng assignment phòng ban (không có section)
   if (
     departmentSectionAssignmentForm.assigned_to_department &&
     !departmentSectionAssignmentForm.assigned_to_section
   ) {
     const assignments = kpiDetailData.value?.assignments || [];
     const deptId = departmentSectionAssignmentForm.assigned_to_department;
-    // Nếu đang edit thì bỏ qua chính assignment đang edit
+
     const duplicate = assignments.find(
       (a) =>
         a.assigned_to_department == deptId &&
@@ -2085,7 +2596,6 @@ const handleSaveDepartmentSectionAssignment = async () => {
       targetValue: Number(departmentSectionAssignmentForm.targetValue),
     };
 
-    // Sửa logic: Nếu chọn cả phòng ban và section thì đều phải gán vào payload
     assignmentPayload.assigned_to_department =
       departmentSectionAssignmentForm.assigned_to_department || null;
     assignmentPayload.assigned_to_section =
@@ -2152,7 +2662,7 @@ const handleNumericInput = (field, event) => {
   if (parts.length > 2) {
     value = parts[0] + "." + parts.slice(1).join("");
   }
-  // Format phần nguyên với dấu phẩy
+
   const [intPart, decPart] = value.split(".");
   let formatted = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
   if (decPart !== undefined) formatted += "." + decPart;
