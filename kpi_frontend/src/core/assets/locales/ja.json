@@ -91,6 +91,7 @@
   "assignmentRemovedForUser": "従業員の割当を削除しました",
   "assignmentUpdated": "割当を更新しました",
   "assignmentUpdatedSuccessfully": "割当を更新しました！",
+  "usersAssignedSuccessfully": "従業員への割当が完了しました！",
   "totalKpiAssignments": "KPI割当総数",
   "kpiAchieved": "KPI達成",
   "kpiNotAchieved": "KPI未達成",
@@ -1086,7 +1087,14 @@
     "kpiLinkedDesc": "この個人目標に連携するKPIを選択",
     "targetValueDesc": "連携KPIの目標値を入力",
     "statusDesc": "現在のステータスを選択",
-    "confirmDelete": "この個人目標を削除してもよろしいですか？"
+    "confirmDelete": "この個人目標を削除してもよろしいですか？",
+    "msgUpdateSuccess": "個人目標を更新しました",
+    "msgError": "エラーが発生しました",
+    "msgAddSuccess": "個人目標を追加しました",
+    "msgDeleteError": "個人目標の削除に失敗しました",
+    "msgEnterName": "個人目標名を入力してください",
+    "msgKpiUnitOnly": "同じ単位のKPIのみ選択できます",
+    "emptyText": "個人目標が見つかりません"
   },
   "competency": {
     "title": "コンピテンシー管理",

@@ -8,6 +8,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Logger } from '@nestjs/common'; // Import Logger
 import { Employee } from 'src/employees/entities/employee.entity';
+import { userHasPermission } from '../common/utils/permission.utils';
 import { Role } from 'src/roles/entities/role.entity';
 import { Department } from 'src/departments/entities/department.entity';
 import { Section } from 'src/sections/entities/section.entity';
@@ -57,30 +58,13 @@ export class EmployeesService {
     private readonly competencyRepo: Repository<Competency>,
   ) {}
 
-  // Helper: check if user has a permission (action, resource, scope)
   private userHasPermission(
     user: Employee,
     action: string,
     resource: string,
     scope?: string,
   ): boolean {
-    if (!user || !user.roles) return false;
-
-    // Get all permissions from all roles
-    const allPermissions = user.roles.flatMap((role) => {
-      if (role && Array.isArray(role.permissions)) {
-        return role.permissions;
-      }
-      return [];
-    });
-
-    // Check permission
-    return allPermissions.some(
-      (p) =>
-        p.action === action &&
-        p.resource === resource &&
-        (!scope || p.scope === scope),
-    );
+    return userHasPermission(user, action, resource, scope);
   }
 
   async create(
@@ -234,10 +218,43 @@ export class EmployeesService {
         (findOptions.where as any).sectionId = filterOptions.sectionId;
       }
     }
+
+    // Apply filter options regardless of user permissions (for API filtering)
+    if (
+      filterOptions.departmentId !== undefined &&
+      filterOptions.departmentId !== null
+    ) {
+      (findOptions.where as any).departmentId = filterOptions.departmentId;
+    }
+    if (
+      filterOptions.sectionId !== undefined &&
+      filterOptions.sectionId !== null
+    ) {
+      (findOptions.where as any).sectionId = filterOptions.sectionId;
+    }
     if (filterOptions.teamId !== undefined && filterOptions.teamId !== null) {
       (findOptions.where as any).teamId = filterOptions.teamId;
     }
-    return this.employeeRepository.find(findOptions);
+
+    // Debug logging
+    console.log('EmployeesService.findAll - filterOptions:', filterOptions);
+    console.log(
+      'EmployeesService.findAll - findOptions.where:',
+      findOptions.where,
+    );
+
+    const result = await this.employeeRepository.find(findOptions);
+    console.log('EmployeesService.findAll - result count:', result.length);
+    if (result.length > 0) {
+      console.log('EmployeesService.findAll - first user:', {
+        id: result[0].id,
+        username: result[0].username,
+        sectionId: result[0].sectionId,
+        departmentId: result[0].departmentId,
+      });
+    }
+
+    return result;
   }
 
   async findOne(id: number): Promise<Employee> {

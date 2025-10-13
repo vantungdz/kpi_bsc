@@ -9,16 +9,20 @@ import router from "@/core/router"; // Vue Router
 import store from "@/core/store";
 import { watch } from "vue";
 import FlagIcon from "vue-flag-icon";
-import { connectNotificationSocket, disconnectNotificationSocket } from "@/core/services/socket";
+import {
+  connectNotificationSocket,
+  disconnectNotificationSocket,
+} from "@/core/services/socket";
 import { setupGlobalErrorHandler } from "@/core/utils/errorHandler";
-import '@/core/utils/axios-interceptor';
-import '@fortawesome/fontawesome-free/css/all.min.css'; // Import Font Awesome
+import "@/core/utils/axios-interceptor";
+import "@fortawesome/fontawesome-free/css/all.min.css"; // Import Font Awesome
 
 // Patch ResizeObserver loop error (completely hide this warning)
-const resizeObserverErrMsg = 'ResizeObserver loop completed with undelivered notifications';
+const resizeObserverErrMsg =
+  "ResizeObserver loop completed with undelivered notifications";
 const realConsoleError = window.console.error;
-window.console.error = function(msg, ...args) {
-  if (typeof msg === 'string' && msg.includes(resizeObserverErrMsg)) {
+window.console.error = function (msg, ...args) {
+  if (typeof msg === "string" && msg.includes(resizeObserverErrMsg)) {
     return;
   }
   realConsoleError.apply(window.console, [msg, ...args]);
@@ -34,16 +38,14 @@ function setupNotificationSocket(store) {
 
   notificationSocket = connectNotificationSocket(user.id);
 
-  notificationSocket.on("connect", () => {
-  });
+  notificationSocket.on("connect", () => {});
 
   notificationSocket.on("notification", (data) => {
     // Send to store for realtime processing
     store.dispatch("notifications/handleRealtimeNotification", data);
   });
 
-  notificationSocket.on("disconnect", () => {
-  });
+  notificationSocket.on("disconnect", () => {});
 }
 
 function teardownNotificationSocket() {
@@ -71,7 +73,10 @@ watch(
 );
 
 // Auto connect when user logs in, disconnect when logout
-const storeInstance = app.config.globalProperties.$store || app._context.provides.store || app.store;
+const storeInstance =
+  app.config.globalProperties.$store ||
+  app._context.provides.store ||
+  app.store;
 if (storeInstance) {
   storeInstance.watch(
     (state, getters) => getters["auth/isAuthenticated"],

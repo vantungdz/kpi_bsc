@@ -1,11 +1,11 @@
 import { createRouter, createWebHistory } from "vue-router";
 import store from "../store";
 import { RBAC_ACTIONS, RBAC_RESOURCES } from "@/core/constants/rbac.constants";
-import KpiListCompany from "../../features/kpi/views/KpiListCompany.vue";
-import KpiListDepartment from "../../features/kpi/views/KpiListDepartment.vue";
-import KpiListSection from "../../features/kpi/views/KpiListSection.vue";
+import KpiListCompany from "../../features/kpi/views/list/KpiListCompany.vue";
+import KpiListDepartment from "../../features/kpi/views/list/KpiListDepartment.vue";
+import KpiListSection from "../../features/kpi/views/list/KpiListSection.vue";
 import KpiCreateCompany from "../../features/kpi/views/create/KpiCreateCompany.vue";
-import KpiDetail from "../../features/kpi/views/KpiDetail.vue";
+import KpiDetailWrapper from "../../features/kpi/views/detail/KpiDetailWrapper.vue";
 import PersonalCreate from "../../features/kpi/views/create/PersonalCreate.vue";
 import KpiPersonal from "../../features/kpi/views/KpiPersonal.vue";
 import KpiCreateDepartment from "../../features/kpi/views/create/KpiCreateDepartment.vue";
@@ -30,21 +30,21 @@ import DepartmentCreateForm from "@/features/departments/views/DepartmentCreateF
 import SectionCreateForm from "@/features/sections/views/SectionCreateForm.vue";
 import KpiReviewList from "@/features/evaluation/views/KpiReviewList.vue";
 import RoleManager from "@/features/roles/views/RoleManager.vue";
-import KpiListEmployee from "../../features/kpi/views/KpiListEmployee.vue";
+import KpiListEmployee from "../../features/kpi/views/list/KpiListEmployee.vue";
 import EmployeePerformanceHistory from "@/features/employees/EmployeePerformanceHistory.vue";
 import PerspectiveCreateForm from "@/features/perspectives/views/PerspectiveCreateForm.vue";
 import FomulaCreateForm from "@/features/formula/views/FomulaCreateForm.vue";
 import PageNotFound from "@/features/common/PageNotFound.vue";
 import PageForbidden from "@/features/common/PageForbidden.vue";
 import PageServerError from "@/features/common/PageServerError.vue";
-import StrategicObjectivesView from '../../features/strategic-objectives/views/StrategicObjectivesView.vue';
+import StrategicObjectivesView from "../../features/strategic-objectives/views/StrategicObjectivesView.vue";
 import StrategicObjectivesStats from "@/features/dashboard/views/StrategicObjectivesStats.vue";
-import AuditLogView from '@/features/dashboard/views/AuditLogView.vue';
-import CompetencyList from '../../features/competency/views/CompetencyList.vue';
+import AuditLogView from "@/features/dashboard/views/AuditLogView.vue";
+import CompetencyList from "../../features/competency/views/CompetencyList.vue";
 import EmployeeSkillList from "../../features/competency/views/EmployeeSkillList.vue";
-import PersonalGoalList from '../../features/personal-goal/views/PersonalGoalList.vue';
-import PersonalGoalListEmployee from '../../features/personal-goal/views/PersonalGoalListEmployee.vue';
-import Documents from '@/features/documents/views/DocumentsList.vue';
+import PersonalGoalList from "../../features/personal-goal/views/PersonalGoalList.vue";
+import PersonalGoalListEmployee from "../../features/personal-goal/views/PersonalGoalListEmployee.vue";
+import Documents from "@/features/documents/views/DocumentsList.vue";
 
 const routes = [
   {
@@ -265,7 +265,7 @@ const routes = [
       {
         path: ":id",
         name: "KpiDetail",
-        component: KpiDetail,
+        component: KpiDetailWrapper,
         props: true,
         meta: { requiresAuth: true },
       },
@@ -505,8 +505,8 @@ const routes = [
     },
   },
   {
-    path: '/competencies',
-    name: 'CompetencyList',
+    path: "/competencies",
+    name: "CompetencyList",
     component: CompetencyList,
     meta: {
       requiresAuth: true,
@@ -519,8 +519,8 @@ const routes = [
     },
   },
   {
-    path: '/employee-skill',
-    name: 'EmployeeSkillList',
+    path: "/employee-skill",
+    name: "EmployeeSkillList",
     component: EmployeeSkillList,
     meta: {
       requiresAuth: true,
@@ -533,14 +533,14 @@ const routes = [
     },
   },
   {
-    path: '/personal-goals',
-    name: 'PersonalGoalList',
+    path: "/personal-goals",
+    name: "PersonalGoalList",
     component: PersonalGoalList,
     meta: { requiresAuth: true },
   },
   {
-    path: '/personal-goals/employee-management',
-    name: 'PersonalGoalListEmployee',
+    path: "/personal-goals/employee-management",
+    name: "PersonalGoalListEmployee",
     component: PersonalGoalListEmployee,
     meta: {
       requiresAuth: true,
@@ -553,8 +553,8 @@ const routes = [
     },
   },
   {
-    path: '/documents',
-    name: 'DocumentsList',
+    path: "/documents",
+    name: "DocumentsList",
     component: Documents,
   },
   {
@@ -575,7 +575,6 @@ const routes = [
     component: PageNotFound,
     meta: { requiresAuth: false },
   },
- 
 ];
 
 function hasPermission(userPermissions, action, resource, scope) {

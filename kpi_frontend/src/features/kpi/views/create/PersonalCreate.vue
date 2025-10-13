@@ -386,8 +386,6 @@ const handleChangeCreate = async () => {
       ],
     };
 
-    console.log("Submitting Personal KPI Data:", payload);
-
     await store.dispatch("kpis/createKpi", payload);
 
     router.push("/personal");
@@ -408,7 +406,6 @@ const handleChangeCreate = async () => {
 };
 
 const onFinishFailed = (errorInfo) => {
-  console.log("Form validation failed:", errorInfo);
   let errorMessages = "Please check required fields and input formats.";
   if (errorInfo?.errorFields?.length > 0) {
     const firstErrorField = errorInfo.errorFields[0];
@@ -436,8 +433,6 @@ watch(
 );
 
 onMounted(() => {
-  console.log("PersonalCreate component mounted.");
-
   store.dispatch("perspectives/fetchPerspectives");
   store.dispatch("formula/fetchFormulas");
 });

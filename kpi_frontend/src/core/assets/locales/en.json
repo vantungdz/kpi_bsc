@@ -91,6 +91,7 @@
   "assignmentRemovedForUser": "The assignment for user {user} has been removed",
   "assignmentUpdated": "Assignment updated",
   "assignmentUpdatedSuccessfully": "Assignment updated successfully!",
+  "usersAssignedSuccessfully": "Users assigned successfully!",
   "totalKpiAssignments": "Total KPI Assignments",
   "kpiAchieved": "KPI Achieved",
   "kpiNotAchieved": "KPI Not Achieved",
@@ -1086,7 +1087,14 @@
     "kpiLinkedDesc": "Select KPI to link with this personal goal",
     "targetValueDesc": "Enter the target value for the linked KPI",
     "statusDesc": "Select the current status of the personal goal",
-    "confirmDelete": "Are you sure you want to delete this personal goal?"
+    "confirmDelete": "Are you sure you want to delete this personal goal?",
+    "msgUpdateSuccess": "Personal goal updated successfully",
+    "msgError": "An error occurred",
+    "msgAddSuccess": "Personal goal added successfully",
+    "msgDeleteError": "Failed to delete personal goal",
+    "msgEnterName": "Please enter personal goal name",
+    "msgKpiUnitOnly": "Only KPIs with the same unit can be selected",
+    "emptyText": "No personal goals found"
   },
   "competency": {
     "title": "Competency Management",

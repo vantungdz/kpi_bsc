@@ -1,6 +1,6 @@
 import { IsOptional, IsString, IsInt, IsEnum } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
-import { Transform } from 'class-transformer';
+import { Transform, Expose } from 'class-transformer';
 
 export enum KpiStatus {
   DRAFT = 'DRAFT',
@@ -25,9 +25,14 @@ export class KpiFilterDto {
     description: 'Lọc theo ID phòng ban được gán',
     required: false,
   })
-  @Transform(({ value }) => parseInt(value, 10))
+  @Transform(({ value }) => {
+    if (value === null || value === undefined || value === '') return undefined;
+    const parsed = parseInt(value, 10);
+    return isNaN(parsed) ? undefined : parsed;
+  })
   @IsInt()
   @IsOptional()
+  @Expose({ name: 'department_id' })
   departmentId?: number;
 
   @ApiProperty({
@@ -35,9 +40,14 @@ export class KpiFilterDto {
     description: 'Lọc theo ID bộ phận được gán',
     required: false,
   })
-  @Transform(({ value }) => parseInt(value, 10))
+  @Transform(({ value }) => {
+    if (value === null || value === undefined || value === '') return undefined;
+    const parsed = parseInt(value, 10);
+    return isNaN(parsed) ? undefined : parsed;
+  })
   @IsInt()
   @IsOptional()
+  @Expose({ name: 'section_id' })
   sectionId?: number;
 
   @ApiProperty({
@@ -45,9 +55,14 @@ export class KpiFilterDto {
     description: 'Lọc theo ID nhóm được gán',
     required: false,
   })
-  @Transform(({ value }) => parseInt(value, 10))
+  @Transform(({ value }) => {
+    if (value === null || value === undefined || value === '') return undefined;
+    const parsed = parseInt(value, 10);
+    return isNaN(parsed) ? undefined : parsed;
+  })
   @IsInt()
   @IsOptional()
+  @Expose({ name: 'team_id' })
   teamId?: number;
 
   @ApiProperty({
@@ -55,9 +70,14 @@ export class KpiFilterDto {
     description: 'Lọc theo ID khía cạnh BSC',
     required: false,
   })
-  @Transform(({ value }) => parseInt(value, 10))
+  @Transform(({ value }) => {
+    if (value === null || value === undefined || value === '') return undefined;
+    const parsed = parseInt(value, 10);
+    return isNaN(parsed) ? undefined : parsed;
+  })
   @IsInt()
   @IsOptional()
+  @Expose({ name: 'perspective_id' })
   perspectiveId?: number;
 
   @ApiProperty({
@@ -65,14 +85,31 @@ export class KpiFilterDto {
     description: 'Lọc theo ID nhân viên được gán',
     required: false,
   })
-  @Transform(({ value }) => parseInt(value, 10))
+  @Transform(({ value }) => {
+    if (value === null || value === undefined || value === '') return undefined;
+    const parsed = parseInt(value, 10);
+    return isNaN(parsed) ? undefined : parsed;
+  })
   @IsInt()
   @IsOptional()
+  @Expose({ name: 'assigned_to_id' })
   assignedToId?: number;
 
   @IsString()
   @IsOptional()
   assignedToName?: string;
+
+  @ApiProperty({
+    example: 'company',
+    description:
+      'Lọc theo phạm vi KPI (company, department, section, employee)',
+    required: false,
+    enum: ['company', 'department', 'section', 'employee'],
+  })
+  @IsString()
+  @IsOptional()
+  @IsEnum(['company', 'department', 'section', 'employee'])
+  scope?: string;
 
   @IsString()
   @IsOptional()
@@ -83,7 +120,11 @@ export class KpiFilterDto {
   endDate?: string;
 
   @ApiProperty({ example: 1, description: 'Trang hiện tại', required: false })
-  @Transform(({ value }) => parseInt(value, 10))
+  @Transform(({ value }) => {
+    if (value === null || value === undefined || value === '') return 1;
+    const parsed = parseInt(value, 10);
+    return isNaN(parsed) ? 1 : parsed;
+  })
   @IsInt()
   @IsOptional()
   page?: number = 1;
@@ -93,7 +134,11 @@ export class KpiFilterDto {
     description: 'Số mục mỗi trang',
     required: false,
   })
-  @Transform(({ value }) => parseInt(value, 10))
+  @Transform(({ value }) => {
+    if (value === null || value === undefined || value === '') return 15;
+    const parsed = parseInt(value, 10);
+    return isNaN(parsed) ? 15 : parsed;
+  })
   @IsInt()
   @IsOptional()
   limit?: number = 15;

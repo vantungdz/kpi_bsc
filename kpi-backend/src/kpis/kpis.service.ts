@@ -1,6 +1,7 @@
 import { plainToInstance } from 'class-transformer';
 import { KPIAssignment } from 'src/kpi-assessments/entities/kpi-assignment.entity';
 import { Employee } from '../employees/entities/employee.entity';
+import { userHasPermission } from '../common/utils/permission.utils';
 import { KpiValueStatus } from 'src/kpi-values/entities/kpi-value.entity';
 import { Kpi, KpiDefinitionStatus } from 'src/kpis/entities/kpi.entity';
 import {
@@ -82,22 +83,7 @@ export class KpisService {
     action: string,
     scope?: string,
   ): boolean {
-    if (!user || !user.roles) return false;
-    for (const role of user.roles) {
-      if (role && Array.isArray(role.permissions)) {
-        if (
-          role.permissions.some(
-            (p) =>
-              p.resource === resource &&
-              p.action === action &&
-              (!scope || p.scope === scope),
-          )
-        ) {
-          return true;
-        }
-      }
-    }
-    return false;
+    return userHasPermission(user, action, resource, scope);
   }
 
   async getKpisByEmployeeId(
@@ -147,9 +133,7 @@ export class KpisService {
       .leftJoinAndSelect('kpi.createdBy', 'createdBy')
       .leftJoinAndSelect('kpi.formula', 'formula')
       .where('kpi.deleted_at IS NULL');
-
     query.andWhere('assignment.deleted_at IS NULL');
-
     if (filterDto.name) {
       query.andWhere('kpi.name ILIKE :name', {
         name: `%${filterDto.name}%`,
@@ -163,32 +147,50 @@ export class KpisService {
     }
 
     if (filterDto.departmentId) {
-      query.andWhere('assignment.assigned_to_department = :departmentId', {
-        departmentId: filterDto.departmentId,
-      });
+      query.andWhere(
+        '(assignment.assigned_to_department = :departmentId AND assignment.deleted_at IS NULL) OR assignment.id IS NULL',
+        {
+          departmentId: filterDto.departmentId,
+        },
+      );
     }
 
     if (filterDto.sectionId) {
-      query.andWhere('assignment.assigned_to_section = :sectionId', {
-        sectionId: filterDto.sectionId,
-      });
+      query.andWhere(
+        '(assignment.assigned_to_section = :sectionId AND assignment.deleted_at IS NULL) OR assignment.id IS NULL',
+        {
+          sectionId: filterDto.sectionId,
+        },
+      );
     }
 
     if (filterDto.teamId) {
-      query.andWhere('assignment.assigned_to_team = :teamId', {
-        teamId: filterDto.teamId,
-      });
+      query.andWhere(
+        '(assignment.assigned_to_team = :teamId AND assignment.deleted_at IS NULL) OR assignment.id IS NULL',
+        {
+          teamId: filterDto.teamId,
+        },
+      );
     }
 
     if (filterDto.assignedToId) {
-      query.andWhere('assignment.assigned_to_employee = :assignedToId', {
-        assignedToId: filterDto.assignedToId,
-      });
+      query.andWhere(
+        '(assignment.assigned_to_employee = :assignedToId AND assignment.deleted_at IS NULL) OR assignment.id IS NULL',
+        {
+          assignedToId: filterDto.assignedToId,
+        },
+      );
     }
 
     if (filterDto.status) {
       query.andWhere('kpi.status = :status', {
         status: filterDto.status,
+      });
+    }
+
+    if (filterDto.scope) {
+      query.andWhere('kpi.created_by_type = :scope', {
+        scope: filterDto.scope,
       });
     }
 
@@ -1327,6 +1329,18 @@ export class KpisService {
   async update(id: number, update: Partial<Kpi>, userId: number): Promise<Kpi> {
     const kpi = await this.kpisRepository.findOne({ where: { id } });
 
+    if (!kpi) {
+      throw new NotFoundException(`KPI with ID ${id} not found`);
+    }
+
+    // Check if KPI has expired
+    const kpiValidityStatus = getKpiStatus(kpi.start_date, kpi.end_date);
+    if (kpiValidityStatus === 'expired') {
+      throw new BadRequestException(
+        'Cannot update expired KPI. This KPI is no longer valid.',
+      );
+    }
+
     const updatePayload: Partial<Kpi> = { ...update };
     if ((update as any).formula_id || (update as any).formulaId) {
       updatePayload.formula_id =
@@ -1346,6 +1360,28 @@ export class KpisService {
     kpiType: 'company' | 'department' | 'section' | 'employee',
   ): Promise<void> {
     await this.checkPermission(userId, RBAC_ACTIONS.DELETE, RBAC_RESOURCES.KPI);
+
+    // Check if KPI has been scored
+    const kpi = await this.kpisRepository.findOne({
+      where: { id },
+      relations: ['assignments', 'assignments.kpiValues'],
+    });
+
+    if (!kpi) {
+      throw new NotFoundException(`KPI with ID ${id} not found`);
+    }
+
+    // Check if KPI has been scored
+    const hasKpiValues = kpi.assignments?.some(
+      (assignment) => assignment.kpiValues && assignment.kpiValues.length > 0,
+    );
+
+    if (hasKpiValues) {
+      throw new BadRequestException(
+        'Cannot delete KPI that has been scored. Please contact administrator for assistance.',
+      );
+    }
+
     await this.kpisRepository.softDelete(id);
   }
 
@@ -1360,6 +1396,14 @@ export class KpisService {
     const kpi = await this.kpisRepository.findOne({ where: { id: kpiId } });
     if (!kpi) {
       throw new NotFoundException(`KPI with ID ${kpiId} not found`);
+    }
+
+    // Check if KPI has expired
+    const kpiValidityStatus = getKpiStatus(kpi.start_date, kpi.end_date);
+    if (kpiValidityStatus === 'expired') {
+      throw new BadRequestException(
+        'Cannot assign expired KPI to other employees. This KPI is no longer valid.',
+      );
     }
     const assignedById = loggedInUser.id;
     const assignedFromType = kpi.created_by_type;
@@ -1382,7 +1426,42 @@ export class KpisService {
     const assignmentsToSave: KPIAssignment[] = [];
 
     for (const incomingAssignment of assignments) {
-      if (this.userHasPermission(loggedInUser, 'kpi', 'assign', 'section')) {
+      // Check user permissions with proper scope hierarchy
+      const hasCompanyPermission = this.userHasPermission(
+        loggedInUser,
+        'kpi',
+        'assign',
+        'company',
+      );
+      const hasDepartmentPermission = this.userHasPermission(
+        loggedInUser,
+        'kpi',
+        'assign',
+        'department',
+      );
+      const hasSectionPermission = this.userHasPermission(
+        loggedInUser,
+        'kpi',
+        'assign',
+        'section',
+      );
+
+      if (
+        !hasCompanyPermission &&
+        !hasDepartmentPermission &&
+        !hasSectionPermission
+      ) {
+        throw new UnauthorizedException(
+          'You do not have permission to assign KPIs.',
+        );
+      }
+
+      // If user only has section permission, validate section assignment
+      if (
+        hasSectionPermission &&
+        !hasDepartmentPermission &&
+        !hasCompanyPermission
+      ) {
         if (!loggedInUser.sectionId) {
           throw new UnauthorizedException(
             'You are not assigned to a section and cannot assign KPIs.',
@@ -1401,11 +1480,44 @@ export class KpisService {
         }
       }
 
+      // If user has department permission (but not company), validate department assignment
+      if (hasDepartmentPermission && !hasCompanyPermission) {
+        if (!loggedInUser.departmentId) {
+          throw new UnauthorizedException(
+            'You are not assigned to a department and cannot assign KPIs.',
+          );
+        }
+        const employeeToAssign = await this.employeeRepository.findOne({
+          where: {
+            id: incomingAssignment.user_id,
+          },
+          relations: ['section', 'section.department'],
+        });
+        if (
+          !employeeToAssign ||
+          employeeToAssign.section?.department?.id !== loggedInUser.departmentId
+        ) {
+          throw new UnauthorizedException(
+            `You can only assign KPIs to employees within your department. User ID ${incomingAssignment.user_id} is not in your department or does not exist.`,
+          );
+        }
+      }
+
+      // If user has company permission, no additional validation needed (can assign to anyone)
+
       const existingAssignment = existingAssignmentsMap.get(
         incomingAssignment.user_id,
       );
 
       if (existingAssignment) {
+        // Check if KPI has expired when updating existing assignment
+        const kpiValidityStatus = getKpiStatus(kpi.start_date, kpi.end_date);
+        if (kpiValidityStatus === 'expired') {
+          throw new BadRequestException(
+            'Cannot update target value for expired KPI. This KPI is no longer valid.',
+          );
+        }
+
         existingAssignment.targetValue = incomingAssignment.target;
         existingAssignment.updated_at = new Date();
         existingAssignment.deleted_at = null as any;
@@ -1502,6 +1614,14 @@ export class KpisService {
         throw new NotFoundException(`KPI with ID ${kpiId} not found`);
       }
 
+      // Check if KPI has expired
+      const kpiValidityStatus = getKpiStatus(kpi.start_date, kpi.end_date);
+      if (kpiValidityStatus === 'expired') {
+        throw new BadRequestException(
+          'Cannot assign expired KPI to other departments/sections. This KPI is no longer valid.',
+        );
+      }
+
       const entitiesToSave: KPIAssignment[] = [];
 
       for (const assignmentData of assignmentsData) {
@@ -1510,6 +1630,17 @@ export class KpisService {
             const existingAssignment = await assignmentRepo.findOneByOrFail({
               id: assignmentData.assignmentId,
             });
+
+            // Check if KPI has expired when updating existing assignment
+            const kpiValidityStatus = getKpiStatus(
+              kpi.start_date,
+              kpi.end_date,
+            );
+            if (kpiValidityStatus === 'expired') {
+              throw new BadRequestException(
+                'Cannot update target value for expired KPI. This KPI is no longer valid.',
+              );
+            }
 
             existingAssignment.targetValue = assignmentData.targetValue;
             existingAssignment.updated_at = new Date();

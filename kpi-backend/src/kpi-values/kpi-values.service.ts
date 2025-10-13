@@ -12,7 +12,9 @@ import { KpiValue, KpiValueStatus } from './entities/kpi-value.entity';
 import { KpiValueHistory } from './entities/kpi-value-history.entity';
 import { KPIAssignment } from '../kpi-assessments/entities/kpi-assignment.entity';
 import { Employee } from '../employees/entities/employee.entity';
+import { userHasPermission } from '../common/utils/permission.utils';
 import { KpiDefinitionStatus } from '../kpis/entities/kpi.entity';
+import { getKpiStatus } from '../kpis/kpis.service';
 
 @Injectable()
 export class KpiValuesService {
@@ -72,9 +74,23 @@ export class KpiValuesService {
   ): Promise<KpiValue> {
     const kpiValue = await this.kpiValuesRepository.findOne({
       where: { id },
+      relations: ['kpiAssignment', 'kpiAssignment.kpi'],
     });
     if (!kpiValue) {
       throw new NotFoundException(`KPI Value with ID ${id} not found`);
+    }
+
+    // Check if KPI has expired
+    if (kpiValue.kpiAssignment?.kpi) {
+      const kpiValidityStatus = getKpiStatus(
+        kpiValue.kpiAssignment.kpi.start_date,
+        kpiValue.kpiAssignment.kpi.end_date,
+      );
+      if (kpiValidityStatus === 'expired') {
+        throw new BadRequestException(
+          'Cannot update values for expired KPI. This KPI is no longer valid.',
+        );
+      }
     }
 
     const historyEntry = this.kpiValueHistoryRepository.create({
@@ -153,6 +169,17 @@ export class KpiValuesService {
           );
         }
 
+        // Check if KPI has expired
+        const kpiValidityStatus = getKpiStatus(
+          assignment.kpi.start_date,
+          assignment.kpi.end_date,
+        );
+        if (kpiValidityStatus === 'expired') {
+          throw new BadRequestException(
+            'Cannot update values for expired KPI. This KPI is no longer valid.',
+          );
+        }
+
         let calculatedValue = 0;
         if (projectDetails && Array.isArray(projectDetails)) {
           calculatedValue = projectDetails.reduce(
@@ -173,7 +200,10 @@ export class KpiValuesService {
 
         const submitter = await transactionalEntityManager
           .getRepository(Employee)
-          .findOne({ where: { id: userId }, relations: ['roles'] });
+          .findOne({
+            where: { id: userId },
+            relations: ['roles', 'roles.permissions'],
+          });
         if (!submitter) {
           throw new UnauthorizedException('Submitter information not found.');
         }
@@ -298,7 +328,7 @@ export class KpiValuesService {
     const statusBefore = kpiValue.status;
     const user = await this.employeeRepository.findOne({
       where: { id: userId },
-      relations: ['roles'],
+      relations: ['roles', 'roles.permissions'],
     });
     if (!user) {
       throw new UnauthorizedException('Approving user not found.');
@@ -402,7 +432,7 @@ export class KpiValuesService {
     const statusBefore = kpiValue.status;
     const user = await this.employeeRepository.findOne({
       where: { id: userId },
-      relations: ['roles'],
+      relations: ['roles', 'roles.permissions'],
     });
     if (!user) throw new UnauthorizedException('Rejecting user not found.');
     const assignment =
@@ -487,7 +517,7 @@ export class KpiValuesService {
     const statusBefore = kpiValue.status;
     const user = await this.employeeRepository.findOne({
       where: { id: userId },
-      relations: ['roles'],
+      relations: ['roles', 'roles.permissions'],
     });
 
     if (!user) {
@@ -598,7 +628,7 @@ export class KpiValuesService {
     const statusBefore = kpiValue.status;
     const user = await this.employeeRepository.findOne({
       where: { id: userId },
-      relations: ['roles'],
+      relations: ['roles', 'roles.permissions'],
     });
 
     if (!user) throw new UnauthorizedException('Rejecting user not found.');
@@ -689,7 +719,7 @@ export class KpiValuesService {
     const statusBefore = kpiValue.status;
     const user = await this.employeeRepository.findOne({
       where: { id: userId },
-      relations: ['roles'],
+      relations: ['roles', 'roles.permissions'],
     });
 
     if (!user) {
@@ -774,7 +804,7 @@ export class KpiValuesService {
     const statusBefore = kpiValue.status;
     const user = await this.employeeRepository.findOne({
       where: { id: userId },
-      relations: ['roles'],
+      relations: ['roles', 'roles.permissions'],
     });
 
     if (!user) throw new UnauthorizedException('Rejecting user not found.');
@@ -851,9 +881,25 @@ export class KpiValuesService {
   }
 
   async approveKpiReview(id: number, approver: Employee): Promise<KpiValue> {
-    const kpiValue = await this.findOne(id);
+    const kpiValue = await this.kpiValuesRepository.findOne({
+      where: { id },
+      relations: ['kpiAssignment', 'kpiAssignment.kpi'],
+    });
     if (!kpiValue) {
       throw new NotFoundException(`KPI Value with ID ${id} not found.`);
+    }
+
+    // Check if KPI has expired
+    if (kpiValue.kpiAssignment?.kpi) {
+      const kpiValidityStatus = getKpiStatus(
+        kpiValue.kpiAssignment.kpi.start_date,
+        kpiValue.kpiAssignment.kpi.end_date,
+      );
+      if (kpiValidityStatus === 'expired') {
+        throw new BadRequestException(
+          'Cannot change approval status for expired KPI. This KPI is no longer valid.',
+        );
+      }
     }
 
     if (this.userHasPermission(approver, 'kpi-value', 'approve', 'manager')) {
@@ -873,9 +919,25 @@ export class KpiValuesService {
   }
 
   async rejectKpiReview(id: number, approver: Employee): Promise<KpiValue> {
-    const kpiValue = await this.findOne(id);
+    const kpiValue = await this.kpiValuesRepository.findOne({
+      where: { id },
+      relations: ['kpiAssignment', 'kpiAssignment.kpi'],
+    });
     if (!kpiValue) {
       throw new NotFoundException(`KPI Value with ID ${id} not found.`);
+    }
+
+    // Check if KPI has expired
+    if (kpiValue.kpiAssignment?.kpi) {
+      const kpiValidityStatus = getKpiStatus(
+        kpiValue.kpiAssignment.kpi.start_date,
+        kpiValue.kpiAssignment.kpi.end_date,
+      );
+      if (kpiValidityStatus === 'expired') {
+        throw new BadRequestException(
+          'Cannot change approval status for expired KPI. This KPI is no longer valid.',
+        );
+      }
     }
 
     if (this.userHasPermission(approver, 'kpi-value', 'reject', 'manager')) {
@@ -895,9 +957,25 @@ export class KpiValuesService {
   }
 
   async resubmitKpiReview(id: number): Promise<KpiValue> {
-    const kpiValue = await this.findOne(id);
+    const kpiValue = await this.kpiValuesRepository.findOne({
+      where: { id },
+      relations: ['kpiAssignment', 'kpiAssignment.kpi'],
+    });
     if (!kpiValue) {
       throw new NotFoundException(`KPI Value with ID ${id} not found.`);
+    }
+
+    // Check if KPI has expired
+    if (kpiValue.kpiAssignment?.kpi) {
+      const kpiValidityStatus = getKpiStatus(
+        kpiValue.kpiAssignment.kpi.start_date,
+        kpiValue.kpiAssignment.kpi.end_date,
+      );
+      if (kpiValidityStatus === 'expired') {
+        throw new BadRequestException(
+          'Cannot update values for expired KPI. This KPI is no longer valid.',
+        );
+      }
     }
 
     if (
@@ -944,23 +1022,7 @@ export class KpiValuesService {
     action: string,
     scope?: string,
   ): boolean {
-    if (!user || !user.roles) return false;
-
-    for (const role of user.roles) {
-      if (role && Array.isArray(role.permissions)) {
-        if (
-          role.permissions.some(
-            (p) =>
-              p.resource === resource &&
-              p.action === action &&
-              (!scope || p.scope === scope),
-          )
-        ) {
-          return true;
-        }
-      }
-    }
-    return false;
+    return userHasPermission(user, action, resource, scope);
   }
 
   private async hasDynamicRole(

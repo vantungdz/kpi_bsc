@@ -18,6 +18,7 @@ import {
 } from './dto/personal-goal.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Employee } from '../employees/entities/employee.entity';
+import { userHasPermission } from '../common/utils/permission.utils';
 
 @Controller('personal-goals')
 @UseGuards(JwtAuthGuard)
@@ -30,18 +31,7 @@ export class PersonalGoalController {
     resource: string,
     scope?: string,
   ): boolean {
-    if (!user || !user.roles) return false;
-
-    const allPermissions = user.roles.flatMap((role: any) =>
-      Array.isArray(role.permissions) ? role.permissions : [],
-    );
-
-    return allPermissions.some(
-      (p: any) =>
-        p.resource === resource &&
-        p.action === action &&
-        (!scope || p.scope === scope),
-    );
+    return userHasPermission(user, action, resource, scope);
   }
 
   @Post()

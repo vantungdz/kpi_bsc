@@ -74,7 +74,7 @@ export class KpisController {
     const data = await this.kpisService.getAllKpiAssignedToDepartments(
       req.user.id,
     );
-    
+
     const dataWithValidity = data.map((kpi) => ({
       ...kpi,
       validityStatus: getKpiStatus(kpi.start_date, kpi.end_date),
@@ -109,11 +109,21 @@ export class KpisController {
     description: 'Tìm kiếm theo tên',
   })
   @ApiQuery({ name: 'departmentId', required: false, type: Number })
+  @ApiQuery({ name: 'department_id', required: false, type: Number })
   @ApiQuery({ name: 'sectionId', required: false, type: Number })
+  @ApiQuery({ name: 'section_id', required: false, type: Number })
   @ApiQuery({ name: 'teamId', required: false, type: Number })
+  @ApiQuery({ name: 'team_id', required: false, type: Number })
   @ApiQuery({ name: 'perspectiveId', required: false, type: Number })
+  @ApiQuery({ name: 'perspective_id', required: false, type: Number })
   @ApiQuery({ name: 'assignedToId', required: false, type: Number })
+  @ApiQuery({ name: 'assigned_to_id', required: false, type: Number })
   @ApiQuery({ name: 'status', required: false, enum: ['Active', 'Inactive'] })
+  @ApiQuery({
+    name: 'scope',
+    required: false,
+    enum: ['company', 'department', 'section', 'employee'],
+  })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiQuery({ name: 'sortBy', required: false, type: String })
@@ -161,7 +171,6 @@ export class KpisController {
     @Query() filterDto: KpiFilterDto,
     @Req() req: Request & { user?: Employee },
   ): Promise<any> {
-    
     if (!req.user)
       throw new UnauthorizedException('User not available in request.');
     return this.kpisService.getSectionKpis(sectionId, filterDto, req.user);
@@ -319,7 +328,7 @@ export class KpisController {
   ): Promise<void> {
     if (!req.user?.id)
       throw new UnauthorizedException('User not authenticated.');
-    
+
     if (!Array.isArray(body.assignments) || body.assignments.length === 0) {
       await this.auditLogService.logAction({
         action: 'ASSIGN',
@@ -351,7 +360,7 @@ export class KpisController {
     @Req() req: Request & { user?: Employee },
   ) {
     if (!req.user) throw new UnauthorizedException('User not authenticated.');
-    
+
     if (!Array.isArray(body.assignments) || body.assignments.length === 0) {
       await this.auditLogService.logAction({
         action: 'ASSIGN',

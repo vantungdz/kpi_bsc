@@ -3,7 +3,7 @@
     <a-card class="goal-header-card" bordered>
       <div class="goal-header">
         <div>
-          <h2 class="goal-title">🎯 {{ $t("personalGoal.titleHeader") }}</h2>
+          <h3 class="goal-title">🎯 {{ $t("personalGoal.titleHeader") }}</h3>
           <p class="goal-desc">{{ $t("personalGoal.descHeader") }}</p>
         </div>
         <a-button type="primary" size="large" @click="openAddModal">
@@ -100,7 +100,7 @@
           />
           <div class="input-desc">{{ $t("personalGoal.descriptionDesc") }}</div>
         </a-form-item>
-        <a-form-item :label="$t('personalGoal.kpiLinked')">
+        <a-form-item :label="$t('personalGoal.kpiLinked')" required>
           <a-select
             v-model:value="form.kpiIds"
             :options="kpiOptions"
@@ -112,10 +112,11 @@
           <div class="input-desc">{{ $t("personalGoal.kpiLinkedDesc") }}</div>
         </a-form-item>
         <a-form-item :label="$t('personalGoal.targetValue')">
-          <a-input-number
+          <a-input
             v-model:value="form.targetValue"
             style="width: 100%"
             :placeholder="$t('personalGoal.targetValuePlaceholder')"
+            @input="(event) => handleNumericInput('targetValue', event)"
           />
           <div class="input-desc">{{ $t("personalGoal.targetValueDesc") }}</div>
         </a-form-item>
@@ -200,6 +201,12 @@ const columns = computed(() => [
     dataIndex: "targetValue",
     key: "targetValue",
     width: 110,
+    customRender: ({ text }) => {
+      if (!text && text !== 0) return "";
+      const num = typeof text === "number" ? text : parseFloat(text);
+      if (isNaN(num)) return text;
+      return num.toLocaleString("vi-VN");
+    },
   },
   { title: $t("personalGoal.progress"), key: "progress", width: 140 },
   {
@@ -309,6 +316,15 @@ function openAddModal() {
 function openEditModal(record) {
   isEditMode.value = true;
   editingId.value = record.id;
+
+  // Format targetValue for display
+  let formattedTargetValue = record.targetValue;
+  if (formattedTargetValue && typeof formattedTargetValue === "number") {
+    formattedTargetValue = formattedTargetValue
+      .toString()
+      .replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  }
+
   form.value = {
     title: record.title,
     description: record.description,
@@ -317,13 +333,35 @@ function openEditModal(record) {
       : record.kpiId
         ? [record.kpiId]
         : [],
-    targetValue: record.targetValue,
+    targetValue: formattedTargetValue,
     startDate: record.startDate ? dayjs(record.startDate) : null,
     endDate: record.endDate ? dayjs(record.endDate) : null,
     status: record.status,
   };
   showModal.value = true;
 }
+
+const handleNumericInput = (field, event) => {
+  let value = event.target.value.replace(/[^0-9.]/g, "");
+  const parts = value.split(".");
+  if (parts.length > 2) {
+    value = parts[0] + "." + parts.slice(1).join("");
+  }
+
+  const [intPart, decPart] = value.split(".");
+  let formatted = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  if (decPart !== undefined) formatted += "." + decPart;
+  form.value[field] = formatted;
+};
+
+const parseNumber = (value) => {
+  if (typeof value === "number") return value;
+  if (!value || value === "") return null;
+
+  const cleaned = String(value).replace(/[^\d.]/g, "");
+  const num = Number(cleaned);
+  return isNaN(num) ? null : num;
+};
 
 function handleOk() {
   if (!form.value.title) {
@@ -333,6 +371,8 @@ function handleOk() {
   saving.value = true;
 
   const payload = { ...form.value };
+  // Parse targetValue to remove formatting before sending to server
+  payload.targetValue = parseNumber(payload.targetValue);
   payload.startDate = payload.startDate
     ? dayjs(payload.startDate).format("DD-MM-YYYY")
     : null;

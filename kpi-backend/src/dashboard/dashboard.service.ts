@@ -2,8 +2,12 @@ import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, Repository, SelectQueryBuilder } from 'typeorm';
 import { Employee } from '../employees/entities/employee.entity';
+import { userHasPermission } from '../common/utils/permission.utils';
 import { KpiValueHistory } from '../kpi-values/entities/kpi-value-history.entity';
-import { KpiValue, KpiValueStatus } from '../kpi-values/entities/kpi-value.entity';
+import {
+  KpiValue,
+  KpiValueStatus,
+} from '../kpi-values/entities/kpi-value.entity';
 import { Kpi } from '../kpis/entities/kpi.entity';
 import { KPIAssignment } from '../kpi-assessments/entities/kpi-assignment.entity';
 import {
@@ -371,23 +375,13 @@ export class DashboardsService {
   }
 
   // Helper: check if user has a permission (resource, action, scope)
-  private userHasPermission(user: Employee, resource: string, action: string, scope?: string): boolean {
-    if (!user || !user.roles) return false;
-    for (const role of user.roles) {
-      if (role && Array.isArray(role.permissions)) {
-        if (
-          role.permissions.some(
-            (p) =>
-              p.resource === resource &&
-              p.action === action &&
-              (!scope || p.scope === scope)
-          )
-        ) {
-          return true;
-        }
-      }
-    }
-    return false;
+  private userHasPermission(
+    user: Employee,
+    resource: string,
+    action: string,
+    scope?: string,
+  ): boolean {
+    return userHasPermission(user, action, resource, scope);
   }
 
   private hasDynamicRole(
@@ -487,7 +481,10 @@ export class DashboardsService {
       });
 
     // Check dashboard view permissions by scope from high to low
-    if (this.userHasPermission(currentUser, 'kpi-value', 'approve', 'manager') && currentUser.departmentId) {
+    if (
+      this.userHasPermission(currentUser, 'kpi-value', 'approve', 'manager') &&
+      currentUser.departmentId
+    ) {
       pendingValuesQuery.andWhere(
         new Brackets((qb) => {
           qb.where('assignedDepartment.id = :userDeptId', {
@@ -501,7 +498,15 @@ export class DashboardsService {
             });
         }),
       );
-    } else if (this.userHasPermission(currentUser, 'kpi-value', 'approve', 'department') && currentUser.departmentId) {
+    } else if (
+      this.userHasPermission(
+        currentUser,
+        'kpi-value',
+        'approve',
+        'department',
+      ) &&
+      currentUser.departmentId
+    ) {
       pendingValuesQuery.andWhere(
         new Brackets((qb) => {
           qb.where('departmentOfAssignedSection.id = :userDeptId', {
@@ -511,11 +516,16 @@ export class DashboardsService {
           });
         }),
       );
-    } else if (this.userHasPermission(currentUser, 'kpi-value', 'approve', 'section') && currentUser.sectionId) {
+    } else if (
+      this.userHasPermission(currentUser, 'kpi-value', 'approve', 'section') &&
+      currentUser.sectionId
+    ) {
       pendingValuesQuery.andWhere('assignedSection.id = :sectionId', {
         sectionId: currentUser.sectionId,
       });
-    } else if (this.userHasPermission(currentUser, 'kpi-value', 'approve', 'user')) {
+    } else if (
+      this.userHasPermission(currentUser, 'kpi-value', 'approve', 'user')
+    ) {
       pendingValuesQuery.andWhere('assignedEmployee.id = :userId', {
         userId: currentUser.id,
       });
@@ -658,17 +668,28 @@ export class DashboardsService {
     // Admin/Manager with global permission can view all entities without restrictions
     if (!this.userHasPermission(currentUser, 'view', 'dashboard', 'global')) {
       // Apply restrictions based on user permission level
-      if (this.userHasPermission(currentUser, 'view', 'kpi', 'department') && currentUser.departmentId) {
+      if (
+        this.userHasPermission(currentUser, 'view', 'kpi', 'department') &&
+        currentUser.departmentId
+      ) {
         // Department Manager: Only view entities in department
-        topEntitiesQuery.andWhere('submitter.departmentId = :userDepartmentId', {
-          userDepartmentId: currentUser.departmentId,
-        });
-      } else if (this.userHasPermission(currentUser, 'view', 'kpi', 'section') && currentUser.sectionId) {
+        topEntitiesQuery.andWhere(
+          'submitter.departmentId = :userDepartmentId',
+          {
+            userDepartmentId: currentUser.departmentId,
+          },
+        );
+      } else if (
+        this.userHasPermission(currentUser, 'view', 'kpi', 'section') &&
+        currentUser.sectionId
+      ) {
         // Section Manager: Only view entities in section
         topEntitiesQuery.andWhere('submitter.sectionId = :userSectionId', {
           userSectionId: currentUser.sectionId,
         });
-      } else if (this.userHasPermission(currentUser, 'view', 'kpi', 'employee')) {
+      } else if (
+        this.userHasPermission(currentUser, 'view', 'kpi', 'employee')
+      ) {
         // Employee: Only view own information
         topEntitiesQuery.andWhere('submitter.id = :userId', {
           userId: currentUser.id,
@@ -777,7 +798,10 @@ export class DashboardsService {
         }
 
         // Check KPI details view permissions by scope
-        if (this.userHasPermission(currentUser, 'view', 'kpi', 'department') && currentUser.departmentId) {
+        if (
+          this.userHasPermission(currentUser, 'view', 'kpi', 'department') &&
+          currentUser.departmentId
+        ) {
           kpiDetailsQuery.andWhere(
             'submitter_detail.departmentId = :managerDeptId',
             { managerDeptId: currentUser.departmentId },
@@ -938,8 +962,10 @@ export class DashboardsService {
 
     // Check performance view permissions by scope
     const performanceByRole: PerformanceByRoleDto[] = [];
-    if (this.userHasPermission(currentUser, 'view', 'dashboard', 'global') || 
-        this.userHasPermission(currentUser, 'view', 'kpi', 'department')) {
+    if (
+      this.userHasPermission(currentUser, 'view', 'dashboard', 'global') ||
+      this.userHasPermission(currentUser, 'view', 'kpi', 'department')
+    ) {
       const performanceMap = new Map<
         number,
         {
@@ -1036,7 +1062,10 @@ export class DashboardsService {
       .createQueryBuilder('kpi')
       .where('kpi.deleted_at IS NULL');
 
-    if (this.userHasPermission(currentUser, 'view', 'kpi', 'department') && currentUser.departmentId) {
+    if (
+      this.userHasPermission(currentUser, 'view', 'kpi', 'department') &&
+      currentUser.departmentId
+    ) {
       totalKpiDefinitionsQuery
         .innerJoin(
           'kpi.assignments',

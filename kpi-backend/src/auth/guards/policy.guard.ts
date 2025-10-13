@@ -3,30 +3,19 @@ import { Reflector } from '@nestjs/core';
 import { POLICY_CHECK_KEY } from './policy.decorator';
 import { getRepository } from 'typeorm';
 import { Employee } from 'src/employees/entities/employee.entity';
+import { userHasPermission } from '../../common/utils/permission.utils';
 
 @Injectable()
 export class PolicyGuard implements CanActivate {
   constructor(private readonly reflector: Reflector) {}
 
-  // Helper: check if user has a permission (action, resource, scope)
-  private userHasPermission(user: Employee, action: string, resource: string, scope?: string): boolean {
-    if (!user || !user.roles) return false;
-    
-    // Get all permissions from all roles
-    const allPermissions = user.roles.flatMap(role => {
-      if (role && Array.isArray(role.permissions)) {
-        return role.permissions;
-      }
-      return [];
-    });
-    
-    // Check permission
-    return allPermissions.some(
-      (p) =>
-        p.action === action &&
-        p.resource === resource &&
-        (!scope || p.scope === scope)
-    );
+  private userHasPermission(
+    user: Employee,
+    action: string,
+    resource: string,
+    scope?: string,
+  ): boolean {
+    return userHasPermission(user, action, resource, scope);
   }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -43,7 +32,8 @@ export class PolicyGuard implements CanActivate {
     // Example: check if user is manager of department options.departmentId
     if (policy === 'isManagerOfDepartment') {
       // Check if user has department management permission
-      if (!this.userHasPermission(user, 'view', 'kpi', 'department')) return false;
+      if (!this.userHasPermission(user, 'view', 'kpi', 'department'))
+        return false;
       if (options?.departmentId && user.departmentId !== options.departmentId)
         return false;
       return true;

@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, IsNull, In } from 'typeorm';
 import { KpiReview, ReviewStatus } from './entities/kpi-review.entity';
@@ -10,10 +14,12 @@ import {
   KpiValueStatus,
 } from '../kpi-values/entities/kpi-value.entity';
 import { Employee } from '../employees/entities/employee.entity';
+import { userHasPermission } from '../common/utils/permission.utils';
 import { KpiReviewHistory } from '../kpi-evaluations/entities/kpi-review-history.entity';
 import { NotificationService } from '../notification/notification.service';
 import { NotificationType } from '../notification/entities/notification.entity';
 import { EmployeesService } from '../employees/employees.service';
+import { getKpiStatus } from '../kpis/kpis.service';
 
 @Injectable()
 export class KpiReviewService {
@@ -39,31 +45,13 @@ export class KpiReviewService {
    * @returns Danh sách KPI reviews
    */
 
-  /**
-   * Helper to check if a user has a specific permission (RBAC)
-   */
   private userHasPermission(
     user: Employee,
     resource: string,
     action: string,
     scope?: string,
   ): boolean {
-    if (!user || !user.roles) return false;
-    for (const role of user.roles) {
-      if (role && Array.isArray(role.permissions)) {
-        if (
-          role.permissions.some(
-            (p) =>
-              p.resource === resource &&
-              p.action === action &&
-              (!scope || p.scope === scope),
-          )
-        ) {
-          return true;
-        }
-      }
-    }
-    return false;
+    return userHasPermission(user, action, resource, scope);
   }
 
   async getKpiReviews(filter: any, reqUser?: any): Promise<any[]> {
@@ -739,6 +727,17 @@ export class KpiReviewService {
       throw new Error('Review đã hoàn thành, không thể duyệt tiếp');
     }
 
+    // Check if KPI has expired
+    const kpiValidityStatus = getKpiStatus(
+      review.kpi.start_date,
+      review.kpi.end_date,
+    );
+    if (kpiValidityStatus === 'expired') {
+      throw new BadRequestException(
+        'Cannot score expired KPI. This KPI is no longer valid.',
+      );
+    }
+
     if (
       this.userHasPermission(user, 'kpi-review', 'approve', 'admin') ||
       this.userHasPermission(user, 'kpi-review', 'approve', 'manager')
@@ -792,6 +791,17 @@ export class KpiReviewService {
     if (!review) throw new Error('Review not found');
     if (review.status === ReviewStatus.COMPLETED) {
       throw new Error('Review đã hoàn thành, không thể từ chối');
+    }
+
+    // Check if KPI has expired
+    const kpiValidityStatus = getKpiStatus(
+      review.kpi.start_date,
+      review.kpi.end_date,
+    );
+    if (kpiValidityStatus === 'expired') {
+      throw new BadRequestException(
+        'Cannot change scoring status for expired KPI. This KPI is no longer valid.',
+      );
     }
     let newStatus: ReviewStatus;
     if (

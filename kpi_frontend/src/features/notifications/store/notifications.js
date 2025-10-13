@@ -1,4 +1,4 @@
-import apiClient from "@/core/services/api"; 
+import apiClient from "@/core/services/api";
 import { notification as antNotification } from "ant-design-vue";
 
 const state = {
@@ -23,8 +23,24 @@ const mutations = {
     state.notifications = notifications || [];
   },
   ADD_NOTIFICATION(state, newNotification) {
-    state.notifications.unshift(newNotification);
-    state.unreadCount++;
+    // Check for duplicates before adding
+    const isDuplicate = state.notifications.some(
+      (existing) =>
+        existing.id === newNotification.id ||
+        (existing.type === newNotification.type &&
+          existing.message === newNotification.message &&
+          existing.userId === newNotification.userId &&
+          existing.kpiId === newNotification.kpiId &&
+          Math.abs(
+            new Date(existing.createdAt).getTime() -
+              new Date(newNotification.createdAt).getTime()
+          ) < 5000) // Within 5 seconds
+    );
+
+    if (!isDuplicate) {
+      state.notifications.unshift(newNotification);
+      state.unreadCount++;
+    }
   },
   SET_UNREAD_COUNT(state, count) {
     state.unreadCount = count || 0;
@@ -81,7 +97,7 @@ const actions = {
       const response = await apiClient.get("/notifications", { params });
       const fetchedNotifications = response.data.data || [];
       commit("SET_NOTIFICATIONS", fetchedNotifications);
-      if (Object.prototype.hasOwnProperty.call(response.data, 'unreadCount')) {
+      if (Object.prototype.hasOwnProperty.call(response.data, "unreadCount")) {
         commit("SET_UNREAD_COUNT", response.data.unreadCount || 0);
       }
       return fetchedNotifications;
@@ -99,7 +115,7 @@ const actions = {
     commit("SET_ERROR_COUNT", null);
     try {
       const response = await apiClient.get("/notifications/unread-count");
-      const unreadCount = response.data.count || response.data.unreadCount || 0; 
+      const unreadCount = response.data.count || response.data.unreadCount || 0;
       commit("SET_UNREAD_COUNT", unreadCount);
       return unreadCount;
     } catch (error) {
@@ -122,9 +138,8 @@ const actions = {
     }
 
     try {
-      await apiClient.post(`/notifications/${notificationId}/mark-as-read`); 
+      await apiClient.post(`/notifications/${notificationId}/mark-as-read`);
       await new Promise((resolve) => setTimeout(resolve, 200));
-      
     } catch (error) {
       if (wasUnread) {
         const failedNotification = state.notifications.find(
@@ -153,7 +168,7 @@ const actions = {
     commit("MARK_ALL_AS_READ");
 
     try {
-      await apiClient.post("/notifications/mark-all-as-read"); 
+      await apiClient.post("/notifications/mark-all-as-read");
       await new Promise((resolve) => setTimeout(resolve, 200));
     } catch (error) {
       commit("SET_NOTIFICATIONS", oldNotifications);
@@ -167,23 +182,43 @@ const actions = {
     }
   },
 
-  handleRealtimeNotification({ commit, dispatch }, notificationData) {
+  handleRealtimeNotification({ commit, dispatch, state }, notificationData) {
     console.log("Adding notification to store:", notificationData);
-    commit("ADD_NOTIFICATION", notificationData);
-    console.log("Updated unread count:", state.unreadCount);
 
-    antNotification.info({
-      message: "Thông báo mới!",
-      description: notificationData.message,
-      duration: 5,
-      onClick: () => {
-        
-        
-        if (notificationData.id) {
-          dispatch("markNotificationAsRead", notificationData.id);
-        }
-      },
-    });
+    // Check for duplicates before adding to store and showing popup
+    const isDuplicate = state.notifications.some(
+      (existing) =>
+        existing.id === notificationData.id ||
+        (existing.type === notificationData.type &&
+          existing.message === notificationData.message &&
+          existing.userId === notificationData.userId &&
+          existing.kpiId === notificationData.kpiId &&
+          Math.abs(
+            new Date(existing.createdAt).getTime() -
+              new Date(notificationData.createdAt).getTime()
+          ) < 5000) // Within 5 seconds
+    );
+
+    if (!isDuplicate) {
+      commit("ADD_NOTIFICATION", notificationData);
+      console.log("Updated unread count:", state.unreadCount);
+
+      antNotification.info({
+        message: "Thông báo mới!",
+        description: notificationData.message,
+        duration: 5,
+        onClick: () => {
+          if (notificationData.id) {
+            dispatch("markNotificationAsRead", notificationData.id);
+          }
+        },
+      });
+    } else {
+      console.log(
+        "Duplicate notification detected, skipping:",
+        notificationData
+      );
+    }
   },
 };
 
