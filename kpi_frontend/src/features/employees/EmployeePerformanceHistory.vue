@@ -13,26 +13,44 @@
         />
       </a-form-item>
       <a-form-item :label="$t('employeePerformanceHistory.fromYear')">
-        <a-input-number v-model:value="fromYear" :min="2015" :max="toYear" @change="fetchPerformanceHistory" />
+        <a-input-number
+          v-model:value="fromYear"
+          :min="2015"
+          :max="toYear"
+          @change="fetchPerformanceHistory"
+        />
       </a-form-item>
       <a-form-item :label="$t('employeePerformanceHistory.toYear')">
-        <a-input-number v-model:value="toYear" :min="fromYear" :max="new Date().getFullYear()" @change="fetchPerformanceHistory" />
+        <a-input-number
+          v-model:value="toYear"
+          :min="fromYear"
+          :max="new Date().getFullYear()"
+          @change="fetchPerformanceHistory"
+        />
       </a-form-item>
     </a-form>
 
-    <div v-if="loading" class="loading"><a-spin /> {{ $t("employeePerformanceHistory.loading") }}</div>
+    <div v-if="loading" class="loading">
+      <a-spin /> {{ $t("employeePerformanceHistory.loading") }}
+    </div>
     <div v-else-if="performanceHistory && performanceHistory.length">
       <div class="chart-section" v-if="performanceHistory.length > 1">
         <h3>{{ $t("employeePerformanceHistory.chartTitle") }}</h3>
         <line-chart :chart-data="chartData" :chart-options="chartOptions" />
       </div>
-      <div v-else class="chart-section" style="text-align:center; color:#888;">
+      <div v-else class="chart-section" style="text-align: center; color: #888">
         <h3>{{ $t("employeePerformanceHistory.chartTitle") }}</h3>
         <div>{{ $t("employeePerformanceHistory.onlyOneYear") }}</div>
       </div>
       <div class="table-section">
         <h3>{{ $t("employeePerformanceHistory.tableTitle") }}</h3>
-        <a-table :columns="columns" :data-source="performanceHistory" row-key="year" bordered size="small" />
+        <a-table
+          :columns="columns"
+          :data-source="performanceHistory"
+          row-key="year"
+          bordered
+          size="small"
+        />
       </div>
       <div class="highlight-section" v-if="highlightComments.length">
         <h3>{{ $t("employeePerformanceHistory.highlightTitle") }}</h3>
@@ -48,10 +66,10 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue';
-import { message } from 'ant-design-vue';
-import { useStore } from 'vuex';
-import LineChart from '@/core/components/common/LineChart.vue';
+import { ref, onMounted, computed } from "vue";
+import { message } from "ant-design-vue";
+import { useStore } from "vuex";
+import LineChart from "@/core/components/common/LineChart.vue";
 import { useI18n } from "vue-i18n";
 
 const store = useStore();
@@ -65,11 +83,33 @@ const highlightComments = ref([]);
 const { t: $t } = useI18n();
 
 const columns = computed(() => [
-  { title: $t("employeePerformanceHistory.colYear"), dataIndex: 'year', key: 'year' },
-  { title: $t("employeePerformanceHistory.colAvgScore"), dataIndex: 'averageKpiScore', key: 'averageKpiScore', customRender: ({ text }) => text != null ? Number(text).toFixed(2) : '' },
-  { title: $t("employeePerformanceHistory.colAchievedRate"), dataIndex: 'achievedRate', key: 'achievedRate', customRender: ({ text }) => text != null ? Number(text).toFixed(2) : '' },
-  { title: $t("employeePerformanceHistory.colAchievedCount"), dataIndex: 'achievedCount', key: 'achievedCount' },
-  { title: $t("employeePerformanceHistory.colNotAchievedCount"), dataIndex: 'notAchievedCount', key: 'notAchievedCount' }
+  {
+    title: $t("employeePerformanceHistory.colYear"),
+    dataIndex: "year",
+    key: "year",
+  },
+  {
+    title: $t("employeePerformanceHistory.colAvgScore"),
+    dataIndex: "averageKpiScore",
+    key: "averageKpiScore",
+    customRender: ({ text }) => (text != null ? Number(text).toFixed(2) : ""),
+  },
+  {
+    title: $t("employeePerformanceHistory.colAchievedRate"),
+    dataIndex: "achievedRate",
+    key: "achievedRate",
+    customRender: ({ text }) => (text != null ? Number(text).toFixed(2) : ""),
+  },
+  {
+    title: $t("employeePerformanceHistory.colAchievedCount"),
+    dataIndex: "achievedCount",
+    key: "achievedCount",
+  },
+  {
+    title: $t("employeePerformanceHistory.colNotAchievedCount"),
+    dataIndex: "notAchievedCount",
+    key: "notAchievedCount",
+  },
 ]);
 
 const chartData = computed(() => {
@@ -79,19 +119,25 @@ const chartData = computed(() => {
     datasets: [
       {
         label: $t("employeePerformanceHistory.colAvgScore"),
-        data: performanceHistory.value.map((item) => item.averageKpiScore != null ? Number(item.averageKpiScore.toFixed(2)) : 0),
-        borderColor: '#1890ff',
-        backgroundColor: 'rgba(24,144,255,0.1)',
-        yAxisID: 'y'
+        data: performanceHistory.value.map((item) =>
+          item.averageKpiScore != null
+            ? Number(item.averageKpiScore.toFixed(2))
+            : 0
+        ),
+        borderColor: "#1890ff",
+        backgroundColor: "rgba(24,144,255,0.1)",
+        yAxisID: "y",
       },
       {
         label: $t("employeePerformanceHistory.colAchievedRate"),
-        data: performanceHistory.value.map((item) => item.achievedRate != null ? Number(item.achievedRate.toFixed(2)) : 0),
-        borderColor: '#52c41a',
-        backgroundColor: 'rgba(82,196,26,0.1)',
-        yAxisID: 'y1'
-      }
-    ]
+        data: performanceHistory.value.map((item) =>
+          item.achievedRate != null ? Number(item.achievedRate.toFixed(2)) : 0
+        ),
+        borderColor: "#52c41a",
+        backgroundColor: "rgba(82,196,26,0.1)",
+        yAxisID: "y1",
+      },
+    ],
   };
 });
 
@@ -103,57 +149,61 @@ const chartOptions = {
       beginAtZero: true,
       ticks: {
         precision: 0,
-        callback: function(value) {
-          return value + '%';
-        }
-      }
+        callback: function (value) {
+          return value + "%";
+        },
+      },
     },
     y1: {
       beginAtZero: true,
-      position: 'right',
+      position: "right",
       grid: {
-        drawOnChartArea: false
+        drawOnChartArea: false,
       },
       ticks: {
         precision: 0,
-        callback: function(value) {
-          return value + '%';
-        }
-      }
-    }
+        callback: function (value) {
+          return value + "%";
+        },
+      },
+    },
   },
   plugins: {
-    legend: { display: true }
-  }
+    legend: { display: true },
+  },
 };
 
 async function fetchEmployees() {
   try {
-    await store.dispatch('employees/fetchUsers', { force: true });
-    employeeOptions.value = store.getters['employees/userList'].map((e) => ({
+    await store.dispatch("employees/fetchUsers", { force: true });
+    employeeOptions.value = store.getters["employees/userList"].map((e) => ({
       label: `${e.first_name} ${e.last_name}`,
       value: e.id,
     }));
   } catch (err) {
-    message.error('Không thể tải danh sách nhân viên');
+    message.error("Cannot load employee list");
   }
 }
 
 async function fetchPerformanceHistory() {
   if (!selectedEmployeeId.value) return;
-   store.dispatch("loading/startLoading");
+  store.dispatch("loading/startLoading");
   try {
-    const data = await store.dispatch('employees/fetchEmployeePerformanceHistory', {
-      employeeId: selectedEmployeeId.value,
-      fromYear: fromYear.value,
-      toYear: toYear.value,
-    });
-    performanceHistory.value = (data.years && Array.isArray(data.years)) ? data.years : [];
+    const data = await store.dispatch(
+      "employees/fetchEmployeePerformanceHistory",
+      {
+        employeeId: selectedEmployeeId.value,
+        fromYear: fromYear.value,
+        toYear: toYear.value,
+      }
+    );
+    performanceHistory.value =
+      data.years && Array.isArray(data.years) ? data.years : [];
     highlightComments.value = data.years
       ? data.years.flatMap((item) => item.highlightComments || [])
       : [];
   } catch (err) {
-    message.error('Không thể tải dữ liệu hiệu suất');
+    message.error("Cannot load performance data");
   } finally {
     store.dispatch("loading/stopLoading");
   }

@@ -56,7 +56,7 @@
         v-model:value="filterRole"
         :placeholder="$t('role')"
         allow-clear
-        style="width: 140px; margin-right: 8px"
+        style="width: 220px; margin-right: 8px"
       >
         <template #suffixIcon>
           <safety-certificate-outlined style="color: #1976d2" />
@@ -73,7 +73,7 @@
         v-model:value="filterDepartment"
         :placeholder="$t('departmentLabel')"
         allow-clear
-        style="width: 160px; margin-right: 8px"
+        style="width: 280px; margin-right: 8px"
       >
         <template #suffixIcon>
           <apartment-outlined style="color: #1976d2" />
@@ -89,7 +89,7 @@
         v-model:value="filterSection"
         :placeholder="$t('section')"
         allow-clear
-        style="width: 160px"
+        style="width: 260px"
       >
         <template #suffixIcon>
           <cluster-outlined style="color: #1976d2" />
@@ -223,16 +223,19 @@
           {{ record.section?.name || $t("noData") }}
         </template>
         <template v-else-if="column.dataIndex === 'role'">
-          <span v-if="Array.isArray(record.roles) && record.roles.length">
+          <div
+            v-if="Array.isArray(record.roles) && record.roles.length"
+            class="role-tags-container"
+          >
             <a-tag
               v-for="r in record.roles"
               :key="typeof r === 'string' ? r : r?.name"
               color="blue"
-              style="margin-right: 2px"
+              class="role-tag"
             >
               {{ $t(typeof r === "string" ? r : r?.name) }}
             </a-tag>
-          </span>
+          </div>
           <span v-else style="color: #aaa">{{ $t("noRole") }}</span>
         </template>
         <template v-else-if="column.key === 'actions'">
@@ -997,7 +1000,7 @@ const exportExcel = async () => {
   ];
   worksheet.columns = columns;
 
-  const title = "Danh sách nhân viên";
+  const title = "Employee List";
   worksheet.mergeCells(1, 1, 1, columns.length);
   const titleCell = worksheet.getCell(1, 1);
   titleCell.value = title;
@@ -1121,7 +1124,7 @@ watch(
 );
 const columns = computed(() => [
   {
-    title: $t("employeeFullName") || "Tên nhân viên",
+    title: $t("employeeFullName") || "Employee Name",
     dataIndex: "fullName",
     key: "fullName",
     sorter: (a, b) =>
@@ -1287,5 +1290,17 @@ function roleColor() {
   color: #222;
   display: flex;
   align-items: center;
+}
+
+.role-tags-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: flex-start;
+}
+
+.role-tag {
+  margin: 0 !important;
+  display: inline-block;
 }
 </style>

@@ -3,7 +3,7 @@
     <div class="list-header-modern">
       <schedule-outlined class="header-icon" />
       <div>
-        <h2>{{ t("personalGoal.employeeGoalManagement") }}</h2>
+        <h4>{{ t("personalGoal.employeeGoalManagement") }}</h4>
         <div class="header-desc">{{ t("personalGoal.employeeGoals") }}</div>
       </div>
     </div>
@@ -93,32 +93,30 @@
         </a-col>
       </a-row>
     </a-card>
-    <div style="margin-top: 20px; margin-bottom: 20px">
-      <a-alert
-        v-if="loadingEmployees"
-        :message="t('kpiEmployee.loadingEmployees')"
-        type="info"
-        show-icon
-      >
-        <template #icon>
-          <a-spin />
-        </template>
-      </a-alert>
-      <a-alert
-        v-else-if="employeeError"
-        :message="employeeError"
-        type="error"
-        show-icon
-        closable
-      />
-      <a-alert
-        v-else-if="employees.length === 0"
-        :message="t('kpiEmployee.noEmployeesFound')"
-        type="warning"
-        show-icon
-        closable
-      />
-    </div>
+    <a-alert
+      v-if="loadingEmployees"
+      :message="t('kpiEmployee.loadingEmployees')"
+      type="info"
+      show-icon
+    >
+      <template #icon>
+        <a-spin />
+      </template>
+    </a-alert>
+    <a-alert
+      v-else-if="employeeError"
+      :message="employeeError"
+      type="error"
+      show-icon
+      closable
+    />
+    <a-alert
+      v-else-if="employees.length === 0"
+      :message="t('kpiEmployee.noEmployeesFound')"
+      type="warning"
+      show-icon
+      closable
+    />
     <a-table
       :columns="employeeColumns"
       :data-source="employees"
@@ -583,9 +581,8 @@ function handleGoalModalCancel() {
 
 <style scoped>
 .personal-goal-employee-list-page {
-  padding: 24px;
   background: #f6f8fa;
-  min-height: 100vh;
+  min-height: auto;
 }
 .list-header-modern {
   display: flex;
@@ -602,7 +599,7 @@ function handleGoalModalCancel() {
 }
 .header-desc {
   color: #64748b;
-  font-size: 15px;
+  font-size: 14px;
   margin-top: 2px;
 }
 .filter-card-modern {
@@ -695,5 +692,9 @@ function handleGoalModalCancel() {
 .kpi-empty {
   margin: 32px 0 12px 0;
   text-align: center;
+}
+
+:deep(.ant-card-body) {
+  padding: 0 !important;
 }
 </style>

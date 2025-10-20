@@ -344,6 +344,8 @@
 import { ref, computed, onMounted, watch, reactive } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import { useStore } from "vuex";
+import { getTranslatedErrorMessage } from "@/core/services/messageTranslator";
+import i18n from "@/core/i18n";
 
 import {
   notification,
@@ -926,14 +928,14 @@ const handleChangeCreate = async () => {
 
       if (missingTargetError) {
         assignmentError.value =
-          "Vui lòng nhập Target hợp lệ (>= 0) cho tất cả các mục đã chọn (các phòng ban được chọn trực tiếp không có bộ phận con được chọn HOẶC các bộ phận được chọn).";
+          "Please enter valid Target (>= 0) for all selected items (directly selected departments without selected sub-sections OR selected sections).";
         throw new Error(assignmentError.value);
       }
     }
 
     if (!hasValidAssignment && !form.value.assigned_user_id) {
       assignmentError.value =
-        "Yêu cầu gán: Vui lòng gán cho một người dùng HOẶC chọn ít nhất một đơn vị (phòng ban hoặc bộ phận) và nhập target hợp lệ của nó.";
+        "Assignment requirement: Please assign to a user OR select at least one unit (department or section) and enter its valid target.";
       throw new Error(assignmentError.value);
     }
 
@@ -1010,11 +1012,11 @@ const handleChangeCreate = async () => {
 
     if (!isHandledAssignmentError) {
       const errorMessage =
-        error?.response?.data?.message ||
+        getTranslatedErrorMessage(error?.response?.data?.message) ||
         error?.message ||
-        "KPI creation failed.";
+        i18n.global.t("errors.unknownError");
       notification.error({
-        message: "KPI Creation Failed",
+        message: i18n.global.t("errors.unknownError"),
         description: errorMessage,
         duration: 5,
       });

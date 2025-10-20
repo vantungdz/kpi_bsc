@@ -3,8 +3,8 @@ import { Kpi } from '../../kpis/entities/kpi.entity';
 import { StrategicObjective } from '../../strategic-objectives/entities/strategic-objective.entity';
 
 /**
- * Entity đại diện cho một Perspective (góc nhìn chiến lược)
- * Mỗi perspective có thể chứa nhiều KPI và nhiều StrategicObjective
+ * Entity representing a Perspective (strategic viewpoint)
+ * Each perspective can contain multiple KPIs and multiple StrategicObjectives
  */
 @Entity('perspectives')
 export class Perspective {

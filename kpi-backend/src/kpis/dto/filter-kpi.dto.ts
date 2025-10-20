@@ -1,4 +1,10 @@
-import { IsOptional, IsString, IsInt, IsEnum } from 'class-validator';
+import {
+  IsOptional,
+  IsString,
+  IsInt,
+  IsEnum,
+  IsDateString,
+} from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { Transform, Expose } from 'class-transformer';
 
@@ -13,7 +19,7 @@ export enum KpiStatus {
 export class KpiFilterDto {
   @ApiProperty({
     example: 'Productivity',
-    description: 'Tìm kiếm theo tên KPI',
+    description: 'Search by KPI name',
     required: false,
   })
   @IsString()
@@ -22,7 +28,7 @@ export class KpiFilterDto {
 
   @ApiProperty({
     example: 1,
-    description: 'Lọc theo ID phòng ban được gán',
+    description: 'Filter by assigned department ID',
     required: false,
   })
   @Transform(({ value }) => {
@@ -37,7 +43,7 @@ export class KpiFilterDto {
 
   @ApiProperty({
     example: 1,
-    description: 'Lọc theo ID bộ phận được gán',
+    description: 'Filter by assigned section ID',
     required: false,
   })
   @Transform(({ value }) => {
@@ -52,7 +58,7 @@ export class KpiFilterDto {
 
   @ApiProperty({
     example: 1,
-    description: 'Lọc theo ID nhóm được gán',
+    description: 'Filter by assigned team ID',
     required: false,
   })
   @Transform(({ value }) => {
@@ -67,7 +73,7 @@ export class KpiFilterDto {
 
   @ApiProperty({
     example: 2,
-    description: 'Lọc theo ID khía cạnh BSC',
+    description: 'Filter by BSC perspective ID',
     required: false,
   })
   @Transform(({ value }) => {
@@ -82,7 +88,7 @@ export class KpiFilterDto {
 
   @ApiProperty({
     example: 4,
-    description: 'Lọc theo ID nhân viên được gán',
+    description: 'Filter by assigned employee ID',
     required: false,
   })
   @Transform(({ value }) => {
@@ -101,8 +107,7 @@ export class KpiFilterDto {
 
   @ApiProperty({
     example: 'company',
-    description:
-      'Lọc theo phạm vi KPI (company, department, section, employee)',
+    description: 'Filter by KPI scope (company, department, section, employee)',
     required: false,
     enum: ['company', 'department', 'section', 'employee'],
   })
@@ -111,15 +116,27 @@ export class KpiFilterDto {
   @IsEnum(['company', 'department', 'section', 'employee'])
   scope?: string;
 
-  @IsString()
+  @ApiProperty({
+    example: '2024-01-01',
+    description: 'Filter by start date',
+    required: false,
+  })
+  @IsDateString()
   @IsOptional()
+  @Expose({ name: 'start_date' })
   startDate?: string;
 
-  @IsString()
+  @ApiProperty({
+    example: '2024-12-31',
+    description: 'Filter by end date',
+    required: false,
+  })
+  @IsDateString()
   @IsOptional()
+  @Expose({ name: 'end_date' })
   endDate?: string;
 
-  @ApiProperty({ example: 1, description: 'Trang hiện tại', required: false })
+  @ApiProperty({ example: 1, description: 'Current page', required: false })
   @Transform(({ value }) => {
     if (value === null || value === undefined || value === '') return 1;
     const parsed = parseInt(value, 10);
@@ -131,7 +148,7 @@ export class KpiFilterDto {
 
   @ApiProperty({
     example: 15,
-    description: 'Số mục mỗi trang',
+    description: 'Items per page',
     required: false,
   })
   @Transform(({ value }) => {
@@ -145,7 +162,7 @@ export class KpiFilterDto {
 
   @ApiProperty({
     example: 'name',
-    description: 'Sắp xếp theo trường (vd: name, created_at)',
+    description: 'Sort by field (e.g: name, created_at)',
     required: false,
   })
   @IsString()
@@ -155,7 +172,7 @@ export class KpiFilterDto {
   @ApiProperty({
     enum: KpiStatus,
     example: KpiStatus.APPROVED,
-    description: 'Lọc theo trạng thái quy trình KPI',
+    description: 'Filter by KPI process status',
     required: false,
   })
   @IsEnum(KpiStatus)
@@ -165,7 +182,7 @@ export class KpiFilterDto {
   @ApiProperty({
     enum: ['ASC', 'DESC'],
     example: 'DESC',
-    description: 'Thứ tự sắp xếp (ASC hoặc DESC)',
+    description: 'Sort order (ASC or DESC)',
     required: false,
   })
   @IsEnum(['ASC', 'DESC'])

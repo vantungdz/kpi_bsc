@@ -1,4 +1,4 @@
-import apiClient from '@/core/services/api';
+import apiClient from "@/core/services/api";
 
 const state = () => ({
   items: [],
@@ -20,38 +20,38 @@ const mutations = {
 
 const actions = {
   async fetchDocuments({ commit }) {
-    commit('SET_LOADING', true);
+    commit("SET_LOADING", true);
     try {
-      const res = await apiClient.get('/documents');
-      commit('SET_ITEMS', res.data);
+      const res = await apiClient.get("/documents");
+      commit("SET_ITEMS", res.data);
     } catch (err) {
-      commit('SET_ERROR', err?.response?.data?.message || err.message);
+      commit("SET_ERROR", err?.response?.data?.message || err.message);
     } finally {
-      commit('SET_LOADING', false);
+      commit("SET_LOADING", false);
     }
   },
   async uploadDocument({ dispatch, commit }, formData) {
-    commit('SET_LOADING', true);
+    commit("SET_LOADING", true);
     try {
-      await apiClient.post('/documents/upload', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
+      await apiClient.post("/documents/upload", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
       });
-      dispatch('fetchDocuments');
+      dispatch("fetchDocuments");
     } catch (err) {
-      commit('SET_ERROR', err?.response?.data?.message || err.message);
+      commit("SET_ERROR", err?.response?.data?.message || err.message);
     } finally {
-      commit('SET_LOADING', false);
+      commit("SET_LOADING", false);
     }
   },
   async deleteDocument({ dispatch, commit }, id) {
-    commit('SET_LOADING', true);
+    commit("SET_LOADING", true);
     try {
       await apiClient.delete(`/documents/${id}`);
-      dispatch('fetchDocuments');
+      dispatch("fetchDocuments");
     } catch (err) {
-      commit('SET_ERROR', err?.response?.data?.message || err.message);
+      commit("SET_ERROR", err?.response?.data?.message || err.message);
     } finally {
-      commit('SET_LOADING', false);
+      commit("SET_LOADING", false);
     }
   },
 };

@@ -482,23 +482,11 @@ const assignableUserOptions = computed(() => {
     .map((assign) => assign.employee.id);
 
   const alreadyAssignedUserIdsSet = new Set(alreadyAssignedUserIds);
-  console.log(
-    "assignableUserOptions - alreadyAssignedUserIds:",
-    alreadyAssignedUserIds
-  );
 
   const filteredAssignableUsers = allFetchableUsers.filter((user) => {
     const isNotAssigned = !alreadyAssignedUserIdsSet.has(user.id);
-    console.log(
-      `User ${user.id} (${user.username}): isNotAssigned=${isNotAssigned}`
-    );
     return user && typeof user.id !== "undefined" && isNotAssigned;
   });
-
-  console.log(
-    "assignableUserOptions - filteredAssignableUsers:",
-    filteredAssignableUsers
-  );
 
   const result = filteredAssignableUsers.map((user) => ({
     value: user.id,
@@ -507,7 +495,6 @@ const assignableUserOptions = computed(() => {
     avatar_url: user?.avatar_url,
   }));
 
-  console.log("assignableUserOptions - final result:", result);
   return result;
 });
 
@@ -593,11 +580,6 @@ const fetchAssignableUsersData = async (
   modalDeptFilter = null,
   modalSectFilter = null
 ) => {
-  console.log("fetchAssignableUsersData called with:", {
-    modalDeptFilter,
-    modalSectFilter,
-  });
-
   let fetchedUsersList = [];
 
   if (!isEditingUserAssignment.value) {
@@ -610,37 +592,14 @@ const fetchAssignableUsersData = async (
 
   try {
     if (modalSectFilter && modalDeptFilter) {
-      console.log("Fetching users by section:", modalSectFilter);
-      console.log("API call: GET /employees?sectionId=" + modalSectFilter);
       await store.dispatch("employees/fetchUsersBySection", modalSectFilter);
       fetchedUsersList =
         store.getters["employees/usersBySection"](modalSectFilter);
-      console.log("Users fetched by section:", fetchedUsersList);
-      console.log("First user structure:", fetchedUsersList[0]);
-      if (fetchedUsersList[0]) {
-        console.log("First user sectionId:", fetchedUsersList[0].sectionId);
-        console.log(
-          "First user departmentId:",
-          fetchedUsersList[0].departmentId
-        );
-      }
     } else if (modalDeptFilter) {
-      console.log("Fetching users by department:", modalDeptFilter);
-      console.log("API call: GET /employees?departmentId=" + modalDeptFilter);
       await store.dispatch("employees/fetchUsersByDepartment", modalDeptFilter);
       fetchedUsersList =
         store.getters["employees/usersByDepartment"](modalDeptFilter);
-      console.log("Users fetched by department:", fetchedUsersList);
-      console.log("First user structure:", fetchedUsersList[0]);
-      if (fetchedUsersList[0]) {
-        console.log("First user sectionId:", fetchedUsersList[0].sectionId);
-        console.log(
-          "First user departmentId:",
-          fetchedUsersList[0].departmentId
-        );
-      }
     } else {
-      console.log("No filters provided, returning empty array");
       fetchedUsersList = [];
     }
 
@@ -670,12 +629,6 @@ const fetchAssignableUsersData = async (
 };
 
 const openAssignUserModal = () => {
-  console.log("openAssignUserModal called");
-  console.log("Current allSections:", props.allSections);
-  console.log("Current allDepartments:", props.allDepartments);
-  console.log("allDepartments length:", props.allDepartments?.length);
-  console.log("allSections length:", props.allSections?.length);
-
   isEditingUserAssignment.value = false;
   editingUserAssignmentRecord.value = null;
   selectedUserIds.value = [];
@@ -690,73 +643,33 @@ const openAssignUserModal = () => {
 
   // Ensure sections are loaded when modal opens
   if (!props.allSections || props.allSections.length === 0) {
-    console.log("Sections not loaded, fetching...");
     store.dispatch("sections/fetchSections", { forceRefresh: true });
   }
 
   // Ensure departments are loaded when modal opens
   if (!props.allDepartments || props.allDepartments.length === 0) {
-    console.log("Departments not loaded, fetching...");
     store.dispatch("departments/fetchDepartments", { forceRefresh: true });
   }
 };
 
 const handleModalDepartmentFilterChange = () => {
-  console.log("=== DEPARTMENT CHANGE EVENT TRIGGERED ===");
-  console.log(
-    "handleModalDepartmentFilterChange called with departmentId:",
-    modalFilterDepartmentId.value
-  );
-  console.log(
-    "Current modalFilterDepartmentId:",
-    modalFilterDepartmentId.value
-  );
-  console.log("Current modalFilterSectionId:", modalFilterSectionId.value);
-
   modalFilterSectionId.value = null;
   assignableUsers.value = [];
   selectedUserIds.value = [];
   if (modalFilterDepartmentId.value) {
-    console.log(
-      "Calling fetchAssignableUsersData with department:",
-      modalFilterDepartmentId.value
-    );
     fetchAssignableUsersData(modalFilterDepartmentId.value, null);
   }
 };
 
 const handleModalSectionFilterChange = () => {
-  console.log("=== SECTION CHANGE EVENT TRIGGERED ===");
-  console.log(
-    "handleModalSectionFilterChange called with sectionId:",
-    modalFilterSectionId.value,
-    "departmentId:",
-    modalFilterDepartmentId.value
-  );
-  console.log(
-    "Current modalFilterDepartmentId:",
-    modalFilterDepartmentId.value
-  );
-  console.log("Current modalFilterSectionId:", modalFilterSectionId.value);
-
   assignableUsers.value = [];
   selectedUserIds.value = [];
   if (modalFilterSectionId.value && modalFilterDepartmentId.value) {
-    console.log(
-      "Calling fetchAssignableUsersData with department:",
-      modalFilterDepartmentId.value,
-      "section:",
-      modalFilterSectionId.value
-    );
     fetchAssignableUsersData(
       modalFilterDepartmentId.value,
       modalFilterSectionId.value
     );
   } else if (modalFilterDepartmentId.value) {
-    console.log(
-      "Calling fetchAssignableUsersData with department only:",
-      modalFilterDepartmentId.value
-    );
     fetchAssignableUsersData(modalFilterDepartmentId.value, null);
   }
 };

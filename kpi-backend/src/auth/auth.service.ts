@@ -57,7 +57,7 @@ export class AuthService {
       user.id,
     );
 
-    // Tạo session mới và logout tất cả session cũ
+    // Create new session and logout all old sessions
     const sessionId = await this.sessionService.createSession(
       user.id,
       deviceInfo || 'Unknown Device',
@@ -81,7 +81,7 @@ export class AuthService {
     const payload = {
       id: user.id,
       username: user.username,
-      sessionId, // Thêm sessionId vào JWT payload
+      sessionId, // Add sessionId to JWT payload
       roles: Array.isArray(user.roles)
         ? user.roles.map((r: any) => (typeof r === 'string' ? r : r?.name))
         : [], // Pass roles array to JWT
@@ -99,7 +99,7 @@ export class AuthService {
   }
 
   async logout(userId: number, sessionId?: string) {
-    // Logout session cụ thể hoặc tất cả sessions của user
+    // Logout specific session or all user sessions
     if (sessionId) {
       await this.sessionService.logoutSession(sessionId);
     } else {

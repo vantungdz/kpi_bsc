@@ -8,12 +8,16 @@ import {
   Post,
   Put,
   Delete,
+  UsePipes,
+  ValidationPipe,
 } from '@nestjs/common';
 import { Perspective } from 'src/perspective/entities/perspective.entity';
 import { PerspectiveService } from './perspective.service';
 import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
 import { RolesGuard } from 'src/auth/guards/roles.guard';
 import { Roles } from 'src/auth/guards/roles.decorator';
+import { CreatePerspectiveDto } from './dto/create-perspective.dto';
+import { UpdatePerspectiveDto } from './dto/update-perspective.dto';
 
 @Controller('perspectives')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -31,18 +35,20 @@ export class PerspectiveController {
   }
 
   @Post()
+  @UsePipes(new ValidationPipe())
   async create(
-    @Body() perspective: Partial<Perspective>,
+    @Body() createPerspectiveDto: CreatePerspectiveDto,
   ): Promise<Perspective> {
-    return await this.perspectivesService.create(perspective);
+    return await this.perspectivesService.create(createPerspectiveDto);
   }
 
   @Put(':id')
+  @UsePipes(new ValidationPipe())
   async update(
     @Param('id', ParseIntPipe) id: number,
-    @Body() perspective: Partial<Perspective>,
+    @Body() updatePerspectiveDto: UpdatePerspectiveDto,
   ): Promise<Perspective> {
-    return await this.perspectivesService.update(id, perspective);
+    return await this.perspectivesService.update(id, updatePerspectiveDto);
   }
 
   @Delete(':id')

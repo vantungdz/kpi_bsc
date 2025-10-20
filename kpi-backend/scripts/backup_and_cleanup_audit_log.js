@@ -22,7 +22,6 @@ const dataSourceOptions = require('../dist/data-source.js').dataSourceOptions;
   const allLogs = await auditLogRepo.find({ order: { createdAt: 'ASC' } });
 
   if (!allLogs.length) {
-    console.log('Không có log nào để backup.');
     process.exit(0);
   }
 
@@ -32,7 +31,7 @@ const dataSourceOptions = require('../dist/data-source.js').dataSourceOptions;
 
   // Tạo file CSV
   const now = new Date();
-  const fileName = `audit_log_backup_to_${now.toISOString().slice(0,10)}.csv`;
+  const fileName = `audit_log_backup_to_${now.toISOString().slice(0, 10)}.csv`;
   const filePath = path.join(backupDir, fileName);
   const header = 'id,action,resource,userId,username,ip,data,createdAt\n';
   const escapeCsv = (val) => {
@@ -43,24 +42,28 @@ const dataSourceOptions = require('../dist/data-source.js').dataSourceOptions;
     }
     return str;
   };
-  const rows = allLogs.map(log => [
-    log.id,
-    log.action,
-    log.resource,
-    log.userId,
-    log.username,
-    log.ip,
-    escapeCsv(JSON.stringify(log.data)),
-    log.createdAt.toISOString(),
-  ].map(escapeCsv).join(',')).join('\n');
+  const rows = allLogs
+    .map((log) =>
+      [
+        log.id,
+        log.action,
+        log.resource,
+        log.userId,
+        log.username,
+        log.ip,
+        escapeCsv(JSON.stringify(log.data)),
+        log.createdAt.toISOString(),
+      ]
+        .map(escapeCsv)
+        .join(','),
+    )
+    .join('\n');
   fs.writeFileSync(filePath, header + rows, 'utf8');
-  console.log(`Đã backup ${allLogs.length} log vào ${filePath}`);
 
   // Xóa toàn bộ log khỏi DB
-  const ids = allLogs.map(l => l.id);
+  const ids = allLogs.map((l) => l.id);
   if (ids.length > 0) {
     await auditLogRepo.createQueryBuilder().delete().whereInIds(ids).execute();
-    console.log(`Đã xóa ${ids.length} log khỏi database.`);
   }
 
   await ds.destroy();

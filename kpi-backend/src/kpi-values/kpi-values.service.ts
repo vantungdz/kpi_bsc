@@ -210,21 +210,14 @@ export class KpiValuesService {
 
         let initialStatusAfterSubmit: KpiValueStatus;
 
-        if (
-          this.userHasPermission(submitter, 'kpi-value', 'approve', 'manager')
-        ) {
+        if (userHasPermission(submitter, 'approve', 'kpi-value', 'manager')) {
           initialStatusAfterSubmit = KpiValueStatus.APPROVED;
         } else if (
-          this.userHasPermission(
-            submitter,
-            'kpi-value',
-            'approve',
-            'department',
-          )
+          userHasPermission(submitter, 'approve', 'kpi-value', 'department')
         ) {
           initialStatusAfterSubmit = KpiValueStatus.PENDING_MANAGER_APPROVAL;
         } else if (
-          this.userHasPermission(submitter, 'kpi-value', 'approve', 'section')
+          userHasPermission(submitter, 'approve', 'kpi-value', 'section')
         ) {
           initialStatusAfterSubmit = KpiValueStatus.PENDING_DEPT_APPROVAL;
         } else {
@@ -333,18 +326,25 @@ export class KpiValuesService {
     if (!user) {
       throw new UnauthorizedException('Approving user not found.');
     }
+
     const assignment =
       kpiValue.kpiAssignment ??
-      (await this.kpiAssignmentRepository.findOneBy({
-        id: kpiValue.kpi_assigment_id,
+      (await this.kpiAssignmentRepository.findOne({
+        where: { id: kpiValue.kpi_assigment_id },
+        relations: ['employee', 'section', 'department'],
       }));
-    const canApprove = await this.hasDynamicRole(
-      user,
-      'kpi-value',
-      'approve',
-      'section',
-      assignment,
-    );
+
+    // Check basic permission first
+    let canApprove = userHasPermission(user, 'approve', 'kpi-value', 'section');
+
+    // If no basic permission, check section-specific logic
+    if (!canApprove && user.sectionId && assignment) {
+      canApprove =
+        userHasPermission(user, 'approve', 'kpi-value', 'section') &&
+        (assignment.assigned_to_section === user.sectionId ||
+          assignment.employee?.sectionId === user.sectionId);
+    }
+
     if (!canApprove) {
       throw new UnauthorizedException(
         'User does not have permission for section approval.',
@@ -356,12 +356,7 @@ export class KpiValuesService {
       );
     }
 
-    const newStatus = this.userHasPermission(
-      user,
-      'kpi-value',
-      'approve',
-      'manager',
-    )
+    const newStatus = userHasPermission(user, 'approve', 'kpi-value', 'manager')
       ? KpiValueStatus.APPROVED
       : KpiValueStatus.PENDING_DEPT_APPROVAL;
     kpiValue.status = newStatus;
@@ -384,8 +379,9 @@ export class KpiValuesService {
 
     const assignmentFound =
       savedValue.kpiAssignment ??
-      (await this.kpiAssignmentRepository.findOneBy({
-        id: savedValue.kpi_assigment_id,
+      (await this.kpiAssignmentRepository.findOne({
+        where: { id: savedValue.kpi_assigment_id },
+        relations: ['kpi'],
       }));
     if (savedValue.status === KpiValueStatus.APPROVED) {
       if (assignmentFound && typeof assignmentFound.kpi_id === 'number') {
@@ -440,13 +436,16 @@ export class KpiValuesService {
       (await this.kpiAssignmentRepository.findOneBy({
         id: kpiValue.kpi_assigment_id,
       }));
-    const canReject = await this.hasDynamicRole(
-      user,
-      'kpi-value',
-      'reject',
-      'section',
-      assignment,
-    );
+    // Check basic permission first
+    let canReject = userHasPermission(user, 'reject', 'kpi-value', 'section');
+
+    // If no basic permission, check section-specific logic
+    if (!canReject && user.sectionId && assignment) {
+      canReject =
+        userHasPermission(user, 'reject', 'kpi-value', 'section') &&
+        (assignment.assigned_to_section === user.sectionId ||
+          assignment.employee?.sectionId === user.sectionId);
+    }
     if (!canReject) {
       throw new UnauthorizedException(
         'User does not have permission to reject at Section level.',
@@ -463,12 +462,10 @@ export class KpiValuesService {
 
     let newStatus: KpiValueStatus;
     let logAction: string;
-    if (this.userHasPermission(user, 'kpi-value', 'reject', 'manager')) {
+    if (userHasPermission(user, 'reject', 'kpi-value', 'manager')) {
       newStatus = KpiValueStatus.REJECTED_BY_MANAGER;
       logAction = 'REJECT_MANAGER';
-    } else if (
-      this.userHasPermission(user, 'kpi-value', 'reject', 'department')
-    ) {
+    } else if (userHasPermission(user, 'reject', 'kpi-value', 'department')) {
       newStatus = KpiValueStatus.REJECTED_BY_DEPT;
       logAction = 'REJECT_DEPT';
     } else {
@@ -528,13 +525,22 @@ export class KpiValuesService {
       (await this.kpiAssignmentRepository.findOneBy({
         id: kpiValue.kpi_assigment_id,
       }));
-    const canApprove = await this.hasDynamicRole(
+    // Check basic permission first
+    let canApprove = userHasPermission(
       user,
-      'kpi-value',
       'approve',
+      'kpi-value',
       'department',
-      assignment,
     );
+
+    // If no basic permission, check department-specific logic
+    if (!canApprove && user.departmentId && assignment) {
+      canApprove =
+        userHasPermission(user, 'approve', 'kpi-value', 'department') &&
+        (assignment.assigned_to_department === user.departmentId ||
+          assignment.employee?.departmentId === user.departmentId ||
+          assignment.section?.department?.id === user.departmentId);
+    }
     if (!canApprove) {
       throw new UnauthorizedException(
         'User does not have permission for department approval.',
@@ -551,12 +557,7 @@ export class KpiValuesService {
       );
     }
 
-    const newStatus = this.userHasPermission(
-      user,
-      'kpi-value',
-      'approve',
-      'manager',
-    )
+    const newStatus = userHasPermission(user, 'approve', 'kpi-value', 'manager')
       ? KpiValueStatus.APPROVED
       : KpiValueStatus.PENDING_MANAGER_APPROVAL;
     kpiValue.status = newStatus;
@@ -579,8 +580,9 @@ export class KpiValuesService {
 
     const assignmentFound =
       savedValue.kpiAssignment ??
-      (await this.kpiAssignmentRepository.findOneBy({
-        id: savedValue.kpi_assigment_id,
+      (await this.kpiAssignmentRepository.findOne({
+        where: { id: savedValue.kpi_assigment_id },
+        relations: ['kpi'],
       }));
 
     if (savedValue.status === KpiValueStatus.APPROVED) {
@@ -637,13 +639,22 @@ export class KpiValuesService {
       (await this.kpiAssignmentRepository.findOneBy({
         id: kpiValue.kpi_assigment_id,
       }));
-    const canReject = await this.hasDynamicRole(
+    // Check basic permission first
+    let canReject = userHasPermission(
       user,
-      'kpi-value',
       'reject',
+      'kpi-value',
       'department',
-      assignment,
     );
+
+    // If no basic permission, check department-specific logic
+    if (!canReject && user.departmentId && assignment) {
+      canReject =
+        userHasPermission(user, 'reject', 'kpi-value', 'department') &&
+        (assignment.assigned_to_department === user.departmentId ||
+          assignment.employee?.departmentId === user.departmentId ||
+          assignment.section?.department?.id === user.departmentId);
+    }
     if (!canReject) {
       throw new UnauthorizedException(
         'User does not have permission for Department level rejection.',
@@ -665,12 +676,10 @@ export class KpiValuesService {
 
     let newStatus: KpiValueStatus;
     let logAction: string;
-    if (this.userHasPermission(user, 'kpi-value', 'reject', 'manager')) {
+    if (userHasPermission(user, 'reject', 'kpi-value', 'manager')) {
       newStatus = KpiValueStatus.REJECTED_BY_MANAGER;
       logAction = 'REJECT_MANAGER';
-    } else if (
-      this.userHasPermission(user, 'kpi-value', 'reject', 'department')
-    ) {
+    } else if (userHasPermission(user, 'reject', 'kpi-value', 'department')) {
       newStatus = KpiValueStatus.REJECTED_BY_DEPT;
       logAction = 'REJECT_DEPT';
     } else {
@@ -730,13 +739,17 @@ export class KpiValuesService {
       (await this.kpiAssignmentRepository.findOneBy({
         id: kpiValue.kpi_assigment_id,
       }));
-    const canApprove = await this.hasDynamicRole(
-      user,
-      'kpi-value',
-      'approve',
-      'manager',
-      assignment,
-    );
+    // Check basic permission first
+    let canApprove = userHasPermission(user, 'approve', 'kpi-value', 'manager');
+
+    // If no basic permission, check manager-specific logic
+    if (!canApprove && user.departmentId && assignment) {
+      canApprove =
+        userHasPermission(user, 'approve', 'kpi-value', 'manager') &&
+        (assignment.assigned_to_department === user.departmentId ||
+          assignment.employee?.departmentId === user.departmentId ||
+          assignment.section?.department?.id === user.departmentId);
+    }
     if (!canApprove) {
       throw new UnauthorizedException(
         'User does not have permission for manager approval.',
@@ -773,8 +786,9 @@ export class KpiValuesService {
 
     const assignmentFound =
       savedValue.kpiAssignment ??
-      (await this.kpiAssignmentRepository.findOneBy({
-        id: savedValue.kpi_assigment_id,
+      (await this.kpiAssignmentRepository.findOne({
+        where: { id: savedValue.kpi_assigment_id },
+        relations: ['kpi'],
       }));
     if (assignmentFound && typeof assignmentFound.kpi_id === 'number') {
       this.eventEmitter.emit('kpi_value.approved', {
@@ -813,13 +827,17 @@ export class KpiValuesService {
       (await this.kpiAssignmentRepository.findOneBy({
         id: kpiValue.kpi_assigment_id,
       }));
-    const canReject = await this.hasDynamicRole(
-      user,
-      'kpi-value',
-      'reject',
-      'manager',
-      assignment,
-    );
+    // Check basic permission first
+    let canReject = userHasPermission(user, 'reject', 'kpi-value', 'manager');
+
+    // If no basic permission, check manager-specific logic
+    if (!canReject && user.departmentId && assignment) {
+      canReject =
+        userHasPermission(user, 'reject', 'kpi-value', 'manager') &&
+        (assignment.assigned_to_department === user.departmentId ||
+          assignment.employee?.departmentId === user.departmentId ||
+          assignment.section?.department?.id === user.departmentId);
+    }
     if (!canReject) {
       throw new UnauthorizedException(
         'User does not have permission to reject at Manager level.',
@@ -842,7 +860,7 @@ export class KpiValuesService {
 
     let newStatus: KpiValueStatus;
     let logAction: string;
-    if (this.userHasPermission(user, 'kpi-value', 'reject', 'manager')) {
+    if (userHasPermission(user, 'reject', 'kpi-value', 'manager')) {
       newStatus = KpiValueStatus.REJECTED_BY_MANAGER;
       logAction = 'REJECT_MANAGER';
     } else {
@@ -902,15 +920,13 @@ export class KpiValuesService {
       }
     }
 
-    if (this.userHasPermission(approver, 'kpi-value', 'approve', 'manager')) {
+    if (userHasPermission(approver, 'approve', 'kpi-value', 'manager')) {
       kpiValue.status = KpiValueStatus.APPROVED;
     } else if (
-      this.userHasPermission(approver, 'kpi-value', 'approve', 'department')
+      userHasPermission(approver, 'approve', 'kpi-value', 'department')
     ) {
       kpiValue.status = KpiValueStatus.PENDING_MANAGER_APPROVAL;
-    } else if (
-      this.userHasPermission(approver, 'kpi-value', 'approve', 'section')
-    ) {
+    } else if (userHasPermission(approver, 'approve', 'kpi-value', 'section')) {
       kpiValue.status = KpiValueStatus.PENDING_DEPT_APPROVAL;
     } else {
       throw new BadRequestException('Invalid approver permission.');
@@ -940,15 +956,13 @@ export class KpiValuesService {
       }
     }
 
-    if (this.userHasPermission(approver, 'kpi-value', 'reject', 'manager')) {
+    if (userHasPermission(approver, 'reject', 'kpi-value', 'manager')) {
       kpiValue.status = KpiValueStatus.REJECTED_BY_MANAGER;
     } else if (
-      this.userHasPermission(approver, 'kpi-value', 'reject', 'department')
+      userHasPermission(approver, 'reject', 'kpi-value', 'department')
     ) {
       kpiValue.status = KpiValueStatus.REJECTED_BY_DEPT;
-    } else if (
-      this.userHasPermission(approver, 'kpi-value', 'reject', 'section')
-    ) {
+    } else if (userHasPermission(approver, 'reject', 'kpi-value', 'section')) {
       kpiValue.status = KpiValueStatus.REJECTED_BY_SECTION;
     } else {
       throw new BadRequestException('Invalid approver permission.');
@@ -1016,48 +1030,6 @@ export class KpiValuesService {
     return kpiValue;
   }
 
-  private userHasPermission(
-    user: Employee,
-    resource: string,
-    action: string,
-    scope?: string,
-  ): boolean {
-    return userHasPermission(user, action, resource, scope);
-  }
-
-  private async hasDynamicRole(
-    user: Employee,
-    resource: string,
-    action: string,
-    scope: string,
-    assignment?: any,
-  ): Promise<boolean> {
-    if (!user || !user.roles) return false;
-
-    if (this.userHasPermission(user, resource, action, scope)) return true;
-
-    if (scope === 'section') {
-      return (
-        this.userHasPermission(user, resource, action, 'section') &&
-        user.sectionId &&
-        assignment &&
-        (assignment.assigned_to_section === user.sectionId ||
-          assignment.employee?.sectionId === user.sectionId)
-      );
-    }
-    if (scope === 'department') {
-      return (
-        this.userHasPermission(user, resource, action, 'department') &&
-        user.departmentId &&
-        assignment &&
-        (assignment.assigned_to_department === user.departmentId ||
-          assignment.employee?.departmentId === user.departmentId ||
-          assignment.section?.department?.id === user.departmentId)
-      );
-    }
-    return false;
-  }
-
   private async logWorkflowHistory(
     kpiValue: KpiValue,
     statusBefore: KpiValueStatus | null | undefined,
@@ -1096,6 +1068,20 @@ export class KpiValuesService {
   }
 
   async getPendingApprovals(user: Employee): Promise<KpiValue[]> {
+    // Debug: Check if there are any pending KPI values in database
+    const allPendingValues = await this.kpiValuesRepository.find({
+      where: [
+        { status: KpiValueStatus.PENDING_SECTION_APPROVAL },
+        { status: KpiValueStatus.PENDING_DEPT_APPROVAL },
+        { status: KpiValueStatus.PENDING_MANAGER_APPROVAL },
+      ],
+      relations: [
+        'kpiAssignment',
+        'kpiAssignment.kpi',
+        'kpiAssignment.employee',
+      ],
+    });
+
     if (
       !user ||
       !user.roles ||
@@ -1107,29 +1093,42 @@ export class KpiValuesService {
       );
     }
 
-    const canApproveSection = this.userHasPermission(
+    const canApproveSection = userHasPermission(
       user,
-      'kpi-value',
       'approve',
+      'kpi-value',
       'section',
     );
-    const canApproveDepartment = this.userHasPermission(
+    const canApproveDepartment = userHasPermission(
       user,
-      'kpi-value',
       'approve',
+      'kpi-value',
       'department',
     );
-    const canApproveManager = this.userHasPermission(
+    const canApproveManager = userHasPermission(
       user,
-      'kpi-value',
       'approve',
+      'kpi-value',
       'manager',
     );
-    const canApproveAdmin = this.userHasPermission(
+    // Add view permission checks
+    const canViewSection = userHasPermission(
       user,
+      'view',
       'kpi-value',
-      'approve',
-      'admin',
+      'section',
+    );
+    const canViewDepartment = userHasPermission(
+      user,
+      'view',
+      'kpi-value',
+      'department',
+    );
+    const canViewManager = userHasPermission(
+      user,
+      'view',
+      'kpi-value',
+      'manager',
     );
 
     const query = this.kpiValuesRepository
@@ -1148,61 +1147,69 @@ export class KpiValuesService {
       .leftJoinAndSelect('kpi.perspective', 'perspective');
 
     let applied = false;
-    if (canApproveAdmin) {
+    const allowedStatuses: KpiValueStatus[] = [];
+
+    // Collect all statuses user can view or approve
+    if (canApproveSection || canViewSection) {
+      allowedStatuses.push(KpiValueStatus.PENDING_SECTION_APPROVAL);
+    }
+    if (canApproveDepartment || canViewDepartment) {
+      allowedStatuses.push(KpiValueStatus.PENDING_DEPT_APPROVAL);
+    }
+    if (canApproveManager || canViewManager) {
+      allowedStatuses.push(KpiValueStatus.PENDING_MANAGER_APPROVAL);
+    }
+
+    if (allowedStatuses.length > 0) {
+      // Remove duplicates
+      const uniqueStatuses = [...new Set(allowedStatuses)];
       query.where('kpiValue.status IN (:...statuses)', {
-        statuses: [
-          KpiValueStatus.PENDING_SECTION_APPROVAL,
-          KpiValueStatus.PENDING_DEPT_APPROVAL,
-          KpiValueStatus.PENDING_MANAGER_APPROVAL,
-        ],
+        statuses: uniqueStatuses,
       });
-      applied = true;
-    } else if (canApproveManager) {
-      query.where('kpiValue.status = :status', {
-        status: KpiValueStatus.PENDING_MANAGER_APPROVAL,
-      });
-      applied = true;
-    } else if (canApproveDepartment && user.departmentId) {
-      query
-        .where('kpiValue.status = :status', {
-          status: KpiValueStatus.PENDING_DEPT_APPROVAL,
-        })
-        .andWhere(
-          new Brackets((qb) => {
-            qb.where('assignment.assigned_to_department = :deptId', {
-              deptId: user.departmentId,
-            })
-              .orWhere('departmentOfAssignedSection.id = :deptId', {
+
+      // Check highest scope first - if user has manager scope, see all
+      const hasManagerScope = canApproveManager || canViewManager;
+
+      // Apply department/section filters only if NOT manager level
+      if (!hasManagerScope) {
+        if (user.departmentId && (canApproveDepartment || canViewDepartment)) {
+          // Filter by department
+          query.andWhere(
+            new Brackets((qb) => {
+              qb.where('assignment.assigned_to_department = :deptId', {
                 deptId: user.departmentId,
               })
-              .orWhere('assignedEmployee.departmentId = :deptId', {
-                deptId: user.departmentId,
+                .orWhere('departmentOfAssignedSection.id = :deptId', {
+                  deptId: user.departmentId,
+                })
+                .orWhere('assignedEmployee.departmentId = :deptId', {
+                  deptId: user.departmentId,
+                });
+            }),
+          );
+        } else if (user.sectionId && (canApproveSection || canViewSection)) {
+          // Filter by section only
+          query.andWhere(
+            new Brackets((qb) => {
+              qb.where('assignment.assigned_to_section = :sectionId', {
+                sectionId: user.sectionId,
+              }).orWhere('assignedEmployee.sectionId = :sectionId', {
+                sectionId: user.sectionId,
               });
-          }),
-        );
-      applied = true;
-    } else if (canApproveSection && user.sectionId) {
-      query
-        .where('kpiValue.status = :status', {
-          status: KpiValueStatus.PENDING_SECTION_APPROVAL,
-        })
-        .andWhere(
-          new Brackets((qb) => {
-            qb.where('assignment.assigned_to_section = :sectionId', {
-              sectionId: user.sectionId,
-            }).orWhere('assignedEmployee.sectionId = :sectionId', {
-              sectionId: user.sectionId,
-            });
-          }),
-        );
+            }),
+          );
+        }
+      }
       applied = true;
     }
     if (!applied) {
       return [];
     }
+
     query.orderBy('kpiValue.timestamp', 'ASC');
     try {
       const results = await query.getMany();
+
       return results;
     } catch (error) {
       throw error;

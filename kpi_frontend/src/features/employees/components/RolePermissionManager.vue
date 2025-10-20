@@ -210,7 +210,7 @@ const permissionGroups = computed(() => {
   );
   if (specialPerms.length) {
     groups.push({
-      label: t("permissionBlock.special") || "Hành động đặc biệt",
+      label: t("permissionBlock.special"),
       permissions: specialPerms,
     });
     specialPerms.forEach((p) => usedIds.add(p.id));
@@ -218,7 +218,7 @@ const permissionGroups = computed(() => {
   const otherPerms = allPermissions.value.filter((p) => !usedIds.has(p.id));
   if (otherPerms.length) {
     groups.push({
-      label: t("permissionBlock.other") || "Khác",
+      label: t("permissionBlock.other"),
       permissions: otherPerms,
     });
   }
@@ -261,7 +261,6 @@ const filteredPermissionGroups = computed(() => {
   background: linear-gradient(135deg, #f6fafd 0%, #e9f0fb 100%);
   border-radius: 18px;
   box-shadow: 0 4px 24px rgba(0, 32, 128, 0.08);
-  min-height: 100vh;
 }
 
 .header-bar {

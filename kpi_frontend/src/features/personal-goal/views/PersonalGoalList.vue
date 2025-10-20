@@ -6,7 +6,7 @@
           <h3 class="goal-title">🎯 {{ $t("personalGoal.titleHeader") }}</h3>
           <p class="goal-desc">{{ $t("personalGoal.descHeader") }}</p>
         </div>
-        <a-button type="primary" size="large" @click="openAddModal">
+        <a-button type="primary" size="middle" @click="openAddModal">
           <i class="fas fa-plus-circle" style="margin-right: 8px" />{{
             $t("personalGoal.addNew")
           }}
@@ -446,14 +446,14 @@ function progressPercent(record) {
 
 .goal-title {
   margin: 0;
-  font-size: 28px;
+  font-size: 20px;
   font-weight: 600;
   color: #333;
 }
 
 .goal-desc {
-  margin: 8px 0 0;
-  font-size: 16px;
+  margin: 8px 0 0 30px;
+  font-size: 14px;
   color: #666;
 }
 

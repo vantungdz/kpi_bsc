@@ -187,7 +187,7 @@ export class EmployeesController {
     @Req() req,
     @Param('departmentId', ParseIntPipe) departmentId: number,
   ) {
-    return { message: `Bạn là manager của phòng ban ${departmentId}!` };
+    return { message: `You are the manager of department ${departmentId}!` };
   }
 
   @Get(':id/performance-history')

@@ -349,6 +349,8 @@
 import { onMounted, ref, computed, watch, reactive } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import { useStore } from "vuex";
+import { getTranslatedErrorMessage } from "@/core/services/messageTranslator";
+import i18n from "@/core/i18n";
 import {
   notification,
   Alert as AAlert,
@@ -555,7 +557,6 @@ const resetForm = (clearTemplateSelection = false) => {
   if (clearTemplateSelection) {
     selectedTemplateKpiId.value = null;
   }
-  console.log("Form Reset");
 };
 
 const loadKpiTemplate = async (selectedId) => {
@@ -791,15 +792,15 @@ const handleChangeCreate = async () => {
     });
   } catch (error) {
     if (error instanceof Error && error.message === assignmentError.value) {
-      console.log("Assignment validation failed:", assignmentError.value);
+      return;
     } else {
       console.error("KPI creation failed:", error);
       const errorMessage =
-        error?.response?.data?.message ||
+        getTranslatedErrorMessage(error?.response?.data?.message) ||
         error?.message ||
-        "KPI creation failed.";
+        i18n.global.t("errors.unknownError");
       notification.error({
-        message: "KPI Creation Failed",
+        message: i18n.global.t("errors.unknownError"),
         description: errorMessage,
         duration: 5,
       });
@@ -810,7 +811,6 @@ const handleChangeCreate = async () => {
 };
 
 const onFinishFailed = (errorInfo) => {
-  console.log("Form validation failed:", errorInfo);
   let errorMessages = "Please check required fields and input formats.";
   if (errorInfo?.errorFields?.length > 0) {
     const nonAssignmentErrors = errorInfo.errorFields.filter(

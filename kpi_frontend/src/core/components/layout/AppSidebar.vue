@@ -215,6 +215,26 @@
             <span>{{ $t("employeeList") }}</span>
           </router-link>
         </a-menu-item>
+        <a-menu-item
+          key="competencies"
+          v-if="canViewEmployeeList"
+          :title="$t('skillManagement')"
+        >
+          <router-link to="/competencies">
+            <appstore-outlined />
+            <span>{{ $t("skillManagement") }}</span>
+          </router-link>
+        </a-menu-item>
+        <a-menu-item
+          key="employee-skill"
+          v-if="canViewEmployeeList"
+          :title="$t('employeeSkill.title')"
+        >
+          <router-link to="/employee-skill">
+            <appstore-outlined />
+            <span>{{ $t("employeeSkill.title") }}</span>
+          </router-link>
+        </a-menu-item>
         <div class="menu-group-title" v-if="!collapsed && canViewReport">
           {{ $t("sidebarGroup.report") }}
         </div>
@@ -294,21 +314,6 @@
               <span>{{ $t("formulaManagement") }}</span>
             </router-link>
           </a-menu-item>
-          <a-menu-item key="admin-competency" :title="$t('skillManagement')">
-            <router-link to="/competencies">
-              <appstore-outlined />
-              <span>{{ $t("skillManagement") }}</span>
-            </router-link>
-          </a-menu-item>
-          <a-menu-item
-            key="admin-employee-skill"
-            :title="$t('employeeSkill.title')"
-          >
-            <router-link to="/employee-skill">
-              <appstore-outlined />
-              <span>{{ $t("employeeSkill.title") }}</span>
-            </router-link>
-          </a-menu-item>
         </a-sub-menu>
         <div
           class="menu-group-title"
@@ -384,7 +389,11 @@ import {
   ProfileOutlined,
   FileTextOutlined,
 } from "@ant-design/icons-vue";
-import { RBAC_ACTIONS, RBAC_RESOURCES } from "@/core/constants/rbac.constants";
+import {
+  RBAC_ACTIONS,
+  RBAC_RESOURCES,
+  SCOPES,
+} from "@/core/constants/rbac.constants";
 
 const store = useStore();
 const collapsed = ref(false);
@@ -476,25 +485,25 @@ const canViewDashboard = computed(() =>
   hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.DASHBOARD)
 );
 const canViewCompanyLevel = computed(() =>
-  hasKpiScopePermission(RBAC_ACTIONS.VIEW, "company")
+  hasKpiScopePermission(RBAC_ACTIONS.VIEW, SCOPES.COMPANY)
 );
 const canViewDepartmentLevel = computed(() =>
-  hasKpiScopePermission(RBAC_ACTIONS.VIEW, "department")
+  hasKpiScopePermission(RBAC_ACTIONS.VIEW, SCOPES.DEPARTMENT)
 );
 const canViewSectionLevel = computed(() =>
-  hasKpiScopePermission(RBAC_ACTIONS.VIEW, "section")
+  hasKpiScopePermission(RBAC_ACTIONS.VIEW, SCOPES.SECTION)
 );
 
 const canViewInactiveKpiList = computed(() =>
-  hasKpiScopePermission(RBAC_ACTIONS.VIEW, "company")
+  hasKpiScopePermission(RBAC_ACTIONS.VIEW, SCOPES.COMPANY)
 );
 
 const canViewEmployeeList = computed(() =>
-  hasPermission(RBAC_ACTIONS.VIEW, "employee", "company")
+  hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.EMPLOYEE, SCOPES.COMPANY)
 );
 
 const canViewApprovals = computed(() =>
-  ["section", "department", "manager"].some((scope) =>
+  [SCOPES.SECTION, SCOPES.DEPARTMENT, SCOPES.MANAGER].some((scope) =>
     hasApprovalScopePermission(RBAC_ACTIONS.VIEW, scope)
   )
 );
@@ -504,21 +513,21 @@ const canViewReport = computed(() =>
 );
 
 const canViewKpiReview = computed(() =>
-  ["section", "department", "manager"].some((scope) =>
+  [SCOPES.SECTION, SCOPES.DEPARTMENT, SCOPES.MANAGER].some((scope) =>
     hasKpiReviewScopePermission(RBAC_ACTIONS.VIEW, scope)
   )
 );
 
 const canViewKpiEmployeeLevel = computed(() =>
-  hasKpiScopePermission(RBAC_ACTIONS.VIEW, "employee")
+  hasKpiScopePermission(RBAC_ACTIONS.VIEW, SCOPES.EMPLOYEE)
 );
 
 const canViewAdminMenu = computed(() =>
   hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.ADMIN)
 );
 
-const canViewStrategicObjectives = computed(
-  () => () => hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.DASHBOARD)
+const canViewStrategicObjectives = computed(() =>
+  hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.DASHBOARD, SCOPES.GLOBAL)
 );
 
 const canViewKpiManagementSubMenu = computed(

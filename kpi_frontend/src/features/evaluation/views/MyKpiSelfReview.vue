@@ -27,7 +27,7 @@
         :message="successMessage"
         show-icon
         closable
-        @close="successMessage = ''"
+        @close="successMessageKey = ''"
         style="margin-bottom: 12px"
       />
       <a-alert
@@ -36,7 +36,7 @@
         :message="errorMessage"
         show-icon
         closable
-        @close="errorMessage = ''"
+        @close="errorMessageKey = ''"
         style="margin-bottom: 12px"
       />
       <div
@@ -57,7 +57,7 @@
         row-key="id"
         bordered
         class="kpi-table-modern"
-        style="margin-top: 32px; width: 100%"
+        style="width: 100%"
         :loading="loading"
         :pagination="false"
       >
@@ -136,6 +136,11 @@
                 v-else-if="record.status === 'MANAGER_REVIEWED'"
                 style="color: #faad14; font-weight: 500"
                 >{{ $t("waitingManagerConfirm") }}</span
+              >
+              <span
+                v-else-if="record.status === 'PENDING_MANAGER_APPROVAL'"
+                style="color: #fa8c16; font-weight: 500"
+                >{{ $t("pendingManagerApproval") }}</span
               >
               <span
                 v-else-if="record.status === 'COMPLETED'"
@@ -424,8 +429,17 @@ const store = useStore();
 const { t } = useI18n();
 const selectedCycle = ref();
 const cycleOptions = ref([]);
-const successMessage = ref("");
-const errorMessage = ref("");
+const successMessageKey = ref("");
+const errorMessageKey = ref("");
+
+// Computed properties that automatically update when locale changes
+const successMessage = computed(() => {
+  return successMessageKey.value ? t(successMessageKey.value) : "";
+});
+
+const errorMessage = computed(() => {
+  return errorMessageKey.value ? t(errorMessageKey.value) : "";
+});
 
 const kpis = ref([]);
 const loading = ref(false);
@@ -454,6 +468,8 @@ const getStatusText = (status) => {
       return t("awaitingEmployeeFeedback");
     case "MANAGER_REVIEWED":
       return t("waitingManagerConfirm");
+    case "PENDING_MANAGER_APPROVAL":
+      return t("pendingManagerApproval");
     case "COMPLETED":
       return t("completed");
     default:
@@ -470,6 +486,7 @@ const getStatusColor = (status, record) => {
     return "blue";
   }
   if (status === "MANAGER_REVIEWED") return "blue";
+  if (status === "PENDING_MANAGER_APPROVAL") return "orange";
   if (status === "COMPLETED") return "green";
   return "default";
 };
@@ -499,16 +516,15 @@ const canSubmit = computed(() => {
 const fetchMyKpis = async () => {
   if (!selectedCycle.value) return;
   loading.value = true;
-  errorMessage.value = "";
+  errorMessageKey.value = "";
   try {
     await store.dispatch("myKpiReviews/fetchMyKpiReviews", selectedCycle.value);
     kpis.value = store.getters["myKpiReviews/myKpiReviews"] || [];
     if (kpis.value.length === 0) {
-      errorMessage.value =
-        "Không có KPI nào đã được duyệt và có kết quả thực tế để tự đánh giá.";
+      errorMessageKey.value = "noApprovedKpisForSelfReview";
     }
   } catch (e) {
-    errorMessage.value = "Không tải được danh sách KPI.";
+    errorMessageKey.value = "failedToLoadKpiList";
   } finally {
     loading.value = false;
   }
@@ -530,10 +546,10 @@ const submitSelfReview = async () => {
         selfComment: item.selfComment,
       })),
     });
-    successMessage.value = "Gửi đánh giá thành công!";
+    successMessageKey.value = "reviewSubmittedSuccessfully";
     fetchMyKpis();
   } catch (e) {
-    errorMessage.value = "Gửi đánh giá thất bại.";
+    errorMessageKey.value = "failedToSubmitReview";
   } finally {
     loading.value = false;
   }
@@ -584,17 +600,17 @@ const submitEmployeeFeedbackModal = async () => {
     !feedbackModal.value.feedbackInput ||
     !feedbackModal.value.feedbackInput.trim()
   ) {
-    errorMessage.value = "Vui lòng nhập phản hồi trước khi gửi.";
+    errorMessageKey.value = "pleaseEnterFeedbackBeforeSubmitting";
     return;
   }
   feedbackModal.value.loading = true;
   try {
     await submitEmployeeFeedback(record.id, feedbackModal.value.feedbackInput);
-    successMessage.value = "Gửi phản hồi thành công!";
+    successMessageKey.value = "feedbackSubmittedSuccessfully";
     closeFeedbackModal();
     fetchMyKpis();
   } catch (e) {
-    errorMessage.value = "Gửi phản hồi thất bại.";
+    errorMessageKey.value = "failedToSubmitFeedback";
   } finally {
     feedbackModal.value.loading = false;
   }
@@ -622,8 +638,6 @@ watch(
         if (k.feedbackLoading === undefined) k.feedbackLoading = false;
       }
     });
-    console.log("kpis updated:", newKpis);
-    console.log("Re-evaluating canSubmit:", canSubmit.value);
   },
   { deep: true }
 );
@@ -652,16 +666,14 @@ onMounted(() => {
 
 <style scoped>
 .my-kpi-self-review {
-  padding: 32px 0 0 0;
   background: #f5f6fa;
-  min-height: 100vh;
+  min-height: auto;
 }
 .filters-modern {
   margin-bottom: 24px;
   display: flex;
   align-items: center;
   background: #fff;
-  padding: 20px 32px 12px 32px;
   border-radius: 12px;
   box-shadow: 0 2px 8px #e6f7ff44;
   max-width: unset;

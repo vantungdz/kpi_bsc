@@ -22,7 +22,7 @@ export class AuthController {
 
   @Post('login')
   async login(@Body() user: LoginDto, @Req() req: Request) {
-    // Lấy thông tin device và IP
+    // Get device and IP information
     const deviceInfo = req.headers['user-agent'] || 'Unknown Device';
     const ipAddress = req.ip || req.socket.remoteAddress || 'Unknown IP';
 
@@ -81,7 +81,7 @@ export class AuthController {
 
   @Post('logout')
   async logout(@Req() req: Request) {
-    // Get userId và sessionId từ JWT
+    // Get userId and sessionId from JWT
     const userId = (req.user as any)?.id;
     const sessionId = (req.user as any)?.sessionId;
 

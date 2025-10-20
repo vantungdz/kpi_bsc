@@ -277,13 +277,21 @@
 import { ref, watch, computed } from "vue";
 import { useI18n } from "vue-i18n";
 import {
-  submitReviewByRole,
+  submitSectionReview,
+  submitDepartmentReview,
+  submitManagerReview,
   updateKpiReview,
   completeReview,
   submitEmployeeFeedback,
   rejectReviewByRole,
 } from "@/core/services/kpiReviewApi";
 import { useStore } from "vuex";
+// Removed userHasPermission import - using hasPermission function instead
+import {
+  RBAC_ACTIONS,
+  RBAC_RESOURCES,
+  SCOPES,
+} from "@/core/constants/rbac.constants";
 import {
   UserOutlined,
   TeamOutlined,
@@ -297,6 +305,7 @@ const props = defineProps({
   review: Object,
   visible: Boolean,
 });
+
 const emit = defineEmits(["close", "saved"]);
 const form = ref({
   score: null,
@@ -309,49 +318,64 @@ const errorMsg = ref("");
 const { t: $t } = useI18n();
 
 const user = computed(() => store.getters["auth/user"]);
+const userPermissions = computed(() => user.value?.permissions || []);
 
-const userRoles = computed(() => {
-  if (!user.value) return [];
-  if (Array.isArray(user.value.roles)) {
-    return user.value.roles
-      .map((r) => (typeof r === "string" ? r : r?.name))
-      .filter(Boolean);
-  }
-  if (user.value.role) {
-    if (typeof user.value.role === "string") return [user.value.role];
-    if (typeof user.value.role === "object" && user.value.role?.name)
-      return [user.value.role.name];
-  }
-  return [];
-});
+// Permission checking function (same as KpiValueApprovalList)
+function hasPermission(action, resource, scope) {
+  return userPermissions.value?.some(
+    (p) =>
+      p.action?.trim() === action &&
+      p.resource?.trim() === resource &&
+      (scope ? p.scope?.trim() === scope : true)
+  );
+}
 
-const isSection = computed(() => userRoles.value.includes("section"));
-const isDepartment = computed(() => userRoles.value.includes("department"));
-const isManager = computed(() => userRoles.value.includes("manager"));
-const isAdmin = computed(() => userRoles.value.includes("admin"));
-const isEmployee = computed(() => userRoles.value.includes("employee"));
+// Permission-based checks instead of role-based
+const canApproveSection = computed(() =>
+  hasPermission(RBAC_ACTIONS.APPROVE, RBAC_RESOURCES.KPI_REVIEW, SCOPES.SECTION)
+);
+
+const canApproveDepartment = computed(() =>
+  hasPermission(
+    RBAC_ACTIONS.APPROVE,
+    RBAC_RESOURCES.KPI_REVIEW,
+    SCOPES.DEPARTMENT
+  )
+);
+
+const canApproveManager = computed(() =>
+  hasPermission(RBAC_ACTIONS.APPROVE, RBAC_RESOURCES.KPI_REVIEW, SCOPES.MANAGER)
+);
 
 const isSectionCanReview = computed(() => {
+  // Anyone with approve permission can review at section level
   return (
     props.review &&
     props.review.status === "SELF_REVIEWED" &&
-    (isSection.value || isAdmin.value)
+    (canApproveSection.value ||
+      canApproveDepartment.value ||
+      canApproveManager.value)
   );
 });
 
 const isDepartmentCanReview = computed(() => {
+  // Department and Manager can review from SELF_REVIEWED or SECTION_REVIEWED
   return (
     props.review &&
-    props.review.status === "SECTION_REVIEWED" &&
-    (isDepartment.value || isAdmin.value)
+    (props.review.status === "SELF_REVIEWED" ||
+      props.review.status === "SECTION_REVIEWED") &&
+    (canApproveDepartment.value || canApproveManager.value)
   );
 });
 
 const isManagerCanReview = computed(() => {
+  // Manager can review from any status
   return (
     props.review &&
-    props.review.status === "DEPARTMENT_REVIEWED" &&
-    (isManager.value || isAdmin.value)
+    (props.review.status === "SELF_REVIEWED" ||
+      props.review.status === "SECTION_REVIEWED" ||
+      props.review.status === "DEPARTMENT_REVIEWED") &&
+    canApproveManager.value
   );
 });
 
@@ -359,7 +383,6 @@ const isEmployeeCanFeedback = computed(() => {
   return (
     props.review &&
     props.review.status === "EMPLOYEE_FEEDBACK" &&
-    isEmployee.value &&
     props.review.employee?.id === user.value?.id
   );
 });
@@ -367,8 +390,8 @@ const isEmployeeCanFeedback = computed(() => {
 const isManagerCanComplete = computed(() => {
   return (
     props.review &&
-    props.review.status === "MANAGER_REVIEWED" &&
-    (isManager.value || isAdmin.value)
+    props.review.status === "PENDING_MANAGER_APPROVAL" &&
+    canApproveManager.value
   );
 });
 
@@ -382,27 +405,54 @@ const isCurrentUserCanReview = computed(
 );
 
 const isCurrentLevelReviewed = computed(() => {
-  if (isSection.value) {
-    return (
+  // Check based on hierarchy (highest permission first)
+  if (canApproveManager.value) {
+    // Manager can review at any level, check if already reviewed at manager level
+    // But allow re-review if status is SELF_REVIEWED (employee resubmitted)
+    const hasManagerReview =
       props.review &&
-      (props.review.sectionScore != null ||
-        (props.review.sectionComment && props.review.sectionComment.length > 0))
-    );
+      (props.review.managerScore != null ||
+        (props.review.managerComment &&
+          props.review.managerComment.length > 0));
+
+    // Allow re-review if employee resubmitted after rejection
+    if (hasManagerReview && props.review?.status === "SELF_REVIEWED") {
+      return false; // Allow re-review
+    }
+
+    return hasManagerReview;
   }
-  if (isDepartment.value) {
-    return (
+  if (canApproveDepartment.value) {
+    // Department can review section and department level, check if already reviewed at department level
+    // But allow re-review if status is SELF_REVIEWED (employee resubmitted)
+    const hasDepartmentReview =
       props.review &&
       (props.review.departmentScore != null ||
         (props.review.departmentComment &&
-          props.review.departmentComment.length > 0))
-    );
+          props.review.departmentComment.length > 0));
+
+    // Allow re-review if employee resubmitted after rejection
+    if (hasDepartmentReview && props.review?.status === "SELF_REVIEWED") {
+      return false; // Allow re-review
+    }
+
+    return hasDepartmentReview;
   }
-  if (isManager.value) {
-    return (
+  if (canApproveSection.value) {
+    // Section can only review section level, check if already reviewed at section level
+    // But allow re-review if status is SELF_REVIEWED (employee resubmitted)
+    const hasSectionReview =
       props.review &&
-      (props.review.managerScore != null ||
-        (props.review.managerComment && props.review.managerComment.length > 0))
-    );
+      (props.review.sectionScore != null ||
+        (props.review.sectionComment &&
+          props.review.sectionComment.length > 0));
+
+    // Allow re-review if employee resubmitted after rejection
+    if (hasSectionReview && props.review?.status === "SELF_REVIEWED") {
+      return false; // Allow re-review
+    }
+
+    return hasSectionReview;
   }
   return false;
 });
@@ -411,13 +461,27 @@ watch(
   () => props.review,
   (val) => {
     if (val) {
-      let score = val.managerScore || val.score || null;
+      let score = null;
+      let comment = "";
+
+      // Determine which fields to show based on user's highest permission
+      if (canApproveManager.value) {
+        score = val.managerScore || null;
+        comment = val.managerComment || "";
+      } else if (canApproveDepartment.value) {
+        score = val.departmentScore || null;
+        comment = val.departmentComment || "";
+      } else if (canApproveSection.value) {
+        score = val.sectionScore || null;
+        comment = val.sectionComment || "";
+      }
 
       if (typeof score !== "number" || isNaN(score) || score < 0.5 || score > 5)
         score = null;
+
       form.value = {
         score,
-        managerComment: val.managerComment || "",
+        managerComment: comment,
         actionPlan: val.actionPlan || "",
       };
     }
@@ -444,12 +508,23 @@ const submitReview = async () => {
   }
   loading.value = true;
   try {
-    if (
-      isSectionCanReview.value ||
-      isDepartmentCanReview.value ||
-      isManagerCanReview.value
-    ) {
-      await submitReviewByRole(
+    if (isManagerCanReview.value) {
+      // Manager can review at any level - call submitManagerReview API
+      await submitManagerReview(
+        props.review.id,
+        form.value.score,
+        form.value.managerComment
+      );
+    } else if (isDepartmentCanReview.value) {
+      // Department can review from SELF_REVIEWED or SECTION_REVIEWED - call submitDepartmentReview API
+      await submitDepartmentReview(
+        props.review.id,
+        form.value.score,
+        form.value.managerComment
+      );
+    } else if (isSectionCanReview.value) {
+      // Section can only review from SELF_REVIEWED - call submitSectionReview API
+      await submitSectionReview(
         props.review.id,
         form.value.score,
         form.value.managerComment
@@ -480,7 +555,8 @@ const statusStepMap = {
   MANAGER_REVIEWED: 4,
   MANAGER_REJECTED: 4,
   EMPLOYEE_FEEDBACK: 4,
-  COMPLETED: 5,
+  PENDING_MANAGER_APPROVAL: 5,
+  COMPLETED: 6,
 };
 const currentStep = computed(() => {
   if (!props.review || !props.review.status) return 0;

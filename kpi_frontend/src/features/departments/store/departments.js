@@ -1,5 +1,6 @@
 import apiClient from "@/core/services/api";
 import store from "@/core/store"; // Dùng store chính để dispatch loading toàn cục
+import { getTranslatedErrorMessage } from "@/core/services/messageTranslator";
 
 const state = {
   departments: [],
@@ -17,7 +18,10 @@ const getters = {
 
 const mutations = {
   SET_ERROR(state, error) {
-    state.error = error ? error.response?.data?.message || error.message : null;
+    state.error = error
+      ? getTranslatedErrorMessage(error.response?.data?.message) ||
+        error.message
+      : null;
   },
   SET_DEPARTMENTS(state, departments) {
     state.departments = departments;
@@ -27,7 +31,8 @@ const mutations = {
   },
   SET_DETAIL_ERROR(state, error) {
     state.detailError = error
-      ? error.response?.data?.message || error.message
+      ? getTranslatedErrorMessage(error.response?.data?.message) ||
+        error.message
       : null;
   },
 };
@@ -105,7 +110,7 @@ const actions = {
       const msg =
         error?.response?.data?.message ||
         error.message ||
-        "Xóa phòng ban thất bại";
+        "Failed to delete department";
       commit("SET_ERROR", msg);
       throw new Error(msg);
     } finally {

@@ -30,7 +30,7 @@ export class KpiFormulaService {
       const existed = await this.formulaRepo.findOneBy({ code: data.code });
       if (existed) {
         throw new BadRequestException(
-          'Mã công thức đã tồn tại. Vui lòng chọn mã khác.',
+          'Formula code already exists. Please choose a different code.',
         );
       }
     }
@@ -46,7 +46,7 @@ export class KpiFormulaService {
       const existed = await this.formulaRepo.findOneBy({ code: data.code });
       if (existed && existed.id !== id) {
         throw new BadRequestException(
-          'Mã công thức đã tồn tại. Vui lòng chọn mã khác.',
+          'Formula code already exists. Please choose a different code.',
         );
       }
     }
@@ -73,7 +73,7 @@ export class KpiFormulaService {
       };
       evaluate(expression, scope);
     } catch (e) {
-      throw new BadRequestException('Công thức không hợp lệ: ' + e.message);
+      throw new BadRequestException('Invalid formula: ' + e.message);
     }
   }
 }

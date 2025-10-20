@@ -1,5 +1,7 @@
 import apiClient from "@/core/services/api";
 import { notification } from "ant-design-vue";
+import { getTranslatedErrorMessage } from "@/core/services/messageTranslator";
+import i18n from "@/core/i18n";
 import { KpiDefinitionStatus } from "@/core/constants/kpiStatus";
 
 const state = {
@@ -100,9 +102,9 @@ const mutations = {
   },
   SET_ERROR(state, error) {
     state.error = error
-      ? error.response?.data?.message ||
+      ? getTranslatedErrorMessage(error.response?.data?.message) ||
         error.message ||
-        "An unknown error occurred"
+        i18n.global.t("errors.unknownError")
       : null;
   },
 
@@ -111,9 +113,9 @@ const mutations = {
   },
   SET_USER_ASSIGNMENT_ERROR(state, error) {
     state.userAssignmentError = error
-      ? error.response?.data?.message ||
+      ? getTranslatedErrorMessage(error.response?.data?.message) ||
         error.message ||
-        "An assignment fetch error occurred"
+        i18n.global.t("errors.unknownError")
       : null;
   },
   SET_KPI_USER_ASSIGNMENTS(state, assignments) {
@@ -125,7 +127,8 @@ const mutations = {
   },
   SET_MY_ASSIGNMENTS_ERROR(state, error) {
     state.myAssignmentsError = error
-      ? error.response?.data?.message || error.message
+      ? getTranslatedErrorMessage(error.response?.data?.message) ||
+        error.message
       : null;
   },
   SET_MY_ASSIGNMENTS(state, assignments) {
@@ -137,7 +140,8 @@ const mutations = {
   },
   SET_SUBMIT_UPDATE_ERROR(state, error) {
     state.submitUpdateError = error
-      ? error.response?.data?.message || error.message
+      ? getTranslatedErrorMessage(error.response?.data?.message) ||
+        error.message
       : null;
   },
 
@@ -146,9 +150,9 @@ const mutations = {
   },
   SET_DEPARTMENT_SECTION_ASSIGNMENT_SAVE_ERROR(state, error) {
     state.departmentSectionAssignmentSaveError = error
-      ? error.response?.data?.message ||
+      ? getTranslatedErrorMessage(error.response?.data?.message) ||
         error.message ||
-        "An error occurred while saving assignment."
+        i18n.global.t("errors.unknownError")
       : null;
   },
 
@@ -157,9 +161,9 @@ const mutations = {
   },
   SET_DEPARTMENT_SECTION_DELETION_ERROR(state, error) {
     state.departmentSectionDeletionError = error
-      ? error.response?.data?.message ||
+      ? getTranslatedErrorMessage(error.response?.data?.message) ||
         error.message ||
-        "An unknown deletion error occurred"
+        i18n.global.t("errors.unknownError")
       : null;
   },
 
@@ -168,9 +172,9 @@ const mutations = {
   },
   SET_USER_DELETION_ERROR(state, error) {
     state.userDeletionError = error
-      ? error.response?.data?.message ||
+      ? getTranslatedErrorMessage(error.response?.data?.message) ||
         error.message ||
-        "An error occurred while deleting user assignment."
+        i18n.global.t("errors.unknownError")
       : null;
   },
 
@@ -179,9 +183,9 @@ const mutations = {
   },
   SET_SAVE_USER_ASSIGNMENT_ERROR(state, error) {
     state.saveUserAssignmentError = error
-      ? error.response?.data?.message ||
+      ? getTranslatedErrorMessage(error.response?.data?.message) ||
         error.message ||
-        "Failed to save user assignment."
+        i18n.global.t("errors.unknownError")
       : null;
   },
 
@@ -264,14 +268,10 @@ const mutations = {
   },
 
   UPDATE_SINGLE_KPI_STATUS(state, { kpiId, newStatus }) {
-    console.log(
-      `Mutation UPDATE_SINGLE_KPI_STATUS: kpiId=${kpiId}, newStatus=${newStatus}`
-    );
     const newAssignmentStatus =
       newStatus === KpiDefinitionStatus.APPROVED ? "APPROVED" : "DRAFT";
 
     if (state.currentKpi && state.currentKpi.id === kpiId) {
-      console.log(`Updating currentKpi status and its assignments`);
       state.currentKpi = {
         ...state.currentKpi,
         status: newStatus,
@@ -285,7 +285,6 @@ const mutations = {
 
     const kpiIndex = state.kpis.findIndex((kpi) => kpi.id === kpiId);
     if (kpiIndex !== -1) {
-      console.log(`Updating kpi status in kpis list at index ${kpiIndex}`);
       const oldKpi = state.kpis[kpiIndex];
       state.kpis.splice(kpiIndex, 1, {
         ...oldKpi,
@@ -296,8 +295,6 @@ const mutations = {
             status: newAssignmentStatus,
           })) || [],
       });
-    } else {
-      console.log(`KPI ID ${kpiId} not found in kpis list state.`);
     }
   },
   SET_EMPLOYEE_KPI_LIST(state, kpis) {
@@ -347,6 +344,9 @@ const actions = {
       }
       const url = `/kpis/sections/${sectionIdInPath}`;
 
+      // Add limit to get all KPIs since we don't have pagination UI
+      queryParams.limit = 1000;
+
       const response = await apiClient.get(url, {
         params: queryParams,
       });
@@ -355,7 +355,7 @@ const actions = {
       return response.data;
     } catch (error) {
       console.error(
-        "ACTION fetchSectionKpis: Lỗi khi fetch section KPIs:",
+        "ACTION fetchSectionKpis: Error fetching section KPIs:",
         error.response || error
       );
       commit("SET_ERROR", error);
@@ -374,16 +374,12 @@ const actions = {
     commit("SET_ERROR", null);
     commit("SET_DEPARTMENT_KPI_LIST", null);
     try {
-      let url = "/kpis/departments";
-      if (
-        departmentId !== null &&
-        departmentId !== "" &&
-        departmentId !== undefined
-      ) {
-        url += `/${departmentId}`;
-      }
+      const deptId = departmentId || 0;
+      const url = `/kpis/departments/${deptId}`;
 
       const { ...queryFilters } = filters;
+      // Add limit to get all KPIs since we don't have pagination UI
+      queryFilters.limit = 1000;
       const response = await apiClient.get(url, { params: queryFilters });
       commit("SET_DEPARTMENT_KPI_LIST", response.data);
       return response.data;
@@ -403,7 +399,7 @@ const actions = {
     commit("SET_ERROR", null);
     try {
       const response = await apiClient.get("/kpis", {
-        params: { limit: 1000, fields: "id,name,path" },
+        params: { limit: 1000 },
       });
       const kpis = response.data?.data || response.data || [];
       commit("SET_KPIS_ALL_FOR_SELECT", kpis);
@@ -504,13 +500,19 @@ const actions = {
       commit("SET_ERROR", error);
       console.error("Error deleting KPI:", error.response || error);
 
-      let errorMessage = "Failed to delete KPI.";
-      let errorDescription = error.response?.data?.message || error.message;
+      let errorMessage = i18n.global.t("errors.unknownError");
+      let errorDescription =
+        getTranslatedErrorMessage(error.response?.data?.message) ||
+        error.message;
 
       if (error.response?.status === 403) {
-        errorMessage = "No Permission";
+        errorMessage = i18n.global.t("errors.accessDenied");
         errorDescription =
-          "You do not have permission to delete KPI, please contact admin or manager to do this.";
+          getTranslatedErrorMessage(error.response?.data?.message) ||
+          i18n.global.t("errors.noPermission", {
+            action: i18n.global.t("common.delete"),
+            resource: i18n.global.t("resources.kpi"),
+          });
       }
       notification.error({
         message: errorMessage,
@@ -564,9 +566,9 @@ const actions = {
       return response.data;
     } catch (error) {
       const errorMsg =
-        error.response?.data?.message ||
+        getTranslatedErrorMessage(error.response?.data?.message) ||
         error.message ||
-        "Failed to save assignment.";
+        i18n.global.t("errors.unknownError");
       commit("SET_DEPARTMENT_SECTION_ASSIGNMENT_SAVE_ERROR", errorMsg);
       notification.error({ message: "Save Failed", description: errorMsg });
       throw error;
@@ -590,9 +592,9 @@ const actions = {
       return response.data;
     } catch (error) {
       const errorMsg =
-        error.response?.data?.message ||
+        getTranslatedErrorMessage(error.response?.data?.message) ||
         error.message ||
-        "Failed to save user assignment.";
+        i18n.global.t("errors.unknownError");
       commit("SET_SAVE_USER_ASSIGNMENT_ERROR", errorMsg);
       notification.error({ message: "Save Failed", description: errorMsg });
       throw error;
@@ -623,8 +625,10 @@ const actions = {
         error.response || error
       );
       notification.error({
-        message: "Failed to delete assignment.",
-        description: error.response?.data?.message || error.message,
+        message: i18n.global.t("errors.unknownError"),
+        description:
+          getTranslatedErrorMessage(error.response?.data?.message) ||
+          error.message,
       });
       throw error;
     } finally {
@@ -638,9 +642,9 @@ const actions = {
 
     if (!kpiId || !assignmentId) {
       console.error("deleteUserAssignment: Missing kpiId or assignmentId");
-      commit("SET_USER_DELETION_ERROR", "Thiếu ID cần thiết để xóa.");
+      commit("SET_USER_DELETION_ERROR", "Missing required ID for deletion.");
       commit("SET_SUBMITTING_USER_DELETION", false);
-      throw new Error("Thiếu ID cần thiết để xóa.");
+      throw new Error("Missing required ID for deletion.");
     }
 
     try {
@@ -648,9 +652,6 @@ const actions = {
 
       try {
         await dispatch("fetchKpiDetail", kpiId);
-        console.log(
-          `[deleteUserAssignment] Refetched KPI Detail ${kpiId} after deleting assignment ${assignmentId}`
-        );
       } catch (fetchError) {
         console.error(
           `[deleteUserAssignment] Error refetching KPI Detail ${kpiId} after delete:`,
@@ -661,9 +662,9 @@ const actions = {
       return true;
     } catch (error) {
       const errorMsg =
-        error.response?.data?.message ||
+        getTranslatedErrorMessage(error.response?.data?.message) ||
         error.message ||
-        "Failed to delete user assignment.";
+        i18n.global.t("errors.unknownError");
       commit("SET_USER_DELETION_ERROR", errorMsg);
       console.error("Error deleting user assignment:", error.response || error);
       notification.error({ message: "Deletion Failed", description: errorMsg });
@@ -713,8 +714,10 @@ const actions = {
       commit("SET_SUBMIT_UPDATE_ERROR", error);
       console.error("Error submitting KPI update:", error.response || error);
       notification.error({
-        message: "Failed to submit progress update.",
-        description: error.response?.data?.message || error.message,
+        message: i18n.global.t("errors.unknownError"),
+        description:
+          getTranslatedErrorMessage(error.response?.data?.message) ||
+          error.message,
       });
       throw error;
     } finally {
@@ -740,9 +743,9 @@ const actions = {
       }
     } catch (error) {
       const errorMsg =
-        error.response?.data?.message ||
+        getTranslatedErrorMessage(error.response?.data?.message) ||
         error.message ||
-        "Failed to toggle KPI status.";
+        i18n.global.t("errors.unknownError");
       commit("SET_TOGGLE_KPI_STATUS_ERROR", errorMsg);
 
       // Only show notification if it's not a permission error (already handled by API interceptor)

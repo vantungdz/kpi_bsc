@@ -112,6 +112,9 @@ export class NotificationEventListener {
     submitterId: number;
     kpiName: string;
   }) {
+    this.logger.log(
+      `Creating KPI_VALUE_APPROVED notification for user ${payload.submitterId}, KPI: "${payload.kpiName}"`,
+    );
     const notification = await this.notificationService.createNotification(
       payload.submitterId,
       NotificationType.KPI_VALUE_APPROVED,

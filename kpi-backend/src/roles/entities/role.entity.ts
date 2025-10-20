@@ -1,9 +1,17 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToMany, JoinTable, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  ManyToMany,
+  JoinTable,
+  CreateDateColumn,
+  UpdateDateColumn,
+} from 'typeorm';
 import { Permission } from '../../common/entities/permission.entity';
 
 /**
- * Entity đại diện cho vai trò (Role) trong hệ thống
- * Mỗi role có thể có nhiều quyền (Permission)
+ * Entity representing role (Role) in the system
+ * Each role can have multiple permissions (Permission)
  */
 @Entity('roles')
 export class Role {
@@ -17,7 +25,7 @@ export class Role {
   description?: string;
 
   /**
-   * Danh sách quyền của role này
+   * List of permissions for this role
    */
   @ManyToMany(() => Permission, { cascade: true })
   @JoinTable({

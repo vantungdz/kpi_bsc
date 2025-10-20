@@ -8,7 +8,7 @@ import { Kpi } from '../kpis/entities/kpi.entity';
 
 /**
  * Module quản lý các mục tiêu chiến lược (StrategicObjective)
- * Kết hợp với các entity liên quan như Perspective, KPI
+ * Combined with related entities like Perspective, KPI
  */
 @Module({
   imports: [TypeOrmModule.forFeature([StrategicObjective, Perspective, Kpi])],

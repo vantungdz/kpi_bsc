@@ -58,15 +58,6 @@ export class EmployeesService {
     private readonly competencyRepo: Repository<Competency>,
   ) {}
 
-  private userHasPermission(
-    user: Employee,
-    action: string,
-    resource: string,
-    scope?: string,
-  ): boolean {
-    return userHasPermission(user, action, resource, scope);
-  }
-
   async create(
     createEmployeeDto: Partial<Employee & { roles?: string[] | number[] }>,
     actor?: { id?: number; username?: string }, // Add actor information if available
@@ -113,23 +104,17 @@ export class EmployeesService {
       }
     }
 
+    const hashedPassword = await bcrypt.hash(password, 10);
+
     const employee = this.employeeRepository.create({
       username,
       email,
-      password,
+      password: hashedPassword,
       ...restOfDto,
       roles: roleEntities,
     } as DeepPartial<Employee>);
     const saved = await this.employeeRepository.save(employee);
     return saved;
-  }
-
-  // Helper: get all role names of user
-  private getUserRoleNames(user: Employee): string[] {
-    if (!user.roles) return [];
-    return user.roles
-      .map((r) => (typeof r === 'string' ? r : r?.name))
-      .filter(Boolean);
   }
 
   async findAll(
@@ -157,11 +142,11 @@ export class EmployeesService {
         }
       }
 
-      if (this.userHasPermission(loggedInUser, 'view', 'employee', 'company')) {
+      if (userHasPermission(loggedInUser, 'view', 'employee', 'company')) {
         // Admin/HR Manager: View all employees
         // No restrictions needed
       } else if (
-        this.userHasPermission(loggedInUser, 'view', 'employee', 'department')
+        userHasPermission(loggedInUser, 'view', 'employee', 'department')
       ) {
         // Department Manager: Only view employees in department
         if (!loggedInUser.departmentId) {
@@ -172,7 +157,7 @@ export class EmployeesService {
         }
         (findOptions.where as any).departmentId = loggedInUser.departmentId;
       } else if (
-        this.userHasPermission(loggedInUser, 'view', 'employee', 'section')
+        userHasPermission(loggedInUser, 'view', 'employee', 'section')
       ) {
         // Section Manager: Only view employees in section
         if (!loggedInUser.sectionId) {
@@ -192,7 +177,7 @@ export class EmployeesService {
           );
         }
       } else if (
-        this.userHasPermission(loggedInUser, 'view', 'employee', 'personal')
+        userHasPermission(loggedInUser, 'view', 'employee', 'personal')
       ) {
         // Employee: Only view own information
         (findOptions.where as any).id = loggedInUser.id;
@@ -236,24 +221,7 @@ export class EmployeesService {
       (findOptions.where as any).teamId = filterOptions.teamId;
     }
 
-    // Debug logging
-    console.log('EmployeesService.findAll - filterOptions:', filterOptions);
-    console.log(
-      'EmployeesService.findAll - findOptions.where:',
-      findOptions.where,
-    );
-
     const result = await this.employeeRepository.find(findOptions);
-    console.log('EmployeesService.findAll - result count:', result.length);
-    if (result.length > 0) {
-      console.log('EmployeesService.findAll - first user:', {
-        id: result[0].id,
-        username: result[0].username,
-        sectionId: result[0].sectionId,
-        departmentId: result[0].departmentId,
-      });
-    }
-
     return result;
   }
 
@@ -451,7 +419,18 @@ export class EmployeesService {
           results.errors.push({
             rowNumber: index + 2,
             rowData: row,
-            error: 'Missing required fields: Username or Email',
+            error: 'Missing required fields: Username or Email are required',
+          });
+          continue;
+        }
+
+        // Check for required first_name and last_name
+        if (!firstName || !lastName) {
+          results.errors.push({
+            rowNumber: index + 2,
+            rowData: row,
+            error:
+              'Missing required fields: First Name and Last Name are required',
           });
           continue;
         }
@@ -522,6 +501,14 @@ export class EmployeesService {
                 // If no roles specified in Excel, clear existing roles
                 existingEmployee.roles = [];
               }
+
+              // Update first_name and last_name
+              existingEmployee.first_name = firstName;
+              existingEmployee.last_name = lastName;
+              existingEmployee.email = email;
+              existingEmployee.departmentId = departmentId;
+              existingEmployee.sectionId = sectionId;
+              existingEmployee.teamId = teamId;
 
               await employeeRepo.save(existingEmployee);
               results.successCount++;
@@ -657,6 +644,54 @@ export class EmployeesService {
   }
 
   /**
+   * Assign management permissions to an employee
+   * This is more flexible than hard-coding 'manager' role
+   */
+  async assignManagementPermissions(
+    employeeId: number,
+    managementInfo: {
+      type: 'department' | 'section';
+      resourceId: number;
+      scope: string;
+    },
+  ): Promise<Employee> {
+    const employee = await this.employeeRepository.findOne({
+      where: { id: employeeId },
+      relations: ['roles'],
+    });
+
+    if (!employee) {
+      throw new NotFoundException('Employee not found');
+    }
+
+    // Update employee's department/section assignment
+    if (managementInfo.type === 'department') {
+      employee.departmentId = managementInfo.resourceId;
+      // Don't clear sectionId - keep existing assignment
+    } else if (managementInfo.type === 'section') {
+      // Get section to find its department
+      const section = await this.dataSource.getRepository('Section').findOne({
+        where: { id: managementInfo.resourceId },
+        relations: ['department'],
+      });
+      if (section) {
+        employee.sectionId = managementInfo.resourceId;
+        // Only assign departmentId if section has a department
+        if (section.department?.id) {
+          employee.departmentId = section.department.id;
+        }
+      }
+    }
+
+    // Instead of hard-coding 'manager' role, we keep existing roles
+    // The management permissions will be handled by the permission system
+    // based on the employee's departmentId/sectionId and scope
+
+    await this.employeeRepository.save(employee);
+    return employee;
+  }
+
+  /**
    * Add a role to an employee if missing (by name or id), preserving existing roles.
    */
   async addRoleIfMissing(
@@ -769,14 +804,9 @@ export class EmployeesService {
       employee.section = null as any;
     }
 
-    console.log(
-      `[EmployeesService] updateEmployee: id=${id}, updateDto=${JSON.stringify(updateDto)}`,
-    );
     Object.assign(employee, updateDto);
     await this.employeeRepository.save(employee);
-    console.log(
-      `[EmployeesService] updateEmployee result: id=${employee.id}, departmentId=${employee.departmentId}, sectionId=${employee.sectionId}, roles=${JSON.stringify(employee.roles)}`,
-    );
+
     return employee;
   }
 

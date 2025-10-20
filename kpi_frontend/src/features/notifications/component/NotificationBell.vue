@@ -233,51 +233,52 @@ const handleNotificationClick = async (notificationItem) => {
   if (!notificationItem.isRead && !notificationItem.is_read) {
     await handleMarkAsRead(notificationItem.id);
   }
-  console.log("Notification Item:", notificationItem);
 
-  const relatedEntityId =
-    notificationItem.relatedEntityId || notificationItem.related_entity_id;
-  const kpiId = notificationItem.kpiId || notificationItem.kpi_id;
-  const relatedEntityType =
-    notificationItem.relatedEntityType || notificationItem.related_entity_type;
+  // Navigate based on notification type
+  const notificationType = notificationItem.type;
 
-  if (relatedEntityId) {
-    switch (relatedEntityType) {
-      case "KPI_ASSIGNMENT":
-      case "KPI_VALUE":
-        if (kpiId || relatedEntityId) {
-          router.push({
-            name: "KpiPersonal",
-            params: { id: kpiId || relatedEntityId },
-          });
-        } else {
-          antNotification.error({
-            message: "Không tìm thấy ID KPI để điều hướng.",
-          });
-        }
-        break;
-      case "OVERALL_REVIEW": {
-        const currentUserRoles = store.getters["auth/effectiveRoles"] || [];
-        if (currentUserRoles.includes("employee")) {
-          router.push({ name: "MyKpiSelfReview" });
-        } else if (
-          currentUserRoles.includes("manager") ||
-          currentUserRoles.includes("admin")
-        ) {
-          router.push({ name: "KpiReviewList" });
-        }
-        break;
-      }
-      default:
-        antNotification.info({
-          message: "Loại thông báo này chưa hỗ trợ điều hướng.",
-        });
-        break;
-    }
-  } else {
+  if (!notificationType) {
     antNotification.warning({
-      message: "Thông báo không có thông tin để điều hướng.",
+      message: "Notification type not found.",
     });
+    popoverVisible.value = false;
+    return;
+  }
+
+  // Navigation mapping based on notification type
+  switch (notificationType) {
+    case "NEW_KPI_ASSIGNMENT":
+    case "KPI_VALUE_APPROVED":
+    case "KPI_VALUE_REJECTED":
+    case "KPI_EXPIRY":
+      router.push({ name: "KpiPersonal" });
+      break;
+
+    case "KPI_APPROVAL_PENDING":
+    case "KPI_VALUE_SUBMITTED":
+      router.push({ name: "PendingApprovals" });
+      break;
+
+    case "REVIEW_PENDING_EMPLOYEE_FEEDBACK":
+    case "REVIEW_COMPLETED":
+    case "REVIEW_REJECTED_BY_SECTION":
+    case "REVIEW_REJECTED_BY_DEPARTMENT":
+    case "REVIEW_REJECTED_BY_MANAGER":
+      router.push({ name: "MyKpiSelfReview" });
+      break;
+
+    case "REVIEW_EMPLOYEE_RESPONDED":
+    case "REVIEW_PENDING_SECTION_REVIEW":
+    case "REVIEW_PENDING_DEPARTMENT_REVIEW":
+    case "REVIEW_PENDING_MANAGER_REVIEW":
+      router.push({ name: "KpiReviewList" });
+      break;
+
+    default:
+      antNotification.info({
+        message: `Navigation for notification type "${notificationType}" is not yet implemented.`,
+      });
+      break;
   }
 
   popoverVisible.value = false;
@@ -293,7 +294,7 @@ const handleMarkAsRead = async (notificationId) => {
       notificationId
     );
   } catch (error) {
-    console.error("Lỗi khi đánh dấu thông báo đã đọc:", error);
+    console.error("Error marking notification as read:", error);
   } finally {
     isProcessingMarkOne.value = false;
     currentMarkingId.value = null;
@@ -305,7 +306,7 @@ const handleMarkAllAsRead = async () => {
   try {
     await store.dispatch("notifications/markAllNotificationsAsRead");
   } catch (error) {
-    console.error("Lỗi khi đánh dấu tất cả thông báo đã đọc:", error);
+    console.error("Error marking all notifications as read:", error);
   } finally {
     isProcessingMarkAll.value = false;
   }
@@ -313,9 +314,7 @@ const handleMarkAllAsRead = async () => {
 
 const viewAllNotifications = () => {
   popoverVisible.value = false;
-  antNotification.info({
-    message: "Chức năng 'Xem tất cả' sẽ được phát triển sau.",
-  });
+  router.push({ name: "NotificationList" });
 };
 </script>
 

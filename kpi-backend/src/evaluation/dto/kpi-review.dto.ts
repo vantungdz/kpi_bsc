@@ -64,3 +64,15 @@ export class RejectKpiReviewDto {
   @IsString()
   rejectionReason: string;
 }
+
+export class SubmitReviewDto {
+  @IsNumber()
+  reviewId: number;
+
+  @IsNumber()
+  score: number;
+
+  @IsOptional()
+  @IsString()
+  comment?: string;
+}

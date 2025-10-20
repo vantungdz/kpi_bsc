@@ -83,7 +83,7 @@
     </a-card>
     <a-modal
       v-model:visible="detailVisible"
-      title="Log Detail"
+      title=""
       width="600px"
       :footer="null"
       @cancel="() => (detailVisible = false)"
@@ -196,9 +196,7 @@ onMounted(() => {
 
 <style scoped>
 .audit-log-view-modern {
-  padding: 24px;
   background: #f6f8fa;
-  min-height: 100vh;
 }
 .audit-header-card {
   margin-bottom: 18px;

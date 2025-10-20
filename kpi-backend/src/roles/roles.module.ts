@@ -6,7 +6,7 @@ import { RolesController } from './roles.controller';
 import { RolesService } from './roles.service';
 
 /**
- * Module quản lý vai trò (Role) và quyền (Permission)
+ * Module managing roles (Role) and permissions (Permission)
  */
 @Module({
   imports: [TypeOrmModule.forFeature([Role, Permission])],

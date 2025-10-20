@@ -23,8 +23,6 @@ const getters = {
   authStatus: (state) => state.status,
   user: (state) => state.user,
   token: (state) => state.token,
-  // Normalize: return user.role?.name (role entity)
-  effectiveRole: (state) => state.user?.role?.name || null,
   authError: (state) => state.error,
   // Normalize: return array of roles (string or object)
   userRoles: (state) => {

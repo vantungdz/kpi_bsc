@@ -2,11 +2,13 @@ import {
   Controller,
   Get,
   Post,
+  Delete,
   Param,
   UseGuards,
   Req,
   ParseIntPipe,
   Body,
+  Query,
 } from '@nestjs/common';
 import { NotificationService } from './notification.service';
 import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
@@ -33,9 +35,17 @@ export class NotificationsController {
     description: 'List of notifications',
     type: [Notification],
   })
-  async getNotifications(@Req() req: { user: Employee }) {
+  async getNotifications(
+    @Req() req: { user: Employee },
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+  ) {
+    const pageNum = page ? parseInt(page.toString()) : 1;
+    const limitNum = limit ? parseInt(limit.toString()) : 10;
     return this.notificationService.getNotificationsForUser(
-      req.user.id /*, page, limit*/,
+      req.user.id,
+      pageNum,
+      limitNum,
     );
   }
 
@@ -81,5 +91,23 @@ export class NotificationsController {
     @Req() req: { user: Employee },
   ): Promise<{ affected: number }> {
     return this.notificationService.markAllAsRead(req.user.id);
+  }
+
+  @Delete(':id')
+  @ApiOperation({ summary: 'Delete a specific notification' })
+  @ApiResponse({
+    status: 200,
+    description: 'Notification deleted successfully',
+  })
+  @ApiResponse({ status: 404, description: 'Notification not found' })
+  async deleteNotification(
+    @Param('id', ParseIntPipe) notificationId: number,
+    @Req() req: { user: Employee },
+  ): Promise<{ message: string }> {
+    await this.notificationService.deleteNotification(
+      notificationId,
+      req.user.id,
+    );
+    return { message: 'Notification deleted successfully' };
   }
 }

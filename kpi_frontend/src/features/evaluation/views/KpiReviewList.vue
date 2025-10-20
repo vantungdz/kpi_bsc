@@ -1,13 +1,13 @@
 <template>
-  <div class="kpi-review-list" v-if="canViewKpiReview">
-    <h2 class="kpi-title">
+  <div v-if="canViewKpiReview">
+    <h4 class="kpi-title">
       <span style="display: flex; align-items: center; gap: 8px">
         <icon-trophy-two-tone
-          style="font-size: 1.6em; color: #409eff; margin-right: 6px"
+          style="font-size: 1em; color: #409eff; margin-right: 6px"
         />
         {{ $t("kpiReviewListTitle") }}
       </span>
-    </h2>
+    </h4>
     <div class="filters modern-filters">
       <a-input-group compact style="display: flex; gap: 12px; width: 100%">
         <a-select
@@ -149,6 +149,7 @@ import {
   UserSwitchOutlined as IconUserSwitchOutlined,
   UserOutlined as IconUserOutlined,
   ExclamationCircleTwoTone as IconExclamationCircleTwoTone,
+  CloseCircleTwoTone as IconCloseCircleTwoTone,
 } from "@ant-design/icons-vue";
 
 const { t } = useI18n();
@@ -162,13 +163,14 @@ const showReviewForm = ref(false);
 const showHistory = ref(false);
 const selectedReview = ref(null);
 const cycleOptions = ref([]);
-const statusOptions = [
+const statusOptions = computed(() => [
   { label: t("all"), value: "" },
   { label: t("pendingReview"), value: "PENDING" },
   { label: t("managerReviewed"), value: "MANAGER_REVIEWED" },
   { label: t("awaitingEmployeeFeedback"), value: "EMPLOYEE_FEEDBACK" },
+  { label: t("pendingManagerApproval"), value: "PENDING_MANAGER_APPROVAL" },
   { label: t("completed"), value: "COMPLETED" },
-];
+]);
 const manualSearch = ref(false);
 const lastModal = ref(null);
 
@@ -219,12 +221,6 @@ const normalizedReviews = computed(() => {
 const fetchReviews = async () => {
   store.dispatch("loading/startLoading");
   try {
-    console.log(
-      "[KPI Review] fetchReviews selectedCycle:",
-      selectedCycle.value,
-      "selectedStatus:",
-      selectedStatus.value
-    );
     const params = {
       cycle: selectedCycle.value,
       status: selectedStatus.value,
@@ -233,7 +229,6 @@ const fetchReviews = async () => {
     if (searchText.value && manualSearch.value) {
       params.search = searchText.value;
     }
-    console.log("[KPI Review] Params gửi lên API:", params);
     const res = await getKpiReviewList(params);
     reviews.value = res;
   } finally {
@@ -331,26 +326,30 @@ const statusIcon = (status) => {
     case "awaitingemployeefeedback":
     case "employee_feedback":
       return IconSmileTwoTone;
+    case "pending_manager_approval":
+      return IconClockCircleTwoTone;
     case "completed":
       return IconCheckCircleTwoTone;
+    case "section_rejected":
+      return IconCloseCircleTwoTone;
+    case "department_rejected":
+      return IconCloseCircleTwoTone;
+    case "manager_rejected":
+      return IconCloseCircleTwoTone;
     default:
       return IconExclamationCircleTwoTone;
   }
 };
 
 onMounted(async () => {
-  console.log("[KPI Review] onMounted");
   await fetchCycles();
   fetchReviews();
 });
 </script>
 
 <style scoped>
-.kpi-review-list {
-  padding: 24px;
-}
 .kpi-title {
-  font-size: 2rem;
+  font-size: 1.6rem;
   font-weight: 700;
   margin-bottom: 24px;
   color: #1a237e;
@@ -448,12 +447,24 @@ onMounted(async () => {
 .status-tag.manager_reviewed {
   background: #409eff;
 }
+.status-tag.pending_manager_approval {
+  background: #8b4b07;
+}
 .status-tag.awaitingemployeefeedback,
 .status-tag.employee_feedback {
   background: #13c2c2;
 }
 .status-tag.completed {
   background: #52c41a;
+}
+.status-tag.section_rejected {
+  background: #ff4d4f;
+}
+.status-tag.department_rejected {
+  background: #ff7875;
+}
+.status-tag.manager_rejected {
+  background: #ffa39e;
 }
 .action-btn {
   margin-right: 8px;

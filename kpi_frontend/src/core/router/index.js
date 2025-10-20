@@ -37,6 +37,7 @@ import FomulaCreateForm from "@/features/formula/views/FomulaCreateForm.vue";
 import PageNotFound from "@/features/common/PageNotFound.vue";
 import PageForbidden from "@/features/common/PageForbidden.vue";
 import PageServerError from "@/features/common/PageServerError.vue";
+import PageUnauthorized from "@/features/common/PageUnauthorized.vue";
 import StrategicObjectivesView from "../../features/strategic-objectives/views/StrategicObjectivesView.vue";
 import StrategicObjectivesStats from "@/features/dashboard/views/StrategicObjectivesStats.vue";
 import AuditLogView from "@/features/dashboard/views/AuditLogView.vue";
@@ -45,6 +46,7 @@ import EmployeeSkillList from "../../features/competency/views/EmployeeSkillList
 import PersonalGoalList from "../../features/personal-goal/views/PersonalGoalList.vue";
 import PersonalGoalListEmployee from "../../features/personal-goal/views/PersonalGoalListEmployee.vue";
 import Documents from "@/features/documents/views/DocumentsList.vue";
+import NotificationListPage from "@/features/notifications/views/NotificationListPage.vue";
 
 const routes = [
   {
@@ -513,7 +515,7 @@ const routes = [
       permissions: [
         {
           action: RBAC_ACTIONS.VIEW,
-          resource: RBAC_RESOURCES.ADMIN,
+          resource: RBAC_RESOURCES.EMPLOYEE,
         },
       ],
     },
@@ -527,7 +529,7 @@ const routes = [
       permissions: [
         {
           action: RBAC_ACTIONS.VIEW,
-          resource: RBAC_RESOURCES.ADMIN,
+          resource: RBAC_RESOURCES.EMPLOYEE,
         },
       ],
     },
@@ -556,6 +558,18 @@ const routes = [
     path: "/documents",
     name: "DocumentsList",
     component: Documents,
+  },
+  {
+    path: "/notifications",
+    name: "NotificationList",
+    component: NotificationListPage,
+    meta: { requiresAuth: true },
+  },
+  {
+    path: "/401",
+    name: "PageUnauthorized",
+    component: PageUnauthorized,
+    meta: { requiresAuth: false },
   },
   {
     path: "/403",

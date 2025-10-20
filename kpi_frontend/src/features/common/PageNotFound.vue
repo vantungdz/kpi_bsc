@@ -2,25 +2,48 @@
   <div class="notfound-viewport">
     <div class="starfield"></div>
     <main class="container" role="main" aria-labelledby="title404">
-      <h1 id="title404" aria-label="Mã lỗi 404">{{ $t("page404.title") }}</h1>
-      <div class="company" aria-label="Tên công ty">{{ $t("page404.company") }}</div>
-      <div class="bsc-container" aria-hidden="true" aria-label="Biểu đồ cân bằng chỉ số BSC">
-        <svg viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" role="img">
-          <circle class="bsc-ring-bg" cx="60" cy="60" r="45"/>
+      <h1 id="title404" aria-label="Error code 404">
+        {{ $t("page404.title") }}
+      </h1>
+      <div class="company" aria-label="Company name">
+        {{ $t("page404.company") }}
+      </div>
+      <div
+        class="bsc-container"
+        aria-hidden="true"
+        aria-label="BSC Balanced Scorecard Chart"
+      >
+        <svg
+          viewBox="0 0 120 120"
+          xmlns="http://www.w3.org/2000/svg"
+          aria-hidden="true"
+          role="img"
+        >
+          <circle class="bsc-ring-bg" cx="60" cy="60" r="45" />
           <circle class="bsc-ring bsc-finance" cx="60" cy="60" r="45" />
           <circle class="bsc-ring bsc-customer" cx="60" cy="60" r="45" />
           <circle class="bsc-ring bsc-internal" cx="60" cy="60" r="45" />
           <circle class="bsc-ring bsc-learning" cx="60" cy="60" r="45" />
         </svg>
         <div class="labels">
-          <div class="label finance" aria-label="Tài chính">{{ $t("page404.bscFinance") }}</div>
-          <div class="label customer" aria-label="Khách hàng">{{ $t("page404.bscCustomer") }}</div>
-          <div class="label internal" aria-label="Quy trình nội bộ">{{ $t("page404.bscInternal") }}</div>
-          <div class="label learning" aria-label="Học hỏi & Phát triển">{{ $t("page404.bscLearning") }}</div>
+          <div class="label finance" aria-label="Finance">
+            {{ $t("page404.bscFinance") }}
+          </div>
+          <div class="label customer" aria-label="Customer">
+            {{ $t("page404.bscCustomer") }}
+          </div>
+          <div class="label internal" aria-label="Internal Process">
+            {{ $t("page404.bscInternal") }}
+          </div>
+          <div class="label learning" aria-label="Learning & Growth">
+            {{ $t("page404.bscLearning") }}
+          </div>
         </div>
       </div>
       <p class="subtitle">{{ $t("page404.subtitle") }}</p>
-      <router-link to="/" class="btn-home" aria-label="Quay về trang chủ">{{ $t("page404.backHome") }}</router-link>
+      <router-link to="/" class="btn-home" aria-label="Back to home">{{
+        $t("page404.backHome")
+      }}</router-link>
     </main>
   </div>
 </template>
@@ -30,7 +53,7 @@
 </script>
 
 <style scoped>
-@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@700&family=Open+Sans&display=swap');
+@import url("https://fonts.googleapis.com/css2?family=Montserrat:wght@700&family=Open+Sans&display=swap");
 
 .notfound-viewport {
   position: fixed;
@@ -49,7 +72,10 @@
 
 .starfield {
   position: fixed;
-  top:0; left:0; right:0; bottom:0;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
   pointer-events: none;
   z-index: 0;
   background:
@@ -62,8 +88,12 @@
   animation: starmove 120s linear infinite;
 }
 @keyframes starmove {
-  from { background-position: 0 0; }
-  to { background-position: 10000px 10000px; }
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: 10000px 10000px;
+  }
 }
 .container {
   position: relative;
@@ -81,7 +111,7 @@
   padding: 50px 40px 70px;
 }
 h1 {
-  font-family: 'Montserrat', sans-serif;
+  font-family: "Montserrat", sans-serif;
   font-weight: 900;
   font-size: 7.5rem;
   margin: 0 0 10px;
@@ -178,7 +208,8 @@ circle.bsc-learning {
   position: absolute;
   width: 100%;
   height: 100%;
-  top: 0; left: 0;
+  top: 0;
+  left: 0;
   pointer-events: none;
 }
 .label {
@@ -214,24 +245,36 @@ circle.bsc-learning {
   transform: translateY(-50%);
 }
 @keyframes ringRotate {
-  0% { transform: rotate(0deg);}
-  100% {transform: rotate(360deg);}
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
 }
 @keyframes ringDrawFinance {
-  to { stroke-dashoffset: 47; }
+  to {
+    stroke-dashoffset: 47;
+  }
 }
 @keyframes ringDrawCustomer {
-  to { stroke-dashoffset: 37; }
+  to {
+    stroke-dashoffset: 37;
+  }
 }
 @keyframes ringDrawInternal {
-  to { stroke-dashoffset: 68; }
+  to {
+    stroke-dashoffset: 68;
+  }
 }
 @keyframes ringDrawLearning {
-  to { stroke-dashoffset: 55; }
+  to {
+    stroke-dashoffset: 55;
+  }
 }
 a.btn-home {
   display: inline-block;
-  font-family: 'Montserrat', sans-serif;
+  font-family: "Montserrat", sans-serif;
   font-weight: 700;
   font-size: 1.2rem;
   padding: 16px 50px;
@@ -245,7 +288,8 @@ a.btn-home {
   transition: all 0.3s ease;
   user-select: none;
 }
-a.btn-home:hover, a.btn-home:focus {
+a.btn-home:hover,
+a.btn-home:focus {
   background: #99d1ff;
   box-shadow:
     0 0 25px #99d1ff,

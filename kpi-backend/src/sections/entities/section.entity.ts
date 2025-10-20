@@ -11,8 +11,8 @@ import { Employee } from '../../employees/entities/employee.entity';
 import { Notification } from '../../notification/entities/notification.entity';
 
 /**
- * Entity đại diện cho Section (bộ phận/phòng ban nhỏ)
- * Section thuộc về một Department, có thể có nhiều Team, Employee, Notification
+ * Entity representing Section (department/sub-department)
+ * Section belongs to one Department, can have multiple Teams, Employees, Notifications
  */
 @Entity('sections')
 export class Section {
@@ -29,7 +29,7 @@ export class Section {
   notifications: Notification[];
 
   /**
-   * Section thuộc về một department
+   * Section belongs to a department
    */
   @ManyToOne(() => Department, (department) => department.sections)
   department: Department;
@@ -47,7 +47,7 @@ export class Section {
   employees: Employee[];
 
   /**
-   * Quản lý (manager) của section
+   * Manager of the section
    */
   @ManyToOne(() => Employee, { nullable: true })
   manager: Employee;

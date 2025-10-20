@@ -27,6 +27,7 @@ import { AuditLogModule } from './audit-log/audit-log.module';
 import { CompetencyModule } from './competency/competency.module';
 import { EmployeeSkillModule } from './employee-skill/employee-skill.module';
 import { PersonalGoalModule } from './personal-goal/personal-goal.module';
+import { DocumentsModule } from './documents/documents.module';
 
 @Module({
   imports: [
@@ -73,6 +74,7 @@ import { PersonalGoalModule } from './personal-goal/personal-goal.module';
     CompetencyModule,
     EmployeeSkillModule,
     PersonalGoalModule,
+    DocumentsModule,
   ],
 })
 export class AppModule {}

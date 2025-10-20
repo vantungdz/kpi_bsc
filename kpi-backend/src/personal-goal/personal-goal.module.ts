@@ -9,10 +9,17 @@ import { PersonalGoalKpi } from './entities/personal-goal-kpi.entity';
 
 /**
  * Module quản lý các mục tiêu cá nhân (PersonalGoal)
- * Kết hợp với các entity liên quan như KPI, KPIAssignment, KpiValue
+ * Combined with related entities like KPI, KPIAssignment, KpiValue
  */
 @Module({
-  imports: [TypeOrmModule.forFeature([PersonalGoal, PersonalGoalKpi, KPIAssignment, KpiValue])],
+  imports: [
+    TypeOrmModule.forFeature([
+      PersonalGoal,
+      PersonalGoalKpi,
+      KPIAssignment,
+      KpiValue,
+    ]),
+  ],
   providers: [PersonalGoalService],
   controllers: [PersonalGoalController],
   exports: [PersonalGoalService],

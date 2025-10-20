@@ -80,17 +80,17 @@ export class DashboardsService {
 
     const byLevelResults = [
       {
-        name: 'Trưởng Bộ phận/Section Leader',
+        name: 'Section Leader',
         count: byLevelCounts[KpiValueStatus.PENDING_SECTION_APPROVAL],
         status: KpiValueStatus.PENDING_SECTION_APPROVAL,
       },
       {
-        name: 'Trưởng phòng/Department Manager',
+        name: 'Department Manager',
         count: byLevelCounts[KpiValueStatus.PENDING_DEPT_APPROVAL],
         status: KpiValueStatus.PENDING_DEPT_APPROVAL,
       },
       {
-        name: 'Quản lý cấp cao/Manager',
+        name: 'Senior Manager',
         count: byLevelCounts[KpiValueStatus.PENDING_MANAGER_APPROVAL],
         status: KpiValueStatus.PENDING_MANAGER_APPROVAL,
       },
@@ -375,23 +375,6 @@ export class DashboardsService {
   }
 
   // Helper: check if user has a permission (resource, action, scope)
-  private userHasPermission(
-    user: Employee,
-    resource: string,
-    action: string,
-    scope?: string,
-  ): boolean {
-    return userHasPermission(user, action, resource, scope);
-  }
-
-  private hasDynamicRole(
-    currentUser: Employee,
-    resource: string,
-    action: string,
-    scope?: string,
-  ): boolean {
-    return this.userHasPermission(currentUser, resource, action, scope);
-  }
 
   private applyRoleBasedFilters<
     T extends KpiValue | KpiValueHistory | Kpi | KPIAssignment,
@@ -406,11 +389,11 @@ export class DashboardsService {
     },
   ): boolean {
     // Prioritize highest permission level
-    if (this.hasDynamicRole(currentUser, 'kpi', 'view', 'company')) {
+    if (userHasPermission(currentUser, 'kpi', 'view', 'company')) {
       return true;
     }
     if (
-      this.hasDynamicRole(currentUser, 'kpi', 'view', 'department') &&
+      userHasPermission(currentUser, 'kpi', 'view', 'department') &&
       currentUser.departmentId
     ) {
       query.andWhere(
@@ -420,7 +403,7 @@ export class DashboardsService {
       return true;
     }
     if (
-      this.hasDynamicRole(currentUser, 'kpi', 'view', 'section') &&
+      userHasPermission(currentUser, 'kpi', 'view', 'section') &&
       currentUser.sectionId
     ) {
       query.andWhere(
@@ -429,7 +412,7 @@ export class DashboardsService {
       );
       return true;
     }
-    if (this.hasDynamicRole(currentUser, 'kpi', 'view', 'personal')) {
+    if (userHasPermission(currentUser, 'kpi', 'view', 'personal')) {
       query.andWhere(`${aliases.assignedEmployeeAlias}.id = :userId`, {
         userId: currentUser.id,
       });
@@ -482,7 +465,7 @@ export class DashboardsService {
 
     // Check dashboard view permissions by scope from high to low
     if (
-      this.userHasPermission(currentUser, 'kpi-value', 'approve', 'manager') &&
+      userHasPermission(currentUser, 'approve', 'kpi-value', 'manager') &&
       currentUser.departmentId
     ) {
       pendingValuesQuery.andWhere(
@@ -499,12 +482,7 @@ export class DashboardsService {
         }),
       );
     } else if (
-      this.userHasPermission(
-        currentUser,
-        'kpi-value',
-        'approve',
-        'department',
-      ) &&
+      userHasPermission(currentUser, 'approve', 'kpi-value', 'department') &&
       currentUser.departmentId
     ) {
       pendingValuesQuery.andWhere(
@@ -517,15 +495,33 @@ export class DashboardsService {
         }),
       );
     } else if (
-      this.userHasPermission(currentUser, 'kpi-value', 'approve', 'section') &&
-      currentUser.sectionId
+      userHasPermission(currentUser, 'approve', 'kpi-value', 'section')
     ) {
-      pendingValuesQuery.andWhere('assignedSection.id = :sectionId', {
-        sectionId: currentUser.sectionId,
-      });
-    } else if (
-      this.userHasPermission(currentUser, 'kpi-value', 'approve', 'user')
-    ) {
+      // Ensure only KPIs of employees in the same department can be viewed
+      if (currentUser.departmentId) {
+        pendingValuesQuery.andWhere(
+          new Brackets((qb) => {
+            // If user has sectionId, only view KPIs of that section
+            if (currentUser.sectionId) {
+              qb.where('assignedSection.id = :sectionId', {
+                sectionId: currentUser.sectionId,
+              });
+            } else {
+              // If user has no sectionId but has departmentId, view all KPIs in department
+              qb.where('assignedDepartment.id = :deptId', {
+                deptId: currentUser.departmentId,
+              })
+                .orWhere('departmentOfAssignedSection.id = :deptId', {
+                  deptId: currentUser.departmentId,
+                })
+                .orWhere('submitterDepartment.id = :deptId', {
+                  deptId: currentUser.departmentId,
+                });
+            }
+          }),
+        );
+      }
+    } else if (userHasPermission(currentUser, 'approve', 'kpi-value', 'user')) {
       pendingValuesQuery.andWhere('assignedEmployee.id = :userId', {
         userId: currentUser.id,
       });
@@ -593,7 +589,7 @@ export class DashboardsService {
       } else if (pv.status === KpiValueStatus.PENDING_MANAGER_APPROVAL) {
         approverType = 'user';
         approverEntityId = 0;
-        approverName = 'Cấp Quản lý/Admin';
+        approverName = 'Management/Admin';
         approverKey = `group_manager_admin`;
       }
 
@@ -666,10 +662,10 @@ export class DashboardsService {
 
     // Check dashboard view permissions by scope from high to low
     // Admin/Manager with global permission can view all entities without restrictions
-    if (!this.userHasPermission(currentUser, 'view', 'dashboard', 'global')) {
+    if (!userHasPermission(currentUser, 'view', 'dashboard', 'global')) {
       // Apply restrictions based on user permission level
       if (
-        this.userHasPermission(currentUser, 'view', 'kpi', 'department') &&
+        userHasPermission(currentUser, 'view', 'kpi', 'department') &&
         currentUser.departmentId
       ) {
         // Department Manager: Only view entities in department
@@ -680,16 +676,14 @@ export class DashboardsService {
           },
         );
       } else if (
-        this.userHasPermission(currentUser, 'view', 'kpi', 'section') &&
+        userHasPermission(currentUser, 'view', 'kpi', 'section') &&
         currentUser.sectionId
       ) {
         // Section Manager: Only view entities in section
         topEntitiesQuery.andWhere('submitter.sectionId = :userSectionId', {
           userSectionId: currentUser.sectionId,
         });
-      } else if (
-        this.userHasPermission(currentUser, 'view', 'kpi', 'employee')
-      ) {
+      } else if (userHasPermission(currentUser, 'view', 'kpi', 'employee')) {
         // Employee: Only view own information
         topEntitiesQuery.andWhere('submitter.id = :userId', {
           userId: currentUser.id,
@@ -760,9 +754,9 @@ export class DashboardsService {
         [];
 
       if (!entityName) {
-        if (entityType === 'section') entityName = 'Không có Bộ phận';
-        else if (entityType === 'department') entityName = 'Không có Phòng ban';
-        else entityName = 'Người dùng không xác định';
+        if (entityType === 'section') entityName = 'No Section';
+        else if (entityType === 'department') entityName = 'No Department';
+        else entityName = 'Unknown User';
       }
 
       if (recentKpisLimit > 0 && entityId) {
@@ -799,7 +793,7 @@ export class DashboardsService {
 
         // Check KPI details view permissions by scope
         if (
-          this.userHasPermission(currentUser, 'view', 'kpi', 'department') &&
+          userHasPermission(currentUser, 'view', 'kpi', 'department') &&
           currentUser.departmentId
         ) {
           kpiDetailsQuery.andWhere(
@@ -963,8 +957,8 @@ export class DashboardsService {
     // Check performance view permissions by scope
     const performanceByRole: PerformanceByRoleDto[] = [];
     if (
-      this.userHasPermission(currentUser, 'view', 'dashboard', 'global') ||
-      this.userHasPermission(currentUser, 'view', 'kpi', 'department')
+      userHasPermission(currentUser, 'view', 'dashboard', 'global') ||
+      userHasPermission(currentUser, 'view', 'kpi', 'department')
     ) {
       const performanceMap = new Map<
         number,
@@ -985,11 +979,11 @@ export class DashboardsService {
           item.assigneddirectlytodepartment_name ||
           item.assignedemployee_department_name ||
           item.departmentofassignedsection_name ||
-          'Không xác định';
+          'Unknown';
 
         if (departmentId) {
           if (
-            this.userHasPermission(currentUser, 'view', 'kpi', 'department') &&
+            userHasPermission(currentUser, 'view', 'kpi', 'department') &&
             currentUser.departmentId !== departmentId
           ) {
             continue;
@@ -1063,7 +1057,7 @@ export class DashboardsService {
       .where('kpi.deleted_at IS NULL');
 
     if (
-      this.userHasPermission(currentUser, 'view', 'kpi', 'department') &&
+      userHasPermission(currentUser, 'view', 'kpi', 'department') &&
       currentUser.departmentId
     ) {
       totalKpiDefinitionsQuery
@@ -1172,7 +1166,7 @@ export class DashboardsService {
     const assignmentsByDepartment = assignmentsByDepartmentRaw
       .map((item) => ({
         departmentId: parseInt(item.departmentId, 10),
-        departmentName: item.departmentName || 'Không xác định',
+        departmentName: item.departmentName || 'Unknown',
         count: parseInt(item.count, 10),
       }))
       .filter((item) => item.departmentId);

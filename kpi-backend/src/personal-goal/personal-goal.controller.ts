@@ -25,15 +25,6 @@ import { userHasPermission } from '../common/utils/permission.utils';
 export class PersonalGoalController {
   constructor(private readonly service: PersonalGoalService) {}
 
-  private userHasPermission(
-    user: Employee,
-    action: string,
-    resource: string,
-    scope?: string,
-  ): boolean {
-    return userHasPermission(user, action, resource, scope);
-  }
-
   @Post()
   create(@Req() req, @Body() dto: CreatePersonalGoalDto) {
     return this.service.create(req.user.id, dto);
@@ -52,7 +43,7 @@ export class PersonalGoalController {
     const user: Employee = req.user;
 
     if (employeeId) {
-      const canViewEmployeeGoals = this.userHasPermission(
+      const canViewEmployeeGoals = userHasPermission(
         user,
         'view',
         'employee',
@@ -72,7 +63,7 @@ export class PersonalGoalController {
       );
     }
 
-    const canViewAllGoals = this.userHasPermission(
+    const canViewAllGoals = userHasPermission(
       user,
       'view',
       'employee',

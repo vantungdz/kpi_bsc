@@ -3,44 +3,80 @@
     <a-card class="cycle-header-card" bordered>
       <template #title>
         <div class="cycle-header-flex">
-          <span style="display:flex;align-items:center;gap:8px;">
-            <calendar-outlined style="color:#2563eb;font-size:22px;" />
-            <span>{{ $t('reviewCycle.createTitle') }}</span>
+          <span style="display: flex; align-items: center; gap: 8px">
+            <calendar-outlined style="color: #2563eb; font-size: 22px" />
+            <span>{{ $t("reviewCycle.createTitle") }}</span>
           </span>
         </div>
       </template>
-      <a-form layout="vertical" :model="form" @submit.prevent="handleSubmit" class="cycle-form-modern">
+      <a-form
+        layout="vertical"
+        :model="form"
+        @submit.prevent="handleSubmit"
+        class="cycle-form-modern"
+      >
         <a-row :gutter="16">
-          <a-col :span="8">
+          <a-col :span="6">
             <a-form-item :label="$t('reviewCycle.name')" required>
-              <a-input v-model:value="form.name" :placeholder="$t('reviewCycle.namePlaceholder')" />
+              <a-input
+                v-model:value="form.name"
+                :placeholder="$t('reviewCycle.namePlaceholder')"
+              />
             </a-form-item>
           </a-col>
-          <a-col :span="8">
+          <a-col :span="6">
             <a-form-item :label="$t('reviewCycle.startDate')" required>
-              <a-date-picker v-model:value="form.startDate" style="width: 100%" />
+              <a-date-picker
+                v-model:value="form.startDate"
+                style="width: 100%"
+              />
             </a-form-item>
           </a-col>
-          <a-col :span="8">
+          <a-col :span="6">
             <a-form-item :label="$t('reviewCycle.endDate')" required>
               <a-date-picker v-model:value="form.endDate" style="width: 100%" />
             </a-form-item>
           </a-col>
+          <a-col :span="6">
+            <a-form-item style="margin-top: 30px">
+              <a-button type="primary" @click="handleSubmit" :loading="loading">
+                <PlusOutlined /> {{ $t("reviewCycle.createButton") }}
+              </a-button>
+            </a-form-item>
+          </a-col>
         </a-row>
-        <a-form-item style="margin-bottom:0;">
-          <a-button type="primary" @click="handleSubmit" :loading="loading">
-            <PlusOutlined /> {{ $t('reviewCycle.createButton') }}
-          </a-button>
-        </a-form-item>
-        <a-alert v-if="successMessage" type="success" :message="successMessage" show-icon closable style="margin-top: 16px" />
-        <a-alert v-if="errorMessage" type="error" :message="errorMessage" show-icon closable style="margin-top: 16px" />
+
+        <a-alert
+          v-if="successMessage"
+          type="success"
+          :message="successMessage"
+          show-icon
+          closable
+          style="margin-top: 16px"
+        />
+        <a-alert
+          v-if="errorMessage"
+          type="error"
+          :message="errorMessage"
+          show-icon
+          closable
+          style="margin-top: 16px"
+        />
       </a-form>
     </a-card>
     <a-card class="cycle-list-card" bordered>
       <div class="cycle-list-header">
-        <span style="font-size:18px;font-weight:600;display:flex;align-items:center;gap:8px;">
-          <unordered-list-outlined style="color:#2563eb;font-size:20px;" />
-          {{ $t('reviewCycle.listTitle') }}
+        <span
+          style="
+            font-size: 18px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+          "
+        >
+          <unordered-list-outlined style="color: #2563eb; font-size: 20px" />
+          {{ $t("reviewCycle.listTitle") }}
         </span>
       </div>
       <a-table
@@ -55,22 +91,40 @@
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'actions'">
             <a-space>
-              <a-button size="small" type="primary" @click="editCycle(record)"><edit-outlined /> {{ $t('common.edit') }}</a-button>
-              <a-popconfirm :title="$t('reviewCycle.confirmDelete')" @confirm="deleteCycle(record.id)" :ok-text="$t('common.delete')" :cancel-text="$t('common.cancel')">
-                <a-button size="small" danger><delete-outlined /> {{ $t('common.delete') }}</a-button>
+              <a-button size="small" type="primary" @click="editCycle(record)"
+                ><edit-outlined /> {{ $t("common.edit") }}</a-button
+              >
+              <a-popconfirm
+                :title="$t('reviewCycle.confirmDelete')"
+                @confirm="deleteCycle(record.id)"
+                :ok-text="$t('common.delete')"
+                :cancel-text="$t('common.cancel')"
+              >
+                <a-button size="small" danger
+                  ><delete-outlined /> {{ $t("common.delete") }}</a-button
+                >
               </a-popconfirm>
             </a-space>
           </template>
         </template>
       </a-table>
     </a-card>
-    <a-modal v-model:open="editing" :title="$t('reviewCycle.editTitle')" @ok="submitEdit" @cancel="cancelEdit" :confirm-loading="loadingEdit">
+    <a-modal
+      v-model:open="editing"
+      :title="$t('reviewCycle.editTitle')"
+      @ok="submitEdit"
+      @cancel="cancelEdit"
+      :confirm-loading="loadingEdit"
+    >
       <a-form layout="vertical">
         <a-form-item :label="$t('reviewCycle.name')" required>
           <a-input v-model:value="editForm.name" />
         </a-form-item>
         <a-form-item :label="$t('reviewCycle.startDate')" required>
-          <a-date-picker v-model:value="editForm.startDate" style="width: 100%" />
+          <a-date-picker
+            v-model:value="editForm.startDate"
+            style="width: 100%"
+          />
         </a-form-item>
         <a-form-item :label="$t('reviewCycle.endDate')" required>
           <a-date-picker v-model:value="editForm.endDate" style="width: 100%" />
@@ -84,8 +138,14 @@
 import { ref, onMounted, computed } from "vue";
 import apiClient from "@/core/services/api";
 import dayjs from "dayjs";
-import { useI18n } from 'vue-i18n';
-import { CalendarOutlined, PlusOutlined, EditOutlined, DeleteOutlined, UnorderedListOutlined } from '@ant-design/icons-vue';
+import { useI18n } from "vue-i18n";
+import {
+  CalendarOutlined,
+  PlusOutlined,
+  EditOutlined,
+  DeleteOutlined,
+  UnorderedListOutlined,
+} from "@ant-design/icons-vue";
 
 const { t } = useI18n();
 
@@ -98,20 +158,20 @@ const cycles = ref([]);
 const loadingCycles = ref(false);
 
 const columns = computed(() => [
-  { title: t('reviewCycle.name'), dataIndex: "name", key: "name" },
+  { title: t("reviewCycle.name"), dataIndex: "name", key: "name" },
   {
-    title: t('reviewCycle.startDate'),
+    title: t("reviewCycle.startDate"),
     dataIndex: "startDate",
     key: "startDate",
     customRender: ({ text }) => (text ? dayjs(text).format("YYYY-MM-DD") : ""),
   },
   {
-    title: t('reviewCycle.endDate'),
+    title: t("reviewCycle.endDate"),
     dataIndex: "endDate",
     key: "endDate",
     customRender: ({ text }) => (text ? dayjs(text).format("YYYY-MM-DD") : ""),
   },
-  { title: t('common.actions'), key: "actions" },
+  { title: t("common.actions"), key: "actions" },
 ]);
 
 const fetchCycles = async () => {
@@ -128,7 +188,7 @@ const fetchCycles = async () => {
 
 const handleSubmit = async () => {
   if (!form.value.name || !form.value.startDate || !form.value.endDate) {
-    errorMessage.value = t('reviewCycle.missingFields');
+    errorMessage.value = t("reviewCycle.missingFields");
     return;
   }
   loading.value = true;
@@ -139,11 +199,12 @@ const handleSubmit = async () => {
       startDate: form.value.startDate,
       endDate: form.value.endDate,
     });
-    successMessage.value = t('reviewCycle.createSuccess');
+    successMessage.value = t("reviewCycle.createSuccess");
     form.value = { name: "", startDate: null, endDate: null };
     fetchCycles();
   } catch (e) {
-    errorMessage.value = e?.response?.data?.message || t('reviewCycle.createError');
+    errorMessage.value =
+      e?.response?.data?.message || t("reviewCycle.createError");
   } finally {
     loading.value = false;
   }
@@ -208,13 +269,13 @@ onMounted(() => {
 
 <style scoped>
 .review-cycle-create-modern {
-  padding: 24px;
   background: #f6f8fa;
-  min-height: 100vh;
+  min-height: auto;
 }
-.cycle-header-card, .cycle-list-card {
+.cycle-header-card,
+.cycle-list-card {
   border-radius: 14px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
   margin: 0 auto 24px auto;
 }
 .cycle-header-flex {

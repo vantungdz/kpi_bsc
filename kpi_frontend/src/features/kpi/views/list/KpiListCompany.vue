@@ -100,228 +100,226 @@
         </a-row>
       </a-form>
     </a-card>
-    <div style="margin-top: 20px; margin-bottom: 20px">
-      <a-alert
-        v-if="loading"
-        :message="$t('loadingKpis')"
-        type="info"
-        show-icon
-      >
-        <template #icon> <a-spin /> </template>
-      </a-alert>
-      <a-alert
-        v-else-if="error"
-        :message="error"
-        type="error"
-        show-icon
-        closable
-      />
-      <a-alert
-        v-else-if="kpis.length === 0"
-        :message="$t('noKpisFound')"
-        type="warning"
-        show-icon
-        closable
-      />
-      <a-alert
-        v-if="deletedKpiName"
-        :message="$t('kpiDeleted', { name: deletedKpiName })"
-        type="success"
-        closable
-        @close="deletedKpiName = null"
-        show-icon
-      />
-      <a-alert
-        v-if="toggleStatusError"
-        :message="$t('toggleStatusError')"
-        :description="toggleStatusError"
-        type="error"
-        show-icon
-        closable
-        @close="clearToggleError"
-        style="margin-top: 10px"
-      />
-    </div>
-    <div v-if="groupedKpis" class="data-container">
-      <a-collapse
-        v-model:activeKey="activePanelKeys"
-        expandIconPosition="end"
-        class="kpi-collapse-modern"
-      >
-        <a-collapse-panel
-          v-for="(kpiList, perspectiveId) in groupedKpis"
-          :key="perspectiveId"
-          :header="
-            $t('perspectiveHeader', {
-              id: kpiList[0]?.perspective?.id || perspectiveId,
-              name: kpiList[0]?.perspective?.name || $t('uncategorized'),
-              count: kpiList ? kpiList.length : 0,
-            })
-          "
-          accordion
+    <a-alert v-if="loading" :message="$t('loadingKpis')" type="info" show-icon>
+      <template #icon> <a-spin /> </template>
+    </a-alert>
+    <a-alert
+      v-else-if="error"
+      :message="error"
+      type="error"
+      show-icon
+      closable
+    />
+    <a-alert
+      v-else-if="kpis.length === 0"
+      :message="$t('noKpisFound')"
+      type="warning"
+      show-icon
+      closable
+    />
+    <a-alert
+      v-if="deletedKpiName"
+      :message="$t('kpiDeleted', { name: deletedKpiName })"
+      type="success"
+      closable
+      @close="deletedKpiName = null"
+      show-icon
+    />
+    <a-alert
+      v-if="toggleStatusError"
+      :message="$t('toggleStatusError')"
+      :description="toggleStatusError"
+      type="error"
+      show-icon
+      closable
+      @close="clearToggleError"
+      style="margin-top: 10px"
+    />
+    <div class="kpi-list-scroll">
+      <div v-if="groupedKpis" class="data-container">
+        <a-collapse
+          v-model:activeKey="activePanelKeys"
+          expandIconPosition="end"
+          class="kpi-collapse-modern"
         >
-          <div v-if="kpiList && kpiList.length > 0">
-            <a-table
-              :columns="columns"
-              :data-source="kpiList"
-              row-key="id"
-              :pagination="false"
-              :size="'small'"
-              bordered
-              class="kpi-table-modern company-table-modern"
-              :rowClassName="() => 'kpi-row-hover'"
-            >
-              <template #bodyCell="{ column, record }">
-                <template v-if="column.dataIndex === 'department'">
-                  <avatar-group>
-                    <template
-                      v-for="assignment in Array.isArray(record.assignments)
-                        ? record.assignments.filter(
-                            (a) => a.assigned_to_department && a.department
-                          )
-                        : []"
-                      :key="assignment.id"
-                    >
-                      <a-tooltip :title="assignment.department.name">
-                        <a-avatar style="background-color: #1890ff">{{
-                          assignment.department.name[0]
-                        }}</a-avatar>
-                      </a-tooltip>
-                    </template>
-                  </avatar-group>
-                </template>
-                <template v-else-if="column.dataIndex === 'section'">
-                  <avatar-group>
-                    <template
-                      v-for="assignment in Array.isArray(record.assignments)
-                        ? record.assignments.filter(
-                            (a) => a.assigned_to_section && a.section
-                          )
-                        : []"
-                      :key="assignment.id"
-                    >
-                      <a-tooltip :title="assignment.section.name">
-                        <a-avatar style="background-color: #1890ff">{{
-                          assignment.section.name[0]
-                        }}</a-avatar>
-                      </a-tooltip>
-                    </template>
-                  </avatar-group>
-                </template>
-                <template v-else-if="column.dataIndex === 'employee'">
-                  <avatar-group>
-                    <template
-                      v-for="assignment in Array.isArray(record.assignments)
-                        ? record.assignments.filter(
-                            (a) => a.assigned_to_employee && a.employee
-                          )
-                        : []"
-                      :key="assignment.id"
-                    >
-                      <a-tooltip
-                        :title="
-                          assignment.employee.first_name +
-                          ' ' +
-                          assignment.employee.last_name
-                        "
+          <a-collapse-panel
+            v-for="(kpiList, perspectiveId) in groupedKpis"
+            :key="perspectiveId"
+            :header="
+              $t('perspectiveHeader', {
+                id: kpiList[0]?.perspective?.id || perspectiveId,
+                name: kpiList[0]?.perspective?.name || $t('uncategorized'),
+                count: kpiList ? kpiList.length : 0,
+              })
+            "
+            accordion
+          >
+            <div v-if="kpiList && kpiList.length > 0">
+              <a-table
+                :columns="columns"
+                :data-source="kpiList"
+                row-key="id"
+                :pagination="false"
+                :size="'small'"
+                bordered
+                class="kpi-table-modern company-table-modern"
+                :rowClassName="() => 'kpi-row-hover'"
+              >
+                <template #bodyCell="{ column, record }">
+                  <template v-if="column.dataIndex === 'department'">
+                    <avatar-group>
+                      <template
+                        v-for="assignment in Array.isArray(record.assignments)
+                          ? record.assignments.filter(
+                              (a) => a.assigned_to_department && a.department
+                            )
+                          : []"
+                        :key="assignment.id"
                       >
-                        <a-avatar style="background-color: #f56a00">{{
-                          assignment.employee.first_name[0]
-                        }}</a-avatar>
-                      </a-tooltip>
-                    </template>
-                  </avatar-group>
-                </template>
-                <template v-else-if="column.dataIndex === 'target'">
-                  <span class="kpi-value"
-                    >{{ Number(record.target).toLocaleString() }}
-                    {{ record.unit || "" }}</span
-                  >
-                </template>
-                <template v-else-if="column.key === 'status'">
-                  <a-tag
-                    :color="getKpiDefinitionStatusColor(record.status)"
-                    class="goal-status-tag"
-                  >
-                    {{
-                      $t("status_chart." + record.status) ||
-                      getKpiDefinitionStatusText(record.status)
-                    }}
-                  </a-tag>
-                  <a-switch
-                    v-if="canToggleStatusKpiCompany"
-                    :checked="record.status === KpiDefinitionStatus.APPROVED"
-                    :loading="isToggling && currentToggleKpiId === record.id"
-                    :disabled="isToggling && currentToggleKpiId !== record.id"
-                    :checked-children="$t('on')"
-                    :un-checked-children="$t('off')"
-                    size="small"
-                    @change="() => handleToggleStatus(record.id)"
-                    :title="$t('toggleStatus')"
-                  />
-                </template>
-                <template v-else-if="column.dataIndex === 'validityStatus'">
-                  <a-tag
-                    :color="
-                      validityStatusColor[record.validityStatus] || 'default'
-                    "
-                  >
-                    {{
-                      $t("validityStatus." + record.validityStatus) ||
-                      record.validityStatus
-                    }}
-                  </a-tag>
-                </template>
-                <template v-else-if="column.dataIndex === 'action'">
-                  <div style="text-align: center">
-                    <a-space>
-                      <a-tooltip :title="$t('viewDetails')">
-                        <a-button
-                          type="default"
-                          size="small"
-                          class="kpi-actions-button"
-                          @click="goToDetail(record)"
-                        >
-                          <schedule-outlined /> {{ $t("details") }}
-                        </a-button>
-                      </a-tooltip>
-                      <a-tooltip :title="$t('copyKpi')">
-                        <a-button
-                          type="dashed"
-                          size="small"
-                          @click="handleCopyKpi(record)"
-                          v-if="canCopyCompanyKpi"
-                        >
-                          <copy-outlined /> {{ $t("copy") }}
-                        </a-button>
-                      </a-tooltip>
-                      <a-tooltip :title="$t('deleteKpi')">
-                        <a-button
-                          danger
-                          size="small"
-                          class="kpi-actions-button"
-                          v-if="canDeleteCompanyKpiCompany"
-                          @click="
-                            showConfirmDeleteDialog(record.id, record.name)
+                        <a-tooltip :title="assignment.department.name">
+                          <a-avatar style="background-color: #1890ff">{{
+                            assignment.department.name[0]
+                          }}</a-avatar>
+                        </a-tooltip>
+                      </template>
+                    </avatar-group>
+                  </template>
+                  <template v-else-if="column.dataIndex === 'section'">
+                    <avatar-group>
+                      <template
+                        v-for="assignment in Array.isArray(record.assignments)
+                          ? record.assignments.filter(
+                              (a) => a.assigned_to_section && a.section
+                            )
+                          : []"
+                        :key="assignment.id"
+                      >
+                        <a-tooltip :title="assignment.section.name">
+                          <a-avatar style="background-color: #1890ff">{{
+                            assignment.section.name[0]
+                          }}</a-avatar>
+                        </a-tooltip>
+                      </template>
+                    </avatar-group>
+                  </template>
+                  <template v-else-if="column.dataIndex === 'employee'">
+                    <avatar-group>
+                      <template
+                        v-for="assignment in Array.isArray(record.assignments)
+                          ? record.assignments.filter(
+                              (a) => a.assigned_to_employee && a.employee
+                            )
+                          : []"
+                        :key="assignment.id"
+                      >
+                        <a-tooltip
+                          :title="
+                            assignment.employee.first_name +
+                            ' ' +
+                            assignment.employee.last_name
                           "
                         >
-                          <delete-outlined /> {{ $t("delete") }}
-                        </a-button>
-                      </a-tooltip>
-                    </a-space>
-                  </div>
+                          <a-avatar style="background-color: #f56a00">{{
+                            assignment.employee.first_name[0]
+                          }}</a-avatar>
+                        </a-tooltip>
+                      </template>
+                    </avatar-group>
+                  </template>
+                  <template v-else-if="column.dataIndex === 'target'">
+                    <span class="kpi-value"
+                      >{{ Number(record.target).toLocaleString() }}
+                      {{ record.unit || "" }}</span
+                    >
+                  </template>
+                  <template v-else-if="column.key === 'status'">
+                    <a-tag
+                      :color="getKpiDefinitionStatusColor(record.status)"
+                      class="goal-status-tag"
+                    >
+                      {{
+                        $t("status_chart." + record.status) ||
+                        getKpiDefinitionStatusText(record.status)
+                      }}
+                    </a-tag>
+                    <a-switch
+                      v-if="canToggleStatusKpiCompany"
+                      :checked="record.status === KpiDefinitionStatus.APPROVED"
+                      :loading="isToggling && currentToggleKpiId === record.id"
+                      :disabled="isToggling && currentToggleKpiId !== record.id"
+                      :checked-children="$t('on')"
+                      :un-checked-children="$t('off')"
+                      size="small"
+                      @change="() => handleToggleStatus(record.id)"
+                      :title="$t('toggleStatus')"
+                    />
+                  </template>
+                  <template v-else-if="column.dataIndex === 'validityStatus'">
+                    <a-tag
+                      :color="
+                        validityStatusColor[record.validityStatus] || 'default'
+                      "
+                    >
+                      {{
+                        $t("validityStatus." + record.validityStatus) ||
+                        record.validityStatus
+                      }}
+                    </a-tag>
+                  </template>
+                  <template v-else-if="column.dataIndex === 'action'">
+                    <div style="text-align: center">
+                      <a-space>
+                        <a-tooltip :title="$t('viewDetails')">
+                          <a-button
+                            type="default"
+                            size="small"
+                            class="kpi-actions-button"
+                            @click="goToDetail(record)"
+                          >
+                            <schedule-outlined /> {{ $t("details") }}
+                          </a-button>
+                        </a-tooltip>
+                        <a-tooltip :title="$t('copyKpi')">
+                          <a-button
+                            type="dashed"
+                            size="small"
+                            @click="handleCopyKpi(record)"
+                            v-if="canCopyCompanyKpi"
+                          >
+                            <copy-outlined /> {{ $t("copy") }}
+                          </a-button>
+                        </a-tooltip>
+                        <a-tooltip :title="$t('deleteKpi')">
+                          <a-button
+                            danger
+                            size="small"
+                            class="kpi-actions-button"
+                            v-if="canDeleteCompanyKpiCompany"
+                            @click="
+                              showConfirmDeleteDialog(record.id, record.name)
+                            "
+                          >
+                            <delete-outlined /> {{ $t("delete") }}
+                          </a-button>
+                        </a-tooltip>
+                      </a-space>
+                    </div>
+                  </template>
+                  <template v-else>
+                    <span>{{ record[column.dataIndex] || "--" }}</span>
+                  </template>
                 </template>
-                <template v-else>
-                  <span>{{ record[column.dataIndex] || "--" }}</span>
-                </template>
-              </template>
-            </a-table>
-          </div>
-          <span v-else>{{ $t("noKpisForPerspective") }}</span>
-        </a-collapse-panel>
-      </a-collapse>
+              </a-table>
+            </div>
+            <span v-else>{{ $t("noKpisForPerspective") }}</span>
+          </a-collapse-panel>
+        </a-collapse>
+      </div>
+      <a-empty
+        v-else-if="!loading && !error"
+        :description="$t('noKpisFound')"
+      />
     </div>
-    <a-empty v-else-if="!loading && !error" :description="$t('noKpisFound')" />
     <a-modal
       danger
       v-model:open="isDeleteModalVisible"
@@ -335,7 +333,7 @@
 </template>
 
 <script setup>
-import { reactive, computed, onMounted, ref, watch, h } from "vue";
+import { reactive, computed, onMounted, onUnmounted, ref, watch, h } from "vue";
 import { useStore } from "vuex";
 import { useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
@@ -445,6 +443,7 @@ const validityStatusColor = {
   active: "green",
   expiring_soon: "orange",
   expired: "red",
+  not_started: "blue",
 };
 
 const columns = computed(() => [
@@ -601,8 +600,8 @@ const goToCreateKpi = () => {
 
 const loadKpis = (page = 1) => {
   const params = {
-    scope: "company",
     page: page,
+    limit: 1000, // Get all KPIs since we don't have pagination in UI
   };
 
   if (localFilters.name) params.search = localFilters.name;
@@ -631,7 +630,7 @@ const handleCopyKpi = (record) => {
     });
   } else {
     notification.warning({
-      message: "Không thể sao chép do thiếu thông tin KPI.",
+      message: "Cannot copy due to missing KPI information.",
     });
   }
 };
@@ -713,15 +712,36 @@ onMounted(async () => {
   await loadKpis();
 
   await store.dispatch("departments/fetchDepartments");
+  document.body.classList.add("no-outer-scroll");
+});
+
+onUnmounted(() => {
+  document.body.classList.remove("no-outer-scroll");
 });
 </script>
 
 <style scoped>
 .kpi-company-list-page {
-  padding: 24px;
+  /* padding: 24px; */
   background: #f6f8fa;
-  min-height: 100vh;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
+
+.kpi-list-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.data-container {
+  overflow: visible !important;
+  height: auto !important;
+}
+
 .list-header-modern {
   display: flex;
   align-items: center;
@@ -851,5 +871,27 @@ onMounted(async () => {
   text-transform: capitalize;
   border: none !important;
   display: inline-block;
+}
+
+:deep(.kpi-list-scroll .ant-table-body),
+:deep(.kpi-list-scroll .ant-table-content),
+:deep(.kpi-list-scroll .ant-table-container),
+:deep(.kpi-list-scroll .ant-table-header) {
+  overflow: visible !important;
+  max-height: none !important;
+}
+
+:deep(.kpi-list-scroll .ant-table-thead th) {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+:deep(.kpi-list-scroll .ant-collapse-content-box) {
+  overflow: visible !important;
+}
+
+:deep(.ant-card-body) {
+  padding: 0 !important;
 }
 </style>

@@ -1,13 +1,14 @@
-
-import apiClient from "@/core/services/api";
 import { notification } from "ant-design-vue";
 import store from "@/core/store";
+import { getTranslatedErrorMessage } from "@/core/services/messageTranslator";
+import i18n from "@/core/i18n";
+import apiClient from "@/core/services/api";
 
 const state = {
-  submitUpdateError: null, 
-  approvalError: null, 
-  pendingError: null, 
-  pendingApprovals: [], 
+  submitUpdateError: null,
+  approvalError: null,
+  pendingError: null,
+  pendingApprovals: [],
 };
 
 const getters = {
@@ -20,29 +21,28 @@ const getters = {
 const mutations = {
   SET_SUBMIT_UPDATE_ERROR(state, error) {
     state.submitUpdateError = error
-      ? error.response?.data?.message ||
+      ? getTranslatedErrorMessage(error.response?.data?.message) ||
         error.message ||
-        "An unknown error occurred."
+        i18n.global.t("errors.unknownError")
       : null;
   },
   SET_APPROVAL_ERROR(state, error) {
     state.approvalError = error
-      ? error.response?.data?.message ||
+      ? getTranslatedErrorMessage(error.response?.data?.message) ||
         error.message ||
-        "An unknown error occurred."
+        i18n.global.t("errors.unknownError")
       : null;
   },
   SET_PENDING_ERROR(state, error) {
     state.pendingError = error
-      ? error.response?.data?.message ||
+      ? getTranslatedErrorMessage(error.response?.data?.message) ||
         error.message ||
-        "An unknown error occurred."
+        i18n.global.t("errors.unknownError")
       : null;
   },
   SET_PENDING_APPROVALS(state, items) {
     state.pendingApprovals = items || [];
   },
-  
 };
 
 const actions = {
@@ -55,8 +55,9 @@ const actions = {
         "[kpi-values/updateKpiValue] Missing kpiValueId or updateData."
       );
       notification.error({
-        message: "Update Failed",
-        description: "Missing required data to update progress.",
+        message: i18n.global.t("errors.unknownError"),
+        description: i18n.global.t("errors.unknownError"),
+        duration: 5,
       });
       return false;
     }
@@ -70,16 +71,20 @@ const actions = {
     } catch (error) {
       const status = error.response?.status;
       const serverMessage = error.response?.data?.message;
-      let errorMessage = "Failed to update progress.";
+      let errorMessage = i18n.global.t("errors.unknownError");
 
       if (status === 404) {
-        errorMessage = `KPI Value record with ID ${kpiValueId} not found.`;
+        errorMessage = i18n.global.t("errors.notFound");
       } else if (serverMessage) {
-        errorMessage = Array.isArray(serverMessage)
-          ? serverMessage.join(", ")
-          : serverMessage;
+        errorMessage = getTranslatedErrorMessage(
+          Array.isArray(serverMessage)
+            ? serverMessage.join(", ")
+            : serverMessage
+        );
       } else {
-        errorMessage = error.message || "An unknown error occurred.";
+        errorMessage =
+          getTranslatedErrorMessage(error.message) ||
+          i18n.global.t("errors.unknownError");
       }
 
       console.error(
@@ -87,8 +92,9 @@ const actions = {
         error.response || error
       );
       notification.error({
-        message: "Update Failed",
+        message: i18n.global.t("errors.unknownError"),
         description: errorMessage,
+        duration: 5,
       });
       return false;
     } finally {
@@ -246,6 +252,65 @@ const actions = {
   },
 
   /**
+   * Duyệt KPI ở cấp Manager.
+   */
+  async approveValueManager({ commit, dispatch }, { valueId }) {
+    await store.dispatch("loading/startLoading");
+    commit("SET_APPROVAL_ERROR", null);
+    try {
+      const response = await apiClient.post(
+        `/kpi-values/${valueId}/approve-manager`
+      );
+      notification.success({ message: "Manager Approved Successfully!" });
+      await dispatch("fetchPendingApprovals");
+      return response.data;
+    } catch (error) {
+      const errorMsg =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to approve at manager level.";
+      commit("SET_APPROVAL_ERROR", errorMsg);
+      notification.error({
+        message: "Approval Failed",
+        description: errorMsg,
+      });
+      throw error;
+    } finally {
+      await store.dispatch("loading/stopLoading");
+    }
+  },
+
+  /**
+   * Từ chối KPI ở cấp Manager.
+   */
+  async rejectValueManager({ commit, dispatch }, { valueId, reason }) {
+    await store.dispatch("loading/startLoading");
+    commit("SET_APPROVAL_ERROR", null);
+    try {
+      const response = await apiClient.post(
+        `/kpi-values/${valueId}/reject-manager`,
+        { reason }
+      );
+      notification.success({ message: "Manager Rejected Successfully!" });
+      await dispatch("fetchPendingApprovals");
+      return response.data;
+    } catch (error) {
+      const errorMsg =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to reject at manager level.";
+      commit("SET_APPROVAL_ERROR", errorMsg);
+      notification.error({
+        message: "Rejection Failed",
+        description: errorMsg,
+      });
+      throw error;
+    } finally {
+      await store.dispatch("loading/stopLoading");
+    }
+  },
+
+  /**
    * Lấy danh sách KPI chờ duyệt.
    */
   async fetchPendingApprovals({ commit }) {
@@ -286,11 +351,11 @@ const actions = {
         error
       );
       notification.error({
-        message: "Lỗi tải lịch sử",
+        message: "Error loading history",
         description:
           error.response?.data?.message ||
           error.message ||
-          "Không thể tải lịch sử cho mục này.",
+          "Cannot load history for this item.",
       });
       throw error;
     } finally {

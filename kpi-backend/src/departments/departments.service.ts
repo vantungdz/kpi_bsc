@@ -50,15 +50,23 @@ export class DepartmentsService {
           employee: manager,
         };
       }
-
-      await this.employeesService.updateEmployee(manager.id, {
-        departmentId: department.id,
-        sectionId: undefined,
-        roles: ['manager' as any],
-        _mergeRoles: true,
-      });
     }
     const savedDepartment = await this.departmentRepository.save(department);
+
+    // Assign management permissions AFTER saving department (so department.id exists)
+    if (createDepartmentDto.managerId) {
+      const manager = await this.employeesService.findOne(
+        createDepartmentDto.managerId,
+      );
+      if (manager) {
+        await this.employeesService.assignManagementPermissions(manager.id, {
+          type: 'department',
+          resourceId: savedDepartment.id,
+          scope: 'department',
+        });
+      }
+    }
+
     return savedDepartment;
   }
 
@@ -158,11 +166,11 @@ export class DepartmentsService {
           .getRepository('Section')
           .save(section);
       }
-      await this.employeesService.updateEmployee(manager.id, {
-        departmentId: department.id,
-        sectionId: undefined,
-        roles: ['manager' as any],
-        _mergeRoles: true,
+      // Use flexible management permission assignment instead of hard-coded 'manager' role
+      await this.employeesService.assignManagementPermissions(manager.id, {
+        type: 'department',
+        resourceId: department.id,
+        scope: 'department',
       });
     }
     const saved = await this.departmentRepository.save(department);
@@ -175,7 +183,7 @@ export class DepartmentsService {
       .count({ where: { department: { id } } });
     if (sectionCount > 0) {
       throw new BadRequestException(
-        'Không thể xóa phòng ban: vẫn còn section thuộc phòng ban này.',
+        'Cannot delete department: there are still sections belonging to this department.',
       );
     }
 
@@ -184,7 +192,7 @@ export class DepartmentsService {
       .count({ where: { department: { id } } });
     if (employeeCount > 0) {
       throw new BadRequestException(
-        'Không thể xóa phòng ban: vẫn còn nhân viên thuộc phòng ban này.',
+        'Cannot delete department: there are still employees belonging to this department.',
       );
     }
     await this.departmentRepository.delete(id);

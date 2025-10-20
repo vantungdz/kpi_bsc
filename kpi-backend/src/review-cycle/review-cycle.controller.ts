@@ -13,7 +13,7 @@ import { ReviewCycle } from './entities/review-cycle.entity';
 
 /**
  * Controller quản lý các chu kỳ đánh giá (ReviewCycle)
- * Cung cấp các API CRUD cho review cycle
+ * Provides CRUD APIs for review cycle
  */
 @Controller('review-cycles')
 export class ReviewCycleController {

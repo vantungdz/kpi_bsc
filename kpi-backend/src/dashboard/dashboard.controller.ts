@@ -46,11 +46,11 @@ export class DashboardsController {
 
   @Get('statistics/kpi-awaiting-approval')
   @ApiOperation({
-    summary: 'Lấy thống kê số lượng KPI values đang chờ duyệt cho dashboard',
+    summary: 'Get statistics of KPI values pending approval for dashboard',
   })
   @ApiResponse({
     status: 200,
-    description: 'Thống kê số lượng KPI values chờ duyệt.',
+    description: 'Statistics of KPI values pending approval.',
   })
   @ApiResponse({ status: 403, description: 'Forbidden.' })
   async getKpiAwaitingApprovalStats(
@@ -62,18 +62,17 @@ export class DashboardsController {
 
   @Get('statistics/kpi-status-over-time')
   @ApiOperation({
-    summary:
-      'Lấy thống kê số lượng KPI được duyệt/từ chối trong khoảng thời gian',
+    summary: 'Get statistics of approved/rejected KPIs within time range',
   })
   @ApiQuery({
     name: 'days',
     required: false,
     type: Number,
-    description: 'Số ngày gần đây để lấy thống kê (mặc định 7 ngày)',
+    description: 'Number of recent days to get statistics (default 7 days)',
   })
   @ApiResponse({
     status: 200,
-    description: 'Thống kê số lượng KPI được duyệt/từ chối.',
+    description: 'Statistics of approved/rejected KPIs.',
   })
   @ApiResponse({ status: 403, description: 'Forbidden.' })
   async getKpiStatusOverTimeStats(
@@ -85,10 +84,10 @@ export class DashboardsController {
   }
 
   @Get('statistics/average-approval-time')
-  @ApiOperation({ summary: 'Lấy thống kê thời gian duyệt KPI trung bình' })
+  @ApiOperation({ summary: 'Get average KPI approval time statistics' })
   @ApiResponse({
     status: 200,
-    description: 'Thống kê thời gian duyệt trung bình.',
+    description: 'Average approval time statistics.',
   })
   @ApiResponse({ status: 403, description: 'Forbidden.' })
   async getAverageApprovalTimeStats(
@@ -100,21 +99,21 @@ export class DashboardsController {
 
   @Get('statistics/top-kpi-activity')
   @ApiOperation({
-    summary: 'Lấy thống kê top KPI được submit/cập nhật nhiều nhất',
+    summary: 'Get statistics of top KPIs submitted/updated most frequently',
   })
   @ApiQuery({
     name: 'days',
     required: false,
     type: Number,
-    description: 'Số ngày gần đây để lấy thống kê (mặc định 30 ngày)',
+    description: 'Number of recent days to get statistics (default 30 days)',
   })
   @ApiQuery({
     name: 'limit',
     required: false,
     type: Number,
-    description: 'Số lượng top KPI muốn lấy (mặc định 5)',
+    description: 'Number of top KPIs to get (default 5)',
   })
-  @ApiResponse({ status: 200, description: 'Thống kê top KPI activity.' })
+  @ApiResponse({ status: 200, description: 'Top KPI activity statistics.' })
   @ApiResponse({ status: 403, description: 'Forbidden.' })
   async getTopKpiActivityStats(
     @Req() req: Request & { user?: Employee },
@@ -127,15 +126,19 @@ export class DashboardsController {
 
   @Get('statistics/top-pending-approvers')
   @ApiOperation({
-    summary: 'Lấy thống kê người dùng/bộ phận có nhiều KPI đang chờ duyệt nhất',
+    summary:
+      'Get statistics of users/departments with most pending KPI approvals',
   })
   @ApiQuery({
     name: 'limit',
     required: false,
     type: Number,
-    description: 'Số lượng top muốn lấy (mặc định 5)',
+    description: 'Number of top items to get (default 5)',
   })
-  @ApiResponse({ status: 200, description: 'Thống kê top pending approvers.' })
+  @ApiResponse({
+    status: 200,
+    description: 'Top pending approvers statistics.',
+  })
   @ApiResponse({ status: 403, description: 'Forbidden.' })
   async getTopPendingApproversStats(
     @Req() req: Request & { user?: Employee },
@@ -147,39 +150,39 @@ export class DashboardsController {
 
   @Get('statistics/kpi-submission-stats')
   @ApiOperation({
-    summary: 'Lấy thống kê người dùng/bộ phận submit KPI nhiều nhất/ít nhất',
+    summary: 'Get statistics of users/departments submitting KPIs most/least',
   })
   @ApiQuery({
     name: 'days',
     required: false,
     type: Number,
-    description: 'Số ngày gần đây (mặc định 30)',
+    description: 'Number of recent days (default 30)',
   })
   @ApiQuery({
     name: 'limit',
     required: false,
     type: Number,
-    description: 'Số lượng top (mặc định 5)',
+    description: 'Number of top items (default 5)',
   })
   @ApiQuery({
     name: 'entityType',
     required: true,
     enum: ['user', 'section', 'department'],
-    description: 'Loại thực thể (user, section, department)',
+    description: 'Entity type (user, section, department)',
   })
   @ApiQuery({
     name: 'orderBy',
     required: true,
     enum: ['most', 'least'],
-    description: 'Sắp xếp (most, least)',
+    description: 'Sort order (most, least)',
   })
   @ApiQuery({
     name: 'recentKpisLimit',
     required: false,
     type: Number,
-    description: 'Số KPI gần nhất cho mỗi đối tượng (mặc định 3)',
+    description: 'Number of recent KPIs for each object (default 3)',
   })
-  @ApiResponse({ status: 200, description: 'Thống kê submit KPI.' })
+  @ApiResponse({ status: 200, description: 'KPI submission statistics.' })
   @ApiResponse({ status: 403, description: 'Forbidden.' })
   async getKpiSubmissionStats(
     @Req() req: Request & { user?: Employee },
@@ -207,16 +210,17 @@ export class DashboardsController {
   }
 
   @Get('statistics/kpi-performance-overview')
-  @ApiOperation({ summary: 'Lấy tổng quan hiệu suất KPI' })
+  @ApiOperation({ summary: 'Get KPI performance overview' })
   @ApiQuery({
     name: 'daysForNotUpdated',
     required: false,
     type: Number,
-    description: 'Số ngày để coi là "chưa cập nhật gần đây" (mặc định 7)',
+    description:
+      'Number of days to consider as "not updated recently" (default 7)',
   })
   @ApiResponse({
     status: 200,
-    description: 'Dữ liệu tổng quan hiệu suất KPI.',
+    description: 'KPI performance overview data.',
     type: KpiPerformanceOverviewDto,
   })
   @ApiResponse({ status: 403, description: 'Forbidden.' })
@@ -233,10 +237,12 @@ export class DashboardsController {
   }
 
   @Get('statistics/kpi-inventory-stats')
-  @ApiOperation({ summary: 'Lấy tổng quan kho KPI (định nghĩa và lượt giao)' })
+  @ApiOperation({
+    summary: 'Get KPI inventory overview (definitions and assignments)',
+  })
   @ApiResponse({
     status: 200,
-    description: 'Dữ liệu tổng quan kho KPI.',
+    description: 'KPI inventory overview data.',
     type: KpiInventoryDto,
   })
   @ApiResponse({ status: 403, description: 'Forbidden.' })

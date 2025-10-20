@@ -59,29 +59,6 @@ export class KpisController {
     );
   }
 
-  @Get('/departments')
-  @ApiOperation({ summary: 'Get all departments from KPI assignments' })
-  @ApiResponse({
-    status: 200,
-    description: 'List of departments',
-    type: [Department],
-  })
-  async getKpisAssignedToDepartments(
-    @Req() req: Request & { user?: { id: number; username?: string } },
-  ) {
-    if (!req.user?.id)
-      throw new UnauthorizedException('User not authenticated.');
-    const data = await this.kpisService.getAllKpiAssignedToDepartments(
-      req.user.id,
-    );
-
-    const dataWithValidity = data.map((kpi) => ({
-      ...kpi,
-      validityStatus: getKpiStatus(kpi.start_date, kpi.end_date),
-    }));
-    return { data: dataWithValidity };
-  }
-
   @Get('/sections')
   @ApiOperation({ summary: 'Get all section from KPI assignments' })
   @ApiResponse({
@@ -106,7 +83,7 @@ export class KpisController {
     name: 'search',
     required: false,
     type: String,
-    description: 'Tìm kiếm theo tên',
+    description: 'Search by name',
   })
   @ApiQuery({ name: 'departmentId', required: false, type: Number })
   @ApiQuery({ name: 'department_id', required: false, type: Number })
@@ -128,7 +105,7 @@ export class KpisController {
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiQuery({ name: 'sortBy', required: false, type: String })
   @ApiQuery({ name: 'sortOrder', required: false, enum: ['ASC', 'DESC'] })
-  @ApiResponse({ status: 200, description: 'Danh sách KPI', type: [Kpi] })
+  @ApiResponse({ status: 200, description: 'List of KPIs', type: [Kpi] })
   findAll(
     @Query() filterDto: KpiFilterDto,
     @Req() req: Request & { user?: { id: number } },
@@ -152,8 +129,12 @@ export class KpisController {
   ) {
     if (!req.user)
       throw new UnauthorizedException('User not available in request.');
+
+    // departmentId = 0 means "all departments" (no filter)
+    const effectiveDepartmentId = departmentId === 0 ? null : departmentId;
+
     return this.kpisService.getDepartmentKpis(
-      departmentId,
+      effectiveDepartmentId,
       filterDto,
       req.user,
     );
@@ -253,15 +234,15 @@ export class KpisController {
   }
 
   @Patch(':id')
-  @ApiOperation({ summary: 'Cập nhật một đánh giá KPI' })
+  @ApiOperation({ summary: 'Update a KPI review' })
   @ApiResponse({
     status: 200,
-    description: 'Đánh giá được cập nhật',
+    description: 'Review has been updated',
     type: KpiEvaluation,
   })
-  @ApiResponse({ status: 400, description: 'Dữ liệu không hợp lệ' })
-  @ApiResponse({ status: 403, description: 'Không có quyền chỉnh sửa' })
-  @ApiResponse({ status: 404, description: 'Đánh giá không tồn tại' })
+  @ApiResponse({ status: 400, description: 'Invalid data' })
+  @ApiResponse({ status: 403, description: 'No permission to edit' })
+  @ApiResponse({ status: 404, description: 'Review not found' })
   async update(
     @Param('id') id: string,
     @Body() update: Partial<Kpi>,

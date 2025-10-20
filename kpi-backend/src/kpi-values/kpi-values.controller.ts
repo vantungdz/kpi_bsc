@@ -34,17 +34,17 @@ export class KpiValuesController {
   ) {}
 
   @Get()
-  @ApiOperation({ summary: 'Lấy danh sách tất cả KpiValue' })
+  @ApiOperation({ summary: 'Get list of all KpiValues' })
   @ApiResponse({ status: 200, type: [KpiValue] })
   async findAll(): Promise<KpiValue[]> {
     return this.kpiValuesService.findAll();
   }
 
   @Get('pending-approvals')
-  @ApiOperation({ summary: 'Lấy danh sách giá trị KPI đang chờ phê duyệt' })
+  @ApiOperation({ summary: 'Get list of KPI values pending approval' })
   @ApiResponse({
     status: 200,
-    description: 'Danh sách giá trị chờ duyệt.',
+    description: 'List of values pending approval.',
     type: [KpiValue],
   })
   @ApiResponse({ status: 403, description: 'Forbidden.' })
@@ -58,7 +58,7 @@ export class KpiValuesController {
   }
 
   @Get(':id/history')
-  @ApiOperation({ summary: 'Lấy lịch sử thay đổi của một giá trị KPI' })
+  @ApiOperation({ summary: 'Get change history of a KPI value' })
   @ApiResponse({ status: 200, type: [KpiValueHistory] })
   async getHistory(
     @Param('id', ParseIntPipe) id: number,
@@ -67,15 +67,15 @@ export class KpiValuesController {
   }
 
   @Get(':id')
-  @ApiOperation({ summary: 'Lấy chi tiết một giá trị KPI' })
+  @ApiOperation({ summary: 'Get details of a KPI value' })
   @ApiResponse({ status: 200, type: KpiValue })
-  @ApiResponse({ status: 404, description: 'Không tìm thấy' })
+  @ApiResponse({ status: 404, description: 'Not found' })
   async findOne(@Param('id', ParseIntPipe) id: number): Promise<KpiValue> {
     return this.kpiValuesService.findOne(id);
   }
 
   @Post()
-  @ApiOperation({ summary: 'Tạo một KpiValue mới' })
+  @ApiOperation({ summary: 'Create a new KpiValue' })
   @ApiResponse({ status: 201, type: KpiValue })
   async create(@Body() kpiValueData: Partial<KpiValue>): Promise<KpiValue> {
     const createdBy = 1; // Placeholder for authenticated user ID
@@ -83,9 +83,9 @@ export class KpiValuesController {
   }
 
   @Post('assignments/:assignmentId/updates')
-  @ApiOperation({ summary: 'Submit hoặc cập nhật giá trị KPI thực hiện' })
+  @ApiOperation({ summary: 'Submit or update KPI implementation value' })
   @ApiResponse({ status: 201, type: KpiValue })
-  @ApiResponse({ status: 404, description: 'Assignment không tồn tại.' })
+  @ApiResponse({ status: 404, description: 'Assignment does not exist.' })
   async submitProgressUpdate(
     @Param('assignmentId', ParseIntPipe) assignmentId: number,
     @Body() updateData: { notes: string; project_details: any[] },
@@ -103,7 +103,7 @@ export class KpiValuesController {
   }
 
   @Post(':valueId/approve-section')
-  @ApiOperation({ summary: 'Section Manager/Admin phê duyệt giá trị KPI' })
+  @ApiOperation({ summary: 'Section Manager/Admin approve KPI value' })
   @ApiResponse({ status: 200, type: KpiValue })
   async approveBySection(
     @Param('valueId', ParseIntPipe) valueId: number,
@@ -112,7 +112,10 @@ export class KpiValuesController {
     if (!req.user?.id) {
       throw new UnauthorizedException('User not authenticated.');
     }
-    const result = await this.kpiValuesService.approveValueBySection(valueId, req.user.id);
+    const result = await this.kpiValuesService.approveValueBySection(
+      valueId,
+      req.user.id,
+    );
     await this.auditLogService.logAction({
       action: 'APPROVE_SECTION',
       resource: 'KPI_VALUE',
@@ -124,7 +127,7 @@ export class KpiValuesController {
   }
 
   @Post(':valueId/reject-section')
-  @ApiOperation({ summary: 'Section Leader/Manager/Admin từ chối giá trị KPI' })
+  @ApiOperation({ summary: 'Section Leader/Manager/Admin reject KPI value' })
   @ApiBody({ type: RejectValueDto })
   @ApiResponse({ status: 200, type: KpiValue })
   async rejectBySection(
@@ -151,7 +154,7 @@ export class KpiValuesController {
   }
 
   @Post(':valueId/approve-department')
-  @ApiOperation({ summary: 'Department Manager/Admin phê duyệt giá trị KPI' })
+  @ApiOperation({ summary: 'Department Manager/Admin approve KPI value' })
   @ApiResponse({ status: 200, type: KpiValue })
   async approveByDepartment(
     @Param('valueId', ParseIntPipe) valueId: number,
@@ -160,7 +163,10 @@ export class KpiValuesController {
     if (!req.user?.id) {
       throw new UnauthorizedException('User not authenticated.');
     }
-    const result = await this.kpiValuesService.approveValueByDepartment(valueId, req.user.id);
+    const result = await this.kpiValuesService.approveValueByDepartment(
+      valueId,
+      req.user.id,
+    );
     await this.auditLogService.logAction({
       action: 'APPROVE_DEPARTMENT',
       resource: 'KPI_VALUE',
@@ -172,7 +178,7 @@ export class KpiValuesController {
   }
 
   @Post(':valueId/reject-department')
-  @ApiOperation({ summary: 'Department Manager/Admin từ chối giá trị KPI' })
+  @ApiOperation({ summary: 'Department Manager/Admin reject KPI value' })
   @ApiBody({ type: RejectValueDto })
   @ApiResponse({ status: 200, type: KpiValue })
   async rejectByDepartment(
@@ -199,7 +205,7 @@ export class KpiValuesController {
   }
 
   @Post(':valueId/approve-manager')
-  @ApiOperation({ summary: 'Manager/Admin phê duyệt cuối cùng giá trị KPI' })
+  @ApiOperation({ summary: 'Manager/Admin final approve KPI value' })
   @ApiResponse({ status: 200, type: KpiValue })
   async approveByManager(
     @Param('valueId', ParseIntPipe) valueId: number,
@@ -208,7 +214,10 @@ export class KpiValuesController {
     if (!req.user?.id) {
       throw new UnauthorizedException('User not authenticated.');
     }
-    const result = await this.kpiValuesService.approveValueByManager(valueId, req.user.id);
+    const result = await this.kpiValuesService.approveValueByManager(
+      valueId,
+      req.user.id,
+    );
     await this.auditLogService.logAction({
       action: 'APPROVE_MANAGER',
       resource: 'KPI_VALUE',
@@ -220,7 +229,7 @@ export class KpiValuesController {
   }
 
   @Post(':valueId/reject-manager')
-  @ApiOperation({ summary: 'Manager/Admin từ chối cuối cùng giá trị KPI' })
+  @ApiOperation({ summary: 'Manager/Admin final reject KPI value' })
   @ApiBody({ type: RejectValueDto })
   @ApiResponse({ status: 200, type: KpiValue })
   async rejectByManager(
@@ -247,7 +256,7 @@ export class KpiValuesController {
   }
 
   @Patch(':id')
-  @ApiOperation({ summary: 'Cập nhật một KpiValue' })
+  @ApiOperation({ summary: 'Update a KpiValue' })
   @ApiResponse({ status: 200, type: KpiValue })
   async update(
     @Param('id', ParseIntPipe) id: number,
@@ -257,7 +266,11 @@ export class KpiValuesController {
     if (!req.user?.id) {
       throw new UnauthorizedException('User not authenticated.');
     }
-    const result = await this.kpiValuesService.update(id, updateData, req.user.id);
+    const result = await this.kpiValuesService.update(
+      id,
+      updateData,
+      req.user.id,
+    );
     await this.auditLogService.logAction({
       action: 'UPDATE',
       resource: 'KPI_VALUE',
@@ -305,7 +318,7 @@ export class KpiValuesController {
   }
 
   @Delete(':id')
-  @ApiOperation({ summary: 'Xóa một KpiValue' })
+  @ApiOperation({ summary: 'Delete a KpiValue' })
   @ApiResponse({ status: 200 })
   async delete(
     @Param('id', ParseIntPipe) id: number,

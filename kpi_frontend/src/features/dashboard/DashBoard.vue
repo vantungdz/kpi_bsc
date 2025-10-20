@@ -6,7 +6,14 @@
       <span class="dashboard-header-title">{{ $t("dashboardOverview") }}</span>
     </div>
     <a-row :gutter="[24, 32]" class="dashboard-row">
-      <a-col v-for="card in dashboardCards" :key="card.key" :xs="24" :sm="12" :md="8" :lg="6">
+      <a-col
+        v-for="card in dashboardCards"
+        :key="card.key"
+        :xs="24"
+        :sm="12"
+        :md="8"
+        :lg="6"
+      >
         <router-link :to="card.to">
           <a-card hoverable :class="['dashboard-block-card', card.class]">
             <template #title>
@@ -15,7 +22,7 @@
             <div class="dashboard-card-content">
               <p>{{ $t(card.desc) }}</p>
               <div class="dashboard-card-action">
-                <span>{{ $t('viewDetail') }}</span>
+                <span>{{ $t("viewDetail") }}</span>
                 <arrow-right-outlined />
               </div>
             </div>
@@ -44,61 +51,69 @@ import {
   BarElement,
   CategoryScale,
   LinearScale,
+  ArcElement,
+} from "chart.js";
+ChartJS.register(
+  Title,
+  Tooltip,
+  Legend,
+  BarElement,
+  CategoryScale,
+  LinearScale,
   ArcElement
-} from 'chart.js';
-ChartJS.register(Title, Tooltip, Legend, BarElement, CategoryScale, LinearScale, ArcElement);
+);
 
 const store = useStore();
 const loading = computed(() => store.getters["loading/isLoading"]);
 
 const dashboardCards = [
   {
-    key: 'kpi-stats',
-    to: '/dashboard/kpi-process-stats',
+    key: "kpi-stats",
+    to: "/dashboard/kpi-process-stats",
     icon: LineChartOutlined,
-    title: 'kpiProcessStats',
-    desc: 'kpiProcessStatsDescription',
-    class: 'card-kpi-stats',
+    title: "kpiProcessStats",
+    desc: "kpiProcessStatsDescription",
+    class: "card-kpi-stats",
   },
   {
-    key: 'user-activity',
-    to: '/dashboard/user-activity-stats',
+    key: "user-activity",
+    to: "/dashboard/user-activity-stats",
     icon: UserSwitchOutlined,
-    title: 'userActivityStats',
-    desc: 'userActivityStatsDescription',
-    class: 'card-user-activity-stats',
+    title: "userActivityStats",
+    desc: "userActivityStatsDescription",
+    class: "card-user-activity-stats",
   },
   {
-    key: 'kpi-performance',
-    to: '/dashboard/kpi-performance-overview',
+    key: "kpi-performance",
+    to: "/dashboard/kpi-performance-overview",
     icon: BarChartOutlined,
-    title: 'kpiPerformanceOverview',
-    desc: 'kpiPerformanceOverviewDescription',
-    class: 'card-kpi-performance',
+    title: "kpiPerformanceOverview",
+    desc: "kpiPerformanceOverviewDescription",
+    class: "card-kpi-performance",
   },
   {
-    key: 'kpi-inventory',
-    to: '/dashboard/kpi-inventory-stats',
+    key: "kpi-inventory",
+    to: "/dashboard/kpi-inventory-stats",
     icon: AppstoreOutlined,
-    title: 'kpiInventoryOverview',
-    desc: 'kpiInventoryOverviewDescription',
-    class: 'card-kpi-inventory',
+    title: "kpiInventoryOverview",
+    desc: "kpiInventoryOverviewDescription",
+    class: "card-kpi-inventory",
   },
   {
-    key: 'employee-performance-history',
-    to: '/dashboard/employee-performance-history',
+    key: "employee-performance-history",
+    to: "/dashboard/employee-performance-history",
     icon: BarChartOutlined,
-    title: 'employeePerformanceHistory.title',
-    desc: 'employeePerformanceHistoryDescription',
-    class: 'card-employee-performance-history',
+    title: "employeePerformanceHistory.title",
+    desc: "employeePerformanceHistoryDescription",
+    class: "card-employee-performance-history",
   },
   {
-    key: 'objective-stats',
-    to: '/dashboard/strategic-objectives-stats',
+    key: "objective-stats",
+    to: "/dashboard/strategic-objectives-stats",
     icon: BarChartOutlined,
-    title: 'strategicObjectivesStats',
-    desc: 'strategicObjectivesStatsDescription',
-    class: 'card-objective-stats',
+    title: "strategicObjectivesStats",
+    desc: "strategicObjectivesStatsDescription",
+    class: "card-objective-stats",
   },
 ];
 </script>
@@ -107,7 +122,7 @@ const dashboardCards = [
 .dashboard-overview-container {
   padding: 32px 32px 24px 32px;
   background: #fafdff;
-  min-height: 100vh;
+  min-height: auto;
 }
 .dashboard-header {
   display: flex;
@@ -138,7 +153,7 @@ const dashboardCards = [
   min-height: 170px;
   border-radius: 16px;
   box-shadow: 0 4px 18px #e3eaf322;
-  transition: all 0.3s cubic-bezier(.25,.8,.25,1);
+  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
   display: flex;
   flex-direction: column;
   justify-content: space-between;

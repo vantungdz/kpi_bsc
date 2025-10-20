@@ -1,5 +1,6 @@
 import apiClient from "@/core/services/api";
 import store from "@/core/store";
+import { getTranslatedErrorMessage } from "@/core/services/messageTranslator";
 
 const state = {
   userList: [],
@@ -27,7 +28,10 @@ const getters = {
 
 const mutations = {
   SET_ERROR(state, error) {
-    state.error = error ? error.response?.data?.message || error.message : null;
+    state.error = error
+      ? getTranslatedErrorMessage(error.response?.data?.message) ||
+        error.message
+      : null;
   },
   SET_USERS(state, users) {
     state.userList = users || [];

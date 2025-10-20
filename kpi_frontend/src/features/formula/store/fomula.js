@@ -1,5 +1,7 @@
 import apiClient from "@/core/services/api";
 import { notification } from "ant-design-vue";
+import { getTranslatedErrorMessage } from "@/core/services/messageTranslator";
+import i18n from "@/core/i18n";
 
 const state = {
   formulas: [],
@@ -23,9 +25,9 @@ const mutations = {
   },
   SET_FORMULA_ERROR(state, error) {
     state.error = error
-      ? error.response?.data?.message ||
+      ? getTranslatedErrorMessage(error.response?.data?.message) ||
         error.message ||
-        "Đã xảy ra lỗi khi thao tác công thức."
+        i18n.global.t("errors.unknownError")
       : null;
   },
 };
@@ -43,13 +45,14 @@ const actions = {
 
       // Only show notification if it's not a permission error (already handled by API interceptor)
       const errorMsg =
-        error.response?.data?.message ||
+        getTranslatedErrorMessage(error.response?.data?.message) ||
         error.message ||
-        "Không thể tải danh sách công thức.";
-      if (!errorMsg.includes("No permission")) {
+        i18n.global.t("errors.unknownError");
+      if (!error.response?.data?.message?.includes("No permission")) {
         notification.error({
-          message: "Lỗi tải công thức",
+          message: i18n.global.t("errors.unknownError"),
           description: errorMsg,
+          duration: 5,
         });
       }
 
@@ -64,16 +67,18 @@ const actions = {
     commit("SET_FORMULA_ERROR", null);
     try {
       await apiClient.post("/kpi-formulas", formula);
-      notification.success({ message: "Thêm công thức thành công!" });
+      notification.success({ message: "Formula added successfully!" });
       await dispatch("fetchFormulas");
     } catch (error) {
       commit("SET_FORMULA_ERROR", error);
+      const errorMsg =
+        getTranslatedErrorMessage(error?.response?.data?.message) ||
+        error?.message ||
+        i18n.global.t("errors.unknownError");
       notification.error({
-        message: "Thêm công thức thất bại",
-        description:
-          error?.response?.data?.message ||
-          error?.message ||
-          "Không thể thêm công thức.",
+        message: i18n.global.t("errors.unknownError"),
+        description: errorMsg,
+        duration: 5,
       });
       throw error;
     } finally {
@@ -86,16 +91,18 @@ const actions = {
     commit("SET_FORMULA_ERROR", null);
     try {
       await apiClient.put(`/kpi-formulas/${id}`, updateData);
-      notification.success({ message: "Cập nhật công thức thành công!" });
+      notification.success({ message: "Formula updated successfully!" });
       await dispatch("fetchFormulas");
     } catch (error) {
       commit("SET_FORMULA_ERROR", error);
+      const errorMsg =
+        getTranslatedErrorMessage(error?.response?.data?.message) ||
+        error?.message ||
+        i18n.global.t("errors.unknownError");
       notification.error({
-        message: "Cập nhật công thức thất bại",
-        description:
-          error?.response?.data?.message ||
-          error?.message ||
-          "Không thể cập nhật công thức.",
+        message: i18n.global.t("errors.unknownError"),
+        description: errorMsg,
+        duration: 5,
       });
       throw error;
     } finally {
@@ -108,13 +115,18 @@ const actions = {
     commit("SET_FORMULA_ERROR", null);
     try {
       await apiClient.delete(`/kpi-formulas/${id}`);
-      notification.success({ message: "Xóa công thức thành công!" });
+      notification.success({ message: "Formula deleted successfully!" });
       await dispatch("fetchFormulas");
     } catch (error) {
       commit("SET_FORMULA_ERROR", error);
+      const errorMsg =
+        getTranslatedErrorMessage(error?.response?.data?.message) ||
+        error?.message ||
+        i18n.global.t("errors.unknownError");
       notification.error({
-        message: "Xóa công thức thất bại",
-        description: error.message || "Không thể xóa công thức.",
+        message: i18n.global.t("errors.unknownError"),
+        description: errorMsg,
+        duration: 5,
       });
       throw error;
     } finally {

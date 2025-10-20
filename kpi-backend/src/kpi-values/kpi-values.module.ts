@@ -20,6 +20,6 @@ import { AuditLogModule } from '../audit-log/audit-log.module';
   ],
   providers: [KpiValuesService],
   controllers: [KpiValuesController],
-  exports: [KpiValuesService], // Thêm dòng này để export service
+  exports: [KpiValuesService], // Add this line to export service
 })
 export class KpiValuesModule {}

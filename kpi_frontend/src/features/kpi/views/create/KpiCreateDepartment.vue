@@ -324,6 +324,8 @@
 import { onMounted, ref, computed, watch, reactive } from "vue";
 import { useRouter } from "vue-router";
 import { useStore } from "vuex";
+import { getTranslatedErrorMessage } from "@/core/services/messageTranslator";
+import i18n from "@/core/i18n";
 import {
   notification,
   Alert as AAlert,
@@ -556,7 +558,6 @@ const resetForm = (clearTemplateSelection = false) => {
   if (clearTemplateSelection) {
     selectedTemplateKpiId.value = null;
   }
-  console.log("Form Reset");
 };
 
 const loadKpiTemplate = async (selectedId) => {
@@ -566,7 +567,6 @@ const loadKpiTemplate = async (selectedId) => {
   }
   loadingKpiTemplate.value = true;
   assignmentError.value = null;
-  console.log(`Loading template KPI ID: ${selectedId}`);
   try {
     await store.dispatch("kpis/fetchKpiDetail", selectedId);
     const kpiDetail = store.getters["kpis/currentKpi"];
@@ -604,7 +604,6 @@ const loadKpiTemplate = async (selectedId) => {
       throw new Error("KPI Detail not found.");
     }
   } catch (error) {
-    console.error("Error loading KPI template:", error);
     notification.error({
       message: "Failed to load KPI template data.",
     });
@@ -840,8 +839,6 @@ const handleChangeCreate = async () => {
       delete kpiData.assignments.to_sections;
     }
 
-    console.log("Submitting KPI Data (Final Structure):", kpiData);
-
     await store.dispatch("kpis/createKpi", kpiData);
 
     resetForm(true);
@@ -852,26 +849,25 @@ const handleChangeCreate = async () => {
     });
   } catch (error) {
     if (error instanceof Error && error.message === assignmentError.value) {
-      console.log("Assignment validation failed:", assignmentError.value);
-    } else {
-      console.error("KPI creation failed:", error);
-      const errorMessage =
-        error?.response?.data?.message ||
-        error?.message ||
-        "KPI creation failed.";
-      notification.error({
-        message: "KPI Creation Failed",
-        description: errorMessage,
-        duration: 5,
-      });
+      // Assignment validation failed - error is already handled by assignmentError
+      return;
     }
+
+    const errorMessage =
+      getTranslatedErrorMessage(error?.response?.data?.message) ||
+      error?.message ||
+      i18n.global.t("errors.unknownError");
+    notification.error({
+      message: i18n.global.t("errors.unknownError"),
+      description: errorMessage,
+      duration: 5,
+    });
   } finally {
     loading.value = false;
   }
 };
 
 const onFinishFailed = (errorInfo) => {
-  console.log("Form validation failed:", errorInfo);
   let errorMessages = "Please check required fields and input formats.";
   if (errorInfo?.errorFields?.length > 0) {
     const nonAssignmentErrors = errorInfo.errorFields.filter(
@@ -1164,7 +1160,6 @@ onMounted(async () => {
       store.dispatch("formula/fetchFormulas"),
     ]);
   } catch (error) {
-    console.error("Error fetching initial data:", error);
     notification.error({
       message: "Failed to load necessary data.",
       description: error.message || "An error occurred.",
@@ -1196,7 +1191,6 @@ watch(
       targetValues.value = {};
       form.value.targets = {};
     } catch (error) {
-      console.error("Error fetching sections for department:", error);
       notification.error({
         message: "Failed to load sections for selected department.",
         description: error.message || "An error occurred.",

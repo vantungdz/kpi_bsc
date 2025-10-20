@@ -24,19 +24,40 @@ export class ReportsService {
     startDate?: Date,
     endDate?: Date,
     fileFormat: string = 'excel',
+    userId?: number,
   ): Promise<Buffer> {
-    const adminUser = await this.employeesService['employeeRepository']
-      .createQueryBuilder('employee')
-      .leftJoinAndSelect('employee.roles', 'role')
-      .where('role.name = :roleName', { roleName: 'admin' })
-      .getOne();
-    if (!adminUser) {
-      throw new Error('No admin user found for KPI report.');
+    if (!userId) {
+      throw new Error('User ID is required for KPI report generation.');
     }
-    const adminUserId = adminUser.id;
+    const reportUserId = userId;
+
+    // Create filter object for date filtering
+    const dateFilter: any = {};
+    if (startDate) {
+      dateFilter.startDate = startDate;
+    }
+    if (endDate) {
+      dateFilter.endDate = endDate;
+    }
+
+    // Check if there's data in the specified date range
+    const hasDataInRange = async (): Promise<boolean> => {
+      const testData = await this.kpisService.findAll(dateFilter, reportUserId);
+      return testData.data && testData.data.length > 0;
+    };
+
+    // If date range is specified, check if there's data
+    if ((startDate || endDate) && !(await hasDataInRange())) {
+      throw new Error(
+        `No KPI data found in the date range from ${startDate ? startDate.toLocaleDateString('en-US') : 'beginning'} to ${endDate ? endDate.toLocaleDateString('en-US') : 'end'}. Please select a different date range.`,
+      );
+    }
 
     if (fileFormat === 'pdf') {
-      const kpiSummaryData = await this.kpisService.findAll({}, adminUserId);
+      const kpiSummaryData = await this.kpisService.findAll(
+        dateFilter,
+        reportUserId,
+      );
 
       const doc = new PDFDocument({ size: 'A4', margin: 40 });
       const buffers: Buffer[] = [];
@@ -161,7 +182,10 @@ export class ReportsService {
         });
         let y = tableTop + 20;
         const rowPadding = 4;
-        const kpiDetailsData = await this.kpisService.findAll({}, adminUserId);
+        const kpiDetailsData = await this.kpisService.findAll(
+          dateFilter,
+          reportUserId,
+        );
         kpiDetailsData.data.forEach((kpi: any) => {
           x = 40;
           const row = [
@@ -236,15 +260,15 @@ export class ReportsService {
           typeof (this.kpisService as any).getKpiComparisonData === 'function'
         ) {
           comparisonData = await (this.kpisService as any).getKpiComparisonData(
-            adminUserId,
+            reportUserId,
           );
         } else {
           const kpiSummaryData = await this.kpisService.findAll(
             {},
-            adminUserId,
+            reportUserId,
           );
           comparisonData.data = (kpiSummaryData.data || []).map((k: any) => ({
-            department_name: k.department_name || 'Phòng ban A',
+            department_name: k.department_name || 'Department A',
             kpi_name: k.name,
             target: k.target,
             actual_value: k.actual_value,
@@ -293,17 +317,12 @@ export class ReportsService {
       }
 
       if (reportType === 'dashboard-multi') {
-        const adminUser = await this.employeesService['employeeRepository']
-          .createQueryBuilder('employee')
-          .leftJoinAndSelect('employee.roles', 'role')
-          .where('role.name = :roleName', { roleName: 'admin' })
-          .getOne();
-        if (!adminUser) {
-          throw new Error('No admin user found for dashboard report.');
-        }
+        // Use the current user for dashboard reports
 
         const awaitingStats =
-          await this.dashboardsService.getKpiAwaitingApprovalStats(adminUser);
+          await this.dashboardsService.getKpiAwaitingApprovalStats({
+            id: reportUserId,
+          } as any);
         doc.addPage();
         doc
           .fontSize(18)
@@ -418,7 +437,10 @@ export class ReportsService {
         }
 
         const statusStats =
-          await this.dashboardsService.getKpiStatusOverTimeStats(adminUser, 7);
+          await this.dashboardsService.getKpiStatusOverTimeStats(
+            { id: reportUserId } as any,
+            7,
+          );
         doc.addPage();
         doc
           .fontSize(18)
@@ -474,7 +496,9 @@ export class ReportsService {
         doc.moveDown(2);
 
         const avgTimeStats =
-          await this.dashboardsService.getAverageApprovalTimeStats(adminUser);
+          await this.dashboardsService.getAverageApprovalTimeStats({
+            id: reportUserId,
+          } as any);
         doc.addPage();
         doc
           .fontSize(18)
@@ -592,7 +616,10 @@ export class ReportsService {
         'Status',
       ];
       summarySheet.addRow(headers);
-      const kpiSummaryData = await this.kpisService.findAll({}, adminUserId);
+      const kpiSummaryData = await this.kpisService.findAll(
+        dateFilter,
+        reportUserId,
+      );
       let rowIdx = 2;
       kpiSummaryData.data.forEach((kpi: Kpi) => {
         const formatNumber = (val: any) => {
@@ -624,7 +651,7 @@ export class ReportsService {
         try {
           summarySheet.addRow(normalizeRow(row, headers.length));
         } catch (err) {
-          logExcelRowError('Tổng quan KPI', rowIdx, row, err);
+          logExcelRowError('KPI Overview', rowIdx, row, err);
         }
         rowIdx++;
       });
@@ -649,7 +676,10 @@ export class ReportsService {
         'Status',
       ];
       detailsSheet.addRow(headers);
-      const kpiDetailsData = await this.kpisService.findAll({}, adminUserId);
+      const kpiDetailsData = await this.kpisService.findAll(
+        dateFilter,
+        reportUserId,
+      );
       let rowIdx = 2;
       kpiDetailsData.data.forEach((kpi: Kpi) => {
         const formatNumber = (val: any) => {
@@ -678,7 +708,7 @@ export class ReportsService {
         try {
           detailsSheet.addRow(normalizeRow(row, headers.length));
         } catch (err) {
-          logExcelRowError('Chi tiết KPI', rowIdx, row, err);
+          logExcelRowError('KPI Details', rowIdx, row, err);
         }
         rowIdx++;
       });
@@ -700,10 +730,13 @@ export class ReportsService {
         typeof (this.kpisService as any).getKpiComparisonData === 'function'
       ) {
         comparisonData = await (this.kpisService as any).getKpiComparisonData(
-          adminUserId,
+          reportUserId,
         );
       } else {
-        const kpiSummaryData = await this.kpisService.findAll({}, adminUserId);
+        const kpiSummaryData = await this.kpisService.findAll(
+          dateFilter,
+          reportUserId,
+        );
         comparisonData.data = (kpiSummaryData.data || []).map((k: any) => ({
           department_name: k.department_name,
           kpi_name: k.name,
@@ -742,7 +775,7 @@ export class ReportsService {
         try {
           comparisonSheet.addRow(normalizeRow(row, headers.length));
         } catch (err) {
-          logExcelRowError('So sánh KPI', rowIdx, row, err);
+          logExcelRowError('KPI Comparison', rowIdx, row, err);
         }
         rowIdx++;
       });
@@ -753,15 +786,16 @@ export class ReportsService {
       const sheet = workbook.addWorksheet('KPI Awaiting Approval');
       const headers = ['Approval Level', 'Count', 'Status'];
       sheet.addRow(headers);
-      const stats =
-        await this.dashboardsService.getKpiAwaitingApprovalStats(adminUser);
+      const stats = await this.dashboardsService.getKpiAwaitingApprovalStats({
+        id: reportUserId,
+      } as any);
       let rowIdx = 2;
       (stats.byLevel || []).forEach((row) => {
         const rowData = [row.name, row.count, row.status];
         try {
           sheet.addRow(normalizeRow(rowData, headers.length));
         } catch (err) {
-          logExcelRowError('KPI chờ phê duyệt', rowIdx, rowData, err);
+          logExcelRowError('Pending KPI Approval', rowIdx, rowData, err);
         }
         rowIdx++;
       });
@@ -780,7 +814,10 @@ export class ReportsService {
       const employees = await this.employeesService.findAll();
       let rowIdx = 2;
       for (const emp of employees) {
-        const allKpis = await this.kpisService.findAll({}, adminUserId);
+        const allKpis = await this.kpisService.findAll(
+          dateFilter,
+          reportUserId,
+        );
         const filteredKpis = (allKpis.data || []).filter((k: any) =>
           k.assignments?.some((a: any) => a.employee?.id === emp.id),
         ) as Kpi[];
@@ -813,7 +850,7 @@ export class ReportsService {
         try {
           sheet.addRow(normalizeRow(row, headers.length));
         } catch (err) {
-          logExcelRowError('Hiệu suất nhân viên', rowIdx, row, err);
+          logExcelRowError('Employee Performance', rowIdx, row, err);
         }
         rowIdx++;
       }
@@ -836,14 +873,14 @@ export class ReportsService {
         const row = [
           obj.name,
           `${obj.start_date || ''} - ${obj.end_date || ''}`,
-          obj.is_active ? 'Đang thực hiện' : 'Ngừng',
+          obj.is_active ? 'Active' : 'Stopped',
           (obj.kpis || []).map((k) => k.name).join(', '),
           typeof obj.progress !== 'undefined' ? obj.progress + '%' : '',
         ];
         try {
           sheet.addRow(normalizeRow(row, headers.length));
         } catch (err) {
-          logExcelRowError('Mục tiêu chiến lược', rowIdx, row, err);
+          logExcelRowError('Strategic Objectives', rowIdx, row, err);
         }
         rowIdx++;
       }
@@ -854,7 +891,7 @@ export class ReportsService {
       const sheet = workbook.addWorksheet('KPI Update Progress');
       const headers = ['KPI', 'Department', 'Last Update', 'Update Status'];
       sheet.addRow(headers);
-      const allKpis = await this.kpisService.findAll({}, adminUserId);
+      const allKpis = await this.kpisService.findAll(dateFilter, reportUserId);
       const now = new Date();
       let rowIdx = 2;
       for (const kpi of allKpis.data || []) {
@@ -882,7 +919,7 @@ export class ReportsService {
         try {
           sheet.addRow(normalizeRow(row, headers.length));
         } catch (err) {
-          logExcelRowError('Tiến độ cập nhật KPI', rowIdx, row, err);
+          logExcelRowError('KPI Update Progress', rowIdx, row, err);
         }
         rowIdx++;
       }
@@ -899,7 +936,7 @@ export class ReportsService {
         'Notes',
       ];
       sheet.addRow(headers);
-      const allKpis = await this.kpisService.findAll({}, adminUserId);
+      const allKpis = await this.kpisService.findAll(dateFilter, reportUserId);
       let rowIdx = 2;
       for (const kpi of allKpis.data || []) {
         if (kpi.id) {
@@ -914,7 +951,7 @@ export class ReportsService {
             try {
               sheet.addRow(normalizeRow(row, headers.length));
             } catch (err) {
-              logExcelRowError('Lịch sử cập nhật KPI', rowIdx, row, err);
+              logExcelRowError('KPI Update History', rowIdx, row, err);
             }
             rowIdx++;
           }
@@ -925,14 +962,14 @@ export class ReportsService {
 
     async function getReportData(
       reportType: string,
-      adminUserId: number,
-      adminUser: any,
+      reportUserId: number,
+      dateFilter: any = {},
     ) {
       switch (reportType) {
         case 'kpi-summary': {
           const kpiSummaryData = await this.kpisService.findAll(
             {},
-            adminUserId,
+            reportUserId,
           );
           const summaryHeaders = [
             'KPI Name',
@@ -966,7 +1003,7 @@ export class ReportsService {
         case 'kpi-details': {
           const kpiDetailsData = await this.kpisService.findAll(
             {},
-            adminUserId,
+            reportUserId,
           );
           const detailsHeaders = [
             'ID',
@@ -1007,14 +1044,14 @@ export class ReportsService {
           ) {
             comparisonData = await (
               this.kpisService as any
-            ).getKpiComparisonData(adminUserId);
+            ).getKpiComparisonData(reportUserId);
           } else {
             const kpiSummaryData = await this.kpisService.findAll(
               {},
-              adminUserId,
+              reportUserId,
             );
             comparisonData.data = (kpiSummaryData.data || []).map((k: any) => ({
-              department_name: k.department_name || 'Phòng ban A',
+              department_name: k.department_name || 'Department A',
               kpi_name: k.name,
               target: k.target,
               actual_value: k.actual_value,
@@ -1054,7 +1091,9 @@ export class ReportsService {
         }
         case 'kpi-awaiting-approval': {
           const stats =
-            await this.dashboardsService.getKpiAwaitingApprovalStats(adminUser);
+            await this.dashboardsService.getKpiAwaitingApprovalStats({
+              id: reportUserId,
+            } as any);
           const awaitingHeaders = ['Approval Level', 'Count', 'Status'];
           const awaitingRows = (stats.byLevel || []).map((row) => [
             row.name,
@@ -1071,7 +1110,10 @@ export class ReportsService {
             'KPI Count',
             'Avg. Completion Rate',
           ];
-          const allKpis = await this.kpisService.findAll({}, adminUserId);
+          const allKpis = await this.kpisService.findAll(
+            dateFilter,
+            reportUserId,
+          );
           const empRows = employees.map((emp) => {
             const filteredKpis = (allKpis.data || []).filter((k: any) =>
               k.assignments?.some((a: any) => a.employee?.id === emp.id),
@@ -1124,7 +1166,10 @@ export class ReportsService {
           return { headers: soHeaders, rows: soRows };
         }
         case 'kpi-update-progress': {
-          const allKpis2 = await this.kpisService.findAll({}, adminUserId);
+          const allKpis2 = await this.kpisService.findAll(
+            dateFilter,
+            reportUserId,
+          );
           const now = new Date();
           const updateHeaders = [
             'KPI',
@@ -1158,7 +1203,10 @@ export class ReportsService {
           return { headers: updateHeaders, rows: updateRows };
         }
         case 'kpi-history': {
-          const allKpis3 = await this.kpisService.findAll({}, adminUserId);
+          const allKpis3 = await this.kpisService.findAll(
+            dateFilter,
+            reportUserId,
+          );
           const historyHeaders = [
             'KPI',
             'Update Date',
@@ -1192,14 +1240,18 @@ export class ReportsService {
         }
         case 'dashboard-multi': {
           const awaitingStats =
-            await this.dashboardsService.getKpiAwaitingApprovalStats(adminUser);
+            await this.dashboardsService.getKpiAwaitingApprovalStats({
+              id: reportUserId,
+            } as any);
           const statusStats =
             await this.dashboardsService.getKpiStatusOverTimeStats(
-              adminUser,
+              { id: reportUserId } as any,
               7,
             );
           const avgTimeStats =
-            await this.dashboardsService.getAverageApprovalTimeStats(adminUser);
+            await this.dashboardsService.getAverageApprovalTimeStats({
+              id: reportUserId,
+            } as any);
           const dashboardSheets = [
             {
               name: 'KPI Awaiting Approval',
@@ -1230,7 +1282,10 @@ export class ReportsService {
         }
         case 'kpi-inventory':
         case 'kpiInventory': {
-          const allKpis = await this.kpisService.findAll({}, adminUserId);
+          const allKpis = await this.kpisService.findAll(
+            dateFilter,
+            reportUserId,
+          );
           const inventoryHeaders = [
             'KPI Name',
             'Department',
@@ -1274,8 +1329,8 @@ export class ReportsService {
       const reportData = await getReportData.call(
         this,
         reportType,
-        adminUserId,
-        adminUser,
+        reportUserId,
+        dateFilter,
       );
 
       const handledTypes = [

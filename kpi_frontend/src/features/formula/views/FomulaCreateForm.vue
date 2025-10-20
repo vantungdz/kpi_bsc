@@ -71,31 +71,14 @@
               <FunctionOutlined />
             </template>
           </a-input>
-          <a-tooltip
-            placement="top"
-            :mouseEnterDelay="0.1"
-            overlayClassName="formula-tooltip"
+          <a-button
+            type="text"
+            size="small"
+            class="tooltip-btn"
+            @click="showExpressionHelp = true"
           >
-            <template #title>
-              <div style="max-width: 320px">
-                <b>{{ $t("formula.tooltipTitle") }}</b
-                ><br />
-                <ul style="padding-left: 18px">
-                  <li v-html="$t('formula.tooltip.values')"></li>
-                  <li v-html="$t('formula.tooltip.targets')"></li>
-                  <li v-html="$t('formula.tooltip.weight')"></li>
-                  <li v-html="$t('formula.tooltip.sum')"></li>
-                  <li v-html="$t('formula.tooltip.average')"></li>
-                  <li v-html="$t('formula.tooltip.minmax')"></li>
-                </ul>
-                <b>{{ $t("formula.tooltip.exampleLabel") }}</b>
-                <code>{{ $t("formula.tooltip.example") }}</code>
-              </div>
-            </template>
-            <a-button type="text" size="small" class="tooltip-btn">
-              <span class="tooltip-icon"><QuestionCircleOutlined /></span>
-            </a-button>
-          </a-tooltip>
+            <span class="tooltip-icon"><QuestionCircleOutlined /></span>
+          </a-button>
         </div>
       </a-form-item>
       <a-form-item :label="$t('formula.description')" name="description">
@@ -177,6 +160,51 @@
       <a-empty v-else :description="$t('common.empty')" />
     </div>
   </a-card>
+
+  <!-- Expression Help Modal -->
+  <a-modal
+    v-model:open="showExpressionHelp"
+    :title="$t('formula.helpModal.title')"
+    width="800px"
+    :footer="null"
+    centered
+  >
+    <div class="expression-help-content">
+      <h4>{{ $t("formula.helpModal.variablesTitle") }}</h4>
+      <a-table
+        :data-source="variablesData"
+        :columns="variablesColumns"
+        :pagination="false"
+        size="small"
+        bordered
+        class="help-table"
+      />
+
+      <h4 style="margin-top: 24px">
+        {{ $t("formula.helpModal.functionsTitle") }}
+      </h4>
+      <a-table
+        :data-source="functionsData"
+        :columns="functionsColumns"
+        :pagination="false"
+        size="small"
+        bordered
+        class="help-table"
+      />
+
+      <h4 style="margin-top: 24px">
+        {{ $t("formula.helpModal.examplesTitle") }}
+      </h4>
+      <a-table
+        :data-source="examplesData"
+        :columns="examplesColumns"
+        :pagination="false"
+        size="small"
+        bordered
+        class="help-table"
+      />
+    </div>
+  </a-modal>
 </template>
 
 <script setup>
@@ -209,6 +237,7 @@ const form = ref({
 });
 const loading = computed(() => store.getters["formula/isFormulaLoading"]);
 const isEdit = ref(false);
+const showExpressionHelp = ref(false);
 
 // Helper functions for code generation and validation
 const generateCodeFromName = (name) => {
@@ -294,6 +323,133 @@ const formulaColumns = computed(() => [
   },
 ]);
 
+// Modal data for expression help
+const variablesData = computed(() => [
+  {
+    key: "values",
+    variable: "values",
+    type: $t("formula.helpModal.array"),
+    description: $t("formula.helpModal.valuesDesc"),
+  },
+  {
+    key: "target",
+    variable: "target",
+    type: $t("formula.helpModal.number"),
+    description: $t("formula.helpModal.targetDesc"),
+  },
+  {
+    key: "targets",
+    variable: "targets",
+    type: $t("formula.helpModal.array"),
+    description: $t("formula.helpModal.targetsDesc"),
+  },
+  {
+    key: "weight",
+    variable: "weight",
+    type: $t("formula.helpModal.number"),
+    description: $t("formula.helpModal.weightDesc"),
+  },
+]);
+
+const functionsData = computed(() => [
+  {
+    key: "sum",
+    function: "sum(arr)",
+    description: $t("formula.helpModal.sumDesc"),
+  },
+  {
+    key: "sumTarget",
+    function: "sum(target)",
+    description: $t("formula.helpModal.sumTargetDesc"),
+  },
+  {
+    key: "average",
+    function: "average(arr)",
+    description: $t("formula.helpModal.averageDesc"),
+  },
+  {
+    key: "min",
+    function: "min(arr)",
+    description: $t("formula.helpModal.minDesc"),
+  },
+  {
+    key: "max",
+    function: "max(arr)",
+    description: $t("formula.helpModal.maxDesc"),
+  },
+]);
+
+const examplesData = computed(() => [
+  {
+    key: "basic",
+    expression: "(sum(values)/sum(targets))*100",
+    description: $t("formula.helpModal.basicExample"),
+  },
+  {
+    key: "target",
+    expression: "sum(values)/target*100",
+    description: $t("formula.helpModal.targetExample"),
+  },
+  {
+    key: "average",
+    expression: "average(values)",
+    description: $t("formula.helpModal.averageExample"),
+  },
+  {
+    key: "weighted",
+    expression: "sum(values)*weight",
+    description: $t("formula.helpModal.weightedExample"),
+  },
+]);
+
+const variablesColumns = computed(() => [
+  {
+    title: $t("formula.helpModal.variable"),
+    dataIndex: "variable",
+    key: "variable",
+    width: 100,
+  },
+  {
+    title: $t("formula.helpModal.type"),
+    dataIndex: "type",
+    key: "type",
+    width: 80,
+  },
+  {
+    title: $t("formula.helpModal.description"),
+    dataIndex: "description",
+    key: "description",
+  },
+]);
+
+const functionsColumns = computed(() => [
+  {
+    title: $t("formula.helpModal.function"),
+    dataIndex: "function",
+    key: "function",
+    width: 120,
+  },
+  {
+    title: $t("formula.helpModal.description"),
+    dataIndex: "description",
+    key: "description",
+  },
+]);
+
+const examplesColumns = computed(() => [
+  {
+    title: $t("formula.helpModal.expression"),
+    dataIndex: "expression",
+    key: "expression",
+    width: 200,
+  },
+  {
+    title: $t("formula.helpModal.description"),
+    dataIndex: "description",
+    key: "description",
+  },
+]);
+
 // Watch for name changes to auto-generate code
 watch(
   () => form.value.name,
@@ -339,14 +495,19 @@ const handleSubmit = async () => {
         id: form.value.id,
         updateData: {
           name: form.value.name,
-          code: form.value.code,
           expression: form.value.expression,
           description: form.value.description,
         },
       });
       message.success($t("common.updateSuccess"));
     } else {
-      await store.dispatch("formula/addFormula", form.value);
+      // Backend will auto-generate ID, only send required fields
+      await store.dispatch("formula/addFormula", {
+        name: form.value.name,
+        code: form.value.code,
+        expression: form.value.expression,
+        description: form.value.description,
+      });
       message.success($t("common.addSuccess"));
     }
     resetForm();
@@ -515,5 +676,35 @@ onMounted(async () => {
 }
 .tooltip-btn:hover .tooltip-icon {
   background: linear-gradient(135deg, #1565c0 70%, #1976d2 100%);
+}
+
+/* Expression Help Modal Styles */
+.expression-help-content h4 {
+  color: #1976d2;
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-bottom: 12px;
+  border-bottom: 2px solid #e3f2fd;
+  padding-bottom: 8px;
+}
+
+.help-table {
+  margin-bottom: 16px;
+}
+
+.help-table .ant-table-thead > tr > th {
+  background: #fafdff;
+  color: #1976d2;
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.help-table .ant-table-tbody > tr > td {
+  font-size: 0.9rem;
+  padding: 8px 12px;
+}
+
+.help-table .ant-table-tbody > tr:hover > td {
+  background: #e3f2fd55;
 }
 </style>

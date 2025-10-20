@@ -161,15 +161,6 @@ const { t: $t } = useI18n();
 const sectionAssignmentModalsRef = ref(null);
 
 const sectionIdForUserAssignmentsCard = (slotProps) => {
-  console.log("sectionIdForUserAssignmentsCard debug:", {
-    contextDepartmentId: slotProps.contextDepartmentId,
-    contextSectionId: slotProps.contextSectionId,
-    currentUserSectionId: slotProps.currentUser?.sectionId,
-    kpiCreatedByType: slotProps.kpiDetailData?.created_by_type,
-    kpiCreatedBy: slotProps.kpiDetailData?.created_by,
-    allSections: slotProps.allSections?.length,
-  });
-
   if (slotProps.contextDepartmentId) {
     const sectionsInDepartment = slotProps.allSections.filter(
       (section) =>
@@ -177,21 +168,15 @@ const sectionIdForUserAssignmentsCard = (slotProps) => {
         section.department?.id === slotProps.contextDepartmentId
     );
     if (sectionsInDepartment.length > 0) {
-      console.log("Found section from department:", sectionsInDepartment[0].id);
       return sectionsInDepartment[0].id;
     }
   }
 
   if (slotProps.contextSectionId) {
-    console.log("Using contextSectionId:", slotProps.contextSectionId);
     return slotProps.contextSectionId;
   }
 
   if (slotProps.currentUser?.sectionId) {
-    console.log(
-      "Using currentUser.sectionId:",
-      slotProps.currentUser.sectionId
-    );
     return slotProps.currentUser.sectionId;
   }
 
@@ -199,11 +184,9 @@ const sectionIdForUserAssignmentsCard = (slotProps) => {
     slotProps.kpiDetailData?.created_by_type === "section" &&
     slotProps.kpiDetailData?.created_by
   ) {
-    console.log("Using KPI created_by:", slotProps.kpiDetailData.created_by);
     return slotProps.kpiDetailData.created_by;
   }
 
-  console.log("No section ID found, returning null");
   return null;
 };
 
@@ -211,41 +194,25 @@ const filteredSectionUserAssignments = (slotProps) => {
   const allAssignments = slotProps.kpiDetailData?.assignments;
   const sectionIdToFilterBy = sectionIdForUserAssignmentsCard(slotProps);
 
-  console.log("filteredSectionUserAssignments debug:", {
-    allAssignments: allAssignments?.length,
-    sectionIdToFilterBy,
-    contextSectionId: slotProps.contextSectionId,
-    contextDepartmentId: slotProps.contextDepartmentId,
-  });
-
   if (!Array.isArray(allAssignments)) {
     return [];
   }
 
   // In section context, show user assignments that belong to this section
-  // Since backend doesn't set employee.sectionId, we need to find employees
-  // that belong to this section through other means
   return allAssignments.filter((assign) => {
     const isUserAssignment = assign.assigned_to_employee !== null;
 
-    // For now, show all user assignments in section context
-    // TODO: Implement proper filtering based on employee-section relationship
-    // when backend provides the correct data structure
+    if (!isUserAssignment) {
+      return false;
+    }
 
-    console.log("Assignment check:", {
-      assignId: assign.id,
-      assignedToEmployee: assign.assigned_to_employee,
-      assignedToSection: assign.assigned_to_section,
-      sectionIdToFilterBy,
-      isUserAssignment,
-      employeeName: assign.employee
-        ? `${assign.employee.first_name} ${assign.employee.last_name}`
-        : "N/A",
-      employeeDepartmentId: assign.employee?.departmentId,
-      employeeSectionId: assign.employee?.sectionId,
-    });
+    // If we have a specific section to filter by, check if employee belongs to that section
+    if (sectionIdToFilterBy && assign.employee?.sectionId) {
+      return Number(assign.employee.sectionId) === Number(sectionIdToFilterBy);
+    }
 
-    return isUserAssignment;
+    // If no specific section filter, show all user assignments
+    return true;
   });
 };
 
@@ -253,16 +220,6 @@ const shouldShowSectionUserAssignmentCard = (slotProps) => {
   const kpi = slotProps.kpiDetailData;
   const user = slotProps.currentUser;
   const sectionId = sectionIdForUserAssignmentsCard(slotProps);
-
-  console.log("shouldShowSectionUserAssignmentCard debug:", {
-    kpi: !!kpi,
-    user: !!user,
-    sectionId,
-    contextSectionId: slotProps.contextSectionId,
-    contextDepartmentId: slotProps.contextDepartmentId,
-    hasPermission: slotProps.hasPermission("ASSIGN", "KPI", "section"),
-    canAssignEmployees: slotProps.canAssignEmployees,
-  });
 
   if (!kpi || !user || !sectionId) return false;
 

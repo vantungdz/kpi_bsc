@@ -230,7 +230,6 @@ const router = useRouter();
 const store = useStore();
 const route = useRoute();
 
-// Props for context
 defineProps({
   contextType: {
     type: String,
@@ -331,11 +330,9 @@ const canAssignEmployees = computed(() =>
 );
 
 const sectionNameFromContext = computed(() => {
-  // Ưu tiên hiển thị ngữ cảnh nếu có
   const currentSectionId = contextSectionId.value;
   const currentDepartmentId = contextDepartmentId.value;
 
-  // Nếu có contextSectionId, hiển thị section đó
   if (currentSectionId !== null) {
     if (!Array.isArray(allSections.value) || allSections.value.length === 0) {
       return "";
@@ -346,8 +343,6 @@ const sectionNameFromContext = computed(() => {
     return foundSection?.name || "";
   }
 
-  // Nếu có contextDepartmentId nhưng không có contextSectionId,
-  // có thể hiển thị section đầu tiên của department đó (nếu có)
   if (currentDepartmentId !== null) {
     if (!Array.isArray(allSections.value) || allSections.value.length === 0) {
       return "";
@@ -357,19 +352,17 @@ const sectionNameFromContext = computed(() => {
         s.department_id === currentDepartmentId ||
         s.department?.id === currentDepartmentId
     );
-    // Chỉ hiển thị nếu department có đúng 1 section
+
     if (sectionsInDepartment.length === 1) {
       return sectionsInDepartment[0].name || "";
     }
-    // Nếu có nhiều section, không hiển thị để tránh nhầm lẫn
+
     return "";
   }
 
-  // Nếu không có ngữ cảnh, hiển thị thông tin thuộc tính của KPI
   const kpi = kpiDetailData.value;
   if (!kpi) return "";
 
-  // Nếu KPI được tạo bởi section, hiển thị tên section đó
   if (kpi.created_by_type === "section" && kpi.created_by) {
     const section = allSections.value.find(
       (s) => String(s.id) === String(kpi.created_by)
@@ -381,11 +374,9 @@ const sectionNameFromContext = computed(() => {
 });
 
 const departmentNameFromSectionContext = computed(() => {
-  // Ưu tiên hiển thị ngữ cảnh nếu có
   const currentSectionId = contextSectionId.value;
   const currentDepartmentId = contextDepartmentId.value;
 
-  // Nếu có contextSectionId, hiển thị department của section đó
   if (currentSectionId !== null) {
     if (
       !Array.isArray(allSections.value) ||
@@ -421,7 +412,6 @@ const departmentNameFromSectionContext = computed(() => {
     return department.name || "";
   }
 
-  // Nếu có contextDepartmentId, hiển thị department đó
   if (currentDepartmentId !== null) {
     if (
       !Array.isArray(allDepartments.value) ||
@@ -435,11 +425,9 @@ const departmentNameFromSectionContext = computed(() => {
     return department?.name || "";
   }
 
-  // Nếu không có ngữ cảnh, hiển thị thông tin thuộc tính của KPI
   const kpi = kpiDetailData.value;
   if (!kpi) return "";
 
-  // Nếu KPI được tạo bởi department, hiển thị tên department đó
   if (kpi.created_by_type === "department" && kpi.created_by) {
     const department = allDepartments.value.find(
       (d) => String(d.id) === String(kpi.created_by)
@@ -447,7 +435,6 @@ const departmentNameFromSectionContext = computed(() => {
     return department?.name || "";
   }
 
-  // Nếu KPI được tạo bởi section, hiển thị department của section đó
   if (kpi.created_by_type === "section" && kpi.created_by) {
     const section = allSections.value.find(
       (s) => String(s.id) === String(kpi.created_by)
@@ -804,13 +791,11 @@ watch(kpiId, (newId, oldId) => {
 
 onMounted(loadDetail);
 
-// Helper function to format dates
 const formatDate = (dateString) => {
   if (!dateString) return "";
   return dayjs(dateString).format("DD/MM/YYYY");
 };
 
-// Expose common data and methods to child components
 defineExpose({
   kpiId,
   contextDepartmentId,

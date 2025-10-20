@@ -64,12 +64,15 @@ export class SectionsService {
           await this.sectionRepository.save(oldSection);
         }
       }
-      await this.employeesService.updateEmployee(createSectionDto.managerId, {
-        departmentId: savedSection.department?.id,
-        sectionId: savedSection.id,
-        roles: ['manager' as any],
-        _mergeRoles: true,
-      });
+      // Use flexible management permission assignment instead of hard-coded 'manager' role
+      await this.employeesService.assignManagementPermissions(
+        createSectionDto.managerId,
+        {
+          type: 'section',
+          resourceId: savedSection.id,
+          scope: 'section',
+        },
+      );
     }
     return savedSection;
   }
@@ -174,15 +177,23 @@ export class SectionsService {
           employee: manager,
         };
       }
-
-      await this.employeesService.updateEmployee(manager.id, {
-        departmentId: section.department?.id,
-        sectionId: section.id,
-        roles: ['manager' as any],
-        _mergeRoles: true,
-      });
     }
     const saved = await this.sectionRepository.save(section);
+
+    // Assign management permissions AFTER saving section (so section.id exists)
+    if (updateSectionDto.managerId) {
+      const manager = await this.employeesService.findOne(
+        updateSectionDto.managerId,
+      );
+      if (manager) {
+        await this.employeesService.assignManagementPermissions(manager.id, {
+          type: 'section',
+          resourceId: saved.id,
+          scope: 'section',
+        });
+      }
+    }
+
     return saved;
   }
 

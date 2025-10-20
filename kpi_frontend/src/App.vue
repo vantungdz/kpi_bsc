@@ -106,6 +106,12 @@ watch(i18nLocale, () => {
 </script>
 
 <style>
+html,
+body,
+#app {
+  height: 100%;
+}
+
 .app-layout-wrapper {
   display: flex;
   flex-direction: row;
@@ -114,16 +120,26 @@ watch(i18nLocale, () => {
 .site-layout {
   display: flex;
   flex-direction: column;
-  flex-grow: 1;
+  flex: 1 1 auto;
   overflow: hidden;
+  padding: 16px;
 }
 
 .site-layout-content {
-  margin: 16px;
+  margin: 0px;
   padding: 24px;
   background: #fff;
-  overflow-y: auto;
-  flex-grow: 1;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  /* overflow-y: auto;
+  flex-grow: 1; */
+}
+
+.no-outer-scroll .site-layout-content {
+  overflow: hidden;
 }
 
 .site-layout-footer {

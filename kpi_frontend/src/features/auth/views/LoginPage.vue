@@ -157,7 +157,6 @@ const handleLogin = async (values) => {
   });
 
   if (success) {
-    console.log("Login successful, redirecting to /home");
     router.push("/home");
   } else {
     console.error("Login failed (handled by action).");
@@ -166,7 +165,6 @@ const handleLogin = async (values) => {
 };
 
 const onFinishFailed = (errorInfo) => {
-  console.log("Form validation failed:", errorInfo);
   let errorMessages = "Please double check required fields and input formats.";
   if (errorInfo?.errorFields?.length > 0) {
     const firstErrorField = errorInfo.errorFields[0];

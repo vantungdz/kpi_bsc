@@ -527,9 +527,8 @@ onMounted(async () => {
 
 <style scoped>
 .so-view-modern {
-  padding: 24px;
   background: #f6f8fa;
-  min-height: 100vh;
+  min-height: auto;
 }
 .so-header-card {
   margin: 32px auto 0 auto;

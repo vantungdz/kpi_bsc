@@ -239,7 +239,7 @@ const rules = {
     { required: true, message: t("departmentRequired"), trigger: "change" },
   ],
   managerId: [
-    { required: true, message: t("managerRequired"), trigger: "change" },
+    { required: false, message: t("managerRequired"), trigger: "change" },
   ],
 };
 

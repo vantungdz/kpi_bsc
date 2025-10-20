@@ -3,7 +3,7 @@
     <div class="list-header-modern">
       <schedule-outlined class="header-icon" />
       <div>
-        <h2>{{ t("kpiEmployee.employeeManagement") }}</h2>
+        <h4>{{ t("kpiEmployee.employeeManagement") }}</h4>
         <div class="header-desc">
           {{
             t("kpiEmployee.employeeManagementDesc") ||
@@ -54,28 +54,14 @@
         </a-col>
         <a-col :span="6">
           <a-form-item :label="t('kpiEmployee.employeeName')">
-            <a-select
+            <a-input
               v-model:value="employeeFilters.name"
-              show-search
-              allow-clear
               :placeholder="t('kpiEmployee.selectEmployee')"
-              :filter-option="filterEmployeeOption"
+              allow-clear
               style="width: 100%"
             >
-              <template #suffixIcon><user-outlined /></template>
-              <a-select-option
-                v-for="emp in filteredEmployees"
-                :key="emp.id"
-                :value="emp.first_name + ' ' + emp.last_name"
-              >
-                <a-avatar
-                  :size="20"
-                  :src="emp.avatar || undefined"
-                  style="margin-right: 6px"
-                />
-                {{ emp.first_name }} {{ emp.last_name }}
-              </a-select-option>
-            </a-select>
+              <template #prefix><user-outlined /></template>
+            </a-input>
           </a-form-item>
         </a-col>
         <a-col :span="8" style="text-align: right">
@@ -98,32 +84,30 @@
         </a-col>
       </a-row>
     </a-card>
-    <div style="margin-top: 20px; margin-bottom: 20px">
-      <a-alert
-        v-if="loadingEmployees"
-        :message="t('kpiEmployee.loadingEmployees')"
-        type="info"
-        show-icon
-      >
-        <template #icon>
-          <a-spin />
-        </template>
-      </a-alert>
-      <a-alert
-        v-else-if="employeeError"
-        :message="employeeError"
-        type="error"
-        show-icon
-        closable
-      />
-      <a-alert
-        v-else-if="employees.length === 0"
-        :message="t('kpiEmployee.noEmployeesFound')"
-        type="warning"
-        show-icon
-        closable
-      />
-    </div>
+    <a-alert
+      v-if="loadingEmployees"
+      :message="t('kpiEmployee.loadingEmployees')"
+      type="info"
+      show-icon
+    >
+      <template #icon>
+        <a-spin />
+      </template>
+    </a-alert>
+    <a-alert
+      v-else-if="employeeError"
+      :message="employeeError"
+      type="error"
+      show-icon
+      closable
+    />
+    <a-alert
+      v-else-if="employees.length === 0"
+      :message="t('kpiEmployee.noEmployeesFound')"
+      type="warning"
+      show-icon
+      closable
+    />
     <a-table
       :columns="employeeColumns"
       :data-source="employees"
@@ -283,7 +267,7 @@
 </template>
 
 <script setup>
-import { reactive, computed, onMounted, ref, watch, h } from "vue";
+import { reactive, computed, onMounted, onUnmounted, ref, watch, h } from "vue";
 import { useStore } from "vuex";
 import { useI18n } from "vue-i18n";
 import {
@@ -295,6 +279,7 @@ import {
   Alert as AAlert,
   Spin as ASpin,
   Empty as AEmpty,
+  Input as AInput,
 } from "ant-design-vue";
 import {
   FilterOutlined,
@@ -341,7 +326,8 @@ const departmentList = computed(
 );
 const sectionList = computed(() => store.getters["sections/sectionList"] || []);
 
-const filteredEmployees = computed(() => {
+// Get all employees based on department/section selection
+const allEmployees = computed(() => {
   if (employeeFilters.sectionId) {
     return store.getters["employees/usersBySection"](employeeFilters.sectionId);
   } else if (employeeFilters.departmentId) {
@@ -353,6 +339,11 @@ const filteredEmployees = computed(() => {
   return store.getters["employees/userList"] || [];
 });
 
+// This is for the actual filtered list displayed in the table
+// const filteredEmployees = computed(() => {
+//   return employees.value;
+// });
+
 watch(
   () => [employeeFilters.departmentId, employeeFilters.sectionId],
   async ([newDept, newSection]) => {
@@ -363,6 +354,20 @@ watch(
     } else {
       await applyEmployeeFilters();
     }
+  }
+);
+
+// Watch for name changes with debounce
+let nameSearchTimeout = null;
+watch(
+  () => employeeFilters.name,
+  () => {
+    if (nameSearchTimeout) {
+      clearTimeout(nameSearchTimeout);
+    }
+    nameSearchTimeout = setTimeout(() => {
+      applyEmployeeFilters();
+    }, 300); // 300ms debounce
   }
 );
 
@@ -424,7 +429,7 @@ const applyEmployeeFilters = async () => {
       });
     }
 
-    let list = filteredEmployees.value;
+    let list = allEmployees.value;
     if (params.name) {
       const nameLower = params.name.toLowerCase();
       list = list.filter((emp) =>
@@ -455,6 +460,7 @@ const validityStatusColor = {
   active: "green",
   expiring_soon: "orange",
   expired: "red",
+  not_started: "blue",
 };
 
 const kpiColumns = computed(() => [
@@ -592,10 +598,6 @@ const onEmployeeRowClick = (record) => {
   openKpiModal(record);
 };
 
-function filterEmployeeOption(input, option) {
-  return option.children.toLowerCase().indexOf(input.toLowerCase()) >= 0;
-}
-
 const user = computed(() => store.getters["auth/user"] || {});
 
 const isAdminOrManager = computed(() => {
@@ -644,6 +646,12 @@ onMounted(async () => {
   await applyEmployeeFilters();
 });
 
+onUnmounted(() => {
+  if (nameSearchTimeout) {
+    clearTimeout(nameSearchTimeout);
+  }
+});
+
 function handleKpiModalCancel() {
   isKpiModalVisible.value = false;
   employeeKpis.value = [];
@@ -654,9 +662,9 @@ function handleKpiModalCancel() {
 
 <style scoped>
 .kpi-employee-list-page {
-  padding: 24px;
+  /* padding: 24px; */
   background: #f6f8fa;
-  min-height: 100vh;
+  min-height: auto;
 }
 .list-header-modern {
   display: flex;
@@ -673,7 +681,7 @@ function handleKpiModalCancel() {
 }
 .header-desc {
   color: #64748b;
-  font-size: 15px;
+  font-size: 14px;
   margin-top: 2px;
 }
 .filter-card-modern {
@@ -763,5 +771,9 @@ function handleKpiModalCancel() {
 .kpi-empty {
   margin: 32px 0 12px 0;
   text-align: center;
+}
+
+:deep(.ant-card-body) {
+  padding: 0 !important;
 }
 </style>

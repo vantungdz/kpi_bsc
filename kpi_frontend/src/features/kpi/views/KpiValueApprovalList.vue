@@ -1,28 +1,49 @@
 <template>
-  <div class="kpi-value-approval-list-page">
-    <a-card :title="cardTitleWithIcon" :bordered="false">
-      <a-spin :spinning="isLoadingPending" :tip="$t('loadingList')">
-        <a-alert
-          v-if="loadingError"
-          type="error"
-          show-icon
-          closable
-          style="margin-bottom: 16px"
-          :message="$t('loadingError')"
-          @close="loadingError = null"
-        />
+  <div class="kpi-value-approval-list">
+    <a-card class="modern-card">
+      <template #title>
+        <div class="page-header">
+          <trophy-outlined class="page-icon" />
+          <span class="page-title">{{ $t("kpiValueApprovalManagement") }}</span>
+        </div>
+      </template>
 
+      <!-- Loading State -->
+      <a-spin v-if="loading" :tip="$t('loading')" size="large" />
+
+      <!-- No Permission State -->
+      <a-result
+        v-else-if="!hasAnyApprovalPermission"
+        status="403"
+        :title="$t('noPermission')"
+        :sub-title="$t('noApprovalPermission')"
+      />
+
+      <!-- Error State -->
+      <a-alert
+        v-else-if="error"
+        type="error"
+        show-icon
+        :message="$t('errorLoadingApprovalList')"
+        :description="error"
+        closable
+        @close="clearError"
+        style="margin-bottom: 16px"
+      />
+
+      <!-- Table Content -->
+      <div v-else-if="pendingApprovals.length > 0" class="table-container">
         <a-table
-          v-if="!loadingError && pendingItems.length > 0"
           :columns="columns"
-          :data-source="pendingItems"
-          :row-key="'id'"
+          :data-source="pendingApprovals"
+          row-key="id"
+          :pagination="pagination"
           bordered
-          size="small"
-          :scroll="{ x: 'max-content' }"
           class="modern-table"
+          :scroll="{ x: 'max-content' }"
         >
           <template #bodyCell="{ column, record }">
+            <!-- KPI Name Column -->
             <template v-if="column.key === 'kpiName'">
               <a-tooltip :title="record.kpiAssignment?.kpi?.name">
                 <span>
@@ -34,6 +55,7 @@
               </a-tooltip>
             </template>
 
+            <!-- Employee Column -->
             <template v-else-if="column.key === 'employee'">
               <span>
                 <user-outlined style="margin-right: 4px; color: #b37feb" />
@@ -43,194 +65,186 @@
               </span>
             </template>
 
+            <!-- Submitted Value Column -->
             <template v-else-if="column.key === 'value'">
-              <span>
-                <calculator-outlined
-                  style="margin-right: 4px; color: #faad14"
-                />
-                {{ record.value?.toLocaleString() ?? "" }}
-                <span v-if="record.kpiAssignment?.kpi?.unit">
-                  {{ record.kpiAssignment.kpi.unit }}
+              <div class="value-cell">
+                <bar-chart-outlined class="value-icon" />
+                <span class="value-text">
+                  {{ record.value?.toLocaleString() ?? "" }}
+                  <span v-if="record.kpiAssignment?.kpi?.unit">
+                    {{ record.kpiAssignment.kpi.unit }}
+                  </span>
                 </span>
-              </span>
+              </div>
             </template>
 
+            <!-- Target Column -->
             <template v-else-if="column.key === 'target'">
-              <span
-                v-if="
-                  record.kpiAssignment?.targetValue !== null &&
-                  record.kpiAssignment?.targetValue !== undefined
-                "
-              >
-                <flag-two-tone style="margin-right: 4px; color: #52c41a" />
-                {{ Number(record.kpiAssignment.targetValue)?.toLocaleString() }}
-                <span v-if="record.kpiAssignment?.kpi?.unit">
-                  {{ record.kpiAssignment.kpi.unit }}
-                </span>
-              </span>
-              <span v-else></span>
-            </template>
-
-            <template v-else-if="column.key === 'submittedAt'">
-              <clock-circle-two-tone
-                style="margin-right: 4px; color: #1890ff"
-              />
-              {{
-                formatDate(
-                  record.timestamp || record.updated_at || record.created_at
-                )
-              }}
-            </template>
-
-            <template v-else-if="column.key === 'notes'">
-              <a-tooltip :title="record.notes">
-                <file-text-outlined style="margin-right: 4px; color: #13c2c2" />
-                <span>{{ truncateText(record.notes, 50) }}</span>
-              </a-tooltip>
-            </template>
-
-            <template v-else-if="column.key === 'status'">
-              <a-tag
-                :color="getValueStatusColor(record.status)"
-                class="status-tag"
-              >
-                <component
-                  :is="statusIcon(record.status)"
-                  style="
-                    margin-right: 6px;
-                    font-size: 1.1em;
-                    vertical-align: middle;
+              <div class="target-cell">
+                <flag-outlined class="target-icon" />
+                <span
+                  v-if="
+                    record.kpiAssignment?.targetValue !== null &&
+                    record.kpiAssignment?.targetValue !== undefined
                   "
-                />
-                {{ getValueStatusText(record.status) }}
+                  class="target-text"
+                >
+                  {{
+                    Number(record.kpiAssignment.targetValue)?.toLocaleString()
+                  }}
+                  <span v-if="record.kpiAssignment?.kpi?.unit">
+                    {{ record.kpiAssignment.kpi.unit }}
+                  </span>
+                </span>
+              </div>
+            </template>
+
+            <!-- Submission Date Column -->
+            <template v-else-if="column.key === 'submittedAt'">
+              <div class="date-cell">
+                <clock-circle-outlined class="date-icon" />
+                <span class="date-text">{{
+                  formatDate(
+                    record.timestamp || record.updated_at || record.created_at
+                  )
+                }}</span>
+              </div>
+            </template>
+
+            <!-- Notes Column -->
+            <template v-else-if="column.key === 'notes'">
+              <div class="notes-cell">
+                <file-text-outlined class="notes-icon" />
+                <span class="notes-text">{{ record.notes || "-" }}</span>
+              </div>
+            </template>
+
+            <!-- Status Column -->
+            <template v-else-if="column.key === 'status'">
+              <a-tag :color="getStatusColor(record.status)" class="status-tag">
+                {{ getStatusText(record.status) }}
               </a-tag>
             </template>
 
+            <!-- Actions Column -->
             <template v-else-if="column.key === 'actions'">
-              <a-space>
-                <a-button
-                  type="link"
-                  size="small"
-                  @click="openDetailModal(record)"
-                  :title="$t('viewDetailsAndHistory')"
-                  class="icon-btn"
-                >
-                  <eye-outlined /> {{ $t("details") }}
-                </a-button>
-                <a-button
-                  type="primary"
-                  size="small"
-                  @click="handleApprove(record.id)"
-                  :loading="isProcessing && currentActionItemId === record.id"
-                  :disabled="isProcessing && currentActionItemId !== record.id"
-                  :title="$t('approve')"
-                  v-if="canApproveKpiValue"
-                  class="icon-btn"
-                >
-                  <check-circle-two-tone two-tone-color="#52c41a" />
-                  {{ $t("approve") }}
-                </a-button>
-                <a-button
-                  danger
-                  size="small"
-                  @click="openRejectModal(record)"
-                  :disabled="isProcessing"
-                  :title="$t('reject')"
-                  v-if="canRejectKpiValue"
-                  class="icon-btn"
-                >
-                  <close-circle-two-tone two-tone-color="#ff4d4f" />
-                  {{ $t("reject") }}
-                </a-button>
-              </a-space>
+              <div class="actions-cell">
+                <a-space>
+                  <!-- Details Button -->
+                  <a-tooltip :title="$t('details')">
+                    <a-button
+                      type="primary"
+                      size="small"
+                      @click="viewDetails(record)"
+                      class="action-btn"
+                    >
+                      <eye-outlined />
+                      {{ $t("details") }}
+                    </a-button>
+                  </a-tooltip>
+
+                  <!-- Approve Button -->
+                  <a-tooltip
+                    v-if="canApproveRecord(record)"
+                    :title="$t('common.approve')"
+                  >
+                    <a-button
+                      type="primary"
+                      size="small"
+                      @click="handleApprove(record)"
+                      :loading="
+                        loading &&
+                        currentAction === 'approve' &&
+                        currentRecordId === record.id
+                      "
+                      class="action-btn approve-btn"
+                    >
+                      <check-outlined />
+                      {{ $t("common.approve") }}
+                    </a-button>
+                  </a-tooltip>
+
+                  <!-- Reject Button -->
+                  <a-tooltip
+                    v-if="canRejectRecord(record)"
+                    :title="$t('common.reject')"
+                  >
+                    <a-button
+                      danger
+                      size="small"
+                      @click="handleReject(record)"
+                      :disabled="isProcessing"
+                      class="action-btn reject-btn"
+                    >
+                      <close-outlined />
+                      {{ $t("common.reject") }}
+                    </a-button>
+                  </a-tooltip>
+                </a-space>
+              </div>
             </template>
           </template>
         </a-table>
+      </div>
 
-        <a-empty
-          v-if="!loadingError && pendingItems.length === 0"
-          :description="$t('noPendingItems')"
-        >
-          <template #image>
-            <frown-two-tone style="font-size: 3em; color: #bfbfbf" />
-          </template>
-        </a-empty>
-      </a-spin>
+      <!-- Empty State -->
+      <a-empty
+        v-else
+        :description="$t('noPendingApprovals')"
+        class="empty-state"
+      />
     </a-card>
 
+    <!-- Reject Modal -->
     <a-modal
-      :open="isRejectModalVisible"
-      :title="$t('rejectReason')"
-      @ok="handleReject"
-      @cancel="closeRejectModal"
-      :confirm-loading="
-        isProcessing && currentActionItemId === itemToReject?.id
-      "
+      :open="rejectModalVisible"
+      :title="$t('rejectKpiValue')"
+      @ok="confirmReject"
+      @cancel="cancelReject"
+      :confirm-loading="rejectLoading"
       :ok-text="$t('confirmReject')"
       :cancel-text="$t('cancel')"
-      :maskClosable="false"
-      destroyOnClose
-      @afterClose="resetRejectModalState"
     >
-      <a-alert
-        v-if="rejectError"
-        :message="rejectError"
-        type="error"
-        show-icon
-        style="margin-bottom: 10px"
-      />
-      <p v-if="itemToReject" style="margin-bottom: 10px">
-        {{
-          $t("rejectValueForKpi", {
-            value: itemToReject.value?.toLocaleString(),
-            kpiName: itemToReject.kpiAssignment?.kpi?.name,
-            employeeName: `${itemToReject.kpiAssignment?.employee?.first_name} ${itemToReject.kpiAssignment?.employee?.last_name}`,
-          })
-        }}
-      </p>
-      <a-form-item
-        :label="$t('reasonRequired')"
-        :validate-status="rejectError ? 'error' : ''"
-        :help="rejectError"
-      >
-        <a-textarea
-          v-model:value="rejectionReason"
-          :placeholder="$t('enterRejectReason')"
-          :rows="4"
-        />
-      </a-form-item>
+      <a-form layout="vertical">
+        <a-form-item :label="$t('rejectionReason')" required>
+          <a-textarea
+            v-model:value="rejectReason"
+            :placeholder="$t('enterRejectionReason')"
+            :rows="4"
+            :maxlength="500"
+            show-count
+          />
+        </a-form-item>
+      </a-form>
     </a-modal>
 
+    <!-- Details Modal -->
     <a-modal
-      :open="isDetailModalVisible"
+      :open="detailsModalVisible"
       :title="$t('detailsAndHistory')"
-      @cancel="closeDetailModal"
-      :width="1000"
+      @cancel="closeDetailsModal"
       :footer="null"
+      :width="1000"
       destroyOnClose
-      @afterClose="resetDetailModalState"
     >
-      <a-spin :spinning="!selectedKpiValue" :tip="$t('loadingDetails')">
-        <div v-if="selectedKpiValue">
+      <a-spin :spinning="!selectedRecord" :tip="$t('loadingDetails')">
+        <div v-if="selectedRecord">
           <a-descriptions bordered size="small" :column="2">
-            <a-descriptions-item :label="$t('kpiName')">{{
-              selectedKpiValue.kpiAssignment?.kpi?.name || ""
-            }}</a-descriptions-item>
-            <a-descriptions-item :label="$t('employee')">{{
-              `${selectedKpiValue.kpiAssignment?.employee?.first_name || ""}
-              ${selectedKpiValue.kpiAssignment?.employee?.last_name || ""}`
-            }}</a-descriptions-item>
-            <a-descriptions-item :label="$t('assignedTarget')"
-              >{{
-                selectedKpiValue.kpiAssignment?.targetValue?.toLocaleString()
-              }}
+            <a-descriptions-item :label="$t('kpiName')">
+              {{ selectedRecord.kpiAssignment?.kpi?.name || "" }}
+            </a-descriptions-item>
+            <a-descriptions-item :label="$t('employee')">
               {{
-                selectedKpiValue.kpiAssignment?.kpi?.unit
-              }}</a-descriptions-item
-            >
-            <a-descriptions-item :label="$t('unit')">{{
-              selectedKpiValue.kpiAssignment?.kpi?.unit || ""
-            }}</a-descriptions-item>
+                `${selectedRecord.kpiAssignment?.employee?.first_name || ""} ${selectedRecord.kpiAssignment?.employee?.last_name || ""}`
+              }}
+            </a-descriptions-item>
+            <a-descriptions-item :label="$t('assignedTarget')">
+              {{ selectedRecord.kpiAssignment?.targetValue?.toLocaleString() }}
+              {{ selectedRecord.kpiAssignment?.kpi?.unit }}
+            </a-descriptions-item>
+            <a-descriptions-item :label="$t('unit')">
+              {{ selectedRecord.kpiAssignment?.kpi?.unit || "" }}
+            </a-descriptions-item>
           </a-descriptions>
 
           <a-descriptions
@@ -241,32 +255,34 @@
             style="margin-top: 16px"
           >
             <a-descriptions-item :label="$t('currentStatus')">
-              <a-tag :color="getValueStatusColor(selectedKpiValue.status)">
-                {{ getValueStatusText(selectedKpiValue.status) }}
+              <a-tag :color="getStatusColor(selectedRecord.status)">
+                {{ getStatusText(selectedRecord.status) }}
               </a-tag>
             </a-descriptions-item>
-            <a-descriptions-item :label="$t('submittedValue')">{{
-              selectedKpiValue.value?.toLocaleString() ?? ""
-            }}</a-descriptions-item>
-            <a-descriptions-item :label="$t('submissionTime')">{{
-              formatDate(
-                selectedKpiValue.timestamp || selectedKpiValue.updated_at
-              )
-            }}</a-descriptions-item>
-            <a-descriptions-item :label="$t('notes')">{{
-              selectedKpiValue.notes || $t("noNotes")
-            }}</a-descriptions-item>
+            <a-descriptions-item :label="$t('submittedValue')">
+              {{ selectedRecord.value?.toLocaleString() ?? "" }}
+            </a-descriptions-item>
+            <a-descriptions-item :label="$t('submissionTime')">
+              {{
+                formatDate(
+                  selectedRecord.timestamp || selectedRecord.updated_at
+                )
+              }}
+            </a-descriptions-item>
+            <a-descriptions-item :label="$t('notes')">
+              {{ selectedRecord.notes || $t("noNotes") }}
+            </a-descriptions-item>
 
             <a-descriptions-item :label="$t('projectOrTaskDetails')">
               <div
                 v-if="
-                  Array.isArray(selectedKpiValue.project_details) &&
-                  selectedKpiValue.project_details.length > 0
+                  Array.isArray(selectedRecord.project_details) &&
+                  selectedRecord.project_details.length > 0
                 "
               >
                 <a-table
                   :columns="projectDetailsColumns"
-                  :data-source="selectedKpiValue.project_details"
+                  :data-source="selectedRecord.project_details"
                   :pagination="false"
                   size="small"
                   bordered
@@ -285,10 +301,10 @@
 
             <a-descriptions-item
               :label="$t('rejectionReasonIfAny')"
-              v-if="selectedKpiValue.rejection_reason"
+              v-if="selectedRecord.rejection_reason"
             >
               <span style="color: red">{{
-                selectedKpiValue.rejection_reason
+                selectedRecord.rejection_reason
               }}</span>
             </a-descriptions-item>
           </a-descriptions>
@@ -323,13 +339,11 @@
                 <template v-else-if="column.key === 'value'">
                   {{ record.value?.toLocaleString() ?? "" }}
                 </template>
-
                 <template v-else-if="column.key === 'noteOrReason'">
                   <a-tooltip v-if="record.reason" :title="record.reason">
-                    <span style="color: red"
-                      >{{ $t("reason") }}:
-                      {{ truncateText(record.reason, 70) }}</span
-                    >
+                    <span style="color: red">
+                      {{ $t("reason") }}: {{ truncateText(record.reason, 70) }}
+                    </span>
                   </a-tooltip>
                   <a-tooltip v-else-if="record.notes" :title="record.notes">
                     <span>{{ truncateText(record.notes, 70) }}</span>
@@ -360,183 +374,174 @@
 </template>
 
 <script setup>
-// Vue core imports
-import { ref, computed, onMounted, h } from "vue";
-// Vuex store
+import { ref, computed, onMounted, nextTick } from "vue";
 import { useStore } from "vuex";
-// Ant Design Vue components and icons
+import { useI18n } from "vue-i18n";
+import { useRoute } from "vue-router";
 import {
-  Table as ATable,
-  Button as AButton,
-  Space as ASpace,
-  Modal as AModal,
-  Textarea as ATextarea,
-  FormItem as AFormItem,
-  Card as ACard,
-  Spin as ASpin,
-  Alert as AAlert,
-  Empty as AEmpty,
-  Tag as ATag,
-  Tooltip as ATooltip,
-  notification,
-} from "ant-design-vue";
-import {
+  TrophyOutlined,
   TrophyTwoTone,
   UserOutlined,
-  CalculatorOutlined,
-  FlagTwoTone,
-  ClockCircleTwoTone,
+  BarChartOutlined,
+  FlagOutlined,
+  ClockCircleOutlined,
   FileTextOutlined,
-  CheckCircleTwoTone,
-  CloseCircleTwoTone,
   EyeOutlined,
-  FrownTwoTone,
-  SmileTwoTone,
-  ExclamationCircleTwoTone,
-  SyncOutlined,
+  CheckOutlined,
+  CloseOutlined,
 } from "@ant-design/icons-vue";
-// Utilities
-import dayjs from "dayjs";
-// Constants
 import {
   KpiValueStatus,
+  getKpiValueStatusText,
   KpiValueStatusColor,
 } from "@/core/constants/kpiStatus";
-import { getKpiValueStatusText } from "@/core/constants/kpiStatus";
-import { useI18n } from "vue-i18n";
 import { RBAC_ACTIONS, RBAC_RESOURCES } from "@/core/constants/rbac.constants";
+import dayjs from "dayjs";
 
-const { t: $t } = useI18n();
-const KpiValueStatusText = getKpiValueStatusText($t);
-
-console.log("KpiValueStatus:", KpiValueStatus);
-
-// Store instance
 const store = useStore();
+const { t } = useI18n();
+const route = useRoute();
 
-// Reactive state variables
-const pendingItems = ref([]);
-const isLoadingPending = ref(false);
-const loadingError = ref(null);
-const isRejectModalVisible = ref(false);
-const itemToReject = ref(null);
-const rejectionReason = ref("");
-const rejectError = ref(null);
-const currentActionItemId = ref(null);
-const isDetailModalVisible = ref(false);
-const selectedKpiValue = ref(null);
+// Reactive data
+const rejectModalVisible = ref(false);
+const detailsModalVisible = ref(false);
+const selectedRecord = ref(null);
+const rejectReason = ref("");
+const rejectLoading = ref(false);
+const currentAction = ref("");
+const currentRecordId = ref(null);
+
+// History modal data
 const kpiValueHistory = ref([]);
 const isLoadingHistory = ref(false);
 const historyError = ref(null);
 
 // Computed properties
-const isProcessing = computed(
-  () => store.getters["kpiValues/isProcessingApproval"]
+const loading = computed(() => store.getters["loading/isLoading"]);
+const error = computed(() => store.getters["kpiValues/getPendingError"]);
+const pendingApprovals = computed(
+  () => store.getters["kpiValues/getPendingApprovals"]
 );
 const currentUser = computed(() => store.getters["auth/user"]);
-const effectiveRole = computed(() => store.getters["auth/effectiveRole"]);
-
-// Computed card title based on user role
-const cardTitle = computed(() => {
-  const role = effectiveRole.value;
-  if (role === "admin") return $t("adminApprovalTitle");
-  if (role === "manager") return $t("managerApprovalTitle");
-  if (role === "leader") return $t("leaderApprovalTitle");
-  return $t("defaultApprovalTitle");
-});
-
-// Card title with icon
-const cardTitleWithIcon = computed(() =>
-  h("span", { style: "display: flex; align-items: center; gap: 8px;" }, [
-    h(TrophyTwoTone, {
-      style: 'font-size: 1.4em; color: #409eff; marginRight: "6px"',
-    }),
-    cardTitle.value,
-  ])
-);
-
-// Permission-related computed properties
 const userPermissions = computed(() => currentUser.value?.permissions || []);
+
+// Permission checking function
 function hasPermission(action, resource, scope) {
   return userPermissions.value?.some(
     (p) =>
-      p.action === action &&
-      p.resource === resource &&
-      (scope ? p.scope === scope : true)
+      p.action?.trim() === action &&
+      p.resource?.trim() === resource &&
+      (scope ? p.scope?.trim() === scope : true)
   );
 }
-const canApproveKpiValue = computed(() => {
-  // Check if user has any approval permission for KPI values
-  return (
-    hasPermission(RBAC_ACTIONS.APPROVE, RBAC_RESOURCES.KPI_VALUE, "section") ||
-    hasPermission(
-      RBAC_ACTIONS.APPROVE,
-      RBAC_RESOURCES.KPI_VALUE,
-      "department"
-    ) ||
-    hasPermission(RBAC_ACTIONS.APPROVE, RBAC_RESOURCES.KPI_VALUE, "manager")
+
+// Permission checks
+const canApproveSection = computed(() =>
+  hasPermission(RBAC_ACTIONS.APPROVE, RBAC_RESOURCES.KPI_VALUE, "section")
+);
+const canApproveDepartment = computed(() =>
+  hasPermission(RBAC_ACTIONS.APPROVE, RBAC_RESOURCES.KPI_VALUE, "department")
+);
+const canApproveManager = computed(() =>
+  hasPermission(RBAC_ACTIONS.APPROVE, RBAC_RESOURCES.KPI_VALUE, "manager")
+);
+const canRejectSection = computed(() =>
+  hasPermission(RBAC_ACTIONS.REJECT, RBAC_RESOURCES.KPI_VALUE, "section")
+);
+const canRejectDepartment = computed(() =>
+  hasPermission(RBAC_ACTIONS.REJECT, RBAC_RESOURCES.KPI_VALUE, "department")
+);
+const canRejectManager = computed(() =>
+  hasPermission(RBAC_ACTIONS.REJECT, RBAC_RESOURCES.KPI_VALUE, "manager")
+);
+
+// Check if user has any view or approval permissions
+const hasAnyApprovalPermission = computed(() => {
+  // Check view permissions
+  const canViewSection = hasPermission(
+    RBAC_ACTIONS.VIEW,
+    RBAC_RESOURCES.KPI_VALUE,
+    "section"
   );
+  const canViewDepartment = hasPermission(
+    RBAC_ACTIONS.VIEW,
+    RBAC_RESOURCES.KPI_VALUE,
+    "department"
+  );
+  const canViewManager = hasPermission(
+    RBAC_ACTIONS.VIEW,
+    RBAC_RESOURCES.KPI_VALUE,
+    "manager"
+  );
+
+  // Check approve/reject permissions
+  const hasApprovalPermissions =
+    canApproveSection.value ||
+    canApproveDepartment.value ||
+    canApproveManager.value ||
+    canRejectSection.value ||
+    canRejectDepartment.value ||
+    canRejectManager.value;
+
+  // Check view permissions
+  const hasViewPermissions =
+    canViewSection || canViewDepartment || canViewManager;
+
+  return hasApprovalPermissions || hasViewPermissions;
 });
 
-const canRejectKpiValue = computed(() => {
-  // Check if user has any rejection permission for KPI values
-  return (
-    hasPermission(RBAC_ACTIONS.REJECT, RBAC_RESOURCES.KPI_VALUE, "section") ||
-    hasPermission(
-      RBAC_ACTIONS.REJECT,
-      RBAC_RESOURCES.KPI_VALUE,
-      "department"
-    ) ||
-    hasPermission(RBAC_ACTIONS.REJECT, RBAC_RESOURCES.KPI_VALUE, "manager")
-  );
-});
-
-// Table columns definitions extracted outside component logic
+// Table columns configuration
 const columns = computed(() => [
   {
-    title: $t("kpiName"),
-    dataIndex: ["kpiAssignment", "kpi", "name"],
+    title: t("kpiName"),
     key: "kpiName",
+    dataIndex: ["kpiAssignment", "kpi", "name"],
     width: 200,
     ellipsis: true,
   },
-  { title: $t("employee"), key: "employee", width: 150, ellipsis: true },
   {
-    title: $t("submittedValue"),
+    title: t("employee"),
+    key: "employee",
+    dataIndex: "employee",
+    width: 150,
+    ellipsis: true,
+  },
+  {
+    title: t("submittedValue"),
     dataIndex: "value",
     key: "value",
     align: "right",
     width: 120,
   },
   {
-    title: $t("target"),
+    title: t("target"),
     dataIndex: ["kpiAssignment", "targetValue"],
     key: "target",
     align: "right",
     width: 120,
   },
   {
-    title: $t("submissionDate"),
+    title: t("submissionDate"),
     dataIndex: "timestamp",
     key: "submittedAt",
     width: 140,
   },
   {
-    title: $t("notes"),
+    title: t("notes"),
     dataIndex: "notes",
     key: "notes",
     width: 150,
     ellipsis: true,
   },
   {
-    title: $t("status"),
+    title: t("status"),
     dataIndex: "status",
     key: "status",
     width: 180,
     align: "center",
   },
   {
-    title: $t("actions"),
+    title: t("actions"),
     key: "actions",
     align: "center",
     width: 180,
@@ -544,348 +549,432 @@ const columns = computed(() => [
   },
 ]);
 
-const historyColumns = computed(() => [
-  { title: $t("timestamp"), key: "timestamp", width: 140 },
+// Pagination configuration
+const pagination = computed(() => ({
+  pageSize: 10,
+  showSizeChanger: true,
+  showQuickJumper: true,
+  showTotal: (total, range) =>
+    t("showingResults", { start: range[0], end: range[1], total }),
+  pageSizeOptions: ["10", "20", "50", "100"],
+}));
+
+// Project details table columns
+const projectDetailsColumns = computed(() => [
   {
-    title: $t("common.actions"),
-    dataIndex: "action",
-    key: "action",
-    width: 180,
+    title: t("projectOrTaskName"),
+    dataIndex: "name",
+    key: "name",
   },
   {
-    title: $t("value"),
+    title: t("value"),
+    dataIndex: "value",
+    key: "value",
+    align: "right",
+  },
+]);
+
+// History table columns
+const historyColumns = computed(() => [
+  {
+    title: t("timestamp"),
+    dataIndex: "timestamp",
+    key: "timestamp",
+    width: 160,
+  },
+  {
+    title: t("action"),
+    dataIndex: "action",
+    key: "action",
+    width: 120,
+  },
+  {
+    title: t("value"),
     dataIndex: "value",
     key: "value",
     align: "right",
     width: 100,
   },
-  { title: $t("noteOrReason"), key: "noteOrReason", ellipsis: true },
-  { title: $t("changedBy"), key: "changed_by", width: 150 },
-]);
-
-const projectDetailsColumns = computed(() => [
   {
-    title: $t("projectOrTaskName"),
-    dataIndex: "name",
-    key: "name",
+    title: t("notesOrReason"),
+    dataIndex: "noteOrReason",
+    key: "noteOrReason",
     ellipsis: true,
   },
   {
-    title: $t("value"),
-    dataIndex: "value",
-    key: "value",
-    align: "right",
-    width: 100,
+    title: t("changedBy"),
+    dataIndex: "changed_by",
+    key: "changed_by",
+    width: 150,
   },
 ]);
 
-// Utility functions with comments
-const getActionText = (actionKey) => {
-  const map = {
-    SUBMIT_CREATE: $t("submitCreate"),
-    SUBMIT_UPDATE: $t("submitUpdate"),
-    APPROVE_SECTION: $t("approveSection"),
-    REJECT_SECTION: $t("rejectSection"),
-    APPROVE_DEPT: $t("approveDept"),
-    REJECT_DEPT: $t("rejectDept"),
-    APPROVE_MANAGER: $t("approveManager"),
-    REJECT_MANAGER: $t("rejectManager"),
-    CREATE: $t("create"),
-    UPDATE: $t("update"),
-    DELETE: $t("delete"),
-  };
-  return map[actionKey?.toUpperCase()] || actionKey || $t("unknown");
-};
+// Helper functions
 
 const formatDate = (dateString) => {
-  if (!dateString) return "";
-  return dayjs(dateString).format("YYYY-MM-DD HH:mm");
+  if (!dateString) return "-";
+  return dayjs(dateString).format("YYYY-MM-DD");
 };
 
-const truncateText = (text, length) => {
-  if (!text) return "";
-  return text.length > length ? text.substring(0, length) + "..." : text;
-};
-
-const getValueStatusText = (status) => {
-  console.log("getValueStatusText called with status:", status);
-  return KpiValueStatusText[status] || status || "Không xác định";
-};
-
-const getValueStatusColor = (status) => {
+const getStatusColor = (status) => {
   return KpiValueStatusColor[status] || "default";
 };
 
-// Status icon mapping
-const statusIcon = (status) => {
-  switch ((status || "").toLowerCase()) {
-    case "pending_section_approval":
-      return SyncOutlined;
-    case "pending_dept_approval":
-      return SyncOutlined;
-    case "pending_manager_approval":
-      return SyncOutlined;
-    case "approved":
-      return SmileTwoTone;
-    case "rejected":
-      return ExclamationCircleTwoTone;
-    default:
-      return ExclamationCircleTwoTone;
-  }
+const getStatusText = (status) => {
+  const statusTextMap = getKpiValueStatusText(t);
+  return statusTextMap[status] || status || t("unknown");
 };
 
-// Fetch pending KPI approval items
-const fetchData = async () => {
-  if (!currentUser.value || !currentUser.value.id) {
-    loadingError.value = "Không thể xác định người dùng.";
-    return;
-  }
-
-  isLoadingPending.value = true;
-  loadingError.value = null;
-  const fetchAction = "kpiValues/fetchPendingApprovals";
-
-  try {
-    const data = await store.dispatch(fetchAction);
-    pendingItems.value = data || [];
-    console.log("Fetched pending items: ", pendingItems.value);
-  } catch (error) {
-    loadingError.value =
-      store.getters["kpiValues/getPendingError"] ||
-      "Lỗi khi tải danh sách chờ duyệt.";
-    pendingItems.value = [];
-    console.error("Fetch pending error:", error);
-  } finally {
-    isLoadingPending.value = false;
-  }
-};
-
-// Handle approval action
-const handleApprove = async (valueId) => {
-  if (!valueId) return;
-  const item = pendingItems.value.find((p) => p.id === valueId);
-  if (!item) return;
-
-  currentActionItemId.value = valueId;
-  let actionName = null;
-  console.log(`Item Status to Approve: ${item.status}`);
-
-  if (!KpiValueStatus.PENDING_DEPT_APPROVAL) {
-    console.error("KpiValueStatus.PENDING_DEPT_APPROVAL is undefined");
-    return;
-  }
-
-  switch (item.status) {
+// Permission helper functions
+const canApproveRecord = (record) => {
+  switch (record.status) {
     case KpiValueStatus.PENDING_SECTION_APPROVAL:
-      actionName = "kpiValues/approveValueSection";
-      break;
+      return canApproveSection.value;
     case KpiValueStatus.PENDING_DEPT_APPROVAL:
-      actionName = "kpiValues/approveValueDept";
-      break;
+      return canApproveDepartment.value;
     case KpiValueStatus.PENDING_MANAGER_APPROVAL:
-      actionName = "kpiValues/approveValueManager";
-      break;
+      return canApproveManager.value;
     default:
-      notification.error({
-        message: "Lỗi",
-        description: `Trạng thái '${item.status}' không hợp lệ để phê duyệt.`,
-      });
-      currentActionItemId.value = null;
-      return;
-  }
-  console.log(`Dispatching Vuex Action: ${actionName} for valueId: ${valueId}`);
-  try {
-    await store.dispatch(actionName, { valueId });
-    await fetchData();
-  } catch (error) {
-    console.error(`Lỗi khi thực hiện ${actionName}:`, error);
-  } finally {
-    currentActionItemId.value = null;
+      return false;
   }
 };
 
-// Open reject modal with validation
-const openRejectModal = (item) => {
-  if (!item || item.id === undefined) return;
-
-  if (
-    ![
-      KpiValueStatus.PENDING_SECTION_APPROVAL,
-      KpiValueStatus.PENDING_DEPT_APPROVAL,
-      KpiValueStatus.PENDING_MANAGER_APPROVAL,
-    ].includes(item.status)
-  ) {
-    notification.warn({
-      message: "Trạng thái không hợp lệ",
-      description: "Không thể từ chối mục ở trạng thái này.",
-    });
-    return;
-  }
-  itemToReject.value = item;
-  // Reset modal state for new instance
-  rejectionReason.value = "";
-  rejectError.value = null;
-  isRejectModalVisible.value = true;
-};
-// Close reject modal and reset state after delay
-const closeRejectModal = () => {
-  isRejectModalVisible.value = false;
-
-  setTimeout(() => {
-    itemToReject.value = null;
-    rejectionReason.value = "";
-    rejectError.value = null;
-    currentActionItemId.value = null;
-  }, 300);
-};
-// Reset reject modal state immediately
-const resetRejectModalState = () => {
-  itemToReject.value = null;
-  rejectionReason.value = "";
-  rejectError.value = null;
-  currentActionItemId.value = null;
-};
-
-// Handle reject action with validation and Vuex dispatch
-const handleReject = async () => {
-  if (!rejectionReason.value || rejectionReason.value.trim() === "") {
-    rejectError.value = "Vui lòng nhập lý do từ chối.";
-    return;
-  }
-  if (!itemToReject.value) return;
-
-  const valueId = itemToReject.value.id;
-  const currentStatus = itemToReject.value.status;
-  currentActionItemId.value = valueId;
-  rejectError.value = null;
-
-  let actionName = null;
-
-  switch (currentStatus) {
+const canRejectRecord = (record) => {
+  switch (record.status) {
     case KpiValueStatus.PENDING_SECTION_APPROVAL:
-      actionName = "kpiValues/rejectValueSection";
-      break;
+      return canRejectSection.value;
     case KpiValueStatus.PENDING_DEPT_APPROVAL:
-      actionName = "kpiValues/rejectValueDept";
-      break;
+      return canRejectDepartment.value;
     case KpiValueStatus.PENDING_MANAGER_APPROVAL:
-      actionName = "kpiValues/rejectValueManager";
-      break;
+      return canRejectManager.value;
     default:
-      notification.error({
-        message: "Lỗi",
-        description: `Trạng thái '${currentStatus}' không hợp lệ để từ chối.`,
-      });
-      currentActionItemId.value = null;
-
-      rejectError.value = `Trạng thái '${currentStatus}' không hợp lệ để từ chối.`;
-      return;
-  }
-
-  try {
-    await store.dispatch(actionName, {
-      valueId,
-      reason: rejectionReason.value,
-    });
-    closeRejectModal();
-    await fetchData();
-  } catch (error) {
-    rejectError.value =
-      store.getters["kpiValues/getApprovalError"] ||
-      "Lỗi khi thực hiện từ chối.";
-    console.error(`Lỗi khi thực hiện ${actionName}:`, error);
-  } finally {
-    if (!rejectError.value) {
-      currentActionItemId.value = null;
-    }
+      return false;
   }
 };
 
-// Open detail modal and load history
-const openDetailModal = async (record) => {
-  if (!record || !record.id) return;
-  selectedKpiValue.value = record;
-  isDetailModalVisible.value = true;
-  await loadHistory(record.id);
+// Helper functions for modal
+const getActionText = (actionKey) => {
+  const actionMap = {
+    SUBMIT_CREATE: t("createAndSubmit"),
+    SUBMIT_UPDATE: t("updateAndSubmit"),
+    APPROVE_SECTION: t("sectionApprove"),
+    REJECT_SECTION: t("sectionReject"),
+    APPROVE_DEPT: t("deptApprove"),
+    REJECT_DEPT: t("deptReject"),
+    APPROVE_MANAGER: t("managerApprove"),
+    REJECT_MANAGER: t("managerReject"),
+    CREATE: t("create"),
+    UPDATE: t("update"),
+    DELETE: t("delete"),
+  };
+  return actionMap[actionKey?.toUpperCase()] || actionKey || t("unknown");
 };
 
-// Load KPI value history from store
+const truncateText = (text, length) =>
+  text?.length > length ? `${text.substring(0, length)}...` : text || "";
+
+// Action handlers
+const viewDetails = async (record) => {
+  selectedRecord.value = record;
+  detailsModalVisible.value = true;
+
+  // Load history when modal opens
+  if (record.id) {
+    await loadHistory(record.id);
+  }
+};
+
 const loadHistory = async (valueId) => {
-  if (!valueId) return;
   isLoadingHistory.value = true;
   historyError.value = null;
-  kpiValueHistory.value = [];
   try {
-    const historyData = await store.dispatch("kpiValues/fetchValueHistory", {
+    const history = await store.dispatch("kpiValues/fetchValueHistory", {
       valueId,
     });
-    kpiValueHistory.value = historyData || [];
-    console.log("Fetched history: ", kpiValueHistory.value);
+    kpiValueHistory.value = history || [];
   } catch (error) {
-    historyError.value = error.message || "Lỗi khi tải lịch sử.";
-    console.error("Fetch history error:", error);
+    historyError.value =
+      error.response?.data?.message ||
+      error.message ||
+      t("errorLoadingHistory");
+    kpiValueHistory.value = [];
   } finally {
     isLoadingHistory.value = false;
   }
 };
 
-// Close detail modal
-const closeDetailModal = () => {
-  isDetailModalVisible.value = false;
-};
-// Reset detail modal state
-const resetDetailModalState = () => {
-  selectedKpiValue.value = null;
+const closeDetailsModal = () => {
+  detailsModalVisible.value = false;
+  selectedRecord.value = null;
   kpiValueHistory.value = [];
-  isLoadingHistory.value = false;
   historyError.value = null;
 };
 
-// Fetch data on component mount
-onMounted(() => {
-  if (currentUser.value && currentUser.value.id) {
-    fetchData();
-  } else {
-    loadingError.value =
-      "Không thể xác định thông tin người dùng để tải dữ liệu.";
+const handleApprove = async (record) => {
+  currentAction.value = "approve";
+  currentRecordId.value = record.id;
+
+  try {
+    const action = getApprovalAction(record.status);
+    if (action) {
+      await store.dispatch(`kpiValues/${action}`, { valueId: record.id });
+    }
+  } catch (error) {
+    // Handle approval error silently
+  } finally {
+    currentAction.value = "";
+    currentRecordId.value = null;
+  }
+};
+
+const handleReject = (record) => {
+  selectedRecord.value = record;
+  rejectReason.value = "";
+  rejectModalVisible.value = true;
+};
+
+const confirmReject = async () => {
+  if (!rejectReason.value.trim()) {
+    return;
+  }
+
+  rejectLoading.value = true;
+  currentAction.value = "reject";
+  currentRecordId.value = selectedRecord.value.id;
+
+  try {
+    const action = getRejectionAction(selectedRecord.value.status);
+    if (action) {
+      await store.dispatch(`kpiValues/${action}`, {
+        valueId: selectedRecord.value.id,
+        reason: rejectReason.value.trim(),
+      });
+    }
+    rejectModalVisible.value = false;
+    selectedRecord.value = null;
+    rejectReason.value = "";
+  } catch (error) {
+    // Handle rejection error silently
+  } finally {
+    rejectLoading.value = false;
+    currentAction.value = "";
+    currentRecordId.value = null;
+  }
+};
+
+const cancelReject = () => {
+  rejectModalVisible.value = false;
+  selectedRecord.value = null;
+  rejectReason.value = "";
+};
+
+const getApprovalAction = (status) => {
+  switch (status) {
+    case KpiValueStatus.PENDING_SECTION_APPROVAL:
+      return "approveValueSection";
+    case KpiValueStatus.PENDING_DEPT_APPROVAL:
+      return "approveValueDept";
+    case KpiValueStatus.PENDING_MANAGER_APPROVAL:
+      return "approveValueManager";
+    default:
+      return null;
+  }
+};
+
+const getRejectionAction = (status) => {
+  switch (status) {
+    case KpiValueStatus.PENDING_SECTION_APPROVAL:
+      return "rejectValueSection";
+    case KpiValueStatus.PENDING_DEPT_APPROVAL:
+      return "rejectValueDept";
+    case KpiValueStatus.PENDING_MANAGER_APPROVAL:
+      return "rejectValueManager";
+    default:
+      return null;
+  }
+};
+
+const clearError = () => {
+  store.commit("kpiValues/SET_PENDING_ERROR", null);
+};
+
+// Lifecycle hooks
+onMounted(async () => {
+  try {
+    await store.dispatch("kpiValues/fetchPendingApprovals");
+
+    // Check for highlighted item from query params
+    await nextTick();
+    if (route.query.highlightKpiValueId) {
+      // You can implement highlighting logic here if needed
+    }
+  } catch (error) {
+    // Handle loading error silently
   }
 });
 </script>
 
 <style scoped>
-.icon-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 8px;
-  font-size: 1.1em;
-  border-radius: 8px;
-  box-shadow: 0 1px 2px #e6f7ff11;
-  transition: background 0.15s;
+.kpi-value-approval-list {
+  background-color: #f5f5f5;
+  min-height: auto;
 }
-.icon-btn:hover {
-  background: #e6f7ff;
-}
-.status-tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 12px;
+
+.modern-card {
   border-radius: 12px;
-  font-size: 13px;
-  font-weight: 500;
-  color: #fff;
-  text-transform: capitalize;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  border: none;
 }
-.modern-table {
+
+.page-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.page-icon {
+  font-size: 24px;
+  color: #1890ff;
+}
+
+.page-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: #262626;
+}
+
+.table-container {
+  background: white;
   border-radius: 8px;
   overflow: hidden;
-  box-shadow: 0 2px 8px #e6f7ff33;
 }
-.ant-table-actions {
-  text-align: center;
+
+.modern-table {
+  border-radius: 8px;
 }
-:deep(.ant-alert-error) {
-  margin-bottom: 10px;
+
+.modern-table :deep(.ant-table-thead > tr > th) {
+  background-color: #fafafa;
+  font-weight: 600;
+  color: #262626;
+  border-bottom: 2px solid #f0f0f0;
+}
+
+.modern-table :deep(.ant-table-tbody > tr > td) {
+  border-bottom: 1px solid #f0f0f0;
+  vertical-align: middle;
+}
+
+.modern-table :deep(.ant-table-tbody > tr:hover > td) {
+  background-color: #f8f9fa;
+}
+
+.kpi-type-cell,
+.employee-cell,
+.value-cell,
+.target-cell,
+.date-cell,
+.notes-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.kpi-icon,
+.employee-icon,
+.value-icon,
+.target-icon,
+.date-icon,
+.notes-icon {
+  color: #1890ff;
+  font-size: 16px;
+}
+
+.value-icon {
+  color: #faad14;
+}
+
+.target-icon {
+  color: #1890ff;
+}
+
+.date-icon {
+  color: #1890ff;
+}
+
+.notes-icon {
+  color: #1890ff;
+}
+
+.status-tag {
+  font-weight: 500;
+  border-radius: 6px;
+}
+
+.actions-cell {
+  display: flex;
+  justify-content: center;
+}
+
+.action-btn {
+  border-radius: 6px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.approve-btn {
+  background-color: #52c41a;
+  border-color: #52c41a;
+}
+
+.approve-btn:hover {
+  background-color: #73d13d;
+  border-color: #73d13d;
+}
+
+.reject-btn {
+  background-color: #ff4d4f;
+  border-color: #ff4d4f;
+  color: #fff !important;
+}
+
+.reject-btn:hover {
+  background-color: #ff7875;
+  border-color: #ff7875;
+  color: #fff !important;
+}
+
+.reject-btn:focus {
+  color: #fff !important;
+}
+
+.reject-btn .ant-btn-loading-icon {
+  margin-right: 4px;
+}
+
+.reject-btn.ant-btn-loading {
+  color: #fff !important;
+}
+
+.empty-state {
+  padding: 48px 0;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .kpi-value-approval-list {
+    padding: 16px;
+  }
+
+  .page-title {
+    font-size: 18px;
+  }
+
+  .modern-table :deep(.ant-table-tbody > tr > td) {
+    padding: 8px;
+    font-size: 14px;
+  }
 }
 </style>

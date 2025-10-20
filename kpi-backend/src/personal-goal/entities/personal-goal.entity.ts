@@ -1,9 +1,17 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, CreateDateColumn, UpdateDateColumn, OneToMany } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  ManyToOne,
+  CreateDateColumn,
+  UpdateDateColumn,
+  OneToMany,
+} from 'typeorm';
 import { Employee } from '../../employees/entities/employee.entity';
 import { PersonalGoalKpi } from './personal-goal-kpi.entity';
 
 /**
- * Trạng thái của mục tiêu cá nhân
+ * Status of personal goal
  */
 export enum PersonalGoalStatus {
   NOT_STARTED = 'not_started',
@@ -13,7 +21,7 @@ export enum PersonalGoalStatus {
 }
 
 /**
- * Entity đại diện cho một mục tiêu cá nhân của nhân viên
+ * Entity representing a personal goal of an employee
  */
 @Entity('personal_goals')
 export class PersonalGoal {
@@ -36,9 +44,11 @@ export class PersonalGoal {
   description: string;
 
   /**
-   * Danh sách các KPI liên kết với mục tiêu cá nhân này
+   * List of KPIs linked to this personal goal
    */
-  @OneToMany(() => PersonalGoalKpi, (pgk) => pgk.personalGoal, { cascade: true })
+  @OneToMany(() => PersonalGoalKpi, (pgk) => pgk.personalGoal, {
+    cascade: true,
+  })
   kpiLinks: PersonalGoalKpi[];
 
   @Column({ type: 'float', nullable: true })
@@ -53,7 +63,11 @@ export class PersonalGoal {
   @Column({ type: 'date', nullable: true })
   endDate: Date;
 
-  @Column({ type: 'enum', enum: PersonalGoalStatus, default: PersonalGoalStatus.NOT_STARTED })
+  @Column({
+    type: 'enum',
+    enum: PersonalGoalStatus,
+    default: PersonalGoalStatus.NOT_STARTED,
+  })
   status: PersonalGoalStatus;
 
   @CreateDateColumn()

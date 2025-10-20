@@ -263,9 +263,8 @@ function hasPermission(action, resource, scope) {
   );
 }
 
-const canViewDashboard = computed(
-  () =>
-    hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.DASHBOARD) 
+const canViewDashboard = computed(() =>
+  hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.DASHBOARD)
 );
 
 const performanceByRoleColumns = ref([

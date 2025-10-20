@@ -24,23 +24,40 @@ export class PermissionGuard implements CanActivate {
 
     const request = context.switchToHttp().getRequest();
     const user: Employee = request.user;
+    if (!user) {
+      throw new ForbiddenException('User not authenticated');
+    }
+
+    // Check permissions from user.permissions first (from findOneWithPermissions)
+    const userWithPermissions = user as any;
+    let allPermissions: any[] = [];
+
     if (
-      !user ||
-      !user.roles ||
-      !Array.isArray(user.roles) ||
-      user.roles.length === 0
+      userWithPermissions.permissions &&
+      Array.isArray(userWithPermissions.permissions)
     ) {
+      allPermissions = userWithPermissions.permissions;
+    } else if (user.roles && Array.isArray(user.roles)) {
+      // Fallback to roles.permissions if user.permissions not available
+      allPermissions = user.roles.flatMap(
+        (role: any) => role.permissions || [],
+      );
+    }
+
+    if (allPermissions.length === 0) {
       throw new ForbiddenException('No permission');
     }
-    const allPermissions = user.roles.flatMap(
-      (role: any) => role.permissions || [],
-    );
     const hasPermission = allPermissions.some(
       (p) =>
-        p.action === permission.action && p.resource === permission.resource,
+        p.action === permission.action &&
+        p.resource === permission.resource &&
+        (!permission.scope || p.scope === permission.scope),
     );
+
     if (!hasPermission) {
-      throw new ForbiddenException('Insufficient permission');
+      throw new ForbiddenException(
+        `Insufficient permission. Required: ${permission.action}:${permission.resource}:${permission.scope || 'any'}`,
+      );
     }
     return true;
   }

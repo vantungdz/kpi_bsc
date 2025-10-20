@@ -20,7 +20,7 @@ export class SessionService {
     // Tạo session ID mới
     const sessionId = uuidv4();
 
-    // Kiểm tra và logout tất cả session cũ của user này
+    // Check and logout all old sessions of this user
     await this.logoutAllUserSessions(userId);
 
     // Tạo session mới
@@ -83,7 +83,7 @@ export class SessionService {
   }
 
   async cleanupExpiredSessions(): Promise<void> {
-    // Xóa sessions không hoạt động quá 24 giờ
+    // Delete sessions inactive for more than 24 hours
     const expiredTime = new Date(Date.now() - 24 * 60 * 60 * 1000);
     await this.sessionRepository.delete({
       isActive: false,

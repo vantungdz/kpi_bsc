@@ -9,15 +9,6 @@ import { userHasPermission } from '../../common/utils/permission.utils';
 export class PolicyGuard implements CanActivate {
   constructor(private readonly reflector: Reflector) {}
 
-  private userHasPermission(
-    user: Employee,
-    action: string,
-    resource: string,
-    scope?: string,
-  ): boolean {
-    return userHasPermission(user, action, resource, scope);
-  }
-
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const policyMeta = this.reflector.get<{ policy: string; options?: any }>(
       POLICY_CHECK_KEY,
@@ -32,8 +23,7 @@ export class PolicyGuard implements CanActivate {
     // Example: check if user is manager of department options.departmentId
     if (policy === 'isManagerOfDepartment') {
       // Check if user has department management permission
-      if (!this.userHasPermission(user, 'view', 'kpi', 'department'))
-        return false;
+      if (!userHasPermission(user, 'view', 'kpi', 'department')) return false;
       if (options?.departmentId && user.departmentId !== options.departmentId)
         return false;
       return true;

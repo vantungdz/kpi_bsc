@@ -10,7 +10,7 @@ export class KpiPerformanceOverviewDto {
   performanceByRole?: PerformanceByRoleDto[];
 }
 
-// DTO mới cho KPI Inventory Stats
+// New DTO for KPI Inventory Stats
 export class KpiInventoryDto {
   totalKpiDefinitions: number;
   totalKpiAssignments: number;
@@ -29,7 +29,7 @@ export class PerformanceByRoleDto {
   roleType: 'department' | 'section' | 'employee';
   roleId: number;
   roleName: string;
-  totalAssignedKpis: number; 
+  totalAssignedKpis: number;
   achievedCount: number;
   notAchievedCount: number;
   achievedRate?: number;

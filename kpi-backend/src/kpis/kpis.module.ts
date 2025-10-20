@@ -11,6 +11,7 @@ import { Department } from '../departments/entities/department.entity';
 import { Section } from '../sections/entities/section.entity';
 import { KPIAssignment } from '../kpi-assessments/entities/kpi-assignment.entity';
 import { AuditLogModule } from '../audit-log/audit-log.module';
+import { EmployeesModule } from '../employees/employees.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { AuditLogModule } from '../audit-log/audit-log.module';
       KPIAssignment,
     ]),
     AuditLogModule,
+    EmployeesModule,
   ],
   providers: [KpisService],
   controllers: [KpisController],

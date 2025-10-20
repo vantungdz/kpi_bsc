@@ -18,6 +18,7 @@ import { userHasPermission } from '../common/utils/permission.utils';
 import { KpiReviewHistory } from '../kpi-evaluations/entities/kpi-review-history.entity';
 import { NotificationService } from '../notification/notification.service';
 import { NotificationType } from '../notification/entities/notification.entity';
+import { ReviewCycle } from '../review-cycle/entities/review-cycle.entity';
 import { EmployeesService } from '../employees/employees.service';
 import { getKpiStatus } from '../kpis/kpis.service';
 
@@ -34,25 +35,18 @@ export class KpiReviewService {
     private readonly kpiValueRepository: Repository<KpiValue>,
     @InjectRepository(KpiReviewHistory)
     private readonly kpiReviewHistoryRepository: Repository<KpiReviewHistory>,
+    @InjectRepository(ReviewCycle)
+    private readonly reviewCycleRepository: Repository<ReviewCycle>,
     private readonly notificationService: NotificationService,
     private readonly employeesService: EmployeesService,
   ) {}
 
   /**
-   * Lấy danh sách KPI reviews theo filter và quyền của user
-   * @param filter Điều kiện lọc
-   * @param reqUser Thông tin user yêu cầu (nếu có)
-   * @returns Danh sách KPI reviews
+   * Get list of KPI reviews by filter and user permissions
+   * @param filter Filter conditions
+   * @param reqUser Requesting user information (if any)
+   * @returns List of KPI reviews
    */
-
-  private userHasPermission(
-    user: Employee,
-    resource: string,
-    action: string,
-    scope?: string,
-  ): boolean {
-    return userHasPermission(user, action, resource, scope);
-  }
 
   async getKpiReviews(filter: any, reqUser?: any): Promise<any[]> {
     if (reqUser) {
@@ -62,12 +56,61 @@ export class KpiReviewService {
         ReviewStatus.DEPARTMENT_REVIEWED,
         ReviewStatus.MANAGER_REVIEWED,
         ReviewStatus.EMPLOYEE_FEEDBACK,
+        ReviewStatus.PENDING_MANAGER_APPROVAL,
         ReviewStatus.COMPLETED,
         ReviewStatus.SECTION_REJECTED,
         ReviewStatus.DEPARTMENT_REJECTED,
         ReviewStatus.MANAGER_REJECTED,
       ];
-      if (this.userHasPermission(reqUser, 'kpi-review', 'view', 'section')) {
+      // Check permissions in order of hierarchy (highest first)
+      if (userHasPermission(reqUser, 'view', 'kpi-review', 'manager')) {
+        // Manager/Admin can see all reviews
+        const reviews = await this.kpiReviewRepository.find({
+          where: {
+            ...filter,
+            status: In(allowedStatuses),
+          },
+          relations: ['kpi', 'employee', 'department', 'section'],
+        });
+        return reviews.map((r) => ({
+          ...r,
+          score:
+            getFinalScore(r) !== null && r.kpi && r.kpi.weight != null
+              ? getFinalScore(r)! * r.kpi.weight
+              : null,
+        }));
+      }
+
+      if (userHasPermission(reqUser, 'view', 'kpi-review', 'department')) {
+        // Department can see reviews from their department
+        const employees = await this.kpiReviewRepository.manager.find(
+          Employee,
+          {
+            where: {
+              departmentId: reqUser.departmentId,
+            },
+          },
+        );
+        const employeeIds = employees.map((e) => e.id);
+        const reviews = await this.kpiReviewRepository.find({
+          where: {
+            ...filter,
+            employee: employeeIds.length ? { id: In(employeeIds) } : undefined,
+            status: In(allowedStatuses),
+          },
+          relations: ['kpi', 'employee', 'department', 'section'],
+        });
+        return reviews.map((r) => ({
+          ...r,
+          score:
+            getFinalScore(r) !== null && r.kpi && r.kpi.weight != null
+              ? getFinalScore(r)! * r.kpi.weight
+              : null,
+        }));
+      }
+
+      if (userHasPermission(reqUser, 'view', 'kpi-review', 'section')) {
+        // Section can see reviews from their section
         const employees = await this.kpiReviewRepository.manager.find(
           Employee,
           {
@@ -82,51 +125,6 @@ export class KpiReviewService {
           where: {
             ...filter,
             employee: employeeIds.length ? { id: In(employeeIds) } : undefined,
-            status: In(allowedStatuses),
-          },
-          relations: ['kpi', 'employee', 'department', 'section'],
-        });
-        return reviews.map((r) => ({
-          ...r,
-          score:
-            getFinalScore(r) !== null && r.kpi && r.kpi.weight != null
-              ? getFinalScore(r)! * r.kpi.weight
-              : null,
-        }));
-      }
-      if (this.userHasPermission(reqUser, 'kpi-review', 'view', 'department')) {
-        const employees = await this.kpiReviewRepository.manager.find(
-          Employee,
-          {
-            where: {
-              departmentId: reqUser.departmentId,
-            },
-          },
-        );
-        const employeeIds = employees.map((e) => e.id);
-        const reviews = await this.kpiReviewRepository.find({
-          where: {
-            ...filter,
-            employee: employeeIds.length ? { id: In(employeeIds) } : undefined,
-            status: In(allowedStatuses),
-          },
-          relations: ['kpi', 'employee', 'department', 'section'],
-        });
-        return reviews.map((r) => ({
-          ...r,
-          score:
-            getFinalScore(r) !== null && r.kpi && r.kpi.weight != null
-              ? getFinalScore(r)! * r.kpi.weight
-              : null,
-        }));
-      }
-      if (
-        this.userHasPermission(reqUser, 'kpi-review', 'view', 'manager') ||
-        this.userHasPermission(reqUser, 'kpi-review', 'view', 'admin')
-      ) {
-        const reviews = await this.kpiReviewRepository.find({
-          where: {
-            ...filter,
             status: In(allowedStatuses),
           },
           relations: ['kpi', 'employee', 'department', 'section'],
@@ -166,6 +164,7 @@ export class KpiReviewService {
           ReviewStatus.DEPARTMENT_REVIEWED,
           ReviewStatus.MANAGER_REVIEWED,
           ReviewStatus.EMPLOYEE_FEEDBACK,
+          ReviewStatus.PENDING_MANAGER_APPROVAL,
           ReviewStatus.COMPLETED,
         ]),
       },
@@ -269,52 +268,143 @@ export class KpiReviewService {
   }
 
   async getMyKpisForReview(userId: number, cycle: string) {
+    // Convert cycle to ID and get review cycle info
+    const cycleId = parseInt(cycle);
+    if (isNaN(cycleId)) {
+      throw new BadRequestException(
+        'Invalid cycle format. Expected cycle ID (e.g., 1, 2)',
+      );
+    }
+
+    // Get review cycle details to check date range
+    const reviewCycle = await this.reviewCycleRepository.findOne({
+      where: { id: cycleId },
+    });
+
+    if (!reviewCycle) {
+      throw new BadRequestException(
+        `Review cycle with ID ${cycleId} not found`,
+      );
+    }
+
+    // First, get all existing reviews for this cycle and user
+    const existingReviews = await this.kpiReviewRepository.find({
+      where: {
+        employee: { id: userId },
+        cycle: cycle,
+      },
+      relations: [
+        'kpi',
+        'kpi.perspective',
+        'kpi.formula',
+        'assignment',
+        'employee',
+      ],
+    });
+
+    // Filter existing reviews by KPI date range overlap with review cycle
+    const validExistingReviews = existingReviews.filter((review) => {
+      if (!review.kpi) {
+        return false;
+      }
+
+      const kpiStartDate = new Date(review.kpi.start_date);
+      const kpiEndDate = new Date(review.kpi.end_date);
+      const cycleStartDate = new Date(reviewCycle.startDate);
+      const cycleEndDate = new Date(reviewCycle.endDate);
+
+      // Check if KPI date range overlaps with review cycle date range
+      const isValid =
+        kpiStartDate <= cycleEndDate && kpiEndDate >= cycleStartDate;
+      return isValid;
+    });
+
+    // If we have valid existing reviews, return them
+    if (validExistingReviews.length > 0) {
+      return validExistingReviews;
+    }
+
+    // If no existing reviews for this cycle, get assignments and create reviews
     const assignments = await this.kpiAssignmentRepository.find({
       where: {
         assigned_to_employee: userId,
         status: 'APPROVED',
         deleted_at: IsNull(),
       },
-      relations: ['kpi', 'kpiValues', 'employee'],
+      relations: [
+        'kpi',
+        'kpiValues',
+        'employee',
+        'kpi.perspective',
+        'kpi.formula',
+      ],
     });
+
     const result: KpiReview[] = [];
     for (const assignment of assignments) {
-      if (!assignment.kpi) continue;
+      if (!assignment.kpi) {
+        continue;
+      }
+
+      // Check if KPI date range overlaps with review cycle date range
+      const kpiStartDate = new Date(assignment.kpi.start_date);
+      const kpiEndDate = new Date(assignment.kpi.end_date);
+      const cycleStartDate = new Date(reviewCycle.startDate);
+      const cycleEndDate = new Date(reviewCycle.endDate);
+
+      // Check if KPI date range overlaps with review cycle date range
+      const hasOverlap =
+        kpiStartDate <= cycleEndDate && kpiEndDate >= cycleStartDate;
+
+      if (!hasOverlap) {
+        continue;
+      }
 
       const approvedValues = (assignment.kpiValues || []).filter(
         (v) => v.status === KpiValueStatus.APPROVED,
       );
-      if (!approvedValues.length) continue;
+
+      if (!approvedValues.length) {
+        continue;
+      }
+
       const latestValue = approvedValues.sort(
         (a, b) =>
           new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
       )[0];
 
-      let review = await this.kpiReviewRepository.findOne({
-        where: { assignment: { id: assignment.id }, cycle },
-        relations: ['kpi', 'assignment'],
+      // Create new review with full KPI data
+      const reviewData: any = {
+        kpi: assignment.kpi, // Full KPI object instead of just ID
+        assignment: assignment, // Full assignment object instead of just ID
+        employee: assignment.employee, // Full employee object
+        cycle: cycle,
+        targetValue: Number(assignment.targetValue) ?? 0,
+        actualValue: Number(latestValue.value) ?? 0,
+        status: ReviewStatus.PENDING,
+      };
+
+      const newReviewArr = this.kpiReviewRepository.create([reviewData]);
+      const newReview = newReviewArr[0];
+      const savedReviewArr = await this.kpiReviewRepository.save([newReview]);
+
+      // Load the saved review with full relations
+      const savedReview = await this.kpiReviewRepository.findOne({
+        where: { id: savedReviewArr[0].id },
+        relations: [
+          'kpi',
+          'kpi.perspective',
+          'kpi.formula',
+          'assignment',
+          'employee',
+        ],
       });
-      if (!review) {
-        const reviewData: any = {
-          kpi: { id: assignment.kpi.id },
-          assignment: { id: assignment.id },
-          cycle: cycle,
-          targetValue: assignment.targetValue ?? 0,
-          actualValue: latestValue.value ?? 0,
-          status: ReviewStatus.PENDING,
-        };
-        if (assignment.employee && assignment.employee.id) {
-          reviewData.employee = { id: assignment.employee.id };
-        }
-        const newReviewArr = this.kpiReviewRepository.create([reviewData]);
-        const newReview = newReviewArr[0];
-        const savedReviewArr = await this.kpiReviewRepository.save([newReview]);
-        review = savedReviewArr[0];
-      }
-      if (review) {
-        result.push(review);
+
+      if (savedReview) {
+        result.push(savedReview);
       }
     }
+
     return result;
   }
 
@@ -334,14 +424,16 @@ export class KpiReviewService {
 
       let status = review.status;
       let isFirstSelfReview = false;
-      if (
-        status === ReviewStatus.PENDING ||
+      if (status === ReviewStatus.PENDING) {
+        status = ReviewStatus.SELF_REVIEWED;
+        isFirstSelfReview = true;
+      } else if (
         status === ReviewStatus.SECTION_REJECTED ||
         status === ReviewStatus.DEPARTMENT_REJECTED ||
         status === ReviewStatus.MANAGER_REJECTED
       ) {
         status = ReviewStatus.SELF_REVIEWED;
-        isFirstSelfReview = true;
+        isFirstSelfReview = false; // This is a resubmission, not first review
       }
       await this.kpiReviewRepository.update(
         { id: item.id, employee: { id: userId }, cycle: body.cycle },
@@ -359,6 +451,7 @@ export class KpiReviewService {
       });
 
       if (isFirstSelfReview && review.section && review.section.id) {
+        // First time submission
         const sectionLeader = await this.employeesService.findLeaderOfSection(
           review.section.id,
         );
@@ -366,7 +459,22 @@ export class KpiReviewService {
           await this.notificationService.createNotification(
             sectionLeader.id,
             NotificationType.REVIEW_PENDING_SECTION_REVIEW,
-            `Nhân viên ${review.employee.first_name || ''} ${review.employee.last_name || ''} đã tự đánh giá KPI "${review.kpi.name}". Chờ duyệt từ section leader!`,
+            `Employee ${review.employee.first_name || ''} ${review.employee.last_name || ''} has self-reviewed KPI "${review.kpi.name}". Waiting for section leader approval!`,
+            review.id,
+            'KPI_REVIEW',
+            review.kpi.id,
+          );
+        }
+      } else if (!isFirstSelfReview && review.section && review.section.id) {
+        // Resubmission after rejection
+        const sectionLeader = await this.employeesService.findLeaderOfSection(
+          review.section.id,
+        );
+        if (sectionLeader) {
+          await this.notificationService.createNotification(
+            sectionLeader.id,
+            NotificationType.REVIEW_PENDING_SECTION_REVIEW,
+            `Employee ${review.employee.first_name || ''} ${review.employee.last_name || ''} has re-reviewed KPI "${review.kpi.name}" after rejection. Please review again!`,
             review.id,
             'KPI_REVIEW',
             review.kpi.id,
@@ -382,52 +490,56 @@ export class KpiReviewService {
     sectionUserId: number,
     body: {
       reviewId: number;
-      sectionScore: number;
-      sectionComment: string;
+      score: number;
+      comment?: string;
     },
     user?: Employee,
   ) {
-    if (
-      user &&
-      (this.userHasPermission(user, 'kpi-review', 'approve', 'admin') ||
-        this.userHasPermission(user, 'kpi-review', 'approve', 'manager') ||
-        this.userHasPermission(user, 'kpi-review', 'approve', 'department'))
-    ) {
-      throw new Error(
-        'Không được dùng API section review cho vai trò admin/manager/department. Hãy dùng đúng API duyệt theo quyền.',
-      );
-    }
     const review = await this.kpiReviewRepository.findOne({
       where: { id: body.reviewId },
       relations: ['kpi', 'employee'],
     });
     if (!review) throw new Error('Review not found');
 
-    if (review.section && review.section.id) {
-      if (review.section.id === sectionUserId) {
-        throw new Error(
-          'Section không được tự duyệt review do chính section mình tạo ra. Chỉ cấp trên mới được duyệt.',
-        );
-      }
+    // Check if KPI has expired
+    const kpiValidityStatus = getKpiStatus(
+      review.kpi.start_date,
+      review.kpi.end_date,
+    );
+    if (kpiValidityStatus === 'expired') {
+      throw new BadRequestException(
+        'Cannot score expired KPI. This KPI is no longer valid.',
+      );
     }
 
+    // Allow section review from SELF_REVIEWED status
+    // Also allow re-review if status is SELF_REVIEWED (even if sectionScore exists)
     if (review.status !== ReviewStatus.SELF_REVIEWED) {
-      throw new Error('Chỉ được duyệt khi đã tự đánh giá');
+      throw new Error('Section can only review from SELF_REVIEWED status');
     }
-    if (body.sectionScore === null || body.sectionScore === undefined) {
-      throw new Error('Vui lòng nhập điểm đánh giá (score) cho review.');
+    // Allow updating section score even if it already exists (for resubmission cases)
+
+    // Check if user has section approval permission
+    if (!user || !userHasPermission(user, 'approve', 'kpi-review', 'section')) {
+      throw new Error('You do not have permission to review as section');
     }
-    review.sectionScore = body.sectionScore;
-    review.sectionComment = body.sectionComment;
+
+    if (body.score === null || body.score === undefined) {
+      throw new Error('Please provide a review score.');
+    }
+
+    review.sectionScore = body.score;
+    review.sectionComment = body.comment || '';
     review.status = ReviewStatus.SECTION_REVIEWED;
+    review.reviewedBy = user;
     await this.kpiReviewRepository.save(review);
     await this.kpiReviewHistoryRepository.save({
       kpiId: review.kpi.id,
       employeeId: review.employee.id,
       cycle: review.cycle,
       status: review.status,
-      score: body.sectionScore,
-      comment: body.sectionComment,
+      score: body.score,
+      comment: body.comment,
       reviewedBy: sectionUserId,
       createdAt: new Date(),
     });
@@ -440,7 +552,7 @@ export class KpiReviewService {
         await this.notificationService.createNotification(
           deptLeader.id,
           NotificationType.REVIEW_PENDING_DEPARTMENT_REVIEW,
-          `Section leader đã duyệt KPI "${review.kpi.name}" của nhân viên ${review.employee.first_name || ''} ${review.employee.last_name || ''}. Chờ duyệt từ department leader!`,
+          `Section leader has approved KPI "${review.kpi.name}" for employee ${review.employee.first_name || ''} ${review.employee.last_name || ''}. Waiting for department leader approval!`,
           review.id,
           'KPI_REVIEW',
           review.kpi.id,
@@ -454,9 +566,10 @@ export class KpiReviewService {
     departmentUserId: number,
     body: {
       reviewId: number;
-      departmentScore: number;
-      departmentComment: string;
+      score: number;
+      comment?: string;
     },
+    user?: Employee,
   ) {
     const review = await this.kpiReviewRepository.findOne({
       where: { id: body.reviewId },
@@ -464,32 +577,52 @@ export class KpiReviewService {
     });
     if (!review) throw new Error('Review not found');
 
-    if (
-      ![
-        ReviewStatus.SELF_REVIEWED,
-        ReviewStatus.SECTION_REVIEWED,
-        ReviewStatus.DEPARTMENT_REVIEWED,
-      ].includes(review.status)
-    ) {
-      throw new Error(
-        'Chỉ được duyệt khi đã qua bước tự đánh giá hoặc section hoặc department',
+    // Check if KPI has expired
+    const kpiValidityStatus = getKpiStatus(
+      review.kpi.start_date,
+      review.kpi.end_date,
+    );
+    if (kpiValidityStatus === 'expired') {
+      throw new BadRequestException(
+        'Cannot score expired KPI. This KPI is no longer valid.',
       );
     }
-    if (body.departmentScore === null || body.departmentScore === undefined) {
-      throw new Error('Vui lòng nhập điểm đánh giá (score) cho review.');
-    }
-    review.departmentScore = body.departmentScore;
-    review.departmentComment = body.departmentComment;
 
+    // Allow department review from SELF_REVIEWED or SECTION_REVIEWED status
+    if (
+      ![ReviewStatus.SELF_REVIEWED, ReviewStatus.SECTION_REVIEWED].includes(
+        review.status,
+      )
+    ) {
+      throw new Error(
+        'Department can only review from SELF_REVIEWED or SECTION_REVIEWED status',
+      );
+    }
+
+    // Check if user has department approval permission
+    if (
+      !user ||
+      !userHasPermission(user, 'approve', 'kpi-review', 'department')
+    ) {
+      throw new Error('You do not have permission to review as department');
+    }
+
+    if (body.score === null || body.score === undefined) {
+      throw new Error('Please provide a review score.');
+    }
+
+    review.departmentScore = body.score;
+    review.departmentComment = body.comment || '';
     review.status = ReviewStatus.DEPARTMENT_REVIEWED;
+    review.reviewedBy = user;
     await this.kpiReviewRepository.save(review);
     await this.kpiReviewHistoryRepository.save({
       kpiId: review.kpi.id,
       employeeId: review.employee.id,
       cycle: review.cycle,
       status: review.status,
-      score: body.departmentScore,
-      comment: body.departmentComment,
+      score: body.score,
+      comment: body.comment,
       reviewedBy: departmentUserId,
       createdAt: new Date(),
     });
@@ -501,7 +634,7 @@ export class KpiReviewService {
       await this.notificationService.createNotification(
         manager.id,
         NotificationType.REVIEW_PENDING_MANAGER_REVIEW,
-        `Department leader đã duyệt KPI "${review.kpi.name}" của nhân viên ${review.employee.first_name || ''} ${review.employee.last_name || ''}. Chờ duyệt từ manager!`,
+        `Department leader has approved KPI "${review.kpi.name}" for employee ${review.employee.first_name || ''} ${review.employee.last_name || ''}. Waiting for manager approval!`,
         review.id,
         'KPI_REVIEW',
         review.kpi.id,
@@ -514,9 +647,10 @@ export class KpiReviewService {
     managerUserId: number,
     body: {
       reviewId: number;
-      managerScore: number;
-      managerComment: string;
+      score: number;
+      comment?: string;
     },
+    user?: Employee,
   ) {
     const review = await this.kpiReviewRepository.findOne({
       where: { id: body.reviewId },
@@ -524,33 +658,51 @@ export class KpiReviewService {
     });
     if (!review) throw new Error('Review not found');
 
+    // Check if KPI has expired
+    const kpiValidityStatus = getKpiStatus(
+      review.kpi.start_date,
+      review.kpi.end_date,
+    );
+    if (kpiValidityStatus === 'expired') {
+      throw new BadRequestException(
+        'Cannot score expired KPI. This KPI is no longer valid.',
+      );
+    }
+
+    // Allow manager review from any status (except already completed)
     if (
       ![
         ReviewStatus.SELF_REVIEWED,
         ReviewStatus.SECTION_REVIEWED,
         ReviewStatus.DEPARTMENT_REVIEWED,
-        ReviewStatus.MANAGER_REVIEWED,
       ].includes(review.status)
     ) {
       throw new Error(
-        'Chỉ được duyệt khi đã qua bước tự đánh giá, section, department hoặc manager',
+        'Manager can only review from SELF_REVIEWED, SECTION_REVIEWED, or DEPARTMENT_REVIEWED status',
       );
     }
-    if (body.managerScore === null || body.managerScore === undefined) {
-      throw new Error('Vui lòng nhập điểm đánh giá (score) cho review.');
-    }
-    review.managerScore = body.managerScore;
-    review.managerComment = body.managerComment;
 
+    // Check if user has manager approval permission
+    if (!user || !userHasPermission(user, 'approve', 'kpi-review', 'manager')) {
+      throw new Error('You do not have permission to review as manager');
+    }
+
+    if (body.score === null || body.score === undefined) {
+      throw new Error('Please provide a review score.');
+    }
+
+    review.managerScore = body.score;
+    review.managerComment = body.comment || '';
     review.status = ReviewStatus.EMPLOYEE_FEEDBACK;
+    review.reviewedBy = user;
     await this.kpiReviewRepository.save(review);
     await this.kpiReviewHistoryRepository.save({
       kpiId: review.kpi.id,
       employeeId: review.employee.id,
       cycle: review.cycle,
       status: review.status,
-      score: body.managerScore,
-      comment: body.managerComment,
+      score: body.score,
+      comment: body.comment,
       reviewedBy: managerUserId,
       createdAt: new Date(),
     });
@@ -558,7 +710,7 @@ export class KpiReviewService {
     await this.notificationService.createNotification(
       review.employee.id,
       NotificationType.REVIEW_PENDING_EMPLOYEE_FEEDBACK,
-      `KPI "${review.kpi.name}" đã được quản lý đánh giá. Vui lòng phản hồi đánh giá này!`,
+      `KPI "${review.kpi.name}" has been manager reviewed. Please provide your feedback on this review!`,
       review.id,
       'KPI_REVIEW',
       review.kpi.id,
@@ -576,10 +728,12 @@ export class KpiReviewService {
     });
     if (!review) throw new Error('Review not found');
     if (review.status !== ReviewStatus.EMPLOYEE_FEEDBACK) {
-      throw new Error('Chỉ feedback khi trạng thái là EMPLOYEE_FEEDBACK');
+      throw new Error(
+        'Feedback is only allowed when status is EMPLOYEE_FEEDBACK',
+      );
     }
     review.employeeFeedback = body.employeeFeedback;
-    review.status = ReviewStatus.MANAGER_REVIEWED;
+    review.status = ReviewStatus.PENDING_MANAGER_APPROVAL;
     await this.kpiReviewRepository.save(review);
     await this.kpiReviewHistoryRepository.save({
       kpiId: review.kpi.id,
@@ -609,7 +763,7 @@ export class KpiReviewService {
       await this.notificationService.createNotification(
         managerId,
         NotificationType.REVIEW_EMPLOYEE_RESPONDED,
-        `Nhân viên ${review.employee.first_name || ''} ${review.employee.last_name || ''} đã phản hồi đánh giá KPI "${review.kpi.name}".`,
+        `Employee ${review.employee.first_name || ''} ${review.employee.last_name || ''} has provided feedback on KPI review "${review.kpi.name}".`,
         review.id,
         'KPI_REVIEW',
         review.kpi.id,
@@ -624,8 +778,10 @@ export class KpiReviewService {
       relations: ['kpi', 'employee'],
     });
     if (!review) throw new Error('Review not found');
-    if (review.status !== ReviewStatus.MANAGER_REVIEWED) {
-      throw new Error('Chỉ hoàn thành khi đã feedback và chờ xác nhận');
+    if (review.status !== ReviewStatus.PENDING_MANAGER_APPROVAL) {
+      throw new Error(
+        'Can only complete when feedback is provided and waiting for confirmation',
+      );
     }
     review.status = ReviewStatus.COMPLETED;
     await this.kpiReviewRepository.save(review);
@@ -643,7 +799,7 @@ export class KpiReviewService {
     await this.notificationService.createNotification(
       review.employee.id,
       NotificationType.REVIEW_COMPLETED,
-      `Đánh giá KPI "${review.kpi.name}" đã hoàn tất.`,
+      `KPI review "${review.kpi.name}" has been completed.`,
       review.id,
       'KPI_REVIEW',
       review.kpi.id,
@@ -716,7 +872,7 @@ export class KpiReviewService {
       comment: string;
     },
   ) {
-    if (!user) throw new Error('Thiếu thông tin người duyệt');
+    if (!user) throw new Error('Missing reviewer information');
 
     const review = await this.kpiReviewRepository.findOne({
       where: { id: body.reviewId },
@@ -724,7 +880,7 @@ export class KpiReviewService {
     });
     if (!review) throw new Error('Review not found');
     if (review.status === ReviewStatus.COMPLETED) {
-      throw new Error('Review đã hoàn thành, không thể duyệt tiếp');
+      throw new Error('Review is already completed, cannot approve further');
     }
 
     // Check if KPI has expired
@@ -739,34 +895,42 @@ export class KpiReviewService {
     }
 
     if (
-      this.userHasPermission(user, 'kpi-review', 'approve', 'admin') ||
-      this.userHasPermission(user, 'kpi-review', 'approve', 'manager')
+      userHasPermission(user, 'approve', 'kpi-review', 'admin') ||
+      userHasPermission(user, 'approve', 'kpi-review', 'manager')
     ) {
-      return this.submitManagerReview(userId, {
-        reviewId: body.reviewId,
-        managerScore: body.score,
-        managerComment: body.comment,
-      });
-    }
-    if (this.userHasPermission(user, 'kpi-review', 'approve', 'department')) {
-      return this.submitDepartmentReview(userId, {
-        reviewId: body.reviewId,
-        departmentScore: body.score,
-        departmentComment: body.comment,
-      });
-    }
-    if (this.userHasPermission(user, 'kpi-review', 'approve', 'section')) {
-      return this.submitSectionReview(
+      return this.submitManagerReview(
         userId,
         {
           reviewId: body.reviewId,
-          sectionScore: body.score,
-          sectionComment: body.comment,
+          score: body.score,
+          comment: body.comment,
         },
         user,
       );
     }
-    throw new Error('Vai trò không hợp lệ để duyệt KPI');
+    if (userHasPermission(user, 'approve', 'kpi-review', 'department')) {
+      return this.submitDepartmentReview(
+        userId,
+        {
+          reviewId: body.reviewId,
+          score: body.score,
+          comment: body.comment,
+        },
+        user,
+      );
+    }
+    if (userHasPermission(user, 'approve', 'kpi-review', 'section')) {
+      return this.submitSectionReview(
+        userId,
+        {
+          reviewId: body.reviewId,
+          score: body.score,
+          comment: body.comment,
+        },
+        user,
+      );
+    }
+    throw new Error('Invalid role for KPI approval');
   }
 
   /**
@@ -783,14 +947,15 @@ export class KpiReviewService {
       rejectionReason: string;
     },
   ) {
-    if (!user) throw new Error('Thiếu thông tin người từ chối');
+    if (!user)
+      throw new Error('Missing information about the person rejecting');
     const review = await this.kpiReviewRepository.findOne({
       where: { id: body.reviewId },
       relations: ['kpi', 'employee', 'department', 'section'],
     });
     if (!review) throw new Error('Review not found');
     if (review.status === ReviewStatus.COMPLETED) {
-      throw new Error('Review đã hoàn thành, không thể từ chối');
+      throw new Error('Review is already completed, cannot reject');
     }
 
     // Check if KPI has expired
@@ -804,21 +969,14 @@ export class KpiReviewService {
       );
     }
     let newStatus: ReviewStatus;
-    if (
-      this.userHasPermission(user, 'kpi-review', 'approve', 'admin') ||
-      this.userHasPermission(user, 'kpi-review', 'approve', 'manager')
-    ) {
+    if (userHasPermission(user, 'approve', 'kpi-review', 'manager')) {
       newStatus = ReviewStatus.MANAGER_REJECTED;
-    } else if (
-      this.userHasPermission(user, 'kpi-review', 'approve', 'department')
-    ) {
+    } else if (userHasPermission(user, 'approve', 'kpi-review', 'department')) {
       newStatus = ReviewStatus.DEPARTMENT_REJECTED;
-    } else if (
-      this.userHasPermission(user, 'kpi-review', 'approve', 'section')
-    ) {
+    } else if (userHasPermission(user, 'approve', 'kpi-review', 'section')) {
       newStatus = ReviewStatus.SECTION_REJECTED;
     } else {
-      throw new Error('Vai trò không hợp lệ để từ chối KPI');
+      throw new Error('Invalid role for KPI rejection');
     }
     review.status = newStatus;
     review.rejectionReason = body.rejectionReason;
@@ -849,7 +1007,7 @@ export class KpiReviewService {
       await this.notificationService.createNotification(
         review.employee.id,
         rejectType,
-        `Đánh giá KPI "${review.kpi.name}" của bạn đã bị từ chối. Lý do: ${body.rejectionReason}`,
+        `Your KPI review "${review.kpi.name}" has been rejected. Reason: ${body.rejectionReason}`,
         review.id,
         'KPI_REVIEW',
         review.kpi.id,

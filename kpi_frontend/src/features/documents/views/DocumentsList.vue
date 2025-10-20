@@ -145,14 +145,14 @@
       <div v-else-if="previewType === 'office'">
         <a-alert
           type="info"
-          message="Không thể xem trước file Office trên hệ thống nội bộ. Hãy tải về để xem."
+          message="Cannot preview Office files on internal system. Please download to view."
           show-icon
         />
       </div>
       <div v-else>
         <a-alert
           type="info"
-          message="Không hỗ trợ xem trước file này. Hãy tải về để xem."
+          message="Preview not supported for this file. Please download to view."
           show-icon
         />
       </div>
@@ -293,13 +293,13 @@ function downloadFile(record) {
       document.body.removeChild(link);
     })
     .catch(() => {
-      message.error("Tải file thất bại!");
+      message.error("File download failed!");
     });
 }
 
 function deleteDocument(id) {
   store.dispatch("documents/deleteDocument", id).then(() => {
-    message.success("Xoá thành công!");
+    message.success("Delete successful!");
   });
 }
 

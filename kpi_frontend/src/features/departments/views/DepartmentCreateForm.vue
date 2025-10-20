@@ -205,7 +205,7 @@ const rules = {
     { min: 2, max: 100, message: t("departmentNameLength"), trigger: "blur" },
   ],
   managerId: [
-    { required: true, message: t("managerRequired"), trigger: "change" },
+    { required: false, message: t("managerRequired"), trigger: "change" },
   ],
 };
 

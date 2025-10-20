@@ -2,10 +2,14 @@
   <div class="error-viewport">
     <div class="starfield"></div>
     <main class="container" role="main" aria-labelledby="title500">
-      <h1 id="title500" aria-label="Mã lỗi 500">{{ $t("page500.title") }}</h1>
+      <h1 id="title500" aria-label="Error code 500">
+        {{ $t("page500.title") }}
+      </h1>
       <div class="company">{{ $t("page500.company") }}</div>
       <div class="error-message">{{ $t("page500.message") }}</div>
-      <router-link to="/" class="btn-home">{{ $t("page500.backHome") }}</router-link>
+      <router-link to="/" class="btn-home">{{
+        $t("page500.backHome")
+      }}</router-link>
     </main>
   </div>
 </template>
@@ -14,9 +18,8 @@
 // No logic needed for static 500 page
 </script>
 
-
 <style scoped>
-@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@700&family=Open+Sans&display=swap');
+@import url("https://fonts.googleapis.com/css2?family=Montserrat:wght@700&family=Open+Sans&display=swap");
 .error-viewport {
   position: fixed;
   inset: 0;
@@ -31,7 +34,10 @@
 }
 .starfield {
   position: fixed;
-  top:0; left:0; right:0; bottom:0;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
   pointer-events: none;
   z-index: 0;
   background:
@@ -44,8 +50,12 @@
   animation: starmove 120s linear infinite;
 }
 @keyframes starmove {
-  from { background-position: 0 0; }
-  to { background-position: 10000px 10000px; }
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: 10000px 10000px;
+  }
 }
 .container {
   position: relative;
@@ -63,7 +73,7 @@
   padding: 50px 40px 50px;
 }
 h1 {
-  font-family: 'Montserrat', sans-serif;
+  font-family: "Montserrat", sans-serif;
   font-weight: 900;
   font-size: 6rem;
   margin: 0 0 10px;
@@ -105,7 +115,7 @@ h1 {
 }
 a.btn-home {
   display: inline-block;
-  font-family: 'Montserrat', sans-serif;
+  font-family: "Montserrat", sans-serif;
   font-weight: 700;
   font-size: 1.1rem;
   padding: 14px 40px;
@@ -119,7 +129,8 @@ a.btn-home {
   transition: all 0.3s ease;
   user-select: none;
 }
-a.btn-home:hover, a.btn-home:focus {
+a.btn-home:hover,
+a.btn-home:focus {
   background: #ffb3b3;
   box-shadow:
     0 0 25px #ffb3b3,

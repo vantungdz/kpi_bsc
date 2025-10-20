@@ -93,7 +93,7 @@ function dummyRequest() {}
 
 async function handleUpload() {
   if (!form.value.name || fileList.value.length === 0) {
-    message.error("Vui lòng nhập tên và chọn file!");
+    message.error("Please enter name and select file!");
     return;
   }
   const fd = new FormData();

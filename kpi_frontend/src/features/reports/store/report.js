@@ -55,12 +55,10 @@ const actions = {
     } catch (error) {
       commit("setError", error);
 
-      // Only show notification if it's not a permission error (already handled by API interceptor)
-      const errorMsg =
-        error.response?.data?.message || "Có lỗi xảy ra khi xuất báo cáo.";
+      const errorMsg = error.response?.data?.message;
       if (!errorMsg.includes("No permission")) {
         dispatch("showErrorNotification", {
-          message: "Xuất báo cáo thất bại",
+          message: "Export report failed",
           description: errorMsg,
         });
       }

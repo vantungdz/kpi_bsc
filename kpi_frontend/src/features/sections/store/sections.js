@@ -1,5 +1,7 @@
 import apiClient from "@/core/services/api";
 import store from "@/core/store";
+import { getTranslatedErrorMessage } from "@/core/services/messageTranslator";
+import i18n from "@/core/i18n";
 
 const state = {
   sections: [],
@@ -19,11 +21,15 @@ const getters = {
 
 const mutations = {
   SET_ERROR(state, error) {
-    state.error = error ? error.response?.data?.message || error.message : null;
+    state.error = error
+      ? getTranslatedErrorMessage(error.response?.data?.message) ||
+        error.message
+      : null;
   },
   SET_DETAIL_ERROR(state, error) {
     state.detailError = error
-      ? error.response?.data?.message || error.message
+      ? getTranslatedErrorMessage(error.response?.data?.message) ||
+        error.message
       : null;
   },
 
@@ -134,9 +140,9 @@ const actions = {
         error.response || error
       );
       const errorMsg =
-        error.response?.data?.message ||
+        getTranslatedErrorMessage(error.response?.data?.message) ||
         error.message ||
-        "Failed to fetch section details.";
+        i18n.global.t("errors.unknownError");
       commit("SET_DETAIL_ERROR", errorMsg);
       return null;
     } finally {
@@ -198,7 +204,7 @@ const actions = {
       const msg =
         error?.response?.data?.message ||
         error.message ||
-        "Xóa section thất bại";
+        "Failed to delete section";
       commit("SET_ERROR", msg);
       throw new Error(msg);
     } finally {

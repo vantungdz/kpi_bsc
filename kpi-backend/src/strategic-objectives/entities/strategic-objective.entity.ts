@@ -1,10 +1,16 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, OneToMany } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  ManyToOne,
+  OneToMany,
+} from 'typeorm';
 import { Perspective } from '../../perspective/entities/perspective.entity';
 import { Kpi } from '../../kpis/entities/kpi.entity';
 
 /**
- * Entity đại diện cho Strategic Objective (mục tiêu chiến lược)
- * Mỗi mục tiêu chiến lược thuộc về một Perspective và có thể có nhiều KPI
+ * Entity representing Strategic Objective (strategic goal)
+ * Each strategic objective belongs to one Perspective and can have multiple KPIs
  */
 @Entity()
 export class StrategicObjective {
@@ -18,15 +24,19 @@ export class StrategicObjective {
   description?: string;
 
   /**
-   * Perspective mà mục tiêu chiến lược này thuộc về
+   * Perspective that this strategic objective belongs to
    */
-  @ManyToOne(() => Perspective, perspective => perspective.strategicObjectives, { nullable: false })
+  @ManyToOne(
+    () => Perspective,
+    (perspective) => perspective.strategicObjectives,
+    { nullable: false },
+  )
   perspective: Perspective;
 
   /**
    * Danh sách KPI thuộc mục tiêu chiến lược này
    */
-  @OneToMany(() => Kpi, kpi => kpi.strategicObjective)
+  @OneToMany(() => Kpi, (kpi) => kpi.strategicObjective)
   kpis: Kpi[];
 
   @Column({ type: 'date', nullable: true })

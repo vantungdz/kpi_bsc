@@ -27,7 +27,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     sessionId: string;
     role: string;
   }) {
-    // Validate session trước khi validate user
+    // Validate session before validating user
     if (payload.sessionId) {
       const session = await this.sessionService.validateSession(
         payload.sessionId,

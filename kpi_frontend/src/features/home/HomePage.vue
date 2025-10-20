@@ -1,9 +1,13 @@
 <template>
   <div class="home-container">
     <div class="home-card">
-      <img src="../../core/assets/logo.png" alt="KPI Project Logo" class="home-logo" />
-      <h1 class="home-title">{{ t('kpiSystemTitle') }}</h1>
-      <p class="home-desc">{{ t('homeWelcome') }}</p>
+      <img
+        src="../../core/assets/logo.png"
+        alt="KPI Project Logo"
+        class="home-logo"
+      />
+      <h1 class="home-title">{{ t("kpiSystemTitle") }}</h1>
+      <p class="home-desc">{{ t("homeWelcome") }}</p>
       <div class="quick-features" v-if="visibleFeatures.length">
         <div
           v-for="feature in visibleFeatures"
@@ -15,15 +19,17 @@
           <span class="feature-label">{{ t(feature.label) }}</span>
         </div>
       </div>
-      <p class="footer-note">{{ t('versionText', { version: '1.0.0 © 2025' }) }}</p>
+      <p class="footer-note">
+        {{ t("versionText", { version: "1.0.0 © 2025" }) }}
+      </p>
     </div>
   </div>
 </template>
 <script setup>
-import { useI18n } from 'vue-i18n';
-import { useStore } from 'vuex';
-import { computed } from 'vue';
-import { useRouter } from 'vue-router';
+import { useI18n } from "vue-i18n";
+import { useStore } from "vuex";
+import { computed } from "vue";
+import { useRouter } from "vue-router";
 import {
   DashboardOutlined,
   AppstoreOutlined,
@@ -31,14 +37,14 @@ import {
   TeamOutlined,
   BarChartOutlined,
   SettingOutlined,
-} from '@ant-design/icons-vue';
-import { RBAC_ACTIONS, RBAC_RESOURCES } from '@/core/constants/rbac.constants';
+} from "@ant-design/icons-vue";
+import { RBAC_ACTIONS, RBAC_RESOURCES } from "@/core/constants/rbac.constants";
 
 const { t } = useI18n();
 const store = useStore();
 const router = useRouter();
 
-const user = computed(() => store.getters['auth/user']);
+const user = computed(() => store.getters["auth/user"]);
 const userPermissions = computed(() => user.value?.permissions || []);
 function hasPermission(action, resource, scope) {
   return userPermissions.value?.some(
@@ -51,56 +57,75 @@ function hasPermission(action, resource, scope) {
 
 const features = [
   {
-    key: 'dashboard',
+    key: "dashboard",
     icon: DashboardOutlined,
-    label: 'dashboard',
-    route: '/dashboard',
-    permission: () => hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.DASHBOARD, 'global'),
+    label: "dashboard",
+    route: "/dashboard",
+    permission: () =>
+      hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.DASHBOARD, "global"),
   },
   {
-    key: 'kpi-management',
+    key: "kpi-management",
     icon: AppstoreOutlined,
-    label: 'kpiManagement',
-    route: '/kpis/company',
+    label: "kpiManagement",
+    route: "/kpis/company",
     permission: () =>
-      hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.KPI, 'company') ||
-      hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.KPI, 'department') ||
-      hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.KPI, 'section'),
+      hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.KPI, "company") ||
+      hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.KPI, "department") ||
+      hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.KPI, "section"),
   },
   {
-    key: 'approvals',
+    key: "approvals",
     icon: AuditOutlined,
-    label: 'approvalsAndReviews',
-    route: '/approvals',
+    label: "approvalsAndReviews",
+    route: "/approvals",
     permission: () =>
-      hasPermission(RBAC_ACTIONS.APPROVE, RBAC_RESOURCES.KPI_VALUE, 'section') ||
-      hasPermission(RBAC_ACTIONS.APPROVE, RBAC_RESOURCES.KPI_VALUE, 'department') ||
-      hasPermission(RBAC_ACTIONS.APPROVE, RBAC_RESOURCES.KPI_VALUE, 'manager'),
+      hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.KPI_VALUE, "section") ||
+      hasPermission(
+        RBAC_ACTIONS.VIEW,
+        RBAC_RESOURCES.KPI_VALUE,
+        "department"
+      ) ||
+      hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.KPI_VALUE, "manager") ||
+      hasPermission(
+        RBAC_ACTIONS.APPROVE,
+        RBAC_RESOURCES.KPI_VALUE,
+        "section"
+      ) ||
+      hasPermission(
+        RBAC_ACTIONS.APPROVE,
+        RBAC_RESOURCES.KPI_VALUE,
+        "department"
+      ) ||
+      hasPermission(RBAC_ACTIONS.APPROVE, RBAC_RESOURCES.KPI_VALUE, "manager"),
   },
   {
-    key: 'employee-list',
+    key: "employee-list",
     icon: TeamOutlined,
-    label: 'employeeList',
-    route: '/employees',
-    permission: () => hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.EMPLOYEE, 'company'),
+    label: "employeeList",
+    route: "/employees",
+    permission: () =>
+      hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.EMPLOYEE, "company"),
   },
   {
-    key: 'report',
+    key: "report",
     icon: BarChartOutlined,
-    label: 'reportGenerator',
-    route: '/report-generator',
-    permission: () => hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.REPORT, 'global'),
+    label: "reportGenerator",
+    route: "/report-generator",
+    permission: () =>
+      hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.REPORT, "global"),
   },
   {
-    key: 'admin',
+    key: "admin",
     icon: SettingOutlined,
-    label: 'administration',
-    route: '/user-role-manager',
-    permission: () => hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.ADMIN, 'global'),
+    label: "administration",
+    route: "/user-role-manager",
+    permission: () =>
+      hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.ADMIN, "global"),
   },
 ];
 
-const visibleFeatures = computed(() => features.filter(f => f.permission()));
+const visibleFeatures = computed(() => features.filter((f) => f.permission()));
 
 function goTo(route) {
   router.push(route);
@@ -116,16 +141,19 @@ function goTo(route) {
   align-items: center;
   justify-content: center;
   position: relative;
-  font-family: 'Roboto', sans-serif;
+  font-family: "Roboto", sans-serif;
   background: linear-gradient(120deg, #e3f2fd 0%, #f8f9fa 100%);
   overflow-x: hidden;
   overflow-y: auto;
 }
 .home-container::before {
-  content: '';
+  content: "";
   position: absolute;
-  top: 0; left: 0; right: 0; bottom: 0;
-  background-image: url('../../core/assets/background.png');
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-image: url("../../core/assets/background.png");
   background-size: cover;
   background-position: center;
   opacity: 0.35;
@@ -135,9 +163,11 @@ function goTo(route) {
 .home-card {
   position: relative;
   z-index: 1;
-  background: rgba(255,255,255,0.92);
+  background: rgba(255, 255, 255, 0.92);
   border-radius: 22px;
-  box-shadow: 0 8px 40px 0 rgba(25, 118, 210, 0.13), 0 1.5px 8px 0 rgba(0,0,0,0.07);
+  box-shadow:
+    0 8px 40px 0 rgba(25, 118, 210, 0.13),
+    0 1.5px 8px 0 rgba(0, 0, 0, 0.07);
   padding: 48px 38px 32px 38px;
   min-width: 320px;
   max-width: 1000px;
@@ -146,11 +176,17 @@ function goTo(route) {
   flex-direction: column;
   align-items: center;
   text-align: center;
-  animation: fadeIn 0.8s cubic-bezier(0.4,0,0.2,1);
+  animation: fadeIn 0.8s cubic-bezier(0.4, 0, 0.2, 1);
 }
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(30px); }
-  to { opacity: 1; transform: none; }
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 .quick-features {
   display: flex;
@@ -164,7 +200,7 @@ function goTo(route) {
 .feature-card {
   background: linear-gradient(120deg, #e3f2fd 60%, #fff 100%);
   border-radius: 16px;
-  box-shadow: 0 2px 12px 0 rgba(25, 118, 210, 0.10);
+  box-shadow: 0 2px 12px 0 rgba(25, 118, 210, 0.1);
   padding: 22px 18px 14px 18px;
   min-width: 110px;
   min-height: 110px;
@@ -174,7 +210,10 @@ function goTo(route) {
   flex-direction: column;
   align-items: center;
   cursor: pointer;
-  transition: box-shadow 0.18s, transform 0.18s, background 0.18s;
+  transition:
+    box-shadow 0.18s,
+    transform 0.18s,
+    background 0.18s;
   position: relative;
   border: 1.5px solid #e3f2fd;
   user-select: none;
@@ -210,7 +249,9 @@ function goTo(route) {
   font-weight: 800;
   margin-bottom: 18px;
   letter-spacing: 0.5px;
-  text-shadow: 0 1px 0 #fff, 0 1.5px 2px #b2ebf2;
+  text-shadow:
+    0 1px 0 #fff,
+    0 1.5px 2px #b2ebf2;
 }
 .home-desc {
   font-size: 1.18rem;

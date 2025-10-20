@@ -1,8 +1,25 @@
 import apiClient from "@/core/services/api";
 import { notification as antNotification } from "ant-design-vue";
 
+// Helper function to normalize notification data from backend
+const normalizeNotification = (notification) => {
+  return {
+    ...notification,
+    is_read: notification.is_read ?? notification.isRead ?? false,
+    created_at: notification.created_at ?? notification.createdAt,
+    updated_at: notification.updated_at ?? notification.updatedAt,
+    related_entity_id:
+      notification.related_entity_id ?? notification.relatedEntityId,
+    related_entity_type:
+      notification.related_entity_type ?? notification.relatedEntityType,
+    kpi_id: notification.kpi_id ?? notification.kpiId,
+    user_id: notification.user_id ?? notification.userId,
+  };
+};
+
 const state = {
   notifications: [],
+  totalNotifications: 0,
   unreadCount: 0,
   isLoading: false,
   error: null,
@@ -12,6 +29,7 @@ const state = {
 
 const getters = {
   allNotifications: (state) => state.notifications,
+  totalNotifications: (state) => state.totalNotifications,
   unreadNotificationCount: (state) => state.unreadCount,
   isLoadingNotifications: (state) => state.isLoading,
   notificationError: (state) => state.error,
@@ -20,26 +38,33 @@ const getters = {
 
 const mutations = {
   SET_NOTIFICATIONS(state, notifications) {
-    state.notifications = notifications || [];
+    state.notifications = (notifications || []).map(normalizeNotification);
+  },
+  SET_TOTAL_NOTIFICATIONS(state, total) {
+    state.totalNotifications = total || 0;
   },
   ADD_NOTIFICATION(state, newNotification) {
+    const normalizedNotification = normalizeNotification(newNotification);
+
     // Check for duplicates before adding
     const isDuplicate = state.notifications.some(
       (existing) =>
-        existing.id === newNotification.id ||
-        (existing.type === newNotification.type &&
-          existing.message === newNotification.message &&
-          existing.userId === newNotification.userId &&
-          existing.kpiId === newNotification.kpiId &&
+        existing.id === normalizedNotification.id ||
+        (existing.type === normalizedNotification.type &&
+          existing.message === normalizedNotification.message &&
+          existing.user_id === normalizedNotification.user_id &&
+          existing.kpi_id === normalizedNotification.kpi_id &&
           Math.abs(
-            new Date(existing.createdAt).getTime() -
-              new Date(newNotification.createdAt).getTime()
+            new Date(existing.created_at).getTime() -
+              new Date(normalizedNotification.created_at).getTime()
           ) < 5000) // Within 5 seconds
     );
 
     if (!isDuplicate) {
-      state.notifications.unshift(newNotification);
-      state.unreadCount++;
+      state.notifications.unshift(normalizedNotification);
+      if (!normalizedNotification.is_read) {
+        state.unreadCount++;
+      }
     }
   },
   SET_UNREAD_COUNT(state, count) {
@@ -69,7 +94,9 @@ const mutations = {
   },
   SET_ERROR(state, error) {
     state.error = error
-      ? error.response?.data?.message || error.message || "Lỗi tải thông báo."
+      ? error.response?.data?.message ||
+        error.message ||
+        "Error loading notifications."
       : null;
   },
   SET_LOADING_COUNT(state, isLoading) {
@@ -79,7 +106,7 @@ const mutations = {
     state.errorCount = error
       ? error.response?.data?.message ||
         error.message ||
-        "Lỗi tải số lượng thông báo."
+        "Error loading notification count."
       : null;
   },
   DECREMENT_UNREAD_COUNT(state) {
@@ -100,7 +127,10 @@ const actions = {
       if (Object.prototype.hasOwnProperty.call(response.data, "unreadCount")) {
         commit("SET_UNREAD_COUNT", response.data.unreadCount || 0);
       }
-      return fetchedNotifications;
+      if (Object.prototype.hasOwnProperty.call(response.data, "total")) {
+        commit("SET_TOTAL_NOTIFICATIONS", response.data.total || 0);
+      }
+      return fetchedNotifications.map(normalizeNotification);
     } catch (error) {
       commit("SET_ERROR", error);
       commit("SET_NOTIFICATIONS", []);
@@ -138,8 +168,21 @@ const actions = {
     }
 
     try {
-      await apiClient.post(`/notifications/${notificationId}/mark-as-read`);
+      const response = await apiClient.post(
+        `/notifications/${notificationId}/mark-as-read`
+      );
       await new Promise((resolve) => setTimeout(resolve, 200));
+
+      // Update the notification with the response data if available
+      if (response.data) {
+        const updatedNotification = normalizeNotification(response.data);
+        const index = state.notifications.findIndex(
+          (n) => n.id === notificationId
+        );
+        if (index !== -1) {
+          state.notifications[index] = updatedNotification;
+        }
+      }
     } catch (error) {
       if (wasUnread) {
         const failedNotification = state.notifications.find(
@@ -149,8 +192,8 @@ const actions = {
         commit("SET_UNREAD_COUNT", state.unreadCount + 1);
       }
       antNotification.error({
-        message: "Lỗi",
-        description: "Không thể đánh dấu thông báo đã đọc.",
+        message: "Error",
+        description: "Cannot mark notification as read.",
       });
       console.error("Error marking notification as read:", error);
       throw error;
@@ -174,8 +217,8 @@ const actions = {
       commit("SET_NOTIFICATIONS", oldNotifications);
       commit("SET_UNREAD_COUNT", oldUnreadCount);
       antNotification.error({
-        message: "Lỗi",
-        description: "Không thể đánh dấu tất cả thông báo đã đọc.",
+        message: "Error",
+        description: "Cannot mark all notifications as read.",
       });
       console.error("Error marking all notifications as read:", error);
       throw error;
@@ -183,41 +226,75 @@ const actions = {
   },
 
   handleRealtimeNotification({ commit, dispatch, state }, notificationData) {
-    console.log("Adding notification to store:", notificationData);
+    const normalizedNotification = normalizeNotification(notificationData);
 
     // Check for duplicates before adding to store and showing popup
     const isDuplicate = state.notifications.some(
       (existing) =>
-        existing.id === notificationData.id ||
-        (existing.type === notificationData.type &&
-          existing.message === notificationData.message &&
-          existing.userId === notificationData.userId &&
-          existing.kpiId === notificationData.kpiId &&
+        existing.id === normalizedNotification.id ||
+        (existing.type === normalizedNotification.type &&
+          existing.message === normalizedNotification.message &&
+          existing.user_id === normalizedNotification.user_id &&
+          existing.kpi_id === normalizedNotification.kpi_id &&
           Math.abs(
-            new Date(existing.createdAt).getTime() -
-              new Date(notificationData.createdAt).getTime()
+            new Date(existing.created_at).getTime() -
+              new Date(normalizedNotification.created_at).getTime()
           ) < 5000) // Within 5 seconds
     );
 
     if (!isDuplicate) {
-      commit("ADD_NOTIFICATION", notificationData);
-      console.log("Updated unread count:", state.unreadCount);
+      commit("ADD_NOTIFICATION", normalizedNotification);
 
       antNotification.info({
-        message: "Thông báo mới!",
-        description: notificationData.message,
+        message: "New notification!",
+        description: normalizedNotification.message,
         duration: 5,
         onClick: () => {
-          if (notificationData.id) {
-            dispatch("markNotificationAsRead", notificationData.id);
+          if (normalizedNotification.id) {
+            dispatch("markNotificationAsRead", normalizedNotification.id);
           }
         },
       });
-    } else {
-      console.log(
-        "Duplicate notification detected, skipping:",
-        notificationData
+    }
+  },
+
+  async deleteNotification({ state }, notificationId) {
+    try {
+      await apiClient.delete(`/notifications/${notificationId}`);
+
+      // Remove notification from state
+      const notificationIndex = state.notifications.findIndex(
+        (n) => n.id === notificationId
       );
+
+      if (notificationIndex !== -1) {
+        const notification = state.notifications[notificationIndex];
+
+        // Remove from notifications array
+        state.notifications.splice(notificationIndex, 1);
+
+        // Update unread count if notification was unread
+        if (!notification.is_read && state.unreadCount > 0) {
+          state.unreadCount--;
+        }
+
+        // Update total count
+        if (state.totalNotifications > 0) {
+          state.totalNotifications--;
+        }
+
+        antNotification.success({
+          message: "Success",
+          description: "Notification deleted successfully",
+        });
+      }
+    } catch (error) {
+      antNotification.error({
+        message: "Error",
+        description: "Cannot delete notification.",
+      });
+      console.error("Error deleting notification:", error);
+      throw error;
     }
   },
 };

@@ -1,10 +1,16 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  ManyToOne,
+  JoinColumn,
+} from 'typeorm';
 import { PersonalGoal } from './personal-goal.entity';
 import { Kpi } from '../../kpis/entities/kpi.entity';
 
 /**
- * Entity liên kết giữa PersonalGoal và KPI
- * Mỗi bản ghi đại diện cho một KPI thuộc về một mục tiêu cá nhân (PersonalGoal)
+ * Entity linking PersonalGoal and KPI
+ * Each record represents a KPI belonging to a personal goal (PersonalGoal)
  */
 @Entity('personal_goal_kpis')
 export class PersonalGoalKpi {
@@ -15,7 +21,7 @@ export class PersonalGoalKpi {
   personalGoalId: number;
 
   /**
-   * Liên kết tới PersonalGoal, xóa PersonalGoal sẽ xóa luôn các liên kết này
+   * Link to PersonalGoal, deleting PersonalGoal will also delete these links
    */
   @ManyToOne(() => PersonalGoal, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'personalGoalId' })
@@ -25,7 +31,7 @@ export class PersonalGoalKpi {
   kpiId: number;
 
   /**
-   * Liên kết tới KPI, xóa KPI sẽ xóa luôn các liên kết này
+   * Link to KPI, deleting KPI will also delete these links
    */
   @ManyToOne(() => Kpi, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'kpiId' })
