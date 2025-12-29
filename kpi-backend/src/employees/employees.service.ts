@@ -945,4 +945,14 @@ export class EmployeesService {
       note: s.note,
     }));
   }
+
+  async findOneByEmail(email: string): Promise<Employee | null> {
+    return await this.employeeRepository.findOne({
+      where: { email, isDeleted: false },
+    });
+  }
+
+  async updatePassword(id: number, hashedPassword: string): Promise<void> {
+    await this.employeeRepository.update(id, { password: hashedPassword });
+  }
 }

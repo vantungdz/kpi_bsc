@@ -1,5 +1,6 @@
 <template>
   <div class="my-kpi-self-review">
+    <LoadingOverlay :visible="loading || feedbackModal.loading" />
     <a-card
       :headStyle="{
         background: '#e6f7ff',
@@ -418,6 +419,7 @@ import {
   getReviewCycles,
   submitEmployeeFeedback,
 } from "@/core/services/kpiReviewApi";
+import LoadingOverlay from "@/core/components/common/LoadingOverlay.vue";
 import {
   TeamOutlined,
   ApartmentOutlined,

@@ -8,15 +8,16 @@ const state = {
   error: null,
   sectionsByDepartment: {},
   detailError: null,
+  loading: false,
 };
 
 const getters = {
   sectionList: (state) => state.sections,
   sectionsByDepartment: (state) => (departmentId) =>
     state.sectionsByDepartment[departmentId] || [],
-
   error: (state) => state.error,
   detailError: (state) => state.detailError,
+  isLoading: (state) => state.loading,
 };
 
 const mutations = {
@@ -26,13 +27,15 @@ const mutations = {
         error.message
       : null;
   },
+  SET_LOADING(state, loading) {
+    state.loading = loading;
+  },
   SET_DETAIL_ERROR(state, error) {
     state.detailError = error
       ? getTranslatedErrorMessage(error.response?.data?.message) ||
         error.message
       : null;
   },
-
   SET_SECTIONS(state, sectionsData) {
     state.sections = sectionsData?.data || sectionsData || [];
   },
@@ -70,7 +73,7 @@ const actions = {
       return state.sections;
     }
 
-    await store.dispatch("loading/startLoading");
+    commit("SET_LOADING", true);
     commit("SET_ERROR", null);
     try {
       const response = await apiClient.get("/sections", { params });
@@ -100,7 +103,7 @@ const actions = {
       }
       throw error;
     } finally {
-      await store.dispatch("loading/stopLoading");
+      commit("SET_LOADING", false);
     }
   },
 

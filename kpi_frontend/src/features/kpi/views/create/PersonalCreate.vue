@@ -1,5 +1,6 @@
 <template>
   <div v-if="canAccessCreatePage">
+    <LoadingOverlay :visible="loading" />
     <a-form
       ref="formRef"
       :model="form"
@@ -227,6 +228,7 @@ import {
   RBAC_RESOURCES,
 } from "@/core/constants/rbac.constants.js";
 import { useI18n } from "vue-i18n";
+import LoadingOverlay from "@/core/components/common/LoadingOverlay.vue";
 
 const router = useRouter();
 const store = useStore();

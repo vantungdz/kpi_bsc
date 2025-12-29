@@ -5,6 +5,7 @@
     class="perspective-select-component"
     :disabled="loading || !!error"
   >
+    <LoadingOverlay :visible="loading" />
     <option :value="null" disabled>{{ $t("selectBscPerspective") }}</option>
     <option v-if="loading" disabled value="">{{ $t("loading") }}</option>
     <option v-else-if="error" disabled value="">
@@ -23,6 +24,7 @@
 <script setup>
 import { computed, onMounted } from "vue";
 import { useStore } from "vuex";
+import LoadingOverlay from "@/core/components/common/LoadingOverlay.vue";
 
 const props = defineProps({
   modelValue: {

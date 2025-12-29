@@ -1,6 +1,7 @@
 <!-- filepath: e:\project\kpi-frontend\src\features\formula\views\FormulaManageForm.vue -->
 <template>
   <a-card class="formula-manage-form">
+    <LoadingOverlay :visible="loading" />
     <div class="form-header">
       <a-avatar
         class="form-header-icon"
@@ -212,6 +213,7 @@ import { ref, onMounted, computed, watch } from "vue";
 import { message } from "ant-design-vue";
 import { useStore } from "vuex";
 import { useI18n } from "vue-i18n";
+import LoadingOverlay from "@/core/components/common/LoadingOverlay.vue";
 import {
   CalculatorOutlined,
   EditOutlined,

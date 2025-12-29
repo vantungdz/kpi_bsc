@@ -4,21 +4,24 @@ import store from "@/core/store";
 const state = {
   roles: [],
   error: null,
+  loading: false,
 };
 
 const getters = {
   roleList: (state) => state.roles,
-
   error: (state) => state.error,
+  isLoading: (state) => state.loading,
 };
 
 const mutations = {
   SET_ROLES(state, roles) {
     state.roles = roles || [];
   },
-
   SET_ERROR(state, error) {
     state.error = error ? error.response?.data?.message || error.message : null;
+  },
+  SET_LOADING(state, loading) {
+    state.loading = loading;
   },
 };
 
@@ -27,7 +30,7 @@ const actions = {
    * Lấy danh sách roles.
    */
   async fetchRoles({ commit }) {
-    await store.dispatch("loading/startLoading");
+    commit("SET_LOADING", true);
     commit("SET_ERROR", null);
     try {
       const res = await apiClient.get("/roles");
@@ -36,7 +39,7 @@ const actions = {
       commit("SET_ERROR", error);
       commit("SET_ROLES", []);
     } finally {
-      await store.dispatch("loading/stopLoading");
+      commit("SET_LOADING", false);
     }
   },
 

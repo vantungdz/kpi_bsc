@@ -1,5 +1,6 @@
 <template>
   <div class="audit-log-view-modern">
+    <LoadingOverlay :visible="loading" />
     <a-card class="audit-header-card" bordered>
       <template #title>
         <span style="display: flex; align-items: center; gap: 8px">
@@ -121,6 +122,7 @@ import {
   EyeOutlined,
   FileTextOutlined,
 } from "@ant-design/icons-vue";
+import LoadingOverlay from "@/core/components/common/LoadingOverlay.vue";
 
 const store = useStore();
 

@@ -1,22 +1,24 @@
 import apiClient from "@/core/services/api";
-import store from "@/core/store";
 
 const state = {
   perspectives: [],
   error: null,
+  loading: false,
 };
 
 const getters = {
   perspectiveList: (state) => state.perspectives,
-
   error: (state) => state.error,
+  isLoading: (state) => state.loading,
 };
 
 const mutations = {
   SET_ERROR(state, error) {
     state.error = error ? error.response?.data?.message || error.message : null;
   },
-
+  SET_LOADING(state, loading) {
+    state.loading = loading;
+  },
   SET_PERSPECTIVES(state, perspectives) {
     state.perspectives = perspectives || [];
   },
@@ -27,7 +29,7 @@ const actions = {
    * Lấy danh sách perspectives.
    */
   async fetchPerspectives({ commit }, params = {}) {
-    await store.dispatch("loading/startLoading");
+    commit("SET_LOADING", true);
     commit("SET_ERROR", null);
     try {
       const response = await apiClient.get("/perspectives", { params });
@@ -36,7 +38,7 @@ const actions = {
       commit("SET_ERROR", error);
       commit("SET_PERSPECTIVES", []);
     } finally {
-      await store.dispatch("loading/stopLoading");
+      commit("SET_LOADING", false);
     }
   },
 
@@ -44,14 +46,14 @@ const actions = {
    * Tạo mới perspective.
    */
   async createPerspective({ commit }, perspective) {
-    await store.dispatch("loading/startLoading");
+    commit("SET_LOADING", true);
     commit("SET_ERROR", null);
     try {
       await apiClient.post("/perspectives", perspective);
     } catch (error) {
       commit("SET_ERROR", error);
     } finally {
-      await store.dispatch("loading/stopLoading");
+      commit("SET_LOADING", false);
     }
   },
 
@@ -59,14 +61,14 @@ const actions = {
    * Cập nhật perspective.
    */
   async updatePerspective({ commit }, { id, perspective }) {
-    await store.dispatch("loading/startLoading");
+    commit("SET_LOADING", true);
     commit("SET_ERROR", null);
     try {
       await apiClient.put(`/perspectives/${id}`, perspective);
     } catch (error) {
       commit("SET_ERROR", error);
     } finally {
-      await store.dispatch("loading/stopLoading");
+      commit("SET_LOADING", false);
     }
   },
 
@@ -74,14 +76,14 @@ const actions = {
    * Xóa perspective.
    */
   async deletePerspective({ commit }, id) {
-    await store.dispatch("loading/startLoading");
+    commit("SET_LOADING", true);
     commit("SET_ERROR", null);
     try {
       await apiClient.delete(`/perspectives/${id}`);
     } catch (error) {
       commit("SET_ERROR", error);
     } finally {
-      await store.dispatch("loading/stopLoading");
+      commit("SET_LOADING", false);
     }
   },
 };

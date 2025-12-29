@@ -1,5 +1,6 @@
 <template>
   <div class="personal-goal-employee-list-page">
+    <LoadingOverlay :visible="loadingEmployees || loadingGoals" />
     <div class="list-header-modern">
       <schedule-outlined class="header-icon" />
       <div>
@@ -287,6 +288,7 @@ import {
   Card as ACard,
 } from "ant-design-vue";
 import { RBAC_ACTIONS, RBAC_RESOURCES } from "@/core/constants/rbac.constants";
+import LoadingOverlay from "@/core/components/common/LoadingOverlay.vue";
 
 const { t } = useI18n();
 const store = useStore();

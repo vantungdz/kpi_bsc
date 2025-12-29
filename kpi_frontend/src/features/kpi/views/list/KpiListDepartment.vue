@@ -101,18 +101,16 @@
         </a-row>
       </a-form>
     </a-card>
-    <a-alert v-if="loading" type="info" :message="$t('loadingKpis')" show-icon>
-      <template #icon> <a-spin /> </template>
-    </a-alert>
+    <LoadingOverlay :visible="loading" />
     <a-alert
-      v-else-if="error"
+      v-if="!loading && error"
       type="error"
       :message="error"
       show-icon
       closable
     />
     <a-alert
-      v-else-if="isDisplayResult && departmentGroups.length === 0"
+      v-if="!loading && isDisplayResult && departmentGroups.length === 0"
       type="warning"
       :message="$t('noKpisFound')"
       show-icon
@@ -127,7 +125,7 @@
       @close="deletedKpiName = null"
     />
     <div class="kpi-list-scroll">
-      <div class="data-container">
+      <div v-if="!loading" class="data-container">
         <div
           v-for="(departmentItem, departmentIndex) in departmentGroups"
           :key="'dept-' + departmentIndex"
@@ -348,7 +346,6 @@ import {
   Col as ACol,
   FormItem as AFormItem,
   Alert as AAlert,
-  Spin as ASpin,
   Collapse as ACollapse,
   CollapsePanel as ACollapsePanel,
   Table as ATable,
@@ -370,6 +367,7 @@ import {
   RBAC_RESOURCES,
   SCOPES,
 } from "@/core/constants/rbac.constants";
+import LoadingOverlay from "@/core/components/common/LoadingOverlay.vue";
 
 const store = useStore();
 const router = useRouter();
@@ -565,11 +563,11 @@ const applyFilters = async () => {
         localFilters.departmentId === "" ? null : localFilters.departmentId,
       filters,
     });
-    isDisplayResult.value = true;
   } catch (err) {
     error.value = err.message || "Failed to fetch KPIs.";
   } finally {
     loading.value = false;
+    isDisplayResult.value = true;
   }
 };
 
@@ -631,6 +629,11 @@ const onCollapseChange = () => {
 };
 
 const departmentGroups = computed(() => {
+  // Don't display data when loading or no results yet
+  if (loading.value || !isDisplayResult.value) {
+    return [];
+  }
+
   const groupedData = {};
   const displayData = departmentKpiList.value
     ? departmentKpiList.value.data
@@ -825,7 +828,6 @@ watch(
 onMounted(async () => {
   try {
     document.body.classList.add("no-outer-scroll");
-    const initialLoading = ref(true);
     await store.dispatch("departments/fetchDepartments");
     if (isDepartmentUser.value && currentUser.value?.departmentId) {
       localFilters.departmentId = currentUser.value.departmentId;
@@ -833,8 +835,7 @@ onMounted(async () => {
       // Admin/Manager
       localFilters.departmentId = null; // Mặc định "All Departments"
     }
-    await applyFilters(); // Tải dữ liệu KPI ban đầu
-    initialLoading.value = false;
+    await applyFilters(); // Load initial KPI data
   } catch (err) {
     console.error("Failed to fetch departments:", err);
     notification.error({ message: "Failed to load department list." });

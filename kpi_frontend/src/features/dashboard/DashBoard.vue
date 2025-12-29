@@ -43,6 +43,7 @@ import {
 } from "@ant-design/icons-vue";
 import { useStore } from "vuex";
 import { computed } from "vue";
+import LoadingOverlay from "@/core/components/common/LoadingOverlay.vue";
 import {
   Chart as ChartJS,
   Title,

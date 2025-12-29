@@ -1,5 +1,13 @@
 <template>
   <div class="notification-list-page">
+    <LoadingOverlay
+      :visible="
+        isLoading ||
+        isProcessingMarkAll ||
+        isProcessingMarkOne ||
+        isProcessingDelete
+      "
+    />
     <div class="page-header">
       <h1>{{ $t("notifications") }}</h1>
       <div class="header-actions">
@@ -155,6 +163,7 @@ import "dayjs/locale/vi";
 
 dayjs.extend(relativeTime);
 dayjs.locale("vi");
+import LoadingOverlay from "@/core/components/common/LoadingOverlay.vue";
 
 const store = useStore();
 const router = useRouter();

@@ -1,5 +1,6 @@
 <template>
   <a-card :title="$t('documents.title')">
+    <LoadingOverlay :visible="loading" />
     <div
       style="
         display: flex;
@@ -166,6 +167,7 @@ import { useStore } from "vuex";
 import { message } from "ant-design-vue";
 import DocumentUpload from "../components/DocumentUpload.vue";
 import { useI18n } from "vue-i18n";
+import LoadingOverlay from "@/core/components/common/LoadingOverlay.vue";
 import {
   UploadOutlined,
   FileTextOutlined,

@@ -1,5 +1,6 @@
 <template>
   <div class="personal-goal-page">
+    <LoadingOverlay :visible="loading" />
     <a-card class="goal-header-card" bordered>
       <div class="goal-header">
         <div>
@@ -151,6 +152,7 @@ import { useStore } from "vuex";
 import { message } from "ant-design-vue";
 import dayjs from "dayjs";
 import { useI18n } from "vue-i18n";
+import LoadingOverlay from "@/core/components/common/LoadingOverlay.vue";
 
 const { t: $t } = useI18n();
 

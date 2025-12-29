@@ -1,5 +1,6 @@
 <template>
   <div class="employee-performance-history-container">
+    <LoadingOverlay :visible="loading" />
     <h1>{{ $t("employeePerformanceHistory.title") }}</h1>
     <a-form layout="inline" @submit.prevent>
       <a-form-item :label="$t('employeePerformanceHistory.employee')">
@@ -70,6 +71,7 @@ import { ref, onMounted, computed } from "vue";
 import { message } from "ant-design-vue";
 import { useStore } from "vuex";
 import LineChart from "@/core/components/common/LineChart.vue";
+import LoadingOverlay from "@/core/components/common/LoadingOverlay.vue";
 import { useI18n } from "vue-i18n";
 
 const store = useStore();

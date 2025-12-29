@@ -1,5 +1,6 @@
 <template>
   <a-card class="section-create-form">
+    <LoadingOverlay :visible="loading || loadingManagers || editLoading" />
     <div class="form-header">
       <a-avatar
         class="form-header-icon"
@@ -200,6 +201,7 @@ import { ref, onMounted, computed } from "vue";
 import { useI18n } from "vue-i18n";
 import { message } from "ant-design-vue";
 import { useStore } from "vuex";
+import LoadingOverlay from "@/core/components/common/LoadingOverlay.vue";
 import {
   AppstoreOutlined,
   ApartmentOutlined,

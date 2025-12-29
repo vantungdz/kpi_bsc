@@ -1,5 +1,6 @@
 <template>
   <div class="review-cycle-create-modern">
+    <LoadingOverlay :visible="loading || loadingCycles || loadingEdit" />
     <a-card class="cycle-header-card" bordered>
       <template #title>
         <div class="cycle-header-flex">
@@ -139,6 +140,7 @@ import { ref, onMounted, computed } from "vue";
 import apiClient from "@/core/services/api";
 import dayjs from "dayjs";
 import { useI18n } from "vue-i18n";
+import LoadingOverlay from "@/core/components/common/LoadingOverlay.vue";
 import {
   CalendarOutlined,
   PlusOutlined,

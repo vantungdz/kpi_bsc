@@ -1,5 +1,12 @@
 <template>
   <!-- Section Assignment Modals -->
+  <LoadingOverlay
+    :visible="
+      loadingAssignableUsers ||
+      submittingUserAssignment ||
+      submittingUserDeletion
+    "
+  />
   <a-modal
     :open="isAssignUserModalVisible"
     @update:open="isAssignUserModalVisible = $event"
@@ -134,6 +141,7 @@ import {
   Input as AInput,
 } from "ant-design-vue";
 import { notification } from "ant-design-vue";
+import LoadingOverlay from "@/core/components/common/LoadingOverlay.vue";
 
 const { t: $t } = useI18n();
 const store = useStore();

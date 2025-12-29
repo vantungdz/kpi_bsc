@@ -7,6 +7,7 @@ const state = {
   error: null,
   departmentDetail: null,
   detailError: null,
+  loading: false,
 };
 
 const getters = {
@@ -14,6 +15,7 @@ const getters = {
   error: (state) => state.error,
   departmentDetail: (state) => state.departmentDetail,
   detailError: (state) => state.detailError,
+  isLoading: (state) => state.loading,
 };
 
 const mutations = {
@@ -22,6 +24,9 @@ const mutations = {
       ? getTranslatedErrorMessage(error.response?.data?.message) ||
         error.message
       : null;
+  },
+  SET_LOADING(state, loading) {
+    state.loading = loading;
   },
   SET_DEPARTMENTS(state, departments) {
     state.departments = departments;
@@ -39,7 +44,7 @@ const mutations = {
 
 const actions = {
   async fetchDepartments({ commit }, params = {}) {
-    await store.dispatch("loading/startLoading");
+    commit("SET_LOADING", true);
     commit("SET_ERROR", null);
     try {
       const response = await apiClient.get("/departments", { params });
@@ -48,7 +53,7 @@ const actions = {
       commit("SET_ERROR", error);
       commit("SET_DEPARTMENTS", []);
     } finally {
-      await store.dispatch("loading/stopLoading");
+      commit("SET_LOADING", false);
     }
   },
   async fetchDepartmentById({ commit }, departmentId) {

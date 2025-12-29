@@ -1,5 +1,10 @@
 <template>
   <div class="employee-list" v-if="canViewEmployee">
+    <LoadingOverlay
+      :visible="
+        uploading || savingEmployee || store.getters['employees/isLoading']
+      "
+    />
     <div class="header">
       <h2
         style="
@@ -525,6 +530,7 @@ import {
 } from "@ant-design/icons-vue";
 import { RBAC_ACTIONS, RBAC_RESOURCES } from "@/core/constants/rbac.constants";
 import dayjs from "dayjs";
+import LoadingOverlay from "@/core/components/common/LoadingOverlay.vue";
 
 const { t: $t } = useI18n();
 const store = useStore();

@@ -1,5 +1,6 @@
 <template>
   <div class="kpi-inventory-statistics-container">
+    <LoadingOverlay :visible="isLoading" />
     <a-breadcrumb style="margin-bottom: 16px">
       <a-breadcrumb-item>
         <router-link to="/dashboard">{{ $t("dashboardOverview") }}</router-link>
@@ -139,6 +140,7 @@ import {
 import { DatabaseOutlined, BranchesOutlined } from "@ant-design/icons-vue";
 import BarChart from "@/core/components/common/BarChart.vue";
 import PieChart from "@/core/components/common/PieChart.vue";
+import LoadingOverlay from "@/core/components/common/LoadingOverlay.vue";
 
 const store = useStore();
 const { t: $t } = useI18n();

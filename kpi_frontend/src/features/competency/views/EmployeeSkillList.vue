@@ -1,5 +1,6 @@
 <template>
   <a-card class="employee-skill-card" bordered>
+    <LoadingOverlay :visible="loading" />
     <template #title>
       <span
         ><TeamOutlined style="margin-right: 7px" />{{
@@ -169,6 +170,7 @@ import { ref, computed, onMounted, watch } from "vue";
 import { useStore } from "vuex";
 import { message } from "ant-design-vue";
 import { useI18n } from "vue-i18n";
+import LoadingOverlay from "@/core/components/common/LoadingOverlay.vue";
 import {
   ApartmentOutlined,
   ClusterOutlined,

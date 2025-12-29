@@ -1,5 +1,6 @@
 <template>
   <div class="so-view-modern">
+    <LoadingOverlay :visible="state.loading || loadingKpis" />
     <a-card class="so-header-card" bordered>
       <template #title>
         <div class="so-header-flex">
@@ -343,6 +344,7 @@ import {
 } from "@ant-design/icons-vue";
 import dayjs from "dayjs";
 import { useI18n } from "vue-i18n";
+import LoadingOverlay from "@/core/components/common/LoadingOverlay.vue";
 
 const { t: $t } = useI18n();
 const store = useStore();

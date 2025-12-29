@@ -1,8 +1,20 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  Injectable,
+  UnauthorizedException,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import { JwtService } from '@nestjs/jwt';
 import { EmployeesService } from 'src/employees/employees.service';
 import { LoginDto } from './dto/login.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
+import { PasswordResetToken } from './entities/password-reset-token.entity';
+import { EmailService } from '../common/services/email.service';
 import * as bcrypt from 'bcrypt';
+import * as crypto from 'crypto';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { SessionService } from './session.service';
 
@@ -14,6 +26,9 @@ export class AuthService {
     private usersService: EmployeesService,
     private auditLogService: AuditLogService,
     private sessionService: SessionService,
+    @InjectRepository(PasswordResetToken)
+    private passwordResetTokenRepository: Repository<PasswordResetToken>,
+    private emailService: EmailService,
   ) {}
 
   async login(
@@ -116,5 +131,107 @@ export class AuthService {
       },
     });
     return { message: 'Logout successful' };
+  }
+
+  async requestPasswordReset(
+    forgotPasswordDto: ForgotPasswordDto,
+  ): Promise<{ message: string }> {
+    const { email } = forgotPasswordDto;
+    const user = await this.usersService.findOneByEmail(email);
+
+    if (!user) {
+      return {
+        message:
+          'If an account with this email exists, a password reset link has been sent.',
+      };
+    }
+
+    const token = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date();
+    expiresAt.setHours(expiresAt.getHours() + 1);
+
+    const resetToken = this.passwordResetTokenRepository.create({
+      token,
+      userId: user.id,
+      expiresAt,
+      used: false,
+    });
+
+    await this.passwordResetTokenRepository.save(resetToken);
+
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:8080';
+    const resetLink = `${frontendUrl}/reset-password?token=${token}`;
+
+    const emailSent = await this.emailService.sendPasswordResetEmail(
+      email,
+      resetLink,
+    );
+
+    await this.auditLogService.logAction({
+      action: 'password_reset_requested',
+      resource: 'auth',
+      userId: user.id,
+      username: user.username,
+      data: {
+        email,
+        emailSent,
+        requestedAt: new Date(),
+      },
+    });
+
+    return {
+      message:
+        'If an account with this email exists, a password reset link has been sent.',
+    };
+  }
+
+  async resetPasswordWithToken(
+    resetPasswordDto: ResetPasswordDto,
+  ): Promise<{ message: string }> {
+    const { token, newPassword } = resetPasswordDto;
+
+    const resetToken = await this.passwordResetTokenRepository.findOne({
+      where: { token },
+      relations: ['user'],
+    });
+
+    if (!resetToken) {
+      throw new BadRequestException('Invalid or expired password reset token.');
+    }
+
+    if (resetToken.used) {
+      throw new BadRequestException(
+        'This password reset token has already been used.',
+      );
+    }
+
+    if (resetToken.expiresAt < new Date()) {
+      throw new BadRequestException('Password reset token has expired.');
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    const user = resetToken.user;
+    await this.usersService.updatePassword(user.id, hashedPassword);
+
+    resetToken.used = true;
+    await this.passwordResetTokenRepository.save(resetToken);
+
+    await this.sessionService.logoutAllUserSessions(user.id);
+
+    await this.auditLogService.logAction({
+      action: 'password_reset_completed',
+      resource: 'auth',
+      userId: user.id,
+      username: user.username,
+      data: {
+        resetAt: new Date(),
+        sessionsTerminated: true,
+      },
+    });
+
+    return {
+      message:
+        'Password has been reset successfully. Please login with your new password.',
+    };
   }
 }

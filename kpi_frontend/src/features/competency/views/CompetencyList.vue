@@ -1,15 +1,33 @@
 <template>
   <a-card class="competency-list-card" bordered>
+    <LoadingOverlay :visible="loading" />
     <template #title>
-      <span><AppstoreOutlined style="margin-right:7px;" />{{ $t('competency.title') }}</span>
+      <span
+        ><AppstoreOutlined style="margin-right: 7px" />{{
+          $t("competency.title")
+        }}</span
+      >
     </template>
     <a-row justify="end" style="margin-bottom: 16px">
-      <a-button type="default" shape="round" size="middle" class="add-btn" @click="openAddModal">
+      <a-button
+        type="default"
+        shape="round"
+        size="middle"
+        class="add-btn"
+        @click="openAddModal"
+      >
         <template #icon><PlusOutlined /></template>
-        {{ $t('competency.add') }}
+        {{ $t("competency.add") }}
       </a-button>
     </a-row>
-    <a-table :columns="columns" :dataSource="skills" :loading="loading" rowKey="id" bordered class="competency-table">
+    <a-table
+      :columns="columns"
+      :dataSource="skills"
+      :loading="loading"
+      rowKey="id"
+      bordered
+      class="competency-table"
+    >
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'action'">
           <a-tooltip :title="$t('common.edit')">
@@ -17,7 +35,12 @@
               <template #icon><EditOutlined /></template>
             </a-button>
           </a-tooltip>
-          <a-popconfirm :title="$t('competency.confirmDelete')" :ok-text="$t('common.delete')" :cancel-text="$t('common.cancel')" @confirm="onDelete(record)">
+          <a-popconfirm
+            :title="$t('competency.confirmDelete')"
+            :ok-text="$t('common.delete')"
+            :cancel-text="$t('common.cancel')"
+            @confirm="onDelete(record)"
+          >
             <a-tooltip :title="$t('common.delete')">
               <a-button size="small" type="text" danger>
                 <template #icon><DeleteOutlined /></template>
@@ -27,10 +50,16 @@
         </template>
       </template>
     </a-table>
-    <a-modal v-model:open="showModal" :title="modalTitle" @ok="handleOk" @cancel="handleCancel" :confirmLoading="saving">
+    <a-modal
+      v-model:open="showModal"
+      :title="modalTitle"
+      @ok="handleOk"
+      @cancel="handleCancel"
+      :confirmLoading="saving"
+    >
       <a-form :model="form" layout="vertical">
         <a-form-item :label="$t('competency.name')" required>
-          <a-input v-model:value="form.name" placeholder="" >
+          <a-input v-model:value="form.name" placeholder="">
             <template #prefix><StarOutlined /></template>
           </a-input>
         </a-form-item>
@@ -50,82 +79,108 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
-import { useStore } from 'vuex';
-import { message } from 'ant-design-vue';
-import { useI18n } from 'vue-i18n';
-import { PlusOutlined, EditOutlined, DeleteOutlined, StarOutlined, ClusterOutlined, FileTextOutlined, AppstoreOutlined } from '@ant-design/icons-vue';
+import { ref, computed, onMounted } from "vue";
+import { useStore } from "vuex";
+import { message } from "ant-design-vue";
+import { useI18n } from "vue-i18n";
+import {
+  PlusOutlined,
+  EditOutlined,
+  DeleteOutlined,
+  StarOutlined,
+  ClusterOutlined,
+  FileTextOutlined,
+  AppstoreOutlined,
+} from "@ant-design/icons-vue";
+import LoadingOverlay from "@/core/components/common/LoadingOverlay.vue";
 
 const store = useStore();
 const { t: $t } = useI18n();
 const showModal = ref(false);
 const saving = ref(false);
-const form = ref({ name: '', group: '', description: '' });
+const form = ref({ name: "", group: "", description: "" });
 const isEditMode = ref(false);
 const editingId = ref(null);
 
-const modalTitle = computed(() => isEditMode.value ? `${$t('competency.editTitle')}` : `${$t('competency.addTitle')}`);
+const modalTitle = computed(() =>
+  isEditMode.value
+    ? `${$t("competency.editTitle")}`
+    : `${$t("competency.addTitle")}`
+);
 
 const columns = computed(() => [
-  { title: $t('competency.name'), dataIndex: 'name', key: 'name' },
-  { title: $t('competency.group'), dataIndex: 'group', key: 'group' },
-  { title: $t('competency.description'), dataIndex: 'description', key: 'description' },
-  { title: $t('common.actions'), key: 'action' }
+  { title: $t("competency.name"), dataIndex: "name", key: "name" },
+  { title: $t("competency.group"), dataIndex: "group", key: "group" },
+  {
+    title: $t("competency.description"),
+    dataIndex: "description",
+    key: "description",
+  },
+  { title: $t("common.actions"), key: "action" },
 ]);
 
-const skills = computed(() => store.getters['competency/competencies']);
-const loading = computed(() => store.getters['competency/loading']);
+const skills = computed(() => store.getters["competency/competencies"]);
+const loading = computed(() => store.getters["competency/loading"]);
 
 onMounted(() => {
-  store.dispatch('competency/fetchCompetencies');
+  store.dispatch("competency/fetchCompetencies");
 });
 
 function openAddModal() {
   isEditMode.value = false;
   editingId.value = null;
-  form.value = { name: '', group: '', description: '' };
+  form.value = { name: "", group: "", description: "" };
   showModal.value = true;
 }
 
 function openEditModal(record) {
   isEditMode.value = true;
   editingId.value = record.id;
-  form.value = { name: record.name, group: record.group, description: record.description };
+  form.value = {
+    name: record.name,
+    group: record.group,
+    description: record.description,
+  };
   showModal.value = true;
 }
 
 function handleOk() {
   if (!form.value.name) {
-    message.error($t('competency.msgNameRequired'));
+    message.error($t("competency.msgNameRequired"));
     return;
   }
   saving.value = true;
   if (isEditMode.value && editingId.value) {
-    store.dispatch('competency/updateCompetency', { id: editingId.value, data: { ...form.value } })
+    store
+      .dispatch("competency/updateCompetency", {
+        id: editingId.value,
+        data: { ...form.value },
+      })
       .then(() => {
-        message.success($t('competency.msgUpdateSuccess'));
+        message.success($t("competency.msgUpdateSuccess"));
         showModal.value = false;
-        form.value = { name: '', group: '', description: '' };
+        form.value = { name: "", group: "", description: "" };
         isEditMode.value = false;
         editingId.value = null;
       })
-      .catch(() => message.error($t('competency.msgError')))
-      .finally(() => saving.value = false);
+      .catch(() => message.error($t("competency.msgError")))
+      .finally(() => (saving.value = false));
   } else {
-    store.dispatch('competency/createCompetency', form.value)
+    store
+      .dispatch("competency/createCompetency", form.value)
       .then(() => {
-        message.success($t('competency.msgAddSuccess'));
+        message.success($t("competency.msgAddSuccess"));
         showModal.value = false;
-        form.value = { name: '', group: '', description: '' };
+        form.value = { name: "", group: "", description: "" };
       })
-      .catch(() => message.error($t('competency.msgError')))
-      .finally(() => saving.value = false);
+      .catch(() => message.error($t("competency.msgError")))
+      .finally(() => (saving.value = false));
   }
 }
 
 function handleCancel() {
   showModal.value = false;
-  form.value = { name: '', group: '', description: '' };
+  form.value = { name: "", group: "", description: "" };
   isEditMode.value = false;
   editingId.value = null;
 }
@@ -133,12 +188,13 @@ function handleCancel() {
 function onDelete(record) {
   const id = Number(record.id);
   if (!id || isNaN(id)) {
-    message.error($t('competency.msgDeleteIdError'));
+    message.error($t("competency.msgDeleteIdError"));
     return;
   }
-  store.dispatch('competency/deleteCompetency', id)
-    .then(() => message.success($t('competency.msgDeleteSuccess')))
-    .catch(() => message.error($t('competency.msgDeleteError')));
+  store
+    .dispatch("competency/deleteCompetency", id)
+    .then(() => message.success($t("competency.msgDeleteSuccess")))
+    .catch(() => message.error($t("competency.msgDeleteError")));
 }
 </script>
 
@@ -163,7 +219,8 @@ function onDelete(record) {
   align-items: center;
   gap: 6px;
 }
-.add-btn:hover, .add-btn:focus {
+.add-btn:hover,
+.add-btn:focus {
   background: #e3f2fd;
   color: #1565c0;
   border-color: #90caf9;

@@ -1,5 +1,6 @@
 <template>
   <div class="role-permission-manager-table">
+    <LoadingOverlay :visible="loading" />
     <div class="header-bar">
       <div class="header-left">
         <h2 class="page-title">
@@ -80,6 +81,7 @@ import { ref, onMounted, computed, watch } from "vue";
 import { message } from "ant-design-vue";
 import { useI18n } from "vue-i18n";
 import { useStore } from "vuex";
+import LoadingOverlay from "@/core/components/common/LoadingOverlay.vue";
 
 const { t } = useI18n();
 const store = useStore();

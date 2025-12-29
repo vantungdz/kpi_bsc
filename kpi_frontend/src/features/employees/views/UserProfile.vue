@@ -1,6 +1,7 @@
 <template>
   <div class="user-profile-container">
-    <a-card :title="$t('accountInformation')" :loading="!user" v-if="user">
+    <LoadingOverlay :visible="!user" />
+    <a-card :title="$t('accountInformation')" v-if="user">
       <a-row :gutter="[16, 24]">
         <a-col :xs="24" :sm="24" :md="8" :lg="6" style="text-align: center">
           <a-avatar :size="128" :src="user.avatar_url">
@@ -68,6 +69,7 @@
 import { computed } from "vue";
 import { useStore } from "vuex";
 import { UserOutlined } from "@ant-design/icons-vue";
+import LoadingOverlay from "@/core/components/common/LoadingOverlay.vue";
 import {
   Card as ACard,
   Row as ARow,

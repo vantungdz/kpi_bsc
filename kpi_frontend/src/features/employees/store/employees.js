@@ -7,6 +7,7 @@ const state = {
   usersBySection: {},
   usersByDepartment: {},
   error: null,
+  loading: false,
 };
 
 const getters = {
@@ -24,6 +25,7 @@ const getters = {
   usersByDepartment: (state) => (departmentId) =>
     state.usersByDepartment[String(departmentId)] || [],
   error: (state) => state.error,
+  isLoading: (state) => state.loading,
 };
 
 const mutations = {
@@ -32,6 +34,9 @@ const mutations = {
       ? getTranslatedErrorMessage(error.response?.data?.message) ||
         error.message
       : null;
+  },
+  SET_LOADING(state, loading) {
+    state.loading = loading;
   },
   SET_USERS(state, users) {
     state.userList = users || [];
@@ -91,7 +96,7 @@ const actions = {
       return state.userList;
     }
 
-    await store.dispatch("loading/startLoading");
+    commit("SET_LOADING", true);
     commit("SET_ERROR", null);
     try {
       const apiParams = { ...params };
@@ -127,7 +132,7 @@ const actions = {
         });
       throw error;
     } finally {
-      await store.dispatch("loading/stopLoading");
+      commit("SET_LOADING", false);
     }
   },
 

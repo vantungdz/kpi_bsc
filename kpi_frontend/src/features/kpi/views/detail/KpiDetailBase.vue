@@ -1,5 +1,12 @@
 <template>
   <div>
+    <LoadingOverlay
+      :visible="
+        loadingKpi ||
+        loadingUserAssignments ||
+        loadingDepartmentSectionAssignments
+      "
+    />
     <a-card
       :title="
         $t('kpiDetailTitle', { name: kpiDetailData?.name || $t('loading') })
@@ -225,6 +232,7 @@ import {
   KpiDefinitionStatusColor,
 } from "@/core/constants/kpiStatus";
 import { RBAC_ACTIONS, RBAC_RESOURCES } from "@/core/constants/rbac.constants";
+import LoadingOverlay from "@/core/components/common/LoadingOverlay.vue";
 
 const router = useRouter();
 const store = useStore();

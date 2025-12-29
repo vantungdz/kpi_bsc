@@ -1,5 +1,6 @@
 <template>
   <div v-if="canViewKpiReview">
+    <LoadingOverlay :visible="loading" />
     <h4 class="kpi-title">
       <span style="display: flex; align-items: center; gap: 8px">
         <icon-trophy-two-tone
@@ -134,6 +135,7 @@ import ReviewHistoryModal from "./ReviewHistoryModal.vue";
 import { useI18n } from "vue-i18n";
 import { useStore } from "vuex";
 import { RBAC_ACTIONS, RBAC_RESOURCES } from "@/core/constants/rbac.constants";
+import LoadingOverlay from "@/core/components/common/LoadingOverlay.vue";
 
 import {
   TrophyTwoTone as IconTrophyTwoTone,

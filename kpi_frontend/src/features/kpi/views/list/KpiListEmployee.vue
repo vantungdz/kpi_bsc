@@ -1,5 +1,6 @@
 <template>
   <div class="kpi-employee-list-page">
+    <LoadingOverlay :visible="loadingEmployees" />
     <div class="list-header-modern">
       <schedule-outlined class="header-icon" />
       <div>
@@ -294,6 +295,7 @@ import {
   UserOutlined,
 } from "@ant-design/icons-vue";
 import { Avatar as AAvatar, Card as ACard } from "ant-design-vue";
+import LoadingOverlay from "@/core/components/common/LoadingOverlay.vue";
 
 const { t } = useI18n();
 const store = useStore();

@@ -1,5 +1,6 @@
 <template>
   <div class="kpi-performance-overview-container" v-if="canViewDashboard">
+    <LoadingOverlay :visible="isLoadingOverview" />
     <a-breadcrumb style="margin-bottom: 16px">
       <a-breadcrumb-item
         ><router-link to="/dashboard">{{
@@ -238,6 +239,7 @@ import {
   Progress as AProgress,
 } from "ant-design-vue";
 import PieChart from "@/core/components/common/PieChart.vue";
+import LoadingOverlay from "@/core/components/common/LoadingOverlay.vue";
 import { RBAC_ACTIONS, RBAC_RESOURCES } from "@/core/constants/rbac.constants";
 
 const { t: $t } = useI18n();

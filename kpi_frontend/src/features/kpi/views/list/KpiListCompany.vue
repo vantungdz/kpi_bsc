@@ -100,18 +100,16 @@
         </a-row>
       </a-form>
     </a-card>
-    <a-alert v-if="loading" :message="$t('loadingKpis')" type="info" show-icon>
-      <template #icon> <a-spin /> </template>
-    </a-alert>
+    <LoadingOverlay :visible="loading" />
     <a-alert
-      v-else-if="error"
+      v-if="!loading && error"
       :message="error"
       type="error"
       show-icon
       closable
     />
     <a-alert
-      v-else-if="kpis.length === 0"
+      v-if="!loading && kpis.length === 0"
       :message="$t('noKpisFound')"
       type="warning"
       show-icon
@@ -136,7 +134,7 @@
       style="margin-top: 10px"
     />
     <div class="kpi-list-scroll">
-      <div v-if="groupedKpis" class="data-container">
+      <div v-if="!loading && groupedKpis" class="data-container">
         <a-collapse
           v-model:activeKey="activePanelKeys"
           expandIconPosition="end"
@@ -347,7 +345,6 @@ import {
   Col as ACol,
   FormItem as AFormItem,
   Alert as AAlert,
-  Spin as ASpin,
   Collapse as ACollapse,
   CollapsePanel as ACollapsePanel,
   Table as ATable,
@@ -374,6 +371,7 @@ import {
   KpiDefinitionStatusColor,
 } from "@/core/constants/kpiStatus";
 import { RBAC_ACTIONS, RBAC_RESOURCES } from "@/core/constants/rbac.constants";
+import LoadingOverlay from "@/core/components/common/LoadingOverlay.vue";
 
 const store = useStore();
 const router = useRouter();
@@ -425,6 +423,11 @@ const departmentList = computed(
 );
 
 const groupedKpis = computed(() => {
+  // Don't display data when loading
+  if (loading.value) {
+    return {};
+  }
+
   const grouped = {};
   if (!kpis.value || kpis.value.length === 0) return grouped;
   kpis.value.forEach((kpi) => {
@@ -669,7 +672,7 @@ const handleToggleStatus = async (kpiId) => {
   } catch (error) {
     console.error("Failed to toggle KPI status from component:", error);
   } finally {
-    currentToggleKpiId.value = null; // Reset ID đang xử lý
+    currentToggleKpiId.value = null; // Reset processing ID
   }
 };
 

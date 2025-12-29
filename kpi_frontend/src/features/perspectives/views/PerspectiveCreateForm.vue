@@ -1,17 +1,27 @@
 <template>
   <div class="perspective-create-form-modern">
+    <LoadingOverlay :visible="isLoading" />
     <div class="modern-header-light">
       <bulb-outlined class="header-icon-light" />
       <div class="header-title-group-light">
-        <h3>{{ $t('perspectiveObject.managePerspectives') }}</h3>
-        <div class="header-desc-light">{{ $t('perspectiveObject.manageDesc') || $t('perspectiveObject.managePerspectives') }}</div>
+        <h3>{{ $t("perspectiveObject.managePerspectives") }}</h3>
+        <div class="header-desc-light">
+          {{
+            $t("perspectiveObject.manageDesc") ||
+            $t("perspectiveObject.managePerspectives")
+          }}
+        </div>
       </div>
     </div>
     <a-card class="modern-card-form-light" bordered>
-      <a-form @submit.prevent="handleSubmit" layout="vertical" class="modern-form">
+      <a-form
+        @submit.prevent="handleSubmit"
+        layout="vertical"
+        class="modern-form"
+      >
         <a-form-item
           :label="$t('perspectiveObject.name')"
-          :rules=" [
+          :rules="[
             { required: true, message: $t('perspectiveObject.nameRequired') },
             { min: 3, message: $t('perspectiveObject.nameMin') },
             { max: 50, message: $t('perspectiveObject.nameMax') },
@@ -43,18 +53,21 @@
         </a-form-item>
 
         <a-form-item>
-          <a-button type="primary" html-type="submit" :loading="isLoading" size="large" class="modern-btn" block>
+          <a-button
+            type="primary"
+            html-type="submit"
+            :loading="isLoading"
+            size="large"
+            class="modern-btn"
+            block
+          >
             <plus-outlined /> {{ $t("common.create") }}
           </a-button>
         </a-form-item>
       </a-form>
     </a-card>
     <div v-if="perspectives.length" class="modern-list-grid-light">
-      <div
-        v-for="item in perspectives"
-        :key="item.id"
-        class="modern-list-card"
-      >
+      <div v-for="item in perspectives" :key="item.id" class="modern-list-card">
         <div class="modern-list-card-icon">
           <bulb-outlined />
         </div>
@@ -63,14 +76,18 @@
           <div class="modern-list-card-desc">{{ item.description }}</div>
         </div>
         <div class="modern-list-card-actions">
-          <a @click="handleEdit(item)"><edit-outlined /> {{ $t("common.edit") }}</a>
+          <a @click="handleEdit(item)"
+            ><edit-outlined /> {{ $t("common.edit") }}</a
+          >
           <a-popconfirm
             :title="$t('perspectiveObject.deleteConfirm')"
             @confirm="() => handleDelete(item.id)"
             :okText="$t('perspectiveObject.confirmYes')"
             :cancelText="$t('perspectiveObject.confirmNo')"
           >
-            <a style="color: #ef4444;"><delete-outlined /> {{ $t("common.delete") }}</a>
+            <a style="color: #ef4444"
+              ><delete-outlined /> {{ $t("common.delete") }}</a
+            >
           </a-popconfirm>
         </div>
       </div>
@@ -86,7 +103,7 @@
       <a-form layout="vertical" class="modern-form">
         <a-form-item
           :label="$t('perspectiveObject.name')"
-          :rules=" [
+          :rules="[
             { required: true, message: $t('perspectiveObject.nameRequired') },
             { min: 3, message: $t('perspectiveObject.nameMin') },
             { max: 50, message: $t('perspectiveObject.nameMax') },
@@ -123,8 +140,14 @@
 import { reactive, onMounted, computed, ref } from "vue";
 import { useStore } from "vuex";
 import { message } from "ant-design-vue";
-import { BulbOutlined, PlusOutlined, EditOutlined, DeleteOutlined } from "@ant-design/icons-vue";
-import { useI18n } from 'vue-i18n';
+import {
+  BulbOutlined,
+  PlusOutlined,
+  EditOutlined,
+  DeleteOutlined,
+} from "@ant-design/icons-vue";
+import { useI18n } from "vue-i18n";
+import LoadingOverlay from "@/core/components/common/LoadingOverlay.vue";
 
 const { t: $t } = useI18n();
 const store = useStore();
@@ -142,8 +165,10 @@ const updateForm = reactive({
 const isUpdateModalVisible = ref(false);
 const editingId = ref(null);
 
-const perspectives = computed(() => store.state.perspectives.perspectives);
-const isLoading = computed(() => store.state.perspectives.isLoading);
+const perspectives = computed(
+  () => store.getters["perspectives/perspectiveList"]
+);
+const isLoading = computed(() => store.getters["perspectives/isLoading"]);
 
 const handleFetch = async () => {
   try {
@@ -223,7 +248,7 @@ onMounted(() => {
   padding: 18px 22px 12px 22px;
   margin-bottom: -8px;
   border: 1px solid #e0e7ef;
-  box-shadow: 0 1px 6px rgba(37,99,235,0.04);
+  box-shadow: 0 1px 6px rgba(37, 99, 235, 0.04);
 }
 .header-icon-light {
   font-size: 26px;
@@ -231,7 +256,7 @@ onMounted(() => {
   background: #e0e7ff;
   border-radius: 50%;
   padding: 7px;
-  box-shadow: 0 1px 4px rgba(37,99,235,0.07);
+  box-shadow: 0 1px 4px rgba(37, 99, 235, 0.07);
 }
 .header-title-group-light h3 {
   color: #1e293b;
@@ -246,7 +271,7 @@ onMounted(() => {
 }
 .modern-card-form-light {
   border-radius: 14px;
-  box-shadow: 0 1px 6px rgba(37,99,235,0.04);
+  box-shadow: 0 1px 6px rgba(37, 99, 235, 0.04);
   margin-bottom: 0;
   margin-top: 0;
   padding-top: 0;
@@ -257,7 +282,7 @@ onMounted(() => {
 }
 .modern-input {
   border-radius: 10px !important;
-  box-shadow: 0 1px 4px rgba(37,99,235,0.03);
+  box-shadow: 0 1px 4px rgba(37, 99, 235, 0.03);
 }
 .modern-btn {
   border-radius: 8px;
@@ -275,7 +300,7 @@ onMounted(() => {
 .modern-list-card {
   background: #fff;
   border-radius: 12px;
-  box-shadow: 0 1px 6px rgba(37,99,235,0.06);
+  box-shadow: 0 1px 6px rgba(37, 99, 235, 0.06);
   padding: 18px 18px 12px 18px;
   display: flex;
   flex-direction: column;
@@ -286,7 +311,7 @@ onMounted(() => {
   border: 1px solid #e0e7ef;
 }
 .modern-list-card:hover {
-  box-shadow: 0 4px 14px rgba(37,99,235,0.13);
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.13);
 }
 .modern-list-card-icon {
   position: absolute;

@@ -21,6 +21,7 @@
     wrap-class-name="kpi-review-modal"
     body-style="padding: 0; background: #f4f7fb; border-radius: 14px;"
   >
+    <LoadingOverlay :visible="loading" />
     <div v-if="review" class="kpi-review-content compact">
       <!-- Steps: Quy trình đánh giá KPI -->
       <a-steps :current="currentStep" class="kpi-steps" direction="horizontal">
@@ -292,6 +293,7 @@ import {
   RBAC_RESOURCES,
   SCOPES,
 } from "@/core/constants/rbac.constants";
+import LoadingOverlay from "@/core/components/common/LoadingOverlay.vue";
 import {
   UserOutlined,
   TeamOutlined,

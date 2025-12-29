@@ -139,18 +139,16 @@
         </a-row>
       </a-form>
     </a-card>
-    <a-alert v-if="loading" :message="$t('loadingKpis')" type="info" show-icon>
-      <template #icon> <a-spin /> </template>
-    </a-alert>
+    <LoadingOverlay :visible="loading" />
     <a-alert
-      v-else-if="error"
+      v-if="!loading && error"
       :message="error"
       type="error"
       show-icon
       closable
     />
     <a-alert
-      v-else-if="isDisplayResult && sectionGroups.length === 0"
+      v-if="!loading && isDisplayResult && sectionGroups.length === 0"
       :message="$t('noKpisFound')"
       type="warning"
       show-icon
@@ -165,7 +163,7 @@
       show-icon
     />
     <div class="kpi-list-scroll">
-      <div v-if="isDisplayResult" class="data-container">
+      <div v-if="!loading && isDisplayResult" class="data-container">
         <div
           v-for="(sectionGroup, sectionIndex) in sectionGroups"
           :key="'sec-' + sectionIndex"
@@ -390,7 +388,6 @@ import {
   DatePicker as ADatePicker,
   FormItem as AFormItem,
   Alert as AAlert,
-  Spin as ASpin,
   Collapse as ACollapse,
   CollapsePanel as ACollapsePanel,
   Table as ATable,
@@ -412,6 +409,7 @@ import {
   RBAC_RESOURCES,
   SCOPES,
 } from "@/core/constants/rbac.constants";
+import LoadingOverlay from "@/core/components/common/LoadingOverlay.vue";
 
 const store = useStore();
 const router = useRouter();
@@ -519,6 +517,11 @@ const localFilters = reactive({
 });
 
 const sectionGroups = computed(() => {
+  // Don't display data when loading
+  if (loading.value) {
+    return [];
+  }
+
   const groupedData = {};
 
   const displayData = Array.isArray(sectionKpiList.value?.data)

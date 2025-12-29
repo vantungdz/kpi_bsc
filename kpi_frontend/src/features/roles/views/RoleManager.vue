@@ -1,5 +1,6 @@
 <template>
   <div class="role-manager-modern">
+    <LoadingOverlay :visible="loading || saving" />
     <a-card class="role-header-card" bordered>
       <template #title>
         <div class="role-header-flex">
@@ -69,6 +70,7 @@ import { ref, onMounted, computed } from "vue";
 import { message } from "ant-design-vue";
 import { useStore } from "vuex";
 import { useI18n } from "vue-i18n";
+import LoadingOverlay from "@/core/components/common/LoadingOverlay.vue";
 import {
   TeamOutlined,
   PlusOutlined,

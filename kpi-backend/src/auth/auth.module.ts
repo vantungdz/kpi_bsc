@@ -9,13 +9,15 @@ import { EmployeesModule } from 'src/employees/employees.module';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { SessionService } from './session.service';
 import { UserSession } from './entities/user-session.entity';
+import { PasswordResetToken } from './entities/password-reset-token.entity';
+import { EmailService } from '../common/services/email.service';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
     }),
-    TypeOrmModule.forFeature([UserSession]),
+    TypeOrmModule.forFeature([UserSession, PasswordResetToken]),
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => {
@@ -31,8 +33,8 @@ import { UserSession } from './entities/user-session.entity';
     EmployeesModule,
     require('../audit-log/audit-log.module').AuditLogModule,
   ],
-  providers: [AuthService, JwtStrategy, SessionService],
+  providers: [AuthService, JwtStrategy, SessionService, EmailService],
   controllers: [AuthController],
-  exports: [JwtModule, SessionService],
+  exports: [JwtModule, SessionService, EmailService],
 })
 export class AuthModule {}
