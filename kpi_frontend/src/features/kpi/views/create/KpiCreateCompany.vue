@@ -146,7 +146,28 @@
       </a-form-item>
 
       <a-row :gutter="12">
-        <a-col :span="12">
+        <a-col :span="8">
+          <a-form-item
+        class="textLabel"
+        :label="$t('kpiCycle')"
+        name="review_cycle_id"
+      >
+        <a-select
+          v-model:value="form.review_cycle_id"
+          :placeholder="$t('selectKpiCycle')"
+          show-search
+          allow-clear
+          :options="reviewCycleOptions"
+          :filter-option="
+            (input, option) =>
+              option.label.toLowerCase().includes(input.toLowerCase())
+          "
+          :loading="loadingReviewCycles"
+          @change="handleReviewCycleChange"
+        />
+      </a-form-item>
+         </a-col>
+        <a-col :span="8">
           <a-form-item
             class="textLabel"
             :label="$t('dateStart')"
@@ -156,11 +177,12 @@
               v-model:value="form.start_date"
               style="width: 100%"
               value-format="YYYY-MM-DD"
+              :disabled="true"
             />
           </a-form-item>
         </a-col>
 
-        <a-col :span="12">
+        <a-col :span="8">
           <a-form-item
             class="textLabel"
             :label="$t('dateEnd')"
@@ -174,6 +196,7 @@
               v-model:value="form.end_date"
               style="width: 100%"
               value-format="YYYY-MM-DD"
+              :disabled="true"
             />
           </a-form-item>
         </a-col>
@@ -347,6 +370,7 @@ import { useRouter, useRoute } from "vue-router";
 import { useStore } from "vuex";
 import { getTranslatedErrorMessage } from "@/core/services/messageTranslator";
 import i18n from "@/core/i18n";
+import { getReviewCycles } from "@/core/services/kpiReviewApi";
 
 import {
   notification,
@@ -388,6 +412,8 @@ const formRef = ref();
 const selectedTemplateKpiId = ref(null);
 const loadingKpiTemplate = ref(false);
 const departmentTreeData = ref([]);
+const reviewCycles = ref([]);
+const loadingReviewCycles = ref(false);
 const { t: $t } = useI18n();
 
 const form = ref({
@@ -399,6 +425,7 @@ const form = ref({
   weight: null,
   frequency: null,
   perspective_id: null,
+  review_cycle_id: null,
   start_date: null,
   end_date: null,
   section_id: [],
@@ -507,6 +534,13 @@ const kpiTemplateOptions = computed(() =>
   kpiTemplateList.value.map((kpi) => ({
     value: kpi.id,
     label: kpi.name,
+  }))
+);
+
+const reviewCycleOptions = computed(() =>
+  reviewCycles.value.map((cycle) => ({
+    value: cycle.id,
+    label: cycle.name,
   }))
 );
 
@@ -700,6 +734,7 @@ const resetForm = (clearTemplateSelection = false) => {
     weight: null,
     frequency: null,
     perspective_id: null,
+    review_cycle_id: null,
     start_date: null,
     end_date: null,
     section_id: [],
@@ -713,6 +748,54 @@ const resetForm = (clearTemplateSelection = false) => {
   assignmentError.value = null;
   if (clearTemplateSelection) {
     selectedTemplateKpiId.value = null;
+  }
+};
+
+const handleReviewCycleChange = (cycleId) => {
+  if (!cycleId) {
+    form.value.start_date = null;
+    form.value.end_date = null;
+    return;
+  }
+  const selectedCycle = reviewCycles.value.find((c) => c.id === cycleId);
+  if (selectedCycle) {
+    form.value.start_date = dayjs(selectedCycle.startDate).format("YYYY-MM-DD");
+    form.value.end_date = dayjs(selectedCycle.endDate).format("YYYY-MM-DD");
+    // Trigger validation for end_date
+    formRef.value?.validateFields(["end_date"]).catch(() => {});
+  }
+};
+
+const fetchReviewCycles = async () => {
+  loadingReviewCycles.value = true;
+  try {
+    const cycles = await getReviewCycles();
+    reviewCycles.value = cycles;
+    
+    // Tự động chọn chu kì mà ngày hiện tại nằm trong khoảng thời gian
+    if (cycles && cycles.length > 0 && !form.value.review_cycle_id) {
+      const today = dayjs().startOf("day");
+      const currentCycle = cycles.find((cycle) => {
+        const startDate = dayjs(cycle.startDate).startOf("day");
+        const endDate = dayjs(cycle.endDate).startOf("day");
+        return (
+          (today.isAfter(startDate, "day") || today.isSame(startDate, "day")) &&
+          (today.isBefore(endDate, "day") || today.isSame(endDate, "day"))
+        );
+      });
+      
+      if (currentCycle) {
+        form.value.review_cycle_id = currentCycle.id;
+        handleReviewCycleChange(currentCycle.id);
+      }
+    }
+  } catch (error) {
+    console.error("Error fetching review cycles:", error);
+    notification.error({
+      message: "Failed to load review cycles",
+    });
+  } finally {
+    loadingReviewCycles.value = false;
   }
 };
 
@@ -746,6 +829,19 @@ const loadKpiTemplate = async (selectedId) => {
       form.value.end_date = kpiDetail.end_date
         ? dayjs(kpiDetail.end_date)
         : null;
+      // Try to match with review cycle
+      if (kpiDetail.start_date && kpiDetail.end_date) {
+        const matchingCycle = reviewCycles.value.find(
+          (cycle) =>
+            dayjs(cycle.startDate).format("YYYY-MM-DD") ===
+              dayjs(kpiDetail.start_date).format("YYYY-MM-DD") &&
+            dayjs(cycle.endDate).format("YYYY-MM-DD") ===
+              dayjs(kpiDetail.end_date).format("YYYY-MM-DD")
+        );
+        if (matchingCycle) {
+          form.value.review_cycle_id = matchingCycle.id;
+        }
+      }
       form.value.assigned_user_id = null;
       notification.success({
         message: `Loaded data from KPI: ${kpiDetail.name}`,
@@ -1058,22 +1154,22 @@ const validateEndDate = async (_rule, value) => {
     return Promise.resolve();
   }
   if (freq === "weekly") {
-    if (end.diff(start, "week") < 1) {
+    if (end.diff(start, "day") < 6) {
       return Promise.reject(new Error($t("endDateAtLeastOneWeek")));
     }
   }
   if (freq === "monthly") {
-    if (end.diff(start, "month") < 1) {
+    if (end.diff(start, "day") < 29) {
       return Promise.reject(new Error($t("endDateAtLeastOneMonth")));
     }
   }
   if (freq === "quarterly") {
-    if (end.diff(start, "month") < 3) {
+    if (end.diff(start, "day") < 89) {
       return Promise.reject(new Error($t("endDateAtLeastOneQuarter")));
     }
   }
   if (freq === "yearly") {
-    if (end.diff(start, "year") < 1) {
+    if (end.diff(start, "day") < 364) {
       return Promise.reject(new Error($t("endDateAtLeastOneYear")));
     }
   }
@@ -1136,6 +1232,12 @@ const formRules = reactive({
       message: $t("pleaseSelectFrequency"),
     },
   ],
+  review_cycle_id: [
+    {
+      required: true,
+      message: $t("pleaseSelectKpiCycle"),
+    },
+  ],
   start_date: [
     {
       required: true,
@@ -1192,6 +1294,7 @@ onMounted(async () => {
       store.dispatch("kpis/fetchAllKpisForSelect"),
       store.dispatch("formula/fetchFormulas"),
       loadDepartmentTreeData(),
+      fetchReviewCycles(),
     ]);
     const templateKpiIdFromRoute = route.query.templateKpiId;
     if (templateKpiIdFromRoute) {

@@ -149,7 +149,29 @@
       </a-form-item>
 
       <a-row :gutter="12">
-        <a-col :span="6">
+        <a-col :span="8">
+          <a-form-item
+        class="textLabel"
+        :label="$t('kpiCycle')"
+        name="review_cycle_id"
+        :rules="[{ required: true, message: $t('pleaseSelectKpiCycle') }]"
+      >
+        <a-select
+          v-model:value="form.review_cycle_id"
+          :placeholder="$t('selectKpiCycle')"
+          show-search
+          allow-clear
+          :options="reviewCycleOptions"
+          :filter-option="
+            (input, option) =>
+              option.label.toLowerCase().includes(input.toLowerCase())
+          "
+          :loading="loadingReviewCycles"
+          @change="handleReviewCycleChange"
+        />
+      </a-form-item>
+        </a-col>
+        <a-col :span="8">
           <a-form-item
             :label="$t('dateStart')"
             name="start_date"
@@ -158,10 +180,11 @@
             <a-date-picker
               v-model:value="form.start_date"
               style="width: 100%"
+              :disabled="true"
             />
           </a-form-item>
         </a-col>
-        <a-col :span="6">
+        <a-col :span="8">
           <a-form-item
             :label="$t('dateEnd')"
             name="end_date"
@@ -170,7 +193,11 @@
               { validator: validateEndDate, trigger: 'change' },
             ]"
           >
-            <a-date-picker v-model:value="form.end_date" style="width: 100%" />
+            <a-date-picker
+              v-model:value="form.end_date"
+              style="width: 100%"
+              :disabled="true"
+            />
           </a-form-item>
         </a-col>
       </a-row>
@@ -229,11 +256,14 @@ import {
 } from "@/core/constants/rbac.constants.js";
 import { useI18n } from "vue-i18n";
 import LoadingOverlay from "@/core/components/common/LoadingOverlay.vue";
+import { getReviewCycles } from "@/core/services/kpiReviewApi";
 
 const router = useRouter();
 const store = useStore();
 const loading = ref(false);
 const formRef = ref(null);
+const reviewCycles = ref([]);
+const loadingReviewCycles = ref(false);
 const { t: $t } = useI18n();
 
 const userPermissions = computed(
@@ -258,6 +288,7 @@ const form = ref({
   perspective_id: null,
   parent: null,
   assigned_to_id: null,
+  review_cycle_id: null,
   start_date: null,
   end_date: null,
   description: "",
@@ -268,6 +299,13 @@ const perspectiveList = computed(
   () => store.getters["perspectives/perspectiveList"] || []
 );
 const formulaList = computed(() => store.getters["formula/getFormulas"] || []);
+
+const reviewCycleOptions = computed(() =>
+  reviewCycles.value.map((cycle) => ({
+    value: cycle.id,
+    label: cycle.name,
+  }))
+);
 
 const handleNumericInput = (field, event) => {
   let value = event.target.value.replace(/[^0-9.]/g, "");
@@ -313,22 +351,22 @@ const validateEndDate = async (_rule, value) => {
     return Promise.resolve();
   }
   if (freq === "weekly") {
-    if (end.diff(start, "week") < 1) {
+    if (end.diff(start, "day") < 6) {
       return Promise.reject(new Error($t("endDateAtLeastOneWeek")));
     }
   }
   if (freq === "monthly") {
-    if (end.diff(start, "month") < 1) {
+    if (end.diff(start, "day") < 29) {
       return Promise.reject(new Error($t("endDateAtLeastOneMonth")));
     }
   }
   if (freq === "quarterly") {
-    if (end.diff(start, "month") < 3) {
+    if (end.diff(start, "day") < 89) {
       return Promise.reject(new Error($t("endDateAtLeastOneQuarter")));
     }
   }
   if (freq === "yearly") {
-    if (end.diff(start, "year") < 1) {
+    if (end.diff(start, "day") < 364) {
       return Promise.reject(new Error($t("endDateAtLeastOneYear")));
     }
   }
@@ -337,6 +375,54 @@ const validateEndDate = async (_rule, value) => {
 
 const formatToDateString = (dateValue) => {
   return dateValue ? dayjs(dateValue).format("YYYY-MM-DD") : null;
+};
+
+const handleReviewCycleChange = (cycleId) => {
+  if (!cycleId) {
+    form.value.start_date = null;
+    form.value.end_date = null;
+    return;
+  }
+  const selectedCycle = reviewCycles.value.find((c) => c.id === cycleId);
+  if (selectedCycle) {
+    form.value.start_date = dayjs(selectedCycle.startDate);
+    form.value.end_date = dayjs(selectedCycle.endDate);
+    // Trigger validation for end_date
+    formRef.value?.validateFields(["end_date"]).catch(() => {});
+  }
+};
+
+const fetchReviewCycles = async () => {
+  loadingReviewCycles.value = true;
+  try {
+    const cycles = await getReviewCycles();
+    reviewCycles.value = cycles;
+    
+    // Tự động chọn chu kì mà ngày hiện tại nằm trong khoảng thời gian
+    if (cycles && cycles.length > 0 && !form.value.review_cycle_id) {
+      const today = dayjs().startOf("day");
+      const currentCycle = cycles.find((cycle) => {
+        const startDate = dayjs(cycle.startDate).startOf("day");
+        const endDate = dayjs(cycle.endDate).startOf("day");
+        return (
+          (today.isAfter(startDate, "day") || today.isSame(startDate, "day")) &&
+          (today.isBefore(endDate, "day") || today.isSame(endDate, "day"))
+        );
+      });
+      
+      if (currentCycle) {
+        form.value.review_cycle_id = currentCycle.id;
+        handleReviewCycleChange(currentCycle.id);
+      }
+    }
+  } catch (error) {
+    console.error("Error fetching review cycles:", error);
+    notification.error({
+      message: "Failed to load review cycles",
+    });
+  } finally {
+    loadingReviewCycles.value = false;
+  }
 };
 
 const handleChangeCreate = async () => {
@@ -434,9 +520,12 @@ watch(
   }
 );
 
-onMounted(() => {
-  store.dispatch("perspectives/fetchPerspectives");
-  store.dispatch("formula/fetchFormulas");
+onMounted(async () => {
+  await Promise.all([
+    store.dispatch("perspectives/fetchPerspectives"),
+    store.dispatch("formula/fetchFormulas"),
+    fetchReviewCycles(),
+  ]);
 });
 </script>
 

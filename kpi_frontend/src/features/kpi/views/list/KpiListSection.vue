@@ -90,26 +90,25 @@
               </a-select>
             </a-form-item>
           </a-col>
-          <a-col :span="3">
-            <a-form-item :label="$t('startDate')" class="filter-label-top">
-              <a-date-picker
-                v-model:value="localFilters.startDate"
+          <a-col :span="6">
+            <a-form-item :label="$t('kpiCycle')" class="filter-label-top">
+              <a-select
+                v-model:value="localFilters.reviewCycleId"
                 style="width: 100%"
-                @change="applyFilters"
+                :placeholder="$t('selectKpiCycle')"
                 allow-clear
                 size="middle"
-              />
-            </a-form-item>
-          </a-col>
-          <a-col :span="3">
-            <a-form-item :label="$t('endDate')" class="filter-label-top">
-              <a-date-picker
-                v-model:value="localFilters.endDate"
-                style="width: 100%"
+                show-search
+                :options="reviewCycleOptions"
+                :filter-option="
+                  (input, option) =>
+                    option.label.toLowerCase().includes(input.toLowerCase())
+                "
+                :loading="loadingReviewCycles"
                 @change="applyFilters"
-                allow-clear
-                size="middle"
-              />
+              >
+                <template #suffixIcon><schedule-outlined /></template>
+              </a-select>
             </a-form-item>
           </a-col>
           <a-col
@@ -126,8 +125,7 @@
                     localFilters.name = '';
                     localFilters.departmentId = null;
                     localFilters.sectionId = 0;
-                    localFilters.startDate = '';
-                    localFilters.endDate = '';
+                    localFilters.reviewCycleId = null;
                     applyFilters();
                   }
                 "
@@ -385,7 +383,6 @@ import {
   Input as AInput,
   Select as ASelect,
   SelectOption as ASelectOption,
-  DatePicker as ADatePicker,
   FormItem as AFormItem,
   Alert as AAlert,
   Collapse as ACollapse,
@@ -410,6 +407,7 @@ import {
   SCOPES,
 } from "@/core/constants/rbac.constants";
 import LoadingOverlay from "@/core/components/common/LoadingOverlay.vue";
+import { getReviewCycles } from "@/core/services/kpiReviewApi";
 
 const store = useStore();
 const router = useRouter();
@@ -512,9 +510,10 @@ const localFilters = reactive({
   name: "",
   departmentId: null,
   sectionId: null,
-  startDate: "",
-  endDate: "",
+  reviewCycleId: null,
 });
+const reviewCycles = ref([]);
+const loadingReviewCycles = ref(false);
 
 const sectionGroups = computed(() => {
   // Don't display data when loading
@@ -789,13 +788,18 @@ const applyFilters = async () => {
       sectionIdForApi: sectionIdForPath,
       departmentIdForQuery: departmentId,
       name: localFilters.name,
-      start_date: localFilters.startDate
-        ? dayjs(localFilters.startDate).format("YYYY-MM-DD")
-        : undefined,
-      end_date: localFilters.endDate
-        ? dayjs(localFilters.endDate).format("YYYY-MM-DD")
-        : undefined,
     };
+    
+    // Get start_date and end_date from selected review cycle
+    if (localFilters.reviewCycleId) {
+      const selectedCycle = reviewCycles.value.find(
+        (c) => c.id === localFilters.reviewCycleId
+      );
+      if (selectedCycle) {
+        filtersToSend.start_date = dayjs(selectedCycle.startDate).format("YYYY-MM-DD");
+        filtersToSend.end_date = dayjs(selectedCycle.endDate).format("YYYY-MM-DD");
+      }
+    }
 
     await store.dispatch("kpis/fetchSectionKpis", filtersToSend);
 
@@ -804,6 +808,46 @@ const applyFilters = async () => {
     error.value = err.message || "Failed to fetch KPIs.";
   } finally {
     loading.value = false;
+  }
+};
+
+const reviewCycleOptions = computed(() =>
+  reviewCycles.value.map((cycle) => ({
+    value: cycle.id,
+    label: cycle.name,
+  }))
+);
+
+const fetchReviewCycles = async () => {
+  loadingReviewCycles.value = true;
+  try {
+    const cycles = await getReviewCycles();
+    reviewCycles.value = cycles;
+    
+    // Tự động chọn chu kì mà ngày hiện tại nằm trong khoảng thời gian
+    if (cycles && cycles.length > 0 && !localFilters.reviewCycleId) {
+      const today = dayjs().startOf("day");
+      const currentCycle = cycles.find((cycle) => {
+        const startDate = dayjs(cycle.startDate).startOf("day");
+        const endDate = dayjs(cycle.endDate).startOf("day");
+        return (
+          (today.isAfter(startDate, "day") || today.isSame(startDate, "day")) &&
+          (today.isBefore(endDate, "day") || today.isSame(endDate, "day"))
+        );
+      });
+      
+      if (currentCycle) {
+        localFilters.reviewCycleId = currentCycle.id;
+        applyFilters();
+      }
+    }
+  } catch (error) {
+    console.error("Error fetching review cycles:", error);
+    notification.error({
+      message: "Failed to load review cycles",
+    });
+  } finally {
+    loadingReviewCycles.value = false;
   }
 };
 
@@ -1045,7 +1089,10 @@ const onCollapseChange = () => {
 onMounted(async () => {
   try {
     document.body.classList.add("no-outer-scroll");
-    await store.dispatch("departments/fetchDepartments");
+    await Promise.all([
+      fetchReviewCycles(),
+      store.dispatch("departments/fetchDepartments"),
+    ]);
 
     localFilters.departmentId = null;
 

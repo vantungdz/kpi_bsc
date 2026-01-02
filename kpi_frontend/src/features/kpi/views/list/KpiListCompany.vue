@@ -54,24 +54,24 @@
               </a-select>
             </a-form-item>
           </a-col>
-          <a-col :span="4">
-            <a-form-item :label="$t('startDate')" class="filter-label-top">
-              <a-date-picker
-                v-model:value="localFilters.startDate"
+          <a-col :span="8">
+            <a-form-item :label="$t('kpiCycle')" class="filter-label-top">
+              <a-select
+                v-model:value="localFilters.reviewCycleId"
                 style="width: 100%"
+                :placeholder="$t('selectKpiCycle')"
                 allow-clear
                 size="middle"
-              />
-            </a-form-item>
-          </a-col>
-          <a-col :span="4">
-            <a-form-item :label="$t('endDate')" class="filter-label-top">
-              <a-date-picker
-                v-model:value="localFilters.endDate"
-                style="width: 100%"
-                allow-clear
-                size="middle"
-              />
+                show-search
+                :options="reviewCycleOptions"
+                :filter-option="
+                  (input, option) =>
+                    option.label.toLowerCase().includes(input.toLowerCase())
+                "
+                :loading="loadingReviewCycles"
+              >
+                <template #suffixIcon><schedule-outlined /></template>
+              </a-select>
             </a-form-item>
           </a-col>
           <a-col
@@ -87,8 +87,7 @@
                   () => {
                     localFilters.name = '';
                     localFilters.departmentId = '';
-                    localFilters.startDate = null;
-                    localFilters.endDate = null;
+                    localFilters.reviewCycleId = null;
                     applyFilters();
                   }
                 "
@@ -340,7 +339,6 @@ import {
   Input as AInput,
   Select as ASelect,
   SelectOption as ASelectOption,
-  DatePicker as ADatePicker,
   Row as ARow,
   Col as ACol,
   FormItem as AFormItem,
@@ -372,6 +370,7 @@ import {
 } from "@/core/constants/kpiStatus";
 import { RBAC_ACTIONS, RBAC_RESOURCES } from "@/core/constants/rbac.constants";
 import LoadingOverlay from "@/core/components/common/LoadingOverlay.vue";
+import { getReviewCycles } from "@/core/services/kpiReviewApi";
 
 const store = useStore();
 const router = useRouter();
@@ -381,9 +380,10 @@ const localFilters = reactive({
   name: "",
   departmentId: "",
   status: "",
-  startDate: null,
-  endDate: null,
+  reviewCycleId: null,
 });
+const reviewCycles = ref([]);
+const loadingReviewCycles = ref(false);
 const isDeleteModalVisible = ref(false);
 const selectedKpiId = ref(null);
 const selectedKpiName = ref(null);
@@ -601,6 +601,13 @@ const goToCreateKpi = () => {
   router.push({ name: "KpiCreateCompany", query: { scope: "company" } });
 };
 
+const reviewCycleOptions = computed(() =>
+  reviewCycles.value.map((cycle) => ({
+    value: cycle.id,
+    label: cycle.name,
+  }))
+);
+
 const loadKpis = (page = 1) => {
   const params = {
     page: page,
@@ -611,12 +618,52 @@ const loadKpis = (page = 1) => {
   if (localFilters.departmentId)
     params.department_id = localFilters.departmentId;
   if (localFilters.status) params.status = localFilters.status;
-  if (localFilters.startDate)
-    params.start_date = dayjs(localFilters.startDate).format("YYYY-MM-DD");
-  if (localFilters.endDate)
-    params.end_date = dayjs(localFilters.endDate).format("YYYY-MM-DD");
+  
+  // Get start_date and end_date from selected review cycle
+  if (localFilters.reviewCycleId) {
+    const selectedCycle = reviewCycles.value.find(
+      (c) => c.id === localFilters.reviewCycleId
+    );
+    if (selectedCycle) {
+      params.start_date = dayjs(selectedCycle.startDate).format("YYYY-MM-DD");
+      params.end_date = dayjs(selectedCycle.endDate).format("YYYY-MM-DD");
+    }
+  }
 
   store.dispatch("kpis/fetchKpis", params);
+};
+
+const fetchReviewCycles = async () => {
+  loadingReviewCycles.value = true;
+  try {
+    const cycles = await getReviewCycles();
+    reviewCycles.value = cycles;
+    
+    // Tự động chọn chu kì mà ngày hiện tại nằm trong khoảng thời gian
+    if (cycles && cycles.length > 0 && !localFilters.reviewCycleId) {
+      const today = dayjs().startOf("day");
+      const currentCycle = cycles.find((cycle) => {
+        const startDate = dayjs(cycle.startDate).startOf("day");
+        const endDate = dayjs(cycle.endDate).startOf("day");
+        return (
+          (today.isAfter(startDate, "day") || today.isSame(startDate, "day")) &&
+          (today.isBefore(endDate, "day") || today.isSame(endDate, "day"))
+        );
+      });
+      
+      if (currentCycle) {
+        localFilters.reviewCycleId = currentCycle.id;
+        applyFilters();
+      }
+    }
+  } catch (error) {
+    console.error("Error fetching review cycles:", error);
+    notification.error({
+      message: "Failed to load review cycles",
+    });
+  } finally {
+    loadingReviewCycles.value = false;
+  }
 };
 
 const applyFilters = () => {
@@ -712,9 +759,11 @@ const goToDetail = (record) => {
 };
 
 onMounted(async () => {
+  await Promise.all([
+    fetchReviewCycles(),
+    store.dispatch("departments/fetchDepartments"),
+  ]);
   await loadKpis();
-
-  await store.dispatch("departments/fetchDepartments");
   document.body.classList.add("no-outer-scroll");
 });
 
