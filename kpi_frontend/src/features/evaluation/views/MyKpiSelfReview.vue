@@ -45,7 +45,7 @@
         style="max-width: unset; margin-left: 0; margin-right: 0"
       >
         <a-select
-          v-model="selectedCycle"
+          v-model:value="selectedCycle"
           :options="cycleOptions"
           :placeholder="$t('selectCycle')"
           style="width: 220px"
@@ -411,9 +411,10 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed, watch } from "vue";
+import { ref, onMounted, computed, watch, nextTick } from "vue";
 import { useStore } from "vuex";
 import { useI18n } from "vue-i18n";
+import dayjs from "dayjs";
 import {
   submitMyKpiSelfReview,
   getReviewCycles,
@@ -533,8 +534,35 @@ const fetchMyKpis = async () => {
 };
 
 const fetchCycles = async () => {
-  const res = await getReviewCycles();
-  cycleOptions.value = res.map((c) => ({ label: c.name, value: c.id }));
+  try {
+    const res = await getReviewCycles();
+    if (!res || !Array.isArray(res)) {
+      return;
+    }
+    
+    cycleOptions.value = res.map((c) => ({ label: c.name, value: c.id }));
+    
+    if (res.length > 0 && !selectedCycle.value) {
+      const today = dayjs().startOf("day");
+      const currentCycle = res.find((cycle) => {
+        if (!cycle.startDate || !cycle.endDate) return false;
+        const startDate = dayjs(cycle.startDate).startOf("day");
+        const endDate = dayjs(cycle.endDate).startOf("day");
+        return (
+          (today.isAfter(startDate, "day") || today.isSame(startDate, "day")) &&
+          (today.isBefore(endDate, "day") || today.isSame(endDate, "day"))
+        );
+      });
+      
+      if (currentCycle) {
+        selectedCycle.value = currentCycle.id;
+        await nextTick();
+        fetchMyKpis();
+      }
+    }
+  } catch (error) {
+    errorMessageKey.value = "failedToLoadReviewCycles";
+  }
 };
 
 const submitSelfReview = async () => {

@@ -125,7 +125,8 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from "vue";
+import { ref, computed, onMounted, nextTick } from "vue";
+import dayjs from "dayjs";
 import {
   getKpiReviewList,
   getReviewCycles,
@@ -239,8 +240,35 @@ const fetchReviews = async () => {
 };
 
 const fetchCycles = async () => {
-  const res = await getReviewCycles();
-  cycleOptions.value = res.map((c) => ({ label: c.name, value: c.id }));
+  try {
+    const res = await getReviewCycles();
+    if (!res || !Array.isArray(res)) {
+      return;
+    }
+    
+    cycleOptions.value = res.map((c) => ({ label: c.name, value: c.id }));
+    
+    if (res.length > 0 && !selectedCycle.value) {
+      const today = dayjs().startOf("day");
+      const currentCycle = res.find((cycle) => {
+        if (!cycle.startDate || !cycle.endDate) return false;
+        const startDate = dayjs(cycle.startDate).startOf("day");
+        const endDate = dayjs(cycle.endDate).startOf("day");
+        return (
+          (today.isAfter(startDate, "day") || today.isSame(startDate, "day")) &&
+          (today.isBefore(endDate, "day") || today.isSame(endDate, "day"))
+        );
+      });
+      
+      if (currentCycle) {
+        selectedCycle.value = currentCycle.id;
+        await nextTick();
+        fetchReviews();
+      }
+    }
+  } catch (error) {
+    // Error handling if needed
+  }
 };
 
 const openReviewForm = (review) => {
