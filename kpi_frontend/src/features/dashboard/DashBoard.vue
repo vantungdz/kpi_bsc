@@ -40,6 +40,7 @@ import {
   BarChartOutlined,
   AppstoreOutlined,
   ArrowRightOutlined,
+  DashboardOutlined,
 } from "@ant-design/icons-vue";
 import { useStore } from "vuex";
 import { computed } from "vue";
@@ -68,6 +69,38 @@ const store = useStore();
 const loading = computed(() => store.getters["loading/isLoading"]);
 
 const dashboardCards = [
+  {
+    key: "bsc-overview",
+    to: "/dashboard/bsc-overview",
+    icon: DashboardOutlined,
+    title: "bscOverview",
+    desc: "bscOverviewDescription",
+    class: "card-bsc-overview",
+  },
+  {
+    key: "kpi-by-perspective",
+    to: "/dashboard/kpi-by-perspective",
+    icon: AppstoreOutlined,
+    title: "kpiByPerspective",
+    desc: "kpiByPerspectiveDescription",
+    class: "card-kpi-by-perspective",
+  },
+  {
+    key: "kpi-heatmap",
+    to: "/dashboard/kpi-heatmap",
+    icon: BarChartOutlined,
+    title: "kpiHeatmap",
+    desc: "kpiHeatmapDescription",
+    class: "card-kpi-heatmap",
+  },
+  {
+    key: "kpi-trend-analysis",
+    to: "/dashboard/kpi-trend-analysis",
+    icon: LineChartOutlined,
+    title: "kpiTrendAnalysis",
+    desc: "kpiTrendAnalysisDescription",
+    class: "card-kpi-trend-analysis",
+  },
   {
     key: "kpi-stats",
     to: "/dashboard/kpi-process-stats",
@@ -328,5 +361,73 @@ const dashboardCards = [
 }
 .card-objective-stats p {
   color: #c41d3b; /* Màu chữ vừa của hồng đậm */
+}
+
+.card-bsc-overview {
+  border-left: 5px solid #1976d2; /* Màu xanh dương đậm cho BSC */
+}
+.card-bsc-overview :deep(.ant-card-head) {
+  background-color: #e3f2fd; /* Màu nền nhạt của xanh dương */
+}
+.card-bsc-overview :deep(.ant-card-body) {
+  background-color: #f5f9ff; /* Màu nền rất nhạt của xanh dương */
+}
+.card-bsc-overview .ant-card-head-title,
+.card-bsc-overview :deep(.anticon) {
+  color: #0d47a1; /* Màu chữ đậm của xanh dương */
+}
+.card-bsc-overview p {
+  color: #1565c0; /* Màu chữ vừa của xanh dương */
+}
+
+.card-kpi-by-perspective {
+  border-left: 5px solid #722ed1; /* Màu tím */
+}
+.card-kpi-by-perspective :deep(.ant-card-head) {
+  background-color: #f9f0ff;
+}
+.card-kpi-by-perspective :deep(.ant-card-body) {
+  background-color: #fef6ff;
+}
+.card-kpi-by-perspective .ant-card-head-title,
+.card-kpi-by-perspective :deep(.anticon) {
+  color: #391085;
+}
+.card-kpi-by-perspective p {
+  color: #531dab;
+}
+
+.card-kpi-heatmap {
+  border-left: 5px solid #ff4d4f; /* Màu đỏ */
+}
+.card-kpi-heatmap :deep(.ant-card-head) {
+  background-color: #fff1f0;
+}
+.card-kpi-heatmap :deep(.ant-card-body) {
+  background-color: #fff5f5;
+}
+.card-kpi-heatmap .ant-card-head-title,
+.card-kpi-heatmap :deep(.anticon) {
+  color: #a8071a;
+}
+.card-kpi-heatmap p {
+  color: #cf1322;
+}
+
+.card-kpi-trend-analysis {
+  border-left: 5px solid #13c2c2; /* Màu teal */
+}
+.card-kpi-trend-analysis :deep(.ant-card-head) {
+  background-color: #e6fffb;
+}
+.card-kpi-trend-analysis :deep(.ant-card-body) {
+  background-color: #f0fffb;
+}
+.card-kpi-trend-analysis .ant-card-head-title,
+.card-kpi-trend-analysis :deep(.anticon) {
+  color: #006d75;
+}
+.card-kpi-trend-analysis p {
+  color: #08979c;
 }
 </style>

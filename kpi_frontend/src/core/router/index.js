@@ -41,6 +41,10 @@ import PageUnauthorized from "@/features/common/PageUnauthorized.vue";
 import StrategicObjectivesView from "../../features/strategic-objectives/views/StrategicObjectivesView.vue";
 import StrategicObjectivesStats from "@/features/dashboard/views/StrategicObjectivesStats.vue";
 import AuditLogView from "@/features/dashboard/views/AuditLogView.vue";
+import BscOverview from "@/features/dashboard/views/BscOverview.vue";
+import KpiByPerspective from "@/features/dashboard/views/KpiByPerspective.vue";
+import KpiHeatmap from "@/features/dashboard/views/KpiHeatmap.vue";
+import KpiTrendAnalysis from "@/features/dashboard/views/KpiTrendAnalysis.vue";
 import CompetencyList from "../../features/competency/views/CompetencyList.vue";
 import EmployeeSkillList from "../../features/competency/views/EmployeeSkillList.vue";
 import PersonalGoalList from "../../features/personal-goal/views/PersonalGoalList.vue";
@@ -171,6 +175,62 @@ const routes = [
     path: "/dashboard/audit-log",
     name: "AuditLogView",
     component: AuditLogView,
+    meta: {
+      requiresAuth: true,
+      permissions: [
+        {
+          action: RBAC_ACTIONS.VIEW,
+          resource: RBAC_RESOURCES.DASHBOARD,
+        },
+      ],
+    },
+  },
+  {
+    path: "/dashboard/bsc-overview",
+    name: "BscOverview",
+    component: BscOverview,
+    meta: {
+      requiresAuth: true,
+      permissions: [
+        {
+          action: RBAC_ACTIONS.VIEW,
+          resource: RBAC_RESOURCES.DASHBOARD,
+        },
+      ],
+    },
+  },
+  {
+    path: "/dashboard/kpi-by-perspective",
+    name: "KpiByPerspective",
+    component: KpiByPerspective,
+    meta: {
+      requiresAuth: true,
+      permissions: [
+        {
+          action: RBAC_ACTIONS.VIEW,
+          resource: RBAC_RESOURCES.DASHBOARD,
+        },
+      ],
+    },
+  },
+  {
+    path: "/dashboard/kpi-heatmap",
+    name: "KpiHeatmap",
+    component: KpiHeatmap,
+    meta: {
+      requiresAuth: true,
+      permissions: [
+        {
+          action: RBAC_ACTIONS.VIEW,
+          resource: RBAC_RESOURCES.DASHBOARD,
+        },
+      ],
+    },
+  },
+  {
+    path: "/dashboard/kpi-trend-analysis",
+    name: "KpiTrendAnalysis",
+    component: KpiTrendAnalysis,
     meta: {
       requiresAuth: true,
       permissions: [
