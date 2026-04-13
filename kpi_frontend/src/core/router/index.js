@@ -365,8 +365,8 @@ const routes = [
     meta: { requiresAuth: true },
   },
   {
-    path: "/my-tasks",
-    name: "MyTasks",
+    path: "/control-panel",
+    name: "ControlPanel",
     component: MyTasksPage,
     meta: { requiresAuth: true },
   },
@@ -721,7 +721,7 @@ router.beforeEach((to, from, next) => {
   const isAuthenticated = store.getters["auth/isAuthenticated"];
 
   if (isAuthenticated && to.path === "/") {
-    next({ path: "/my-tasks" });
+    next({ path: "/control-panel" });
     return;
   }
 

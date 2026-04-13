@@ -150,7 +150,7 @@ const handleLogin = async (values) => {
   });
 
   if (success) {
-    router.push(route.query.redirect || "/my-tasks");
+    router.push(route.query.redirect || "/control-panel");
   } else {
     console.error("Login failed (handled by action).");
     formData.password = "";

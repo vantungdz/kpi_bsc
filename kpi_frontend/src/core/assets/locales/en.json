@@ -1527,7 +1527,7 @@
       "cardLead": "Suggested order: departments → sections → employees → roles → permissions → documents."
     },
     "items": {
-      "myTasks": "Open your workflow inbox and continue the next item that requires action.",
+      "kpiControlPanel": "Open the KPI control panel and monitor role-based workflow tasks.",
       "personalKpis": "See your assigned KPIs, update progress, and follow current workflow status.",
       "kpiDefinitionApproval": "Approve newly created KPI definitions so they become active and can be assigned.",
       "approvals": "Process pending KPI value (actuals) approvals at your level.",
@@ -1554,7 +1554,7 @@
       "systemDocs": "Open architecture, design, and system guidance documents."
     }
   },
-  "myTasks": "My Tasks",
+  "kpiControlPanel": "KPI Control Panel",
   "workflowStatus": "Workflow Status",
   "workflowInbox": {
     "title": "Coordinate KPI work",
@@ -1758,6 +1758,7 @@
       "viewDetail": "View detail",
       "update": "Update KPI",
       "selfReview": "Self review",
+      "viewStatus": "View status",
       "viewReview": "View review",
       "giveFeedback": "Give feedback",
       "reReview": "Review again",
@@ -1900,6 +1901,112 @@
       "completed": {
         "step": "Review completed",
         "next": "Open to inspect the final evaluation."
+      }
+    },
+    "dashboard": {
+      "rolePanel": {
+        "title": "Role-based control panel",
+        "subtitle": "Key indicators you should monitor in this session."
+      },
+      "timeline": {
+        "title": "KPI transition timeline",
+        "subtitle": "Track KPI progression across active, mid-year, and end-year stages.",
+        "notStart": "Not start",
+        "pendingCount": "{count} KPIs pending transition",
+        "active": {
+          "title": "Active KPI",
+          "description": "KPIs currently active in this cycle."
+        },
+        "midYear": {
+          "title": "Mid-year",
+          "description": "KPIs in the first submission phase."
+        },
+        "endYear": {
+          "title": "End-year",
+          "description": "KPIs in the final year-end phase."
+        }
+      },
+      "role": {
+        "employee": "Employee",
+        "section": "Section Lead",
+        "department": "Department Lead",
+        "company": "Manager"
+      },
+      "actions": {
+        "overdue": "Overdue"
+      },
+      "columns": {
+        "ownerScope": "Owner / KPI scope",
+        "workflowStep": "Current workflow step",
+        "nextActor": "Who acts next (by status)"
+      },
+      "nextActor": {
+        "notSubmitSelf": "You (KPI value not submitted yet)",
+        "notSubmitAssignee": "Assignee / handling team (KPI value not submitted yet)",
+        "pendingSection": "Section lead (waiting for section approval)",
+        "pendingDepartment": "Department lead (waiting for department approval)",
+        "pendingManager": "Manager (waiting for manager approval)",
+        "rejected": "Assignee (needs update after rejection)",
+        "approved": "Completed (no further action required)",
+        "submitted": "Next approver in the approval workflow"
+      },
+      "cards": {
+        "employeeAction": {
+          "label": "KPIs to update",
+          "hint": "Items requiring your immediate action"
+        },
+        "employeeOverdue": {
+          "label": "Overdue KPIs",
+          "hint": "Handle first to avoid delays"
+        },
+        "employeeWaiting": {
+          "label": "Waiting for approval",
+          "hint": "Submitted items awaiting feedback"
+        },
+        "leadApproval": {
+          "label": "Waiting for your approval",
+          "hintAllowed": "Your decision is required",
+          "hintDenied": "You do not have access to the approvals page"
+        },
+        "leadOverdue": {
+          "label": "Overdue KPIs",
+          "hint": "KPIs in your scope that are overdue"
+        },
+        "leadAttention": {
+          "label": "Need close follow-up",
+          "hint": "Flows currently requiring team action"
+        }
+      },
+      "priority": {
+        "title": "Today priorities",
+        "subtitle": "{role} - focus on items that need handling first.",
+        "empty": "No priority items right now. You are on track.",
+        "pendingApprovals": {
+          "label": "{count} approval requests",
+          "descAllowed": "Open approvals to process KPI items awaiting decision.",
+          "descDenied": "You do not have access to approvals. Shown for visibility only.",
+          "action": "Open approvals"
+        },
+        "overdue": {
+          "label": "{count} overdue KPIs",
+          "description": "Filter pipeline by overdue to unblock delayed items first.",
+          "action": "View overdue"
+        },
+        "dueSoon": {
+          "label": "{count} KPIs due soon",
+          "description": "Track near-deadline KPIs before they become overdue.",
+          "action": "View due soon"
+        },
+        "actionable": {
+          "label": "{count} items need your action",
+          "description": "Open action inbox to handle important tasks in order.",
+          "action": "Open inbox"
+        },
+        "reviewApprovals": {
+          "label": "{count} KPI reviews to monitor",
+          "description": "Check review progress to avoid end-of-cycle bottlenecks.",
+          "action": "View reviews"
+        }
       }
     }
   },

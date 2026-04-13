@@ -1531,7 +1531,7 @@
       "cardLead": "推奨順: 部署 → セクション → 従業員 → ロール定義 → 権限付与 → ドキュメント。"
     },
     "items": {
-      "myTasks": "ワークフロー受信箱を開き、次に対応すべき作業を続けます。",
+      "kpiControlPanel": "KPIコントロールパネルを開き、役割別のワークフロー作業を確認します。",
       "personalKpis": "自分に割り当てられたKPIを確認し、進捗更新と現在のワークフロー状態を確認します。",
       "kpiDefinitionApproval": "作成されたKPI定義を承認し、有効化して割り当て可能にします。",
       "approvals": "自分のレベルで待機しているKPI値（実績）の承認を処理します。",
@@ -1558,7 +1558,7 @@
       "systemDocs": "アーキテクチャ、設計、システムガイド文書を開きます。"
     }
   },
-  "myTasks": "マイタスク",
+  "kpiControlPanel": "KPIコントロールパネル",
   "workflowStatus": "ワークフロー状況",
   "workflowInbox": {
     "title": "KPIワークの調整",
@@ -1762,6 +1762,7 @@
       "viewDetail": "詳細を見る",
       "update": "KPIを更新",
       "selfReview": "自己評価",
+      "viewStatus": "ステータスを見る",
       "viewReview": "レビューを見る",
       "giveFeedback": "フィードバック",
       "reReview": "再レビュー",
@@ -1904,6 +1905,112 @@
       "completed": {
         "step": "レビュー完了",
         "next": "開いて最終評価を確認できます。"
+      }
+    },
+    "dashboard": {
+      "rolePanel": {
+        "title": "役割別コントロールパネル",
+        "subtitle": "このセッションで確認すべき主要指標です。"
+      },
+      "timeline": {
+        "title": "KPI遷移タイムライン",
+        "subtitle": "現行サイクルでの active・mid-year・end-year の進捗を確認します。",
+        "notStart": "未開始",
+        "pendingCount": "未遷移のKPI: {count} 件",
+        "active": {
+          "title": "稼働中KPI",
+          "description": "このサイクルで有効なKPI。"
+        },
+        "midYear": {
+          "title": "中間評価",
+          "description": "1回目提出フェーズに入ったKPI。"
+        },
+        "endYear": {
+          "title": "期末評価",
+          "description": "年末評価フェーズのKPI。"
+        }
+      },
+      "role": {
+        "employee": "従業員",
+        "section": "セクションリード",
+        "department": "部門リード",
+        "company": "マネージャー"
+      },
+      "actions": {
+        "overdue": "期限超過"
+      },
+      "columns": {
+        "ownerScope": "担当 / KPI 範囲",
+        "workflowStep": "現在のワークフローステップ",
+        "nextActor": "次の対応者（ステータス別）"
+      },
+      "nextActor": {
+        "notSubmitSelf": "あなた（KPI値が未提出）",
+        "notSubmitAssignee": "担当者 / 対応チーム（KPI値が未提出）",
+        "pendingSection": "セクションリード（セクション承認待ち）",
+        "pendingDepartment": "部門リード（部門承認待ち）",
+        "pendingManager": "マネージャー（マネージャー承認待ち）",
+        "rejected": "担当者（差し戻し後の更新が必要）",
+        "approved": "完了（追加対応不要）",
+        "submitted": "承認フロー上の次の承認者"
+      },
+      "cards": {
+        "employeeAction": {
+          "label": "更新が必要なKPI",
+          "hint": "今すぐ対応が必要な項目"
+        },
+        "employeeOverdue": {
+          "label": "期限超過KPI",
+          "hint": "遅延回避のため優先対応"
+        },
+        "employeeWaiting": {
+          "label": "承認待ち",
+          "hint": "提出済みでフィードバック待ちの項目"
+        },
+        "leadApproval": {
+          "label": "あなたの承認待ち",
+          "hintAllowed": "あなたの判断が必要です",
+          "hintDenied": "承認ページへのアクセス権がありません"
+        },
+        "leadOverdue": {
+          "label": "期限超過KPI",
+          "hint": "あなたの範囲内で期限超過しているKPI"
+        },
+        "leadAttention": {
+          "label": "要フォロー",
+          "hint": "チーム対応が必要なフロー"
+        }
+      },
+      "priority": {
+        "title": "本日の優先事項",
+        "subtitle": "{role} - 先に対応が必要な項目に集中します。",
+        "empty": "現在、優先項目はありません。順調です。",
+        "pendingApprovals": {
+          "label": "{count} 件の承認依頼",
+          "descAllowed": "承認一覧を開き、判断待ちのKPIを処理します。",
+          "descDenied": "承認ページへのアクセス権がないため、表示のみです。",
+          "action": "承認一覧を開く"
+        },
+        "overdue": {
+          "label": "{count} 件の期限超過KPI",
+          "description": "期限超過フィルターで遅延項目を優先的に解消します。",
+          "action": "期限超過を見る"
+        },
+        "dueSoon": {
+          "label": "{count} 件の期限間近KPI",
+          "description": "期限間近KPIを追跡し、期限超過を防ぎます。",
+          "action": "期限間近を見る"
+        },
+        "actionable": {
+          "label": "{count} 件の要対応タスク",
+          "description": "アクション受信箱を開いて重要タスクを順に処理します。",
+          "action": "受信箱を開く"
+        },
+        "reviewApprovals": {
+          "label": "{count} 件のKPIレビュー確認",
+          "description": "期末の詰まりを防ぐためレビュー進捗を確認します。",
+          "action": "レビューを見る"
+        }
       }
     }
   },

@@ -66,10 +66,10 @@ function hasPermission(action, resource, scope) {
 
 const features = [
   {
-    key: "my-tasks",
+    key: "control-panel",
     icon: ProfileOutlined,
-    label: "myTasks",
-    route: "/my-tasks",
+    label: "kpiControlPanel",
+    route: "/control-panel",
     permission: () => true,
   },
   {

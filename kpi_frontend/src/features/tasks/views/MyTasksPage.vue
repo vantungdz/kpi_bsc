@@ -6,7 +6,6 @@
           <div class="hero-kicker">{{ t("workflowInbox.control.kicker") }}</div>
           <h1>{{ t("workflowInbox.control.heading") }}</h1>
           <p>{{ t("workflowInbox.control.subheading") }}</p>
-          <p class="hero-role-line">{{ roleLineText }}</p>
         </div>
         <a-button type="primary" @click="refreshAll" :loading="loading">
           {{ t("workflowInbox.refresh") }}
@@ -74,29 +73,93 @@
         </a-col>
       </a-row>
 
-      <a-row :gutter="[16, 16]" class="summary-row">
-        <a-col :xs="24" :sm="8">
-          <div class="summary-tile action" @click="focusBucket('action')">
-            <div class="summary-label">
-              {{ t("workflowInbox.summary.action") }}
+      <div class="timeline-block">
+        <div class="control-title">{{ t("workflow.dashboard.timeline.title") }}</div>
+        <div class="control-subtitle">{{ t("workflow.dashboard.timeline.subtitle") }}</div>
+        <div class="timeline-track">
+          <div
+            v-for="node in timelineNodes"
+            :key="node.key"
+            class="timeline-node"
+            :class="[node.tone, { disabled: node.disabled }]"
+          >
+            <div class="timeline-head">
+              <div class="timeline-dot"></div>
+              <div class="timeline-node-title">{{ node.title }}</div>
             </div>
-            <div class="summary-value">{{ actionableTasks.length }}</div>
+            <div class="timeline-node-desc">{{ node.description }}</div>
+          </div>
+        </div>
+        <div class="timeline-status-row">
+          <div
+            v-for="node in timelineNodes"
+            :key="`${node.key}-status`"
+            class="timeline-status-item"
+            :class="{ disabled: node.disabled }"
+          >
+            <span v-if="node.disabled">{{ t("workflow.dashboard.timeline.notStart") }}</span>
+            <span v-else>
+              {{ t("workflow.dashboard.timeline.pendingCount", { count: node.pending }) }}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <a-row :gutter="[16, 16]" class="control-row">
+        <a-col :xs="24" :lg="14">
+          <div class="control-block">
+            <div class="control-title">{{ t("workflow.dashboard.priority.title") }}</div>
+            <div class="control-subtitle">
+              {{
+                t("workflow.dashboard.priority.subtitle", {
+                  role: currentRoleLabel,
+                })
+              }}
+            </div>
+            <div v-if="priorityActions.length" class="priority-list">
+              <div
+                v-for="item in priorityActions"
+                :key="item.key"
+                class="priority-item"
+                :class="item.tone"
+              >
+                <div class="priority-content">
+                  <div class="priority-label">{{ item.label }}</div>
+                  <div class="priority-desc">{{ item.description }}</div>
+                </div>
+                <a-button
+                  v-if="item.handler && item.actionText"
+                  type="link"
+                  @click="item.handler"
+                >
+                  {{ item.actionText }}
+                </a-button>
+              </div>
+            </div>
+            <a-empty v-else :description="t('workflow.dashboard.priority.empty')" />
           </div>
         </a-col>
-        <a-col :xs="24" :sm="8">
-          <div class="summary-tile waiting" @click="focusBucket('waiting')">
-            <div class="summary-label">
-              {{ t("workflowInbox.summary.waiting") }}
+        <a-col :xs="24" :lg="10">
+          <div class="control-block">
+            <div class="control-title">{{ t("workflow.dashboard.rolePanel.title") }}</div>
+            <div class="control-subtitle">
+              {{ t("workflow.dashboard.rolePanel.subtitle") }}
             </div>
-            <div class="summary-value">{{ waitingTasks.length }}</div>
-          </div>
-        </a-col>
-        <a-col :xs="24" :sm="8">
-          <div class="summary-tile done" @click="focusBucket('completed')">
-            <div class="summary-label">
-              {{ t("workflowInbox.summary.completed") }}
+            <div class="role-kpi-list">
+              <div
+                v-for="card in roleKpiCards"
+                :key="card.key"
+                class="role-kpi-card"
+                :class="card.tone"
+                :role="card.handler ? 'button' : undefined"
+                :tabindex="card.handler ? 0 : undefined"
+                @click="card.handler && card.handler()"
+              >
+                <div class="role-kpi-value">{{ card.value }}</div>
+                <div class="role-kpi-label">{{ card.label }}</div>
+                <div class="role-kpi-hint">{{ card.hint }}</div>
+              </div>
             </div>
-            <div class="summary-value">{{ completedTasks.length }}</div>
           </div>
         </a-col>
       </a-row>
@@ -276,7 +339,15 @@
               <a-tag v-else color="green">{{ t("workflowInbox.overview.riskOk") }}</a-tag>
             </template>
             <template v-else-if="column.key === 'open'">
-              <a-button type="link" size="small" @click="openRoute(record.route)">
+              <span v-if="record.overdue" class="cell-open-disabled">
+                Đã quá hạn
+              </span>
+              <a-button
+                v-else
+                type="link"
+                size="small"
+                @click="openRoute(record.route)"
+              >
                 {{ record.actionLabel }}
               </a-button>
             </template>
@@ -313,7 +384,6 @@ import {
 import {
   getAssignmentWorkflowSummary,
   getPendingApprovalStep,
-  getReviewApprovalWorkflowSummary,
   getReviewWorkflowSummary,
 } from "@/core/utils/workflowTasks";
 
@@ -328,6 +398,7 @@ const pendingApprovals = ref([]);
 const myReviews = ref([]);
 const reviewApprovals = ref([]);
 const selectedCycle = ref(null);
+const selectedCycleMeta = ref(null);
 const activeBucket = ref("action");
 const viewMode = ref("preview");
 const previewLimit = 5;
@@ -376,8 +447,17 @@ const overviewScope = computed(() => {
   return "employee";
 });
 
-const roleLineText = computed(() =>
-  t(`workflowInbox.overview.roleLine.${overviewScope.value}`),
+const currentRoleLabel = computed(() =>
+  t(`workflow.dashboard.role.${overviewScope.value}`),
+);
+const canOpenApprovals = computed(
+  () =>
+    hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.KPI_VALUE, SCOPES.SECTION) ||
+    hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.KPI_VALUE, SCOPES.DEPARTMENT) ||
+    hasPermission(RBAC_ACTIONS.VIEW, RBAC_RESOURCES.KPI_VALUE, SCOPES.MANAGER) ||
+    hasPermission(RBAC_ACTIONS.APPROVE, RBAC_RESOURCES.KPI_VALUE, SCOPES.SECTION) ||
+    hasPermission(RBAC_ACTIONS.APPROVE, RBAC_RESOURCES.KPI_VALUE, SCOPES.DEPARTMENT) ||
+    hasPermission(RBAC_ACTIONS.APPROVE, RBAC_RESOURCES.KPI_VALUE, SCOPES.MANAGER),
 );
 
 const orgContextWarning = computed(() => {
@@ -485,12 +565,45 @@ function daysBetween(from, to) {
   return Math.round(ms / (24 * 60 * 60 * 1000));
 }
 
-const normalizedTasks = computed(() => [
-  ...buildAssignmentTasks(myAssignments.value),
-  ...buildApprovalTasks(pendingApprovals.value),
-  ...buildReviewTasks(myReviews.value),
-  ...buildReviewApprovalTasks(reviewApprovals.value),
-]);
+function taskPriority(task) {
+  if (task.taskType === "approval") return 0;
+  if (task.taskType === "assignment") return 1;
+  if (task.taskType === "review") return 2;
+  return 9;
+}
+
+const normalizedTasks = computed(() => {
+  const tasks = [
+    ...buildAssignmentTasks(myAssignments.value),
+    ...buildApprovalTasks(scopedPendingApprovals.value),
+    ...buildReviewTasks(myReviews.value),
+  ];
+
+  const deduped = [];
+  const pickedByKey = new Map();
+
+  tasks.forEach((task) => {
+    if (!task?.kpiId) {
+      deduped.push(task);
+      return;
+    }
+
+    const key = `${task.bucket}:${task.kpiId}`;
+    const existingIndex = pickedByKey.get(key);
+    if (existingIndex == null) {
+      pickedByKey.set(key, deduped.length);
+      deduped.push(task);
+      return;
+    }
+
+    const existing = deduped[existingIndex];
+    if (taskPriority(task) < taskPriority(existing)) {
+      deduped[existingIndex] = task;
+    }
+  });
+
+  return deduped;
+});
 
 const actionableTasks = computed(() =>
   normalizedTasks.value.filter((task) => task.bucket === "action"),
@@ -553,7 +666,33 @@ const overviewRows = computed(() => {
     return 5;
   };
 
-  return rows.sort((a, b) => {
+  const cycleScopedRows = rows.filter((row) => dateInsideSelectedCycle(row.endDate));
+
+  // Deduplicate by KPI to avoid double counting when one KPI has chained assignments
+  // across department/section/employee in the same workflow.
+  const dedupedByKpi = new Map();
+  cycleScopedRows.forEach((row) => {
+    const existing = dedupedByKpi.get(row.kpiId);
+    if (!existing) {
+      dedupedByKpi.set(row.kpiId, row);
+      return;
+    }
+
+    const weightDiff = weight(row) - weight(existing);
+    if (weightDiff < 0) {
+      dedupedByKpi.set(row.kpiId, row);
+      return;
+    }
+    if (weightDiff === 0) {
+      const rowEnd = row.endDate ? row.endDate.getTime() : Infinity;
+      const existingEnd = existing.endDate ? existing.endDate.getTime() : Infinity;
+      if (rowEnd < existingEnd) {
+        dedupedByKpi.set(row.kpiId, row);
+      }
+    }
+  });
+
+  return [...dedupedByKpi.values()].sort((a, b) => {
     const diff = weight(a) - weight(b);
     if (diff !== 0) return diff;
     const ae = a.endDate ? a.endDate.getTime() : Infinity;
@@ -568,8 +707,287 @@ const riskStats = computed(() => {
     overdue: rows.filter((r) => r.overdue).length,
     dueSoon: rows.filter((r) => r.dueSoon && !r.overdue).length,
     attention: rows.filter((r) => r.workflowBucket === "action").length,
-    pendingApprovals: pendingApprovals.value.length,
+    pendingApprovals: scopedPendingApprovals.value.length,
   };
+});
+
+function normalizeCycleId(value) {
+  if (value == null || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function extractCycleId(entity) {
+  if (!entity || typeof entity !== "object") return null;
+  const candidates = [
+    entity.cycle,
+    entity.cycleId,
+    entity.cycle_id,
+    entity.reviewCycleId,
+    entity.review_cycle_id,
+    entity.kpi?.cycle,
+    entity.kpi?.cycleId,
+    entity.kpi?.cycle_id,
+    entity.kpi?.reviewCycleId,
+    entity.kpi?.review_cycle_id,
+  ];
+  for (const c of candidates) {
+    const normalized = normalizeCycleId(c);
+    if (normalized != null) return normalized;
+  }
+  return null;
+}
+
+const scopedPendingApprovals = computed(() => {
+  const selected = normalizeCycleId(selectedCycle.value);
+  const groups = Array.isArray(pendingApprovals.value) ? pendingApprovals.value : [];
+  if (selected == null) return groups;
+
+  return groups
+    .map((group) => {
+      const values = Array.isArray(group.kpiValues) ? group.kpiValues : [];
+      const filtered = values.filter((value) => {
+        const valueCycle = extractCycleId(value);
+        return valueCycle == null || valueCycle === selected;
+      });
+      return {
+        ...group,
+        kpiValues: filtered,
+        totalKpis: filtered.length,
+      };
+    })
+    .filter((group) => (group.kpiValues?.length || 0) > 0);
+});
+
+const selectedCycleRange = computed(() => {
+  const startRaw = selectedCycleMeta.value?.startDate;
+  const endRaw = selectedCycleMeta.value?.endDate;
+  if (!startRaw || !endRaw) return null;
+  const start = startOfDay(new Date(startRaw));
+  const end = startOfDay(new Date(endRaw));
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return null;
+  return { start, end };
+});
+
+function dateInsideSelectedCycle(dateValue) {
+  const range = selectedCycleRange.value;
+  if (!range || !dateValue) return true;
+  const d = startOfDay(new Date(dateValue));
+  if (Number.isNaN(d.getTime())) return true;
+  return d >= range.start && d <= range.end;
+}
+
+function kpiMatchesSelectedCycle(kpi) {
+  const selected = normalizeCycleId(selectedCycle.value);
+  if (selected != null) {
+    const directCycle = extractCycleId(kpi);
+    if (directCycle != null) return directCycle === selected;
+    const assignments = Array.isArray(kpi?.assignments) ? kpi.assignments : [];
+    const assignmentCycle = assignments
+      .map((assignment) => extractCycleId(assignment))
+      .find((id) => id != null);
+    if (assignmentCycle != null) return assignmentCycle === selected;
+  }
+
+  const endDateCandidate = kpi?.end_date || kpi?.endDate || null;
+  return dateInsideSelectedCycle(endDateCandidate);
+}
+
+function filterKpisBySelectedCycle(list) {
+  const source = Array.isArray(list) ? list : [];
+  return source.filter((kpi) => kpiMatchesSelectedCycle(kpi));
+}
+
+const mergedReviewItems = computed(() => {
+  const merged = [];
+  const seen = new Set();
+  [...(myReviews.value || []), ...(reviewApprovals.value || [])].forEach((review) => {
+    if (!review?.id || seen.has(review.id)) return;
+    seen.add(review.id);
+    merged.push(review);
+  });
+  return merged;
+});
+
+function getReviewPhase(review) {
+  return String(review?.evaluationPhase || review?.evaluation_phase || "").toUpperCase();
+}
+
+function isReviewStarted(status) {
+  const s = String(status || "").toUpperCase();
+  return !["", "PENDING", "NOT_STARTED"].includes(s);
+}
+
+const endYearStarted = computed(() => {
+  if (!selectedCycleMeta.value?.startDate) return true;
+  const start = new Date(selectedCycleMeta.value.startDate);
+  if (Number.isNaN(start.getTime())) return true;
+  const threshold = new Date(Date.UTC(start.getUTCFullYear(), 6, 1)); // Jul 1
+  return new Date() >= threshold;
+});
+
+const timelineNodes = computed(() => {
+  const totalActive = overviewRows.value.length;
+  const midYearStartedCount = mergedReviewItems.value.filter(
+    (review) =>
+      getReviewPhase(review) === "MID_YEAR" && isReviewStarted(review.status),
+  ).length;
+  const endYearStartedCount = mergedReviewItems.value.filter(
+    (review) =>
+      getReviewPhase(review) === "YEAR_END" && isReviewStarted(review.status),
+  ).length;
+
+  const midYearPending = Math.max(totalActive - midYearStartedCount, 0);
+  const endYearPending = Math.max(totalActive - endYearStartedCount, 0);
+
+  return [
+    {
+      key: "active",
+      title: t("workflow.dashboard.timeline.active.title"),
+      description: t("workflow.dashboard.timeline.active.description"),
+      pending: totalActive,
+      tone: "active",
+      disabled: false,
+    },
+    {
+      key: "mid-year",
+      title: t("workflow.dashboard.timeline.midYear.title"),
+      description: t("workflow.dashboard.timeline.midYear.description"),
+      pending: midYearPending,
+      tone: "mid-year",
+      disabled: false,
+    },
+    {
+      key: "end-year",
+      title: t("workflow.dashboard.timeline.endYear.title"),
+      description: t("workflow.dashboard.timeline.endYear.description"),
+      pending: endYearPending,
+      tone: "end-year",
+      disabled: !endYearStarted.value,
+    },
+  ];
+});
+
+const roleKpiCards = computed(() => {
+  if (overviewScope.value === "employee") {
+    return [
+      {
+        key: "employee-action",
+        label: t("workflow.dashboard.cards.employeeAction.label"),
+        value: actionableTasks.value.length,
+        hint: t("workflow.dashboard.cards.employeeAction.hint"),
+        tone: "warning",
+        handler: () => focusBucket("action"),
+      },
+      {
+        key: "employee-overdue",
+        label: t("workflow.dashboard.cards.employeeOverdue.label"),
+        value: riskStats.value.overdue,
+        hint: t("workflow.dashboard.cards.employeeOverdue.hint"),
+        tone: "danger",
+        handler: () => togglePipelineFilter("overdue"),
+      },
+      {
+        key: "employee-waiting",
+        label: t("workflow.dashboard.cards.employeeWaiting.label"),
+        value: waitingTasks.value.length,
+        hint: t("workflow.dashboard.cards.employeeWaiting.hint"),
+        tone: "approval",
+        handler: () => focusBucket("waiting"),
+      },
+    ];
+  }
+
+  return [
+    {
+      key: "lead-approvals",
+      label: t("workflow.dashboard.cards.leadApproval.label"),
+      value: riskStats.value.pendingApprovals,
+      hint: canOpenApprovals.value
+        ? t("workflow.dashboard.cards.leadApproval.hintAllowed")
+        : t("workflow.dashboard.cards.leadApproval.hintDenied"),
+      tone: "approval",
+      handler: canOpenApprovals.value ? () => goToApprovals() : null,
+    },
+    {
+      key: "lead-overdue",
+      label: t("workflow.dashboard.cards.leadOverdue.label"),
+      value: riskStats.value.overdue,
+      hint: t("workflow.dashboard.cards.leadOverdue.hint"),
+      tone: "warning",
+      handler: () => togglePipelineFilter("overdue"),
+    },
+    {
+      key: "lead-attention",
+      label: t("workflow.dashboard.cards.leadAttention.label"),
+      value: riskStats.value.attention,
+      hint: t("workflow.dashboard.cards.leadAttention.hint"),
+      tone: "info",
+      handler: () => togglePipelineFilter("attention"),
+    },
+  ];
+});
+
+const priorityActions = computed(() => {
+  const actions = [];
+
+  if (riskStats.value.pendingApprovals > 0) {
+    actions.push({
+      key: "pending-approvals",
+      label: t("workflow.dashboard.priority.pendingApprovals.label", {
+        count: riskStats.value.pendingApprovals,
+      }),
+      description: canOpenApprovals.value
+        ? t("workflow.dashboard.priority.pendingApprovals.descAllowed")
+        : t("workflow.dashboard.priority.pendingApprovals.descDenied"),
+      actionText: canOpenApprovals.value
+        ? t("workflow.dashboard.priority.pendingApprovals.action")
+        : "",
+      tone: "priority-approval",
+      handler: canOpenApprovals.value ? goToApprovals : null,
+    });
+  }
+
+  if (riskStats.value.overdue > 0) {
+    actions.push({
+      key: "overdue-kpis",
+      label: t("workflow.dashboard.priority.overdue.label", {
+        count: riskStats.value.overdue,
+      }),
+      description: t("workflow.dashboard.priority.overdue.description"),
+      actionText: t("workflow.dashboard.priority.overdue.action"),
+      tone: "priority-overdue",
+      handler: () => togglePipelineFilter("overdue"),
+    });
+  }
+
+  if (riskStats.value.dueSoon > 0) {
+    actions.push({
+      key: "due-soon-kpis",
+      label: t("workflow.dashboard.priority.dueSoon.label", {
+        count: riskStats.value.dueSoon,
+      }),
+      description: t("workflow.dashboard.priority.dueSoon.description"),
+      actionText: t("workflow.dashboard.priority.dueSoon.action"),
+      tone: "priority-due-soon",
+      handler: () => togglePipelineFilter("dueSoon"),
+    });
+  }
+
+  if (actionableTasks.value.length > 0) {
+    actions.push({
+      key: "my-actions",
+      label: t("workflow.dashboard.priority.actionable.label", {
+        count: actionableTasks.value.length,
+      }),
+      description: t("workflow.dashboard.priority.actionable.description"),
+      actionText: "",
+      tone: "priority-action",
+      handler: null,
+    });
+  }
+
+  return actions.slice(0, 4);
 });
 
 const filteredPipelineRows = computed(() => {
@@ -600,17 +1018,17 @@ const pipelineColumns = computed(() => [
   },
   {
     key: "owner",
-    title: t("workflowInbox.overview.columns.owner"),
+    title: t("workflow.dashboard.columns.ownerScope"),
     width: 160,
   },
   {
     key: "stage",
-    title: t("workflowInbox.overview.columns.stage"),
+    title: t("workflow.dashboard.columns.workflowStep"),
     width: 140,
   },
   {
     key: "yourTurn",
-    title: t("workflowInbox.overview.columns.yourTurn"),
+    title: t("workflow.dashboard.columns.nextActor"),
     width: 200,
   },
   {
@@ -725,7 +1143,32 @@ function stageTagColor(status) {
   return "processing";
 }
 
-function getYourTurnLabel(assignment, mapping, scope, userId, translate) {
+function getYourTurnLabel(status, assignment, mapping, scope, userId, translate) {
+  const normalizedStatus = String(status || "");
+  if (normalizedStatus === "NOT_SUBMIT" || normalizedStatus === "DRAFT") {
+    if (scope === "employee" && isOwnEmployeeAssignment(assignment, userId)) {
+      return t("workflow.dashboard.nextActor.notSubmitSelf");
+    }
+    return t("workflow.dashboard.nextActor.notSubmitAssignee");
+  }
+  if (normalizedStatus === "PENDING_SECTION_APPROVAL") {
+    return t("workflow.dashboard.nextActor.pendingSection");
+  }
+  if (normalizedStatus === "PENDING_DEPT_APPROVAL") {
+    return t("workflow.dashboard.nextActor.pendingDepartment");
+  }
+  if (normalizedStatus === "PENDING_MANAGER_APPROVAL") {
+    return t("workflow.dashboard.nextActor.pendingManager");
+  }
+  if (/^REJECTED_/i.test(normalizedStatus)) {
+    return t("workflow.dashboard.nextActor.rejected");
+  }
+  if (normalizedStatus === "APPROVED") {
+    return t("workflow.dashboard.nextActor.approved");
+  }
+  if (normalizedStatus === "SUBMITTED") {
+    return t("workflow.dashboard.nextActor.submitted");
+  }
   if (mapping.bucket === "completed") {
     return translate("workflowInbox.control.yourTurn.done");
   }
@@ -783,9 +1226,17 @@ function buildPipelineRow(kpi, assignment, translate, scope, userId) {
   const perspectiveName = kpi.perspective?.name || "";
   const workflowStageLabel = getWorkflowStageLabel(status, translate);
   const stageColor = stageTagColor(status);
-  const yourTurnLabel = getYourTurnLabel(assignment, mapping, scope, userId, translate);
+  const yourTurnLabel = getYourTurnLabel(
+    status,
+    assignment,
+    mapping,
+    scope,
+    userId,
+    translate,
+  );
 
   const row = {
+    kpiId: kpi.id,
     key: `kpi-${kpi.id}-asg-${assignment.id}`,
     kpiName: kpi.name,
     ownerLabel: getOwnerLabel(assignment),
@@ -799,7 +1250,7 @@ function buildPipelineRow(kpi, assignment, translate, scope, userId) {
     dueSoon,
     workflowBucket: mapping.bucket,
     isRejected,
-    actionLabel: mapping.actionLabel,
+    actionLabel: overdue ? t("workflow.dashboard.actions.overdue") : mapping.actionLabel,
     route: { name: "KpiDetail", params: { id: kpi.id } },
     searchText: [
       kpi.name,
@@ -828,6 +1279,7 @@ function buildAssignmentTasks(kpis) {
 
       return {
         key: `assignment-${assignment.id}`,
+        kpiId: kpi.id,
         taskType: "assignment",
         bucket: mapping.bucket,
         tagColor: mapping.tagColor,
@@ -840,7 +1292,7 @@ function buildAssignmentTasks(kpis) {
           target: formatNumber(assignment.targetValue ?? kpi.target),
           unit: kpi.unit || "",
         }).trim(),
-        actionLabel: mapping.actionLabel,
+        actionLabel: t("workflow.actions.viewStatus"),
         searchableText: [
           kpi.name,
           getFullName(assignment.employee),
@@ -849,7 +1301,10 @@ function buildAssignmentTasks(kpis) {
           .filter(Boolean)
           .join(" ")
           .toLowerCase(),
-        route: { name: "KpiDetail", params: { id: kpi.id } },
+        route: {
+          path: "/my-kpi-self-review",
+          query: { cycle: String(selectedCycle.value || "") },
+        },
       };
     })
     .filter(Boolean);
@@ -905,6 +1360,7 @@ function buildReviewTasks(reviews) {
     const mapping = getReviewWorkflowSummary(review.status, t);
     return {
       key: `review-${review.id}`,
+      kpiId: review.kpi?.id || null,
       taskType: "review",
       bucket: mapping.bucket,
       tagColor: mapping.tagColor,
@@ -937,76 +1393,6 @@ function buildReviewTasks(reviews) {
               : review.status === "COMPLETED"
                 ? "detail"
                 : "focus",
-        },
-      },
-    };
-  });
-}
-
-function buildReviewApprovalTasks(reviews) {
-  const grouped = (reviews || []).reduce((accumulator, review) => {
-    const employeeId = review.employee?.id;
-    if (!employeeId) return accumulator;
-
-    if (!accumulator[employeeId]) {
-      accumulator[employeeId] = {
-        employee: review.employee,
-        reviews: [],
-      };
-    }
-
-    accumulator[employeeId].reviews.push(review);
-    return accumulator;
-  }, {});
-
-  return Object.values(grouped).map((group) => {
-    const actionableStatuses = [
-      "SELF_REVIEWED",
-      "SECTION_REVIEWED",
-      "DEPARTMENT_REVIEWED",
-      "PENDING_MANAGER_APPROVAL",
-    ];
-    const actionableReview =
-      group.reviews.find((review) => actionableStatuses.includes(review.status)) ||
-      group.reviews.find((review) => review.status !== "COMPLETED");
-    const baseReview = actionableReview || group.reviews[0];
-    const mapping = getReviewApprovalWorkflowSummary(baseReview?.status, t);
-
-    return {
-      key: `review-approval-${group.employee.id}`,
-      taskType: "reviewApproval",
-      bucket: mapping.bucket,
-      tagColor: mapping.tagColor,
-      tagLabel: t("workflow.labels.reviewApproval"),
-      currentStep: mapping.currentStep,
-      nextAction:
-        group.reviews.length > 1 &&
-        group.reviews.some((review) => review.status !== baseReview?.status)
-          ? t("workflow.reviewApproval.multipleNext", {
-              count: group.reviews.length,
-            })
-          : mapping.nextAction,
-      title: getFullName(group.employee),
-      subtitle: t("workflow.reviewApproval.summary", {
-        cycle: selectedCycleLabel.value,
-        count: group.reviews.length,
-      }),
-      actionLabel: mapping.actionLabel,
-      searchableText: [
-        getFullName(group.employee),
-        group.employee?.username,
-        ...group.reviews.map((review) => review.kpi?.name),
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase(),
-      route: {
-        path: "/kpi-review",
-        query: {
-          cycle: String(selectedCycle.value || ""),
-          employeeId: String(group.employee.id),
-          reviewId: String(baseReview?.id || ""),
-          action: mapping.bucket === "action" ? "review" : "detail",
         },
       },
     };
@@ -1093,6 +1479,8 @@ async function refreshAll() {
     }
     const fromStore = pickReviewCycleIdFromStore(store, cycles);
     selectedCycle.value = fromStore ?? pickDefaultCycle(cycles);
+    selectedCycleMeta.value =
+      cycles.find((cycle) => String(cycle.id) === String(selectedCycle.value)) || null;
 
     const cycleParam = selectedCycle.value || undefined;
     const scope = overviewScope.value;
@@ -1107,7 +1495,11 @@ async function refreshAll() {
           params: { limit: 1000, cycle: cycleParam },
         }),
         apiClient.get("/kpi-values/pending-approvals", {
-          params: { groupBy: "employee", includeReview: "true" },
+          params: {
+            groupBy: "employee",
+            includeReview: "true",
+            cycle: cycleParam,
+          },
         }),
         selectedCycle.value
           ? apiClient.get("/kpi-review/my", {
@@ -1125,8 +1517,9 @@ async function refreshAll() {
         ? await getKpiReviewList({ cycle: selectedCycle.value })
         : [];
 
-    const assignmentList =
+    const assignmentListRaw =
       assignmentsResponse.data?.data || assignmentsResponse.data || [];
+    const assignmentList = filterKpisBySelectedCycle(assignmentListRaw);
     myAssignments.value = assignmentList;
     pendingApprovals.value = approvalsResponse.data || [];
     myReviews.value = reviewsResponse.data || [];
@@ -1134,8 +1527,9 @@ async function refreshAll() {
       ? reviewApprovalResponse
       : [];
 
-    overviewKpis.value =
-      scope === "employee" ? assignmentList : scopedKpis || [];
+    overviewKpis.value = filterKpisBySelectedCycle(
+      scope === "employee" ? assignmentList : scopedKpis || [],
+    );
   } catch (error) {
     errorMessage.value =
       error.response?.data?.message ||
@@ -1157,6 +1551,7 @@ function openRoute(route) {
 }
 
 function goToApprovals() {
+  if (!canOpenApprovals.value) return;
   router.push("/approvals");
 }
 
@@ -1222,13 +1617,6 @@ onMounted(() => {
   max-width: 820px;
   color: #475569;
   font-size: 14px;
-}
-
-.hero-role-line {
-  margin-top: 10px !important;
-  font-size: 13px !important;
-  color: #334155 !important;
-  font-weight: 600;
 }
 
 .risk-row {
@@ -1307,40 +1695,249 @@ onMounted(() => {
   line-height: 1.35;
 }
 
-.summary-row {
-  margin-top: 14px;
+.control-row {
+  margin-top: 12px;
 }
 
-.summary-tile {
+.timeline-block {
+  margin-top: 12px;
+  border: 1px solid #e2e8f0;
   border-radius: 14px;
-  padding: 14px 16px;
-  min-height: 96px;
+  padding: 14px;
+  background: #fff;
+}
+
+.timeline-track {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  position: relative;
+}
+
+.timeline-track::before {
+  content: "";
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  top: 14px;
+  height: 2px;
+  background: #cbd5e1;
+  z-index: 0;
+}
+
+.timeline-node {
+  padding: 6px 4px 2px;
+  position: relative;
+}
+
+.timeline-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  position: relative;
+  z-index: 1;
+  background: #fff;
+  width: fit-content;
+  padding-right: 6px;
+}
+
+.timeline-dot {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  border: 2px solid #2563eb;
+  background: #fff;
+  flex: 0 0 auto;
+}
+
+.timeline-node.active .timeline-dot {
+  border-color: #2563eb;
+  background: #2563eb;
+}
+
+.timeline-node.mid-year .timeline-dot {
+  border-color: #ea580c;
+  background: #ea580c;
+}
+
+.timeline-node.end-year .timeline-dot {
+  border-color: #7c3aed;
+  background: #7c3aed;
+}
+
+.timeline-node.disabled {
+  opacity: 0.8;
+}
+
+.timeline-node.disabled .timeline-dot {
+  border-color: #94a3b8;
+  background: #94a3b8;
+}
+
+.timeline-node.disabled .timeline-head::after {
+  background: #e2e8f0;
+}
+
+.timeline-node-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.timeline-node-desc {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #64748b;
+  padding-left: 26px;
+}
+
+.timeline-status-row {
+  margin-top: 8px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.timeline-status-item {
+  font-size: 12px;
+  font-weight: 700;
+  color: #334155;
+  padding-left: 30px;
+}
+
+.timeline-status-item.disabled {
+  color: #94a3b8;
+}
+
+.control-block {
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 14px;
+  background: #fff;
+}
+
+.control-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.control-subtitle {
+  margin-top: 4px;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.priority-list {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.priority-item {
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  padding: 10px 12px;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.priority-item.priority-overdue {
+  border-color: #fecaca;
+  background: #fef2f2;
+}
+
+.priority-item.priority-due-soon {
+  border-color: #fed7aa;
+  background: #fff7ed;
+}
+
+.priority-item.priority-approval,
+.priority-item.priority-review {
+  border-color: #ddd6fe;
+  background: #f5f3ff;
+}
+
+.priority-item.priority-action {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+}
+
+.priority-content {
+  min-width: 0;
+}
+
+.priority-label {
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.priority-desc {
+  margin-top: 3px;
+  color: #475569;
+  font-size: 12px;
+}
+
+.role-kpi-list {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.role-kpi-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+
+.role-kpi-card[role="button"] {
   cursor: pointer;
 }
 
-.summary-tile.action {
-  background: linear-gradient(135deg, #fff7e6 0%, #ffffff 100%);
+.role-kpi-card.warning {
+  border-color: #fed7aa;
+  background: #fff7ed;
 }
 
-.summary-tile.waiting {
-  background: linear-gradient(135deg, #e6f4ff 0%, #ffffff 100%);
+.role-kpi-card.danger {
+  border-color: #fecaca;
+  background: #fef2f2;
 }
 
-.summary-tile.done {
-  background: linear-gradient(135deg, #f6ffed 0%, #ffffff 100%);
+.role-kpi-card.info {
+  border-color: #bfdbfe;
+  background: #eff6ff;
 }
 
-.summary-label {
-  color: #475569;
-  font-size: 13px;
-  margin-bottom: 8px;
+.role-kpi-card.approval {
+  border-color: #ddd6fe;
+  background: #f5f3ff;
 }
 
-.summary-value {
-  color: #0f172a;
-  font-size: 28px;
+.role-kpi-value {
+  font-size: 22px;
   font-weight: 800;
   line-height: 1;
+  color: #0f172a;
+}
+
+.role-kpi-label {
+  margin-top: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.role-kpi-hint {
+  margin-top: 2px;
+  font-size: 12px;
+  color: #64748b;
 }
 
 .pipeline-card,
@@ -1396,6 +1993,12 @@ onMounted(() => {
   font-size: 12px;
   color: #64748b;
   margin-top: 4px;
+}
+
+.cell-open-disabled {
+  font-size: 12px;
+  color: #94a3b8;
+  font-weight: 600;
 }
 
 .pipeline-footer {
@@ -1479,6 +2082,22 @@ onMounted(() => {
 
   .hero-header h1 {
     font-size: 1.35rem;
+  }
+
+  .timeline-track {
+    grid-template-columns: 1fr;
+  }
+
+  .timeline-status-row {
+    grid-template-columns: 1fr;
+  }
+
+  .timeline-head::after {
+    display: none;
+  }
+
+  .timeline-track::before {
+    display: none;
   }
 }
 </style>

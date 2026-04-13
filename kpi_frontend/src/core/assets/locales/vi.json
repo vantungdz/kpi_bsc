@@ -1236,6 +1236,7 @@
   "selectUsers": "Chọn người dùng",
   "selfComment": "Nhận xét tự đánh giá",
   "selfReview": "Tự đánh giá",
+  "viewStatus": "Xem trạng thái",
   "selfReviewed": "Tự đánh giá",
   "selfScore": "Điểm tự đánh giá",
   "sendPasswordResetLink": "Gửi liên kết đặt lại mật khẩu",
@@ -1536,7 +1537,7 @@
       "cardLead": "Thứ tự gợi ý: phòng ban → bộ phận → nhân viên → vai trò → phân quyền → tài liệu."
     },
     "items": {
-      "myTasks": "Mở inbox workflow và tiếp tục đúng việc đang tới lượt bạn xử lý.",
+      "kpiControlPanel": "Mở bảng điều phối KPI và theo dõi công việc theo vai trò.",
       "personalKpis": "Xem KPI được giao, cập nhật tiến độ và theo dõi trạng thái workflow hiện tại.",
       "kpiDefinitionApproval": "Phê duyệt định nghĩa KPI vừa được tạo (nhân viên/cấp dưới) để KPI được kích hoạt và có thể giao việc.",
       "approvals": "Xử lý các yêu cầu duyệt giá trị KPI (số liệu thực tế) đang chờ ở cấp của bạn.",
@@ -1563,7 +1564,7 @@
       "systemDocs": "Mở tài liệu kiến trúc, thiết kế và hướng dẫn hệ thống."
     }
   },
-  "myTasks": "Việc của tôi",
+  "kpiControlPanel": "Điều phối KPI",
   "workflowStatus": "Trạng thái workflow",
   "workflowInbox": {
     "title": "Điều phối công việc KPI",
@@ -1905,6 +1906,112 @@
       "completed": {
         "step": "Review đã hoàn tất",
         "next": "Mở để xem lại kết quả cuối kỳ."
+      }
+    },
+    "dashboard": {
+      "rolePanel": {
+        "title": "Bảng điều khiển theo vai trò",
+        "subtitle": "Các chỉ số bạn cần theo dõi trong phiên này."
+      },
+      "timeline": {
+        "title": "Mốc chuyển trạng thái KPI",
+        "subtitle": "Theo dõi KPI đang hoạt động, giữa năm và cuối năm theo chu kỳ hiện tại.",
+        "notStart": "Chưa bắt đầu",
+        "pendingCount": "Còn {count} KPI chưa chuyển trạng thái",
+        "active": {
+          "title": "KPI đang hoạt động",
+          "description": "Các KPI đang hoạt động trong chu kỳ."
+        },
+        "midYear": {
+          "title": "Giữa năm",
+          "description": "KPI đã vào pha submit lần 1."
+        },
+        "endYear": {
+          "title": "Cuối năm",
+          "description": "KPI ở pha đánh giá cuối năm."
+        }
+      },
+      "role": {
+        "employee": "Nhân viên",
+        "section": "Trưởng bộ phận",
+        "department": "Trưởng phòng",
+        "company": "Quản lý"
+      },
+      "actions": {
+        "overdue": "Đã quá hạn"
+      },
+      "columns": {
+        "ownerScope": "Chủ thể / phạm vi KPI",
+        "workflowStep": "Bước workflow hiện tại",
+        "nextActor": "Ai cần làm tiếp (theo trạng thái)"
+      },
+      "nextActor": {
+        "notSubmitSelf": "Bạn (chưa nộp giá trị KPI)",
+        "notSubmitAssignee": "Người được giao KPI / nhóm xử lý (chưa nộp giá trị KPI)",
+        "pendingSection": "Trưởng bộ phận (chờ duyệt cấp bộ phận)",
+        "pendingDepartment": "Trưởng phòng (chờ duyệt cấp phòng ban)",
+        "pendingManager": "Quản lý (chờ duyệt cấp quản lý)",
+        "rejected": "Người được giao KPI (cần cập nhật lại sau khi bị từ chối)",
+        "approved": "Đã hoàn tất (không cần hành động thêm)",
+        "submitted": "Cấp duyệt tiếp theo trong luồng phê duyệt"
+      },
+      "cards": {
+        "employeeAction": {
+          "label": "KPI cần cập nhật",
+          "hint": "Mục bạn cần xử lý ngay"
+        },
+        "employeeOverdue": {
+          "label": "KPI quá hạn",
+          "hint": "Nên xử lý trước để tránh trễ kỳ"
+        },
+        "employeeWaiting": {
+          "label": "Đang chờ duyệt",
+          "hint": "Các mục đã gửi và chờ phản hồi"
+        },
+        "leadApproval": {
+          "label": "Chờ bạn phê duyệt",
+          "hintAllowed": "Đang cần quyết định đầu vào bạn",
+          "hintDenied": "Bạn chưa có quyền mở trang phê duyệt"
+        },
+        "leadOverdue": {
+          "label": "Mục KPI quá hạn",
+          "hint": "Các KPI trong phạm vi đang trễ hạn"
+        },
+        "leadAttention": {
+          "label": "Cần theo sát",
+          "hint": "Luồng đang cần hành động của team"
+        }
+      },
+      "priority": {
+        "title": "Ưu tiên hôm nay",
+        "subtitle": "{role} - tập trung vào các mục đang cần xử lý trước.",
+        "empty": "Hiện chưa có mục ưu tiên, bạn đang theo dõi tốt.",
+        "pendingApprovals": {
+          "label": "Có {count} yêu cầu phê duyệt",
+          "descAllowed": "Mở danh sách approvals để xử lý ngay các KPI đang chờ quyết định.",
+          "descDenied": "Bạn chưa có quyền truy cập trang phê duyệt, chỉ hiển thị để theo dõi.",
+          "action": "Mở approvals"
+        },
+        "overdue": {
+          "label": "{count} KPI đã quá hạn",
+          "description": "Lọc pipeline theo quá hạn để ưu tiên gỡ tắc các mục trễ.",
+          "action": "Xem quá hạn"
+        },
+        "dueSoon": {
+          "label": "{count} KPI sắp đến hạn",
+          "description": "Theo dõi các KPI gần hạn để xử lý trước khi chuyển sang quá hạn.",
+          "action": "Xem sắp hạn"
+        },
+        "actionable": {
+          "label": "{count} việc cần bạn hành động",
+          "description": "Mở inbox action để xử lý tuần tự các task quan trọng.",
+          "action": "Mở inbox"
+        },
+        "reviewApprovals": {
+          "label": "{count} review KPI cần theo dõi",
+          "description": "Kiểm tra tiến trình review để không nghẽn cuối kỳ.",
+          "action": "Xem review"
+        }
       }
     }
   },

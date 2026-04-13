@@ -11,7 +11,7 @@
   >
     <div class="sidebar-inner">
       <div class="logo-area" :class="{ collapsed }">
-        <router-link to="/my-tasks" class="logo-link">
+        <router-link to="/control-panel" class="logo-link">
           <img
             src="../../assets/logo.png"
             alt="Company Logo"
@@ -192,9 +192,9 @@ const canAccessSystem = computed(
 
 const menuItems = computed(() => [
   {
-    key: "my-tasks",
-    label: "myTasks",
-    route: "/my-tasks",
+    key: "control-panel",
+    label: "kpiControlPanel",
+    route: "/control-panel",
     icon: ProfileOutlined,
     visible: true,
   },
@@ -285,7 +285,7 @@ const systemSubmenuEntry = computed(
 );
 
 function resolveSelectedMenuKey(path) {
-  if (path.startsWith("/my-tasks")) return "my-tasks";
+  if (path.startsWith("/control-panel")) return "control-panel";
   if (
     path.startsWith("/workspace") ||
     path.startsWith("/personal") ||
@@ -322,7 +322,7 @@ function resolveSelectedMenuKey(path) {
   if (isSystemSectionPath(path)) {
     return resolveSystemSidebarMenuKey(path, hasPermission);
   }
-  return "my-tasks";
+  return "control-panel";
 }
 
 watch(
