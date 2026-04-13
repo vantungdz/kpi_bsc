@@ -171,15 +171,6 @@ export class DepartmentsService {
         }
       }
 
-      const sections = await this.departmentRepository.manager
-        .getRepository('Section')
-        .find({ where: { department: { id: department.id } } });
-      for (const section of sections) {
-        section.managerId = updateDepartmentDto.managerId;
-        await this.departmentRepository.manager
-          .getRepository('Section')
-          .save(section);
-      }
       // Use flexible management permission assignment instead of hard-coded 'manager' role
       await this.employeesService.assignManagementPermissions(manager.id, {
         type: 'department',

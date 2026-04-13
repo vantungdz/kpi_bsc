@@ -121,17 +121,11 @@ export class SectionsService {
 
   /**
    * Get list of sections, optionally filtered by departmentId.
-   * Always loads related department and manager information.
-   * If manager is missing, automatically find employee with role 'section' and corresponding sectionId.
+   * Always loads related department and manager information from the section record itself.
    * @param departmentId Department ID to filter by (optional)
    * @returns List of sections with department and manager information, sorted by sort_order ASC
    */
   async getFilteredSections(departmentId?: number): Promise<Section[]> {
-    let sections: Section[] = [];
-
-    console.log('getFilteredSections called with:', departmentId);
-    
-    // Use QueryBuilder to explicitly specify the order column
     const queryBuilder = this.sectionRepository
       .createQueryBuilder('section')
       .leftJoinAndSelect('section.department', 'department')
@@ -142,24 +136,7 @@ export class SectionsService {
       queryBuilder.where('department.id = :departmentId', { departmentId });
     }
 
-    sections = await queryBuilder.getMany();
-
-    for (const section of sections) {
-      if (!section.managerId) {
-        const manager = await this.sectionRepository.manager
-          .getRepository(Employee)
-          .createQueryBuilder('employee')
-          .leftJoinAndSelect('employee.roles', 'role')
-          .where('employee.sectionId = :sectionId', { sectionId: section.id })
-          .andWhere('role.name = :roleName', { roleName: 'manager' })
-          .getOne();
-        if (manager) {
-          section.manager = manager;
-          section.managerId = manager.id;
-        }
-      }
-    }
-    return sections;
+    return queryBuilder.getMany();
   }
 
   /**
