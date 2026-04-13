@@ -1,0 +1,18 @@
+Sử dụng ID người dùng thực tế khi tạo KPI (Backend): Trong kpis.service.ts, phương thức create đang sử dụng authenticatedUserId = 1 làm placeholder. Điều này cần được thay thế bằng ID của người dùng đã được xác thực thực tế từ context request. Đây là một thay đổi quan trọng để đảm bảo tính toàn vẹn dữ liệu và bảo mật.
+Sửa lỗi không nhất quán trong Vuex Store dashboard.js (Frontend): Trạng thái kpiStatusOverTimeStats trong e:\project\kpi-frontend\src\features\dashboard\store\dashboard.js được khởi tạo là một mảng rỗng ([]), nhưng API backend (/dashboard/statistics/kpi-status-over-time) trả về một đối tượng có dạng { approvedLastXDays: number, rejectedLastXDays: number }. Điều này cần được đồng bộ.
+Tái cấu trúc (Refactoring) và Cải thiện Mã nguồn:
+Backend - kpi-values.service.ts - Phương thức checkPermission: Phương thức này khá dài và chứa nhiều logic lồng nhau. Hãy xem xét việc chia nhỏ nó thành các hàm con hoặc sử dụng một thư viện quản lý quyền (RBAC) chuyên dụng hơn (ví dụ: Casl.js) nếu các quy tắc về quyền trở nên phức tạp hơn nữa. Điều này sẽ giúp mã dễ đọc và bảo trì hơn.
+
+Backend - kpis.service.ts - Các truy vấn phức tạp: Các phương thức như getDepartmentKpis và getSectionKpis sử dụng TypeORM QueryBuilder với nhiều điều kiện và join phức tạp. Mặc dù mạnh mẽ, chúng có thể khó đọc. Hãy rà soát lại xem có thể đơn giản hóa hoặc chia nhỏ các phần của truy vấn để tăng tính rõ ràng không.
+
+Frontend - KpiProcessStatistics.vue - Template: Phần template hiển thị các thẻ thống kê (a-card bên trong a-col) có sự lặp lại. Nếu mẫu này được sử dụng ở nhiều nơi khác, bạn có thể tạo một component con có thể tái sử dụng để hiển thị các khối thống kê này.
+
+Sử dụng Constants/Enums cho Action Types (Backend): Trong KpiValueHistory và các service liên quan, các chuỗi như 'SUBMIT_CREATE', 'APPROVE_SECTION' được sử dụng cho action. Cân nhắc việc sử dụng enums hoặc hằng số (constants) để tăng tính an toàn kiểu (type safety) và dễ bảo trì.
+
+
+Mặc dù có các tệp .spec.ts, nội dung của chúng không được cung cấp. Hãy đảm bảo rằng bạn có độ bao phủ kiểm thử (test coverage) tốt, đặc biệt là cho:
+Logic workflow duyệt/từ chối trong kpi-values.service.ts.
+Các truy vấn phức tạp và logic RBAC trong kpis.service.ts.
+Logic tổng hợp thống kê trong dashboard.service.ts.
+Các actions và mutations quan trọng trong Vuex stores.
+Các component frontend có nhiều điều kiện hiển thị và tương tác người dùng.

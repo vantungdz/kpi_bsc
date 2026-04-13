@@ -1,0 +1,1354 @@
+<template>
+  <div v-if="canAccessCreatePage">
+    <LoadingOverlay
+      :visible="loading || loadingInitialData || loadingKpiTemplate"
+    />
+    <a-form
+      ref="formRef"
+      :model="form"
+      :rules="formRules"
+      layout="vertical"
+      @finish="handleChangeCreate"
+      @finishFailed="onFinishFailed"
+    >
+
+      <!-- Row 1 -->
+      <a-row :gutter="12">
+        <a-col :span="6">
+          <a-form-item
+            class="textLabel"
+            :label="$t('perspective')"
+            name="perspective_id"
+          >
+            <a-select
+              v-model:value="form.perspective_id"
+              :placeholder="$t('selectPerspective')"
+            >
+              <a-select-option
+                v-for="perspective in perspectiveList"
+                :key="perspective.id"
+                :value="perspective.id"
+                >{{ perspective.name }}</a-select-option
+              >
+            </a-select>
+          </a-form-item>
+        </a-col>
+        <a-col :span="6">
+          <a-form-item class="textLabel" :label="$t('type')" name="type">
+            <a-select v-model:value="form.type" :placeholder="$t('selectType')">
+              <a-select-option value="efficiency">
+                {{ $t("efficiency") }}
+              </a-select-option>
+              <a-select-option value="qualitative">
+                {{ $t("qualitative") }}
+              </a-select-option>
+            </a-select>
+          </a-form-item>
+        </a-col>
+        <a-col :span="6">
+          <a-form-item class="textLabel" name="formula_id">
+            <template #label>
+              <span class="formula-form-label-with-tip">
+                {{ $t("calculationFormula") }}
+                <a-tooltip
+                  :title="selectedFormulaExpressionTooltip"
+                  :overlayInnerStyle="formulaExpressionTooltipInnerStyle"
+                >
+                  <span class="formula-form-label-tip-wrap">
+                    <InfoCircleOutlined class="formula-form-label-tip-icon" />
+                  </span>
+                </a-tooltip>
+              </span>
+            </template>
+            <a-select
+              v-model:value="form.formula_id"
+              :placeholder="$t('selectCalculationFormula')"
+            >
+              <a-select-option
+                v-for="formula in formulaList"
+                :key="formula.id"
+                :value="formula.id"
+              >
+                {{ formula.name }}
+              </a-select-option>
+            </a-select>
+          </a-form-item>
+        </a-col>
+        <a-col :span="6">
+          <a-form-item
+            class="textLabel"
+            :label="$t('frequency')"
+            name="frequency"
+          >
+            <a-select
+              v-model:value="form.frequency"
+              :placeholder="$t('selectFrequency')"
+            >
+              <a-select-option value="daily"> {{ $t("daily") }} </a-select-option>
+              <a-select-option value="weekly"> {{ $t("weekly") }} </a-select-option>
+              <a-select-option value="monthly">
+                {{ $t("monthly") }}
+              </a-select-option>
+              <a-select-option value="quarterly">
+                {{ $t("quarterly") }}
+              </a-select-option>
+              <a-select-option value="yearly"> {{ $t("yearly") }} </a-select-option>
+            </a-select>
+          </a-form-item>
+        </a-col>
+      </a-row>
+      <!-- Row 2 -->
+      <a-row :gutter="12">
+        <a-col :span="6">
+          <a-form-item class="textLabel" :label="$t('kpiName')" name="name">
+            <a-input
+              v-model:value="form.name"
+              :placeholder="$t('enterKpiName')"
+            />
+          </a-form-item>
+        </a-col>
+         <a-col :span="6">
+          <a-form-item class="textLabel" :label="$t('target')" name="target">
+            <a-input
+              v-model:value="form.targetFormatted"
+              :placeholder="$t('enterTarget')"
+              @input="(event) => handleNumericInput('target', event)"
+            />
+          </a-form-item>
+        </a-col>
+        <a-col :span="6">
+          <a-form-item class="textLabel" :label="$t('weight')" name="weight">
+            <a-input
+              v-model:value="form.weight"
+              :placeholder="$t('enterWeight')"
+              @input="(event) => handleNumericInput('weight', event)"
+            />
+          </a-form-item>
+        </a-col>
+        <a-col :span="6">
+          <a-form-item class="textLabel" :label="$t('unit')" name="unit">
+            <a-select v-model:value="form.unit" :placeholder="$t('selectUnit')">
+              <a-select-option
+                v-for="(unitValue, unitKey) in KpiUnits"
+                :key="unitKey"
+                :value="unitValue"
+              >
+                {{ unitKey }}
+              </a-select-option>
+            </a-select>
+          </a-form-item>
+        </a-col>
+        
+      </a-row>
+      <!-- Row 3-->
+       <a-row :gutter="12">
+        <a-col :span="6">
+          <a-form-item
+            class="textLabel"
+            :label="$t('department')"
+            name="department_id"
+            required
+          >
+            <a-select
+              v-model:value="form.department_id"
+              :placeholder="$t('selectDepartment')"
+              :disabled="isDepartmentSelectDisabled"
+            >
+              <a-select-option
+                v-for="department in departmentList"
+                :key="department.id"
+                :value="department.id"
+              >
+                {{ department.name }}
+              </a-select-option>
+            </a-select>
+          </a-form-item>
+        </a-col>
+        <a-col :span="6">
+          <a-form-item
+            class="textLabel"
+            :label="$t('section')"
+            name="section_id"
+            required
+          >
+            <a-select
+              v-model:value="form.section_id"
+              :placeholder="$t('selectSection')"
+              :disabled="isSectionSelectDisabled"
+            >
+              <a-select-option
+                v-for="section in sectionList"
+                :key="section.id"
+                :value="section.id"
+              >
+                {{ section.name }}
+              </a-select-option>
+            </a-select>
+          </a-form-item>
+        </a-col>
+        <a-col :span="6">
+          <a-form-item
+            class="textLabel"
+            :label="$t('dateStart')"
+            name="start_date"
+          >
+            <a-date-picker
+              v-model:value="form.start_date"
+              style="width: 100%"
+              value-format="YYYY-MM-DD"
+              :disabled="true"
+            />
+          </a-form-item>
+        </a-col>
+        <a-col :span="6">
+          <a-form-item
+            class="textLabel"
+            :label="$t('dateEnd')"
+            name="end_date"
+            :rules="[
+              { required: true, message: $t('pleaseSelectEndDate') },
+              { validator: validateEndDate },
+            ]"
+          >
+            <a-date-picker
+              v-model:value="form.end_date"
+              style="width: 100%"
+              value-format="YYYY-MM-DD"
+              :disabled="true"
+            />
+          </a-form-item>
+        </a-col>
+      </a-row>
+      <a-form-item
+        class="textLabel"
+        :label="$t('description')"
+        name="description"
+      >
+        <v-md-editor
+          v-model="form.description"
+          height="400px"
+          :placeholder="$t('enterDescription')"
+        ></v-md-editor>
+      </a-form-item>
+
+      <a-row
+        :gutter="12"
+        style="
+          margin-top: -10px;
+          margin-bottom: 16px;
+          background: #f0f2f5;
+          padding: 8px;
+          border-radius: 4px;
+        "
+      >
+        <a-col :span="8">
+          <a-statistic
+            :title="$t('overallTargetDepartment')"
+            :value="overallTargetValue"
+            :precision="2"
+          />
+        </a-col>
+        <a-col :span="8">
+          <a-statistic
+            :title="$t('totalAssigned')"
+            :value="totalAssignedTarget"
+            :precision="2"
+          />
+        </a-col>
+        <a-col :span="8">
+          <a-statistic
+            :title="$t('remaining')"
+            :value="remainingTarget"
+            :precision="2"
+            :value-style="isOverAssigned ? { color: '#cf1322' } : {}"
+          />
+        </a-col>
+      </a-row>
+
+      <a-form-item
+        v-if="canAssignDirectlyToUser"
+        class="textLabel"
+        :label="$t('assignToUser')"
+        name="assigned_users"
+      >
+        <a-alert
+          v-if="assignmentError"
+          :message="assignmentError"
+          type="error"
+          show-icon
+          style="margin-bottom: 10px"
+        />
+        <a-table
+          :columns="columns"
+          :data-source="sectionUserOptions"
+          :pagination="false"
+          :row-key="(record) => `user - ${record.value}`"
+          :row-selection="rowSelection"
+          :class="{ 'table-disabled': false }"
+          size="small"
+          bordered
+          @blur="onAssignedUsersBlur"
+        >
+          <template #target="{ record }">
+            <a-input-number
+              :value="targetValues[`user - ${record.value}`] || null"
+              :placeholder="$t('enterTarget')"
+              :min="0"
+              style="width: 100%"
+              :disabled="!selectedRowKeys.includes(`user - ${record.value}`)"
+              :formatter="
+                (value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+              "
+              :parser="(value) => String(value).replace(/\$\s?|(,*)/g, '')"
+              @change="
+                (value) =>
+                  handleAssignedUserTargetChange(
+                    `user - ${record.value}`,
+                    value
+                  )
+              "
+              @blur="onAssignedUsersBlur"
+            />
+          </template>
+          <template #bodyCell="{ column, record }">
+            <template v-if="column.key === 'name'">
+              <span>{{ record.label }}</span>
+            </template>
+          </template>
+        </a-table>
+      </a-form-item>
+      <a-form-item>
+        <a-row justify="end" style="margin-top: 10px">
+          <a-button style="margin-right: 10px" @click="resetForm(true)">
+            {{ $t("clearForm") }}
+          </a-button>
+          <a-button
+            style="margin-right: 10px"
+            type="primary"
+            html-type="submit"
+            :loading="loading"
+          >
+            {{ $t("saveKpi") }}
+          </a-button>
+          <a-button type="default" @click="goBack"> {{ $t("back") }} </a-button>
+        </a-row>
+      </a-form-item>
+    </a-form>
+  </div>
+  <div v-else>
+    <a-alert
+      :message="$t('accessDenied')"
+      :description="$t('accessDeniedDescription')"
+      type="error"
+      show-icon
+    />
+    <a-button type="default" style="margin-top: 15px" @click="goBack">
+      {{ $t("back") }}
+    </a-button>
+  </div>
+</template>
+
+<script setup>
+import { onMounted, ref, computed, watch, reactive } from "vue";
+import { watchReviewCycleAndPrefillDates } from "@/core/composables/useWatchReviewCyclePrefillDates";
+import { useRouter, useRoute } from "vue-router";
+import { useStore } from "vuex";
+import { getTranslatedErrorMessage } from "@/core/services/messageTranslator";
+import i18n from "@/core/i18n";
+import {
+  notification,
+  Alert as AAlert,
+  DatePicker as ADatePicker,
+  Form as AForm,
+  FormItem as AFormItem,
+  Input as AInput,
+  Select as ASelect,
+  SelectOption as ASelectOption,
+  Row as ARow,
+  Col as ACol,
+  Button as AButton,
+} from "ant-design-vue";
+import dayjs from "dayjs";
+import { KpiUnits } from "@/core/constants/kpiConstants.js";
+import {
+  RBAC_ACTIONS,
+  RBAC_RESOURCES,
+  SCOPES,
+} from "@/core/constants/rbac.constants.js";
+import { getFullName } from "@/core/utils/format";
+import { useI18n } from "vue-i18n";
+import LoadingOverlay from "@/core/components/common/LoadingOverlay.vue";
+import { InfoCircleOutlined } from "@ant-design/icons-vue";
+
+const router = useRouter();
+const route = useRoute();
+const store = useStore();
+const { t: $t } = useI18n();
+
+const sectionId = computed(() => parseInt(route.params.sectionId, 10));
+
+const creationScope = "section";
+
+const loading = ref(false);
+const loadingInitialData = ref(false);
+/** Skip department_id watcher resetting section while applying org scope from the user. */
+const applyingScopedOrg = ref(false);
+const selectedTemplateKpiId = ref(null);
+const loadingKpiTemplate = ref(false);
+const assignmentError = ref(null);
+const formRef = ref();
+const form = ref({
+  name: "",
+  formula_id: null,
+  type: null,
+  unit: null,
+  target: null,
+  weight: null,
+  frequency: null,
+  perspective_id: null,
+  department_id: null,
+  section_id: null,
+  start_date: null,
+  end_date: null,
+  assigned_users: [],
+  description: "",
+});
+
+const isCopy = computed(() => route.query.isCopy || false);
+const contextSectionId = computed(() => parseInt(route.query.contextSectionId))
+
+const formulaList = computed(() => store.getters["formula/getFormulas"] || []);
+
+const formulaExpressionTooltipInnerStyle = {
+  maxWidth: "min(420px, 90vw)",
+  whiteSpace: "pre-wrap",
+  textAlign: "left",
+};
+
+const selectedFormulaExpressionTooltip = computed(() => {
+  const id = form.value.formula_id;
+  if (id === null || id === undefined || id === "") {
+    return $t("formulaNameTooltipEmpty");
+  }
+  const found = formulaList.value.find(
+    (f) => f.id === id || String(f.id) === String(id),
+  );
+  if (!found) return $t("formulaNameTooltipEmpty");
+  const expr = found.expression;
+  if (expr === null || expr === undefined || String(expr).trim() === "") {
+    return $t("formulaExpressionTooltipMissing");
+  }
+  return String(expr);
+});
+
+const perspectiveList = computed(
+  () => store.getters["perspectives/perspectiveList"] || []
+);
+const departmentList = computed(
+  () => store.getters["departments/departmentList"] || []
+);
+const sectionList = computed(() =>
+  form.value.department_id
+    ? store.getters["sections/sectionsByDepartment"](form.value.department_id)
+    : []
+);
+
+async function ensureReviewCyclesLoaded() {
+  if (!store.getters["reviewCycle/loaded"]) {
+    await store.dispatch("reviewCycle/fetchCycles");
+  }
+}
+
+/** Set start/end from the header-selected review cycle; clear dates when no cycle is selected. */
+function prefillStartEndFromStoreCycle() {
+  const cycle = store.getters["reviewCycle/selectedCycle"];
+  if (!cycle) {
+    form.value.start_date = null;
+    form.value.end_date = null;
+    return;
+  }
+  const start = cycle.startDate || cycle.start_date;
+  const end = cycle.endDate || cycle.end_date;
+  if (!start || !end) return;
+  form.value.start_date = dayjs(start).format("YYYY-MM-DD");
+  form.value.end_date = dayjs(end).format("YYYY-MM-DD");
+  formRef.value?.validateFields(["end_date"]).catch(() => {});
+}
+
+watchReviewCycleAndPrefillDates(store, prefillStartEndFromStoreCycle);
+
+const sectionUserList = computed(
+  () => store.getters["employees/usersBySection"](form.value.section_id) || []
+);
+
+const sectionUserOptions = computed(() =>
+  sectionUserList.value.map((user) => ({
+    value: user.id,
+    label: getFullName(user),
+  }))
+);
+
+const currentUser = computed(
+  () => store.getters["auth/currentUser"] || store.getters["auth/user"],
+);
+const userPermissions = computed(() => {
+  const u = store.getters["auth/user"];
+  if (!u) return [];
+  const direct = Array.isArray(u.permissions) ? u.permissions : [];
+  if (direct.length > 0) return direct;
+  const roles = Array.isArray(u.roles) ? u.roles : [];
+  return roles.flatMap((r) => (Array.isArray(r?.permissions) ? r.permissions : []));
+});
+
+function matchKpiCreatePermission(scope) {
+  return userPermissions.value.some(
+    (p) =>
+      String(p.action ?? "").trim() === RBAC_ACTIONS.CREATE &&
+      String(p.resource ?? "").trim() === RBAC_RESOURCES.KPI &&
+      p.scope === scope,
+  );
+}
+
+const canCreateKpiCompany = computed(() =>
+  matchKpiCreatePermission(SCOPES.COMPANY),
+);
+const canCreateKpiDepartment = computed(() =>
+  matchKpiCreatePermission(SCOPES.DEPARTMENT),
+);
+
+const canAccessCreatePage = computed(() =>
+  matchKpiCreatePermission(SCOPES.SECTION),
+);
+
+/** User can create company KPIs: free choice of department and section. */
+const isDepartmentSelectDisabled = computed(
+  () => canAccessCreatePage.value && !canCreateKpiCompany.value,
+);
+/** Section-only create (no department/company create): lock section to the user's org. */
+const isSectionSelectDisabled = computed(
+  () =>
+    canAccessCreatePage.value &&
+    !canCreateKpiCompany.value &&
+    !canCreateKpiDepartment.value,
+);
+
+function orgIdsFromUser(user) {
+  if (!user) return { departmentId: null, sectionId: null };
+  const departmentId =
+    user.departmentId ??
+    user.department_id ??
+    user.department?.id ??
+    null;
+  const sectionId =
+    user.sectionId ?? user.section_id ?? user.section?.id ?? null;
+  const d =
+    departmentId != null && !Number.isNaN(Number(departmentId))
+      ? Number(departmentId)
+      : null;
+  const s =
+    sectionId != null && !Number.isNaN(Number(sectionId))
+      ? Number(sectionId)
+      : null;
+  return { departmentId: d, sectionId: s };
+}
+
+function lockedOrgDefaults() {
+  const { departmentId, sectionId } = orgIdsFromUser(currentUser.value);
+  if (canCreateKpiCompany.value) {
+    return { department_id: null, section_id: null };
+  }
+  const department_id = departmentId;
+  const lockSection =
+    canAccessCreatePage.value && !canCreateKpiDepartment.value;
+  const section_id = lockSection ? sectionId : null;
+  return { department_id, section_id };
+}
+
+async function applyOrgScopeFromUser() {
+  if (!canAccessCreatePage.value || canCreateKpiCompany.value) return;
+  const { department_id, section_id } = lockedOrgDefaults();
+  applyingScopedOrg.value = true;
+  loadingInitialData.value = true;
+  try {
+    if (department_id != null) {
+      form.value.department_id = department_id;
+      await store.dispatch(
+        "sections/fetchSectionsByDepartment",
+        department_id,
+      );
+    }
+    if (section_id != null) {
+      form.value.section_id = section_id;
+      await store.dispatch("employees/fetchUsersBySection", section_id);
+    } else if (isSectionSelectDisabled.value) {
+      form.value.section_id = null;
+    }
+  } finally {
+    loadingInitialData.value = false;
+    applyingScopedOrg.value = false;
+  }
+}
+
+/** Department head: section picked from a template must belong to the locked department. */
+function ensureSectionBelongsToLockedDepartment() {
+  if (canCreateKpiCompany.value || !form.value.department_id) return;
+  if (!form.value.section_id) return;
+  const list =
+    store.getters["sections/sectionsByDepartment"](form.value.department_id) ||
+    [];
+  const ok = list.some(
+    (s) => Number(s.id) === Number(form.value.section_id),
+  );
+  if (!ok) {
+    form.value.section_id = null;
+  }
+}
+const canAssignDirectlyToUser = computed(() =>
+  userPermissions.value.some(
+    (p) =>
+      p.action?.trim() === RBAC_ACTIONS.ASSIGN &&
+      p.resource?.trim() === RBAC_RESOURCES.KPI &&
+      p.scope === "section"
+  )
+);
+
+const selectedRowKeys = ref([]);
+const targetValues = ref({});
+const assignmentTouched = ref(false);
+
+const columns = computed(() => [
+  {
+    title: $t("user"),
+    dataIndex: "label",
+    key: "name",
+  },
+  {
+    title: $t("target"),
+    key: "target",
+    slots: { customRender: "target" },
+    width: "150px",
+  },
+]);
+
+const rowSelection = computed(() => ({
+  type: "checkbox",
+  selectedRowKeys: selectedRowKeys.value,
+  getCheckboxProps: (record) => ({
+    disabled: false,
+    name: record.label,
+  }),
+  onSelect: (record, selected) => {
+    let currentSelectedKeys = [...selectedRowKeys.value];
+    const recordKey = `user - ${record.value}`;
+    if (selected) {
+      if (!currentSelectedKeys.includes(recordKey)) {
+        currentSelectedKeys.push(recordKey);
+      }
+    } else {
+      currentSelectedKeys = currentSelectedKeys.filter(
+        (key) => key !== recordKey
+      );
+      delete targetValues.value[recordKey];
+    }
+    selectedRowKeys.value = currentSelectedKeys;
+  },
+  onSelectAll: (selected, selectedRows) => {
+    if (selected) {
+      selectedRowKeys.value = selectedRows.map((r) => `user - ${r.value}`);
+    } else {
+      selectedRowKeys.value = [];
+      targetValues.value = {};
+    }
+  },
+}));
+
+const overallTargetValue = computed(() => {
+  const target = parseFloat(form.value.target);
+  return isNaN(target) ? 0 : target;
+});
+const totalAssignedTarget = computed(() => {
+  let total = 0;
+  selectedRowKeys.value.forEach((key) => {
+    if (key.startsWith("user - ")) {
+      const targetValue = targetValues.value[key];
+      if (
+        targetValue !== undefined &&
+        targetValue !== null &&
+        !isNaN(targetValue) &&
+        targetValue >= 0
+      ) {
+        total += Number(targetValue);
+      }
+    }
+  });
+  return total;
+});
+const remainingTarget = computed(() => {
+  return parseFloat(
+    (overallTargetValue.value - totalAssignedTarget.value).toFixed(5)
+  );
+});
+
+const resetForm = (clearTemplateSelection = false) => {
+  formRef.value?.resetFields();
+  const org = lockedOrgDefaults();
+  form.value = {
+    name: "",
+    formula_id: null,
+    type: null,
+    unit: null,
+    target: null,
+    targetFormatted: "",
+    weight: null,
+    frequency: null,
+    perspective_id: null,
+    department_id: org.department_id,
+    section_id: org.section_id,
+    start_date: null,
+    end_date: null,
+    assigned_users: [],
+    description: "",
+  };
+  assignmentError.value = null;
+  assignmentTouched.value = false;
+  if (clearTemplateSelection) {
+    selectedTemplateKpiId.value = null;
+  }
+  void applyOrgScopeFromUser();
+  void ensureReviewCyclesLoaded().then(() => prefillStartEndFromStoreCycle());
+};
+
+const loadKpiTemplate = async (selectedId) => {
+  if (!selectedId) {
+    resetForm();
+    return;
+  }
+  loadingKpiTemplate.value = true;
+  assignmentError.value = null;
+  assignmentTouched.value = false;
+  try {
+    await store.dispatch("kpis/fetchKpiDetail", selectedId);
+    const kpiDetail = store.getters["kpis/currentKpi"];
+
+    if (kpiDetail) {
+      let targetVal = 0;
+      if (contextSectionId.value) {
+        const targetAssignment = kpiDetail.assignments.find(
+          (assign) => assign.assigned_to_section === contextSectionId.value
+        );
+        if (targetAssignment) {
+          form.value.department_id = parseInt(targetAssignment.section?.department?.id);
+          targetVal = targetAssignment.targetValue;
+        }
+      }
+      form.value.name = kpiDetail.name ? `${kpiDetail.name}${isCopy.value ? " (Copy)" : ""}` : "";
+      form.value.formula_id = kpiDetail.formula_id;
+      form.value.type = kpiDetail.type || null;
+      form.value.unit = kpiDetail.unit || null;
+      form.value.target = targetVal || "";
+      form.value.targetFormatted = String(targetVal).replace(/\B(?=(\d{3})+(?!\d))/g, ",") || "";
+      form.value.weight = kpiDetail.weight ?? null;
+      form.value.frequency = kpiDetail.frequency || null;
+      form.value.perspective_id = kpiDetail.perspective?.id || null;
+      form.value.description = kpiDetail.description || "";
+
+      // Reset assignment fields - user will select department/section manually
+      form.value.assigned_users = [];
+      selectedRowKeys.value = [];
+      targetValues.value = {};
+      assignmentError.value = null;
+      assignmentTouched.value = false;
+
+      if (selectedTemplateKpiId.value && !isCopy.value) {
+        form.value.section_id = contextSectionId.value;
+        const employeeAssignments = kpiDetail.assignments.filter(item => {
+          return (item.assigned_to_employee !== null);
+        });
+        if (employeeAssignments) {
+          const newSelectedKeys = [];
+          const newTargets = {};
+          const keysToExpand = new Set();
+
+          employeeAssignments.forEach(emp => {
+            const targetKey = `user - ${emp.assigned_to_employee}`;
+            newSelectedKeys.push(targetKey);
+            newTargets[targetKey] = emp.targetValue;
+            targetValues.value[targetKey] = emp.targetValue;
+            keysToExpand.add(targetKey);
+          });
+
+          selectedRowKeys.value = newSelectedKeys;
+          targetValues.value = newTargets;
+        }
+      }
+
+      if (!canCreateKpiCompany.value) {
+        await applyOrgScopeFromUser();
+        ensureSectionBelongsToLockedDepartment();
+      }
+
+      await ensureReviewCyclesLoaded();
+      prefillStartEndFromStoreCycle();
+      notification.success({
+        message: `Loaded data from KPI: ${kpiDetail.name}`,
+      });
+    } else {
+      throw new Error("KPI Detail not found.");
+    }
+  } catch (error) {
+    console.error("Error loading KPI template:", error);
+    notification.error({
+      message: "Failed to load KPI template data.",
+    });
+    resetForm();
+  } finally {
+    loadingKpiTemplate.value = false;
+  }
+};
+
+const handleNumericInput = (field, event) => {
+  let value = event.target.value.replace(/[^0-9.]/g, "");
+  const parts = value.split(".");
+  if (parts.length > 2) {
+    value = parts[0] + "." + parts.slice(1).join("");
+  }
+
+  const rawValue = parseFloat(value) || 0;
+
+  const [intPart, decPart] = value.split(".");
+  let formatted = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  if (decPart !== undefined) formatted += "." + decPart;
+
+  form.value[field] = rawValue;
+  form.value[`${field}Formatted`] = formatted;
+};
+
+const validateWeight = async (_, value) => {
+  if (value === null || value === "") return Promise.resolve();
+  const numValue = parseFloat(value);
+  if (isNaN(numValue)) return Promise.reject("Weight must be a number");
+  if (numValue < 0 || numValue > 100)
+    return Promise.reject("Weight must be between 0 and 100");
+  return Promise.resolve();
+};
+
+const handleAssignedUserTargetChange = (key, value) => {
+  assignmentTouched.value = true;
+  if (value === null || value === "" || isNaN(value)) {
+    delete targetValues.value[key];
+  } else {
+    const numValue = parseFloat(value);
+    if (numValue < 0) {
+      targetValues.value[key] = null;
+      assignmentError.value = `Target for ${key.split(" - ")[1]} cannot be negative.`;
+      formRef.value?.validateFields(["assigned_users"]);
+      return;
+    }
+    targetValues.value[key] = numValue;
+    assignmentError.value = null;
+  }
+};
+
+const validateAssignment = async () => {
+  if (!assignmentTouched.value) {
+    assignmentError.value = null;
+    return Promise.resolve();
+  }
+  if (!selectedRowKeys.value || selectedRowKeys.value.length === 0) {
+    assignmentError.value = $t("assignmentRequirementMessage");
+    return Promise.reject("No user selected for assignment.");
+  }
+  let missingTarget = false;
+  selectedRowKeys.value.forEach((key) => {
+    const targetValue = targetValues.value[key];
+    if (
+      targetValue === undefined ||
+      targetValue === null ||
+      isNaN(targetValue) ||
+      targetValue < 0
+    ) {
+      missingTarget = true;
+    }
+  });
+  if (missingTarget) {
+    assignmentError.value = $t("pleaseEnterValidTargetForSelectedItems");
+    return Promise.reject("Missing target for selected users.");
+  }
+  const total = totalAssignedTarget.value;
+  const overall = overallTargetValue.value;
+  // Check if total assigned exceeds overall target
+  if (total > overall) {
+    assignmentError.value = $t("totalAssignedTargetExceedsKpiTarget", {
+      totalAssigned: total,
+      kpiTarget: overall
+    });
+    return Promise.reject(assignmentError.value);
+  } else {
+    assignmentError.value = null;
+    return Promise.resolve();
+  }
+};
+
+const goBack = () => {
+  router.push({
+    name: "KpiListSection",
+    params: { sectionId: sectionId.value },
+  });
+};
+
+const formatToDateString = (dateValue) => {
+  return dateValue ? dayjs(dateValue).format("YYYY-MM-DD") : null;
+};
+
+const handleChangeCreate = async () => {
+  loading.value = true;
+  assignmentError.value = null;
+  try {
+    await formRef.value?.validate();
+
+    const userAssignments = selectedRowKeys.value
+      .filter((key) => key.startsWith("user - "))
+      .map((key) => {
+        const userId = parseInt(key.split(" - ")[1], 10);
+        const target = targetValues.value[key];
+        return { id: userId, target: Number(target) };
+      });
+
+    const sectionAssignments = [];
+    if (form.value.section_id !== null && form.value.section_id !== undefined) {
+      sectionAssignments.push({
+        id: form.value.section_id,
+        target: form.value.target !== null ? Number(form.value.target) : null,
+      });
+    }
+    const departmentAssignments = [];
+    if (
+      form.value.department_id !== null &&
+      form.value.department_id !== undefined
+    ) {
+      departmentAssignments.push({
+        id: form.value.department_id,
+        target: form.value.target !== null ? Number(form.value.target) : null,
+      });
+    }
+
+    let assignments = {
+      from: creationScope,
+      to_employees: [],
+      to_departments: [],
+      to_sections: [],
+    };
+    let hasValidAssignment = false;
+    if (userAssignments.length > 0) {
+      assignments.to_employees = userAssignments;
+      hasValidAssignment = true;
+    }
+    if (sectionAssignments.length > 0) {
+      assignments.to_sections = sectionAssignments;
+      hasValidAssignment = true;
+    }
+    if (departmentAssignments.length > 0) {
+      assignments.to_departments = departmentAssignments;
+      hasValidAssignment = true;
+    }
+    if (!hasValidAssignment) {
+      assignmentError.value =
+        "Assignment Required: Please select a user or section/department to assign this KPI.";
+      throw new Error(assignmentError.value);
+    }
+    const formattedStartDate = formatToDateString(form.value.start_date);
+    const formattedEndDate = formatToDateString(form.value.end_date);
+    const numericMainTarget =
+      form.value.target !== null ? Number(form.value.target) : null;
+    const numericMainWeight =
+      form.value.weight !== null ? Number(form.value.weight) : null;
+    const kpiData = {
+      name: form.value.name,
+      formula_id: form.value.formula_id,
+      type: form.value.type,
+      unit: form.value.unit,
+      target: numericMainTarget,
+      weight: numericMainWeight,
+      frequency: form.value.frequency,
+      perspective_id: form.value.perspective_id,
+      description: form.value.description,
+      start_date: formattedStartDate,
+      end_date: formattedEndDate,
+      section_id: form.value.section_id,
+      department_id: form.value.department_id,
+      assignments,
+    };
+
+    // If isCopy is true, always create new KPI, don't update the template
+    if(selectedTemplateKpiId.value && !isCopy.value) {
+      await store.dispatch("kpis/updateKpi", {
+        id: selectedTemplateKpiId.value,
+        kpiData: kpiData,
+      });
+    } else {
+      await store.dispatch("kpis/createKpi", kpiData);
+    }
+    resetForm(true);
+    router.push({
+      name: "KpiListSection",
+      params: { sectionId: form.value.section_id },
+    });
+  } catch (error) {
+    if (error instanceof Error && error.message === assignmentError.value) {
+      return;
+    } else {
+      console.error("KPI creation failed:", error);
+      const errorMessage =
+        getTranslatedErrorMessage(error?.response?.data?.message) ||
+        error?.message ||
+        i18n.global.t("errors.unknownError");
+      notification.error({
+        message: i18n.global.t("errors.unknownError"),
+        description: errorMessage,
+        duration: 5,
+      });
+    }
+  } finally {
+    loading.value = false;
+  }
+};
+
+const onFinishFailed = (errorInfo) => {
+  let errorMessages = "Please check required fields and input formats.";
+  if (errorInfo?.errorFields?.length > 0) {
+    const nonAssignmentErrors = errorInfo.errorFields.filter(
+      (field) => field.name[0] !== "assigned_users"
+    );
+    if (nonAssignmentErrors.length > 0) {
+      const firstErrorField = nonAssignmentErrors[0];
+      const errors = Array.isArray(firstErrorField.errors)
+        ? firstErrorField.errors.join(", ")
+        : "Unknown error";
+      errorMessages = `${errors}`;
+    } else if (
+      errorInfo.errorFields.some((field) => field.name[0] === "assigned_users")
+    ) {
+      if (assignmentError.value) {
+        errorMessages = assignmentError.value;
+      } else {
+        errorMessages = "Please select a user for assignment.";
+      }
+    }
+  }
+
+  notification.error({
+    message: "Form Validation Failed",
+    description: errorMessages,
+  });
+};
+
+const validateEndDate = async (_rule, value) => {
+  if (!value || !form.value.start_date) return Promise.resolve();
+  const start = dayjs(form.value.start_date);
+  const end = dayjs(value);
+  if (end.isBefore(start, "day")) {
+    return Promise.reject(new Error($t("endDateMustBeAfterStartDate")));
+  }
+  const freq = form.value.frequency;
+  if (freq === "daily") {
+    return Promise.resolve();
+  }
+  if (freq === "weekly") {
+    if (end.diff(start, "day") < 6) {
+      return Promise.reject(new Error($t("endDateAtLeastOneWeek")));
+    }
+  }
+  if (freq === "monthly") {
+    if (end.diff(start, "day") < 29) {
+      return Promise.reject(new Error($t("endDateAtLeastOneMonth")));
+    }
+  }
+  if (freq === "quarterly") {
+    if (end.diff(start, "day") < 89) {
+      return Promise.reject(new Error($t("endDateAtLeastOneQuarter")));
+    }
+  }
+  if (freq === "yearly") {
+    if (end.diff(start, "day") < 364) {
+      return Promise.reject(new Error($t("endDateAtLeastOneYear")));
+    }
+  }
+  return Promise.resolve();
+};
+
+const formRules = reactive({
+  section_id: [
+    {
+      required: true,
+      message: $t("pleaseSelectSection"),
+    },
+  ],
+  perspective_id: [
+    {
+      required: true,
+      message: $t("pleaseSelectPerspective"),
+    },
+  ],
+  name: [
+    {
+      required: true,
+      message: $t("pleaseEnterKpiName"),
+      trigger: "blur",
+    },
+  ],
+  formula_id: [
+    {
+      required: true,
+      message: $t("pleaseSelectFormula"),
+    },
+  ],
+  type: [
+    {
+      required: true,
+      message: $t("pleaseSelectKpiType"),
+    },
+  ],
+  unit: [
+    {
+      required: true,
+      message: $t("pleaseSelectUnit"),
+    },
+  ],
+  target: [
+    {
+      required: true,
+      message: $t("pleaseEnterTarget"),
+      trigger: "blur",
+    },
+    {
+      validator: async (_, value) => {
+        const numValue = parseFloat(value);
+        if (value === null || value === "" || isNaN(numValue) || numValue < 0) {
+          return Promise.reject($t("targetMustBeNonNegative"));
+        }
+        return Promise.resolve();
+      },
+      trigger: "blur",
+    },
+  ],
+  weight: [
+    {
+      required: true,
+      message: $t("pleaseEnterWeight"),
+      trigger: "blur",
+    },
+    {
+      validator: validateWeight,
+      trigger: "blur",
+    },
+  ],
+  frequency: [
+    {
+      required: true,
+      message: $t("pleaseSelectFrequency"),
+    },
+  ],
+  start_date: [
+    {
+      required: true,
+      message: $t("pleaseSelectStartDate"),
+    },
+  ],
+  end_date: [
+    {
+      required: true,
+      message: $t("pleaseSelectEndDate"),
+    },
+    {
+      validator: validateEndDate,
+      trigger: "change",
+    },
+  ],
+
+  assigned_users: [{ validator: validateAssignment, trigger: ["finish"] }],
+});
+
+watch(
+  () => form.value.assigned_users,
+  (newVal) => {
+    if (!(canAssignDirectlyToUser.value && newVal.length === 0)) {
+      assignmentError.value = null;
+    }
+
+    formRef.value?.validateFields(["assigned_users"]).catch(() => {});
+  },
+  { immediate: true }
+);
+
+watch(
+  () => form.value.frequency,
+  () => {
+    if (form.value.end_date && formRef.value) {
+      formRef.value.validateFields(["end_date"]);
+    }
+  }
+);
+
+
+watch(
+  () => form.value.department_id,
+  async (newDepartmentId, oldDepartmentId) => {
+    if (loadingInitialData.value) return;
+    if (applyingScopedOrg.value) return;
+
+    if (newDepartmentId && newDepartmentId !== oldDepartmentId) {
+      loadingInitialData.value = true;
+      try {
+        await store.dispatch(
+          "sections/fetchSectionsByDepartment",
+          newDepartmentId
+        );
+        form.value.section_id = null;
+      } catch (error) {
+        console.error("Error fetching sections by department:", error);
+        notification.error({
+          message: "Failed to load sections for selected department.",
+          description: error.message || "An error occurred.",
+          duration: 5,
+        });
+      } finally {
+        loadingInitialData.value = false;
+      }
+
+      selectedRowKeys.value = [];
+      targetValues.value = {};
+      assignmentError.value = null;
+      assignmentTouched.value = false;
+    }
+  }
+);
+watch(
+  () => form.value.section_id,
+  async (newSectionId, oldSectionId) => {
+    if (loadingInitialData.value) {
+      await store.dispatch("employees/fetchUsersBySection", newSectionId);
+      return;
+    }
+    if (newSectionId && newSectionId !== oldSectionId) {
+      loadingInitialData.value = true;
+      try {
+        await store.dispatch("employees/fetchUsersBySection", newSectionId);
+      } catch (error) {
+        console.error("Error fetching users by section:", error);
+        notification.error({
+          message: "Failed to load users for selected section.",
+          description: error.message || "An error occurred.",
+          duration: 5,
+        });
+      } finally {
+        loadingInitialData.value = false;
+      }
+
+      selectedRowKeys.value = [];
+      targetValues.value = {};
+      assignmentError.value = null;
+      assignmentTouched.value = false;
+    }
+  }
+);
+
+onMounted(async () => {
+  loadingInitialData.value = true;
+  try {
+    await Promise.all([
+      store.dispatch("departments/fetchDepartments"),
+      store.dispatch("perspectives/fetchPerspectives"),
+      store.dispatch("sections/fetchSections"),
+      store.dispatch("kpis/fetchAllKpisForSelect"),
+      store.dispatch("formula/fetchFormulas"),
+      ensureReviewCyclesLoaded().then(() => prefillStartEndFromStoreCycle()),
+    ]);
+
+    await applyOrgScopeFromUser();
+
+    if (form.value.department_id && !form.value.section_id) {
+      await store.dispatch(
+        "sections/fetchSectionsByDepartment",
+        form.value.department_id,
+      );
+    }
+
+    if (form.value.section_id) {
+      await store.dispatch(
+        "employees/fetchUsersBySection",
+        form.value.section_id,
+      );
+    }
+
+    const templateKpiIdFromRoute = route.query.templateKpiId;
+    if (templateKpiIdFromRoute) {
+      const kpiId = parseInt(templateKpiIdFromRoute, 10);
+      if (!isNaN(kpiId)) {
+        selectedTemplateKpiId.value = kpiId;
+        await loadKpiTemplate(kpiId);
+        if (form.value.department_id) {
+          await store.dispatch(
+            "sections/fetchSectionsByDepartment",
+            form.value.department_id,
+          );
+        }
+      } else {
+        console.error("Invalid templateKpiId in route query.");
+        notification.error({ message: "Invalid template ID provided." });
+      }
+    }
+  } catch (error) {
+    console.error("Error fetching initial data:", error);
+    notification.error({
+      message: "Failed to load necessary data.",
+      description: error.message || "An error occurred.",
+      duration: 5,
+    });
+  } finally {
+    loadingInitialData.value = false;
+  }
+});
+
+
+const onAssignedUsersBlur = () => {
+  assignmentTouched.value = true;
+};
+</script>
+
+<style scoped>
+.textLabel label {
+  font-weight: bold !important;
+}
+
+.table-disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.ant-form-item {
+  margin-bottom: 16px;
+}
+
+:deep(.ant-input-number-disabled) {
+  background-color: #f5f5f5 !important;
+  color: rgba(0, 0, 0, 0.25) !important;
+  cursor: not-allowed !important;
+}
+
+.formula-form-label-with-tip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.formula-form-label-tip-wrap {
+  display: inline-flex;
+  align-items: center;
+  cursor: help;
+}
+
+.formula-form-label-tip-icon {
+  color: #94a3b8;
+  font-size: 14px;
+}
+</style>
