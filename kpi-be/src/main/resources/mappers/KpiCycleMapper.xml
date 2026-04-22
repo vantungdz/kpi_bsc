@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.company.kpi.mapper.KpiCycleMapper">
+
+    <!--
+        findByYear: lấy chu kỳ KPI theo năm.
+        init-db.sql dùng 'status_code' (INTEGER) thay vì 'status' (ENUM).
+        Alias status_code AS status để map vào KpiCycle.status field.
+    -->
+    <select id="findByYear" resultType="com.company.kpi.entity.KpiCycle">
+        SELECT
+            id,
+            year,
+            name,
+            goal_setting_deadline,
+            mid_year_deadline,
+            end_year_deadline,
+            status_code AS status,
+            created_at,
+            updated_at
+        FROM
+            kpi_cycles
+        WHERE
+            year = #{year}
+            AND deleted_at IS NULL
+    </select>
+
+</mapper>

@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.company.kpi.mapper.UserMapper">
+
+    <!--
+        findById: dùng cho AuthService.refresh() và các service khác cần load User theo ID.
+        JOIN user_roles + roles để lấy role code (GM/PM/LEADER/MEMBER) phục vụ JWT generation.
+    -->
+    <select id="findById" resultType="com.company.kpi.entity.User">
+        SELECT
+            U.ID,
+            U.EMAIL,
+            U.PASSWORD_HASH,
+            U.FULL_NAME,
+            R.CODE AS ROLE,
+            U.IS_ACTIVE,
+            U.CREATED_AT,
+            U.UPDATED_AT
+        FROM
+            USERS U
+            LEFT JOIN USER_ROLES UR ON U.ID = UR.USER_ID
+            LEFT JOIN ROLES R ON UR.ROLE_ID = R.ID
+        WHERE
+            U.ID = #{id}
+            AND U.DELETED_AT IS NULL
+            AND U.IS_ACTIVE = TRUE
+    </select>
+
+</mapper>

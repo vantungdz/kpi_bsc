@@ -1,0 +1,128 @@
+version: '3.9'
+
+services:
+  # ----------------------------------------------------------------
+  # PostgreSQL for KPI project (port 5556 to avoid conflict with wtm)
+  # ----------------------------------------------------------------
+  kpi-postgres:
+    image: postgres:16-alpine
+    container_name: kpi-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-kpi_dev}
+    ports:
+      - "${POSTGRES_PORT:-5556}:5432"
+    volumes:
+      - kpi_postgres_data:/var/lib/postgresql/data
+      - ./kpi-be/src/main/resources/db/migration/V1__create_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
+      - ./kpi-be/src/main/resources/db/seed/V2__seed_data.sql:/docker-entrypoint-initdb.d/02_seed.sql
+    networks:
+      - kpi-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-kpi_dev}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ----------------------------------------------------------------
+  # Redis (for refresh token blacklist / session cache)
+  # ----------------------------------------------------------------
+  kpi-redis:
+    image: redis:7-alpine
+    container_name: kpi-redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6380}:6379"
+    networks:
+      - kpi-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ----------------------------------------------------------------
+  # pgAdmin 4 — Web UI để quản lý PostgreSQL
+  # Truy cập: http://localhost:5050
+  # Email: admin@kpi.local | Password: admin123
+  # Chạy: docker-compose --profile tools up -d
+  # ----------------------------------------------------------------
+  kpi-pgadmin:
+    profiles: ["tools"]
+    image: dpage/pgadmin4:latest
+    container_name: kpi-pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@kpi.dev}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin123}
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
+    ports:
+      - "${PGADMIN_PORT:-5050}:80"
+    volumes:
+      - kpi_pgadmin_data:/var/lib/pgadmin
+      - ./pgadmin-servers.json:/pgadmin4/servers.json:ro
+    networks:
+      - kpi-network
+    depends_on:
+      kpi-postgres:
+        condition: service_healthy
+
+  # ----------------------------------------------------------------
+  # Backend  (Spring Boot — build from source)
+  # Yêu cầu Docker Hub / registry mirror truy cập được.
+  # Chạy: docker-compose --profile backend up -d
+  # Hoặc chạy local: cd kpi-be && mvn spring-boot:run
+  # ----------------------------------------------------------------
+  kpi-be:
+    profiles: ["backend"]
+    build:
+      context: ./kpi-be
+      dockerfile: Dockerfile
+    container_name: kpi-be
+    restart: unless-stopped
+    depends_on:
+      kpi-postgres:
+        condition: service_healthy
+      kpi-redis:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://kpi-postgres:5432/${POSTGRES_DB:-kpi_dev}?stringtype=unspecified
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-postgres}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      SPRING_REDIS_HOST: kpi-redis
+      SPRING_REDIS_PORT: 6379
+      JWT_SECRET: ${JWT_SECRET:-changeme_use_a_long_random_secret_in_production}
+      JWT_ACCESS_EXPIRATION: ${JWT_ACCESS_EXPIRATION:-3600000}
+      JWT_REFRESH_EXPIRATION: ${JWT_REFRESH_EXPIRATION:-604800000}
+    ports:
+      - "${BACKEND_PORT:-8081}:8081"
+    networks:
+      - kpi-network
+
+  # ----------------------------------------------------------------
+  # Frontend (Vite / React) — Build from Dockerfile
+  # ----------------------------------------------------------------
+  kpi-fe:
+    build:
+      context: ./kpi-fe
+      dockerfile: Dockerfile
+    container_name: kpi-fe
+    restart: unless-stopped
+    environment:
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/api/v1}
+      VITE_USE_MOCK: ${VITE_USE_MOCK:-true}
+    ports:
+      - "3000:5173"
+    networks:
+      - kpi-network
+
+volumes:
+  kpi_postgres_data:
+  kpi_pgadmin_data:
+
+networks:
+  kpi-network:
+    driver: bridge

@@ -1,0 +1,16 @@
+{
+  "Servers": {
+    "1": {
+      "Name": "KPI PostgreSQL",
+      "Group": "Servers",
+      "Host": "kpi-postgres",
+      "Port": 5432,
+      "MaintenanceDB": "kpi_dev",
+      "Username": "postgres",
+      "Password": "postgres",
+      "SSLMode": "prefer",
+      "SavePassword": true,
+      "Comment": "KPI Project — kpi_dev database"
+    }
+  }
+}

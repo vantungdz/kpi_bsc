@@ -1,0 +1,68 @@
+# ============================================================
+# KPI Management System — .gitignore
+# ============================================================
+
+# ─── Environment / Secrets ──────────────────────────────────
+# Không commit file .env thực tế — chỉ commit .env.example
+.env
+kpi-fe/.env
+
+# ─── Frontend (Node / Vite) ─────────────────────────────────
+kpi-fe/node_modules/
+kpi-fe/dist/
+kpi-fe/dist-ssr/
+kpi-fe/.vite/
+kpi-fe/*.local
+
+# Vite cache
+kpi-fe/.vite-inspect/
+
+# ─── Backend (Maven / Java) ─────────────────────────────────
+kpi-be/target/
+kpi-be/.mvn/wrapper/maven-wrapper.jar
+!kpi-be/.mvn/wrapper/maven-wrapper.properties
+
+# IntelliJ IDEA
+*.iml
+.idea/
+*.iws
+*.ipr
+
+# Eclipse / STS
+.project
+.classpath
+.settings/
+.springBeans
+
+# ─── Editor / IDE ───────────────────────────────────────────
+# VS Code settings (cá nhân, không bắt buộc team dùng chung)
+.vscode/
+# Ngoại lệ: uncommment dòng dưới nếu muốn chia sẻ extensions
+# !.vscode/extensions.json
+
+# ─── OS ─────────────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V500
+.Trashes
+Thumbs.db
+ehthumbs.db
+desktop.ini
+
+# ─── Logs ───────────────────────────────────────────────────
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ─── Docker volumes (nếu mount local) ───────────────────────
+pgadmin-data/
+postgres-data/
+redis-data/
+
+# ─── Misc ───────────────────────────────────────────────────
+*.bak
+*.swp
+*.tmp

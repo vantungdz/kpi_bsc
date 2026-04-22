@@ -1,0 +1,709 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GM Dashboard - KPI Management</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <!-- Custom Animations -->
+  <style>
+    @keyframes fadeInBottom {
+      from { opacity: 0; transform: translateY(1rem); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes fadeInRight {
+      from { opacity: 0; transform: translateX(2rem); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+    .animate-view-overview {
+      animation: fadeInBottom 0.5s ease-out forwards;
+    }
+    .animate-view-detail {
+      animation: fadeInRight 0.3s ease-out forwards;
+    }
+    
+    /* Hide scrollbar for a cleaner look on Windows */
+    .overflow-x-auto::-webkit-scrollbar {
+        height: 6px;
+    }
+    .overflow-x-auto::-webkit-scrollbar-thumb {
+        background-color: #cbd5e1;
+        border-radius: 10px;
+    }
+
+    /* Custom thin scrollbar for breakdown lists */
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 4px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background-color: #e2e8f0;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body class="min-h-screen bg-slate-50 font-sans text-slate-800">
+
+  <!-- HEADER -->
+  <header class="bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center sticky top-0 z-20 shadow-sm">
+    <div class="flex items-center gap-4">
+      <div class="bg-blue-600 text-white p-2 rounded-xl shadow-inner">
+        <i data-lucide="target" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <h1 class="text-xl font-bold text-slate-800 tracking-tight">GM Workspace</h1>
+        <p class="text-xs text-slate-500 font-medium">KPI Management System</p>
+      </div>
+    </div>
+    
+    <div class="flex items-center gap-5">
+      <button class="relative p-2 text-slate-400 hover:text-slate-600 transition-colors bg-slate-50 rounded-full">
+        <i data-lucide="bell" class="w-5 h-5"></i>
+        <span class="absolute top-1.5 right-1.5 w-2 h-2 bg-rose-500 rounded-full"></span>
+      </button>
+      
+      <div class="flex items-center gap-3 pl-5 border-l border-slate-200 cursor-pointer hover:opacity-80">
+        <div class="w-9 h-9 rounded-full bg-indigo-100 text-indigo-700 font-bold flex items-center justify-center border border-indigo-200">
+          GM
+        </div>
+        <div class="hidden md:block">
+          <p class="text-sm font-bold leading-tight">Tran Van GM</p>
+          <p class="text-xs text-slate-500">Rank: R8</p>
+        </div>
+        <i data-lucide="chevron-down" class="w-4 h-4 text-slate-400"></i>
+      </div>
+    </div>
+  </header>
+
+  <!-- MAIN CONTENT AREA -->
+  <main class="p-6 max-w-6xl mx-auto">
+    
+    <!-- ==================== VIEW 1: OVERVIEW ==================== -->
+    <div id="overview-view" class="space-y-6 animate-view-overview">
+      
+      <!-- Dynamic Header actions -->
+      <div class="flex justify-between items-end mb-6">
+        <div>
+          <h2 class="text-2xl font-bold text-slate-800">KPI Overview</h2>
+          <p class="text-slate-500 text-sm mt-1">Track the progress of KPI implementation across the entire department.</p>
+        </div>
+        <select id="year-select" class="px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none focus:border-blue-500 shadow-sm cursor-pointer">
+          <option value="2024">Evaluation Period 2024</option>
+          <option value="2025" selected>Evaluation Period 2025</option>
+        </select>
+      </div>
+
+      <!-- 1. GLOBAL PROGRESS BAR (STEPPER) -->
+      <div class="bg-white p-6 md:p-8 rounded-2xl border border-slate-200 shadow-sm">
+        <div class="flex justify-between items-center mb-8">
+          <h3 class="text-lg font-bold text-slate-800">KPI Implementation Roadmap (<span id="display-year">2025</span>)</h3>
+          <span class="px-3 py-1 bg-blue-50 text-blue-700 text-xs font-bold rounded-full">Phase 3</span>
+        </div>
+        
+        <div class="relative flex w-full">
+          <!-- Connecting Lines -->
+          <div class="absolute top-5 left-[16.66%] right-[16.66%] h-[2px] bg-slate-100 z-0 rounded-full"></div>
+          <div class="absolute top-5 left-[16.66%] w-[66.66%] h-[2px] bg-blue-500 z-0 rounded-full transition-all duration-1000"></div>
+
+          <!-- Step 1 -->
+          <div class="relative z-10 flex-1 flex flex-col items-center">
+            <div class="w-10 h-10 bg-blue-600 text-white rounded-full flex items-center justify-center font-bold ring-8 ring-white shadow-sm">
+              <i data-lucide="check-circle" class="w-5 h-5"></i>
+            </div>
+            <div class="text-center mt-4">
+              <p class="font-bold text-slate-800 text-sm">Target Setup</p>
+              <p class="text-xs text-slate-500 mt-1">Completed (100%)</p>
+            </div>
+          </div>
+
+          <!-- Step 2 -->
+          <div class="relative z-10 flex-1 flex flex-col items-center">
+            <div class="w-10 h-10 bg-blue-600 text-white rounded-full flex items-center justify-center font-bold ring-8 ring-white shadow-sm">
+              <i data-lucide="check-circle" class="w-5 h-5"></i>
+            </div>
+            <div class="text-center mt-4">
+              <p class="font-bold text-slate-800 text-sm">Mid-Year Review</p>
+              <p class="text-xs text-slate-500 mt-1">Completed (100%)</p>
+            </div>
+          </div>
+
+          <!-- Step 3 -->
+          <div class="relative z-10 flex-1 flex flex-col items-center">
+            <div class="w-10 h-10 bg-white border-2 border-blue-600 rounded-full flex items-center justify-center ring-8 ring-white shadow-sm">
+              <span class="w-2.5 h-2.5 bg-blue-600 rounded-full animate-pulse"></span>
+            </div>
+            <div class="text-center mt-4">
+              <p class="font-bold text-blue-600 text-sm">Year-End Evaluation</p>
+              <p class="text-xs text-blue-500 font-medium mt-1">In Progress (78%)</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. GM'S PERSONAL KPI OVERVIEW -->
+      <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden">
+        <!-- Background Decoration -->
+        <div class="absolute -right-10 -top-10 w-32 h-32 bg-indigo-50 rounded-full blur-2xl opacity-50 pointer-events-none"></div>
+        
+        <div class="flex justify-between items-center mb-6 relative z-10">
+          <div>
+            <h3 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+              <i data-lucide="bar-chart-2" class="w-5 h-5 text-indigo-600"></i>
+              GM's Core Targets Breakdown
+            </h3>
+            <p class="text-xs text-slate-500 mt-1">Detailed contribution from each section to your overall C-Level goals.</p>
+          </div>
+          <button class="text-sm font-medium text-indigo-600 hover:underline">View My Full KPI Sheet &rarr;</button>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 relative z-10">
+          
+          <!-- KPI 1: Gross Profit -->
+          <div class="bg-slate-50/50 rounded-xl border border-slate-200 p-5 flex flex-col">
+            <div class="flex justify-between items-start mb-4">
+              <div>
+                <p class="text-sm font-bold text-slate-800">C.1 Gross Profit Achievement</p>
+                <p class="text-xs text-slate-500 mt-0.5">Target: >= 32.0%</p>
+              </div>
+              <div class="text-right">
+                <p class="text-xl font-bold text-emerald-600">34.2%</p>
+                <p class="text-xs text-slate-500">Overall Average</p>
+              </div>
+            </div>
+            
+            <div class="w-full bg-slate-200 rounded-full h-1.5 mb-5">
+              <div class="bg-emerald-500 h-1.5 rounded-full" style="width: 100%"></div>
+            </div>
+
+            <!-- Section Breakdown List -->
+            <div class="mt-auto">
+              <p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Breakdown by Section</p>
+              <div class="space-y-2 pr-2 max-h-36 overflow-y-auto custom-scrollbar">
+                <div class="flex justify-between items-center text-sm border-b border-slate-100 pb-1">
+                  <span class="text-slate-600">S1 - Thai Van Liem</span>
+                  <span class="font-bold text-emerald-600">34.5%</span>
+                </div>
+                <div class="flex justify-between items-center text-sm border-b border-slate-100 pb-1">
+                  <span class="text-slate-600">S2 - Nguyen Van A</span>
+                  <span class="font-bold text-rose-500 flex items-center gap-1">31.0% <i data-lucide="alert-triangle" class="w-3 h-3"></i></span>
+                </div>
+                <div class="flex justify-between items-center text-sm border-b border-slate-100 pb-1">
+                  <span class="text-slate-600">S3 - Tran Thi B</span>
+                  <span class="font-bold text-emerald-600">38.0%</span>
+                </div>
+                <div class="flex justify-between items-center text-sm border-b border-slate-100 pb-1">
+                  <span class="text-slate-600">S4 - Le Van C</span>
+                  <span class="font-bold text-emerald-600">33.2%</span>
+                </div>
+                <div class="flex justify-between items-center text-sm border-b border-slate-100 pb-1">
+                  <span class="text-slate-600">S5 - Pham Ba Quoc Tai</span>
+                  <span class="font-bold text-emerald-600">35.1%</span>
+                </div>
+                <div class="flex justify-between items-center text-sm border-b border-slate-100 pb-1">
+                  <span class="text-slate-600">S6 - Dinh Thi E</span>
+                  <span class="font-bold text-rose-500 flex items-center gap-1">30.5% <i data-lucide="alert-triangle" class="w-3 h-3"></i></span>
+                </div>
+                <div class="flex justify-between items-center text-sm">
+                  <span class="text-slate-600">S7 - Vu Hoang F</span>
+                  <span class="font-bold text-emerald-600">36.0%</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- KPI 2: Idle Rate -->
+          <div class="bg-slate-50/50 rounded-xl border border-slate-200 p-5 flex flex-col">
+            <div class="flex justify-between items-start mb-4">
+              <div>
+                <p class="text-sm font-bold text-slate-800">C.3 Idle Rate (Non-billable)</p>
+                <p class="text-xs text-slate-500 mt-0.5">Budget limit: <= 17.0 MM</p>
+              </div>
+              <div class="text-right">
+                <p class="text-xl font-bold text-blue-600">14.5 MM</p>
+                <p class="text-xs text-slate-500">Overall Total</p>
+              </div>
+            </div>
+            
+            <div class="w-full bg-slate-200 rounded-full h-1.5 mb-5">
+              <div class="bg-blue-500 h-1.5 rounded-full" style="width: 85%"></div>
+            </div>
+
+            <!-- Section Breakdown List -->
+            <div class="mt-auto">
+              <p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Breakdown by Section</p>
+              <div class="space-y-2 pr-2 max-h-36 overflow-y-auto custom-scrollbar">
+                <div class="flex justify-between items-center text-sm border-b border-slate-100 pb-1">
+                  <span class="text-slate-600">S1 - Thai Van Liem</span>
+                  <span class="font-bold text-slate-700">2.5 MM</span>
+                </div>
+                <div class="flex justify-between items-center text-sm border-b border-slate-100 pb-1">
+                  <span class="text-slate-600">S2 - Nguyen Van A</span>
+                  <span class="font-bold text-slate-700">1.0 MM</span>
+                </div>
+                <div class="flex justify-between items-center text-sm border-b border-slate-100 pb-1">
+                  <span class="text-slate-600">S3 - Tran Thi B</span>
+                  <span class="font-bold text-orange-500 flex items-center gap-1">4.5 MM <i data-lucide="trending-up" class="w-3 h-3"></i></span>
+                </div>
+                <div class="flex justify-between items-center text-sm border-b border-slate-100 pb-1">
+                  <span class="text-slate-600">S4 - Le Van C</span>
+                  <span class="font-bold text-slate-700">1.5 MM</span>
+                </div>
+                <div class="flex justify-between items-center text-sm border-b border-slate-100 pb-1">
+                  <span class="text-slate-600">S5 - Pham Ba Quoc Tai</span>
+                  <span class="font-bold text-emerald-600">0.5 MM</span>
+                </div>
+                <div class="flex justify-between items-center text-sm border-b border-slate-100 pb-1">
+                  <span class="text-slate-600">S6 - Dinh Thi E</span>
+                  <span class="font-bold text-orange-500 flex items-center gap-1">3.5 MM <i data-lucide="trending-up" class="w-3 h-3"></i></span>
+                </div>
+                <div class="flex justify-between items-center text-sm">
+                  <span class="text-slate-600">S7 - Vu Hoang F</span>
+                  <span class="font-bold text-slate-700">1.0 MM</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- KPI 3: CS Efficiency -->
+          <div class="bg-slate-50/50 rounded-xl border border-slate-200 p-5 flex flex-col">
+            <div class="flex justify-between items-start mb-4">
+              <div>
+                <p class="text-sm font-bold text-slate-800">A.1d Customer Satisfaction</p>
+                <p class="text-xs text-slate-500 mt-0.5">Target: Average Score >= 3.0</p>
+              </div>
+              <div class="text-right">
+                <p class="text-xl font-bold text-emerald-600">4.0</p>
+                <p class="text-xs text-slate-500">Overall Average</p>
+              </div>
+            </div>
+            
+            <div class="w-full bg-slate-200 rounded-full h-1.5 mb-5">
+              <div class="bg-emerald-500 h-1.5 rounded-full" style="width: 80%"></div>
+            </div>
+
+            <!-- Section Breakdown List -->
+            <div class="mt-auto">
+              <p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Breakdown by Section</p>
+              <div class="space-y-2 pr-2 max-h-36 overflow-y-auto custom-scrollbar">
+                <div class="flex justify-between items-center text-sm border-b border-slate-100 pb-1">
+                  <span class="text-slate-600">S1 - Thai Van Liem</span>
+                  <span class="font-bold text-emerald-600">4.2</span>
+                </div>
+                <div class="flex justify-between items-center text-sm border-b border-slate-100 pb-1">
+                  <span class="text-slate-600">S2 - Nguyen Van A</span>
+                  <span class="font-bold text-slate-700">3.8</span>
+                </div>
+                <div class="flex justify-between items-center text-sm border-b border-slate-100 pb-1">
+                  <span class="text-slate-600">S3 - Tran Thi B</span>
+                  <span class="font-bold text-emerald-600">4.5</span>
+                </div>
+                <div class="flex justify-between items-center text-sm border-b border-slate-100 pb-1">
+                  <span class="text-slate-600">S4 - Le Van C</span>
+                  <span class="font-bold text-rose-500 flex items-center gap-1">2.8 <i data-lucide="alert-triangle" class="w-3 h-3"></i></span>
+                </div>
+                <div class="flex justify-between items-center text-sm border-b border-slate-100 pb-1">
+                  <span class="text-slate-600">S5 - Pham Ba Quoc Tai</span>
+                  <span class="font-bold text-emerald-600">4.8</span>
+                </div>
+                <div class="flex justify-between items-center text-sm border-b border-slate-100 pb-1">
+                  <span class="text-slate-600">S6 - Dinh Thi E</span>
+                  <span class="font-bold text-slate-700">3.2</span>
+                </div>
+                <div class="flex justify-between items-center text-sm">
+                  <span class="text-slate-600">S7 - Vu Hoang F</span>
+                  <span class="font-bold text-emerald-600">4.0</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- KPI 4: Security Compliance -->
+          <div class="bg-slate-50/50 rounded-xl border border-slate-200 p-5 flex flex-col">
+            <div class="flex justify-between items-start mb-4">
+              <div>
+                <p class="text-sm font-bold text-slate-800">A.7 Security Compliance</p>
+                <p class="text-xs text-slate-500 mt-0.5">Target: No major violations</p>
+              </div>
+              <div class="text-right">
+                <p class="text-xl font-bold text-emerald-600">Secure</p>
+                <p class="text-xs text-slate-500">Overall Status</p>
+              </div>
+            </div>
+            
+            <div class="w-full bg-slate-200 rounded-full h-1.5 mb-5">
+              <div class="bg-emerald-500 h-1.5 rounded-full" style="width: 100%"></div>
+            </div>
+
+            <!-- Section Breakdown List -->
+            <div class="mt-auto">
+              <p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Breakdown by Section</p>
+              <div class="space-y-2 pr-2 max-h-36 overflow-y-auto custom-scrollbar">
+                <div class="flex justify-between items-center text-sm border-b border-slate-100 pb-1">
+                  <span class="text-slate-600">S1 - Thai Van Liem</span>
+                  <span class="font-bold text-slate-500">0 violations</span>
+                </div>
+                <div class="flex justify-between items-center text-sm border-b border-slate-100 pb-1">
+                  <span class="text-slate-600">S2 - Nguyen Van A</span>
+                  <span class="font-bold text-slate-500">0 violations</span>
+                </div>
+                <div class="flex justify-between items-center text-sm border-b border-slate-100 pb-1">
+                  <span class="text-slate-600">S3 - Tran Thi B</span>
+                  <span class="font-bold text-slate-500">0 violations</span>
+                </div>
+                <div class="flex justify-between items-center text-sm border-b border-slate-100 pb-1">
+                  <span class="text-slate-600">S4 - Le Van C</span>
+                  <span class="font-bold text-orange-500 flex items-center gap-1">1 Minor <i data-lucide="alert-circle" class="w-3 h-3"></i></span>
+                </div>
+                <div class="flex justify-between items-center text-sm border-b border-slate-100 pb-1">
+                  <span class="text-slate-600">S5 - Pham Ba Quoc Tai</span>
+                  <span class="font-bold text-slate-500">0 violations</span>
+                </div>
+                <div class="flex justify-between items-center text-sm border-b border-slate-100 pb-1">
+                  <span class="text-slate-600">S6 - Dinh Thi E</span>
+                  <span class="font-bold text-slate-500">0 violations</span>
+                </div>
+                <div class="flex justify-between items-center text-sm">
+                  <span class="text-slate-600">S7 - Vu Hoang F</span>
+                  <span class="font-bold text-slate-500">0 violations</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- 3. DEPARTMENTS STATS TABLE -->
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+          <h3 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+            <i data-lucide="building-2" class="w-5 h-5 text-blue-600"></i>
+            Statistics by Section (Department KPIs)
+          </h3>
+        </div>
+        
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse">
+            <thead>
+              <tr class="bg-white border-b border-slate-100 text-sm text-slate-500">
+                <th class="py-4 px-6 font-medium">Department / Section</th>
+                <th class="py-4 px-6 font-medium">Manager (PM)</th>
+                <th class="py-4 px-6 font-medium w-[15%]">Start of Year</th>
+                <th class="py-4 px-6 font-medium w-[15%]">Mid-Year</th>
+                <th class="py-4 px-6 font-medium w-[15%]">Year-End</th>
+                <th class="py-4 px-6 font-medium text-right w-[10%]">Action</th>
+              </tr>
+            </thead>
+            <tbody id="departments-tbody">
+              <!-- Rendered via JavaScript -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 4. DETAILED DEPARTMENT SUMMARY -->
+      <h3 class="text-lg font-bold text-slate-800 mb-4 mt-8 flex items-center gap-2">
+        <i data-lucide="pie-chart" class="w-5 h-5 text-blue-600"></i>
+        Evaluation Deep Dive Summary
+      </h3>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+        
+        <!-- Card 1: Headcount Breakdown -->
+        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
+          <div class="flex items-center gap-4 mb-4">
+            <div class="p-3 bg-blue-50 text-blue-600 rounded-xl"><i data-lucide="users" class="w-6 h-6"></i></div>
+            <div>
+              <p class="text-sm text-slate-500 font-medium">Total Evaluated Headcount</p>
+              <p class="text-2xl font-bold text-slate-800">132 <span class="text-sm font-normal text-slate-400">members</span></p>
+            </div>
+          </div>
+          <div class="space-y-2 pt-4 border-t border-slate-100">
+            <div class="flex justify-between text-xs font-medium text-slate-600"><span class="flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-slate-300"></span> Employee (R1-R3)</span> <span>85</span></div>
+            <div class="flex justify-between text-xs font-medium text-slate-600"><span class="flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-slate-500"></span> Leader (R4-R5)</span> <span>35</span></div>
+            <div class="flex justify-between text-xs font-medium text-slate-600"><span class="flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-slate-800"></span> Manager (R6-R7)</span> <span>12</span></div>
+          </div>
+        </div>
+
+        <!-- Card 2: Performance Distribution -->
+        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
+          <div class="flex items-center gap-4 mb-4">
+            <div class="p-3 bg-emerald-50 text-emerald-600 rounded-xl"><i data-lucide="check-circle" class="w-6 h-6"></i></div>
+            <div>
+              <p class="text-sm text-slate-500 font-medium">Year-End Completed</p>
+              <p class="text-2xl font-bold text-slate-800">103 <span class="text-sm font-normal text-slate-400">members</span></p>
+            </div>
+          </div>
+          <div class="space-y-2 pt-4 border-t border-slate-100">
+            <div class="flex justify-between text-xs font-medium text-slate-600"><span class="flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-emerald-500"></span> High Performers (>= 4.0)</span> <span>45</span></div>
+            <div class="flex justify-between text-xs font-medium text-slate-600"><span class="flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-blue-500"></span> Meets Target (3.0 - 3.9)</span> <span>50</span></div>
+            <div class="flex justify-between text-xs font-medium text-slate-600"><span class="flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-rose-500"></span> Underperforming (< 3.0)</span> <span class="text-rose-600 font-bold">8</span></div>
+          </div>
+        </div>
+
+        <!-- Card 3: Pending Bottlenecks -->
+        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
+          <div class="flex items-center gap-4 mb-4">
+            <div class="p-3 bg-orange-50 text-orange-600 rounded-xl"><i data-lucide="clock" class="w-6 h-6"></i></div>
+            <div>
+              <p class="text-sm text-slate-500 font-medium">Pending Evaluation</p>
+              <p class="text-2xl font-bold text-slate-800">29 <span class="text-sm font-normal text-slate-400">members</span></p>
+            </div>
+          </div>
+          <div class="space-y-2 pt-4 border-t border-slate-100">
+            <div class="flex justify-between text-xs font-medium text-slate-600"><span class="flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-orange-300"></span> Missing Self-Eval / Evidence</span> <span>12</span></div>
+            <div class="flex justify-between text-xs font-medium text-slate-600"><span class="flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-orange-500"></span> Pending PM/Leader Approval</span> <span>15</span></div>
+            <div class="flex justify-between text-xs font-medium text-slate-600"><span class="flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-rose-500"></span> Overdue / Escalated</span> <span class="text-rose-600 font-bold">2</span></div>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+
+
+    <!-- ==================== VIEW 2: DETAIL ==================== -->
+    <div id="detail-view" class="space-y-6 animate-view-detail hidden">
+      
+      <!-- Detail Header -->
+      <div class="flex items-center gap-4">
+        <button onclick="handleBack()" class="p-2 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors text-slate-600">
+          <i data-lucide="arrow-left" class="w-5 h-5"></i>
+        </button>
+        <div>
+          <h2 id="detail-dept-name" class="text-2xl font-bold text-slate-800">Section Name</h2>
+          <p class="text-sm text-slate-500">Managed by: <span id="detail-dept-manager" class="font-medium text-slate-700">PM Name</span> • <span id="detail-dept-members">0</span> members</p>
+        </div>
+      </div>
+
+      <!-- Dept specific stats -->
+      <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+         <div class="flex gap-8">
+            <div>
+              <p class="text-sm text-slate-500 mb-1">Target Setup</p>
+              <p id="detail-target" class="text-xl font-bold text-emerald-600">0%</p>
+            </div>
+            <div class="w-px bg-slate-200"></div>
+            <div>
+              <p class="text-sm text-slate-500 mb-1">Mid-Year Update</p>
+              <p id="detail-midyear" class="text-xl font-bold text-emerald-600">0%</p>
+            </div>
+            <div class="w-px bg-slate-200"></div>
+            <div>
+              <p class="text-sm text-slate-500 mb-1">Final Eval</p>
+              <p id="detail-final" class="text-xl font-bold text-blue-600">0%</p>
+            </div>
+         </div>
+         <button id="detail-pending-btn" class="hidden px-4 py-2 bg-orange-100 text-orange-700 font-bold text-sm rounded-lg hover:bg-orange-200 items-center gap-2">
+           <!-- Rendered via JS -->
+         </button>
+      </div>
+
+      <!-- Member List -->
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+          <h3 class="text-lg font-bold text-slate-800">Member List</h3>
+          <div class="relative">
+            <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+            <input type="text" placeholder="Search name, ID..." class="pl-9 pr-4 py-1.5 bg-white border border-slate-200 rounded-lg text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all" />
+          </div>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left">
+            <thead>
+              <tr class="bg-white border-b border-slate-100 text-xs uppercase text-slate-500">
+                <th class="py-3 px-6 font-medium">Employee</th>
+                <th class="py-3 px-6 font-medium w-20">Rank</th>
+                <th class="py-3 px-6 font-medium text-center w-[15%]">Target</th>
+                <th class="py-3 px-6 font-medium text-center w-[15%]">Mid-Year</th>
+                <th class="py-3 px-6 font-medium text-center w-[15%]">Final Eval</th>
+                <th class="py-3 px-6 font-medium text-center w-24">Action</th>
+              </tr>
+            </thead>
+            <tbody id="members-tbody">
+              <!-- Rendered via JavaScript -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- JAVASCRIPT LOGIC -->
+  <script>
+    // --- MOCK DATA ---
+    const departments = [
+      { id: 'S1', name: 'Section 1', manager: 'Thai Van Liem', members: 45, targetSetup: 100, midYear: 100, finalEval: 85, pendingTasks: 2 },
+      { id: 'S2', name: 'Section 2', manager: 'Nguyen Van A', members: 32, targetSetup: 100, midYear: 100, finalEval: 100, pendingTasks: 0 },
+      { id: 'S3', name: 'Section 3', manager: 'Tran Thi B', members: 18, targetSetup: 100, midYear: 100, finalEval: 40, pendingTasks: 5 },
+      { id: 'S4', name: 'Section 4', manager: 'Le Van C', members: 25, targetSetup: 100, midYear: 100, finalEval: 90, pendingTasks: 1 },
+      { id: 'S5', name: 'Section 5', manager: 'Pham Ba Quoc Tai', members: 12, targetSetup: 100, midYear: 100, finalEval: 100, pendingTasks: 0 },
+      { id: 'S6', name: 'Section 6', manager: 'Dinh Thi E', members: 20, targetSetup: 100, midYear: 100, finalEval: 60, pendingTasks: 3 },
+      { id: 'S7', name: 'Section 7', manager: 'Vu Hoang F', members: 30, targetSetup: 100, midYear: 100, finalEval: 75, pendingTasks: 0 },
+    ];
+
+    const mockMembersDetails = [
+      { id: 'E1', name: 'Tran Van Phuoc', rank: 'R3', targetStatus: 'Approved', midYearStatus: 'Approved', finalStatus: 'Evaluating', score: '-' },
+      { id: 'E2', name: 'Le Thi D', rank: 'R2', targetStatus: 'Approved', midYearStatus: 'Approved', finalStatus: 'Completed', score: '4.2' },
+      { id: 'E3', name: 'Nguyen Hoang E', rank: 'R4', targetStatus: 'Approved', midYearStatus: 'Approved', finalStatus: 'Evaluating', score: '-' },
+    ];
+
+    let selectedDept = null;
+
+    // Initialize the dashboard
+    document.addEventListener('DOMContentLoaded', () => {
+      renderOverviewTable();
+      renderMembersTable(); // Pre-render members
+      lucide.createIcons(); // Initialize all SVG icons
+      
+      // Select Year listener
+      document.getElementById('year-select').addEventListener('change', (e) => {
+        document.getElementById('display-year').innerText = e.target.value;
+      });
+    });
+
+    // Helper: HTML progress bar
+    function getProgressBar(percent, colorClass) {
+      return `
+        <div class="w-full bg-slate-100 rounded-full h-2.5">
+          <div class="${colorClass} h-2.5 rounded-full transition-all duration-500" style="width: ${percent}%"></div>
+        </div>
+      `;
+    }
+
+    // Render logic for Overview Table
+    function renderOverviewTable() {
+      const tbody = document.getElementById('departments-tbody');
+      tbody.innerHTML = departments.map(dept => {
+        const isTargetDone = dept.targetSetup === 100;
+        const isMidYearDone = dept.midYear === 100;
+        const isFinalDone = dept.finalEval === 100;
+        
+        return `
+          <tr class="border-b border-slate-50 hover:bg-slate-50 transition-colors group">
+            <td class="py-4 px-6">
+              <div class="font-bold text-slate-800">${dept.name}</div>
+              <div class="text-xs text-slate-500 mt-0.5">${dept.members} members</div>
+            </td>
+            <td class="py-4 px-6 text-sm font-medium text-slate-700">${dept.manager}</td>
+            
+            <td class="py-4 px-6 align-middle">
+              <div class="flex justify-between text-xs mb-1">
+                <span class="text-slate-600 font-medium">${dept.targetSetup}%</span>
+                ${isTargetDone ? '<i data-lucide="check-circle" class="w-3.5 h-3.5 text-emerald-500"></i>' : ''}
+              </div>
+              ${getProgressBar(dept.targetSetup, "bg-emerald-500")}
+            </td>
+            
+            <td class="py-4 px-6 align-middle">
+              <div class="flex justify-between text-xs mb-1">
+                <span class="${isMidYearDone ? 'text-emerald-600' : 'text-slate-600'} font-medium">${dept.midYear}%</span>
+                ${isMidYearDone ? '<i data-lucide="check-circle" class="w-3.5 h-3.5 text-emerald-500"></i>' : ''}
+              </div>
+              ${getProgressBar(dept.midYear, isMidYearDone ? "bg-emerald-500" : "bg-blue-500")}
+            </td>
+            
+            <td class="py-4 px-6 align-middle">
+              <div class="flex justify-between text-xs mb-1">
+                <span class="${isFinalDone ? 'text-emerald-600' : 'text-blue-600'} font-medium">${dept.finalEval}%</span>
+                ${dept.pendingTasks > 0 ? `<span class="text-orange-500 font-bold">${dept.pendingTasks} pending</span>` : ''}
+              </div>
+              ${getProgressBar(dept.finalEval, isFinalDone ? "bg-emerald-500" : "bg-blue-500")}
+            </td>
+            
+            <td class="py-4 px-6 text-right align-middle">
+              <button onclick="handleViewDetail('${dept.id}')" class="inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-blue-600 bg-blue-50 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity hover:bg-blue-100">
+                Detail <i data-lucide="chevron-right" class="w-4 h-4"></i>
+              </button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    // Render logic for Members Table in Detail View
+    function renderMembersTable() {
+      const tbody = document.getElementById('members-tbody');
+      tbody.innerHTML = mockMembersDetails.map(member => {
+        let finalStatusClass = '';
+        if (member.finalStatus === 'Completed') finalStatusClass = 'bg-emerald-100 text-emerald-700';
+        else if (member.finalStatus === 'Evaluating') finalStatusClass = 'bg-blue-100 text-blue-700';
+        else finalStatusClass = 'bg-orange-100 text-orange-700';
+
+        const finalScoreText = member.score !== '-' ? `(${member.score})` : '';
+
+        return `
+          <tr class="border-b border-slate-50 hover:bg-slate-50">
+            <td class="py-3 px-6 font-medium text-slate-800">${member.name}</td>
+            <td class="py-3 px-6 text-sm text-slate-500">${member.rank}</td>
+            <td class="py-3 px-6 text-center">
+              <span class="inline-block px-2 py-1 bg-emerald-100 text-emerald-700 text-xs font-bold rounded">
+                ${member.targetStatus}
+              </span>
+            </td>
+            <td class="py-3 px-6 text-center">
+              <span class="inline-block px-2 py-1 bg-emerald-100 text-emerald-700 text-xs font-bold rounded">
+                ${member.midYearStatus}
+              </span>
+            </td>
+            <td class="py-3 px-6 text-center">
+              <span class="inline-block px-2 py-1 text-xs font-bold rounded ${finalStatusClass}">
+                ${member.finalStatus} ${finalScoreText}
+              </span>
+            </td>
+            <td class="py-3 px-6 text-center">
+              <button class="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors" title="View Sheet">
+                <i data-lucide="file-text" class="w-4 h-4"></i>
+              </button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    // View Navigation Logic
+    function handleViewDetail(deptId) {
+      selectedDept = departments.find(d => d.id === deptId);
+      if (!selectedDept) return;
+
+      // Update Header Info
+      document.getElementById('detail-dept-name').innerText = selectedDept.name;
+      document.getElementById('detail-dept-manager').innerText = selectedDept.manager;
+      document.getElementById('detail-dept-members').innerText = selectedDept.members;
+
+      // Update Stats
+      document.getElementById('detail-target').innerText = selectedDept.targetSetup + '%';
+      document.getElementById('detail-midyear').innerText = selectedDept.midYear + '%';
+      document.getElementById('detail-final').innerText = selectedDept.finalEval + '%';
+
+      // Update Pending Button
+      const pendingBtn = document.getElementById('detail-pending-btn');
+      if (selectedDept.pendingTasks > 0) {
+        pendingBtn.innerHTML = `<i data-lucide="alert-circle" class="w-4 h-4"></i> Approve ${selectedDept.pendingTasks} tasks`;
+        pendingBtn.style.display = 'flex';
+      } else {
+        pendingBtn.style.display = 'none';
+      }
+
+      // Switch view classes
+      document.getElementById('overview-view').classList.add('hidden');
+      document.getElementById('detail-view').classList.remove('hidden');
+
+      // Re-render icons since we injected new HTML strings
+      lucide.createIcons();
+      window.scrollTo(0, 0); // scroll to top
+    }
+
+    function handleBack() {
+      selectedDept = null;
+      document.getElementById('detail-view').classList.add('hidden');
+      document.getElementById('overview-view').classList.remove('hidden');
+      window.scrollTo(0, 0);
+    }
+  </script>
+</body>
+</html>

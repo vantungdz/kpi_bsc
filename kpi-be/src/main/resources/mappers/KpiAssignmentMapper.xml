@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.company.kpi.mapper.KpiAssignmentMapper">
+
+    <!--
+        findDetailsByUserAndCycle: lấy chi tiết KPI assignments của member trong một chu kỳ.
+
+        Sơ đồ JOIN (theo init-db.sql schema):
+          kpi_assignments (ka)
+            → kpis_information (ki) qua ka.kpi_info_id = ki.id
+            → kpi_master (km) qua ki.master_kpi_id = km.id
+            → kpi_categories (kc) qua km.category_id = kc.id   [category nằm ở kpi_master, không phải kpis_information]
+            → sys_status_codes (sc) qua km.type_code = sc.code  [để lấy tên loại KPI: INDIVIDUAL/TEAM/PROMOTION]
+
+        Lưu ý:
+          - init-db.sql chỉ có mid_self_score (mid evaluation chỉ tự đánh giá)
+          - mid_pm_score KHÔNG tồn tại → để null trong DTO
+          - end_pm_score = điểm PM chấm cuối kỳ
+    -->
+    <select id="findDetailsByUserAndCycle"
+            resultType="com.company.kpi.response.member.MemberKpiAssignmentDTO">
+        SELECT
+            ka.id              AS assignment_id,
+            ki.target_description,
+            km.objective,
+            ki.weight,
+            sc.name            AS type,
+            ka.mid_self_score,
+            ka.end_self_score,
+            ka.end_pm_score,
+            ka.evidences,
+            kc.id              AS category_id,
+            kc.name            AS category_name
+        FROM
+            kpi_assignments ka
+            JOIN kpis_information ki ON ka.kpi_info_id = ki.id
+                AND ki.deleted_at IS NULL
+            JOIN kpi_master km ON ki.master_kpi_id = km.id
+                AND km.deleted_at IS NULL
+            JOIN kpi_categories kc ON km.category_id = kc.id
+                AND kc.deleted_at IS NULL
+            LEFT JOIN sys_status_codes sc ON km.type_code = sc.code
+                AND sc.category = 'KPI_TYPE'
+        WHERE
+            ka.user_id = #{userId}
+            AND ka.cycle_id = #{cycleId}
+            AND ka.deleted_at IS NULL
+        ORDER BY
+            kc.name, km.code
+    </select>
+
+    <!--
+        updateEvidence: cập nhật bằng chứng (evidences JSON) cho một assignment.
+        Dùng #{param1}, #{param2} vì KpiAssignmentMapper không có @Param annotation.
+    -->
+    <update id="updateEvidence">
+        UPDATE
+            kpi_assignments
+        SET
+            evidences   = #{evidences}::jsonb,
+            updated_at  = NOW()
+        WHERE
+            id          = #{id}
+            AND deleted_at IS NULL
+    </update>
+
+</mapper>

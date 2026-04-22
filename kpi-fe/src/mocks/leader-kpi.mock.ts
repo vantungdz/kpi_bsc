@@ -1,0 +1,67 @@
+import type { LeaderKpiDashboard } from '@/types/kpi'
+
+export function getMockLeaderKpiDashboard(year = 2025): LeaderKpiDashboard {
+  return {
+    year,
+    phase: 'year_end',
+    teamMembers: [
+      { id: 'u-m1', name: 'Nguyen Van A', rank: 'R2', sheetStatus: 'submitted', score: null, pendingCount: 2 },
+      { id: 'u-m2', name: 'Tran Thi B', rank: 'R1', sheetStatus: 'draft', score: null, pendingCount: 0 },
+      { id: 'u-m3', name: 'Le Van C', rank: 'R3', sheetStatus: 'approved', score: 4.1, pendingCount: 0 },
+      { id: 'u-m4', name: 'Pham Thi D', rank: 'R2', sheetStatus: 'submitted', score: null, pendingCount: 1 },
+    ],
+    mySheet: {
+      id: 'sheet-leader-1',
+      userId: 'u-leader-1',
+      userName: 'Lê Thị Leader',
+      rank: 'R5',
+      year,
+      phase: 'year_end',
+      items: [
+        {
+          id: 'item-l-a1',
+          code: 'A.1',
+          name: 'Team Efficiency',
+          description: 'Hiệu suất team do Leader quản lý',
+          target: 'IE >= 3.0',
+          weight: 40,
+          group: 'A',
+          evidenceStatus: 'submitted',
+          selfScore: 4,
+          pmScore: null,
+          leaderScore: null,
+        },
+        {
+          id: 'item-l-b1',
+          code: 'B.1',
+          name: 'Mentoring & Coaching',
+          description: 'Hỗ trợ phát triển thành viên trong team',
+          target: 'MC >= 3.0',
+          weight: 30,
+          group: 'B',
+          evidenceStatus: 'submitted',
+          selfScore: 3,
+          pmScore: null,
+          leaderScore: null,
+        },
+        {
+          id: 'item-l-c1',
+          code: 'C.1',
+          name: 'Delivery On Time',
+          description: 'Tỷ lệ delivery đúng hạn của team',
+          target: 'DOT >= 90%',
+          weight: 30,
+          group: 'C',
+          evidenceStatus: 'missing',
+          selfScore: null,
+          pmScore: null,
+          leaderScore: null,
+        },
+      ],
+      totalWeight: 100,
+      evidenceCount: 2,
+      evidenceTotalCount: 3,
+      status: 'draft',
+    },
+  }
+}
