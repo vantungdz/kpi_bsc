@@ -17,10 +17,12 @@ public class KpiAssignment extends BaseEntity {
     private UUID jobTitleId;
     private UUID parentAssignmentId;
     private BigDecimal targetValue;
+    private String updatePayload; // Handled as JSON string for MyBatis compatibility
+    private String updateReason;
     private BigDecimal midSelfScore;
-    private BigDecimal midPmScore;
     private BigDecimal endSelfScore;
     private BigDecimal endPmScore;
-    private String evidences;
-    private String status;
+    private BigDecimal endGmScore;
+    private String evidences; // Handled as JSON string
+    private Integer statusCode;
 }

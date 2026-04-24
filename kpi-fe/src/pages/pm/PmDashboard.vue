@@ -11,6 +11,9 @@ import GmMemberKpiDrawer from '@/components/gm/GmMemberKpiDrawer.vue'
 
 const activeTab = ref('personal')
 
+// Control refresh of PM Portfolio tab after actions in drawers
+const personalKpiKey = ref(0)
+
 const midYearIssuesMock = ref({
   pendingKpisLine: 'Pending: 15 KPIs',
   popoverTitle: '15 KPI Process Issues',
@@ -34,14 +37,8 @@ const activeItem = ref<any>(null)
 const openAssignDrawer = (kpi: any) => { activeItem.value = kpi; rightPanelMode.value = 'assign'; rightPanelVisible.value = true }
 const openMemberDrawer = (member: any) => { activeItem.value = member; rightPanelMode.value = 'member_detail'; rightPanelVisible.value = true }
 const openRequestDrawer = (req: any) => { activeItem.value = req; rightPanelMode.value = 'request_detail'; rightPanelVisible.value = true }
+const closePanel = () => { rightPanelVisible.value = false; setTimeout(() => { activeItem.value = null; rightPanelMode.value = 'none' }, 300); personalKpiKey.value += 1 }
 
-const closePanel = () => { 
-  rightPanelVisible.value = false; 
-  // Đợi animation trượt xong (300ms) mới clear data
-  setTimeout(() => { activeItem.value = null; rightPanelMode.value = 'none' }, 300) 
-}
-
-// --- Tái sử dụng Drawer của GM ---
 const isGmDrawerOpen = ref(false)
 const gmDrawerMember = ref<any>(null)
 const gmDrawerItems = ref<any[]>([])
@@ -66,30 +63,59 @@ const openKpiChildDetail = (payload: { child: any, parent: any }) => {
   }]
   isGmDrawerOpen.value = true
 }
+
+const handleRefresh = () => {
+  // This can be expanded to handle more complex refresh logic if needed
+  personalKpiKey.value += 1
+}
 </script>
 
 <template>
-  <div class="flex flex-col w-full h-full text-slate-800 font-sans bg-slate-50 relative">
-    <div class="shrink-0 px-6 pt-6 z-20">
+  <div class="flex flex-col w-full text-slate-800 font-sans relative pb-10">
+    
+    <div class="space-y-4 p-3 sm:p-4 lg:p-6">
       <GmProcessTimeline :midYearIssues="midYearIssuesMock" />
     </div>
 
-    <div class="shrink-0 flex px-6 border-b border-slate-200 bg-white gap-2 z-10 shadow-sm relative mt-4">
-      <button @click="activeTab = 'personal'" class="px-5 py-4 text-sm font-bold border-b-2 transition-colors flex items-center gap-2" :class="activeTab === 'personal' ? 'border-purple-600 text-purple-700' : 'border-transparent text-slate-500 hover:text-slate-800'"><i class="fas fa-bullseye text-base"></i> Personal KPI</button>
-      <button @click="activeTab = 'team'" class="px-5 py-4 text-sm font-bold border-b-2 transition-colors flex items-center gap-2" :class="activeTab === 'team' ? 'border-purple-600 text-purple-700' : 'border-transparent text-slate-500 hover:text-slate-800'"><i class="fas fa-sitemap text-base"></i> Team Members</button>
-      <button @click="activeTab = 'requests'" class="px-5 py-4 text-sm font-bold border-b-2 transition-colors flex items-center gap-2 relative" :class="activeTab === 'requests' ? 'border-purple-600 text-purple-700' : 'border-transparent text-slate-500 hover:text-slate-800'"><i class="fas fa-inbox text-base"></i> Request Approval<span v-if="pendingRequestsCount > 0" class="flex h-4 w-4 items-center justify-center rounded-full bg-orange-500 text-[9px] font-bold text-white shadow-sm ml-1">{{ pendingRequestsCount }}</span></button>
+    <div class="mx-6 mt-6 bg-white border border-slate-200 rounded-2xl shadow-sm flex flex-col overflow-hidden">
+      
+      <div class="flex bg-slate-50 border-b border-slate-200 px-4 pt-3 gap-2 overflow-x-auto hide-scrollbar">
+        <button 
+          @click="activeTab = 'personal'" 
+          class="px-5 py-3 text-sm font-bold rounded-t-xl transition-all flex items-center gap-2 relative -bottom-[1px]" 
+          :class="activeTab === 'personal' ? 'bg-white text-blue-700 border border-slate-200 border-b-white z-10' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-200/50 border border-transparent'"
+        >
+          <i class="fas fa-list-alt text-base"></i> KPI Portfolio
+        </button>
+        
+        <button 
+          @click="activeTab = 'team'" 
+          class="px-5 py-3 text-sm font-bold rounded-t-xl transition-all flex items-center gap-2 relative -bottom-[1px]" 
+          :class="activeTab === 'team' ? 'bg-white text-blue-700 border border-slate-200 border-b-white z-10' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-200/50 border border-transparent'"
+        >
+          <i class="fas fa-sitemap text-base"></i> Team Review
+        </button>
+        
+        <button 
+          @click="activeTab = 'requests'" 
+          class="px-5 py-3 text-sm font-bold rounded-t-xl transition-all flex items-center gap-2 relative -bottom-[1px]" 
+          :class="activeTab === 'requests' ? 'bg-white text-blue-700 border border-slate-200 border-b-white z-10' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-200/50 border border-transparent'"
+        >
+          <i class="fas fa-inbox text-base"></i> Request Approval
+          <span v-if="pendingRequestsCount > 0" class="flex h-4 w-4 items-center justify-center rounded-full bg-orange-500 text-[9px] font-bold text-white shadow-sm ml-1">{{ pendingRequestsCount }}</span>
+        </button>
+      </div>
+
+      <div class="bg-white">
+        <PmPersonalKpiTab v-show="activeTab === 'personal'" :key="personalKpiKey" @open-assign="openAssignDrawer" @open-member-detail="openKpiChildDetail" />
+        <PmTeamMembersTab v-show="activeTab === 'team'" @open-member="openMemberDrawer" />
+        <PmRequestsTab v-show="activeTab === 'requests'" :requests="requests" @open-request="openRequestDrawer" />
+      </div>
     </div>
 
-    <div class="flex-1 overflow-y-auto custom-scrollbar px-6 py-4">
-      <PmPersonalKpiTab v-show="activeTab === 'personal'" @open-assign="openAssignDrawer" @open-member-detail="openKpiChildDetail" />
-      <PmTeamMembersTab v-show="activeTab === 'team'" @open-member="openMemberDrawer" />
-      <PmRequestsTab v-show="activeTab === 'requests'" :requests="requests" @open-request="openRequestDrawer" />
-    </div>
-
-    <PmAssignKpiDrawer :open="rightPanelVisible && rightPanelMode === 'assign'" :kpi="activeItem" @close="closePanel" />
+    <PmAssignKpiDrawer :open="rightPanelVisible && rightPanelMode === 'assign'" :kpi="activeItem" @close="closePanel" @refresh="handleRefresh" />
     <PmMemberDetailDrawer :open="rightPanelVisible && rightPanelMode === 'member_detail'" :member="activeItem" @close="closePanel" />
     <PmRequestDetailDrawer :open="rightPanelVisible && rightPanelMode === 'request_detail'" :request="activeItem" @close="closePanel" />
-
     <GmMemberKpiDrawer :open="isGmDrawerOpen" :member="gmDrawerMember" :items="gmDrawerItems" @close="isGmDrawerOpen = false" />
   </div>
 </template>
@@ -99,4 +125,13 @@ const openKpiChildDetail = (payload: { child: any, parent: any }) => {
 .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
 .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
 .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+/* Ẩn scrollbar ngang cho thanh Tab */
+.hide-scrollbar::-webkit-scrollbar { display: none; }
+.hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+.slide-panel-enter-active, .slide-panel-leave-active { transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1); }
+.slide-panel-enter-from, .slide-panel-leave-to { transform: translateX(100%); }
+.fade-enter-active, .fade-leave-active { transition: opacity 0.28s ease; }
+.fade-enter-from, .fade-leave-to { opacity: 0; }
 </style>

@@ -1,65 +1,45 @@
 <script setup lang="ts">
 import { ref, computed, inject, onMounted, onUnmounted, watch } from 'vue'
+import { useDepartmentManagerOptions } from '@/composables/useDepartmentManagerOptions'
 import {
-  gmLayoutMockDepartments,
-  gmLayoutMockMembersDetails,
-  type GmDepartmentMock,
-  type GmDeptKpiMock,
-  type GmDeptKpiStatus,
-  type GmMemberDetailMock,
-} from '@/mocks/gm-kpi.mock'
+  apiAddGmDepartmentMembers,
+  apiCreateGmDepartment,
+  apiDeleteGmDepartment,
+  apiListGmDepartmentMemberCandidates,
+  apiListGmDepartments,
+  apiRemoveGmDepartmentMember,
+  apiUpdateGmDepartment,
+} from '@/services/modules/kpi-gm.service'
+import type {
+  GmDepartmentApiRow,
+  GmDepartmentMemberApiRow,
+  GmDepartmentMemberCandidateApiRow,
+} from '@/types/gm-department-api'
+import type { GmDepartmentMock, GmMemberDetailMock } from '@/types/gm-workspace'
+import type { DepartmentManagerOption } from '@/types/department-manager'
+import { strategicKpiKindFromTypeCode } from '@/utils/strategicKpiTypeCodes'
+import { pushGmNotification } from '@/composables/useGmNotifications'
 
 /** Khớp `#gm-main-modal-anchor` trong `GmLayout.vue` — overlay chỉ phủ cột nội dung, không xám sidebar. */
 const GM_MAIN_MODAL_ANCHOR = '#gm-main-modal-anchor'
 
-/** Danh sách quản lý mẫu (UI mock — đồng bộ ý tưởng index.html). */
-const MANAGER_OPTIONS = [
-  { id: 'user1', label: 'Thai Van Liem' },
-  { id: 'user2', label: 'Nguyễn Văn A' },
-  { id: 'user3', label: 'Trần Thị B' },
-] as const
+const { users: departmentManagers, load: loadDepartmentManagers, loading: managersLoading } =
+  useDepartmentManagerOptions()
 
 type OrgCardColor = 'blue' | 'indigo' | 'rose' | 'amber' | 'emerald' | 'purple'
 
 /** Một section trên trang Organization — map từ mock + bản ghi user (layout theo index.html `renderOrgList`). */
 interface GmOrgSectionRow {
   id: string
-  /** Mã hiển thị (vd. SD1) — dùng lọc trùng khi tạo mới. */
-  code: string
   name: string
   manager: string
+  /** `roles.code` — hiển thị cạnh tên quản lý; null nếu không có / chưa biết. */
+  managerRoleCode: string | null
   employeeCount: number
-  kpiCount: number
   color: OrgCardColor
 }
 
 const ORG_COLOR_SEQUENCE: OrgCardColor[] = ['blue', 'indigo', 'rose', 'amber', 'emerald', 'purple']
-
-const SECTION_DISPLAY_NAME: Record<string, string> = {
-  S1: 'Section 1',
-  S2: 'Section 2',
-  S3: 'Section 3',
-  S4: 'Section 4',
-  S5: 'Section 5',
-  S6: 'Section 6',
-  S7: 'Section 7',
-  S8: 'Section 8',
-  S9: 'Section 9',
-  S10: 'Section 10',
-}
-
-const SECTION_CODE_LABEL: Record<string, string> = {
-  S1: 'SD1',
-  S2: 'SD2',
-  S3: 'QA',
-  S4: 'PMO',
-  S5: 'SC5',
-  S6: 'SC6',
-  S7: 'SC7',
-  S8: 'SC8',
-  S9: 'SC9',
-  S10: 'SC10',
-}
 
 function colorForIndex(i: number): OrgCardColor {
   return ORG_COLOR_SEQUENCE[i % ORG_COLOR_SEQUENCE.length]!
@@ -116,94 +96,84 @@ function orgCardTheme(c: OrgCardColor) {
   return themes[c]
 }
 
-function initLocalWorkspace(): { depts: GmDepartmentMock[]; mems: GmMemberDetailMock[] } {
-  const depts = structuredClone(gmLayoutMockDepartments) as GmDepartmentMock[]
-  for (const d of depts) {
-    const label = SECTION_DISPLAY_NAME[d.id]
-    if (label) d.name = label
-  }
+function formatManagerRoleCode(code: string | null | undefined): string {
+  const c = (code ?? '').trim().toUpperCase()
+  return c
+}
+
+function apiMemberToDetail(mem: GmDepartmentMemberApiRow, deptId: string): GmMemberDetailMock {
   return {
-    depts,
-    mems: structuredClone(gmLayoutMockMembersDetails) as GmMemberDetailMock[],
+    id: mem.userId,
+    name: mem.fullName?.trim() || '—',
+    rank: mem.rankCode?.trim() || '',
+    leader: '',
+    status: '',
+    rootCause: '',
+    dueIn: null,
+    priority: '',
+    scoreSelf: '',
+    scoreMgr: '',
+    deptId,
+    relatedKpi: '',
+    relatedKpiType: strategicKpiKindFromTypeCode(102),
   }
 }
 
-const _gmOrgWorkspaceInit = initLocalWorkspace()
+function mapApiRowToLocal(r: GmDepartmentApiRow): GmDepartmentMock {
+  const members = r.members ?? []
+  return {
+    id: r.id,
+    name: r.name,
+    manager: r.managerFullName?.trim() || '—',
+    managerUserId: r.managerId,
+    parentId: r.parentId,
+    managerRoleCode: r.managerRoleCode ?? null,
+    health: 0,
+    progress: 0,
+    risks: { critical: 0, medium: 0 },
+    responsibility: '-',
+    breakdown: '—',
+    impact: null,
+    kpis: [],
+    staffDetails: members.map((m) => apiMemberToDetail(m, r.id)),
+  }
+}
 
-/** Bản sao mock — chỉnh sửa section / nhân sự trên trang (chưa đồng bộ GmLayout.vue). */
-const departmentsLocal = ref<GmDepartmentMock[]>(_gmOrgWorkspaceInit.depts)
-const membersLocal = ref<GmMemberDetailMock[]>(_gmOrgWorkspaceInit.mems)
-/** Mã hiển thị (SD1, …) khi khác `SECTION_CODE_LABEL` hoặc section tạo mới. */
-const sectionOrgCodes = ref<Record<string, string>>({})
+/** Phòng ban từ API `GET /kpi/gm/departments`. */
+const departmentsLocal = ref<GmDepartmentMock[]>([])
+
+const listLoading = ref(false)
+const listError = ref<string | null>(null)
+
+async function loadDepartments() {
+  listLoading.value = true
+  listError.value = null
+  try {
+    const rows = await apiListGmDepartments(new Date().getFullYear())
+    departmentsLocal.value = rows.map(mapApiRowToLocal)
+  } catch (e: unknown) {
+    listError.value = e instanceof Error ? e.message : 'Không tải được danh sách phòng ban'
+    departmentsLocal.value = []
+  } finally {
+    listLoading.value = false
+  }
+}
 
 const memberCountByDept = computed(() => {
   const m = new Map<string, number>()
-  for (const mem of membersLocal.value) {
-    const id = mem.deptId
-    m.set(id, (m.get(id) ?? 0) + 1)
+  for (const d of departmentsLocal.value) {
+    m.set(d.id, (d.staffDetails ?? []).length)
   }
   return m
 })
-
-function rowDisplayCode(d: GmDepartmentMock): string {
-  return sectionOrgCodes.value[d.id] ?? SECTION_CODE_LABEL[d.id] ?? d.id
-}
 
 function deptBySectionId(sectionId: string): GmDepartmentMock | undefined {
   return departmentsLocal.value.find((d) => d.id === sectionId)
 }
 
 function membersForDept(deptId: string): GmMemberDetailMock[] {
-  return membersLocal.value.filter((m) => m.deptId === deptId)
-}
-
-function parseProgressPct(actual: string): number | null {
-  const pct = actual.match(/(\d+(?:\.\d+)?)\s*%/)
-  if (pct) return Math.round(Math.min(100, parseFloat(pct[1]!)))
-  const n = actual.match(/(\d+(?:\.\d+)?)/)
-  if (n) return Math.round(Math.min(100, parseFloat(n[1]!)))
-  return null
-}
-
-function deptKpiStatusUi(status: GmDeptKpiStatus): { label: string; badgeClass: string; progressClass: string } {
-  switch (status) {
-    case 'pass':
-      return {
-        label: 'On Track',
-        badgeClass: 'border border-emerald-200 bg-emerald-100 text-emerald-700',
-        progressClass: 'text-emerald-600',
-      }
-    case 'warn':
-      return {
-        label: 'Warning',
-        badgeClass: 'border border-yellow-200 bg-yellow-100 text-yellow-700',
-        progressClass: 'text-yellow-600',
-      }
-    case 'fail':
-      return {
-        label: 'At Risk',
-        badgeClass: 'border border-rose-200 bg-rose-100 text-rose-700',
-        progressClass: 'text-rose-600',
-      }
-    case 'active':
-      return {
-        label: 'Active',
-        badgeClass: 'border border-blue-200 bg-blue-100 text-blue-700',
-        progressClass: 'text-blue-600',
-      }
-  }
-}
-
-function kpiTypeDisplay(k: GmDeptKpiMock): string {
-  if (k.kpiType === 'cascading') return 'Cascading'
-  if (k.kpiType === 'individual') return 'Individual'
-  if (k.kpiType === 'promotion') return 'Promotion'
-  return String(k.kpiType)
-}
-
-function kpiProgressText(k: GmDeptKpiMock): string {
-  const p = parseProgressPct(k.actual)
-  return p != null ? `${p}/100` : '—'
+  const d = deptBySectionId(deptId)
+  return d?.staffDetails ?? []
 }
 
 const MEMBER_AVATAR_CLASSES = [
@@ -232,7 +202,7 @@ function memberSubtitle(m: GmMemberDetailMock): string {
 }
 
 /**
- * Avatar nhân sự trên thẻ — khớp `employeeCount`: tối đa 2 ảnh từ mock thành viên,
+ * Avatar nhân sự trên thẻ — khớp `employeeCount`: tối đa 2 mặt từ danh sách nhân sự (API hoặc mock),
  * phần còn lại là +N (N > 0). Không dùng chữ cái tên PM làm “nhân sự”.
  */
 function orgSectionMemberStack(sectionId: string, employeeCount: number) {
@@ -249,11 +219,10 @@ function orgSectionMemberStack(sectionId: string, employeeCount: number) {
 function rowFromDepartment(d: GmDepartmentMock, index: number): GmOrgSectionRow {
   return {
     id: d.id,
-    code: rowDisplayCode(d),
     name: d.name,
     manager: d.manager,
+    managerRoleCode: d.managerRoleCode?.trim() ? d.managerRoleCode.trim().toUpperCase() : null,
     employeeCount: memberCountByDept.value.get(d.id) ?? 0,
-    kpiCount: d.kpis.length,
     color: colorForIndex(index),
   }
 }
@@ -267,7 +236,7 @@ const filteredSections = computed(() => {
   const q = orgSearch.value.trim().toLowerCase()
   if (q) {
     list = list.filter((s) => {
-      const hay = `${s.name} ${s.code} ${s.manager}`.toLowerCase()
+      const hay = `${s.name} ${s.id} ${s.manager} ${s.managerRoleCode ?? ''}`.toLowerCase()
       return hay.includes(q)
     })
   }
@@ -339,51 +308,16 @@ function collapseSectionDetailMembers() {
   sectionDetailMembersVisibleCount.value = SECTION_DETAIL_MEMBERS_INITIAL
 }
 
-const sectionDetailKpis = computed((): GmDeptKpiMock[] => {
-  return sectionDetailDept.value?.kpis ?? []
-})
-
-/** Drawer chi tiết: ban đầu 4 KPI; «Tải thêm» mỗi lần +4. */
-const SECTION_DETAIL_KPIS_INITIAL = 4
-const SECTION_DETAIL_KPIS_LOAD_MORE = 4
-
-const sectionDetailKpisVisibleCount = ref(SECTION_DETAIL_KPIS_INITIAL)
-
-const sectionDetailKpisPreview = computed(() =>
-  sectionDetailKpis.value.slice(0, sectionDetailKpisVisibleCount.value),
-)
-
-const sectionDetailKpisHasMore = computed(
-  () => sectionDetailKpis.value.length > sectionDetailKpisPreview.value.length,
-)
-
-function loadMoreSectionDetailKpis() {
-  sectionDetailKpisVisibleCount.value = Math.min(
-    sectionDetailKpis.value.length,
-    sectionDetailKpisVisibleCount.value + SECTION_DETAIL_KPIS_LOAD_MORE,
-  )
-}
-
-const sectionDetailKpisCanCollapse = computed(
-  () => sectionDetailKpisVisibleCount.value > SECTION_DETAIL_KPIS_INITIAL,
-)
-
-function collapseSectionDetailKpis() {
-  sectionDetailKpisVisibleCount.value = SECTION_DETAIL_KPIS_INITIAL
-}
-const pageToast = ref('')
-let pageToastTimer: ReturnType<typeof setTimeout> | null = null
-
 const sectionName = ref('')
 const description = ref('')
 const managerId = ref('')
 
-const formErrors = ref<{ name?: string; code?: string; manager?: string }>({})
+const formErrors = ref<{ name?: string }>({})
 const saving = ref(false)
 
 const managerLabel = computed(() => {
-  const m = MANAGER_OPTIONS.find((o) => o.id === managerId.value)
-  return m?.label ?? ''
+  const m = departmentManagers.value.find((o) => o.id === managerId.value)
+  return m?.fullName ?? ''
 })
 
 function clearErrors() {
@@ -397,33 +331,33 @@ function resetFormFields() {
   clearErrors()
 }
 
-/** Mã section khi tạo mới: luôn bám theo tên + tránh trùng. */
-const createSectionGeneratedCode = computed(() => {
-  const name = sectionName.value.trim()
-  if (!name) return ''
-  const base = deriveSectionCodeFromName(name)
-  return ensureUniqueOrgCodeFromBase(base)
-})
-
-function showPageToast(message: string) {
-  pageToast.value = message
-  if (pageToastTimer) clearTimeout(pageToastTimer)
-  pageToastTimer = setTimeout(() => {
-    pageToast.value = ''
-    pageToastTimer = null
-  }, 4500)
+function showPageToast(message: string, variant: 'success' | 'error' = 'success') {
+  pushGmNotification(message, {
+    variant,
+    durationMs: variant === 'error' ? 8000 : 4500,
+  })
 }
 
 type GmOrgSectionDrawerHost = { open: () => void }
 
 const orgSectionDrawerHost = inject<GmOrgSectionDrawerHost | null>('gmOrgSectionDrawer', null)
 
+const gmRequestStrategicDiagnosticsReload = inject<(() => void) | undefined>(
+  'gmRequestStrategicDiagnosticsReload',
+  undefined,
+)
+
+/** Sau mutation org — cập nhật danh sách phòng ban và refetch diagnostics ở `GmLayout` (cùng shell). */
+async function refreshOrgListAndStrategicDiagnostics() {
+  await loadDepartments()
+  gmRequestStrategicDiagnosticsReload?.()
+}
+
 function openDrawer() {
   drawerOpen.value = true
 }
 
 function openSectionDetail(row: GmOrgSectionRow) {
-  sectionDetailKpisVisibleCount.value = SECTION_DETAIL_KPIS_INITIAL
   sectionDetailMembersVisibleCount.value = SECTION_DETAIL_MEMBERS_INITIAL
   sectionDetailSectionId.value = row.id
   sectionDetailOpen.value = true
@@ -432,92 +366,34 @@ function openSectionDetail(row: GmOrgSectionRow) {
 function closeSectionDetail() {
   sectionDetailOpen.value = false
   sectionDetailSectionId.value = null
-  sectionDetailKpisVisibleCount.value = SECTION_DETAIL_KPIS_INITIAL
   sectionDetailMembersVisibleCount.value = SECTION_DETAIL_MEMBERS_INITIAL
-}
-
-/** Chuẩn hóa chữ để sinh mã (bỏ dấu, đ/Đ → d). */
-function stripDiacriticsForCode(s: string): string {
-  let x = s.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-  x = x.replace(/đ/gi, 'd')
-  return x
-}
-
-/**
- * Sinh mã gợi ý từ tên: nhiều từ → lấy chữ cái đầu (+ cụm số);
- * một từ → tối đa 8 ký tự chữ/số in hoa.
- */
-function deriveSectionCodeFromName(name: string): string {
-  const t = stripDiacriticsForCode(name)
-    .replace(/[^a-zA-Z0-9\s-]/g, ' ')
-    .trim()
-    .replace(/[\s-]+/g, ' ')
-  if (!t) return 'SEC'
-  const parts = t.split(' ').filter(Boolean)
-  let code = ''
-  if (parts.length === 1) {
-    const w = parts[0].toUpperCase().replace(/[^A-Z0-9]/g, '')
-    code = (w.slice(0, 8) || 'SEC').slice(0, 16)
-  } else {
-    for (const p of parts) {
-      if (/^\d+$/.test(p)) code += p
-      else if (p[0]) code += p[0].toUpperCase()
-    }
-    code = (code.replace(/[^A-Z0-9]/g, '') || 'SEC').slice(0, 16)
-  }
-  return code.toUpperCase().slice(0, 16)
-}
-
-function isOrgCodeTaken(code: string, excludeDeptId?: string): boolean {
-  const u = code.trim().toUpperCase()
-  for (const d of departmentsLocal.value) {
-    if (excludeDeptId && d.id === excludeDeptId) continue
-    const c = (sectionOrgCodes.value[d.id] ?? SECTION_CODE_LABEL[d.id] ?? d.id).toUpperCase()
-    if (c === u) return true
-  }
-  return false
-}
-
-/** Đảm bảo mã không trùng với section hiện có (thêm hậu tố số nếu cần). */
-function ensureUniqueOrgCodeFromBase(base: string): string {
-  const clean = (s: string) =>
-    s
-      .toUpperCase()
-      .replace(/[^A-Z0-9]/g, '')
-      .slice(0, 16)
-  let b = clean(base) || 'SEC'
-  if (!isOrgCodeTaken(b)) return b
-  for (let i = 2; i < 10_000; i++) {
-    const suffix = String(i)
-    const head = b.slice(0, Math.max(1, 16 - suffix.length))
-    const candidate = (head + suffix).slice(0, 16)
-    if (!isOrgCodeTaken(candidate)) return candidate
-  }
-  return clean(`S${Date.now().toString(36)}`) || 'SEC'
 }
 
 const editSectionModalOpen = ref(false)
 const editSectionName = ref('')
-const editSectionCode = ref('')
-const editSectionManagerLabel = ref('')
-const editFormErrors = ref<{ name?: string; code?: string; manager?: string }>({})
+const editSectionManagerId = ref('')
+const editFormErrors = ref<{ name?: string; manager?: string }>({})
 const savingEdit = ref(false)
 
-const editManagerChoices = computed(() => {
+const editManagerChoices = computed((): DepartmentManagerOption[] => {
+  const base = departmentManagers.value.slice()
   const dept = sectionDetailDept.value
-  const labels = MANAGER_OPTIONS.map((o) => o.label)
-  if (dept?.manager && !labels.includes(dept.manager)) {
-    return [dept.manager, ...labels]
+  if (dept?.managerUserId && !base.some((u) => u.id === dept.managerUserId)) {
+    base.unshift({
+      id: dept.managerUserId,
+      username: '',
+      email: '',
+      fullName: dept.manager || dept.managerUserId,
+    })
   }
-  return labels
+  return base
 })
 
 function openEditSectionFromDetail() {
   const dept = sectionDetailDept.value
   if (!dept) return
   editSectionName.value = dept.name
-  editSectionCode.value = rowDisplayCode(dept)
-  editSectionManagerLabel.value = dept.manager
+  editSectionManagerId.value = dept.managerUserId ?? ''
   editFormErrors.value = {}
   editSectionModalOpen.value = true
 }
@@ -526,15 +402,12 @@ function closeEditSectionModal() {
   editSectionModalOpen.value = false
 }
 
-function validateEdit(excludeDeptId: string): boolean {
+function validateEdit(): boolean {
   editFormErrors.value = {}
   const err: typeof editFormErrors.value = {}
   const name = editSectionName.value.trim()
-  const code = editSectionCode.value.trim().toUpperCase()
-  if (!name) err.name = 'Vui lòng nhập tên khối / section.'
-  if (!code) err.code = 'Vui lòng nhập mã code.'
-  if (!editSectionManagerLabel.value.trim()) err.manager = 'Vui lòng chọn người quản lý.'
-  if (code && isOrgCodeTaken(code, excludeDeptId)) err.code = 'Mã code đã tồn tại trên danh sách.'
+  if (!name) err.name = 'Vui lòng nhập tên phòng ban.'
+  if (!editSectionManagerId.value.trim()) err.manager = 'Vui lòng chọn người quản lý.'
   editFormErrors.value = err
   return Object.keys(err).length === 0
 }
@@ -542,68 +415,26 @@ function validateEdit(excludeDeptId: string): boolean {
 async function saveEditSection() {
   const dept = sectionDetailDept.value
   if (!dept) return
-  if (!validateEdit(dept.id)) return
+  if (!validateEdit()) return
   savingEdit.value = true
-  await new Promise((r) => setTimeout(r, 400))
-  savingEdit.value = false
-  dept.name = editSectionName.value.trim()
-  dept.manager = editSectionManagerLabel.value.trim()
-  sectionOrgCodes.value = { ...sectionOrgCodes.value, [dept.id]: editSectionCode.value.trim().toUpperCase() }
-  closeEditSectionModal()
-  showPageToast(`Đã cập nhật section «${dept.name}».`)
+  try {
+    await apiUpdateGmDepartment(dept.id, {
+      name: editSectionName.value.trim(),
+      parentId: dept.parentId ?? null,
+      managerId: editSectionManagerId.value.trim() || null,
+    })
+    await refreshOrgListAndStrategicDiagnostics()
+    closeEditSectionModal()
+    showPageToast(`Đã cập nhật phòng ban «${editSectionName.value.trim()}».`)
+  } catch (e: unknown) {
+    showPageToast(e instanceof Error ? e.message : 'Không lưu được phòng ban', 'error')
+  } finally {
+    savingEdit.value = false
+  }
 }
-
-function onEditCodeInput(e: Event) {
-  const el = e.target as HTMLInputElement
-  editSectionCode.value = el.value.toUpperCase()
-}
-
-/** Ứng viên thêm vào section — mock theo wireframe (checkbox + tìm kiếm + chip lọc). */
-interface AddMemberCandidate {
-  id: string
-  name: string
-  role: string
-  /** Chữ Rank hiển thị (vd. D, C, B) — đồng bộ subtitle mock. */
-  rank: string
-  email: string
-}
-
-const ADD_MEMBER_CANDIDATES: AddMemberCandidate[] = [
-  { id: 'c-hvt', name: 'Hoàng Văn Thái', role: 'Fresher Dev', rank: 'D', email: 'hvt@mock.local' },
-  { id: 'c-dty', name: 'Đào Thị Yến', role: 'Mid QA', rank: 'C', email: 'dty@mock.local' },
-  { id: 'c-vmt', name: 'Vũ Minh Tuấn', role: 'Senior Dev', rank: 'B', email: 'vmt@mock.local' },
-  { id: 'c-pqa', name: 'Phạm Quốc An', role: 'DevOps Engineer', rank: 'B', email: 'pqa@mock.local' },
-  { id: 'c-lnh', name: 'Lê Ngọc Hà', role: 'Business Analyst', rank: 'C', email: 'lnh@mock.local' },
-  { id: 'c-ntt', name: 'Ngô Thanh Tùng', role: 'Junior Dev', rank: 'D', email: 'ntt@mock.local' },
-  { id: 'c-htl', name: 'Huỳnh Thị Lan', role: 'QC Engineer', rank: 'C', email: 'htl@mock.local' },
-  { id: 'c-dvk', name: 'Đỗ Văn Khánh', role: 'Tech Lead', rank: 'B', email: 'dvk@mock.local' },
-  { id: 'c-btt', name: 'Bùi Thị Thu', role: 'Scrum Master', rank: 'C', email: 'btt@mock.local' },
-  { id: 'c-nvh', name: 'Nguyễn Việt Hùng', role: 'Intern Dev', rank: 'D', email: 'nvh@mock.local' },
-]
 
 /** Thứ tự hiển thị rank trong bộ lọc (giống nhóm checkbox diagnostics). */
 const ADD_MEMBER_RANK_ORDER = ['A', 'B', 'C', 'D'] as const
-
-/** Ứng viên đã thêm vào từng section (id ứng viên) — để ẩn khỏi danh sách. */
-const hiredCandidateIdsByDept = ref<Record<string, string[]>>({})
-
-function hiredInDept(deptId: string): Set<string> {
-  return new Set(hiredCandidateIdsByDept.value[deptId] ?? [])
-}
-
-function markCandidatesHired(deptId: string, candIds: string[]) {
-  const cur = new Set(hiredCandidateIdsByDept.value[deptId] ?? [])
-  for (const id of candIds) cur.add(id)
-  hiredCandidateIdsByDept.value = { ...hiredCandidateIdsByDept.value, [deptId]: [...cur] }
-}
-
-function unmarkCandidateHired(deptId: string, candId: string) {
-  const cur = hiredCandidateIdsByDept.value[deptId] ?? []
-  hiredCandidateIdsByDept.value = {
-    ...hiredCandidateIdsByDept.value,
-    [deptId]: cur.filter((x) => x !== candId),
-  }
-}
 
 const addMemberModalOpen = ref(false)
 const addMemberSearch = ref('')
@@ -612,10 +443,22 @@ const addMemberFilterRanks = ref<string[]>([])
 const addMemberSelectedIds = ref<string[]>([])
 const addMemberBulkError = ref('')
 const savingMember = ref(false)
+/** Danh sách ứng viên từ GET /kpi/gm/departments/:id/member-candidates */
+const addMemberCandidates = ref<GmDepartmentMemberCandidateApiRow[]>([])
+const addMemberCandidatesLoading = ref(false)
 
 const addMemberRankOptions = computed(() => {
-  const present = new Set(ADD_MEMBER_CANDIDATES.map((c) => c.rank))
-  return ADD_MEMBER_RANK_ORDER.filter((r) => present.has(r))
+  const present = new Set<string>()
+  for (const c of addMemberCandidates.value) {
+    const r = c.rankCode?.trim()
+    if (r) present.add(r)
+  }
+  const order = ADD_MEMBER_RANK_ORDER as readonly string[]
+  const ordered = order.filter((r) => present.has(r))
+  const rest = [...present]
+    .filter((r) => !order.includes(r))
+    .sort((a, b) => a.localeCompare(b, 'vi'))
+  return [...ordered, ...rest]
 })
 
 function addMemberRankOrderIdx(r: string): number {
@@ -660,26 +503,20 @@ watch(addMemberRankPopoverOpen, (open) => {
 
 const addMemberSelectedCount = computed(() => addMemberSelectedIds.value.length)
 
-const addMemberFilteredCandidates = computed((): AddMemberCandidate[] => {
-  const deptId = sectionDetailSectionId.value
-  if (!deptId) return []
-  const hired = hiredInDept(deptId)
+const addMemberFilteredCandidates = computed((): GmDepartmentMemberCandidateApiRow[] => {
+  if (!sectionDetailSectionId.value) return []
   const q = addMemberSearch.value.trim().toLowerCase()
-
-  let list = ADD_MEMBER_CANDIDATES.filter((c) => !hired.has(c.id))
-
+  let list = addMemberCandidates.value
   if (q) {
     list = list.filter((c) => {
-      const hay = `${c.name} ${c.email} ${c.role}`.toLowerCase()
+      const hay = `${c.fullName} ${c.email ?? ''} ${c.jobTitleLabel ?? ''}`.toLowerCase()
       return hay.includes(q)
     })
   }
-
   if (addMemberFilterRanks.value.length > 0) {
     const rankSet = new Set(addMemberFilterRanks.value)
-    list = list.filter((c) => rankSet.has(c.rank))
+    list = list.filter((c) => c.rankCode && rankSet.has(c.rankCode))
   }
-
   return list
 })
 
@@ -705,14 +542,25 @@ function resetAddMemberRankFilters() {
   addMemberFilterRanks.value = []
 }
 
-function openAddMemberFromDetail() {
-  if (!sectionDetailSectionId.value) return
+async function openAddMemberFromDetail() {
+  const deptId = sectionDetailSectionId.value
+  if (!deptId) return
   addMemberSearch.value = ''
   addMemberFilterRanks.value = []
   addMemberSelectedIds.value = []
   addMemberBulkError.value = ''
   addMemberRankPopoverOpen.value = false
   addMemberModalOpen.value = true
+  addMemberCandidatesLoading.value = true
+  addMemberCandidates.value = []
+  try {
+    addMemberCandidates.value = await apiListGmDepartmentMemberCandidates(deptId)
+  } catch (e: unknown) {
+    addMemberBulkError.value =
+      e instanceof Error ? e.message : 'Không tải được danh sách ứng viên từ server.'
+  } finally {
+    addMemberCandidatesLoading.value = false
+  }
 }
 
 function closeAddMemberModal() {
@@ -720,26 +568,10 @@ function closeAddMemberModal() {
   addMemberModalOpen.value = false
 }
 
-function candidateSubtitle(c: AddMemberCandidate): string {
-  return `${c.role} · Rank ${c.rank}`
-}
-
-function buildMemberFromCandidate(deptId: string, c: AddMemberCandidate): GmMemberDetailMock {
-  return {
-    id: `${deptId}|cand|${c.id}|${Date.now()}`,
-    name: c.name,
-    rank: c.rank,
-    leader: `Nhóm ${deptId}`,
-    status: 'Pending',
-    rootCause: '',
-    dueIn: 2,
-    priority: 'Medium',
-    scoreSelf: '-',
-    scoreMgr: '-',
-    deptId,
-    relatedKpi: 'Individual Efficiency',
-    relatedKpiType: 'cascading',
-  }
+function candidateSubtitle(c: GmDepartmentMemberCandidateApiRow): string {
+  const job = c.jobTitleLabel?.trim() || '—'
+  const rc = c.rankCode?.trim() ? `Rank ${c.rankCode}` : 'Rank —'
+  return `${job} · ${rc}`
 }
 
 async function saveAddMember() {
@@ -752,30 +584,50 @@ async function saveAddMember() {
   }
   addMemberBulkError.value = ''
   savingMember.value = true
-  await new Promise((r) => setTimeout(r, 450))
-  savingMember.value = false
-  const toAdd = ids
-    .map((id) => ADD_MEMBER_CANDIDATES.find((c) => c.id === id))
-    .filter((c): c is AddMemberCandidate => Boolean(c))
-  for (const c of toAdd) {
-    membersLocal.value.push(buildMemberFromCandidate(deptId, c))
+  try {
+    await apiAddGmDepartmentMembers(deptId, { userIds: ids })
+    await refreshOrgListAndStrategicDiagnostics()
+    closeAddMemberModal()
+    const n = ids.length
+    showPageToast(n === 1 ? `Đã thêm thành viên vào phòng ban.` : `Đã thêm ${n} thành viên vào phòng ban.`)
+  } catch (e: unknown) {
+    addMemberBulkError.value = e instanceof Error ? e.message : 'Không thêm được thành viên.'
+  } finally {
+    savingMember.value = false
   }
-  markCandidatesHired(deptId, ids)
-  closeAddMemberModal()
-  const n = toAdd.length
-  showPageToast(n === 1 ? `Đã thêm «${toAdd[0]!.name}» vào section.` : `Đã thêm ${n} thành viên vào section.`)
 }
 
-function removeMemberFromSection(m: GmMemberDetailMock) {
-  if (!confirm(`Xóa «${m.name}» khỏi section?`)) return
-  const parts = m.id.split('|')
-  if (parts.length === 4 && parts[1] === 'cand') {
-    const [deptId, , candId] = parts
-    if (deptId && candId) unmarkCandidateHired(deptId, candId)
+const removeMemberModalOpen = ref(false)
+const removeMemberTarget = ref<GmMemberDetailMock | null>(null)
+const removingMember = ref(false)
+
+function openRemoveMemberModal(m: GmMemberDetailMock) {
+  removeMemberTarget.value = m
+  removeMemberModalOpen.value = true
+}
+
+function closeRemoveMemberModal() {
+  removeMemberModalOpen.value = false
+  removeMemberTarget.value = null
+  removingMember.value = false
+}
+
+async function confirmRemoveMember() {
+  const m = removeMemberTarget.value
+  const deptId = sectionDetailSectionId.value
+  if (!m || !deptId || removingMember.value) return
+  removingMember.value = true
+  try {
+    await apiRemoveGmDepartmentMember(deptId, m.id)
+    await refreshOrgListAndStrategicDiagnostics()
+    showPageToast(`Đã gỡ «${m.name}» khỏi phòng ban.`)
+    closeRemoveMemberModal()
+  } catch (e: unknown) {
+    showPageToast(e instanceof Error ? e.message : 'Không xóa được thành viên', 'error')
+    closeRemoveMemberModal()
+  } finally {
+    removingMember.value = false
   }
-  const i = membersLocal.value.findIndex((x) => x.id === m.id)
-  if (i >= 0) membersLocal.value.splice(i, 1)
-  showPageToast(`Đã xóa «${m.name}» khỏi nhóm.`)
 }
 
 const deleteSectionModalOpen = ref(false)
@@ -791,7 +643,7 @@ function closeDeleteSectionModal() {
   deleteSectionTarget.value = null
 }
 
-function confirmDeleteSection() {
+async function confirmDeleteSection() {
   const row = deleteSectionTarget.value
   if (!row) return
   const id = row.id
@@ -806,30 +658,27 @@ function confirmDeleteSection() {
     closeSectionDetail()
   }
 
-  departmentsLocal.value = departmentsLocal.value.filter((d) => d.id !== id)
-  membersLocal.value = membersLocal.value.filter((m) => m.deptId !== id)
-
-  const codes = { ...sectionOrgCodes.value }
-  delete codes[id]
-  sectionOrgCodes.value = codes
-
-  const hired = { ...hiredCandidateIdsByDept.value }
-  delete hired[id]
-  hiredCandidateIdsByDept.value = hired
-
-  const label = row.name
-  closeDeleteSectionModal()
-  showPageToast(`Đã xóa section «${label}».`)
+  try {
+    await apiDeleteGmDepartment(id)
+    await refreshOrgListAndStrategicDiagnostics()
+    const label = row.name
+    closeDeleteSectionModal()
+    showPageToast(`Đã xóa phòng ban «${label}».`)
+  } catch (e: unknown) {
+    showPageToast(e instanceof Error ? e.message : 'Không xóa được phòng ban', 'error')
+    closeDeleteSectionModal()
+  }
 }
 
 onMounted(() => {
+  void loadDepartmentManagers()
+  void loadDepartments()
   if (orgSectionDrawerHost) orgSectionDrawerHost.open = openDrawer
 })
 
 onUnmounted(() => {
   document.removeEventListener('pointerdown', onAddMemberRankDocPointerDown, true)
   if (orgSectionDrawerHost) orgSectionDrawerHost.open = () => {}
-  if (pageToastTimer) clearTimeout(pageToastTimer)
 })
 
 function closeDrawer() {
@@ -841,8 +690,7 @@ function validate(): boolean {
   clearErrors()
   const err: typeof formErrors.value = {}
   const name = sectionName.value.trim()
-  if (!name) err.name = 'Vui lòng nhập tên khối / section.'
-  if (!managerId.value) err.manager = 'Vui lòng chọn người quản lý.'
+  if (!name) err.name = 'Vui lòng nhập tên phòng ban.'
   formErrors.value = err
   return Object.keys(err).length === 0
 }
@@ -850,28 +698,21 @@ function validate(): boolean {
 async function onSubmit() {
   if (!validate()) return
   saving.value = true
-  await new Promise((r) => setTimeout(r, 450))
-  saving.value = false
-
-  const name = sectionName.value.trim()
-  const codeUpper = createSectionGeneratedCode.value.toUpperCase()
-  const nid = `sec-${Date.now()}`
-  sectionOrgCodes.value = { ...sectionOrgCodes.value, [nid]: codeUpper }
-  departmentsLocal.value.unshift({
-    id: nid,
-    name,
-    manager: managerLabel.value,
-    health: 0,
-    progress: 0,
-    risks: { critical: 0, medium: 0 },
-    responsibility: '-',
-    breakdown: '—',
-    impact: null,
-    kpis: [],
-  })
-
-  showPageToast(`Đã thêm section «${name}» (${codeUpper}) — PM: ${managerLabel.value}.`)
-  closeDrawer()
+  try {
+    const name = sectionName.value.trim()
+    await apiCreateGmDepartment({
+      name,
+      parentId: null,
+      managerId: managerId.value.trim() || null,
+    })
+    await refreshOrgListAndStrategicDiagnostics()
+    showPageToast(`Đã thêm phòng ban «${name}»${managerLabel.value ? ` — ${managerLabel.value}` : ''}.`)
+    closeDrawer()
+  } catch (e: unknown) {
+    showPageToast(e instanceof Error ? e.message : 'Không tạo được phòng ban', 'error')
+  } finally {
+    saving.value = false
+  }
 }
 
 </script>
@@ -880,11 +721,16 @@ async function onSubmit() {
   <div class="w-full bg-slate-50/50 pb-12">
     <div class="mx-auto w-full max-w-none space-y-6 px-4 py-4 sm:px-6 lg:px-8">
       <div
-        v-if="pageToast"
-        class="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-900 shadow-sm"
-        role="status"
+        v-if="listError"
+        class="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-900 shadow-sm"
+        role="alert"
       >
-        {{ pageToast }}
+        {{ listError }}
+      </div>
+
+      <div v-if="listLoading" class="flex justify-center py-8 text-sm font-medium text-slate-500">
+        <i class="fas fa-spinner fa-spin mr-2 text-indigo-500" aria-hidden="true" />
+        Đang tải danh sách phòng ban…
       </div>
 
       <!-- Tìm kiếm — canh phải -->
@@ -897,16 +743,16 @@ async function onSubmit() {
           <input
             v-model="orgSearch"
             type="search"
-            placeholder="Tìm kiếm tên khối, mã code hoặc PM..."
+            placeholder="Tìm kiếm tên phòng ban hoặc quản lý..."
             class="w-full rounded-lg border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm font-medium text-slate-800 shadow-sm outline-none transition-all placeholder:text-slate-400 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
           />
         </div>
       </div>
 
-      <!-- Lưới thẻ section — lg+ 5 cột / card gọn -->
+      <!-- Lưới thẻ phòng ban — lg+ 4 cột / card gọn -->
       <div
         v-if="sections.length > 0 && filteredSectionCards.length > 0"
-        class="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3 md:grid-cols-4 lg:grid-cols-5"
+        class="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3 md:grid-cols-4 lg:grid-cols-4"
       >
         <article
           v-for="sectionCard in filteredSectionCards"
@@ -938,19 +784,15 @@ async function onSubmit() {
                 <h2
                   class="line-clamp-2 break-words text-sm font-bold leading-snug text-slate-800 transition-colors group-hover:text-indigo-600 sm:text-[15px]"
                 >
-                  {{ sectionCard.row.name }}<span
-                    class="ml-1.5 inline-block whitespace-nowrap align-baseline rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-500 sm:text-xs"
-                  >
-                    {{ sectionCard.row.code }}
-                  </span>
+                  {{ sectionCard.row.name }}
                 </h2>
               </div>
             </div>
             <button
               type="button"
               class="shrink-0 rounded p-1 text-slate-400 transition-colors hover:bg-rose-50 hover:text-rose-600"
-              aria-label="Xóa section"
-              title="Xóa section"
+              aria-label="Xóa phòng ban"
+              title="Xóa phòng ban"
               @click.stop="openDeleteSectionModal(sectionCard.row)"
             >
               <i class="fas fa-trash-can text-sm" aria-hidden="true" />
@@ -971,33 +813,23 @@ async function onSubmit() {
                   {{ sectionCard.row.manager }}
                 </p>
                 <span
+                  v-if="sectionCard.row.managerRoleCode"
                   class="inline-flex shrink-0 items-center gap-1 text-[11px] font-medium text-slate-500 sm:text-xs"
                 >
                   <i class="fas fa-award text-[10px] text-amber-500 sm:text-xs" aria-hidden="true" />
-                  PM
+                  {{ formatManagerRoleCode(sectionCard.row.managerRoleCode) }}
                 </span>
               </div>
             </div>
 
-            <div class="grid grid-cols-2 gap-2">
-              <div>
-                <p class="mb-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 sm:text-[11px]">
-                  Nhân sự
-                </p>
-                <p class="flex items-center gap-1.5 text-xs font-bold text-slate-800 sm:text-sm">
-                  <i class="fas fa-users text-sm text-blue-500" aria-hidden="true" />
-                  {{ sectionCard.row.employeeCount }}
-                </p>
-              </div>
-              <div>
-                <p class="mb-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 sm:text-[11px]">
-                  KPI
-                </p>
-                <p class="flex items-center gap-1.5 text-xs font-bold text-slate-800 sm:text-sm">
-                  <i class="fas fa-bullseye text-sm text-emerald-500" aria-hidden="true" />
-                  {{ sectionCard.row.kpiCount }}
-                </p>
-              </div>
+            <div>
+              <p class="mb-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 sm:text-[11px]">
+                Nhân sự
+              </p>
+              <p class="flex items-center gap-1.5 text-xs font-bold text-slate-800 sm:text-sm">
+                <i class="fas fa-users text-sm text-blue-500" aria-hidden="true" />
+                {{ sectionCard.row.employeeCount }}
+              </p>
             </div>
           </div>
 
@@ -1046,8 +878,8 @@ async function onSubmit() {
         class="rounded-2xl border border-dashed border-slate-200 bg-white px-6 py-14 text-center shadow-sm"
       >
         <i class="fas fa-magnifying-glass mb-3 text-3xl text-slate-300" aria-hidden="true" />
-        <p class="text-sm font-bold text-slate-600">Không có section khớp tìm kiếm</p>
-        <p class="mt-1 text-xs text-slate-400">Thử đổi từ khóa tìm kiếm theo tên, mã hoặc PM.</p>
+        <p class="text-sm font-bold text-slate-600">Không có phòng ban khớp tìm kiếm</p>
+        <p class="mt-1 text-xs text-slate-400">Thử đổi từ khóa tìm kiếm theo tên, role hoặc quản lý.</p>
       </div>
 
       <!-- Empty state -->
@@ -1059,7 +891,7 @@ async function onSubmit() {
           <i class="fas fa-sitemap mb-4 text-5xl text-slate-300 sm:text-6xl" aria-hidden="true" />
           <h2 class="text-lg font-bold text-slate-600">Chưa có dữ liệu hiển thị</h2>
           <p class="mt-2 text-sm leading-relaxed text-slate-400">
-            Bấm &quot;Thêm Section Mới&quot; để bắt đầu thiết lập sơ đồ tổ chức.
+            Bấm &quot;Thêm phòng ban mới&quot; để bắt đầu thiết lập sơ đồ tổ chức.
           </p>
         </div>
       </div>
@@ -1073,7 +905,7 @@ async function onSubmit() {
           class="absolute inset-0 z-[100]"
           role="dialog"
           aria-modal="true"
-          aria-labelledby="gm-create-section-title"
+          aria-labelledby="gm-create-department-title"
         >
           <div
             class="gm-section-drawer-backdrop absolute inset-0 cursor-pointer bg-slate-900/60 backdrop-blur-sm"
@@ -1095,8 +927,8 @@ async function onSubmit() {
                   <i class="fas fa-sitemap text-lg" aria-hidden="true"></i>
                 </div>
                 <div class="min-w-0 pt-0.5">
-                  <h2 id="gm-create-section-title" class="text-xl font-bold leading-tight text-slate-800">
-                    Create New Section
+                  <h2 id="gm-create-department-title" class="text-xl font-bold leading-tight text-slate-800">
+                    Create New Department
                   </h2>
                   <p
                     class="mt-1 text-[10px] font-bold uppercase tracking-widest text-slate-500"
@@ -1126,45 +958,23 @@ async function onSubmit() {
                   <h3 class="text-sm font-bold text-slate-800">Thông tin Cơ bản</h3>
                 </div>
 
-                <div class="flex flex-col gap-4 sm:flex-row">
-                  <div class="min-w-0 flex-1 sm:w-2/3">
-                    <label
-                      for="gm-section-name"
-                      class="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500"
-                    >
-                      Tên khối / Section <span class="text-rose-500">*</span>
-                    </label>
-                    <input
-                      id="gm-section-name"
-                      v-model="sectionName"
-                      type="text"
-                      placeholder="e.g. Software Development 3"
-                      autocomplete="organization"
-                      class="w-full rounded-lg border border-indigo-200 bg-indigo-50/50 px-3 py-2 text-sm font-medium text-slate-800 outline-none transition-all placeholder:text-slate-400 focus:border-indigo-500 focus:bg-white focus:ring-1 focus:ring-indigo-500"
-                      :class="formErrors.name ? 'border-rose-300 ring-1 ring-rose-200' : ''"
-                    />
-                    <p v-if="formErrors.name" class="mt-1 text-xs font-semibold text-rose-600">{{ formErrors.name }}</p>
-                  </div>
-                  <div class="min-w-0 sm:w-1/3">
-                    <label
-                      for="gm-section-code"
-                      class="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500"
-                    >
-                      Mã code
-                      <span class="font-medium normal-case text-slate-400">(Tự động)</span>
-                    </label>
-                    <input
-                      id="gm-section-code"
-                      :value="createSectionGeneratedCode"
-                      type="text"
-                      readonly
-                      tabindex="-1"
-                      placeholder="—"
-                      maxlength="16"
-                      class="w-full cursor-default rounded-lg border border-slate-200 bg-slate-100 px-3 py-2 text-sm font-bold uppercase tracking-wide text-slate-700 outline-none"
-                      aria-live="polite"
-                    />
-                  </div>
+                <div>
+                  <label
+                    for="gm-section-name"
+                    class="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500"
+                  >
+                    Tên phòng ban <span class="text-rose-500">*</span>
+                  </label>
+                  <input
+                    id="gm-section-name"
+                    v-model="sectionName"
+                    type="text"
+                    placeholder="e.g. Software Development 3"
+                    autocomplete="organization"
+                    class="w-full rounded-lg border border-indigo-200 bg-indigo-50/50 px-3 py-2 text-sm font-medium text-slate-800 outline-none transition-all placeholder:text-slate-400 focus:border-indigo-500 focus:bg-white focus:ring-1 focus:ring-indigo-500"
+                    :class="formErrors.name ? 'border-rose-300 ring-1 ring-rose-200' : ''"
+                  />
+                  <p v-if="formErrors.name" class="mt-1 text-xs font-semibold text-rose-600">{{ formErrors.name }}</p>
                 </div>
 
                 <div>
@@ -1179,7 +989,7 @@ async function onSubmit() {
                     id="gm-section-desc"
                     v-model="description"
                     rows="3"
-                    placeholder="Mô tả nhiệm vụ chính của section này..."
+                    placeholder="Mô tả nhiệm vụ chính của phòng ban này..."
                     class="w-full resize-none rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800 outline-none transition-all placeholder:text-slate-400 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                   />
                 </div>
@@ -1199,7 +1009,8 @@ async function onSubmit() {
                     for="gm-section-manager"
                     class="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500"
                   >
-                    Người quản lý (Manager / PM) <span class="text-rose-500">*</span>
+                    Người quản lý (Manager / PM)
+                    <span class="font-medium normal-case text-slate-400">(Optional)</span>
                   </label>
                   <div class="group relative">
                     <i
@@ -1210,17 +1021,16 @@ async function onSubmit() {
                       id="gm-section-manager"
                       v-model="managerId"
                       class="w-full cursor-pointer appearance-none rounded-lg border border-indigo-200 bg-indigo-50/50 py-2 pl-9 pr-9 text-sm font-medium text-slate-800 outline-none transition-all focus:border-indigo-500 focus:bg-white focus:ring-1 focus:ring-indigo-500"
-                      :class="formErrors.manager ? 'border-rose-300 ring-1 ring-rose-200' : ''"
+                      :disabled="managersLoading"
                     >
-                      <option disabled value="">-- Chọn Quản lý --</option>
-                      <option v-for="m in MANAGER_OPTIONS" :key="m.id" :value="m.id">{{ m.label }}</option>
+                      <option value="">{{ managersLoading ? 'Đang tải…' : '— Không gán —' }}</option>
+                      <option v-for="m in departmentManagers" :key="m.id" :value="m.id">{{ m.fullName }}</option>
                     </select>
                     <i
                       class="fas fa-chevron-down pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400"
                       aria-hidden="true"
                     />
                   </div>
-                  <p v-if="formErrors.manager" class="mt-1 text-xs font-semibold text-rose-600">{{ formErrors.manager }}</p>
                 </div>
 
                 <div
@@ -1230,7 +1040,7 @@ async function onSubmit() {
                   <p>
                     Người quản lý được chọn sẽ chịu trách nhiệm nhận và phân bổ các
                     <span class="font-bold">Cascading KPI</span>
-                    xuống cho các thành viên trong Section này.
+                    xuống cho các thành viên trong phòng ban này.
                   </p>
                 </div>
               </section>
@@ -1256,7 +1066,7 @@ async function onSubmit() {
               >
                 <i v-if="!saving" class="fas fa-floppy-disk text-sm" aria-hidden="true" />
                 <i v-else class="fas fa-spinner fa-spin text-sm" aria-hidden="true" />
-                {{ saving ? 'Đang lưu…' : 'Tạo Section' }}
+                {{ saving ? 'Đang lưu…' : 'Tạo phòng ban' }}
               </button>
             </div>
           </div>
@@ -1290,7 +1100,7 @@ async function onSubmit() {
                 class="flex items-center gap-2 text-sm font-bold text-slate-800"
               >
                 <i class="fas fa-network-wired text-indigo-500" aria-hidden="true" />
-                Quản lý Khối / Section
+                Quản lý phòng ban
               </h2>
               <button
                 type="button"
@@ -1321,9 +1131,6 @@ async function onSubmit() {
                     <h3 class="text-xl font-bold leading-tight text-white">
                       {{ sectionDetailRow.name }}
                     </h3>
-                    <p class="mt-1 text-[10px] font-bold uppercase tracking-wider text-indigo-300">
-                      {{ sectionDetailRow.code }}
-                    </p>
                   </div>
                   <button
                     type="button"
@@ -1337,7 +1144,11 @@ async function onSubmit() {
                 <div class="mt-3 border-t border-slate-600/50 pt-3">
                   <p class="flex flex-wrap items-center gap-1.5 text-[11px] font-medium text-slate-300">
                     <i class="fas fa-user text-[11px] text-slate-400" aria-hidden="true" />
-                    PM:
+                    {{
+                      sectionDetailDept?.managerRoleCode
+                        ? formatManagerRoleCode(sectionDetailDept.managerRoleCode)
+                        : 'Quản lý'
+                    }}:
                     <span class="font-bold text-white">{{ sectionDetailRow.manager }}</span>
                   </p>
                 </div>
@@ -1387,7 +1198,7 @@ async function onSubmit() {
                         class="p-1 text-slate-400 opacity-0 transition-all hover:text-rose-500 group-hover:opacity-100"
                         title="Xóa khỏi nhóm"
                         aria-label="Xóa khỏi nhóm"
-                        @click.stop="removeMemberFromSection(m)"
+                        @click.stop="openRemoveMemberModal(m)"
                       >
                         <i class="fas fa-user-minus text-xs" aria-hidden="true" />
                       </button>
@@ -1415,82 +1226,7 @@ async function onSubmit() {
                     </div>
                   </template>
                   <p v-else class="px-2 py-6 text-center text-xs text-slate-400">
-                    Chưa có nhân sự mock gắn với section này.
-                  </p>
-                </div>
-              </div>
-
-              <!-- KPI đang chạy -->
-              <div class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-                <div class="border-b border-slate-100 bg-slate-50/50 p-4">
-                  <h3 class="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-800">
-                    <i class="fas fa-bullseye text-emerald-500" aria-hidden="true" />
-                    Mục tiêu đang chạy ( {{ sectionDetailKpis.length }} )
-                  </h3>
-                </div>
-                <div class="space-y-2 p-3">
-                  <template v-if="sectionDetailKpis.length">
-                    <div
-                      v-for="(k, ki) in sectionDetailKpisPreview"
-                      :key="`${k.code ?? k.name}-${ki}`"
-                      class="cursor-pointer rounded-lg border border-slate-100 bg-slate-50/30 p-3 transition-all hover:border-blue-200 hover:shadow-sm"
-                    >
-                      <div class="mb-2 flex items-start justify-between gap-2">
-                        <div class="min-w-0">
-                          <p
-                            v-if="k.code || k.abbr"
-                            class="mb-0.5 flex flex-wrap items-center gap-x-1.5 text-[9px] font-bold uppercase tracking-wide text-slate-400"
-                          >
-                            <span v-if="k.code" class="font-mono text-indigo-600">{{ k.code }}</span>
-                            <span v-if="k.abbr" class="text-slate-500">[{{ k.abbr }}]</span>
-                            <span v-if="k.category" class="text-slate-400">Nhóm {{ k.category }}</span>
-                          </p>
-                          <h4 class="text-xs font-bold text-slate-700">{{ k.name }}</h4>
-                        </div>
-                        <span
-                          class="shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold uppercase"
-                          :class="deptKpiStatusUi(k.status).badgeClass"
-                        >
-                          {{ deptKpiStatusUi(k.status).label }}
-                        </span>
-                      </div>
-                      <div class="flex items-end justify-between">
-                        <span class="flex items-center gap-1 text-[10px] text-slate-500">
-                          <i class="fas fa-code-branch text-[10px] text-blue-500" aria-hidden="true" />
-                          {{ kpiTypeDisplay(k) }}
-                        </span>
-                        <span class="text-[10px] font-bold text-slate-600">
-                          Tiến độ:
-                          <span :class="deptKpiStatusUi(k.status).progressClass">
-                            {{ kpiProgressText(k) }}
-                          </span>
-                        </span>
-                      </div>
-                    </div>
-                    <div
-                      v-if="sectionDetailKpisHasMore || sectionDetailKpisCanCollapse"
-                      class="mt-1 flex flex-col gap-1.5 sm:flex-row sm:gap-2"
-                    >
-                      <button
-                        v-if="sectionDetailKpisHasMore"
-                        type="button"
-                        class="w-full flex-1 rounded-lg border border-slate-200 bg-white py-2.5 text-center text-[10px] font-bold text-indigo-600 transition-colors hover:border-indigo-200 hover:bg-indigo-50/60"
-                        @click="loadMoreSectionDetailKpis"
-                      >
-                        Tải thêm
-                      </button>
-                      <button
-                        v-if="sectionDetailKpisCanCollapse"
-                        type="button"
-                        class="w-full flex-1 rounded-lg border border-slate-300 bg-slate-50 py-2.5 text-center text-[10px] font-bold text-slate-600 transition-colors hover:border-slate-400 hover:bg-slate-100"
-                        @click="collapseSectionDetailKpis"
-                      >
-                        Ẩn bớt
-                      </button>
-                    </div>
-                  </template>
-                  <p v-else class="py-6 text-center text-xs text-slate-400">
-                    Chưa có KPI mock gắn với section này.
+                    Chưa có nhân sự trong phòng ban này.
                   </p>
                 </div>
               </div>
@@ -1522,7 +1258,7 @@ async function onSubmit() {
               class="flex items-center gap-2 text-sm font-bold text-slate-800"
             >
               <i class="fas fa-pen text-indigo-600" aria-hidden="true" />
-              Chỉnh sửa Khối / Section
+              Chỉnh sửa phòng ban
             </h3>
             <button
               type="button"
@@ -1539,7 +1275,7 @@ async function onSubmit() {
                 for="gm-edit-section-name"
                 class="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500"
               >
-                Tên khối / Section <span class="text-rose-500">*</span>
+                Tên phòng ban <span class="text-rose-500">*</span>
               </label>
               <input
                 id="gm-edit-section-name"
@@ -1554,26 +1290,6 @@ async function onSubmit() {
             </div>
             <div>
               <label
-                for="gm-edit-section-code"
-                class="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500"
-              >
-                Mã code <span class="text-rose-500">*</span>
-              </label>
-              <input
-                id="gm-edit-section-code"
-                :value="editSectionCode"
-                type="text"
-                maxlength="16"
-                class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium uppercase text-slate-800 outline-none transition-all focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-                :class="editFormErrors.code ? 'border-rose-300 ring-1 ring-rose-200' : ''"
-                @input="onEditCodeInput"
-              />
-              <p v-if="editFormErrors.code" class="mt-1 text-xs font-semibold text-rose-600">
-                {{ editFormErrors.code }}
-              </p>
-            </div>
-            <div>
-              <label
                 for="gm-edit-section-manager"
                 class="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500"
               >
@@ -1582,11 +1298,13 @@ async function onSubmit() {
               <div class="relative">
                 <select
                   id="gm-edit-section-manager"
-                  v-model="editSectionManagerLabel"
+                  v-model="editSectionManagerId"
                   class="w-full cursor-pointer appearance-none rounded-lg border border-slate-200 py-2 pl-3 pr-9 text-sm font-medium text-slate-800 outline-none transition-all focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                   :class="editFormErrors.manager ? 'border-rose-300 ring-1 ring-rose-200' : ''"
+                  :disabled="managersLoading"
                 >
-                  <option v-for="lab in editManagerChoices" :key="lab" :value="lab">{{ lab }}</option>
+                  <option disabled value="">{{ managersLoading ? 'Đang tải…' : '-- Chọn Quản lý --' }}</option>
+                  <option v-for="m in editManagerChoices" :key="m.id" :value="m.id">{{ m.fullName }}</option>
                 </select>
                 <i
                   class="fas fa-chevron-down pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400"
@@ -1645,7 +1363,7 @@ async function onSubmit() {
             >
               <i class="fas fa-user-plus shrink-0 text-violet-600" aria-hidden="true" />
               <span class="shrink-0">Thêm nhân sự vào</span>
-              <span class="truncate text-violet-600">{{ sectionDetailRow?.name ?? 'Section' }}</span>
+              <span class="truncate text-violet-600">{{ sectionDetailRow?.name ?? 'Phòng ban' }}</span>
             </h3>
             <button
               type="button"
@@ -1763,27 +1481,33 @@ async function onSubmit() {
             <p v-if="addMemberBulkError" class="mb-2 px-2 text-xs font-semibold text-rose-600">
               {{ addMemberBulkError }}
             </p>
-            <template v-if="addMemberFilteredCandidates.length">
+            <p
+              v-if="addMemberCandidatesLoading"
+              class="px-3 py-8 text-center text-xs font-medium text-slate-500"
+            >
+              Đang tải danh sách ứng viên…
+            </p>
+            <template v-else-if="addMemberFilteredCandidates.length">
               <label
                 v-for="c in addMemberFilteredCandidates"
-                :key="c.id"
+                :key="c.userId"
                 class="flex cursor-pointer items-center gap-3 rounded-lg border border-transparent px-3 py-2.5 transition-all hover:border-slate-200 hover:bg-slate-50 has-[:checked]:border-violet-200 has-[:checked]:bg-violet-50/60"
               >
                 <input
                   type="checkbox"
                   class="h-4 w-4 shrink-0 rounded accent-violet-600"
-                  :checked="isAddMemberSelected(c.id)"
+                  :checked="isAddMemberSelected(c.userId)"
                   @change="
-                    toggleAddMemberCandidate(c.id, ($event.target as HTMLInputElement).checked)
+                    toggleAddMemberCandidate(c.userId, ($event.target as HTMLInputElement).checked)
                   "
                 />
                 <div
                   class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-slate-100 text-xs font-bold text-slate-600"
                 >
-                  {{ memberInitial(c.name) }}
+                  {{ memberInitial(c.fullName) }}
                 </div>
                 <div class="min-w-0 flex-1">
-                  <p class="text-sm font-bold text-slate-700">{{ c.name }}</p>
+                  <p class="text-sm font-bold text-slate-700">{{ c.fullName }}</p>
                   <p class="text-[10px] font-medium text-slate-500">{{ candidateSubtitle(c) }}</p>
                 </div>
               </label>
@@ -1812,7 +1536,7 @@ async function onSubmit() {
               <button
                 type="button"
                 class="inline-flex items-center gap-1.5 rounded-lg bg-violet-600 px-4 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-60"
-                :disabled="savingMember"
+                :disabled="savingMember || addMemberCandidatesLoading"
                 @click="saveAddMember"
               >
                 <i v-if="!savingMember" class="fas fa-check text-xs" aria-hidden="true" />
@@ -1847,13 +1571,12 @@ async function onSubmit() {
               class="flex items-center gap-2 text-sm font-bold text-slate-900"
             >
               <i class="fas fa-triangle-exclamation text-rose-600" aria-hidden="true" />
-              Xóa section?
+              Xóa phòng ban?
             </h3>
             <p class="mt-2 text-xs font-medium leading-relaxed text-slate-600">
-              Bạn có chắc muốn xóa section
+              Bạn có chắc muốn xóa phòng ban
               <span class="font-bold text-slate-800">«{{ deleteSectionTarget.name }}»</span>
-              <span class="text-slate-500">({{ deleteSectionTarget.code }})</span>
-              không? Toàn bộ nhân sự thuộc section này cũng sẽ bị gỡ.
+              không? Toàn bộ nhân sự thuộc phòng ban này cũng sẽ bị gỡ.
             </p>
           </div>
           <div class="flex justify-end gap-2 bg-white px-5 py-4">
@@ -1870,6 +1593,64 @@ async function onSubmit() {
               @click="confirmDeleteSection"
             >
               Xác nhận xóa
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- Xác nhận gỡ thành viên khỏi phòng ban -->
+    <Teleport :to="GM_MAIN_MODAL_ANCHOR">
+      <div
+        v-if="removeMemberModalOpen && removeMemberTarget"
+        class="absolute inset-0 z-[160] flex items-center justify-center p-4"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="gm-remove-member-title"
+      >
+        <div
+          class="absolute inset-0 cursor-pointer bg-slate-900/60 backdrop-blur-sm"
+          @click="closeRemoveMemberModal"
+        />
+        <div
+          class="relative z-10 w-full max-w-md overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl"
+        >
+          <div class="border-b border-rose-100 bg-rose-50/80 px-5 py-4">
+            <h3
+              id="gm-remove-member-title"
+              class="flex items-center gap-2 text-sm font-bold text-slate-900"
+            >
+              <i class="fas fa-user-minus text-rose-600" aria-hidden="true" />
+              Gỡ thành viên?
+            </h3>
+            <p class="mt-2 text-xs font-medium leading-relaxed text-slate-600">
+              Bạn có chắc muốn gỡ
+              <span class="font-bold text-slate-800">«{{ removeMemberTarget.name }}»</span>
+              khỏi phòng ban
+              <span class="font-bold text-slate-800">«{{ sectionDetailRow?.name ?? '—' }}»</span>?
+            </p>
+          </div>
+          <div class="flex justify-end gap-2 bg-white px-5 py-4">
+            <button
+              type="button"
+              class="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-600 shadow-sm transition-colors hover:bg-slate-50 disabled:pointer-events-none disabled:opacity-50"
+              :disabled="removingMember"
+              @click="closeRemoveMemberModal"
+            >
+              Hủy
+            </button>
+            <button
+              type="button"
+              class="rounded-lg bg-rose-600 px-4 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:bg-rose-700 disabled:pointer-events-none disabled:opacity-60"
+              :disabled="removingMember"
+              @click="confirmRemoveMember"
+            >
+              <i
+                v-if="removingMember"
+                class="fas fa-spinner fa-spin mr-1.5 text-[10px]"
+                aria-hidden="true"
+              />
+              {{ removingMember ? 'Đang xử lý…' : 'Xác nhận gỡ' }}
             </button>
           </div>
         </div>

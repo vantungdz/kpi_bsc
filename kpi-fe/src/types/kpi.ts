@@ -33,9 +33,25 @@ export interface KpiItem {
   code: string
   name: string
   description?: string
+  /** Cột Chỉ tiêu — ưu tiên target_description từ API (có thể HTML) */
   target: string
+  /** ka.target_value — mục tiêu giao cho cá nhân */
+  assignmentTargetValue?: number | null
+  /** ki.target_value — chỉ tiêu chuẩn thư viện KPI */
+  kpiTemplateTargetValue?: number | null
+  /** kpi_assignments.status_code */
+  statusCode?: number | null
+  /** Nhãn ASM_STATUS từ API */
+  assignmentStatusName?: string | null
   weight: number
   group: string
+  /** kpi_categories — nhóm hiển thị Personal KPI */
+  categoryId?: string | null
+  categoryName?: string | null
+  /** kpi_master.calculation_rule_code (801–804) */
+  calculationRuleCode?: number | null
+  /** JSON string kpi_assignments.evidences — dùng trang chi tiết */
+  evidencesJson?: string | null
   /** Trạng thái đánh giá KPI (ưu tiên hiển thị cột Trạng thái) */
   evaluationStatus?: MemberKpiEvaluationStatus
   evidenceStatus: 'submitted' | 'missing' | 'pending'
@@ -151,6 +167,23 @@ export interface MemberKpiDashboard {
   canSubmit: boolean
 }
 
+/** GET /kpi/member/form-meta — tạo KPI cá nhân */
+export interface KpiCategoryOption {
+  id: string
+  name: string
+}
+
+export interface CalcRuleOption {
+  code: number
+  name: string
+  description?: string | null
+}
+
+export interface MemberKpiFormMeta {
+  kpiCategories: KpiCategoryOption[]
+  calcRules: CalcRuleOption[]
+}
+
 /** Gợi ý UI Leader (mock/API): hạn tự đánh giá KPI cá nhân — âm nghĩa là quá hạn */
 export interface LeaderDashboardUiHints {
   selfEvalDaysRemaining: number
@@ -195,4 +228,95 @@ export interface PmTeamMember {
   selfScore: number | null
   pmScore: number | null
   awaitingPmReview: boolean
+}
+
+// Các type dùng chung cho Hệ thống mã (sys_status_codes)
+export interface SysStatusCode {
+  code: number;
+  category: string;
+  name: string;
+  description: string;
+}
+
+export interface KpiMaster {
+  id: string;
+  code: string;
+  name: string;
+  categoryId: string;
+  typeCode: number;
+  calculationRuleCode: number;
+  unitCode: number;
+  isGlobal: boolean;
+}
+
+export interface KpiCycle {
+  id: string;
+  year: number;
+  name: string;
+  statusCode: number;
+}
+
+export interface PmMemberOption {
+  id: string;
+  shortName: string;
+  fullName: string;
+  departmentName: string;
+  rankCode: string;
+}
+
+// Payload trả về từ API Init
+export interface KpiRegistrationInitResponse {
+  activeCycle: KpiCycle;
+  kpiLibrary: KpiMaster[];
+  kpiTypes: SysStatusCode[];
+  calcRules: SysStatusCode[];
+  units: SysStatusCode[]; // Nếu backend trả thêm Unit
+  teamMembers: PmMemberOption[]; // Danh sách member của PM
+}
+
+// Payload gửi lên API Create/Assign
+export interface KpiRegistrationRequest {
+  existingMasterKpiId?: string | null;
+  newKpiName?: string;
+  typeCode?: number;
+  calculationRuleCode?: number;
+  unitCode?: number;
+  targetValue?: number;
+  weight?: number;
+  targetDescription?: string;
+  isImportant?: boolean;
+  assignedMembers: string[]; // Mảng UUID
+  targets: Record<string, number>; // Map UUID -> Target value
+}
+
+export interface LeaderKpiInformationResponse {
+  year: number;
+  categories: LeaderKpiCategoryGroup[];
+  kpiSummary: LeaderKpiSummary;
+}
+
+export interface LeaderKpiCategoryGroup {
+  id: string;
+  name: string;
+  assignments: LeaderKpiAssignment[];
+}
+
+export interface LeaderKpiAssignment {
+  assignmentId: string;
+  kpiName: string;
+  kpiCode: string;
+  targetDescription: string;
+  weight: number;
+  statusCode: string;
+  statusDesc: string;
+  midSelfScore: number | null;
+  endSelfScore: number | null;
+  endPmScore: number | null;
+  evidences: string | null;
+}
+
+export interface LeaderKpiSummary {
+  finalScore: number;
+  evaluationComments: string;
+  evaluationStatus: string;
 }

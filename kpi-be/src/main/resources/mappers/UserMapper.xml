@@ -3,12 +3,14 @@
 <mapper namespace="com.company.kpi.mapper.UserMapper">
 
     <!--
-        findById: dùng cho AuthService.refresh() và các service khác cần load User theo ID.
-        JOIN user_roles + roles để lấy role code (GM/PM/LEADER/MEMBER) phục vụ JWT generation.
+        findById: used by AuthService.refresh() and other services to load a User by ID.
+        This query joins user_roles and roles to retrieve the role code
+        (GM/PM/LEADER/MEMBER) needed for JWT generation.
     -->
     <select id="findById" resultType="com.company.kpi.entity.User">
         SELECT
             U.ID,
+            U.JOB_TITLE_ID AS jobTitleId,
             U.EMAIL,
             U.PASSWORD_HASH,
             U.FULL_NAME,
@@ -26,4 +28,349 @@
             AND U.IS_ACTIVE = TRUE
     </select>
 
+    <select id="listActiveDepartmentManagers" resultType="com.company.kpi.response.reference.DepartmentManagerOptionResponse">
+        SELECT
+            u.id,
+            u.username,
+            u.email,
+            u.full_name,
+            string_agg(d.name, ', ' ORDER BY d.name) AS managing_departments_label
+        FROM
+            departments d
+            INNER JOIN users u ON u.id = d.manager_id
+        WHERE
+            d.deleted_at IS NULL
+            AND d.manager_id IS NOT NULL
+            AND u.deleted_at IS NULL
+            AND u.is_active = TRUE
+        GROUP BY
+            u.id, u.username, u.email, u.full_name
+        ORDER BY
+            u.full_name ASC
+    </select>
+
+    <select id="listActiveUsersByRankCode" resultType="com.company.kpi.response.reference.MemberByRankOptionResponse">
+        SELECT DISTINCT
+            U.ID,
+            U.USERNAME,
+            U.EMAIL,
+            U.FULL_NAME,
+            R.CODE AS RANK_CODE,
+            D.NAME AS DEPARTMENT_NAME
+        FROM
+            USERS U
+            INNER JOIN JOB_TITLES JT ON U.JOB_TITLE_ID = JT.ID
+                AND JT.DELETED_AT IS NULL
+            INNER JOIN RANKS R ON JT.RANK_ID = R.ID
+                AND R.DELETED_AT IS NULL
+            LEFT JOIN USER_DEPARTMENTS UD ON U.ID = UD.USER_ID
+                AND UD.IS_PRIMARY = TRUE
+            LEFT JOIN DEPARTMENTS D ON UD.DEPARTMENT_ID = D.ID
+                AND D.DELETED_AT IS NULL
+        WHERE
+            R.CODE = #{rankCode}
+            AND U.DELETED_AT IS NULL
+            AND U.IS_ACTIVE = TRUE
+        ORDER BY
+            U.FULL_NAME ASC
+    </select>
+
+    <select id="listActiveUsersForPromotionAssignment" resultType="com.company.kpi.response.reference.MemberByRankOptionResponse">
+        SELECT DISTINCT
+            U.ID,
+            U.USERNAME,
+            U.EMAIL,
+            U.FULL_NAME,
+            COALESCE(R.CODE, '') AS RANK_CODE,
+            D.NAME AS DEPARTMENT_NAME
+        FROM
+            USERS U
+            LEFT JOIN JOB_TITLES JT ON U.JOB_TITLE_ID = JT.ID
+                AND JT.DELETED_AT IS NULL
+            LEFT JOIN RANKS R ON JT.RANK_ID = R.ID
+                AND R.DELETED_AT IS NULL
+            LEFT JOIN USER_DEPARTMENTS UD ON U.ID = UD.USER_ID
+                AND UD.IS_PRIMARY = TRUE
+            LEFT JOIN DEPARTMENTS D ON UD.DEPARTMENT_ID = D.ID
+                AND D.DELETED_AT IS NULL
+        WHERE
+            U.DELETED_AT IS NULL
+            AND U.IS_ACTIVE = TRUE
+        ORDER BY
+            U.FULL_NAME ASC
+    </select>
+
+
+    <resultMap id="PmMemberFlatResultMap" type="com.company.kpi.aggregate.PmMemberOptionAggregate">
+        <id property="id" column="u_id"/>
+        <result property="username" column="u_username"/>
+        <result property="fullName" column="u_full_name"/>
+        <result property="email" column="u_email"/>
+        
+        <result property="departmentName" column="d_name"/>
+        <result property="jobTitleName" column="jt_name"/>
+        <result property="rankCode" column="r_code"/>
+    </resultMap>
+
+    <select id="findMembersByPmDepartment" resultMap="PmMemberFlatResultMap">
+        SELECT 
+            u.id AS u_id,
+            u.username AS u_username,
+            u.full_name AS u_full_name,
+            u.email AS u_email,
+            
+            d.name AS d_name,
+            jt.name AS jt_name,
+            r.code AS r_code
+            
+        FROM users u
+        JOIN user_departments ud ON u.id = ud.user_id
+        JOIN departments d ON ud.department_id = d.id
+        LEFT JOIN job_titles jt ON u.job_title_id = jt.id
+        LEFT JOIN ranks r ON jt.rank_id = r.id
+        WHERE ud.department_id IN (
+            SELECT department_id FROM user_departments WHERE user_id = #{pmUserId}
+        )
+        AND u.is_active = true 
+        AND u.deleted_at IS NULL
+    </select>
+
+    <resultMap id="PmDashboardAggregateResultMap" type="com.company.kpi.aggregate.PmDashboardAggregate">
+        <association property="assignment" javaType="com.company.kpi.entity.KpiAssignment">
+            <id property="id" column="asm_id"/>
+            <result property="targetValue" column="asm_target_value"/>
+            <result property="midSelfScore" column="asm_mid_self_score"/>
+            <result property="endSelfScore" column="asm_end_self_score"/>
+            <result property="endPmScore" column="asm_end_pm_score"/>
+            <result property="statusCode" column="asm_status_code"/>
+            <result property="evidences" column="asm_evidences"/>
+        </association>
+
+        <association property="kpiInfo" javaType="com.company.kpi.entity.KpisInformation">
+            <id property="id" column="info_id"/>
+            <result property="targetDescription" column="info_target_desc"/>
+            <result property="weight" column="info_weight"/>
+            <result property="isImportant" column="info_is_important"/>
+        </association>
+
+        <association property="kpiMaster" javaType="com.company.kpi.entity.KpiMaster">
+            <id property="id" column="master_id"/>
+            <result property="code" column="master_code"/>
+            <result property="name" column="master_name"/>
+            <result property="typeCode" column="master_type_code"/>
+        </association>
+
+        <association property="kpiCategory" javaType="com.company.kpi.entity.KpiCategory">
+            <id property="id" column="cat_id"/>
+            <result property="name" column="cat_name"/>
+        </association>
+
+        <association property="user" javaType="com.company.kpi.entity.User">
+            <id property="id" column="user_id"/>
+            <result property="fullName" column="user_full_name"/>
+        </association>
+
+        <association property="jobTitle" javaType="com.company.kpi.entity.JobTitle">
+            <id property="id" column="jt_id"/>
+            <result property="name" column="jt_name"/>
+        </association>
+    </resultMap>
+
+    <select id="findUsersWithAssignmentsByPmIdAndCycleId" resultMap="PmDashboardAggregateResultMap">
+        SELECT
+            ka.id AS asm_id,
+            ka.target_value AS asm_target_value,
+            ka.mid_self_score AS asm_mid_self_score,
+            ka.end_self_score AS asm_end_self_score,
+            ka.end_pm_score AS asm_end_pm_score,
+            ka.status_code AS asm_status_code,
+            ka.evidences AS asm_evidences,
+            
+            ki.id AS info_id,
+            ki.target_description AS info_target_desc,
+            ki.weight AS info_weight,
+            ki.is_important AS info_is_important,
+            
+            km.id AS master_id,
+            km.code AS master_code,
+            km.name AS master_name,
+            km.type_code AS master_type_code,
+            
+            kc.id AS cat_id,
+            kc.name AS cat_name,
+            
+            u.id AS user_id,
+            u.full_name AS user_full_name,
+            
+            jt.id AS jt_id,
+            jt.name AS jt_name
+        FROM users u
+        JOIN user_departments ud ON u.id = ud.user_id
+        JOIN departments d ON ud.department_id = d.id
+        JOIN kpi_assignments ka ON u.id = ka.user_id AND ka.cycle_id = #{cycleId} AND ka.deleted_at IS NULL
+        JOIN kpis_information ki ON ka.kpi_info_id = ki.id AND ki.deleted_at IS NULL
+        JOIN kpi_master km ON ki.master_kpi_id = km.id AND km.deleted_at IS NULL
+        LEFT JOIN kpi_categories kc ON km.category_id = kc.id AND kc.deleted_at IS NULL
+        LEFT JOIN job_titles jt ON u.job_title_id = jt.id AND jt.deleted_at IS NULL
+        WHERE d.manager_id = #{pmId}
+          AND u.deleted_at IS NULL
+          AND d.deleted_at IS NULL
+        ORDER BY km.code, u.full_name
+    </select>
+    <!-- Added from AdminMapper -->
+    <select id="countTotalActiveEmployees" resultType="int">
+        SELECT COUNT(DISTINCT u.id)
+        FROM users u
+        JOIN user_roles ur ON u.id = ur.user_id
+        JOIN roles r       ON ur.role_id = r.id
+        WHERE r.code IN ('MEMBER', 'LEADER', 'PM')
+          AND u.is_active = TRUE
+          AND u.deleted_at IS NULL
+    </select>
+
+    <select id="getEmployeeProgressByCycleId"
+            resultType="com.company.kpi.response.admin.AdminEmployeeProgressResponse">
+        SELECT
+            u.id                                                  AS id,
+            u.full_name                                           AS name,
+            u.email                                               AS email,
+            COALESCE(d.name, 'N/A')                               AS section,
+            COALESCE(d.name, 'N/A')                               AS division,
+            CASE
+                WHEN COUNT(ka.id) = 0 THEN 'not_started'
+                WHEN COUNT(ka.id) FILTER (WHERE ka.status_code != 603) = 0 THEN 'completed'
+                WHEN COUNT(ka.id) FILTER (WHERE ka.status_code IN (501,502,601,602)) > 0 THEN 'pending'
+                WHEN MAX(kc.end_year_deadline) &lt; NOW()
+                     AND COUNT(ka.id) FILTER (WHERE ka.status_code != 603) > 0 THEN 'overdue'
+                ELSE 'not_started'
+            END                                                   AS status,
+            TO_CHAR(MAX(ka.updated_at), 'DD/MM/YYYY')             AS lastUpdate
+        FROM users u
+        JOIN user_roles ur
+            ON u.id = ur.user_id
+        JOIN roles r
+            ON ur.role_id = r.id AND r.code IN ('MEMBER', 'LEADER', 'PM')
+        LEFT JOIN user_departments ud
+            ON u.id = ud.user_id AND ud.is_primary = TRUE
+        LEFT JOIN departments d
+            ON ud.department_id = d.id AND d.deleted_at IS NULL
+        LEFT JOIN kpi_assignments ka
+            ON ka.user_id = u.id AND ka.cycle_id = #{cycleId} AND ka.deleted_at IS NULL
+        LEFT JOIN kpi_cycles kc
+            ON kc.id = #{cycleId}
+        WHERE u.is_active  = TRUE
+          AND u.deleted_at IS NULL
+        GROUP BY u.id, u.full_name, u.email, d.name
+        ORDER BY u.full_name
+    </select>
+
+    <select id="getEmployeeEmailById" resultType="java.lang.String">
+        SELECT u.email
+        FROM users u
+        WHERE u.id = #{id}
+          AND u.is_active = TRUE
+          AND u.deleted_at IS NULL
+    </select>
+
+    <select id="getAllActiveEmployeeEmails" resultType="java.lang.String">
+        SELECT DISTINCT u.email
+        FROM users u
+        JOIN user_roles ur ON u.id = ur.user_id
+        JOIN roles r       ON ur.role_id = r.id AND r.code != 'ADMIN'
+        WHERE u.is_active  = TRUE
+          AND u.deleted_at IS NULL
+        ORDER BY u.email
+    </select>
+
+    <select id="getEmployees"
+            resultType="com.company.kpi.response.admin.AdminEmployeeResponse">
+        SELECT
+            u.id                                                                  AS id,
+            u.username                                                            AS code,
+            u.full_name                                                           AS name,
+            u.email                                                               AS email,
+            COALESCE(d.name, 'N/A')                                               AS section,
+            COALESCE(rk.code, 'N/A')                                              AS rank,
+            COALESCE(jt.name, 'N/A')                                              AS jobTitle,
+            CASE WHEN u.is_active = TRUE THEN 'active' ELSE 'inactive' END        AS status
+        FROM users u
+        LEFT JOIN user_departments ud
+            ON u.id = ud.user_id AND ud.is_primary = TRUE
+        LEFT JOIN departments d
+            ON ud.department_id = d.id AND d.deleted_at IS NULL
+        LEFT JOIN job_titles jt
+            ON u.job_title_id = jt.id AND jt.deleted_at IS NULL
+        LEFT JOIN ranks rk
+            ON jt.rank_id = rk.id AND rk.deleted_at IS NULL
+        JOIN user_roles ur
+            ON u.id = ur.user_id
+        JOIN roles r
+            ON ur.role_id = r.id AND r.code != 'ADMIN'
+        WHERE u.deleted_at IS NULL
+        ORDER BY u.full_name
+    </select>
+
+    <select id="getEmployeeById"
+            resultType="com.company.kpi.response.admin.AdminEmployeeResponse">
+        SELECT
+            u.id                                                                  AS id,
+            u.username                                                            AS code,
+            u.full_name                                                           AS name,
+            u.email                                                               AS email,
+            COALESCE(d.name, 'N/A')                                               AS section,
+            COALESCE(rk.code, 'N/A')                                              AS rank,
+            COALESCE(jt.name, 'N/A')                                              AS jobTitle,
+            CASE WHEN u.is_active = TRUE THEN 'active' ELSE 'inactive' END        AS status
+        FROM users u
+        LEFT JOIN user_departments ud
+            ON u.id = ud.user_id AND ud.is_primary = TRUE
+        LEFT JOIN departments d
+            ON ud.department_id = d.id AND d.deleted_at IS NULL
+        LEFT JOIN job_titles jt
+            ON u.job_title_id = jt.id AND jt.deleted_at IS NULL
+        LEFT JOIN ranks rk
+            ON jt.rank_id = rk.id AND rk.deleted_at IS NULL
+        WHERE u.id = #{id} AND u.deleted_at IS NULL
+    </select>
+
+    <insert id="insertEmployee">
+        INSERT INTO users (id, username, email, password_hash, full_name, job_title_id, is_active)
+        VALUES (#{id}, #{username}, #{email}, #{passwordHash}, #{fullName},
+                #{jobTitleId, jdbcType=OTHER, typeHandler=com.company.kpi.common.mybatis.UUIDTypeHandler},
+                #{isActive})
+    </insert>
+
+    <update id="updateEmployee">
+        UPDATE users
+        SET full_name    = #{fullName},
+            email        = #{email},
+            job_title_id = #{jobTitleId, jdbcType=OTHER, typeHandler=com.company.kpi.common.mybatis.UUIDTypeHandler},
+            is_active    = #{isActive},
+            updated_at   = NOW()
+        WHERE id = #{id} AND deleted_at IS NULL
+    </update>
+    <!-- ── Thêm từ StrategicKpiWriteMapper ─────────────────────────────────────── -->
+    <select id="listExistingActiveUserIds" resultType="java.util.UUID">
+        SELECT u.id
+        FROM users u
+        WHERE u.deleted_at IS NULL
+          AND u.is_active = TRUE
+          AND u.id IN
+        <foreach collection="userIds" item="uid" open="(" separator="," close=")">
+            #{uid}
+        </foreach>
+    </select>
+
+    <select id="listUserJobTitlesByIds" resultType="com.company.kpi.aggregate.UserJobTitlePair">
+        SELECT
+            u.id AS userId,
+            u.job_title_id AS jobTitleId
+        FROM users u
+        WHERE u.deleted_at IS NULL
+          AND u.is_active = TRUE
+          AND u.id IN
+        <foreach collection="userIds" item="uid" open="(" separator="," close=")">
+            #{uid}
+        </foreach>
+    </select>
 </mapper>

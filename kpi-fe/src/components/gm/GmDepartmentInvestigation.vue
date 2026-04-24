@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import GmStrategicKpiTypeTag from '@/components/gm/GmStrategicKpiTypeTag.vue'
-import type { GmDeptKpiMock, GmInvestigationMember, GmStrategicKpiKind } from '@/mocks/gm-kpi.mock'
+import type { GmDeptKpiMock, GmInvestigationMember, GmStrategicKpiKind } from '@/types/gm-workspace'
 
 const props = defineProps<{
   department: Record<string, unknown> & { id: string; name: string; manager: string }

@@ -2,23 +2,20 @@
 import { ref, computed, shallowRef, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import GmMemberKpiDrawer from '@/components/gm/GmMemberKpiDrawer.vue'
 import GmStrategicKpiTypeTag from '@/components/gm/GmStrategicKpiTypeTag.vue'
-import {
-  gmKpiHierarchyMockRows,
-  gmLayoutMockDepartments,
-  GM_BSC_LABELS,
-  GM_BSC_ORDER,
-  normalizeGmBscPerspective,
-  type GmBscPerspective,
-  type GmHierarchyKpi,
-  type GmHierarchyLeader,
-  type GmHierarchyMember,
-  type GmHierarchyPm,
-  type GmHierarchyStatus,
-  type GmKpiSubmissionStatus,
-  type GmMemberKpiDrawerProfile,
-  type GmModalKpiItemMock,
-  type GmPmKpiRolloutPayload,
-} from '@/mocks/gm-kpi.mock'
+import { gmKpiHierarchyMockRows, gmLayoutMockDepartments } from '@/mocks/gm-kpi.mock'
+import type {
+  GmBscPerspective,
+  GmHierarchyKpi,
+  GmHierarchyLeader,
+  GmHierarchyMember,
+  GmHierarchyPm,
+  GmHierarchyStatus,
+  GmKpiSubmissionStatus,
+  GmMemberKpiDrawerProfile,
+  GmModalKpiItemMock,
+  GmPmKpiRolloutPayload,
+} from '@/types/gm-workspace'
+import { GM_BSC_LABELS, GM_BSC_ORDER, normalizeGmBscPerspective } from '@/utils/gm-bsc-diagnostics'
 
 const props = withDefaults(
   defineProps<{
@@ -140,10 +137,11 @@ const appliedFilterCount = computed(() => {
   return n
 })
 
+/** Nhãn đèn giao thông chung (lọc + rollup KPI/PM/Leader), cùng từ vựng bảng MID/END. */
 function kpiStatusLabel(status: GmHierarchyStatus) {
-  if (status === 'success') return 'Đạt chỉ tiêu'
-  if (status === 'warning') return 'Cần cải thiện'
-  return 'Rủi ro hệ thống'
+  if (status === 'success') return 'Vượt tiến độ / Đạt–vượt'
+  if (status === 'warning') return 'Đúng tiến độ / Gần đạt'
+  return 'Chậm tiến độ / Không đạt'
 }
 
 type DiagnosticChipKey = 'section' | 'member' | 'important' | 'status'
@@ -215,12 +213,20 @@ function pmUsesLeaderTree(pm: GmHierarchyPm): boolean {
 }
 
 function allMembersUnderPm(pm: GmHierarchyPm): GmHierarchyMember[] {
-  if (pmUsesLeaderTree(pm)) return pm.leaders!.flatMap((l) => l.members)
-  return pm.members
+  const fromLeaders = pm.leaders?.flatMap((l) => l.members) ?? []
+  return [...pm.members, ...fromLeaders]
 }
 
 function pmHasRollout(pm: GmHierarchyPm): boolean {
   return allMembersUnderPm(pm).length > 0
+}
+
+/** Một assignee là đúng manager phòng — ẩn dải tóm tắt tên+tag lặp lại ngay dưới dòng khối. */
+function pmRolloutSelfOnlyRedundantSummaryBand(pm: GmHierarchyPm): boolean {
+  if (pmUsesLeaderTree(pm)) return false
+  const ou = pm.ownerUserId
+  if (!ou || pm.members.length !== 1) return false
+  return String(pm.members[0]?.id) === String(ou)
 }
 
 function leaderExpandKey(pmId: string, leaderId: string) {
@@ -265,6 +271,14 @@ function memberTableActualDisplay(member: GmHierarchyMember) {
   return `${pct}%`
 }
 
+function memberDiagnosticsStatusLabel(member: GmHierarchyMember): string {
+  const pl = member.performanceLabel?.trim()
+  if (pl) return pl
+  if (member.status === 'danger') return 'Fail'
+  if (member.status === 'warning') return 'Warning'
+  return 'Done'
+}
+
 /**
  * Target trên bảng (dòng member): khi có số thô PM giao → hiển thị 100% (mức chuẩn “đủ chỉ tiêu được giao”),
  * để cùng cơ sở với Actual = (submissionActual / submissionTarget) * 100%.
@@ -298,11 +312,92 @@ function sortImportantKpisFirst(list: GmHierarchyKpi[]): GmHierarchyKpi[] {
   })
 }
 
-/** Nhãn khối / line PM quản lý (ưu tiên `unitLine`, bỏ prefix "PM ·") — dùng cả filter và cột bảng. */
+/** Bỏ phần trước dấu «·» trên `unitLine` (nhãn vai trò từ DB + tên phòng). */
+function stripRollupUnitLinePrefix(line: string | null | undefined): string {
+  const s = String(line ?? '').trim()
+  const idx = s.indexOf('·')
+  if (idx < 0) return s
+  return s.slice(idx + 1).trim()
+}
+
+/** Nhãn khối / line quản lý (ưu tiên `unitLine`, bỏ prefix vai trò) — dùng cả filter và cột bảng. */
 function pmManagedSectionLabel(pm: GmHierarchyPm): string {
-  const fromLine = pm.unitLine?.replace(/^PM\s*·\s*/i, '').trim()
+  const fromLine = stripRollupUnitLinePrefix(pm.unitLine)
   if (fromLine) return fromLine
   return 'Khối phụ trách'
+}
+
+/** Viền tag theo `roles.code` (màu gợi ý); nhãn tag = code (không dùng `roles.name` trên UI). */
+function badgeClassForRoleCode(code: string | null | undefined): string {
+  const c = String(code ?? '').trim().toUpperCase()
+  switch (c) {
+    case 'TEAM':
+      return 'border-emerald-200/80 bg-white text-emerald-800'
+    case 'LEADER':
+      return 'border-violet-200/80 bg-white text-violet-800'
+    case 'GM':
+      return 'border-amber-200/80 bg-white text-amber-900'
+    case 'MEMBER':
+      return 'border-slate-200/80 bg-white text-slate-700'
+    case 'PM':
+      return 'border-indigo-200/80 bg-white text-indigo-700'
+    default:
+      return 'border-slate-200/80 bg-white text-slate-600'
+  }
+}
+
+/** Tag vai trò: chỉ hiển thị `roles.code` (API), không dùng full name. */
+function rollupRoleBadgeFromCode(code: string | null | undefined): {
+  label: string
+  badgeClass: string
+} | null {
+  const raw = String(code ?? '').trim()
+  if (!raw) return null
+  const u = raw.toUpperCase()
+  const label = u.length > 14 ? `${u.slice(0, 14)}…` : u
+  return { label, badgeClass: badgeClassForRoleCode(raw) }
+}
+
+function pmRollupRoleBadge(pm: GmHierarchyPm): { label: string; badgeClass: string } | null {
+  if (String(pm.id ?? '').includes('diag-pm-unassigned')) {
+    return null
+  }
+  const fromCode = rollupRoleBadgeFromCode(pm.ownerRoleCode)
+  if (fromCode) return fromCode
+  const ul = pm.unitLine?.trim() ?? ''
+  const beforeDot = /^([^·]+)\s*·/.exec(ul)?.[1]?.trim()
+  if (beforeDot) return { label: beforeDot.toUpperCase(), badgeClass: badgeClassForRoleCode(beforeDot) }
+  return null
+}
+
+function pmRollupShortRoleForLabel(pm: GmHierarchyPm): string {
+  const c = pm.ownerRoleCode?.trim()
+  if (c) return c.toUpperCase()
+  return pmRollupRoleBadge(pm)?.label ?? '—'
+}
+
+function pmRollupOwnerSubtitle(pm: GmHierarchyPm): string {
+  if (String(pm.id ?? '').includes('diag-pm-unassigned')) return 'Chưa giao'
+  const ct = String(pm.ownerRoleCode ?? '').toUpperCase()
+  if (ct === 'TEAM') return 'Nhóm nhận KPI'
+  if (ct) return `${ct} phụ trách`
+  return 'Quản lý khối phụ trách'
+}
+
+function pmRollupOwnerSrOnly(pm: GmHierarchyPm): string {
+  if (String(pm.id ?? '').includes('diag-pm-unassigned')) return 'Trạng thái chưa giao'
+  const ct = String(pm.ownerRoleCode ?? '').toUpperCase()
+  if (ct === 'TEAM') return 'Dòng KPI team — danh sách người nhận bên dưới'
+  if (ct) return `${ct} phụ trách nhóm`
+  return 'Quản lý khối phụ trách nhóm'
+}
+
+function leaderRollupRoleBadge(leader: GmHierarchyLeader): { label: string; badgeClass: string } | null {
+  return rollupRoleBadgeFromCode(leader.ownerRoleCode)
+}
+
+function memberRollupRoleBadge(member: GmHierarchyMember): { label: string; badgeClass: string } | null {
+  return rollupRoleBadgeFromCode(member.ownerRoleCode)
 }
 
 const diagnosticsSectionOptions = computed(() => {
@@ -394,12 +489,17 @@ function projectKpiRowForToolbarFilters(kpi: GmHierarchyKpi): GmHierarchyKpi {
             members: ldr.members.filter((m) => memSet.has(String(m.name ?? '').trim())),
           }))
           const leaders = nextLeaders.filter((ldr) => ldr.members.length > 0)
-          if (leaders.length === 0) return null
-          return { ...pm, leaders, members: [] as GmHierarchyMember[] }
+          const members = pm.members.filter((m) => memSet.has(String(m.name ?? '').trim()))
+          if (leaders.length === 0 && members.length === 0) return null
+          return {
+            ...pm,
+            leaders: leaders.length > 0 ? leaders : undefined,
+            members,
+          }
         }
-        const members = pm.members.filter((m) => memSet.has(String(m.name ?? '').trim()))
-        if (members.length === 0) return null
-        return { ...pm, members }
+        const membersOnly = pm.members.filter((m) => memSet.has(String(m.name ?? '').trim()))
+        if (membersOnly.length === 0) return null
+        return { ...pm, members: membersOnly }
       })
       .filter((pm): pm is GmHierarchyPm => pm != null)
   }
@@ -413,43 +513,54 @@ const prunedFilteredRows = computed(() => {
   return fullFilteredRows.value.map(projectKpiRowForToolbarFilters)
 })
 
-/** Thứ tự hiển thị: theo BSC, trong mỗi khía cạnh KPI quan trọng trước. */
-function flattenByBscOrder(list: GmHierarchyKpi[]): GmHierarchyKpi[] {
-  const buckets = new Map<GmBscPerspective, GmHierarchyKpi[]>()
-  for (const id of GM_BSC_ORDER) buckets.set(id, [])
-  for (const k of list) {
-    buckets.get(normalizeGmBscPerspective(k.bscPerspective))!.push(k)
-  }
-  const out: GmHierarchyKpi[] = []
-  for (const id of GM_BSC_ORDER) {
-    out.push(...sortImportantKpisFirst(buckets.get(id)!))
-  }
-  return out
-}
+type DiagnosticsTableGroup = { key: string; label: string; rows: GmHierarchyKpi[] }
 
-const orderedFilteredRows = computed(() => flattenByBscOrder(prunedFilteredRows.value))
-
-/** Nhóm KPI sau lọc theo BSC — mỗi nhóm một collapse. */
-const visibleRowsByBsc = computed(() => {
+/** Nhóm theo `kpi_categories` khi có `categoryId`; không thì nhóm theo `diagnosticsFallbackGroup` (mock). */
+function buildDisplayGroups(list: GmHierarchyKpi[]): DiagnosticsTableGroup[] {
+  const useCategory = list.some((k) => Boolean(k.categoryId?.trim()))
+  if (useCategory) {
+    const meta = new Map<string, { label: string; rows: GmHierarchyKpi[] }>()
+    for (const k of list) {
+      const id = k.categoryId?.trim() || 'uncategorized'
+      const label = k.categoryName?.trim() || 'Không phân loại'
+      if (!meta.has(id)) meta.set(id, { label, rows: [] })
+      meta.get(id)!.rows.push(k)
+    }
+    return [...meta.entries()]
+      .sort((a, b) => a[1].label.localeCompare(b[1].label, 'vi'))
+      .map(([key, v]) => ({ key, label: v.label, rows: sortImportantKpisFirst(v.rows) }))
+  }
   const m = new Map<GmBscPerspective, GmHierarchyKpi[]>()
   for (const id of GM_BSC_ORDER) m.set(id, [])
-  for (const k of orderedFilteredRows.value) {
-    m.get(normalizeGmBscPerspective(k.bscPerspective))!.push(k)
-  }
+  for (const k of list) m.get(normalizeGmBscPerspective(k.diagnosticsFallbackGroup))!.push(k)
   return GM_BSC_ORDER.map((perspective) => ({
-    perspective,
+    key: perspective,
     label: GM_BSC_LABELS[perspective],
-    rows: m.get(perspective)!,
+    rows: sortImportantKpisFirst(m.get(perspective)!),
   })).filter((g) => g.rows.length > 0)
-})
+}
 
-const expandedBscSections = ref<Set<GmBscPerspective>>(new Set(GM_BSC_ORDER))
+const visibleRowGroups = computed(() => buildDisplayGroups(prunedFilteredRows.value))
 
-function toggleBscSection(p: GmBscPerspective) {
-  const s = new Set(expandedBscSections.value)
-  if (s.has(p)) s.delete(p)
-  else s.add(p)
-  expandedBscSections.value = s
+const expandedSectionKeys = ref<Set<string>>(new Set())
+
+watch(
+  visibleRowGroups,
+  (groups) => {
+    expandedSectionKeys.value = new Set(groups.map((g) => g.key))
+  },
+  { immediate: true },
+)
+
+function sectionDomId(key: string): string {
+  return `gm-diag-sec-${key.replace(/[^a-zA-Z0-9_-]/g, '_')}`
+}
+
+function toggleSection(sectionKey: string) {
+  const s = new Set(expandedSectionKeys.value)
+  if (s.has(sectionKey)) s.delete(sectionKey)
+  else s.add(sectionKey)
+  expandedSectionKeys.value = s
 }
 
 watch([filterStatuses, filterImportant, filterSections, filterMembers], () => {
@@ -494,12 +605,6 @@ function badgeClass(status: GmHierarchyStatus) {
   }
 }
 
-function pmRollupStatusLabel(status: GmHierarchyStatus) {
-  if (status === 'success') return 'Tốt'
-  if (status === 'warning') return 'Cảnh báo'
-  return 'Nguy hiểm'
-}
-
 /** Tooltip trên badge trạng thái — chỉ lý do / tồn đọng (không lặp nhãn trạng thái). */
 function diagnosticsReasonTooltip(text: unknown): string | undefined {
   const t = String(text ?? '').trim()
@@ -519,7 +624,7 @@ const drawerKpiItems = shallowRef<GmModalKpiItemMock[]>([])
 const drawerPmKpiRollout = shallowRef<GmPmKpiRolloutPayload | null>(null)
 
 function memberDrawerDepartmentLabel(pm: GmHierarchyPm, kpi: GmHierarchyKpi) {
-  const fromLine = pm.unitLine?.replace(/^PM\s*·\s*/i, '').trim()
+  const fromLine = stripRollupUnitLinePrefix(pm.unitLine)
   if (fromLine) return fromLine.toUpperCase()
   if (kpi.investigateDeptId) {
     const n = gmLayoutMockDepartments.find((d) => d.id === kpi.investigateDeptId)?.name
@@ -557,7 +662,7 @@ function memberRowToModalItem(member: GmHierarchyMember, kpi: GmHierarchyKpi, pm
     score: member.actual,
     kpiType: kpi.kpiType,
     submissionStatus: submissionFromMemberStatus(member.status),
-    targetSummary: `Đóng góp trong KPI «${kpi.name}» · Minh chứng / ghi chú: ${evidenceNote} · PM: ${pm.name}`,
+    targetSummary: `Đóng góp trong KPI «${kpi.name}» · Minh chứng / ghi chú: ${evidenceNote} · ${pmRollupShortRoleForLabel(pm)}: ${pm.name}`,
     actualProgressPct: memberDrawerActualProgressPct(member),
     evidenceAttachmentUrl: member.evidenceAttachmentUrl ?? null,
   }
@@ -568,6 +673,7 @@ function openPmKpiDrawer(pm: GmHierarchyPm, kpi: GmHierarchyKpi) {
   if (!rolloutMembers.length) return
   drawerPmKpiRollout.value = {
     pmName: pm.name,
+    rollupRoleLabel: pmRollupShortRoleForLabel(pm),
     pmUnitLine: pm.unitLine,
     kpiName: kpi.name,
     kpiTarget: kpi.target,
@@ -837,18 +943,18 @@ function closeMemberDrawer() {
           <div class="col-span-1 text-center">Thao tác</div>
         </div>
 
-        <template v-for="group in visibleRowsByBsc" :key="'bsc-' + group.perspective">
+        <template v-for="group in visibleRowGroups" :key="'sec-' + group.key">
           <div class="border-b border-slate-200 bg-slate-50">
             <button
               type="button"
               class="flex w-full items-center gap-2.5 px-3 py-2.5 text-left transition-colors hover:bg-slate-100/80"
-              :aria-expanded="expandedBscSections.has(group.perspective)"
-              :aria-controls="`gm-diag-bsc-${group.perspective}`"
-              @click="toggleBscSection(group.perspective)"
+              :aria-expanded="expandedSectionKeys.has(group.key)"
+              :aria-controls="sectionDomId(group.key)"
+              @click="toggleSection(group.key)"
             >
               <i
                 class="fas fa-chevron-right w-3 shrink-0 text-center text-[10px] text-slate-500 transition-transform duration-200 motion-reduce:transition-none"
-                :class="expandedBscSections.has(group.perspective) ? 'rotate-90' : ''"
+                :class="expandedSectionKeys.has(group.key) ? 'rotate-90' : ''"
                 aria-hidden="true"
               />
               <span class="text-[11px] font-bold uppercase tracking-wider text-slate-800">{{ group.label }}</span>
@@ -858,9 +964,9 @@ function closeMemberDrawer() {
             </button>
           </div>
           <div
-            :id="`gm-diag-bsc-${group.perspective}`"
+            :id="sectionDomId(group.key)"
             class="grid overflow-hidden border-b border-slate-200 transition-[grid-template-rows] duration-300 ease-in-out motion-reduce:transition-none"
-            :class="expandedBscSections.has(group.perspective) ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'"
+            :class="expandedSectionKeys.has(group.key) ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'"
           >
             <div class="min-h-0 divide-y divide-slate-200">
             <template v-for="kpi in group.rows" :key="kpi.id">
@@ -994,7 +1100,7 @@ function closeMemberDrawer() {
                               {{ pmManagedSectionLabel(pm) }}
                             </div>
                             <div v-if="!pmHasRollout(pm)" class="mt-0.5 truncate text-xs font-medium text-slate-500">
-                              PM phụ trách: {{ pm.name }}
+                              {{ pmRollupOwnerSubtitle(pm) }}: {{ pm.name }}
                             </div>
                           </div>
                         </div>
@@ -1021,7 +1127,7 @@ function closeMemberDrawer() {
                                     : 'fa-times-circle'
                               "
                             />
-                            <span class="truncate">{{ pmRollupStatusLabel(pm.status) }}</span>
+                            <span class="truncate">{{ kpiStatusLabel(pm.status) }}</span>
                           </span>
                         </div>
                         <div class="col-span-1 flex justify-center pr-0.5">
@@ -1044,11 +1150,12 @@ function closeMemberDrawer() {
                         <div class="min-h-0">
                           <div class="border-y border-slate-100 bg-slate-50/50 py-1">
                             <div
+                              v-if="!(pmHasRollout(pm) && pmRolloutSelfOnlyRedundantSummaryBand(pm))"
                               class="flex flex-wrap items-center gap-2 border-b border-indigo-100/90 bg-gradient-to-r from-indigo-50/50 to-transparent py-2 pl-20 pr-3"
-                              :title="`Target, Actual và trạng thái tổng hợp của nhóm «${pmManagedSectionLabel(pm)}» nằm ở dòng khối phía trên. Phía dưới là ${pmUsesLeaderTree(pm) ? 'Leader và thành viên' : 'từng thành viên'}.`"
+                              :title="`Target, Actual và trạng thái tổng hợp của nhóm «${pmManagedSectionLabel(pm)}» nằm ở dòng khối phía trên. Phía dưới: ${pm.members.length > 0 && pmUsesLeaderTree(pm) ? 'thành viên trực tiếp và nhóm theo supervisor' : pmUsesLeaderTree(pm) ? 'nhóm theo supervisor' : 'từng thành viên'}.`"
                             >
                               <span class="sr-only">
-                                PM phụ trách nhóm; chỉ số tổng hợp nằm ở dòng khối phía trên.
+                                {{ pmRollupOwnerSrOnly(pm) }}; chỉ số tổng hợp nằm ở dòng khối phía trên.
                               </span>
                               <div
                                 class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-indigo-200 bg-white shadow-sm"
@@ -1057,9 +1164,13 @@ function closeMemberDrawer() {
                               </div>
                               <div class="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
                                 <span class="text-xs font-semibold text-slate-800">{{ pm.name }}</span>
-                                <span
-                                  class="rounded border border-indigo-200/80 bg-white px-1.5 py-px text-[9px] font-bold uppercase tracking-wide text-indigo-700"
-                                >PM</span>
+                                <template v-for="rb in [pmRollupRoleBadge(pm)]" :key="`rb-${pm.id}`">
+                                  <span
+                                    v-if="rb"
+                                    class="rounded border px-1.5 py-px text-[9px] font-bold uppercase tracking-wide"
+                                    :class="rb.badgeClass"
+                                  >{{ rb.label }}</span>
+                                </template>
                               </div>
                               <span
                                 class="ml-auto hidden shrink-0 items-center gap-1 text-[10px] font-medium text-slate-400 sm:inline-flex"
@@ -1070,7 +1181,7 @@ function closeMemberDrawer() {
                               </span>
                             </div>
 
-                            <template v-if="!pmUsesLeaderTree(pm)">
+                            <template v-if="pm.members.length > 0">
                               <div
                                 v-for="member in pm.members"
                                 :key="member.id"
@@ -1082,11 +1193,15 @@ function closeMemberDrawer() {
                                   >
                                     <i class="fas fa-user text-[10px] text-slate-400" />
                                   </div>
-                                  <div class="min-w-0">
-                                    <div class="text-xs font-semibold text-slate-700">{{ member.name }}</div>
-                                    <div v-if="member.leader" class="mt-0.5 truncate text-xs text-slate-500">
-                                      {{ member.leader }}
-                                    </div>
+                                  <div class="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                                    <span class="text-xs font-semibold text-slate-700">{{ member.name }}</span>
+                                    <template v-for="mb in [memberRollupRoleBadge(member)]" :key="`mbr-${member.id}`">
+                                      <span
+                                        v-if="mb"
+                                        class="shrink-0 rounded border px-1.5 py-px text-[9px] font-bold uppercase tracking-wide"
+                                        :class="mb.badgeClass"
+                                      >{{ mb.label }}</span>
+                                    </template>
                                   </div>
                                 </div>
                                 <div class="col-span-1 text-center text-xs text-slate-300">-</div>
@@ -1117,17 +1232,20 @@ function closeMemberDrawer() {
                                   >
                                     <template v-if="member.status === 'danger'">
                                       <span class="inline-flex items-center text-red-600">
-                                        <i class="fas fa-times-circle mr-1 shrink-0 text-[11px]" /> Fail
+                                        <i class="fas fa-times-circle mr-1 shrink-0 text-[11px]" />
+                                        {{ memberDiagnosticsStatusLabel(member) }}
                                       </span>
                                     </template>
                                     <template v-else-if="member.status === 'warning'">
                                       <span class="inline-flex items-center text-yellow-700">
-                                        <i class="fas fa-exclamation-circle mr-1 shrink-0 text-[11px]" /> Warning
+                                        <i class="fas fa-exclamation-circle mr-1 shrink-0 text-[11px]" />
+                                        {{ memberDiagnosticsStatusLabel(member) }}
                                       </span>
                                     </template>
                                     <template v-else>
                                       <span class="inline-flex items-center text-green-600">
-                                        <i class="fas fa-check-circle mr-1 shrink-0 text-[11px]" /> Done
+                                        <i class="fas fa-check-circle mr-1 shrink-0 text-[11px]" />
+                                        {{ memberDiagnosticsStatusLabel(member) }}
                                       </span>
                                     </template>
                                   </span>
@@ -1136,7 +1254,7 @@ function closeMemberDrawer() {
                               </div>
                             </template>
 
-                            <template v-else>
+                            <template v-if="pmUsesLeaderTree(pm)">
                               <div
                                 v-for="leader in pm.leaders"
                                 :key="leader.id"
@@ -1177,9 +1295,13 @@ function closeMemberDrawer() {
                                     </div>
                                     <div class="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
                                       <span class="truncate text-xs font-semibold text-slate-800">{{ leader.name }}</span>
-                                      <span
-                                        class="shrink-0 rounded border border-violet-200/80 bg-white px-1.5 py-px text-[9px] font-bold uppercase tracking-wide text-violet-800"
-                                      >Leader</span>
+                                      <template v-for="lb in [leaderRollupRoleBadge(leader)]" :key="`lrb-${leader.id}`">
+                                        <span
+                                          v-if="lb"
+                                          class="shrink-0 rounded border px-1.5 py-px text-[9px] font-bold uppercase tracking-wide"
+                                          :class="lb.badgeClass"
+                                        >{{ lb.label }}</span>
+                                      </template>
                                     </div>
                                   </div>
                                   <div class="col-span-1 text-center text-xs text-slate-300">-</div>
@@ -1209,7 +1331,7 @@ function closeMemberDrawer() {
                                               : 'fa-times-circle'
                                         "
                                       />
-                                      <span class="truncate">{{ pmRollupStatusLabel(leader.status) }}</span>
+                                      <span class="truncate">{{ kpiStatusLabel(leader.status) }}</span>
                                     </span>
                                   </div>
                                   <div class="col-span-1 text-center text-xs text-slate-200">—</div>
@@ -1236,8 +1358,15 @@ function closeMemberDrawer() {
                                         >
                                           <i class="fas fa-user text-[10px] text-slate-400" />
                                         </div>
-                                        <div class="min-w-0">
-                                          <div class="text-xs font-semibold text-slate-700">{{ member.name }}</div>
+                                        <div class="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                                          <span class="text-xs font-semibold text-slate-700">{{ member.name }}</span>
+                                          <template v-for="mb in [memberRollupRoleBadge(member)]" :key="`mbr-l-${member.id}`">
+                                            <span
+                                              v-if="mb"
+                                              class="shrink-0 rounded border px-1.5 py-px text-[9px] font-bold uppercase tracking-wide"
+                                              :class="mb.badgeClass"
+                                            >{{ mb.label }}</span>
+                                          </template>
                                         </div>
                                       </div>
                                       <div class="col-span-1 text-center text-xs text-slate-300">-</div>
@@ -1270,17 +1399,20 @@ function closeMemberDrawer() {
                                         >
                                           <template v-if="member.status === 'danger'">
                                             <span class="inline-flex items-center text-red-600">
-                                              <i class="fas fa-times-circle mr-1 shrink-0 text-[11px]" /> Fail
+                                              <i class="fas fa-times-circle mr-1 shrink-0 text-[11px]" />
+                                              {{ memberDiagnosticsStatusLabel(member) }}
                                             </span>
                                           </template>
                                           <template v-else-if="member.status === 'warning'">
                                             <span class="inline-flex items-center text-yellow-700">
-                                              <i class="fas fa-exclamation-circle mr-1 shrink-0 text-[11px]" /> Warning
+                                              <i class="fas fa-exclamation-circle mr-1 shrink-0 text-[11px]" />
+                                              {{ memberDiagnosticsStatusLabel(member) }}
                                             </span>
                                           </template>
                                           <template v-else>
                                             <span class="inline-flex items-center text-green-600">
-                                              <i class="fas fa-check-circle mr-1 shrink-0 text-[11px]" /> Done
+                                              <i class="fas fa-check-circle mr-1 shrink-0 text-[11px]" />
+                                              {{ memberDiagnosticsStatusLabel(member) }}
                                             </span>
                                           </template>
                                         </span>

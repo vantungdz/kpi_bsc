@@ -1,0 +1,30 @@
+package com.company.kpi.request.gm;
+
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
+import lombok.Data;
+
+import java.util.List;
+import java.util.UUID;
+
+@Data
+public class GmEvaluationHubConfirmRequest {
+
+    @NotNull
+    private UUID cycleId;
+
+    /** User được GM chấm (assignee). */
+    @NotNull
+    private UUID evaluationUserId;
+
+    /** Nhận xét tổng (602) — lưu {@code user_kpi_summaries.evaluation_supervisor_comments}; 502-only có thể bỏ trống. */
+    @Size(max = 8000)
+    private String supervisorComment;
+
+    @NotEmpty
+    @Size(max = 500)
+    @Valid
+    private List<GmEvaluationHubConfirmLine> lines;
+}

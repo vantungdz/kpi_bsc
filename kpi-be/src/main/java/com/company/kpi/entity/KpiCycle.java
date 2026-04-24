@@ -11,8 +11,12 @@ import java.time.OffsetDateTime;
 public class KpiCycle extends BaseEntity {
     private Integer year;
     private String name;
-    private OffsetDateTime goalSettingDeadline;
-    private OffsetDateTime midYearDeadline;
-    private OffsetDateTime endYearDeadline;
+    private OffsetDateTime goalSettingStart;
+    private OffsetDateTime goalSettingEnd;
+    private OffsetDateTime midYearStart;
+    private OffsetDateTime midYearEnd;
+    private OffsetDateTime endYearStart;
+    private OffsetDateTime endYearEnd;
     private String status;
+    private Integer statusCode;
 }

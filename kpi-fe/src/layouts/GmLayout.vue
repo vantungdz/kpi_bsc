@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onUnmounted, provide, reactive } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, provide, reactive, TransitionGroup } from 'vue'
 import { useRoute, useRouter, RouterView } from 'vue-router'
 import { useAuth } from '@/composables/useAuth'
 import GmDepartmentInvestigation from '@/components/gm/GmDepartmentInvestigation.vue'
@@ -10,18 +10,32 @@ import GmGmPersonalKpiPanel from '@/components/gm/GmGmPersonalKpiPanel.vue'
 import GmApprovedKpiPanel from '@/components/gm/GmApprovedKpiPanel.vue'
 import GmMemberKpiDrawer from '@/components/gm/GmMemberKpiDrawer.vue'
 import GmCreateStrategicKpiModal from '@/components/gm/GmCreateStrategicKpiModal.vue'
+import { gmLayoutMockMemberModalKpiItems, gmLayoutCycleSnapshots } from '@/mocks/gm-kpi.mock'
+import type {
+  GmHierarchyKpi,
+  GmInvestigationMember,
+  GmMemberKpiDrawerProfile,
+  GmPersonalKpiRowMock,
+} from '@/types/gm-workspace'
 import {
-  gmLayoutMockMemberModalKpiItems,
-  gmLayoutCycleSnapshots,
-  buildGmKpiHierarchyRowsFromDepartmentLayout,
   buildHierarchyKpiFromStrategicCreatePayload,
   buildDeptKpiFromStrategicCreatePayload,
-  appendDeptKpisAsHierarchyRows,
   hierarchyInactiveKpiToDeptKpiMock,
-  type GmHierarchyKpi,
-  type GmInvestigationMember,
-  type GmMemberKpiDrawerProfile,
-} from '@/mocks/gm-kpi.mock'
+} from '@/utils/gm-strategic-create-preview'
+import { gmKpiService } from '@/services/modules/kpi-gm.service'
+import { leaderKpiService } from '@/services/modules/kpi-leader.service'
+import type { GmKpiCycleOption } from '@/types/gm-kpi-cycle'
+import { mapGmApprovedKpiQueueItemsToHierarchyRows } from '@/utils/mapGmApprovedKpiQueueToHierarchy'
+import { mapGmDiagnosticsApiKpisToHierarchyRows } from '@/utils/mapGmDiagnosticsApiToHierarchy'
+import { mapStrategicKpiCreatePayloadToApi } from '@/utils/mapStrategicKpiCreatePayloadToApi'
+import { mergeLeaderKpiInfoResponsesToGmPersonalRows } from '@/utils/mapLeaderPersonalKpiToGmPersonalRows'
+import {
+  clearAllGmNotifications,
+  dismissGmNotification,
+  pushGmNotification,
+  useGmNotificationItems,
+  type GmNotificationVariant,
+} from '@/composables/useGmNotifications'
 
 const route = useRoute()
 const { user, logout } = useAuth()
@@ -29,11 +43,11 @@ const { user, logout } = useAuth()
 const navItems = [{ name: 'KPI Overview', icon: 'fas fa-chart-line', to: '/gm/dashboard' }]
 
 const settingsNavItems = [
-  { name: 'Create Section', icon: 'fas fa-folder-plus', to: '/gm/settings/create-section' },
+  { name: 'Create Department', icon: 'fas fa-folder-plus', to: '/gm/settings/create-department' },
   { name: 'KPI Template', icon: 'fas fa-layer-group', to: '/gm/settings/kpi-template' },
 ]
 
-/** Trang Organization đăng ký `open` — nút header «Thêm Section Mới» (route create-section). */
+/** Trang Organization đăng ký `open` — nút header «Thêm phòng ban mới» (route create-department). */
 const gmOrgSectionDrawer = reactive<{ open: () => void }>({ open: () => {} })
 provide('gmOrgSectionDrawer', gmOrgSectionDrawer)
 
@@ -48,9 +62,9 @@ function isNavItemActive(to: string): boolean {
 }
 
 const isGmEvaluationRoute = computed(() => route.name === 'gm-employee-evaluation')
-const isGmCreateSectionRoute = computed(() => route.name === 'gm-create-section')
+const isGmCreateDepartmentRoute = computed(() => route.name === 'gm-create-department')
 const isGmKpiTemplateRoute = computed(() => route.name === 'gm-kpi-template')
-const isGmSettingsRoute = computed(() => isGmCreateSectionRoute.value || isGmKpiTemplateRoute.value)
+const isGmSettingsRoute = computed(() => isGmCreateDepartmentRoute.value || isGmKpiTemplateRoute.value)
 const isGmDashboardRoute = computed(() => route.name === 'gm-dashboard')
 
 const router = useRouter()
@@ -93,8 +107,8 @@ function setDashboardWorkspaceTab(tab: GmDashboardWorkspaceTab) {
 }
 
 const headerConfig = computed(() => {
-  if (route.name === 'gm-create-section') {
-    return { category: 'GM Workspace', title: 'Organization Structure' }
+  if (route.name === 'gm-create-department') {
+    return { category: 'GM Workspace', title: 'Create Department' }
   }
   if (route.name === 'gm-kpi-template') {
     return { category: 'GM Workspace', title: 'Template Library' }
@@ -102,53 +116,134 @@ const headerConfig = computed(() => {
   return { category: 'GM Workspace', title: 'KPI Management' }
 })
 
-/** Chỉ năm hiện tại và năm kế tiếp (không chọn năm trước). */
-function buildGmSelectableCycleYears(): { id: string; label: string }[] {
-  const y = new Date().getFullYear()
-  return [
-    { id: String(y), label: String(y) },
-    { id: String(y + 1), label: String(y + 1) },
-  ]
-}
+/** Chu kỳ từ `GET /kpi/gm/kpi-cycles-for-evaluation` (`year` ≥ năm hiện tại). */
+const gmHeaderCycleRows = ref<GmKpiCycleOption[]>([])
 
-const gmSelectableCycleOptions = computed(() => buildGmSelectableCycleYears())
+const gmSelectableCycleOptions = computed(() =>
+  gmHeaderCycleRows.value.map((r) => ({
+    id: r.id,
+    label: String(r.year),
+  })),
+)
 
-/** Mặc định theo năm lịch của máy; nếu không có trong danh sách thì lấy năm hiện tại. */
-function defaultGmCycleId(): string {
-  const opts = buildGmSelectableCycleYears()
-  const id = String(new Date().getFullYear())
-  return opts.some((o) => o.id === id) ? id : opts[0]!.id
-}
+/** `selectedCycleId` = UUID `kpi_cycles.id` (đồng bộ form tạo KPI). */
+const selectedCycleId = ref<string>('')
 
-const selectedCycleId = ref(defaultGmCycleId())
-
-function resolveGmLayoutSnapshot(id: string) {
-  return gmLayoutCycleSnapshots[id] ?? gmLayoutCycleSnapshots['2026'] ?? gmLayoutCycleSnapshots['2025']!
-}
-
-/** Đồng bộ `GmKpiEvaluationPanel` với dropdown Năm ở header (không dùng dropdown năm trong panel). */
-const gmEvaluationYear = computed(() => {
-  const n = parseInt(String(selectedCycleId.value), 10)
+function cycleYearFromCycleId(cycleId: string): number {
+  const raw = String(cycleId ?? '').trim()
+  if (!raw) return new Date().getFullYear()
+  const row = gmHeaderCycleRows.value.find((c) => c.id === raw)
+  if (row != null) return row.year
+  const n = parseInt(raw, 10)
   return Number.isFinite(n) ? n : new Date().getFullYear()
-})
+}
+
+function resolveGmLayoutSnapshot(cycleId: string) {
+  const y = String(cycleYearFromCycleId(cycleId))
+  return gmLayoutCycleSnapshots[y] ?? gmLayoutCycleSnapshots['2026'] ?? gmLayoutCycleSnapshots['2025']!
+}
+
+/** Đồng bộ `GmKpiEvaluationPanel` / template — năm dương lịch suy ra từ chu kỳ đang chọn. */
+const gmEvaluationYear = computed(() => cycleYearFromCycleId(selectedCycleId.value))
 provide('gmEvaluationYear', gmEvaluationYear)
+/** UUID `kpi_cycles.id` — tab Đánh giá gọi API hub theo chu kỳ đang chọn. */
+provide('gmSelectedCycleId', selectedCycleId)
+
+/** KPI cá nhân GM: `GET /kpi/leader/kpi-info` ×2 (INDIVIDUAL + PROMOTION), user = JWT. */
+const gmPersonalKpiRows = ref<GmPersonalKpiRowMock[]>([])
+const gmPersonalKpiLoading = ref(false)
+
+async function loadGmPersonalKpiRows() {
+  const y = gmEvaluationYear.value
+  if (!Number.isFinite(y)) {
+    gmPersonalKpiRows.value = []
+    gmPersonalKpiLoading.value = false
+    return
+  }
+  gmPersonalKpiLoading.value = true
+  try {
+    const settled = await Promise.allSettled([
+      leaderKpiService.getKpiInfo(y, 'INDIVIDUAL'),
+      leaderKpiService.getKpiInfo(y, 'PROMOTION'),
+    ])
+    const parts: Parameters<typeof mergeLeaderKpiInfoResponsesToGmPersonalRows>[0] = []
+    const errs: string[] = []
+    for (let i = 0; i < settled.length; i++) {
+      const s = settled[i]!
+      const label = i === 0 ? 'INDIVIDUAL' : 'PROMOTION'
+      if (s.status === 'fulfilled') {
+        parts.push(s.value)
+      } else {
+        const msg = s.reason instanceof Error ? s.reason.message : String(s.reason)
+        errs.push(`${label}: ${msg}`)
+        parts.push(null)
+      }
+    }
+    gmPersonalKpiRows.value = mergeLeaderKpiInfoResponsesToGmPersonalRows(parts)
+    if (errs.length === 2) {
+      pushGmNotification(errs.join(' · '), { variant: 'error', durationMs: 8000 })
+      gmPersonalKpiRows.value = []
+    } else if (errs.length === 1) {
+      pushGmNotification(`Một phần KPI cá nhân không tải được — ${errs[0]}`, {
+        variant: 'info',
+        durationMs: 7000,
+      })
+    }
+  } catch (e: unknown) {
+    gmPersonalKpiRows.value = []
+    pushGmNotification(e instanceof Error ? e.message : 'Không tải được KPI cá nhân', {
+      variant: 'error',
+      durationMs: 8000,
+    })
+  } finally {
+    gmPersonalKpiLoading.value = false
+  }
+}
+
+watch(
+  gmEvaluationYear,
+  () => {
+    void loadGmPersonalKpiRows()
+  },
+  { immediate: true },
+)
 
 const activeSnapshot = computed(() => resolveGmLayoutSnapshot(selectedCycleId.value))
 
 const activeCycleLabel = computed(() => {
+  const row = gmHeaderCycleRows.value.find((c) => c.id === selectedCycleId.value)
+  if (row) return String(row.year)
   return gmSelectableCycleOptions.value.find((c) => c.id === selectedCycleId.value)?.label ?? ''
 })
 
 watch(
-  gmSelectableCycleOptions,
-  (opts) => {
-    const ids = new Set(opts.map((o) => o.id))
-    if (!ids.has(selectedCycleId.value)) {
-      selectedCycleId.value = opts[0]?.id ?? String(new Date().getFullYear())
+  gmHeaderCycleRows,
+  (rows) => {
+    if (!rows.length) return
+    if (!rows.some((r) => r.id === selectedCycleId.value)) {
+      selectedCycleId.value = rows[0]!.id
     }
   },
-  { deep: true, immediate: true },
+  { immediate: true },
 )
+
+function onGmEvaluationCyclesLoaded(rows: GmKpiCycleOption[]) {
+  gmHeaderCycleRows.value = rows
+}
+
+/** Dropdown «Năm» ở header — tải ngay khi vào GM; không phụ thuộc mở drawer tạo KPI. */
+async function loadGmHeaderEvaluationCycles() {
+  try {
+    const rows = await gmKpiService.getKpiCyclesForEvaluation()
+    onGmEvaluationCyclesLoaded(Array.isArray(rows) ? rows : [])
+  } catch {
+    gmHeaderCycleRows.value = []
+  }
+}
+
+onMounted(() => {
+  void loadGmHeaderEvaluationCycles()
+})
 
 const investigatingKPI = ref<string | null>(null)
 const selectedDept = ref<any>(null)
@@ -156,7 +251,7 @@ const selectedDept = ref<any>(null)
 watch(
   () => route.name,
   (name) => {
-    if (name === 'gm-employee-evaluation' || name === 'gm-create-section' || name === 'gm-kpi-template') {
+    if (name === 'gm-employee-evaluation' || name === 'gm-create-department' || name === 'gm-kpi-template') {
       selectedDept.value = null
       investigatingKPI.value = null
     }
@@ -175,14 +270,20 @@ const departments = ref(structuredClone(initialSnap.departments))
 const mockMembersDetails = ref(structuredClone(initialSnap.membersDetails))
 const mockKPIItems = ref(structuredClone(gmLayoutMockMemberModalKpiItems))
 
+const useMockHub = import.meta.env.VITE_USE_MOCK === 'true'
+/** Tab Approved KPI — nguồn API (401/402/403); mock vẫn dùng snapshot `inactivePendingKpis`. */
+const approvedKpiQueueApiRows = ref<GmHierarchyKpi[]>([])
+const approvedKpiQueueLoading = ref(false)
+
 /** KPI inactive chờ GM duyệt (tab Approved KPI) — theo năm; đổi năm reset từ snapshot. */
 const inactivePendingKpisByCycle = ref<Record<string, GmHierarchyKpi[]>>({
   [selectedCycleId.value]: structuredClone(initialSnap.inactivePendingKpis ?? []),
 })
 
-const inactivePendingRowsForSelectedCycle = computed(
-  () => inactivePendingKpisByCycle.value[selectedCycleId.value] ?? [],
-)
+const inactivePendingRowsForSelectedCycle = computed(() => {
+  if (!useMockHub) return approvedKpiQueueApiRows.value
+  return inactivePendingKpisByCycle.value[selectedCycleId.value] ?? []
+})
 
 /** KPI vừa tạo trên UI (mock) — theo `cycleId` trong form; ghép vào bảng diagnostics. */
 const extraHierarchyKpisByCycle = ref<Record<string, GmHierarchyKpi[]>>({})
@@ -198,22 +299,87 @@ function markDiagnosticsKpiRemoved(cycleId: string, kpiId: string) {
   removedDiagnosticsKpiIdsByCycle.value = cur
 }
 
-/**
- * Diagnostics: hierarchy dựng lại từ `departments` + members (sửa KPI phản ánh ngay) + KPI thêm theo năm,
- * rồi `appendDeptKpisAsHierarchyRows`.
- */
+/** Strategic KPIs Tracking & Diagnostics — nguồn `GET /kpi/gm/diagnostics-hierarchy` (+ KPI thêm local). */
+const diagnosticsApiRows = ref<GmHierarchyKpi[]>([])
+const diagnosticsApiLoading = ref(false)
+const diagnosticsApiError = ref<string | null>(null)
+
+async function loadStrategicDiagnosticsFromApi() {
+  const y = cycleYearFromCycleId(selectedCycleId.value)
+  if (!Number.isFinite(y)) return
+  diagnosticsApiLoading.value = true
+  diagnosticsApiError.value = null
+  try {
+    const data = await gmKpiService.getDiagnosticsHierarchy(y)
+    diagnosticsApiRows.value = mapGmDiagnosticsApiKpisToHierarchyRows(data.kpis)
+  } catch (e: unknown) {
+    diagnosticsApiError.value = e instanceof Error ? e.message : 'Không tải được Strategic KPIs'
+    diagnosticsApiRows.value = []
+  } finally {
+    diagnosticsApiLoading.value = false
+  }
+}
+
+async function loadApprovedKpiQueueFromApi() {
+  if (useMockHub) return
+  const cid = String(selectedCycleId.value ?? '').trim()
+  if (!cid) {
+    approvedKpiQueueApiRows.value = []
+    return
+  }
+  approvedKpiQueueLoading.value = true
+  try {
+    const items = await gmKpiService.getApprovedKpiQueue(cid)
+    approvedKpiQueueApiRows.value = mapGmApprovedKpiQueueItemsToHierarchyRows(items)
+  } catch (e: unknown) {
+    approvedKpiQueueApiRows.value = []
+    showGmToast(
+      e instanceof Error ? e.message : 'Không tải danh sách Approved KPI',
+      5000,
+      'error',
+    )
+  } finally {
+    approvedKpiQueueLoading.value = false
+  }
+}
+
+/** Trang Organization — sau đổi thành viên / phòng ban, gọi để bảng Strategic KPIs diagnostics đồng bộ không cần F5. */
+provide('gmRequestStrategicDiagnosticsReload', () => {
+  void loadStrategicDiagnosticsFromApi()
+})
+
 const diagnosticsHierarchyRows = computed(() => {
   const id = selectedCycleId.value
   const removed = new Set(removedDiagnosticsKpiIdsByCycle.value[id] ?? [])
-  const baseLive = buildGmKpiHierarchyRowsFromDepartmentLayout(departments.value, mockMembersDetails.value)
-  const base = baseLive.filter((r) => !removed.has(r.id))
+  const fromApi = diagnosticsApiRows.value.filter((r) => !removed.has(r.id))
   const extra = (extraHierarchyKpisByCycle.value[id] ?? []).filter((r) => !removed.has(r.id))
-  const merged = [...extra, ...base]
-  return appendDeptKpisAsHierarchyRows(merged, departments.value).filter((r) => !removed.has(r.id))
+  return [...extra, ...fromApi]
 })
 
-const gmToastMessage = ref<string | null>(null)
-let gmToastTimer: ReturnType<typeof setTimeout> | null = null
+const gmNotifications = useGmNotificationItems()
+
+/** Thông báo dạng card góc phải (thay toast giữa màn hình). */
+function showGmToast(msg: string, durationMs = 4000, variant: GmNotificationVariant = 'success') {
+  pushGmNotification(msg, { durationMs, variant })
+}
+
+function gmNotifyShellClass(variant: GmNotificationVariant): string {
+  const base =
+    'pointer-events-auto relative flex gap-3 overflow-hidden rounded-xl border px-4 py-3 pr-10 shadow-lg backdrop-blur-sm'
+  if (variant === 'error') return `${base} border-rose-200 bg-rose-50/95 text-rose-950`
+  if (variant === 'info') return `${base} border-amber-200 bg-amber-50/95 text-amber-950`
+  return `${base} border-emerald-200 bg-emerald-50/95 text-emerald-950`
+}
+
+function gmNotifyIconClass(variant: GmNotificationVariant): string {
+  if (variant === 'error') {
+    return 'fas fa-circle-exclamation mt-0.5 shrink-0 text-base text-rose-600'
+  }
+  if (variant === 'info') {
+    return 'fas fa-circle-info mt-0.5 shrink-0 text-base text-amber-600'
+  }
+  return 'fas fa-circle-check mt-0.5 shrink-0 text-base text-emerald-600'
+}
 
 function applyOneStrategicKpiCreate(
   payload: Record<string, unknown>,
@@ -268,7 +434,9 @@ function applyOneStrategicKpiCreate(
         }
       }
     }
-    showGmToast(`Đã cập nhật KPI «${title}».`, 4500)
+    if (!opts?.skipCreateToast) {
+      showGmToast(`Đã cập nhật KPI «${title}».`, 4500)
+    }
     return
   }
 
@@ -288,36 +456,90 @@ function applyOneStrategicKpiCreate(
   }
 
   if (!opts?.skipCreateToast) {
-    gmToastMessage.value = `Đã tạo KPI «${title}» — năm ${cycleId}.`
-    if (gmToastTimer != null) window.clearTimeout(gmToastTimer)
-    gmToastTimer = window.setTimeout(() => {
-      gmToastMessage.value = null
-      gmToastTimer = null
-    }, 4500)
+    const yLabel = cycleYearFromCycleId(cycleId)
+    showGmToast(`Đã tạo KPI «${title}» — năm ${yLabel}.`, 4500)
   }
 }
 
-function onStrategicKpiSaved(payload: Record<string, unknown> | Record<string, unknown>[]) {
+async function onStrategicKpiSaved(payload: Record<string, unknown> | Record<string, unknown>[]) {
   const items = Array.isArray(payload) ? payload : [payload]
   if (items.length === 0) return
-  if (items.length === 1) {
-    applyOneStrategicKpiCreate(items[0]!)
+
+  const edits = items.filter((p) => String(p.editingKpiId ?? '').trim())
+  const creates = items.filter((p) => !String(p.editingKpiId ?? '').trim())
+
+  const mockEdits = edits.filter((p) => !String(p.editingKpiId).trim().startsWith('diag-kpi-'))
+  const serverEdits = edits.filter((p) => String(p.editingKpiId).trim().startsWith('diag-kpi-'))
+
+  for (const p of mockEdits) {
+    applyOneStrategicKpiCreate(p, { skipCreateToast: mockEdits.length > 1 })
+  }
+
+  const editErrors: string[] = []
+  for (const p of serverEdits) {
+    const tid = String(p.editingKpiId).trim().replace(/^diag-kpi-/, '').trim()
+    if (!tid) {
+      editErrors.push('«KPI» không có id hợp lệ để cập nhật.')
+      continue
+    }
+    try {
+      const body = mapStrategicKpiCreatePayloadToApi(p)
+      const res = await gmKpiService.updateStrategicKpi(tid, body)
+      if (!res.success) {
+        editErrors.push(String(res.message ?? `«${String(p.kpiName ?? 'KPI')}»`))
+      }
+    } catch (e: unknown) {
+      editErrors.push(e instanceof Error ? e.message : 'Lỗi không xác định')
+    }
+  }
+
+  const createErrors: string[] = []
+  for (const p of creates) {
+    try {
+      const body = mapStrategicKpiCreatePayloadToApi(p)
+      const res = await gmKpiService.createStrategicKpi(body)
+      if (!res.success) {
+        createErrors.push(String(res.message ?? `«${String(p.kpiName ?? 'KPI')}»`))
+      }
+    } catch (e: unknown) {
+      createErrors.push(e instanceof Error ? e.message : 'Lỗi không xác định')
+    }
+  }
+
+  try {
+    await loadStrategicDiagnosticsFromApi()
+  } catch {
+    /* bảng vẫn có thể lệch */
+  }
+
+  const allErr = [...editErrors, ...createErrors]
+  if (allErr.length > 0) {
+    showGmToast(allErr.slice(0, 2).join(' — ') + (allErr.length > 2 ? '…' : ''), 8000, 'error')
     return
   }
-  for (const p of items) {
-    applyOneStrategicKpiCreate(p, { skipCreateToast: true })
-  }
-  const years = [...new Set(items.map((p) => String(p.cycleId ?? selectedCycleId.value)))]
-  showGmToast(`Đã tạo ${items.length} KPI${years.length ? ` — năm ${years.join(', ')}` : ''}.`, 5000)
-}
 
-function showGmToast(msg: string, ms = 4000) {
-  gmToastMessage.value = msg
-  if (gmToastTimer != null) window.clearTimeout(gmToastTimer)
-  gmToastTimer = window.setTimeout(() => {
-    gmToastMessage.value = null
-    gmToastTimer = null
-  }, ms)
+  if (mockEdits.length > 1 && serverEdits.length === 0 && creates.length === 0) {
+    showGmToast(`Đã cập nhật ${mockEdits.length} KPI (chỉ trên bản xem trước).`, 5000, 'info')
+    return
+  }
+
+  const okParts: string[] = []
+  if (serverEdits.length > 0) {
+    okParts.push(serverEdits.length === 1 ? 'Đã cập nhật KPI trên máy chủ' : `Đã cập nhật ${serverEdits.length} KPI`)
+  }
+  if (creates.length === 1) {
+    const title = String(creates[0]!.kpiName ?? '').trim() || 'KPI'
+    const yLabel = cycleYearFromCycleId(String(creates[0]!.cycleId ?? selectedCycleId.value))
+    okParts.push(`Đã tạo «${title}» — năm ${yLabel}`)
+  } else if (creates.length > 1) {
+    const years = [
+      ...new Set(creates.map((p) => String(cycleYearFromCycleId(String(p.cycleId ?? selectedCycleId.value))))),
+    ]
+    okParts.push(`Đã tạo ${creates.length} KPI${years.length ? ` — năm ${years.join(', ')}` : ''}`)
+  }
+  if (okParts.length > 0) {
+    showGmToast(okParts.join(' · '), 5000)
+  }
 }
 
 function onDiagnosticsEditKpi(kpi: GmHierarchyKpi) {
@@ -332,10 +554,12 @@ function openCreateStrategicKpiDrawer() {
 
 const deleteKpiModalOpen = ref(false)
 const deleteKpiTarget = ref<GmHierarchyKpi | null>(null)
+const deleteKpiSaving = ref(false)
 
 function closeDeleteKpiModal() {
   deleteKpiModalOpen.value = false
   deleteKpiTarget.value = null
+  deleteKpiSaving.value = false
 }
 
 function onDiagnosticsDeleteKpi(kpi: GmHierarchyKpi) {
@@ -343,12 +567,36 @@ function onDiagnosticsDeleteKpi(kpi: GmHierarchyKpi) {
   deleteKpiModalOpen.value = true
 }
 
-function confirmDeleteKpi() {
+async function confirmDeleteKpi() {
   const kpi = deleteKpiTarget.value
-  if (!kpi) return
+  if (!kpi || deleteKpiSaving.value) return
   const name = String(kpi.name ?? '').trim() || 'KPI'
   const cid = selectedCycleId.value
   const kid = String(kpi.id ?? '')
+
+  if (kid.startsWith('diag-kpi-')) {
+    const infoId = kid.slice('diag-kpi-'.length).trim()
+    if (!infoId) {
+      showGmToast('Không xác định được KPI trên máy chủ.', 5000, 'error')
+      return
+    }
+    deleteKpiSaving.value = true
+    try {
+      const res = await gmKpiService.deleteStrategicKpi(infoId)
+      if (!res.success) {
+        showGmToast(String(res.message ?? 'Không xóa được KPI trên máy chủ.'), 7000, 'error')
+        return
+      }
+      await loadStrategicDiagnosticsFromApi()
+      closeDeleteKpiModal()
+      showGmToast(`Đã xóa KPI «${name}».`, 4500)
+    } catch (e: unknown) {
+      showGmToast(e instanceof Error ? e.message : 'Không xóa được KPI trên máy chủ.', 7000, 'error')
+    } finally {
+      deleteKpiSaving.value = false
+    }
+    return
+  }
 
   if (kid.startsWith('kpi-created-')) {
     const next = { ...extraHierarchyKpisByCycle.value }
@@ -399,7 +647,7 @@ watch(showCreateStrategicKpiModal, (v) => {
 })
 
 onUnmounted(() => {
-  if (gmToastTimer != null) window.clearTimeout(gmToastTimer)
+  clearAllGmNotifications()
 })
 
 watch(selectedCycleId, (id) => {
@@ -414,10 +662,24 @@ watch(selectedCycleId, (id) => {
   investigatingKPI.value = null
   closeDeleteKpiModal()
   removedDiagnosticsKpiIdsByCycle.value = {}
-})
+  void loadStrategicDiagnosticsFromApi()
+  void loadApprovedKpiQueueFromApi()
+}, { immediate: true })
 
-function onApproveInactiveKpi(kpi: GmHierarchyKpi) {
-  const cid = selectedCycleId.value
+async function onApproveInactiveKpi(kpi: GmHierarchyKpi) {
+  const title = String(kpi.name ?? '').trim() || 'KPI'
+  const cid = String(selectedCycleId.value ?? '').trim()
+  const aid = String(kpi.assignmentId ?? '').trim()
+  if (!useMockHub && aid) {
+    try {
+      await gmKpiService.decideApprovedKpiQueue({ cycleId: cid, assignmentId: aid, approve: true })
+      await loadApprovedKpiQueueFromApi()
+      showGmToast(`Đã duyệt (403→404) — «${title}».`, 4500)
+    } catch (e: unknown) {
+      showGmToast(e instanceof Error ? e.message : 'Không cập nhật được trạng thái', 5000, 'error')
+    }
+    return
+  }
   const cur = inactivePendingKpisByCycle.value[cid] ?? []
   inactivePendingKpisByCycle.value = {
     ...inactivePendingKpisByCycle.value,
@@ -427,19 +689,29 @@ function onApproveInactiveKpi(kpi: GmHierarchyKpi) {
   if (d0) {
     d0.kpis = [...d0.kpis, hierarchyInactiveKpiToDeptKpiMock(kpi)]
   }
-  const title = String(kpi.name ?? '').trim() || 'KPI'
   showGmToast(`Đã duyệt và kích hoạt KPI «${title}».`, 4500)
 }
 
-function onRejectInactiveKpi(kpi: GmHierarchyKpi) {
-  const cid = selectedCycleId.value
+async function onRejectInactiveKpi(kpi: GmHierarchyKpi) {
+  const title = String(kpi.name ?? '').trim() || 'KPI'
+  const cid = String(selectedCycleId.value ?? '').trim()
+  const aid = String(kpi.assignmentId ?? '').trim()
+  if (!useMockHub && aid) {
+    try {
+      await gmKpiService.decideApprovedKpiQueue({ cycleId: cid, assignmentId: aid, approve: false })
+      await loadApprovedKpiQueueFromApi()
+      showGmToast(`Đã từ chối — «${title}».`, 4500, 'info')
+    } catch (e: unknown) {
+      showGmToast(e instanceof Error ? e.message : 'Không cập nhật được trạng thái', 5000, 'error')
+    }
+    return
+  }
   const cur = inactivePendingKpisByCycle.value[cid] ?? []
   inactivePendingKpisByCycle.value = {
     ...inactivePendingKpisByCycle.value,
     [cid]: cur.filter((r) => r.id !== kpi.id),
   }
-  const title = String(kpi.name ?? '').trim() || 'KPI'
-  showGmToast(`Đã từ chối đề xuất KPI «${title}».`, 4500)
+  showGmToast(`Đã từ chối đề xuất KPI «${title}».`, 4500, 'info')
 }
 
 // ── Methods ───────────────────────────────────────────────────────────────────
@@ -578,13 +850,13 @@ function closeModal() { showKpiModal.value = false; selectedMember.value = null 
             Create Strategic KPI
           </button>
           <button
-            v-else-if="isGmCreateSectionRoute"
+            v-else-if="isGmCreateDepartmentRoute"
             type="button"
             class="flex shrink-0 items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:bg-blue-700"
             @click="gmOrgSectionDrawer.open()"
           >
             <i class="fas fa-plus text-xs" />
-            Thêm Section Mới
+            Thêm phòng ban mới
           </button>
           <button
             v-else-if="isGmKpiTemplateRoute"
@@ -696,6 +968,20 @@ function closeModal() { showKpiModal.value = false; selectedMember.value = null 
 
               <div class="min-h-0">
                 <div v-show="dashboardWorkspaceTab === 'diagnostics'" class="p-3 sm:p-4 lg:p-5">
+                  <p
+                    v-if="diagnosticsApiLoading"
+                    class="mb-3 text-xs font-medium text-slate-500"
+                    role="status"
+                  >
+                    Đang tải Strategic KPIs…
+                  </p>
+                  <p
+                    v-else-if="diagnosticsApiError"
+                    class="mb-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-800"
+                    role="alert"
+                  >
+                    {{ diagnosticsApiError }}
+                  </p>
                   <GmKpiDiagnosticsTable
                     :rows="diagnosticsHierarchyRows"
                     @edit-kpi="onDiagnosticsEditKpi"
@@ -706,6 +992,13 @@ function closeModal() { showKpiModal.value = false; selectedMember.value = null 
                   <GmPmEvaluationWorkspace />
                 </div>
                 <div v-show="dashboardWorkspaceTab === 'approved-kpi'" class="p-3 sm:p-4 lg:p-5">
+                  <p
+                    v-if="!useMockHub && approvedKpiQueueLoading"
+                    class="mb-3 text-xs font-medium text-slate-500"
+                    role="status"
+                  >
+                    Đang tải Approved KPI…
+                  </p>
                   <GmApprovedKpiPanel
                     :rows="inactivePendingRowsForSelectedCycle"
                     @approve-kpi="onApproveInactiveKpi"
@@ -714,19 +1007,35 @@ function closeModal() { showKpiModal.value = false; selectedMember.value = null 
                 </div>
                 <div v-show="dashboardWorkspaceTab === 'personal'" class="p-3 sm:p-4 lg:p-5">
                   <GmGmPersonalKpiPanel
-                    :year-id="selectedCycleId"
-                    :rows="activeSnapshot.personalKpiRows"
+                    :year-id="String(gmEvaluationYear)"
+                    :rows="gmPersonalKpiRows"
+                    :loading="gmPersonalKpiLoading"
                   />
                 </div>
               </div>
             </div>
           </template>
-          <GmKpiDiagnosticsTable
-            v-else
-            :rows="diagnosticsHierarchyRows"
-            @edit-kpi="onDiagnosticsEditKpi"
-            @delete-kpi="onDiagnosticsDeleteKpi"
-          />
+          <div v-else class="p-3 sm:p-4 lg:p-5">
+            <p
+              v-if="diagnosticsApiLoading"
+              class="mb-3 text-xs font-medium text-slate-500"
+              role="status"
+            >
+              Đang tải Strategic KPIs…
+            </p>
+            <p
+              v-else-if="diagnosticsApiError"
+              class="mb-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-800"
+              role="alert"
+            >
+              {{ diagnosticsApiError }}
+            </p>
+            <GmKpiDiagnosticsTable
+              :rows="diagnosticsHierarchyRows"
+              @edit-kpi="onDiagnosticsEditKpi"
+              @delete-kpi="onDiagnosticsDeleteKpi"
+            />
+          </div>
         </div>
 
         <!-- VIEW 2: chi tiết department / Investigate -->
@@ -743,19 +1052,36 @@ function closeModal() { showKpiModal.value = false; selectedMember.value = null 
           v-model="showCreateStrategicKpiModal"
           :cycle-id="selectedCycleId"
           :edit-initial="strategicKpiEditTarget"
+          :prefetched-evaluation-cycles="gmHeaderCycleRows"
+          @evaluation-cycles-loaded="onGmEvaluationCyclesLoaded"
           @saved="onStrategicKpiSaved"
         />
 
         <Teleport to="body">
-          <Transition name="gm-toast">
-            <div
-              v-if="gmToastMessage"
-              class="fixed left-1/2 top-6 z-[120] max-w-[min(90vw,28rem)] -translate-x-1/2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-center text-xs font-bold text-emerald-900 shadow-lg sm:top-8"
-              role="status"
-            >
-              {{ gmToastMessage }}
-            </div>
-          </Transition>
+          <div
+            class="pointer-events-none fixed right-4 top-20 z-[320] flex max-h-[calc(100vh-5rem)] w-[min(100vw-2rem,22rem)] flex-col items-end gap-2 overflow-y-auto overflow-x-hidden pb-2 pl-2 pt-1 sm:right-5 sm:top-24"
+            aria-live="polite"
+          >
+            <TransitionGroup name="gm-notify" tag="div" class="relative flex w-full flex-col gap-2">
+              <article
+                v-for="n in gmNotifications"
+                :key="n.id"
+                role="status"
+                :class="gmNotifyShellClass(n.variant)"
+              >
+                <i :class="gmNotifyIconClass(n.variant)" aria-hidden="true" />
+                <p class="min-w-0 flex-1 text-xs font-semibold leading-snug">{{ n.message }}</p>
+                <button
+                  type="button"
+                  class="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-black/5 hover:text-slate-800"
+                  aria-label="Đóng thông báo"
+                  @click.stop="dismissGmNotification(n.id)"
+                >
+                  <i class="fas fa-times text-[11px]" aria-hidden="true" />
+                </button>
+              </article>
+            </TransitionGroup>
+          </div>
         </Teleport>
 
         <Teleport to="body">
@@ -791,17 +1117,19 @@ function closeModal() { showKpiModal.value = false; selectedMember.value = null 
               <div class="flex justify-end gap-2 bg-white px-5 py-4">
                 <button
                   type="button"
-                  class="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-600 shadow-sm transition-colors hover:bg-slate-50"
+                  class="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-600 shadow-sm transition-colors hover:bg-slate-50 disabled:opacity-50"
+                  :disabled="deleteKpiSaving"
                   @click="closeDeleteKpiModal"
                 >
                   Hủy
                 </button>
                 <button
                   type="button"
-                  class="rounded-lg bg-rose-600 px-4 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:bg-rose-700"
+                  class="rounded-lg bg-rose-600 px-4 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:bg-rose-700 disabled:opacity-60"
+                  :disabled="deleteKpiSaving"
                   @click="confirmDeleteKpi"
                 >
-                  Xác nhận xóa
+                  {{ deleteKpiSaving ? 'Đang xóa…' : 'Xác nhận xóa' }}
                 </button>
               </div>
               </div>
@@ -823,16 +1151,22 @@ function closeModal() { showKpiModal.value = false; selectedMember.value = null 
 </template>
 
 <style scoped>
-.gm-toast-enter-active,
-.gm-toast-leave-active {
+.gm-notify-move,
+.gm-notify-enter-active,
+.gm-notify-leave-active {
   transition:
-    opacity 0.22s ease,
-    transform 0.22s ease;
+    opacity 0.26s ease,
+    transform 0.32s cubic-bezier(0.22, 1, 0.36, 1);
 }
-.gm-toast-enter-from,
-.gm-toast-leave-to {
+.gm-notify-enter-from,
+.gm-notify-leave-to {
   opacity: 0;
-  transform: translate(-50%, -10px);
+  transform: translateX(110%);
+}
+.gm-notify-leave-active {
+  position: absolute;
+  right: 0;
+  width: 100%;
 }
 
 .gm-delete-kpi-modal-enter-active,
@@ -869,6 +1203,9 @@ function closeModal() { showKpiModal.value = false; selectedMember.value = null 
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .gm-notify-move,
+  .gm-notify-enter-active,
+  .gm-notify-leave-active,
   .gm-delete-kpi-modal-enter-active,
   .gm-delete-kpi-modal-leave-active,
   .gm-delete-kpi-modal-enter-active .gm-delete-kpi-modal-backdrop,

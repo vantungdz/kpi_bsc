@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.company.kpi.mapper.UserKpiSummaryMapper">
+
+    <select id="findByUserIdAndCycleId" resultType="com.company.kpi.entity.UserKpiSummary">
+        SELECT
+            ID,
+            USER_ID,
+            CYCLE_ID,
+            FINAL_SCORE,
+            FINAL_RATING,
+            CALCULATION_SNAPSHOT,
+            EVALUATION_COMMENTS,
+            EVALUATION_SUPERVISOR_COMMENTS,
+            EVALUATOR_ID,
+            CREATED_AT,
+            UPDATED_AT,
+            CREATED_BY,
+            UPDATED_BY,
+            DELETED_AT
+        FROM
+            USER_KPI_SUMMARIES
+        WHERE
+            USER_ID = #{userId, jdbcType=OTHER}
+            AND CYCLE_ID = #{cycleId, jdbcType=OTHER}
+            AND DELETED_AT IS NULL
+    </select>
+
+    <update id="updateEvaluationSupervisorComments">
+        UPDATE USER_KPI_SUMMARIES
+        SET
+            EVALUATION_SUPERVISOR_COMMENTS = #{comments},
+            EVALUATOR_ID = #{evaluatorId, jdbcType=OTHER},
+            UPDATED_AT = CURRENT_TIMESTAMP,
+            UPDATED_BY = #{updatedBy, jdbcType=OTHER}
+        WHERE USER_ID = #{userId, jdbcType=OTHER}
+          AND CYCLE_ID = #{cycleId, jdbcType=OTHER}
+          AND DELETED_AT IS NULL
+    </update>
+
+    <insert id="insertEvaluationSupervisorComments">
+        INSERT INTO USER_KPI_SUMMARIES (
+            ID,
+            USER_ID,
+            CYCLE_ID,
+            EVALUATION_SUPERVISOR_COMMENTS,
+            EVALUATOR_ID,
+            CREATED_AT,
+            UPDATED_AT,
+            CREATED_BY,
+            UPDATED_BY
+        ) VALUES (
+            #{id, jdbcType=OTHER},
+            #{userId, jdbcType=OTHER},
+            #{cycleId, jdbcType=OTHER},
+            #{comments},
+            #{evaluatorId, jdbcType=OTHER},
+            CURRENT_TIMESTAMP,
+            CURRENT_TIMESTAMP,
+            #{createdBy, jdbcType=OTHER},
+            #{updatedBy, jdbcType=OTHER}
+        )
+    </insert>
+
+</mapper>

@@ -13,241 +13,20 @@ import {
 } from 'vue'
 import GmTemplateSuiteKpiFormDrawer from '@/components/gm/GmTemplateSuiteKpiFormDrawer.vue'
 import GmStrategicKpiTypeTag from '@/components/gm/GmStrategicKpiTypeTag.vue'
-import { normalizeStrategicKpiKind, type GmStrategicKpiKind } from '@/mocks/gm-kpi.mock'
+import type { GmStrategicKpiKind } from '@/types/gm-workspace'
+import { normalizeStrategicKpiKind } from '@/utils/gm-strategic-kpi-kind'
+import { kpiFormUnitToUnitCode } from '@/utils/kpiUnitCodes'
+import type { KpiTemplateSuite, SuiteColor, TemplateKpiDef } from '@/mocks/gm-kpi-template-suites.seed'
+import type { GmKpiTemplateItemRow } from '@/types/gm-kpi-template'
+import { gmKpiService } from '@/services/modules/kpi-gm.service'
+import { mapTemplateApiDataToSuites } from '@/utils/mapGmKpiTemplatesToSuites'
+import {
+  mapDraftPayloadToCreateTemplateItemBody,
+  mapDraftPayloadToUpdateTemplateItemBody,
+} from '@/utils/mapTemplateKpiDraftToApi'
+import { pushGmNotification } from '@/composables/useGmNotifications'
 
 /** Drawer gắn `body` + `left-64` để khớp sidebar GM — tránh `absolute` trong anchor bị cắt bởi `overflow-hidden` / stacking. */
-
-type SuiteColor = 'blue' | 'indigo' | 'amber' | 'emerald'
-
-interface TemplateKpiDef {
-  name: string
-  weight: number
-  target: string
-  /** Snapshot form KPI (khi thêm qua drawer riêng). */
-  draftPayload?: Record<string, unknown>
-}
-
-interface KpiTemplateSuite {
-  id: string
-  name: string
-  code: string
-  description: string
-  color: SuiteColor
-  kpis: TemplateKpiDef[]
-}
-
-type BscPerspective = 'financial' | 'customer' | 'internal' | 'learning'
-
-/** Lấy số đầu tiên từ chuỗi target hiển thị (mock) — dùng làm targetValue cascading. */
-function mockTargetValueFromDisplay(target: string): string {
-  const m = /(\d+(?:\.\d+)?)/.exec(String(target ?? '').replace(/\u00a0/g, ' '))
-  return m ? m[1]! : '90'
-}
-
-/** Snapshot tối thiểu giống emit form template KPI — để nhóm BSC + mở sửa được. */
-function mockKpiDraftPayload(args: {
-  name: string
-  weight: number
-  targetDisplay: string
-  perspective: BscPerspective
-  unit?: string
-  evaluationDirection?: 'maximize' | 'minimize'
-}): Record<string, unknown> {
-  const y = String(new Date().getFullYear())
-  const evaluationDirection = args.evaluationDirection ?? 'maximize'
-  return {
-    kpiType: 'cascading',
-    perspective: args.perspective,
-    kpiName: args.name,
-    description: '',
-    targetValue: mockTargetValueFromDisplay(args.targetDisplay),
-    unit: args.unit ?? 'POINT',
-    weightPct: String(args.weight),
-    cycleId: y,
-    calculationMethod: 'mean_actual_plan',
-    evaluationDirection,
-    isImportant: false,
-    assignPMs: [] as string[],
-    pmTargets: {} as Record<string, string>,
-    startDate: `${y}-01-01`,
-    endDate: `${y}-12-31`,
-  }
-}
-
-/** Dữ liệu mẫu — mỗi KPI có `draftPayload` (BSC + form) để nhóm đúng và nút Sửa hoạt động. */
-const INITIAL_TEMPLATE_SUITES: KpiTemplateSuite[] = [
-  {
-    id: 'agile',
-    name: 'Agile/Scrum Engineering',
-    code: 'TPL-AGILE',
-    description: 'Bộ tiêu chuẩn đánh giá hiệu suất team Dev theo mô hình Agile.',
-    color: 'blue',
-    kpis: [
-      {
-        name: 'Sprint Velocity',
-        weight: 40,
-        target: '100%',
-        draftPayload: mockKpiDraftPayload({
-          name: 'Sprint Velocity',
-          weight: 40,
-          targetDisplay: '100%',
-          perspective: 'internal',
-        }),
-      },
-      {
-        name: 'Defect Escape Rate',
-        weight: 30,
-        target: '< 5%',
-        draftPayload: mockKpiDraftPayload({
-          name: 'Defect Escape Rate',
-          weight: 30,
-          targetDisplay: '< 5%',
-          perspective: 'internal',
-          evaluationDirection: 'minimize',
-        }),
-      },
-      {
-        name: 'Code Coverage',
-        weight: 30,
-        target: '> 80%',
-        draftPayload: mockKpiDraftPayload({
-          name: 'Code Coverage',
-          weight: 30,
-          targetDisplay: '> 80%',
-          perspective: 'learning',
-        }),
-      },
-    ],
-  },
-  {
-    id: 'bsc_tech',
-    name: 'BSC for Tech Dept',
-    code: 'TPL-TECH',
-    description: 'Đánh giá toàn diện mảng Tech theo 4 khía cạnh Balanced Scorecard.',
-    color: 'indigo',
-    kpis: [
-      {
-        name: 'Tỷ lệ hoàn thành dự án',
-        weight: 30,
-        target: '> 95%',
-        draftPayload: mockKpiDraftPayload({
-          name: 'Tỷ lệ hoàn thành dự án',
-          weight: 30,
-          targetDisplay: '> 95%',
-          perspective: 'internal',
-        }),
-      },
-      {
-        name: 'Chỉ số Chất lượng (Quality Index)',
-        weight: 30,
-        target: '98%',
-        draftPayload: mockKpiDraftPayload({
-          name: 'Chỉ số Chất lượng (Quality Index)',
-          weight: 30,
-          targetDisplay: '98%',
-          perspective: 'customer',
-        }),
-      },
-      {
-        name: 'Training Hours',
-        weight: 20,
-        target: '40h/member',
-        draftPayload: mockKpiDraftPayload({
-          name: 'Training Hours',
-          weight: 20,
-          targetDisplay: '40',
-          perspective: 'learning',
-          unit: 'MM',
-        }),
-      },
-      {
-        name: 'Cost Optimization',
-        weight: 20,
-        target: '10%',
-        draftPayload: mockKpiDraftPayload({
-          name: 'Cost Optimization',
-          weight: 20,
-          targetDisplay: '10%',
-          perspective: 'financial',
-        }),
-      },
-    ],
-  },
-  {
-    id: 'qa',
-    name: 'Quality Assurance Standard',
-    code: 'TPL-QA',
-    description: 'Bộ chỉ số đo lường chất lượng sản phẩm (QA/QC).',
-    color: 'emerald',
-    kpis: [
-      {
-        name: 'Test Automation Coverage',
-        weight: 50,
-        target: '> 90%',
-        draftPayload: mockKpiDraftPayload({
-          name: 'Test Automation Coverage',
-          weight: 50,
-          targetDisplay: '> 90%',
-          perspective: 'internal',
-        }),
-      },
-      {
-        name: 'UAT Bug Count',
-        weight: 50,
-        target: '< 3',
-        draftPayload: mockKpiDraftPayload({
-          name: 'UAT Bug Count',
-          weight: 50,
-          targetDisplay: '< 3',
-          perspective: 'customer',
-          evaluationDirection: 'minimize',
-        }),
-      },
-    ],
-  },
-  {
-    id: 'sale',
-    name: 'Sales Performance',
-    code: 'TPL-SALE',
-    description: 'Dành cho các team kinh doanh thị trường.',
-    color: 'amber',
-    kpis: [
-      {
-        name: 'Doanh thu thuần (Net Revenue)',
-        weight: 50,
-        target: '100%',
-        draftPayload: mockKpiDraftPayload({
-          name: 'Doanh thu thuần (Net Revenue)',
-          weight: 50,
-          targetDisplay: '100%',
-          perspective: 'financial',
-        }),
-      },
-      {
-        name: 'Tỷ lệ chốt deal (Win rate)',
-        weight: 30,
-        target: '> 25%',
-        draftPayload: mockKpiDraftPayload({
-          name: 'Tỷ lệ chốt deal (Win rate)',
-          weight: 30,
-          targetDisplay: '> 25%',
-          perspective: 'customer',
-        }),
-      },
-      {
-        name: 'Khách hàng mới',
-        weight: 20,
-        target: '20 Khách',
-        draftPayload: mockKpiDraftPayload({
-          name: 'Khách hàng mới',
-          weight: 20,
-          targetDisplay: '20 Khách',
-          perspective: 'customer',
-        }),
-      },
-    ],
-  },
-]
 
 function templateCardTheme(c: SuiteColor) {
   const map: Record<SuiteColor, { box: string; text: string; border: string }> = {
@@ -280,6 +59,9 @@ function bscLabel(p: unknown): string {
 }
 
 const BSC_PERSPECTIVE_ORDER = ['financial', 'customer', 'internal', 'learning'] as const
+
+/** `kpi_categories.id` từ API — giữ nguyên trong draftPayload (không ép về BSC string). */
+const CATEGORY_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 const BSC_SECTION_LABEL: Record<string, string> = {
   financial: '💰 Financial',
@@ -404,8 +186,33 @@ function detailSuiteKpiFormulaDisplay(kpi: TemplateKpiDef): string {
   return CALC_METHOD_LABELS[cm] ?? cm
 }
 
-const templateSuites = ref<KpiTemplateSuite[]>(structuredClone(INITIAL_TEMPLATE_SUITES))
+const templateSuites = ref<KpiTemplateSuite[]>([])
+const templateSuitesLoading = ref(true)
 const templateSearch = ref('')
+
+const detailMutating = ref(false)
+const suiteMetaSaving = ref(false)
+const deleteExecuting = ref(false)
+
+async function loadTemplateSuitesFromApi() {
+  templateSuitesLoading.value = true
+  try {
+    const packs = await gmKpiService.getKpiTemplates()
+    const itemLists = await Promise.all(packs.map((p) => gmKpiService.getKpiTemplateItems(p.id)))
+    const map = new Map<string, GmKpiTemplateItemRow[]>()
+    packs.forEach((p, i) => {
+      map.set(p.id, itemLists[i] ?? [])
+    })
+    templateSuites.value = mapTemplateApiDataToSuites(packs, map)
+  } catch (e: unknown) {
+    templateSuites.value = []
+    const msg =
+      e instanceof Error ? e.message : 'Không tải được danh sách gói template KPI từ máy chủ.'
+    pushGmNotification(msg, { variant: 'error', durationMs: 9000 })
+  } finally {
+    templateSuitesLoading.value = false
+  }
+}
 
 const filteredSuites = computed(() => {
   const q = templateSearch.value.trim().toLowerCase()
@@ -512,7 +319,11 @@ function templateDefFromStrategicPayload(p: Record<string, unknown>): TemplateKp
   }
   const persRaw = String(p.perspective ?? '').trim()
   const allowedBsc = new Set(BSC_PERSPECTIVE_ORDER as unknown as string[])
-  const perspectiveNorm = allowedBsc.has(persRaw) ? persRaw : 'internal'
+  const perspectiveNorm = CATEGORY_UUID_RE.test(persRaw)
+    ? persRaw
+    : allowedBsc.has(persRaw)
+      ? persRaw
+      : 'internal'
   const cmRaw = String(p.calculationMethod ?? '').trim()
   const calculationMethodNorm = cmRaw || 'mean_actual_plan'
 
@@ -526,42 +337,66 @@ function templateDefFromStrategicPayload(p: Record<string, unknown>): TemplateKp
   return { name, weight, target, draftPayload }
 }
 
-function onTemplateKpiDraftAdded(payload: Record<string, unknown>) {
+async function onTemplateKpiDraftAdded(payload: Record<string, unknown>) {
   const def = templateDefFromStrategicPayload(payload)
   const dSid = kpiDetailEditSuiteId.value
   const dIx = kpiDetailEditKpiIndex.value
   if (dSid != null && dIx != null) {
-    const sIx = templateSuites.value.findIndex((s) => s.id === dSid)
-    if (sIx >= 0) {
-      const suite = templateSuites.value[sIx]!
-      const nextKpis = [...suite.kpis]
-      if (dIx >= 0 && dIx < nextKpis.length) {
-        nextKpis[dIx] = def
-        const nextSuites = [...templateSuites.value]
-        nextSuites[sIx] = { ...suite, kpis: nextKpis }
-        templateSuites.value = nextSuites
-      }
+    const suite = templateSuites.value.find((s) => s.id === dSid)
+    const prevKpi = suite?.kpis[dIx]
+    const itemId = prevKpi?.templateItemId
+    if (!suite || !prevKpi || !itemId) {
+      pushGmNotification(
+        'Không có mã KPI trên máy chủ (templateItemId). Hãy tải lại trang hoặc tạo KPI mới từ «Thêm KPI».',
+        { variant: 'error', durationMs: 9000 },
+      )
+      return
+    }
+    detailMutating.value = true
+    try {
+      const body = mapDraftPayloadToUpdateTemplateItemBody(payload)
+      await gmKpiService.updateKpiTemplateItem(dSid, itemId, body)
+      await loadTemplateSuitesFromApi()
+      showKpiDraftDrawer.value = false
+      const title = String(payload.kpiName ?? '').trim() || 'KPI'
+      pushGmNotification(`Đã cập nhật KPI mẫu «${title}».`)
+    } catch (e: unknown) {
+      const msg =
+        e instanceof Error ? e.message : 'Không cập nhật được KPI trên máy chủ.'
+      pushGmNotification(msg, { variant: 'error' })
+    } finally {
+      detailMutating.value = false
     }
     return
   }
   const appendSid = kpiAppendSuiteId.value
   if (appendSid != null) {
-    const sIx = templateSuites.value.findIndex((s) => s.id === appendSid)
-    if (sIx >= 0) {
-      const suite = templateSuites.value[sIx]!
-      const nextKpis = [...suite.kpis, def]
-      const nextSuites = [...templateSuites.value]
-      nextSuites[sIx] = { ...suite, kpis: nextKpis }
-      templateSuites.value = nextSuites
+    const suiteLabel =
+      templateSuites.value.find((s) => s.id === appendSid)?.name?.trim() || 'bộ mẫu'
+    detailMutating.value = true
+    try {
+      const body = mapDraftPayloadToCreateTemplateItemBody(payload)
+      await gmKpiService.createKpiTemplateItem(appendSid, body)
+      await loadTemplateSuitesFromApi()
+      showKpiDraftDrawer.value = false
+      const title = String(payload.kpiName ?? '').trim() || 'KPI'
+      pushGmNotification(`Đã thêm KPI mẫu «${title}» vào «${suiteLabel}».`)
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Không thêm được KPI trên máy chủ.'
+      pushGmNotification(msg, { variant: 'error' })
+    } finally {
+      detailMutating.value = false
     }
     return
   }
   const replaceId = kpiDraftReplaceRowId.value
   if (replaceId) {
     draftKpis.value = draftKpis.value.map((r) => (r.id === replaceId ? { id: r.id, def } : r))
+    showKpiDraftDrawer.value = false
     return
   }
   draftKpis.value = [...draftKpis.value, { id: newDraftId(), def }]
+  showKpiDraftDrawer.value = false
 }
 
 function openAddKpiDraft() {
@@ -602,23 +437,41 @@ function closeDeleteConfirmModal() {
   deleteConfirmPayload.value = null
 }
 
-function confirmDeleteExecute() {
+async function confirmDeleteExecute() {
   const d = deleteConfirmPayload.value
   if (!d) return
-  if (d.kind === 'suite') {
-    templateSuites.value = templateSuites.value.filter((t) => t.id !== d.suiteId)
-    closeDetail()
-  } else {
-    const ix = templateSuites.value.findIndex((t) => t.id === d.suiteId)
-    if (ix >= 0) {
-      const suite = templateSuites.value[ix]!
-      const nextKpis = suite.kpis.filter((_, i) => i !== d.kpiIndex)
-      const nextSuites = [...templateSuites.value]
-      nextSuites[ix] = { ...suite, kpis: nextKpis }
-      templateSuites.value = nextSuites
+  deleteExecuting.value = true
+  try {
+    if (d.kind === 'suite') {
+      await gmKpiService.deleteKpiTemplate(d.suiteId)
+      await loadTemplateSuitesFromApi()
+      closeDetail()
+      pushGmNotification(`Đã xóa bộ mẫu «${d.suiteName}».`)
+    } else {
+      const suite = templateSuites.value.find((t) => t.id === d.suiteId)
+      const kpi = suite?.kpis[d.kpiIndex]
+      const itemId = kpi?.templateItemId
+      if (!itemId) {
+        pushGmNotification('Không có mã KPI trên máy chủ để xóa. Hãy tải lại trang.', {
+          variant: 'error',
+          durationMs: 9000,
+        })
+        closeDeleteConfirmModal()
+        return
+      }
+      await gmKpiService.deleteKpiTemplateItem(d.suiteId, itemId)
+      await loadTemplateSuitesFromApi()
+      pushGmNotification(`Đã xóa KPI mẫu «${d.kpiName}».`)
     }
+    closeDeleteConfirmModal()
+  } catch (e: unknown) {
+    pushGmNotification(e instanceof Error ? e.message : 'Không xóa được trên máy chủ.', {
+      variant: 'error',
+    })
+    closeDeleteConfirmModal()
+  } finally {
+    deleteExecuting.value = false
   }
-  closeDeleteConfirmModal()
 }
 
 function editKpiFromDetailSuite(index: number) {
@@ -654,7 +507,7 @@ function closeSuiteMetaModal() {
   suiteMetaSuiteId.value = null
 }
 
-function saveSuiteMetaFromModal() {
+async function saveSuiteMetaFromModal() {
   const id = suiteMetaSuiteId.value
   if (!id) return
   const name = suiteMetaName.value.trim()
@@ -663,13 +516,23 @@ function saveSuiteMetaFromModal() {
     return
   }
   suiteMetaNameError.value = ''
-  const ix = templateSuites.value.findIndex((t) => t.id === id)
-  if (ix < 0) return
-  const prev = templateSuites.value[ix]!
-  const next = [...templateSuites.value]
-  next[ix] = { ...prev, name, description: suiteMetaDesc.value.trim() }
-  templateSuites.value = next
-  closeSuiteMetaModal()
+  suiteMetaSaving.value = true
+  try {
+    await gmKpiService.updateKpiTemplate(id, {
+      name,
+      description: suiteMetaDesc.value.trim() || null,
+    })
+    await loadTemplateSuitesFromApi()
+    closeSuiteMetaModal()
+    pushGmNotification(`Đã cập nhật thông tin bộ mẫu «${name}».`)
+  } catch (e: unknown) {
+    pushGmNotification(
+      e instanceof Error ? e.message : 'Không cập nhật được bộ mẫu trên máy chủ.',
+      { variant: 'error' },
+    )
+  } finally {
+    suiteMetaSaving.value = false
+  }
 }
 
 /** Thứ tự KPI trong draft (1-based), giống số thứ tự ở chi tiết. */
@@ -680,7 +543,7 @@ function draftRowOrderIndex(row: TemplateKpiDraftRow): number {
 
 const saving = ref(false)
 
-/** Lỗi validate drawer «Tạo bộ KPI mẫu» (hiển thị trong UI, không dùng toast). */
+/** Lỗi validate drawer «Tạo bộ KPI mẫu» (hiển thị trong drawer; lỗi API → card thông báo góc phải). */
 const createFormValidationError = ref<string | null>(null)
 /** Lỗi tên bắt buộc trong modal sửa meta bộ. */
 const suiteMetaNameError = ref('')
@@ -747,10 +610,6 @@ function closeCreateDrawer() {
   kpiAppendSuiteId.value = null
 }
 
-function codeForTemplateSave(): string {
-  return `TPL-${Date.now()}`
-}
-
 function validateCreate(): string | null {
   if (!tplName.value.trim()) return 'Vui lòng nhập tên bộ template (trường bắt buộc).'
   for (const r of draftKpis.value) {
@@ -767,36 +626,43 @@ async function saveTemplateSuite() {
   }
   createFormValidationError.value = null
   saving.value = true
-  await new Promise((r) => setTimeout(r, 400))
-  saving.value = false
-
-  const kpis: TemplateKpiDef[] = draftKpis.value
-    .filter((r) => r.def.name.trim())
-    .map((r) => ({
-      name: r.def.name.trim(),
-      target: r.def.target.trim() || '-',
-      weight: Math.max(0, r.def.weight),
-      ...(r.def.draftPayload ? { draftPayload: r.def.draftPayload } : {}),
-    }))
-
-  const code = codeForTemplateSave()
-  const name = tplName.value.trim()
-  const description = tplDesc.value.trim()
-
-  const id = `tpl-${Date.now()}`
-  const colors: SuiteColor[] = ['blue', 'indigo', 'amber', 'emerald']
-  const color = colors[templateSuites.value.length % colors.length]!
-  templateSuites.value = [
-    ...templateSuites.value,
-    { id, name, code, description, color, kpis },
-  ]
-  closeCreateDrawer()
+  let createdTemplateId: string | null = null
+  try {
+    const created = await gmKpiService.createKpiTemplate({
+      name: tplName.value.trim(),
+      description: tplDesc.value.trim() || null,
+    })
+    createdTemplateId = created.id
+    for (const row of draftKpis.value) {
+      const p = row.def.draftPayload
+      if (!row.def.name.trim() || !p) continue
+      const body = mapDraftPayloadToCreateTemplateItemBody(p)
+      await gmKpiService.createKpiTemplateItem(created.id, body)
+    }
+    await loadTemplateSuitesFromApi()
+    const createdName = tplName.value.trim()
+    closeCreateDrawer()
+    pushGmNotification(`Đã tạo bộ template «${createdName}».`)
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : 'Không lưu được bộ template trên máy chủ.'
+    pushGmNotification(msg, { variant: 'error', durationMs: 9000 })
+    if (createdTemplateId) {
+      try {
+        await gmKpiService.deleteKpiTemplate(createdTemplateId)
+      } catch {
+        /* rollback best-effort */
+      }
+    }
+  } finally {
+    saving.value = false
+  }
 }
 
-onBeforeMount(() => {
+onBeforeMount(async () => {
   if (gmKpiTemplateLibrary) {
     gmKpiTemplateLibrary.openCreate = openCreateDrawer
   }
+  await loadTemplateSuitesFromApi()
 })
 
 onUnmounted(() => {
@@ -823,6 +689,11 @@ onUnmounted(() => {
         />
       </div>
 
+      <p v-if="templateSuitesLoading" class="text-sm font-medium text-slate-500">
+        Đang tải bộ template từ cơ sở dữ liệu…
+      </p>
+
+      <template v-else>
       <!-- Grid thẻ -->
       <div
         v-if="filteredSuites.length > 0"
@@ -880,6 +751,7 @@ onUnmounted(() => {
         <p class="text-sm font-bold text-slate-600">Không có bộ template khớp tìm kiếm</p>
         <p class="mt-1 text-xs text-slate-400">Thử đổi từ khóa theo tên, mã hoặc mô tả.</p>
       </div>
+      </template>
     </div>
 
     <!-- Drawer chi tiết — body + offset sidebar (w-64) -->
@@ -897,8 +769,19 @@ onUnmounted(() => {
             @click="closeDetail"
           />
           <div
-            class="gm-tpl-drawer-panel absolute bottom-0 right-0 top-0 flex w-full max-w-full flex-col border-l border-slate-200 bg-slate-50 shadow-2xl md:max-w-[700px] lg:max-w-[850px]"
+            class="gm-tpl-drawer-panel absolute bottom-0 right-0 top-0 flex min-h-0 w-full max-w-full flex-col border-l border-slate-200 bg-slate-50 shadow-2xl md:max-w-[700px] lg:max-w-[850px]"
           >
+            <!-- Overlay: cha phải là `absolute` (không thêm `relative` cùng class — Tailwind có thể ưu tiên relative → panel mất full-height). -->
+            <div
+              v-if="detailMutating"
+              class="pointer-events-auto absolute inset-0 z-[160] flex items-center justify-center bg-slate-50/80 backdrop-blur-[1px]"
+              aria-live="polite"
+            >
+              <span class="flex items-center gap-2 text-sm font-semibold text-slate-600">
+                <i class="fas fa-spinner fa-spin" aria-hidden="true" />
+                Đang đồng bộ với máy chủ…
+              </span>
+            </div>
             <div
               class="z-10 flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 bg-white px-4 py-3 shadow-sm"
             >
@@ -960,7 +843,7 @@ onUnmounted(() => {
               </div>
             </div>
 
-            <div class="custom-scrollbar flex-1 space-y-4 overflow-y-auto bg-slate-50/50 p-5">
+            <div class="custom-scrollbar min-h-0 flex-1 space-y-4 overflow-y-auto bg-slate-50/50 p-5">
               <div
                 class="flex flex-col gap-3 border-b border-slate-200 pb-3 sm:flex-row sm:items-end sm:justify-between"
               >
@@ -1319,6 +1202,7 @@ onUnmounted(() => {
       v-model="showKpiDraftDrawer"
       :cycle-id="cycleIdForKpiDraft"
       :initial-payload="kpiDraftInitialPayload"
+      :confirm-delay-ms="0"
       @added="onTemplateKpiDraftAdded"
     />
 
@@ -1380,17 +1264,20 @@ onUnmounted(() => {
             <div class="flex justify-end gap-2 border-t border-slate-200 bg-slate-50/80 px-5 py-4">
               <button
                 type="button"
-                class="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-600 shadow-sm hover:bg-slate-50"
+                class="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-600 shadow-sm hover:bg-slate-50 disabled:opacity-50"
+                :disabled="suiteMetaSaving"
                 @click="closeSuiteMetaModal"
               >
                 Hủy
               </button>
               <button
                 type="button"
-                class="rounded-lg bg-purple-600 px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-purple-700"
+                class="rounded-lg bg-purple-600 px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-purple-700 disabled:opacity-60"
+                :disabled="suiteMetaSaving"
                 @click="saveSuiteMetaFromModal"
               >
-                Lưu
+                <i v-if="suiteMetaSaving" class="fas fa-spinner fa-spin mr-2" aria-hidden="true" />
+                {{ suiteMetaSaving ? 'Đang lưu…' : 'Lưu' }}
               </button>
             </div>
           </div>
@@ -1445,10 +1332,12 @@ onUnmounted(() => {
               </button>
               <button
                 type="button"
-                class="rounded-lg bg-rose-600 px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-rose-700"
+                class="rounded-lg bg-rose-600 px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-rose-700 disabled:opacity-60"
+                :disabled="deleteExecuting"
                 @click="confirmDeleteExecute"
               >
-                Xóa
+                <i v-if="deleteExecuting" class="fas fa-spinner fa-spin mr-2" aria-hidden="true" />
+                {{ deleteExecuting ? 'Đang xóa…' : 'Xóa' }}
               </button>
             </div>
           </div>

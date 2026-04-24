@@ -1,58 +1,56 @@
 <script setup lang="ts">
-const props = defineProps({
-  selfComment: { type: String, default: '' },
-  supervisorComment: { type: String, default: '' },
-  selfTitle: { type: String, default: 'My Comment' },
-  supervisorTitle: { type: String, default: 'Supervisor Comment' },
-  isSubmitting: { type: Boolean, default: false }
+defineProps({
+  employeeComment: { type: String, default: '' },
+  managerComment: { type: String, default: '' },
+  employeeTitle: { type: String, default: 'Nhân viên tự đánh giá' },
+  managerTitle: { type: String, default: 'Quản lý nhận xét' },
+  
+  // Cờ điều khiển ai được quyền nhập liệu
+  employeeReadonly: { type: Boolean, default: false },
+  managerReadonly: { type: Boolean, default: true }
 })
 
-const emit = defineEmits(['update:selfComment', 'submit'])
-
-const updateSelfComment = (e: Event) => {
-  const target = e.target as HTMLTextAreaElement
-  emit('update:selfComment', target.value)
-}
+defineEmits(['update:employeeComment', 'update:managerComment'])
 </script>
 
 <template>
-  <div class="shrink-0 p-5 border-t border-slate-200 bg-slate-50/30">
+  <div class="p-6 bg-slate-50/50">
     <h4 class="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
-      <i class="fas fa-comments text-blue-600"></i>
-      Comment of employee and supervisor
+      <i class="fas fa-comments text-blue-600"></i> General Comments
     </h4>
     
     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
       <div>
-        <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">{{ selfTitle }}</label>
+        <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
+          {{ employeeTitle }} <span v-if="!employeeReadonly" class="text-rose-500">*</span>
+        </label>
         <textarea 
-          :value="selfComment"
-          @input="updateSelfComment"
-          class="w-full h-24 p-3 bg-white border border-slate-200 rounded-lg text-sm text-slate-700 focus:ring-2 focus:ring-blue-100 outline-none resize-none shadow-sm" 
-          placeholder="Nhập ý kiến tự đánh giá của bạn..."
+          :value="employeeComment"
+          @input="$emit('update:employeeComment', ($event.target as HTMLTextAreaElement).value)"
+          :readonly="employeeReadonly"
+          :placeholder="employeeReadonly ? '' : 'Nhập tự đánh giá của bạn...'"
+          class="w-full h-24 p-3 rounded-lg text-sm outline-none resize-none transition-colors"
+          :class="employeeReadonly 
+            ? 'bg-slate-100 border border-slate-200 text-slate-600 cursor-not-allowed shadow-inner' 
+            : 'bg-white border border-slate-300 text-slate-800 focus:ring-2 focus:ring-blue-100 focus:border-blue-400 shadow-sm'"
         ></textarea>
       </div>
-      <div>
-        <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">{{ supervisorTitle }}</label>
-        <textarea 
-          class="w-full h-24 p-3 bg-slate-100 border border-slate-200 rounded-lg text-sm text-slate-500 outline-none resize-none cursor-not-allowed" 
-          placeholder="Quản lý sẽ nhập ý kiến tại đây..." 
-          readonly
-          :value="supervisorComment"
-        ></textarea>
-      </div>
-    </div>
 
-    <div class="flex justify-end mt-4">
-      <button 
-        @click="$emit('submit')" 
-        :disabled="isSubmitting"
-        class="flex items-center gap-1.5 rounded-lg bg-blue-600 px-6 py-2 text-sm font-bold text-white shadow-sm transition-colors hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-      >
-        <i v-if="isSubmitting" class="fas fa-spinner fa-spin text-xs"></i>
-        <i v-else class="fas fa-paper-plane text-xs"></i> 
-        Submit Evaluation
-      </button>
+      <div>
+        <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
+          {{ managerTitle }} <span v-if="!managerReadonly" class="text-rose-500">*</span>
+        </label>
+        <textarea 
+          :value="managerComment"
+          @input="$emit('update:managerComment', ($event.target as HTMLTextAreaElement).value)"
+          :readonly="managerReadonly"
+          :placeholder="managerReadonly ? '' : 'Nhập đánh giá và nhận xét của bạn...'"
+          class="w-full h-24 p-3 rounded-lg text-sm outline-none resize-none transition-colors"
+          :class="managerReadonly 
+            ? 'bg-slate-100 border border-slate-200 text-slate-600 cursor-not-allowed shadow-inner' 
+            : 'bg-white border border-slate-300 text-slate-800 focus:ring-2 focus:ring-blue-100 focus:border-blue-400 shadow-sm'"
+        ></textarea>
+      </div>
     </div>
   </div>
 </template>

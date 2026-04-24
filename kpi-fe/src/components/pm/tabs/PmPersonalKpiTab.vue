@@ -1,15 +1,10 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
+import { pmKpiService } from '@/services/modules/kpi-pm.service'
 import EvaluationCommentBlock from '@/components/evaluation/EvaluationCommentBlock.vue'
 import EvaluationEvidenceDrawer from '@/components/evaluation/EvaluationEvidenceDrawer.vue'
 
 const emit = defineEmits(['open-assign', 'open-member-detail'])
-
-const groupLabels: Record<string, string> = {
-  A: '(A) Core Operations & Technical Excellence',
-  B: '(B) People Development & Knowledge Sharing',
-  C: '(C) Strategic Management & Governance'
-}
 
 const KPI_TYPE_UI: Record<string, { label: string, badgeClass: string, icon: string }> = {
   cascading: { label: 'Cascading', badgeClass: 'bg-blue-50 text-blue-700 border-blue-200', icon: 'fas fa-code-branch' },
@@ -17,26 +12,51 @@ const KPI_TYPE_UI: Record<string, { label: string, badgeClass: string, icon: str
   promotion: { label: 'Promotion', badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200', icon: 'fas fa-user-plus' },
 }
 
-const personalKpisRaw = ref([
-    {
-      id: 'kpi-1', group: 'A', code: 'A.1', kpiType: 'cascading', isImportant: true, status: 'approved',
-      name: 'System Performance Optimization', target: '99.9% Uptime', actualResult: '99.5% Uptime', weight: 35, selfScore: 4, pmScore: null, isTree: true, expanded: true,
-      children: [{ id: 'c1', name: 'Peter Park', role: 'DevOps', avatar: 'PP', target: 'Zero P0 Bugs', actualResult: 'Fixed 5/5', selfScore: 4.5, pmScore: null, status: 'approved' }]
-    },
-    {
-      id: 'kpi-2', group: 'B', code: 'B.1', kpiType: 'individual', isImportant: false, status: 'approved',
-      name: 'Internal Talent Upskilling', target: '4 Workshop Sessions', actualResult: '4 Sessions', weight: 25, selfScore: 5, pmScore: 5, isTree: false, expanded: false,
-      children: []
-    },
-    {
-      id: 'kpi-3', group: 'C', code: 'C.1', kpiType: 'cascading', isImportant: false, status: 'pending_approval',
-      name: 'Project Delivery Excellence', target: 'Delivery Rate >= 95%', actualResult: '1 minor delay', weight: 40, selfScore: 3.5, pmScore: null, isTree: true, expanded: true,
-      children: [
-          { id: 'c2', name: 'John Doe', role: 'Senior Dev', avatar: 'JD', target: 'API Docs', actualResult: '100% done', selfScore: 5.0, pmScore: null, status: 'approved' },
-          { id: 'c3', name: 'Anna Smith', role: 'Backend', avatar: 'AS', target: 'Refactor Payment', actualResult: 'Coverage 65%', selfScore: 3.5, pmScore: null, status: 'pending_approval' }
-      ]
-    }
-]);
+const personalKpisRaw = ref<any[]>([])
+
+async function loadPmPortfolio(cycleId?: string) {
+  try {
+    const data:any = await pmKpiService.getInitialization(cycleId)
+    
+    // Map backend Enums sang UI String
+    const typeMap: Record<number, string> = { 101: 'individual', 102: 'cascading', 103: 'promotion' }
+    const statusMap: Record<number, string> = { 401: 'draft', 402: 'pending_approval', 403: 'pending_approval', 404: 'pending_approval', 405: 'approved' }
+
+    // Map KpiGroupDto -> UI shape
+    personalKpisRaw.value = (data.kpis ?? []).map((kpi: any) => ({
+      id: String(kpi.id),
+      infoId: String(kpi.infoId),
+      group: kpi.group || 'Khác', // Dùng luôn tên group BE trả về (vd: "A - Hiệu quả công việc...")
+      code: kpi.code,
+      kpiType: typeMap[kpi.kpiType] || 'individual',
+      isImportant: kpi.isImportant,
+      // Lấy tạm status của con đầu tiên làm status cha để phục vụ filter
+      status: kpi.children?.length ? (statusMap[kpi.children[0].statusCode] || 'pending_approval') : 'pending_approval',
+      name: kpi.name,
+      target: kpi.target,
+      actualResult: '', // Parent không có actualResult
+      weight: kpi.weight,
+      selfScore: null,
+      pmScore: null,
+      isTree: kpi.isTree,
+      expanded: kpi.expanded !== undefined ? kpi.expanded : true,
+      children: (kpi.children || []).map((c: any) => ({
+        id: String(c.id),
+        name: c.name,
+        role: c.role || 'Member',
+        // Tự động generate Avatar từ 2 chữ cái đầu của tên
+        avatar: c.name ? c.name.split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase() : 'U',
+        target: c.targetValue != null ? String(c.targetValue) : '',
+        actualResult: c.actualResult || '',
+        selfScore: c.selfScore != null ? Number(c.selfScore) : null,
+        pmScore: c.pmScore != null ? Number(c.pmScore) : null,
+        status: statusMap[c.statusCode] || 'pending_approval'
+      }))
+    }))
+  } catch (err) {
+    console.error('Failed to load PM portfolio', err)
+  }
+}
 
 // --- LOGIC FILTER ---
 const filterMember = ref('')
@@ -53,7 +73,7 @@ const filterPanelFixedStyle = ref<Record<string, string>>({})
 
 const diagnosticsMemberOptions = computed(() => {
   const set = new Set<string>()
-  personalKpisRaw.value.forEach(kpi => kpi.children?.forEach(c => set.add(c.name)))
+  personalKpisRaw.value.forEach(kpi => kpi.children?.forEach((c: any) => set.add(c.name)))
   return [...set].sort((a, b) => a.localeCompare(b, 'vi'))
 })
 
@@ -82,7 +102,7 @@ const activeFilterChips = computed(() => {
   if (filterMember.value) chips.push({ key: 'member', label: `Thành viên: ${filterMember.value}` })
   if (filterImportant.value === 'yes') chips.push({ key: 'important', label: 'KPI quan trọng' })
   if (filterImportant.value === 'no') chips.push({ key: 'important', label: 'Không gắn sao' })
-  if (filterStatus.value) chips.push({ key: 'status', label: `Trạng thái: ${filterStatus.value}` })
+  if (filterStatus.value) chips.push({ key: 'status', label: `Trạng thái: ${filterStatus.value === 'approved' ? 'Đã duyệt' : 'Chờ duyệt'}` })
   return chips
 })
 
@@ -95,16 +115,29 @@ function removeAppliedFilterChip(key: string) {
 onMounted(() => { window.addEventListener('resize', updateFilterPanelPosition); window.addEventListener('scroll', updateFilterPanelPosition, true) })
 onUnmounted(() => { window.removeEventListener('resize', updateFilterPanelPosition); window.removeEventListener('scroll', updateFilterPanelPosition, true) })
 
+onMounted(() => { loadPmPortfolio(String(new Date().getFullYear())) })
+
 const groupedPersonalKpis = computed(() => {
   const filtered = personalKpisRaw.value.filter(kpi => {
     if (filterImportant.value === 'yes' && !kpi.isImportant) return false
     if (filterImportant.value === 'no' && kpi.isImportant) return false
     if (filterStatus.value && kpi.status !== filterStatus.value) return false
-    if (filterMember.value && !kpi.children?.some(c => c.name === filterMember.value)) return false
+    if (filterMember.value && !kpi.children?.some((c: any) => c.name === filterMember.value)) return false
     return true
   })
-  const groups = filtered.reduce((acc: any, item: any) => { (acc[item.group] ??= []).push(item); return acc; }, {});
-  return ['A', 'B', 'C'].map(key => ({ key, label: groupLabels[key], items: groups[key] || [] })).filter(g => g.items.length > 0);
+  
+  // Tự động gom nhóm dựa trên key "group" (vd: "A - Hiệu quả công việc...")
+  const groups = filtered.reduce((acc: any, item: any) => { 
+    (acc[item.group] ??= []).push(item); 
+    return acc; 
+  }, {});
+  
+  // Sắp xếp tự động để A nằm trước B, B nằm trước C
+  return Object.keys(groups).sort().map(key => ({ 
+    key, 
+    label: key, // Dùng luôn tên làm label
+    items: groups[key] || [] 
+  }));
 })
 
 const pmComments = ref({ selfComment: '', supervisorComment: '' })
@@ -120,11 +153,11 @@ const saveEvidenceData = (data: any) => {
 </script>
 
 <template>
-  <div class="animate-fade-in bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden flex flex-col relative">
+  <div class="animate-fade-in flex flex-col relative">
     
-    <div class="flex flex-col gap-3 border-b border-slate-200 bg-white p-5 shrink-0">
+    <div class="flex flex-col gap-3 border-b border-slate-200 p-5 shrink-0">
       <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <h3 class="font-bold text-slate-800 text-lg flex items-center gap-2"><i class="fas fa-list-alt text-slate-400"></i> My KPI Portfolio</h3>
+        <h3 class="font-bold text-slate-800 text-lg flex items-center gap-2"><i class="fas fa-list-alt text-slate-400"></i> KPI Portfolio</h3>
 
         <div class="flex shrink-0 flex-wrap items-center justify-end gap-2">
           <button @click.stop="resetAllDiagnosticFilters" class="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 shadow-sm hover:bg-slate-50 transition-colors">
@@ -167,6 +200,7 @@ const saveEvidenceData = (data: any) => {
           </div>
         </Transition>
       </Teleport>
+      
       <div v-if="activeFilterChips.length > 0" class="flex flex-wrap items-start gap-2 border-t border-slate-100 pt-3">
         <span class="mt-1.5 text-[10px] font-bold uppercase text-slate-400">Đang lọc:</span>
         <div class="flex flex-wrap gap-2">
@@ -175,16 +209,16 @@ const saveEvidenceData = (data: any) => {
       </div>
     </div>
 
-    <div class="overflow-x-auto flex-1">
+    <div class="overflow-x-auto w-full">
       <table class="w-full text-left">
-        <thead class="bg-white border-b border-slate-200 text-[11px] uppercase tracking-wider text-slate-500 font-bold">
+        <thead class="bg-slate-50 border-b border-slate-200 text-[11px] uppercase tracking-wider text-slate-500 font-bold">
           <tr>
             <th class="py-4 px-5 w-12 text-center">STT</th>
             <th class="py-4 px-5 min-w-[280px]">Hạng Mục (Objectives)</th>
             <th class="py-4 px-5 min-w-[150px]">Chỉ Tiêu (Target)</th>
-            <th class="py-4 px-5 min-w-[150px]">Thực tế (Actual Result)</th>
-            <th class="py-4 px-5 text-center w-24">Trọng số</th>
-            <th class="py-4 px-5 text-center w-28 bg-blue-50/50">Self Score</th>
+            <th class="py-4 px-5 min-w-[150px]">Thực tế (Actual)</th>
+            <th class="py-4 px-5 text-center w-24">W(%)</th>
+            <th class="py-4 px-5 text-center w-28 border-x border-slate-100">Self Score</th>
             <th class="py-4 px-5 text-center w-28">Supervisor Score</th>
             <th class="py-4 px-5 text-right min-w-[140px]">Thao tác</th>
           </tr>
@@ -201,19 +235,22 @@ const saveEvidenceData = (data: any) => {
                     <div v-else class="w-5 h-5 shrink-0"></div>
                     <div class="flex flex-wrap items-center gap-2">
                       <p class="font-bold text-slate-900 text-sm">{{ item.code }} {{ item.name }}</p>
-                      <div v-if="item.kpiType === 'cascading'" class="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 shadow-sm bg-blue-50 text-blue-700 border-blue-200"><i class="fas fa-code-branch text-[10px]"></i><span class="text-[10px] font-bold tracking-wide">Cascading</span></div>
+                      <div v-if="KPI_TYPE_UI[item.kpiType]" class="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 shadow-sm" :class="KPI_TYPE_UI[item.kpiType].badgeClass"><i :class="KPI_TYPE_UI[item.kpiType].icon" class="text-[10px]"></i></div>
+                      <i v-if="item.isImportant" class="fas fa-star text-amber-400 text-xs" title="KPI Quan trọng"></i>
                     </div>
                   </div>
                 </td>
                 <td class="py-4 px-5 align-top pt-4"><p class="text-sm font-medium text-slate-700">{{ item.target }}</p></td>
-                <td class="py-4 px-5 align-top pt-4"><p class="text-sm font-bold text-blue-700">{{ item.actualResult || 'Chưa cập nhật' }}</p></td>
+                
+                <td class="py-4 px-5 align-top pt-4"><p class="text-sm font-bold text-emerald-600">{{ item.actualResult || 'Chưa cập nhật' }}</p></td>
+                
                 <td class="py-4 px-5 text-center align-top pt-4"><span class="inline-block px-2.5 py-1 bg-slate-100 text-slate-700 font-bold text-sm rounded-md">{{ item.weight }}</span></td>
-                <td class="py-4 px-5 text-center bg-blue-50/20 align-top pt-4"><span class="text-sm font-bold text-slate-800">{{ item.selfScore ?? '-' }}</span></td>
+                <td class="py-4 px-5 text-center bg-blue-50/20 align-top pt-4 border-x border-slate-100"><span class="text-sm font-bold text-slate-800">{{ item.selfScore ?? '-' }}</span></td>
                 <td class="py-4 px-5 text-center align-top pt-4"><span class="text-slate-400 font-medium text-sm">{{ item.pmScore ?? '-' }}</span></td>
                 <td class="py-4 px-5 text-right align-top pt-4">
                     <div class="flex items-center justify-end gap-2">
-                      <button @click.stop="openEvidenceDrawer(item)" class="flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-[10px] font-bold text-slate-600 hover:bg-slate-50 hover:text-blue-600"><i class="fas fa-pen text-xs"></i> Edit</button>
-                      <button v-if="item.isTree" @click.stop="$emit('open-assign', item)" class="flex h-8 items-center gap-1.5 rounded-lg border border-purple-200 bg-purple-50 px-3 text-[10px] font-bold text-purple-700 hover:bg-purple-100"><i class="fas fa-user-plus text-xs"></i> Assign</button>
+                      <button @click.stop="openEvidenceDrawer(item)" class="flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-[10px] font-bold text-slate-600 hover:bg-slate-50 hover:text-blue-600 shadow-sm"><i class="fas fa-pen text-xs"></i> Edit</button>
+                      <button v-if="item.isTree" @click.stop="$emit('open-assign', item)" class="flex h-8 items-center gap-1.5 rounded-lg border border-purple-200 bg-purple-50 px-3 text-[10px] font-bold text-purple-700 hover:bg-purple-100 shadow-sm"><i class="fas fa-user-plus text-xs"></i> Assign</button>
                     </div>
                 </td>
               </tr>
@@ -228,20 +265,51 @@ const saveEvidenceData = (data: any) => {
                     </div>
                   </td>
                   <td class="py-3 px-5"><p class="text-xs font-medium text-slate-700">{{ child.target }}</p></td>
-                  <td class="py-3 px-5"><p class="text-xs font-semibold text-slate-700">{{ child.actualResult || '-' }}</p></td>
+                  <td class="py-3 px-5"><p class="text-xs font-semibold text-emerald-600">{{ child.actualResult || '-' }}</p></td>
                   <td class="py-3 px-5 text-center text-slate-400 font-bold">-</td>
-                  <td class="py-3 px-5 text-center bg-blue-50/10"><span class="text-xs font-bold text-slate-600">{{ child.selfScore ?? '-' }}</span></td>
+                  <td class="py-3 px-5 text-center bg-blue-50/10 border-x border-slate-100"><span class="text-xs font-bold text-slate-600">{{ child.selfScore ?? '-' }}</span></td>
                   <td class="py-3 px-5 text-center"><span class="text-xs font-bold text-purple-700">{{ child.pmScore ?? '-' }}</span></td>
-                  <td class="py-3 px-5 text-right"><button @click.stop="$emit('open-member-detail', { child, parent: item })" class="inline-flex h-7 items-center gap-1.5 rounded-md border border-blue-100 bg-blue-50 px-2.5 text-[10px] font-bold text-blue-600"><i class="far fa-eye text-[10px]"></i> Detail</button></td>
+                  <td class="py-3 px-5 text-right"><button @click.stop="$emit('open-member-detail', { child, parent: item })" class="inline-flex h-7 items-center gap-1.5 rounded-md border border-blue-100 bg-blue-50 px-2.5 text-[10px] font-bold text-blue-600 shadow-sm"><i class="far fa-eye text-[10px]"></i> Detail</button></td>
                 </tr>
               </template>
             </template>
           </template>
         </tbody>
+        
+        <tfoot class="bg-slate-100/80 border-t-2 border-slate-200 font-bold">
+          <tr>
+            <td colspan="4" class="py-4 px-5 text-right text-slate-700 uppercase text-xs tracking-wider">Tổng cộng (Total score):</td>
+            <td class="py-4 px-5 text-center"><span class="text-sm text-slate-800">100</span><span class="text-[10px] text-slate-500 font-medium ml-1">pts</span></td>
+            <td class="py-4 px-5 text-center text-slate-500 text-sm border-x border-slate-100">12.5</td>
+            <td class="py-4 px-5 text-center text-slate-500 text-sm">-</td>
+            <td class="py-4 px-5"></td>
+          </tr>
+          <tr class="bg-violet-50/50 border-t border-slate-200">
+            <td colspan="4" class="py-4 px-5 text-right text-violet-800 uppercase text-xs tracking-wider">Điểm trung bình (Average score):</td>
+            <td class="py-4 px-5"></td>
+            <td class="py-4 px-5 text-center bg-violet-100/80 border-x border-violet-200"><span class="text-lg text-violet-700 font-extrabold">4.2</span></td>
+            <td class="py-4 px-5 text-center text-slate-500 text-sm">-</td>
+            <td class="py-4 px-5"></td>
+          </tr>
+        </tfoot>
+
       </table>
     </div>
 
-    <EvaluationCommentBlock v-model:selfComment="pmComments.selfComment" :supervisorComment="pmComments.supervisorComment" selfTitle="My Comment (To GM)" supervisorTitle="Supervisor (GM) Comment" @submit="() => {}" />
+    <EvaluationCommentBlock 
+      v-model:employeeComment="pmComments.selfComment"
+      v-model:managerComment="pmComments.supervisorComment"
+      employeeTitle="My Comment"
+      managerTitle="Supervisor Comment"
+      :employeeReadonly="false"
+      :managerReadonly="true"
+    />
+    <div class="mt-6 mb-8 flex justify-center">
+      <button type="button"
+        class="inline-flex items-center gap-2 rounded-lg bg-slate-800 px-6 py-2.5 text-sm font-bold text-white shadow-md transition-colors hover:bg-slate-900">
+        <i class="fas fa-paper-plane text-sm" /> Submit Đánh Giá
+      </button>
+    </div>
     <EvaluationEvidenceDrawer :open="evidencePanelOpen" :item="selectedKpiItem" @close="evidencePanelOpen = false" @save="saveEvidenceData" />
   </div>
 </template>

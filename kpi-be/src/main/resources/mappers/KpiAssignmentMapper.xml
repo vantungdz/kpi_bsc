@@ -2,33 +2,42 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.company.kpi.mapper.KpiAssignmentMapper">
 
-    <!--
-        findDetailsByUserAndCycle: lấy chi tiết KPI assignments của member trong một chu kỳ.
+        <!--
+                findDetailsByUserAndCycle: retrieves detailed KPI assignments for a member in a given cycle.
 
-        Sơ đồ JOIN (theo init-db.sql schema):
-          kpi_assignments (ka)
-            → kpis_information (ki) qua ka.kpi_info_id = ki.id
-            → kpi_master (km) qua ki.master_kpi_id = km.id
-            → kpi_categories (kc) qua km.category_id = kc.id   [category nằm ở kpi_master, không phải kpis_information]
-            → sys_status_codes (sc) qua km.type_code = sc.code  [để lấy tên loại KPI: INDIVIDUAL/TEAM/PROMOTION]
+                Joins (based on init-db.sql schema):
+                    - kpi_assignments (ka)
+                    - kpis_information (ki) via ka.kpi_info_id = ki.id
+                    - kpi_master (km) via ki.master_kpi_id = km.id
+                    - kpi_categories (kc) via km.category_id = kc.id (category belongs to kpi_master)
+                    - sys_status_codes (sc) via km.type_code = sc.code (to get KPI type name: INDIVIDUAL/TEAM/PROMOTION)
 
-        Lưu ý:
-          - init-db.sql chỉ có mid_self_score (mid evaluation chỉ tự đánh giá)
-          - mid_pm_score KHÔNG tồn tại → để null trong DTO
-          - end_pm_score = điểm PM chấm cuối kỳ
-    -->
+                Notes:
+                    - init-db.sql may not always include mid_self_score (mid evaluation can be self-assessed)
+                    - mid_pm_score may be null in the DTO
+                    - end_pm_score represents the final PM score
+        -->
     <select id="findDetailsByUserAndCycle"
             resultType="com.company.kpi.response.member.MemberKpiAssignmentDTO">
         SELECT
             ka.id              AS assignment_id,
+            ka.cycle_id        AS cycle_id,
+            km.code            AS master_code,
+            km.name            AS master_name,
             ki.target_description,
-            km.objective,
+            km.name            AS objective,
+            CAST(NULL AS TEXT) AS objective,
             ki.weight,
             sc.name            AS type,
+            km.type_code       AS type_code,
+            ka.status_code     AS status_code,
+            ki.target_value    AS kpi_info_target_value,
+            ka.target_value    AS assignment_target_value,
             ka.mid_self_score,
             ka.end_self_score,
             ka.end_pm_score,
-            ka.evidences,
+            ka.evidences::text AS evidences,
+            km.calculation_rule_code AS calculation_rule_code,
             kc.id              AS category_id,
             kc.name            AS category_name
         FROM
@@ -50,8 +59,8 @@
     </select>
 
     <!--
-        updateEvidence: cập nhật bằng chứng (evidences JSON) cho một assignment.
-        Dùng #{param1}, #{param2} vì KpiAssignmentMapper không có @Param annotation.
+        updateEvidence: update the evidences JSON for an assignment.
+        Note: use positional parameters (#{param1}, #{param2}) only when mapper method lacks @Param annotations.
     -->
     <update id="updateEvidence">
         UPDATE
@@ -64,4 +73,442 @@
             AND deleted_at IS NULL
     </update>
 
+    <select id="findCycleIdByAssignmentId" resultType="java.util.UUID">
+        SELECT cycle_id
+        FROM kpi_assignments
+        WHERE id = #{assignmentId}
+          AND deleted_at IS NULL
+        LIMIT 1
+    </select>
+
+    <select id="findByIdAndUser"
+            resultType="com.company.kpi.response.member.MemberKpiAssignmentDTO">
+        SELECT
+            ka.id              AS assignment_id,
+            ka.cycle_id        AS cycle_id,
+            km.code            AS master_code,
+            km.name            AS master_name,
+            ki.target_description,
+            CAST(NULL AS TEXT) AS objective,
+            ki.weight,
+            sc.name            AS type,
+            km.type_code       AS type_code,
+            ka.status_code     AS status_code,
+            ki.target_value    AS kpi_info_target_value,
+            ka.target_value    AS assignment_target_value,
+            ka.mid_self_score,
+            ka.end_self_score,
+            ka.end_pm_score,
+            ka.evidences::text AS evidences,
+            km.calculation_rule_code AS calculation_rule_code,
+            kc.id              AS category_id,
+            kc.name            AS category_name
+        FROM
+            kpi_assignments ka
+            JOIN kpis_information ki ON ka.kpi_info_id = ki.id
+                AND ki.deleted_at IS NULL
+            JOIN kpi_master km ON ki.master_kpi_id = km.id
+                AND km.deleted_at IS NULL
+            JOIN kpi_categories kc ON km.category_id = kc.id
+                AND kc.deleted_at IS NULL
+            LEFT JOIN sys_status_codes sc ON km.type_code = sc.code
+                AND sc.category = 'KPI_TYPE'
+        WHERE
+            ka.id = #{assignmentId}
+            AND ka.user_id = #{userId}
+            AND ka.deleted_at IS NULL
+    </select>
+
+    <update id="patchMemberAssignment">
+        UPDATE kpi_assignments
+        <set>
+            <if test="midSelfScore != null">mid_self_score = #{midSelfScore},</if>
+            <if test="endSelfScore != null">end_self_score = #{endSelfScore},</if>
+            <if test="evidences != null">evidences = #{evidences}::jsonb,</if>
+            updated_at = NOW()
+        </set>
+        WHERE id = #{id}
+          AND cycle_id = #{cycleId}
+          AND user_id = #{userId}
+          AND deleted_at IS NULL
+    </update>
+
+    <!-- Member transition: change status from 405 (ACCEPTED) to 501 (mid-year submitted) -->
+    <update id="submitAssignmentsForMidYear">
+        UPDATE kpi_assignments
+        SET status_code = 501,
+            updated_at = NOW()
+        WHERE user_id = #{userId}
+          AND cycle_id = #{cycleId}
+          AND deleted_at IS NULL
+          AND status_code = 405
+    </update>
+
+    <!-- Flow 2 + multiple submit flow: mark as ACCEPTED (405) when previously in 404 -->
+    <update id="bulkAcceptPendingForSubmit">
+        UPDATE kpi_assignments
+        SET status_code = 405,
+            updated_at = NOW()
+        WHERE user_id = #{userId}
+          AND cycle_id = #{cycleId}
+          AND deleted_at IS NULL
+          AND status_code = 404
+    </update>
+
+    <!-- Final submission: convert statuses 405 or 503 to 601 (PM final grading) -->
+    <update id="submitAssignmentsForYearEnd">
+        UPDATE kpi_assignments
+        SET status_code = 601,
+            updated_at = NOW()
+        WHERE user_id = #{userId}
+          AND cycle_id = #{cycleId}
+          AND deleted_at IS NULL
+          AND status_code IN (405, 503)
+    </update>
+
+    <insert id="insert" parameterType="com.company.kpi.entity.KpiAssignment">
+        INSERT INTO kpi_assignments (
+            id, cycle_id, kpi_info_id, user_id, target_value, status_code, created_by
+        ) VALUES (
+            #{id}, #{cycleId}, #{kpiInfoId}, #{userId}, #{targetValue}, #{statusCode}, #{createdBy}
+        )
+    </insert>
+
+    <resultMap id="PmDashboardAggregateResultMap" type="com.company.kpi.aggregate.PmDashboardAggregate">
+        <association property="pmAssignment" javaType="com.company.kpi.entity.KpiAssignment">
+            <id property="id" column="pm_asm_id"/>
+            <result property="targetValue" column="pm_asm_target"/>
+            <result property="midSelfScore" column="pm_mid_score"/>
+            <result property="endSelfScore" column="pm_end_score"/>
+            <result property="endPmScore" column="pm_end_pm_score"/>
+            <result property="statusCode" column="pm_status_code"/>
+            <result property="evidences" column="pm_evidences"/>
+        </association>
+
+        <association property="kpiInfo" javaType="com.company.kpi.entity.KpisInformation">
+            <id property="id" column="info_id"/>
+            <result property="targetDescription" column="info_target_desc"/>
+            <result property="weight" column="info_weight"/>
+            <result property="isImportant" column="info_is_important"/>
+        </association>
+        <association property="kpiMaster" javaType="com.company.kpi.entity.KpiMaster">
+            <id property="id" column="master_id"/>
+            <result property="code" column="master_code"/>
+            <result property="name" column="master_name"/>
+            <result property="typeCode" column="master_type_code"/>
+        </association>
+        <association property="kpiCategory" javaType="com.company.kpi.entity.KpiCategory">
+            <id property="id" column="cat_id"/>
+            <result property="name" column="cat_name"/>
+        </association>
+
+        <association property="childAssignment" javaType="com.company.kpi.entity.KpiAssignment">
+            <id property="id" column="child_asm_id"/>
+            <result property="targetValue" column="child_asm_target"/>
+            <result property="midSelfScore" column="child_mid_score"/>
+            <result property="endSelfScore" column="child_end_score"/>
+            <result property="endPmScore" column="child_pm_score"/>
+            <result property="statusCode" column="child_status_code"/>
+            <result property="evidences" column="child_evidences"/>
+        </association>
+        <association property="childUser" javaType="com.company.kpi.entity.User">
+            <id property="id" column="child_user_id"/>
+            <result property="fullName" column="child_full_name"/>
+        </association>
+        <association property="childJobTitle" javaType="com.company.kpi.entity.JobTitle">
+            <id property="id" column="child_jt_id"/>
+            <result property="name" column="child_jt_name"/>
+        </association>
+    </resultMap>
+
+    <select id="findPmPortfolioByPmIdAndCycleId" resultMap="PmDashboardAggregateResultMap">
+        SELECT
+            pm_ka.id AS pm_asm_id,
+            pm_ka.target_value AS pm_asm_target,
+            pm_ka.mid_self_score AS pm_mid_score,
+            pm_ka.end_self_score AS pm_end_score,
+            pm_ka.end_pm_score AS pm_end_pm_score,
+            pm_ka.status_code AS pm_status_code,
+            pm_ka.evidences AS pm_evidences,
+
+            ki.id AS info_id,
+            ki.target_description AS info_target_desc,
+            ki.weight AS info_weight,
+            ki.is_important AS info_is_important,
+
+            km.id AS master_id,
+            km.code AS master_code,
+            km.name AS master_name,
+            km.type_code AS master_type_code,
+
+            kc.id AS cat_id,
+            kc.name AS cat_name,
+
+            child_ka.id AS child_asm_id,
+            child_ka.target_value AS child_asm_target,
+            child_ka.mid_self_score AS child_mid_score,
+            child_ka.end_self_score AS child_end_score,
+            child_ka.end_pm_score AS child_pm_score,
+            child_ka.status_code AS child_status_code,
+            child_ka.evidences AS child_evidences,
+
+            child_u.id AS child_user_id,
+            child_u.full_name AS child_full_name,
+
+            child_jt.id AS child_jt_id,
+            child_jt.name AS child_jt_name
+
+        FROM kpi_assignments pm_ka
+        JOIN kpis_information ki ON pm_ka.kpi_info_id = ki.id AND ki.deleted_at IS NULL
+        JOIN kpi_master km ON ki.master_kpi_id = km.id AND km.deleted_at IS NULL
+        LEFT JOIN kpi_categories kc ON km.category_id = kc.id AND kc.deleted_at IS NULL
+
+        LEFT JOIN kpi_assignments child_ka ON child_ka.parent_assignment_id = pm_ka.id AND child_ka.deleted_at IS NULL
+        LEFT JOIN users child_u ON child_ka.user_id = child_u.id AND child_u.deleted_at IS NULL
+        LEFT JOIN job_titles child_jt ON child_u.job_title_id = child_jt.id AND child_jt.deleted_at IS NULL
+
+        WHERE pm_ka.cycle_id = #{cycleId}
+          AND pm_ka.deleted_at IS NULL
+          AND (
+              pm_ka.user_id = #{pmId} 
+              OR pm_ka.department_id IN (SELECT id FROM departments WHERE manager_id = #{pmId} AND deleted_at IS NULL)
+          )
+        ORDER BY km.code, child_u.full_name
+    </select>
+
+    <select id="findDetailsByUserAndCycleAndRoleLeader"
+            resultType="com.company.kpi.response.leader.LeaderKpiAssignmentDTO">
+        SELECT
+            ka.id              AS assignment_id,
+            ki.target_description,
+            km.name as kpi_name,
+            km.code as kpi_code,
+            ki.weight,
+            sc.name            AS status_code,
+            sc.description     AS status_desc,
+            ka.mid_self_score,
+            ka.end_self_score,
+            ka.end_pm_score,
+            ka.evidences,
+            kc.id              AS category_id,
+            kc.name            AS category_name
+        FROM
+            kpi_assignments ka
+            JOIN kpis_information ki ON ka.kpi_info_id = ki.id
+                AND ki.deleted_at IS NULL
+            JOIN kpi_master km ON ki.master_kpi_id = km.id
+                AND km.deleted_at IS NULL
+            JOIN kpi_categories kc ON km.category_id = kc.id
+                AND kc.deleted_at IS NULL
+            JOIN sys_status_codes st ON km.type_code = st.code
+                AND st.category = '${@com.company.kpi.common.constant.Constant@KPI_TYPE}'
+                AND st.name = #{type, jdbcType=VARCHAR}
+            LEFT JOIN sys_status_codes sc ON ka.status_code = sc.code
+        WHERE
+            ka.user_id = #{userId, jdbcType=OTHER}
+            AND ka.cycle_id = #{cycleId, jdbcType=OTHER}
+            AND ka.deleted_at IS NULL
+        ORDER BY
+            kc.name, km.code
+    </select>
+
+    <!-- Added from AdminMapper -->
+    <select id="countCompletedByCycleId" resultType="int">
+        SELECT COUNT(DISTINCT ka.user_id)
+        FROM kpi_assignments ka
+        WHERE ka.cycle_id   = #{cycleId}
+          AND ka.deleted_at IS NULL
+          AND ka.user_id IS NOT NULL
+          AND ka.status_code = 603
+          AND ka.user_id NOT IN (
+              SELECT DISTINCT user_id
+              FROM kpi_assignments
+              WHERE cycle_id   = #{cycleId}
+                AND deleted_at IS NULL
+                AND user_id IS NOT NULL
+                AND status_code != 603
+          )
+    </select>
+
+    <select id="countPendingByCycleId" resultType="int">
+        SELECT COUNT(DISTINCT ka.user_id)
+        FROM kpi_assignments ka
+        WHERE ka.cycle_id   = #{cycleId}
+          AND ka.deleted_at IS NULL
+          AND ka.user_id    IS NOT NULL
+          AND ka.status_code IN (501, 502, 601, 602)
+    </select>
+
+    <select id="countOverdueByCycleId" resultType="int">
+        SELECT COUNT(DISTINCT ka.user_id)
+        FROM kpi_assignments ka
+        JOIN kpi_cycles kc ON kc.id = ka.cycle_id
+        WHERE ka.cycle_id    = #{cycleId}
+          AND ka.deleted_at  IS NULL
+          AND ka.user_id     IS NOT NULL
+          AND ka.status_code != 603
+          AND kc.end_year_deadline &lt; NOW()
+    </select>
+    <!-- ── Thêm từ StrategicKpiWriteMapper ─────────────────────────────────────── -->
+    <insert id="insertKpiAssignments">
+        INSERT INTO kpi_assignments (
+            id, cycle_id, kpi_info_id,
+            user_id, job_title_id,
+            target_value, status_code,
+            created_by, updated_by
+        ) VALUES
+        <foreach collection="rows" item="r" separator=",">
+            (
+                #{r.id}, #{r.cycleId}, #{r.kpiInfoId},
+                #{r.userId}, #{r.jobTitleId},
+                #{r.targetValue}, #{r.statusCode},
+                #{r.createdBy}, #{r.createdBy}
+            )
+        </foreach>
+    </insert>
+
+    <update id="softDeleteAssignmentsForKpiInformation">
+        UPDATE kpi_assignments
+        SET deleted_at = CURRENT_TIMESTAMP,
+            updated_at = CURRENT_TIMESTAMP,
+            updated_by = #{updatedBy}
+        WHERE kpi_info_id = #{kpiInfoId}
+          AND cycle_id = #{cycleId}
+          AND deleted_at IS NULL
+    </update>
+
+    <select id="listAssignmentUserTargets" resultType="com.company.kpi.aggregate.KpiAssignmentUserTargetRow">
+        SELECT
+            ka.id,
+            ka.user_id AS userId,
+            ka.target_value AS targetValue
+        FROM kpi_assignments ka
+        WHERE ka.kpi_info_id = #{kpiInfoId}
+          AND ka.cycle_id = #{cycleId}
+          AND ka.deleted_at IS NULL
+          AND ka.user_id IS NOT NULL
+    </select>
+
+    <update id="softDeleteKpiAssignmentById">
+        UPDATE kpi_assignments
+        SET
+            deleted_at = CURRENT_TIMESTAMP,
+            updated_at = CURRENT_TIMESTAMP,
+            updated_by = #{updatedBy}
+        WHERE id = #{assignmentId}
+          AND cycle_id = #{cycleId}
+          AND deleted_at IS NULL
+    </update>
+
+    <update id="updateKpiAssignmentTarget">
+        UPDATE kpi_assignments
+        SET
+            target_value = #{targetValue},
+            updated_at = CURRENT_TIMESTAMP,
+            updated_by = #{updatedBy}
+        WHERE id = #{assignmentId}
+          AND cycle_id = #{cycleId}
+          AND deleted_at IS NULL
+    </update>
+
+    <insert id="insertKpiAssignmentsWithEntity">
+        INSERT INTO kpi_assignments (
+            id, cycle_id, kpi_info_id,
+            user_id, job_title_id,
+            target_value, status_code,
+            created_by, updated_by
+        ) VALUES
+        <foreach collection="rows" item="r" separator=",">
+            (
+                #{r.id}, #{r.cycleId}, #{r.kpiInfoId},
+                #{r.userId}, #{r.jobTitleId},
+                #{r.targetValue}, #{r.statusCode},
+                #{r.createdBy}, #{r.createdBy}
+            )
+        </foreach>
+    </insert>
+    <select id="selectHubConfirmStatus" resultType="java.lang.Integer">
+        SELECT status_code
+        FROM kpi_assignments
+        WHERE id = #{assignmentId}
+          AND cycle_id = #{cycleId}
+          AND user_id = #{evaluationUserId, jdbcType=OTHER}
+          AND deleted_at IS NULL
+        LIMIT 1
+    </select>
+
+    <update id="updateGmEvaluationHubConfirmReview502">
+        UPDATE kpi_assignments
+        SET
+            status_code = 503,
+            updated_at = NOW(),
+            updated_by = #{updatedBy, jdbcType=OTHER}
+        WHERE id = #{assignmentId}
+          AND cycle_id = #{cycleId}
+          AND user_id = #{evaluationUserId, jdbcType=OTHER}
+          AND deleted_at IS NULL
+          AND status_code = 502
+    </update>
+
+    <update id="updateGmEvaluationHubConfirmGrade602">
+        UPDATE kpi_assignments
+        SET
+            end_gm_score = #{endGmScore},
+            status_code = 603,
+            updated_at = NOW(),
+            updated_by = #{updatedBy, jdbcType=OTHER}
+        WHERE id = #{assignmentId}
+          AND cycle_id = #{cycleId}
+          AND user_id = #{evaluationUserId, jdbcType=OTHER}
+          AND deleted_at IS NULL
+          AND status_code = 602
+    </update>
+
+    <!-- Tab GM Approved KPI: KPI cá nhân (user_id NOT NULL) ASM 401/402/403 trong chu kỳ. -->
+    <select id="listGmApprovedKpiQueue" resultType="com.company.kpi.response.gm.GmApprovedKpiQueueItemResponse">
+        SELECT
+            ka.id AS assignment_id,
+            ka.cycle_id AS cycle_id,
+            ka.status_code AS status_code,
+            asm.name AS status_name,
+            asm.description AS status_description,
+            ka.user_id AS user_id,
+            u.full_name AS user_full_name,
+            u.username AS user_username,
+            km.code AS master_code,
+            km.name AS master_name,
+            ki.target_description AS target_description,
+            ki.weight AS weight,
+            ki.is_important AS important,
+            kc.name AS category_name,
+            km.type_code AS type_code
+        FROM kpi_assignments ka
+        JOIN kpis_information ki ON ka.kpi_info_id = ki.id AND ki.deleted_at IS NULL
+        JOIN kpi_master km ON ki.master_kpi_id = km.id AND km.deleted_at IS NULL
+        JOIN kpi_categories kc ON km.category_id = kc.id AND kc.deleted_at IS NULL
+        JOIN users u ON ka.user_id = u.id AND u.deleted_at IS NULL
+        LEFT JOIN sys_status_codes asm ON asm.code = ka.status_code AND asm.category = 'ASM_STATUS'
+        WHERE ka.cycle_id = #{cycleId, jdbcType=OTHER}
+          AND ka.deleted_at IS NULL
+          AND ka.user_id IS NOT NULL
+          AND ka.status_code IN (401, 402, 403)
+        ORDER BY
+            CASE ka.status_code WHEN 403 THEN 0 WHEN 402 THEN 1 ELSE 2 END,
+            kc.name,
+            km.code,
+            u.full_name
+    </select>
+
+    <update id="updateGmAssignmentStatusFromWaitingGm">
+        UPDATE kpi_assignments
+        SET
+            status_code = #{newStatus},
+            updated_at = NOW(),
+            updated_by = #{updatedBy, jdbcType=OTHER}
+        WHERE id = #{assignmentId, jdbcType=OTHER}
+          AND cycle_id = #{cycleId, jdbcType=OTHER}
+          AND deleted_at IS NULL
+          AND user_id IS NOT NULL
+          AND status_code = 403
+    </update>
 </mapper>

@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.company.kpi.mapper.SysStatusCodeMapper">
+
+    <select id="findByCategories" resultType="com.company.kpi.entity.SysStatusCode">
+        SELECT code, category, name, description 
+        FROM sys_status_codes
+        WHERE category IN 
+        <foreach item="item" collection="categories" open="(" separator="," close=")">
+            #{item}
+        </foreach>
+        AND deleted_at IS NULL
+    </select>
+
+    <select id="listKpiUnits" resultType="com.company.kpi.response.reference.KpiUnitOptionResponse">
+        SELECT
+            code AS unit_code,
+            UPPER(TRIM(name)) AS form_value,
+            TRIM(name) AS label
+        FROM
+            sys_status_codes
+        WHERE
+            category = #{category}
+            AND deleted_at IS NULL
+        ORDER BY
+            code ASC
+    </select>
+
+    <select id="listCalcRuleOptions" resultType="com.company.kpi.response.reference.StatusCodeOptionResponse">
+        SELECT
+            code,
+            UPPER(TRIM(name)) AS formValue,
+            TRIM(COALESCE(NULLIF(description, ''), name)) AS label
+        FROM
+            sys_status_codes
+        WHERE
+            category = 'CALC_RULE'
+            AND deleted_at IS NULL
+        ORDER BY
+            code ASC
+    </select>
+
+    <select id="listCalcTypeOptions" resultType="com.company.kpi.response.reference.StatusCodeOptionResponse">
+        SELECT
+            code,
+            UPPER(TRIM(name)) AS formValue,
+            TRIM(COALESCE(NULLIF(description, ''), name)) AS label
+        FROM
+            sys_status_codes
+        WHERE
+            category = 'CALC_TYPE'
+            AND deleted_at IS NULL
+        ORDER BY
+            code ASC
+    </select>
+
+    <select id="listStrategicKpiTypes" resultType="com.company.kpi.response.reference.KpiTypeOptionResponse">
+        SELECT
+            code,
+            TRIM(name) AS name,
+            TRIM(COALESCE(description, '')) AS description
+        FROM
+            sys_status_codes
+        WHERE
+            category = 'KPI_TYPE'
+            AND deleted_at IS NULL
+            AND code IN (101, 102, 103)
+        ORDER BY
+            CASE code
+                WHEN 102 THEN 1
+                WHEN 101 THEN 2
+                WHEN 103 THEN 3
+                ELSE code
+            END
+    </select>
+
+    <!-- ── Thêm từ ReferenceDataMapper ─────────────────────────────────────────── -->
+    <select id="listCalcRules801To804" resultType="com.company.kpi.response.member.CalcRuleOption">
+        SELECT code, name, description
+        FROM sys_status_codes
+        WHERE category = 'CALC_RULE'
+          AND code IN (801, 802, 803, 804)
+          AND deleted_at IS NULL
+        ORDER BY code
+    </select>
+</mapper>

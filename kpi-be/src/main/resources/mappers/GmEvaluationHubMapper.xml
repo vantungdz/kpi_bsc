@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.company.kpi.mapper.GmEvaluationHubMapper">
+
+    <!--
+      GM đánh giá hub: assignments trong chu kỳ, ASM 501/502/503/601/602/603.
+      Rank: ranks.code qua users.job_title_id → job_titles.rank_id.
+      Section: user_departments is_primary → departments.
+    -->
+    <select id="listAssignmentsForEvaluationHub"
+            resultType="com.company.kpi.aggregate.GmEvaluationHubAssignmentRow">
+        SELECT
+            ka.id AS assignment_id,
+            ka.status_code AS status_code,
+            asm.name AS assignment_status_name,
+            asm.description AS assignment_status_description,
+            ka.mid_self_score,
+            ka.end_self_score,
+            ka.end_pm_score,
+            ka.end_gm_score,
+            ka.evidences::text AS evidences,
+            ki.target_description,
+            ki.weight,
+            km.code AS master_code,
+            km.name AS master_name,
+            kc.name AS category_name,
+            sc_type.name AS kpi_type_name,
+            u.id AS user_id,
+            u.full_name AS user_full_name,
+            u.username AS user_username,
+            r.code AS rank_code,
+            ud.supervisor_id AS assignee_supervisor_id,
+            sup.full_name AS assignee_supervisor_full_name,
+            d.id AS section_id,
+            d.name AS section_name,
+            d.manager_id AS section_manager_id,
+            mgr.full_name AS section_manager_full_name,
+            (
+                SELECT r2.code
+                FROM user_roles ur
+                INNER JOIN roles r2 ON r2.id = ur.role_id AND r2.deleted_at IS NULL
+                WHERE ur.user_id = u.id
+                ORDER BY
+                    CASE UPPER(r2.code)
+                        WHEN 'GM' THEN 1
+                        WHEN 'PM' THEN 2
+                        WHEN 'LEADER' THEN 3
+                        WHEN 'MEMBER' THEN 4
+                        ELSE 99
+                    END,
+                    r2.code
+                LIMIT 1
+            ) AS member_role_code,
+            (
+                SELECT r2.name
+                FROM user_roles ur
+                INNER JOIN roles r2 ON r2.id = ur.role_id AND r2.deleted_at IS NULL
+                WHERE ur.user_id = u.id
+                ORDER BY
+                    CASE UPPER(r2.code)
+                        WHEN 'GM' THEN 1
+                        WHEN 'PM' THEN 2
+                        WHEN 'LEADER' THEN 3
+                        WHEN 'MEMBER' THEN 4
+                        ELSE 99
+                    END,
+                    r2.code
+                LIMIT 1
+            ) AS member_role_name
+        FROM kpi_assignments ka
+        INNER JOIN kpis_information ki ON ka.kpi_info_id = ki.id AND ki.deleted_at IS NULL
+        INNER JOIN kpi_master km ON ki.master_kpi_id = km.id AND km.deleted_at IS NULL
+        INNER JOIN kpi_categories kc ON km.category_id = kc.id AND kc.deleted_at IS NULL
+        LEFT JOIN sys_status_codes sc_type ON sc_type.code = km.type_code AND sc_type.category = 'KPI_TYPE'
+        LEFT JOIN sys_status_codes asm ON asm.code = ka.status_code AND asm.category = 'ASM_STATUS'
+        INNER JOIN users u ON ka.user_id = u.id AND u.deleted_at IS NULL
+        LEFT JOIN job_titles jt ON u.job_title_id = jt.id AND jt.deleted_at IS NULL
+        LEFT JOIN ranks r ON jt.rank_id = r.id AND r.deleted_at IS NULL
+        LEFT JOIN user_departments ud ON ud.user_id = u.id AND ud.is_primary = TRUE
+        INNER JOIN departments d ON ud.department_id = d.id AND d.deleted_at IS NULL
+        LEFT JOIN users mgr ON mgr.id = d.manager_id AND mgr.deleted_at IS NULL
+        LEFT JOIN users sup ON sup.id = ud.supervisor_id AND sup.deleted_at IS NULL
+        WHERE ka.cycle_id = #{cycleId, jdbcType=OTHER}
+          AND ka.deleted_at IS NULL
+          AND ka.user_id IS NOT NULL
+          AND ka.status_code IN (501, 502, 503, 601, 602, 603)
+        ORDER BY d.name, u.full_name, kc.name, km.code
+    </select>
+</mapper>

@@ -5,7 +5,8 @@ import GmProcessTimelineTrack from '@/components/gm/GmProcessTimelineTrack.vue'
 
 const props = defineProps<{
   year: number
-  activePhase: EvalPhase
+  /** Theo chu kỳ KPI trên API — ưu tiên hơn cửa sổ tháng trên lịch */
+  activePhase?: EvalPhase | null
 }>()
 
 /** Cùng lịch giai đoạn với GM — góc nhìn Member: việc cần làm theo từng mốc. */
@@ -24,19 +25,33 @@ function phaseStatusForMonth(month: number, start: number, end: number): PhaseSt
 }
 
 const currentMonth = computed(() => new Date().getMonth() + 1)
-const isViewingLiveYear = computed(() => props.year === new Date().getFullYear())
 
-const phaseStatuses = computed(() =>
-  PHASE_WINDOWS.map((p) =>
-    isViewingLiveYear.value
-      ? phaseStatusForMonth(currentMonth.value, p.monthStart, p.monthEnd)
-      : props.year < new Date().getFullYear()
-        ? ('complete' as PhaseStatus)
-        : props.year > new Date().getFullYear()
-          ? ('upcoming' as PhaseStatus)
-          : phaseStatusForMonth(currentMonth.value, p.monthStart, p.monthEnd),
-  ),
-)
+const phaseStatuses = computed((): PhaseStatus[] => {
+  const yNow = new Date().getFullYear()
+
+  if (props.year < yNow) {
+    return PHASE_WINDOWS.map(() => 'complete' as PhaseStatus)
+  }
+  if (props.year > yNow) {
+    return PHASE_WINDOWS.map(() => 'upcoming' as PhaseStatus)
+  }
+
+  // Cùng năm hiện tại: đồng bộ với phase chu kỳ (mid_year ≠ “chưa tới” chỉ vì đang tháng 4)
+  const ap = props.activePhase
+  if (ap === 'target_setup') {
+    return ['active', 'upcoming', 'upcoming']
+  }
+  if (ap === 'mid_year') {
+    return ['complete', 'active', 'upcoming']
+  }
+  if (ap === 'year_end') {
+    return ['complete', 'complete', 'active']
+  }
+
+  return PHASE_WINDOWS.map(p =>
+    phaseStatusForMonth(currentMonth.value, p.monthStart, p.monthEnd),
+  )
+})
 
 const settingStatus = computed(() => phaseStatuses.value[0]!)
 const midYearStatus = computed(() => phaseStatuses.value[1]!)

@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.company.kpi.mapper.KpiLibraryMapper">
+
+    <!-- README Flow 3 — kpi_master.is_global = FALSE (member đề xuất) -->
+    <insert id="insertKpiMaster">
+        INSERT INTO kpi_master (
+            id, code, name, category_id, type_code,
+            calculation_rule_code, calculation_type_code, unit_code,
+            is_global, created_by, updated_by
+        ) VALUES (
+            #{id}, #{code}, #{name}, #{categoryId}, #{typeCode},
+            #{calcRuleCode}, #{calcTypeCode}, #{unitCode},
+            #{isGlobal}, #{createdBy}, #{createdBy}
+        )
+    </insert>
+
+    <insert id="insertKpisInformation">
+        INSERT INTO kpis_information (
+            id, cycle_id, master_kpi_id, target_description, target_value, weight,
+            is_important, created_by, updated_by
+        ) VALUES (
+            #{id}, #{cycleId}, #{masterKpiId}, #{targetDescription}, #{targetValue}, #{weight},
+            #{isImportant}, #{createdBy}, #{createdBy}
+        )
+    </insert>
+
+    <insert id="insertMemberKpiAssignment">
+        INSERT INTO kpi_assignments (
+            id, cycle_id, kpi_info_id, user_id, job_title_id,
+            target_value, status_code, created_by, updated_by
+        ) VALUES (
+            #{id}, #{cycleId}, #{kpiInfoId}, #{userId}, #{jobTitleId},
+            #{targetValue}, #{statusCode}, #{createdBy}, #{createdBy}
+        )
+    </insert>
+</mapper>

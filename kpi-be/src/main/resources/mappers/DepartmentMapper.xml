@@ -1,0 +1,271 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.company.kpi.mapper.DepartmentMapper">
+
+    <sql id="departmentSelectColumns">
+        D.ID,
+        D.NAME,
+        D.PARENT_ID,
+        D.MANAGER_ID,
+        M.FULL_NAME AS MANAGER_FULL_NAME,
+        (
+            SELECT R.CODE
+            FROM USER_ROLES UR
+            INNER JOIN ROLES R ON R.ID = UR.ROLE_ID AND R.DELETED_AT IS NULL
+            WHERE UR.USER_ID = D.MANAGER_ID
+            ORDER BY
+                CASE R.CODE
+                    WHEN 'GM' THEN 1
+                    WHEN 'PM' THEN 2
+                    WHEN 'LEADER' THEN 3
+                    WHEN 'MEMBER' THEN 4
+                    ELSE 99
+                END,
+                R.CODE
+            LIMIT 1
+        ) AS MANAGER_ROLE_CODE,
+        D.CREATED_AT,
+        D.UPDATED_AT
+    </sql>
+
+    <select id="selectAllActive" resultType="com.company.kpi.response.gm.GmDepartmentResponse">
+        SELECT
+            <include refid="departmentSelectColumns"/>
+        FROM
+            DEPARTMENTS D
+            LEFT JOIN USERS M ON M.ID = D.MANAGER_ID AND M.DELETED_AT IS NULL
+        WHERE
+            D.DELETED_AT IS NULL
+        ORDER BY
+            D.NAME ASC
+    </select>
+
+    <select id="selectActiveById" resultType="com.company.kpi.response.gm.GmDepartmentResponse">
+        SELECT
+            <include refid="departmentSelectColumns"/>
+        FROM
+            DEPARTMENTS D
+            LEFT JOIN USERS M ON M.ID = D.MANAGER_ID AND M.DELETED_AT IS NULL
+        WHERE
+            D.ID = #{id}
+            AND D.DELETED_AT IS NULL
+    </select>
+
+    <insert id="insertDepartment">
+        INSERT INTO DEPARTMENTS (ID, NAME, PARENT_ID, MANAGER_ID, CREATED_BY, UPDATED_BY)
+        VALUES (#{id}, #{name}, #{parentId}, #{managerId}, #{actorId}, #{actorId})
+    </insert>
+
+    <update id="updateDepartment">
+        UPDATE DEPARTMENTS
+        SET
+            NAME = #{name},
+            PARENT_ID = #{parentId},
+            MANAGER_ID = #{managerId},
+            UPDATED_AT = CURRENT_TIMESTAMP,
+            UPDATED_BY = #{actorId}
+        WHERE
+            ID = #{id}
+            AND DELETED_AT IS NULL
+    </update>
+
+    <update id="softDeleteDepartment">
+        UPDATE DEPARTMENTS
+        SET
+            DELETED_AT = CURRENT_TIMESTAMP,
+            UPDATED_BY = #{actorId}
+        WHERE
+            ID = #{id}
+            AND DELETED_AT IS NULL
+    </update>
+
+    <select id="countActiveChildren" resultType="int">
+        SELECT COUNT(*)
+        FROM DEPARTMENTS
+        WHERE PARENT_ID = #{parentId}
+          AND DELETED_AT IS NULL
+    </select>
+
+    <select id="selectMembersForDepartments" resultType="com.company.kpi.aggregate.DeptMemberJoinRow">
+        SELECT
+            UD.DEPARTMENT_ID,
+            U.ID AS USER_ID,
+            U.FULL_NAME,
+            U.EMAIL,
+            R.CODE AS RANK_CODE
+        FROM
+            USER_DEPARTMENTS UD
+            INNER JOIN USERS U ON U.ID = UD.USER_ID
+                AND U.DELETED_AT IS NULL
+                AND COALESCE(U.IS_ACTIVE, TRUE) = TRUE
+            LEFT JOIN JOB_TITLES JT ON JT.ID = U.JOB_TITLE_ID
+                AND JT.DELETED_AT IS NULL
+            LEFT JOIN RANKS R ON R.ID = JT.RANK_ID
+                AND R.DELETED_AT IS NULL
+        WHERE
+            UD.DEPARTMENT_ID IN
+            <foreach collection="departmentIds" item="id" open="(" separator="," close=")">
+                #{id}
+            </foreach>
+        ORDER BY
+            UD.DEPARTMENT_ID,
+            U.FULL_NAME
+    </select>
+
+    <select id="selectTeamKpisForDepartments" resultType="com.company.kpi.aggregate.DeptTeamKpiJoinRow">
+        SELECT
+            KA.DEPARTMENT_ID,
+            KA.ID AS ASSIGNMENT_ID,
+            KA.CYCLE_ID,
+            KC.YEAR AS CYCLE_YEAR,
+            KI.ID AS KPI_INFO_ID,
+            KM.CODE AS KPI_CODE,
+            KM.NAME AS KPI_NAME,
+            KA.STATUS_CODE,
+            KM.TYPE_CODE,
+            COALESCE(KI.TARGET_VALUE, KA.TARGET_VALUE) AS TARGET_VALUE,
+            KI.WEIGHT
+        FROM
+            KPI_ASSIGNMENTS KA
+            INNER JOIN KPI_CYCLES KC ON KC.ID = KA.CYCLE_ID
+                AND KC.DELETED_AT IS NULL
+            INNER JOIN KPIS_INFORMATION KI ON KI.ID = KA.KPI_INFO_ID
+                AND KI.CYCLE_ID = KA.CYCLE_ID
+                AND KI.DELETED_AT IS NULL
+            INNER JOIN KPI_MASTER KM ON KM.ID = KI.MASTER_KPI_ID
+                AND KM.DELETED_AT IS NULL
+        WHERE
+            KA.DELETED_AT IS NULL
+            AND KA.USER_ID IS NULL
+            AND KA.DEPARTMENT_ID IS NOT NULL
+            AND KC.YEAR = #{year}
+            AND KA.DEPARTMENT_ID IN
+            <foreach collection="departmentIds" item="id" open="(" separator="," close=")">
+                #{id}
+            </foreach>
+        ORDER BY
+            KA.DEPARTMENT_ID,
+            KM.NAME
+    </select>
+
+    <select id="selectMemberCandidatesForDepartment" resultType="com.company.kpi.response.gm.GmDepartmentMemberCandidateResponse">
+        SELECT
+            U.ID AS USER_ID,
+            U.FULL_NAME AS FULL_NAME,
+            U.EMAIL,
+            R.CODE AS RANK_CODE,
+            NULLIF(
+                TRIM(BOTH ' · ' FROM CONCAT_WS(' · ', NULLIF(TRIM(JF.NAME), ''), NULLIF(TRIM(JT.NAME), ''))),
+                ''
+            ) AS JOB_TITLE_LABEL
+        FROM
+            USERS U
+            LEFT JOIN JOB_TITLES JT ON JT.ID = U.JOB_TITLE_ID
+                AND JT.DELETED_AT IS NULL
+            LEFT JOIN RANKS R ON R.ID = JT.RANK_ID
+                AND R.DELETED_AT IS NULL
+            LEFT JOIN JOB_FAMILIES JF ON JF.ID = JT.JOB_FAMILY_ID
+                AND JF.DELETED_AT IS NULL
+        WHERE
+            U.DELETED_AT IS NULL
+            AND COALESCE(U.IS_ACTIVE, TRUE) = TRUE
+            AND NOT EXISTS (
+                SELECT 1
+                FROM USER_DEPARTMENTS UD0
+                WHERE UD0.USER_ID = U.ID
+                  AND UD0.DEPARTMENT_ID = #{departmentId}
+            )
+            <if test="query != null and query != ''">
+                AND (
+                    UPPER(U.FULL_NAME) LIKE CONCAT('%', UPPER(#{query}), '%')
+                    OR UPPER(U.EMAIL) LIKE CONCAT('%', UPPER(#{query}), '%')
+                )
+            </if>
+            <if test="rankCodes != null and rankCodes.size() &gt; 0">
+                AND R.CODE IN
+                <foreach collection="rankCodes" item="rc" open="(" separator="," close=")">
+                    #{rc}
+                </foreach>
+            </if>
+        ORDER BY
+            U.FULL_NAME ASC
+        LIMIT 500
+    </select>
+
+    <select id="countUserDepartmentMembership" resultType="int">
+        SELECT COUNT(*)
+        FROM USER_DEPARTMENTS
+        WHERE DEPARTMENT_ID = #{departmentId}
+          AND USER_ID = #{userId}
+    </select>
+
+    <select id="countDepartmentsForUser" resultType="int">
+        SELECT COUNT(*)
+        FROM USER_DEPARTMENTS
+        WHERE USER_ID = #{userId}
+    </select>
+
+    <insert id="insertUserDepartment">
+        INSERT INTO USER_DEPARTMENTS (USER_ID, DEPARTMENT_ID, SUPERVISOR_ID, IS_PRIMARY)
+        VALUES (#{userId}, #{departmentId}, #{supervisorId, jdbcType=OTHER}, #{isPrimary})
+    </insert>
+
+    <delete id="deleteUserDepartment">
+        DELETE FROM USER_DEPARTMENTS
+        WHERE DEPARTMENT_ID = #{departmentId}
+          AND USER_ID = #{userId}
+    </delete>
+
+    <delete id="deleteUserDepartmentsExcept">
+        DELETE FROM USER_DEPARTMENTS
+        WHERE USER_ID = #{userId}
+          AND DEPARTMENT_ID != #{keepDepartmentId}
+    </delete>
+
+    <select id="selectActiveDepartmentIdsManagedByUserExcept" resultType="java.util.UUID">
+        SELECT D.ID
+        FROM DEPARTMENTS D
+        WHERE D.DELETED_AT IS NULL
+          AND D.MANAGER_ID = #{userId}
+          AND D.ID != #{excludeDepartmentId}
+    </select>
+
+    <select id="countPrimaryDepartmentsForUser" resultType="int">
+        SELECT COUNT(*)
+        FROM USER_DEPARTMENTS
+        WHERE USER_ID = #{userId}
+          AND IS_PRIMARY = TRUE
+    </select>
+
+    <update id="clearPrimaryFlagsForUser">
+        UPDATE USER_DEPARTMENTS
+        SET IS_PRIMARY = FALSE
+        WHERE USER_ID = #{userId}
+    </update>
+
+    <select id="selectDepartmentIdForPrimaryPromotion" resultType="java.util.UUID">
+        SELECT DEPARTMENT_ID
+        FROM USER_DEPARTMENTS
+        WHERE USER_ID = #{userId}
+        ORDER BY DEPARTMENT_ID ASC
+        LIMIT 1
+    </select>
+
+    <update id="setPrimaryUserDepartment">
+        UPDATE USER_DEPARTMENTS
+        SET IS_PRIMARY = #{isPrimary}
+        WHERE USER_ID = #{userId}
+          AND DEPARTMENT_ID = #{departmentId}
+    </update>
+    <!-- ── Thêm từ AdminMapper ─────────────────────────────────────────────────── -->
+    <select id="getSections"
+            resultType="com.company.kpi.response.admin.AdminSectionResponse">
+        SELECT
+            CAST(id AS VARCHAR)        AS id,
+            name                       AS name,
+            CAST(parent_id AS VARCHAR) AS parentId
+        FROM departments
+        WHERE deleted_at IS NULL
+        ORDER BY name
+    </select>
+</mapper>

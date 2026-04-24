@@ -1,16 +1,16 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick } from 'vue'
+import { memberKpiService } from '@/services/modules/kpi-member.service'
+import type { MemberKpiFormMeta } from '@/types/kpi'
 
+/** Payload gửi parent → POST /kpi/member/individual-kpi */
 export interface CreateIndividualKpiPayload {
-  perspective: string
+  cycleYear: number
   kpiName: string
   description: string
-  unit: string
   weight: number
-  cycleYear: number
-  calculationMethodPersisted: string
-  /** Mô tả ngắn cách tính — hiển thị phụ trong bảng */
-  calculationSummary: string
+  categoryId: string
+  calculationRuleCode: number
 }
 
 const open = defineModel<boolean>({ default: false })
@@ -28,136 +28,46 @@ const emit = defineEmits<{
   saved: [payload: CreateIndividualKpiPayload]
 }>()
 
-const BSC_OPTIONS = [
-  { value: 'financial', label: '💰 Financial' },
-  { value: 'customer', label: '👥 Customer' },
-  { value: 'internal', label: '⚙️ Internal Process' },
-  { value: 'learning', label: '🎓 Learning & Growth' },
-] as const
+const meta = ref<MemberKpiFormMeta | null>(null)
+const metaLoadError = ref<string | null>(null)
+const loadingMeta = ref(false)
 
-const UNIT_OPTIONS = [
-  { value: 'MM', label: 'MM' },
-  { value: 'POINT', label: 'POINT' },
-  { value: 'PRODUCT', label: 'PRODUCT' },
-  { value: 'PROJECT', label: 'PROJECT' },
-  { value: 'CERTIFICATION', label: 'CERTIFICATION' },
-  { value: 'ARTICLE', label: 'ARTICLE' },
-  { value: 'PERSON', label: 'PERSON' },
-] as const
-
-const FORMULA_MEAN_RATIO = 'mean_by_ratio'
-const FORMULA_MEAN_AGGREGATE = 'mean_by_aggregate'
-
-interface FormulaDef {
-  value: string
-  label: string
-  expression: string
-}
-
-const KPI_CALCULATION_FORMULAS: FormulaDef[] = [
-  {
-    value: FORMULA_MEAN_RATIO,
-    label: 'Trung bình — theo tỉ lệ',
-    expression: 'Chọn Actual/Plan hoặc Plan/Actual.',
-  },
-  {
-    value: FORMULA_MEAN_AGGREGATE,
-    label: 'Trung bình — gộp (AVG / SUM)',
-    expression: 'Chọn AVG (trung bình) hoặc SUM (tổng).',
-  },
-  {
-    value: 'manual_member_input',
-    label: 'Tự nhập — theo số member nhập',
-    expression: 'Dựa vào số mà member tự nhập để tính; không áp dụng công thức Plan/Actual cố định.',
-  },
-]
-
-const DEFAULT_CALCULATION_METHOD = FORMULA_MEAN_RATIO
-
-type MeanRatioKind = 'actual_plan' | 'plan_actual'
-type MeanAggregateKind = 'average' | 'sum'
-
-const perspective = ref<string>('internal')
+const categoryId = ref<string>('')
+/** CALC_RULE 801–804 — gán sau khi load meta */
+const calculationRuleCode = ref<number>(801)
 const kpiName = ref('')
 const description = ref('')
-const unit = ref<string>('MM')
 const weightInput = ref<string>('')
-const calculationMethod = ref<string>(DEFAULT_CALCULATION_METHOD)
-const meanRatioKind = ref<MeanRatioKind>('actual_plan')
-const meanAggregateKind = ref<MeanAggregateKind>('average')
 
 const cycleYearNum = computed(() => {
   const n = Number.parseInt(String(props.cycleId).trim(), 10)
   return Number.isFinite(n) ? n : new Date().getFullYear()
 })
 
-const formulaOptions = computed((): FormulaDef[] => [...KPI_CALCULATION_FORMULAS])
+const calcRuleOptions = computed(() => meta.value?.calcRules ?? [])
 
-const selectedFormulaExpression = computed(() => {
-  if (calculationMethod.value === 'manual_member_input') {
-    return (
-      formulaOptions.value.find((f) => f.value === 'manual_member_input')?.expression ??
-      'Tự nhập theo số member.'
-    )
+async function loadFormMeta() {
+  loadingMeta.value = true
+  metaLoadError.value = null
+  try {
+    meta.value = await memberKpiService.getFormMeta()
+    const cats = meta.value.kpiCategories ?? []
+    const rules = meta.value.calcRules ?? []
+    if (!categoryId.value && cats.length) categoryId.value = cats[0].id
+    if (rules.length) calculationRuleCode.value = rules[0].code
+  } catch (e: unknown) {
+    metaLoadError.value = e instanceof Error ? e.message : 'Không tải được danh mục KPI.'
+    meta.value = null
+  } finally {
+    loadingMeta.value = false
   }
-  if (calculationMethod.value === FORMULA_MEAN_RATIO) {
-    return meanRatioKind.value === 'actual_plan'
-      ? 'Theo tỉ lệ Actual / Plan.'
-      : 'Theo tỉ lệ Plan / Actual.'
-  }
-  if (calculationMethod.value === FORMULA_MEAN_AGGREGATE) {
-    return meanAggregateKind.value === 'sum'
-      ? 'Gộp kiểu SUM (tổng).'
-      : 'Gộp kiểu AVG (trung bình %).'
-  }
-  return 'Chọn công thức tính để xem biểu thức.'
-})
-
-function resolvePersistedCalculationMethod(): string {
-  if (calculationMethod.value === 'manual_member_input') return 'manual_member_input'
-  if (calculationMethod.value === FORMULA_MEAN_RATIO) {
-    return meanRatioKind.value === 'actual_plan' ? 'mean_actual_plan' : 'mean_plan_actual'
-  }
-  if (calculationMethod.value === FORMULA_MEAN_AGGREGATE) {
-    return meanAggregateKind.value === 'sum' ? 'mean_plan_actual_sum' : 'mean_plan_actual_pct'
-  }
-  return 'manual_member_input'
-}
-
-function calculationSummaryLabel(): string {
-  const f = formulaOptions.value.find((x) => x.value === calculationMethod.value)
-  const base = f?.label ?? calculationMethod.value
-  if (calculationMethod.value === FORMULA_MEAN_RATIO) {
-    return `${base} (${meanRatioKind.value === 'actual_plan' ? 'Actual/Plan' : 'Plan/Actual'})`
-  }
-  if (calculationMethod.value === FORMULA_MEAN_AGGREGATE) {
-    return `${base} (${meanAggregateKind.value === 'average' ? 'AVG' : 'SUM'})`
-  }
-  return base
-}
-
-const saving = ref(false)
-const formErrors = ref<Record<string, string>>({})
-const errorBannerRef = ref<HTMLElement | null>(null)
-
-function clearFormErrors() {
-  formErrors.value = {}
-}
-
-function resetForm() {
-  perspective.value = 'internal'
-  kpiName.value = ''
-  description.value = ''
-  unit.value = 'MM'
-  weightInput.value = ''
-  calculationMethod.value = DEFAULT_CALCULATION_METHOD
-  meanRatioKind.value = 'actual_plan'
-  meanAggregateKind.value = 'average'
-  clearFormErrors()
 }
 
 watch(open, (v) => {
-  if (v) resetForm()
+  if (v) {
+    resetForm()
+    loadFormMeta()
+  }
 })
 
 watch(
@@ -167,8 +77,25 @@ watch(
   },
 )
 
+function resetForm() {
+  kpiName.value = ''
+  description.value = ''
+  weightInput.value = ''
+  categoryId.value = ''
+  calculationRuleCode.value = 801
+  clearFormErrors()
+}
+
 function close() {
   open.value = false
+}
+
+const saving = ref(false)
+const formErrors = ref<Record<string, string>>({})
+const errorBannerRef = ref<HTMLElement | null>(null)
+
+function clearFormErrors() {
+  formErrors.value = {}
 }
 
 function validateForm(): boolean {
@@ -187,8 +114,11 @@ function validateForm(): boolean {
     err.weightInput = 'Trọng số phải lớn hơn 0 và tối đa 100.'
   }
 
-  if (!KPI_CALCULATION_FORMULAS.some((f) => f.value === calculationMethod.value)) {
-    err.calculationMethod = 'Chọn phân loại cách tính (công thức).'
+  if (!categoryId.value.trim()) {
+    err.categoryId = 'Chọn Perspective (nhóm KPI).'
+  }
+  if (![801, 802, 803, 804].includes(calculationRuleCode.value)) {
+    err.calculationRuleCode = 'Chọn phân loại cách tính.'
   }
 
   formErrors.value = err
@@ -203,22 +133,21 @@ async function save() {
   }
 
   saving.value = true
-  const wNum = Number.parseFloat(String(weightInput.value).trim())
-  const payload: CreateIndividualKpiPayload = {
-    perspective: perspective.value,
-    kpiName: kpiName.value.trim(),
-    description: description.value.trim(),
-    unit: unit.value,
-    weight: wNum,
-    cycleYear: cycleYearNum.value,
-    calculationMethodPersisted: resolvePersistedCalculationMethod(),
-    calculationSummary: calculationSummaryLabel(),
+  try {
+    const wNum = Number.parseFloat(String(weightInput.value).trim())
+    const payload: CreateIndividualKpiPayload = {
+      cycleYear: cycleYearNum.value,
+      kpiName: kpiName.value.trim(),
+      description: description.value.trim(),
+      weight: wNum,
+      categoryId: categoryId.value.trim(),
+      calculationRuleCode: calculationRuleCode.value,
+    }
+    emit('saved', payload)
+    open.value = false
+  } finally {
+    saving.value = false
   }
-
-  await new Promise((r) => setTimeout(r, 320))
-  saving.value = false
-  emit('saved', payload)
-  open.value = false
 }
 </script>
 
@@ -261,6 +190,14 @@ async function save() {
 
           <div class="custom-scrollbar flex-1 space-y-6 overflow-y-auto p-6">
             <div
+              v-if="metaLoadError"
+              class="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-900"
+              role="alert"
+            >
+              {{ metaLoadError }}
+            </div>
+
+            <div
               v-if="Object.keys(formErrors).length > 0"
               id="ind-create-kpi-errors"
               ref="errorBannerRef"
@@ -286,22 +223,33 @@ async function save() {
 
               <div class="space-y-4">
                 <div class="flex flex-col gap-3 sm:flex-row">
-                  <div class="sm:w-1/3">
+                  <div class="sm:w-2/5">
                     <label class="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500">
                       Perspective (BSC) <span class="text-rose-500">*</span>
                     </label>
                     <div class="relative">
                       <select
-                        v-model="perspective"
-                        class="input-required w-full cursor-pointer appearance-none rounded-md py-2 pl-3 pr-8 text-xs font-bold text-slate-800 outline-none transition-all"
+                        v-model="categoryId"
+                        class="input-required w-full cursor-pointer appearance-none rounded-md py-2 pl-3 pr-8 text-xs font-bold text-slate-800 outline-none transition-all disabled:opacity-60"
+                        :disabled="loadingMeta || !(meta?.kpiCategories?.length)"
                       >
-                        <option v-for="o in BSC_OPTIONS" :key="o.value" :value="o.value">{{ o.label }}</option>
+                        <option value="" disabled>— Chọn nhóm —</option>
+                        <option
+                          v-for="c in meta?.kpiCategories ?? []"
+                          :key="c.id"
+                          :value="c.id"
+                        >
+                          {{ c.name }}
+                        </option>
                       </select>
                       <i
                         class="fas fa-chevron-down pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400"
                         aria-hidden="true"
                       />
                     </div>
+                    <p v-if="formErrors.categoryId" class="mt-1 text-[10px] font-semibold text-rose-600">
+                      {{ formErrors.categoryId }}
+                    </p>
                   </div>
                   <div class="min-w-0 sm:flex-1">
                     <label class="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500">
@@ -341,20 +289,31 @@ async function save() {
                   </div>
                   <div class="min-w-0">
                     <label class="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                      Unit <span class="text-rose-500">*</span>
+                      Phân loại cách tính <span class="text-rose-500">*</span>
                     </label>
                     <div class="relative">
                       <select
-                        v-model="unit"
-                        class="input-required min-h-[38px] w-full cursor-pointer appearance-none rounded-md py-2 pl-2.5 pr-7 text-xs font-bold text-slate-800 outline-none transition-all"
+                        v-model.number="calculationRuleCode"
+                        class="input-required min-h-[38px] w-full cursor-pointer appearance-none rounded-md py-2 pl-2.5 pr-7 text-xs font-bold text-slate-800 outline-none transition-all disabled:opacity-60"
+                        :disabled="loadingMeta || !calcRuleOptions.length"
                       >
-                        <option v-for="u in UNIT_OPTIONS" :key="u.value" :value="u.value">{{ u.label }}</option>
+                        <option
+                          v-for="r in calcRuleOptions"
+                          :key="r.code"
+                          :value="r.code"
+                          :title="r.description ?? r.name"
+                        >
+                          {{ r.code }} · {{ r.description ?? r.name }}
+                        </option>
                       </select>
                       <i
                         class="fas fa-chevron-down pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-slate-400"
                         aria-hidden="true"
                       />
                     </div>
+                    <p v-if="formErrors.calculationRuleCode" class="mt-1 text-[10px] font-semibold text-rose-600">
+                      {{ formErrors.calculationRuleCode }}
+                    </p>
                   </div>
                 </div>
 
@@ -363,120 +322,6 @@ async function save() {
                   <span class="font-bold text-slate-800">{{ cycleYearNum }}</span>
                   (theo năm đang chọn trên dashboard)
                 </p>
-
-                <div>
-                  <div class="mb-1.5 flex items-center gap-1.5">
-                    <label class="block flex-1 text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                      Phân loại cách tính <span class="text-rose-500">*</span>
-                    </label>
-                    <span
-                      v-if="calculationMethod !== 'manual_member_input'"
-                      class="inline-flex shrink-0 cursor-help text-slate-400 transition-colors hover:text-blue-600"
-                      :title="selectedFormulaExpression"
-                      tabindex="0"
-                      role="note"
-                      aria-label="Biểu thức công thức đang chọn"
-                    >
-                      <i class="fas fa-circle-question text-[12px]" aria-hidden="true" />
-                    </span>
-                  </div>
-                  <div class="flex flex-col gap-2 sm:flex-row sm:items-stretch sm:gap-3">
-                    <div class="relative min-w-0 w-full sm:min-w-[22rem] sm:flex-[1.35]">
-                      <select
-                        v-model="calculationMethod"
-                        class="input-required min-h-[38px] w-full appearance-none rounded-md py-2 pr-7 text-xs font-bold text-slate-800 outline-none transition-all"
-                        :class="[
-                          calculationMethod === 'manual_member_input' ? 'pl-2.5' : 'cursor-help pl-8',
-                          formErrors.calculationMethod ? '!border-rose-400 !bg-rose-50/50' : '',
-                        ]"
-                        :title="
-                          calculationMethod === 'manual_member_input' ? undefined : selectedFormulaExpression
-                        "
-                      >
-                        <option
-                          v-for="f in formulaOptions"
-                          :key="f.value"
-                          :value="f.value"
-                          :title="f.expression"
-                        >
-                          {{ f.label }}
-                        </option>
-                      </select>
-                      <i
-                        v-if="calculationMethod !== 'manual_member_input'"
-                        class="fas fa-calculator pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] text-slate-400"
-                        aria-hidden="true"
-                      />
-                      <i
-                        class="fas fa-chevron-down pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-slate-400"
-                        aria-hidden="true"
-                      />
-                    </div>
-                    <div
-                      v-if="calculationMethod === 'mean_by_ratio'"
-                      class="flex min-w-0 flex-1 flex-wrap items-center gap-x-4 gap-y-2 rounded-md border border-slate-200/90 bg-slate-50/70 px-2.5 py-2"
-                    >
-                      <span class="text-[9px] font-bold uppercase tracking-wide text-slate-400">Tỉ lệ</span>
-                      <label
-                        class="inline-flex cursor-pointer items-center gap-1.5 text-[11px] font-semibold text-slate-700"
-                      >
-                        <input
-                          v-model="meanRatioKind"
-                          type="radio"
-                          name="ind-kpi-mean-ratio"
-                          value="actual_plan"
-                          class="h-3.5 w-3.5 border-slate-300 text-slate-700 focus:ring-slate-400/40"
-                        />
-                        Actual/Plan
-                      </label>
-                      <label
-                        class="inline-flex cursor-pointer items-center gap-1.5 text-[11px] font-semibold text-slate-700"
-                      >
-                        <input
-                          v-model="meanRatioKind"
-                          type="radio"
-                          name="ind-kpi-mean-ratio"
-                          value="plan_actual"
-                          class="h-3.5 w-3.5 border-slate-300 text-slate-700 focus:ring-slate-400/40"
-                        />
-                        Plan/Actual
-                      </label>
-                    </div>
-                    <div
-                      v-else-if="calculationMethod === 'mean_by_aggregate'"
-                      class="flex min-w-0 flex-1 flex-wrap items-center gap-x-4 gap-y-2 rounded-md border border-slate-200/90 bg-slate-50/70 px-2.5 py-2"
-                    >
-                      <span class="text-[9px] font-bold uppercase tracking-wide text-slate-400">Gộp</span>
-                      <label
-                        class="inline-flex cursor-pointer items-center gap-1.5 text-[11px] font-semibold text-slate-700"
-                      >
-                        <input
-                          v-model="meanAggregateKind"
-                          type="radio"
-                          name="ind-kpi-mean-agg"
-                          value="average"
-                          class="h-3.5 w-3.5 border-slate-300 text-slate-700 focus:ring-slate-400/40"
-                        />
-                        AVG
-                      </label>
-                      <label
-                        class="inline-flex cursor-pointer items-center gap-1.5 text-[11px] font-semibold text-slate-700"
-                      >
-                        <input
-                          v-model="meanAggregateKind"
-                          type="radio"
-                          name="ind-kpi-mean-agg"
-                          value="sum"
-                          class="h-3.5 w-3.5 border-slate-300 text-slate-700 focus:ring-slate-400/40"
-                        />
-                        SUM
-                      </label>
-                    </div>
-                  </div>
-                  <p v-if="formErrors.calculationMethod" class="mt-1 text-[10px] font-semibold text-rose-600">
-                    {{ formErrors.calculationMethod }}
-                  </p>
-                </div>
 
                 <div>
                   <label class="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500">
@@ -505,7 +350,7 @@ async function save() {
             <button
               type="button"
               class="flex items-center gap-1.5 rounded-lg bg-blue-600 px-6 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:bg-blue-700 disabled:opacity-60"
-              :disabled="saving"
+              :disabled="saving || loadingMeta || !meta?.kpiCategories?.length"
               @click="save"
             >
               <i v-if="saving" class="fas fa-spinner fa-spin text-sm" aria-hidden="true" />

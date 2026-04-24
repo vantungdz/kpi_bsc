@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
-import {
-  gmTimelinePhaseHasOpenIssues,
-  type GmIssueTypeId,
-  type GmMidYearIssuesData,
-  type GmTimelineIssueBucket,
-  type GmTimelineIssueType,
-} from '@/mocks/gm-kpi.mock'
+import type {
+  GmIssueTypeId,
+  GmMidYearIssuesData,
+  GmTimelineIssueBucket,
+  GmTimelineIssueType,
+} from '@/types/gm-workspace'
+import { gmTimelinePhaseHasOpenIssues } from '@/utils/gm-timeline-phase'
 import GmProcessTimelineTrack from '@/components/gm/GmProcessTimelineTrack.vue'
 
 const props = defineProps<{

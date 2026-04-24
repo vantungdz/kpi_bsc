@@ -12,12 +12,13 @@ async function handleSubmit() {
   await login({ ...form });
 }
 
-function fillDemo(role: "gm" | "pm" | "leader" | "member") {
+function fillDemo(role: "gm" | "pm" | "leader" | "member" | "admin") {
   const map = {
-    gm: { email: "gm@kpi.com", password: "password" },
-    pm: { email: "pm@kpi.com", password: "password" },
-    leader: { email: "leader@kpi.com", password: "password" },
-    member: { email: "member@kpi.com", password: "password" },
+    gm: { email: "gm@kpi.com", password: "Abc@12345" },
+    pm: { email: "pm1@kpi.com", password: "Abc@12345" },
+    leader: { email: "leader1@kpi.com", password: "Abc@12345" },
+    member: { email: "member1@kpi.com", password: "Abc@12345" },
+    admin: { email: "admin@company.vn", password: "Abc@12345" },
   };
   form.email = map[role].email;
   form.password = map[role].password;
@@ -60,15 +61,16 @@ function fillDemo(role: "gm" | "pm" | "leader" | "member") {
           Demo accounts
         </p>
         <button
-          v-for="r in ['gm', 'pm', 'leader', 'member'] as const"
+          v-for="r in ['gm', 'pm', 'leader', 'member', 'admin'] as const"
           :key="r"
           class="w-full text-left px-4 py-2.5 bg-white/10 hover:bg-white/20 rounded-xl transition-all text-sm font-medium"
           @click="fillDemo(r)"
         >
           <span class="capitalize font-bold">{{ r.toUpperCase() }}</span>
-          <span class="text-blue-200 text-xs ml-2"
-            >{{ r }}@kpi.com / Abc@12345</span
-          >
+          <span class="text-blue-200 text-xs ml-2">
+            {{ r === "admin" ? "admin@company.vn" : `${r}@kpi.com` }} /
+            Abc@12345
+          </span>
         </button>
       </div>
     </div>

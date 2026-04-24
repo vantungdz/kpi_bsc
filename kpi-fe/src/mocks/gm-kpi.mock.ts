@@ -1,4 +1,22 @@
 import type { GmKpiDashboard } from '@/types/kpi'
+import type {
+  GmDeptKpiMock,
+  GmDepartmentMock,
+  GmDeptKpiStatus,
+  GmHierarchyKpi,
+  GmHierarchyLeader,
+  GmHierarchyMember,
+  GmHierarchyPm,
+  GmHierarchyStatus,
+  GmMemberDetailMock,
+  GmMidYearIssuesData,
+  GmModalKpiItemMock,
+  GmPersonalKpiRowMock,
+  GmPortfolioDonutData,
+  GmWorkspaceCycleOption,
+  GmWorkspaceCycleSnapshot,
+} from '@/types/gm-workspace'
+import { normalizeGmBscPerspective } from '@/utils/gm-bsc-diagnostics'
 
 export function getMockGmKpiDashboard(year = 2025): GmKpiDashboard {
   return {
@@ -137,133 +155,6 @@ export function getMockSectionMembers(sectionId: string) {
   return base.map(m => ({ ...m, id: `${sectionId}-${m.id}` }))
 }
 
-// ── GM Layout workspace (GmLayout.vue + GmDepartmentInvestigation) ───────────
-// Thay bằng API thật: chỉ cần thay import / fetch và gán vào cùng shape dữ liệu.
-
-/** Loại KPI chiến lược — đồng bộ form tạo & tag UI toàn GM workspace. */
-export type GmStrategicKpiKind = 'cascading' | 'individual' | 'promotion'
-
-/** Khía cạnh BSC — đồng bộ form tạo Strategic KPI & nhóm diagnostics. */
-export type GmBscPerspective = 'financial' | 'customer' | 'internal' | 'learning'
-
-export const GM_BSC_ORDER: GmBscPerspective[] = ['financial', 'customer', 'internal', 'learning']
-
-export const GM_BSC_LABELS: Record<GmBscPerspective, string> = {
-  financial: 'Financial',
-  customer: 'Customer',
-  internal: 'Internal Process',
-  learning: 'Learning & Growth',
-}
-
-export function normalizeGmBscPerspective(raw: unknown): GmBscPerspective {
-  const s = String(raw ?? '').trim()
-  if (s === 'financial' || s === 'customer' || s === 'internal' || s === 'learning') return s
-  return 'internal'
-}
-
-export type GmDeptKpiStatus = 'fail' | 'warn' | 'active' | 'pass'
-
-export interface GmDeptKpiMock {
-  /** Mã KPI (vd. A.1a) — mock chuẩn 11 mục/section. */
-  code?: string
-  /** Viết tắt hiển thị (vd. IE). */
-  abbr?: string
-  /** Nhóm A: mục tiêu vận hành · B: đào tạo nhân viên. */
-  category?: 'A' | 'B'
-  name: string
-  weight: number
-  target: string
-  actual: string
-  status: GmDeptKpiStatus
-  kpiType: GmStrategicKpiKind
-  /** Khía cạnh BSC (form tạo KPI) — diagnostics nhóm theo trường này. */
-  bscPerspective?: GmBscPerspective
-  /** ISO — khoảng hoạt động trong **một** năm dương lịch (mock; «Năm nguồn» sao chép). */
-  activityStartDate?: string
-  activityEndDate?: string
-}
-
-export interface GmDepartmentMock {
-  id: string
-  name: string
-  manager: string
-  health: number
-  progress: number
-  risks: { critical: number; medium: number }
-  responsibility: string
-  breakdown: string
-  impact: string | null
-  kpis: GmDeptKpiMock[]
-}
-
-/** Member trong bảng Investigate — trùng field GmDepartmentInvestigation cần */
-export interface GmMemberDetailMock {
-  id: string
-  name: string
-  rank: string
-  leader: string
-  status: string
-  rootCause: string
-  dueIn: number | null
-  priority: string
-  scoreSelf: string
-  scoreMgr: string
-  deptId: string
-  relatedKpi: string
-  relatedKpiType: GmStrategicKpiKind
-}
-
-export type GmInvestigationMember = GmMemberDetailMock
-
-/** Trạng thái nộp KPI / minh chứng (drawer Chi tiết tình trạng Nộp KPI). */
-export type GmKpiSubmissionStatus = 'submitted' | 'submitted_with_file' | 'missing_data'
-
-export interface GmModalKpiItemMock {
-  code: string
-  obj: string
-  weight: number
-  target: string
-  actual: string
-  isFail: boolean
-  rootCause: string
-  score: string
-  kpiType: GmStrategicKpiKind
-  submissionStatus: GmKpiSubmissionStatus
-  /** Dòng mô tả mục tiêu dưới tên KPI (vd. kế thừa Khối + trọng số). */
-  targetSummary?: string
-  /** % hoàn thành (submission hoặc Actual/Target) — card rollout diagnostics. */
-  actualProgressPct?: string | null
-  /** Đường dẫn minh chứng (Drive/Wiki/Jira…) — GM mở tab mới. */
-  evidenceAttachmentUrl?: string | null
-}
-
-/** Hồ sơ nhân viên cho drawer Nộp KPI (GM layout + diagnostics). */
-export interface GmMemberKpiDrawerProfile {
-  name: string
-  rank?: string
-  leader?: string
-  /** Tên phòng ban hiển thị dạng in hoa (vd. SOFTWARE DEV 1). */
-  departmentLabel?: string
-}
-
-/** Một member + một dòng KPI (đúng ngữ cảnh KPI đang mở trong diagnostics). */
-export interface GmPmKpiMemberRolloutRow {
-  profile: GmMemberKpiDrawerProfile
-  item: GmModalKpiItemMock
-}
-
-/** Drawer “Chi tiết” theo PM — tất cả member dưới PM cho **một** KPI. */
-export interface GmPmKpiRolloutPayload {
-  pmName: string
-  pmUnitLine?: string
-  kpiName: string
-  kpiTarget: string
-  rows: GmPmKpiMemberRolloutRow[]
-}
-
-/** Số KPI chuẩn mỗi section (nhóm A + B theo spec công ty). */
-export const GM_LAYOUT_STANDARD_KPI_COUNT = 11
-
 const GM_LAYOUT_KPI_ISO = {
   activityStartDate: '2026-01-01',
   activityEndDate: '2026-12-31',
@@ -288,7 +179,7 @@ export function gmLayoutDeptKpisStandard11(deptIndex: number): GmDeptKpiMock[] {
       actual: `${90 + (n % 8)}%`,
       status: st(0),
       kpiType: 'cascading',
-      bscPerspective: 'internal',
+      diagnosticsFallbackGroup: 'internal',
       ...GM_LAYOUT_KPI_ISO,
     },
     {
@@ -301,7 +192,7 @@ export function gmLayoutDeptKpisStandard11(deptIndex: number): GmDeptKpiMock[] {
       actual: `${1.0 + (n % 5) * 0.1} MM`,
       status: st(1),
       kpiType: 'cascading',
-      bscPerspective: 'financial',
+      diagnosticsFallbackGroup: 'financial',
       ...GM_LAYOUT_KPI_ISO,
     },
     {
@@ -314,7 +205,7 @@ export function gmLayoutDeptKpisStandard11(deptIndex: number): GmDeptKpiMock[] {
       actual: `${82 + (n % 12)}%`,
       status: st(2),
       kpiType: 'cascading',
-      bscPerspective: 'internal',
+      diagnosticsFallbackGroup: 'internal',
       ...GM_LAYOUT_KPI_ISO,
     },
     {
@@ -327,7 +218,7 @@ export function gmLayoutDeptKpisStandard11(deptIndex: number): GmDeptKpiMock[] {
       actual: `${(4.2 + (n % 6) * 0.05).toFixed(2)}`,
       status: st(3),
       kpiType: 'promotion',
-      bscPerspective: 'customer',
+      diagnosticsFallbackGroup: 'customer',
       ...GM_LAYOUT_KPI_ISO,
     },
     {
@@ -340,7 +231,7 @@ export function gmLayoutDeptKpisStandard11(deptIndex: number): GmDeptKpiMock[] {
       actual: `${88 + (n % 10)}%`,
       status: st(4),
       kpiType: 'cascading',
-      bscPerspective: 'internal',
+      diagnosticsFallbackGroup: 'internal',
       ...GM_LAYOUT_KPI_ISO,
     },
     {
@@ -353,7 +244,7 @@ export function gmLayoutDeptKpisStandard11(deptIndex: number): GmDeptKpiMock[] {
       actual: `${95 + (n % 5)}%`,
       status: st(5),
       kpiType: 'individual',
-      bscPerspective: 'internal',
+      diagnosticsFallbackGroup: 'internal',
       ...GM_LAYOUT_KPI_ISO,
     },
     {
@@ -366,7 +257,7 @@ export function gmLayoutDeptKpisStandard11(deptIndex: number): GmDeptKpiMock[] {
       actual: n % 7 === 0 ? '1 Minor' : '0 violations',
       status: st(6),
       kpiType: 'individual',
-      bscPerspective: 'internal',
+      diagnosticsFallbackGroup: 'internal',
       ...GM_LAYOUT_KPI_ISO,
     },
     {
@@ -379,7 +270,7 @@ export function gmLayoutDeptKpisStandard11(deptIndex: number): GmDeptKpiMock[] {
       actual: `${75 + (n % 20)}%`,
       status: st(7),
       kpiType: 'cascading',
-      bscPerspective: 'internal',
+      diagnosticsFallbackGroup: 'internal',
       ...GM_LAYOUT_KPI_ISO,
     },
     {
@@ -392,7 +283,7 @@ export function gmLayoutDeptKpisStandard11(deptIndex: number): GmDeptKpiMock[] {
       actual: `${90 + (n % 8)}%`,
       status: st(8),
       kpiType: 'individual',
-      bscPerspective: 'learning',
+      diagnosticsFallbackGroup: 'learning',
       ...GM_LAYOUT_KPI_ISO,
     },
     {
@@ -405,7 +296,7 @@ export function gmLayoutDeptKpisStandard11(deptIndex: number): GmDeptKpiMock[] {
       actual: `${(3.6 + (n % 8) * 0.05).toFixed(2)}`,
       status: st(9),
       kpiType: 'promotion',
-      bscPerspective: 'learning',
+      diagnosticsFallbackGroup: 'learning',
       ...GM_LAYOUT_KPI_ISO,
     },
     {
@@ -418,7 +309,7 @@ export function gmLayoutDeptKpisStandard11(deptIndex: number): GmDeptKpiMock[] {
       actual: `${Math.min(100, Math.round(((660 + (n % 5) * 5) / 650) * 100))}%`,
       status: st(10),
       kpiType: 'individual',
-      bscPerspective: 'learning',
+      diagnosticsFallbackGroup: 'learning',
       ...GM_LAYOUT_KPI_ISO,
     },
   ]
@@ -443,6 +334,9 @@ export const GM_LAYOUT_MEMBERS_PER_SECTION = 10
 /** Tên leader (người) — gán luân phiên cho member mock; diagnostics nhóm theo tên này. */
 const GM_LAYOUT_TEAM_LEADER_NAMES = ['Nguyễn Văn Lâm', 'Trần Thị Mai', 'Lê Quốc Hùng'] as const
 
+const GM_SEED_SUPERVISOR_ROLE_CODES = ['GM', 'LEADER', 'PM'] as const
+const GM_SEED_ASSIGNEE_ROLE_CODES = ['MEMBER', 'LEADER', 'PM', 'GM'] as const
+
 function buildGmLayoutMockMembersDetails(): GmMemberDetailMock[] {
   const ranks = ['R1', 'R2', 'R3', 'R4', 'R5'] as const
   const statuses = ['Pending', 'Approved', 'Overdue'] as const
@@ -450,9 +344,12 @@ function buildGmLayoutMockMembersDetails(): GmMemberDetailMock[] {
   for (const deptId of GM_LAYOUT_SECTION_IDS) {
     const sn = deptId.slice(1)
     for (let m = 1; m <= GM_LAYOUT_MEMBERS_PER_SECTION; m++) {
+      const rc = GM_SEED_ASSIGNEE_ROLE_CODES[m % 4]!
       rows.push({
         id: `${deptId}-M${String(m).padStart(2, '0')}`,
         name: `Thành viên Section ${sn} · ${m}`,
+        ownerRoleCode: rc,
+        leaderRoleCode: GM_SEED_SUPERVISOR_ROLE_CODES[m % 3]!,
         rank: ranks[(m + sn.charCodeAt(0)) % ranks.length]!,
         leader: GM_LAYOUT_TEAM_LEADER_NAMES[(m % 3) as 0 | 1 | 2]!,
         status: statuses[m % statuses.length]!,
@@ -475,6 +372,7 @@ export const gmLayoutMockDepartments: GmDepartmentMock[] = [
   {
     id: 'S1',
     name: 'Section 1',
+    managerRoleCode: 'LEADER',
     manager: 'Thai Van Liem',
     health: 82,
     progress: 80,
@@ -499,6 +397,7 @@ export const gmLayoutMockDepartments: GmDepartmentMock[] = [
   {
     id: 'S3',
     name: 'Section 3',
+    managerRoleCode: 'LEADER',
     manager: 'Tran Thi B',
     health: 45,
     progress: 40,
@@ -941,87 +840,6 @@ export const gmLayoutMockYearEndIssues = {
 
 // ── Strategic KPIs Tracking: KPI → PM (section) → (Leader) → member (GmKpiDiagnosticsTable) ─
 // Mặc định: 11 KPI × 10 section (`pmOwners`) — đồng bộ `gmLayoutMockDepartments` + members.
-/** Trạng thái hiển thị badge (theo mock index.html GM). */
-export type GmHierarchyStatus = 'success' | 'warning' | 'danger'
-
-/** Leader trung gian dưới PM — nhóm member (cascading 2 cấp). */
-export interface GmHierarchyLeader {
-  id: string
-  name: string
-  target: string
-  actual: string
-  status: GmHierarchyStatus
-  blockerSummary: string
-  members: GmHierarchyMember[]
-}
-
-export interface GmHierarchyMember {
-  id: string
-  name: string
-  target: string
-  actual: string
-  status: GmHierarchyStatus
-  blocker: string
-  rank?: string
-  leader?: string
-  /**
-   * Chỉ tiêu số PM giao cho member (vd. 10) — drawer hiển thị số thô.
-   * Trên bảng diagnostics, Actual member = (submissionActual / submissionTarget) * 100%.
-   */
-  submissionTarget?: number
-  /** Giá trị số member nộp chờ PM (vd. 5). */
-  submissionActual?: number
-  /** Link tài liệu đính kèm (mock) — hiển thị trong drawer rollout. */
-  evidenceAttachmentUrl?: string
-}
-
-/** PM được giao KPI — cấp dưới trong `members` (phẳng) hoặc `leaders` (PM → Leader → Member). */
-export interface GmHierarchyPm {
-  id: string
-  /** Tên PM (owner cascading / delivery). */
-  name: string
-  /** Ngữ cảnh: nhóm / dự án (không thay thế vai trò PM). */
-  unitLine?: string
-  target: string
-  actual: string
-  status: GmHierarchyStatus
-  blockerSummary: string
-  /**
-   * Member trực tiếp dưới PM (không có leader trung gian trong mock).
-   * Khi có `leaders` (độ dài > 0), bảng diagnostics dùng cây leader và thường để `members` rỗng.
-   */
-  members: GmHierarchyMember[]
-  /** PM quản lý leader, leader quản lý member — ưu tiên hiển thị khi có phần tử. */
-  leaders?: GmHierarchyLeader[]
-}
-
-/** Vòng đời KPI chiến lược trên GM workspace — `inactive` = chờ GM duyệt kích hoạt (tab Approved KPI). */
-export type GmKpiLifecycleStatus = 'active' | 'inactive'
-
-export interface GmHierarchyKpi {
-  id: string
-  name: string
-  weight: string
-  target: string
-  actual: string
-  status: GmHierarchyStatus
-  blockerSummary: string
-  kpiType: GmStrategicKpiKind
-  /** Khía cạnh BSC — nhóm collapse trên bảng Strategic KPIs Tracking & Diagnostics. */
-  bscPerspective?: GmBscPerspective
-  /** Mặc định coi như đang hoạt động; `inactive` không hiện diagnostics cho đến khi GM duyệt. */
-  lifecycleStatus?: GmKpiLifecycleStatus
-  /** KPI quan trọng — ưu tiên đầu danh sách diagnostics + icon sao. */
-  isImportant?: boolean
-  /** Giao theo PM — drill-down: cấp dưới của từng PM. */
-  pmOwners: GmHierarchyPm[]
-  /** Bấm Investigate — map sang workspace `departments` + tên KPI thật */
-  investigateDeptId?: string
-  investigateKpiName?: string
-  /** ISO — khoảng hoạt động trong **một** năm dương lịch (mock; «Năm nguồn» sao chép). */
-  activityStartDate?: string
-  activityEndDate?: string
-}
 
 function mapDeptKpiStatusToHierarchy(status: GmDeptKpiStatus): GmHierarchyStatus {
   if (status === 'fail') return 'danger'
@@ -1060,37 +878,69 @@ function rollupFromMemberList(
   return { status, actual: members[0]?.actual ?? fallbackActual }
 }
 
+function normalizePersonNameKey(name: string | null | undefined): string {
+  if (name == null) return ''
+  const t = String(name).trim()
+  if (!t.length) return ''
+  return t
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/gi, 'd')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+}
+
+function leaderGroupKey(
+  leaderRaw: string | null | undefined,
+  sectionManagerName: string,
+  memberId?: string | null,
+  sectionManagerUserId?: string | null,
+): string {
+  if (memberId && sectionManagerUserId && memberId === sectionManagerUserId) {
+    return '__DIRECT__'
+  }
+  const raw = String(leaderRaw ?? '').trim()
+  if (!raw.length) return '__DIRECT__'
+  const mgr = normalizePersonNameKey(sectionManagerName)
+  if (mgr.length > 0 && normalizePersonNameKey(raw) === mgr) return '__DIRECT__'
+  return raw
+}
+
 function buildLeadersUnderPm(
   pmMembers: GmHierarchyMember[],
   pmRowId: string,
   k: GmDeptKpiMock,
-): GmHierarchyLeader[] {
+  sectionManagerName: string,
+  _sectionManagerRoleCode: string,
+  sectionManagerUserId?: string | null,
+): { leaders: GmHierarchyLeader[]; directMembers: GmHierarchyMember[] } | undefined {
   const groups = new Map<string, GmHierarchyMember[]>()
   for (const mem of pmMembers) {
-    const raw = String(mem.leader ?? '').trim()
-    const key = raw.length > 0 ? raw : '__DIRECT__'
+    const key = leaderGroupKey(mem.leader, sectionManagerName, mem.id, sectionManagerUserId)
     const arr = groups.get(key) ?? []
     arr.push(mem)
     groups.set(key, arr)
   }
 
-  const keys = [...groups.keys()].sort((a, b) => {
-    if (a === '__DIRECT__') return -1
-    if (b === '__DIRECT__') return 1
-    return a.localeCompare(b, 'vi')
-  })
+  if (groups.size === 1 && groups.has('__DIRECT__')) {
+    return undefined
+  }
 
-  return keys.map((key, idx) => {
+  const directMembers = [...(groups.get('__DIRECT__') ?? [])]
+
+  const keys = [...groups.keys()]
+    .filter((k) => k !== '__DIRECT__')
+    .sort((a, b) => a.localeCompare(b, 'vi'))
+
+  const leaders: GmHierarchyLeader[] = keys.map((key, idx) => {
     const members = groups.get(key)!
-    const displayName = key === '__DIRECT__' ? 'Trực tiếp PM' : key
     const rollup = rollupFromMemberList(members, k.actual)
-    const slug =
-      key === '__DIRECT__'
-        ? 'direct'
-        : stripAsciiSlug(key) || `g${idx}`
+    const slug = stripAsciiSlug(key) || `g${idx}`
+    const head = members[0]
     return {
       id: `${pmRowId}-ldr-${idx}-${slug}`,
-      name: displayName,
+      name: key,
+      ownerRoleCode: head?.leaderRoleCode ?? undefined,
       target: k.target,
       actual: rollup.actual,
       status: rollup.status,
@@ -1099,6 +949,8 @@ function buildLeadersUnderPm(
       members,
     }
   })
+
+  return { leaders, directMembers }
 }
 
 function stripAsciiSlug(s: string): string {
@@ -1153,6 +1005,8 @@ export function buildGmKpiHierarchyRowsFromDepartmentLayout(
       const pmMembers: GmHierarchyMember[] = deptMembers.map((m, mi) => ({
         id: m.id,
         name: m.name,
+        ownerRoleCode: m.ownerRoleCode ?? GM_SEED_ASSIGNEE_ROLE_CODES[mi % 4]!,
+        leaderRoleCode: m.leaderRoleCode,
         target: k.target,
         actual: /%/.test(String(k.actual))
           ? k.actual
@@ -1172,18 +1026,32 @@ export function buildGmKpiHierarchyRowsFromDepartmentLayout(
       const pmRowId = `layout-section-${dept.id}-${codeKey}`
       const useLeaderTree =
         pmMembers.length > 0 && pmMembers.some((mem) => String(mem.leader ?? '').trim().length > 0)
-      const leaders = useLeaderTree ? buildLeadersUnderPm(pmMembers, pmRowId, k) : undefined
+      const roleRaw = (dept.managerRoleCode ?? '').trim().toUpperCase()
+      const rollupRole =
+        roleRaw === 'LEADER' || roleRaw === 'GM' || roleRaw === 'MEMBER' ? roleRaw : 'PM'
+      const isTeamKpiRow = template.kpiType === 'cascading'
+      const leadersBuilt = useLeaderTree
+        ? buildLeadersUnderPm(pmMembers, pmRowId, k, dept.manager, rollupRole, dept.managerUserId)
+        : undefined
+      const leaders = leadersBuilt?.leaders
+      const membersOut = !useLeaderTree
+        ? pmMembers
+        : leadersBuilt === undefined
+          ? pmMembers
+          : leadersBuilt.directMembers
       return {
         id: pmRowId,
         name: dept.manager,
-        unitLine: `PM · ${dept.name}`,
+        ownerUserId: dept.managerUserId ?? undefined,
+        ownerRoleCode: isTeamKpiRow ? 'TEAM' : rollupRole,
+        unitLine: isTeamKpiRow ? `TEAM · ${dept.name}` : `${rollupRole} · ${dept.name}`,
         target: k.target,
         actual: k.actual,
         status: hm,
         blockerSummary: deptMembers.length
           ? `${deptMembers.length} thành viên · rollout ${dept.name}`
           : `Chưa có thành viên mock · ${dept.name}`,
-        members: useLeaderTree ? [] : pmMembers,
+        members: membersOut,
         leaders,
       }
     })
@@ -1203,7 +1071,7 @@ export function buildGmKpiHierarchyRowsFromDepartmentLayout(
           ? `${pmOwners.length} section · đồng bộ member mock`
           : 'Chưa có section',
       kpiType: template.kpiType,
-      bscPerspective: template.bscPerspective ?? normalizeGmBscPerspective(undefined),
+      diagnosticsFallbackGroup: template.diagnosticsFallbackGroup ?? normalizeGmBscPerspective(undefined),
       isImportant: template.name === 'Individual Quality',
       investigateDeptId: departments[0]!.id,
       investigateKpiName: template.name,
@@ -1221,91 +1089,21 @@ export const gmKpiHierarchyMockRows: GmHierarchyKpi[] = buildGmKpiHierarchyRowsF
   gmLayoutMockMembersDetails,
 )
 
-// ── GM Workspace: chọn năm (dropdown header) ────────────────────────────────
-export interface GmMidYearIssuesData {
-  /** `false` = không hiển thị View Issues dù đã tới mốc. Mặc định suy từ issueTypes/issueDetails. */
-  hasOpenIssues?: boolean
-  pendingKpisLine: string
-  popoverTitle: string
-  bullets: { text: string; dotClass: string }[]
-  issueTypes?: GmTimelineIssueType[]
-  issueDetails?: GmTimelineIssueBucket[]
-}
+// Types snapshot / timeline: `@/types/gm-workspace` — `gmWorkspaceCycleOptions` chỉ là dữ liệu mock header.
 
-/** Có dữ liệu vấn đề để hiện View Issues (sau khi đã tới mốc timeline). */
-export function gmTimelinePhaseHasOpenIssues(data: GmMidYearIssuesData | null | undefined): boolean {
-  if (!data) return false
-  if (data.hasOpenIssues === false) return false
-  const types = data.issueTypes
-  if (types && types.length === 0) return false
-  if (types && types.length > 0) return true
-  const details = data.issueDetails
-  if (details?.some((b) => b.items.length > 0)) return true
-  return false
-}
-
-export interface GmPortfolioDonutData {
-  centerTotal: number
-  centerSubtitle: string
-  circles: { stroke: string; strokeDasharray: string; strokeDashoffset: string }[]
-  legend: { label: string; value: number; dotClass: string; badgeClass: string }[]
-  /** Badge xu hướng thẻ “Sức khỏe doanh nghiệp” (tùy năm). */
-  healthTrendLabel?: string
-  /** Điểm % sức khỏe theo tháng — modal biểu đồ (null = chưa có dữ liệu). */
-  healthMonthlyTrend?: { label: string; value: number | null }[]
-}
-
-export interface GmWorkspaceCycleOption {
-  id: string
-  label: string
-}
-
+/** Chỉ các kỳ mock còn snapshot KPI chiến lược (đồng bộ «Năm nguồn» sao chép nhanh). */
 export const gmWorkspaceCycleOptions: GmWorkspaceCycleOption[] = [
   { id: '2026', label: '2026' },
   { id: '2025', label: '2025' },
-  { id: '2024', label: '2024' },
-  { id: '2023', label: '2023' },
 ]
-
-/** Snapshot dữ liệu UI theo từng năm (mock — API thật trả về cùng shape). */
-export interface GmWorkspaceCycleSnapshot {
-  departments: GmDepartmentMock[]
-  portfolioDonut: GmPortfolioDonutData
-  midYearIssues: GmMidYearIssuesData
-  /** KPI Setting (Jan–Mar): ~80% + View Issues (mock GM). */
-  settingIssues?: GmMidYearIssuesData | null
-  /** Year-End View Issues — chỉ truyền khi có KPI lệch; bỏ qua/undefined = không hiện nút. */
-  yearEndIssues?: GmMidYearIssuesData | null
-  hierarchyKpis: GmHierarchyKpi[]
-  membersDetails: GmMemberDetailMock[]
-  /** KPI chiến lược đang `inactive` — tab Approved KPI; duyệt xong đưa vào master `departments`. */
-  inactivePendingKpis: GmHierarchyKpi[]
-  /** KPI cá nhân GM — tab KPI cá nhân (mock theo năm). */
-  personalKpiRows: GmPersonalKpiRowMock[]
-}
-
-/** Trạng thái hiển thị dòng KPI cá nhân GM (mock). */
-export type GmPersonalKpiRowStatus = 'good' | 'warn' | 'pending'
-
-/** Một dòng KPI cá nhân trên tab KPI cá nhân (GM) — không có mã KPI. */
-export interface GmPersonalKpiRowMock {
-  id: string
-  bscPerspective: GmBscPerspective
-  objective: string
-  target: string
-  weight: number
-  actual: string
-  /** Điểm GM tự nhập — coi là điểm cuối (không luồng duyệt PM). */
-  finalScore: string
-  status: GmPersonalKpiRowStatus
-}
 
 /** Mock KPI cá nhân GM — một nguồn; snapshot năm dùng `structuredClone` của danh sách này (API thật: fetch theo user + năm). */
 export function buildDefaultGmPersonalKpiRows(): GmPersonalKpiRowMock[] {
   return [
     {
       id: 'gm-pk-1',
-      bscPerspective: 'financial',
+      diagnosticsFallbackGroup: 'financial',
+      kpiType: 'individual',
       objective: 'Kỷ luật chi phí trong phạm vi vai trò',
       target: '≤ 102% ngân sách được giao',
       weight: 10,
@@ -1315,7 +1113,8 @@ export function buildDefaultGmPersonalKpiRows(): GmPersonalKpiRowMock[] {
     },
     {
       id: 'gm-pk-2',
-      bscPerspective: 'customer',
+      diagnosticsFallbackGroup: 'customer',
+      kpiType: 'individual',
       objective: 'Individual Quality',
       target: '≥ 98%',
       weight: 12,
@@ -1325,7 +1124,8 @@ export function buildDefaultGmPersonalKpiRows(): GmPersonalKpiRowMock[] {
     },
     {
       id: 'gm-pk-3',
-      bscPerspective: 'internal',
+      diagnosticsFallbackGroup: 'internal',
+      kpiType: 'individual',
       objective: 'Individual Efficiency',
       target: '≥ 95% tương đương WA',
       weight: 12,
@@ -1335,7 +1135,8 @@ export function buildDefaultGmPersonalKpiRows(): GmPersonalKpiRowMock[] {
     },
     {
       id: 'gm-pk-4',
-      bscPerspective: 'internal',
+      diagnosticsFallbackGroup: 'internal',
+      kpiType: 'individual',
       objective: 'Task Delivery',
       target: '≥ 95%',
       weight: 11,
@@ -1345,7 +1146,8 @@ export function buildDefaultGmPersonalKpiRows(): GmPersonalKpiRowMock[] {
     },
     {
       id: 'gm-pk-5',
-      bscPerspective: 'learning',
+      diagnosticsFallbackGroup: 'learning',
+      kpiType: 'promotion',
       objective: 'Improvement / Kaizen',
       target: 'Hoàn thành 100%',
       weight: 9,
@@ -1355,7 +1157,8 @@ export function buildDefaultGmPersonalKpiRows(): GmPersonalKpiRowMock[] {
     },
     {
       id: 'gm-pk-6',
-      bscPerspective: 'learning',
+      diagnosticsFallbackGroup: 'learning',
+      kpiType: 'individual',
       objective: 'Language Capability',
       target: 'TOEIC ≥ 650',
       weight: 8,
@@ -1378,7 +1181,7 @@ export function buildDefaultGmInactivePendingKpis(): GmHierarchyKpi[] {
       status: 'warning',
       blockerSummary: 'Đề xuất từ PM Khối Tài chính · chờ GM duyệt để đưa vào KPI Setting',
       kpiType: 'cascading',
-      bscPerspective: 'financial',
+      diagnosticsFallbackGroup: 'financial',
       lifecycleStatus: 'inactive',
       isImportant: true,
       pmOwners: [],
@@ -1392,7 +1195,7 @@ export function buildDefaultGmInactivePendingKpis(): GmHierarchyKpi[] {
       status: 'warning',
       blockerSummary: 'Chưa kích hoạt — không rollout xuống PM',
       kpiType: 'individual',
-      bscPerspective: 'customer',
+      diagnosticsFallbackGroup: 'customer',
       lifecycleStatus: 'inactive',
       pmOwners: [],
     },
@@ -1405,7 +1208,7 @@ export function buildDefaultGmInactivePendingKpis(): GmHierarchyKpi[] {
       status: 'warning',
       blockerSummary: 'Chờ GM phê duyệt để bắt đầu theo dõi trong năm',
       kpiType: 'cascading',
-      bscPerspective: 'internal',
+      diagnosticsFallbackGroup: 'internal',
       lifecycleStatus: 'inactive',
       pmOwners: [],
     },
@@ -1418,29 +1221,11 @@ export function buildDefaultGmInactivePendingKpis(): GmHierarchyKpi[] {
       status: 'warning',
       blockerSummary: 'HR đề xuất · inactive cho đến khi GM kích hoạt',
       kpiType: 'promotion',
-      bscPerspective: 'learning',
+      diagnosticsFallbackGroup: 'learning',
       lifecycleStatus: 'inactive',
       pmOwners: [],
     },
   ]
-}
-
-/** Chuyển dòng inactive (tab duyệt) → mục master phòng ban đầu (đồng bộ builder hierarchy). */
-export function hierarchyInactiveKpiToDeptKpiMock(row: GmHierarchyKpi): GmDeptKpiMock {
-  const wStr = String(row.weight ?? '')
-    .replace(/%/g, '')
-    .trim()
-  const w = Number.parseInt(wStr, 10)
-  const weight = Number.isFinite(w) && w > 0 ? w : 5
-  return {
-    name: String(row.name ?? '').trim() || 'Strategic KPI',
-    weight,
-    target: String(row.target ?? '—'),
-    actual: String(row.actual ?? '—').trim() || '—',
-    status: 'active',
-    kpiType: row.kpiType,
-    bscPerspective: row.bscPerspective ?? normalizeGmBscPerspective(undefined),
-  }
 }
 
 function snap2025(): GmWorkspaceCycleSnapshot {
@@ -1462,297 +1247,7 @@ function snap2026(): GmWorkspaceCycleSnapshot {
   return structuredClone(snap2025())
 }
 
-function snap2023(): GmWorkspaceCycleSnapshot {
-  const s = snap2025()
-  s.portfolioDonut.centerTotal = 156
-  s.portfolioDonut.legend = [
-    { label: 'Completed (Pass)', value: 82, dotClass: 'bg-emerald-500', badgeClass: 'text-emerald-800 bg-emerald-100' },
-    { label: 'On Track (Active)', value: 22, dotClass: 'bg-blue-500', badgeClass: 'text-blue-900 bg-blue-100' },
-    { label: 'At Risk (Warning)', value: 30, dotClass: 'bg-amber-400', badgeClass: 'text-amber-900 bg-amber-100' },
-    { label: 'Failed', value: 22, dotClass: 'bg-red-500', badgeClass: 'text-red-900 bg-red-100' },
-  ]
-  s.portfolioDonut.healthTrendLabel = '+2.1% so với tháng trước'
-  s.midYearIssues = {
-    pendingKpisLine: 'Pending: 8 KPIs',
-    popoverTitle: '8 KPI Process Issues',
-    bullets: [
-      { text: '3 pending approval', dotClass: 'text-amber-600' },
-      { text: '2 chưa submit', dotClass: 'text-amber-600' },
-      { text: '3 thiếu evidence', dotClass: 'text-rose-500' },
-    ],
-    issueTypes: [
-      { id: 'pending_approval', text: '3 pending approval', dotClass: 'text-amber-600' },
-      { id: 'not_submitted', text: '2 chưa submit', dotClass: 'text-amber-600' },
-      { id: 'missing_evidence', text: '3 thiếu evidence', dotClass: 'text-rose-500' },
-    ],
-    issueDetails: gmLayoutMockMidYearIssues.issueDetails,
-  }
-  const s3 = s.departments.find((d) => d.id === 'S3')
-  const qi = s3?.kpis.find((k) => k.name === 'Individual Quality')
-  if (qi) {
-    qi.actual = '90%'
-    qi.status = 'warn'
-  }
-  const del = s.departments.find((d) => d.id === 'S1')?.kpis.find((k) => k.name === 'Task Delivery')
-  if (del) {
-    del.actual = '88%'
-    del.status = 'warn'
-  }
-  s.hierarchyKpis = buildGmKpiHierarchyRowsFromDepartmentLayout(s.departments, s.membersDetails)
-  const iqRow = s.hierarchyKpis.find((r) => r.id === 'layout-global-kpi-A.3a')
-  if (iqRow) {
-    iqRow.actual = '91%'
-    iqRow.status = 'warning'
-    iqRow.blockerSummary = '1 PM cần theo dõi (mock năm 2023)'
-  }
-  return s
-}
-
-function snap2024(): GmWorkspaceCycleSnapshot {
-  const s = snap2025()
-  s.portfolioDonut.centerTotal = 138
-  s.portfolioDonut.legend = [
-    { label: 'Completed (Pass)', value: 90, dotClass: 'bg-emerald-500', badgeClass: 'text-emerald-800 bg-emerald-100' },
-    { label: 'On Track (Active)', value: 15, dotClass: 'bg-blue-500', badgeClass: 'text-blue-900 bg-blue-100' },
-    { label: 'At Risk (Warning)', value: 18, dotClass: 'bg-amber-400', badgeClass: 'text-amber-900 bg-amber-100' },
-    { label: 'Failed', value: 15, dotClass: 'bg-red-500', badgeClass: 'text-red-900 bg-red-100' },
-  ]
-  s.portfolioDonut.healthTrendLabel = '+5.8% so với tháng trước'
-  s.midYearIssues = {
-    pendingKpisLine: 'Pending: 3 KPIs',
-    popoverTitle: '3 KPI Process Issues',
-    bullets: [
-      { text: '1 pending approval', dotClass: 'text-amber-600' },
-      { text: '1 chưa submit', dotClass: 'text-amber-600' },
-      { text: '1 thiếu evidence', dotClass: 'text-rose-500' },
-    ],
-    issueTypes: [
-      { id: 'pending_approval', text: '1 pending approval', dotClass: 'text-amber-600' },
-      { id: 'not_submitted', text: '1 chưa submit', dotClass: 'text-amber-600' },
-      { id: 'missing_evidence', text: '1 thiếu evidence', dotClass: 'text-rose-500' },
-    ],
-    issueDetails: gmLayoutMockMidYearIssues.issueDetails,
-  }
-  const s3 = s.departments.find((d) => d.id === 'S3')
-  const qi = s3?.kpis.find((k) => k.name === 'Individual Quality')
-  if (qi) {
-    qi.actual = '97%'
-    qi.status = 'pass'
-  }
-  s.hierarchyKpis = buildGmKpiHierarchyRowsFromDepartmentLayout(s.departments, s.membersDetails)
-  const iqRow = s.hierarchyKpis.find((r) => r.id === 'layout-global-kpi-A.3a')
-  if (iqRow) {
-    iqRow.actual = '97%'
-    iqRow.status = 'success'
-    iqRow.blockerSummary = 'Ổn định (mock năm 2024)'
-  }
-  return s
-}
-
-/** Định dạng mục tiêu hiển thị từ form tạo KPI (mock). */
-export function formatStrategicCreateTargetDisplay(targetValue: string, unit: string): string {
-  const t = String(targetValue ?? '').trim()
-  if (!t) return '—'
-  switch (unit) {
-    case 'percent':
-      return /%$/.test(t) ? t : `${t}%`
-    case 'currency':
-      return t.startsWith('$') ? t : `$${t}`
-    case 'hours':
-      return /\b(h|hr|hrs|hours)\b/i.test(t) ? t : `${t}h`
-    case 'days':
-      return /\bday/i.test(t) ? t : `${t} days`
-    case 'text':
-      return t
-    case 'MM':
-    case 'POINT':
-    case 'PRODUCT':
-    case 'PROJECT':
-    case 'CERTIFICATION':
-    case 'ARTICLE':
-    case 'PERSON':
-      return `${t} ${unit}`.trim()
-    default:
-      return t
-  }
-}
-
-/** Chuẩn hoá loại KPI từ payload (hỗ trợ legacy `independent` / `direct`). */
-export function normalizeStrategicKpiKind(raw: unknown): GmStrategicKpiKind {
-  if (raw === 'cascading' || raw === 'individual' || raw === 'promotion') return raw
-  if (raw === 'independent') return 'individual'
-  if (raw === 'direct') return 'promotion'
-  return 'cascading'
-}
-
-/** Một dòng diagnostics từ payload emit của GmCreateStrategicKpiModal (mock). */
-export function buildHierarchyKpiFromStrategicCreatePayload(
-  payload: Record<string, unknown>,
-): GmHierarchyKpi {
-  const kpiType = normalizeStrategicKpiKind(payload.kpiType)
-
-  const nameRaw = String(payload.kpiName ?? '').trim()
-  const name = nameRaw || 'Strategic KPI'
-
-  const w = String(payload.weightPct ?? '').trim()
-  const weight = w.length ? `${w.replace(/%/g, '')}%` : '—'
-
-  const unit = String(payload.unit ?? 'MM')
-  const target = formatStrategicCreateTargetDisplay(String(payload.targetValue ?? ''), unit)
-
-  const pmTargets = (payload.pmTargets as Record<string, string> | undefined) ?? {}
-  const assignPMs = Array.isArray(payload.assignPMs) ? (payload.assignPMs as string[]) : []
-
-  const editingRowId = String(payload.editingKpiId ?? '').trim()
-  const preserveCreatedId = editingRowId.startsWith('kpi-created-') ? editingRowId : ''
-  const pmOwnerKey =
-    preserveCreatedId.length > 0
-      ? preserveCreatedId.replace(/^kpi-created-/, '') || 'id'
-      : typeof crypto !== 'undefined' && 'randomUUID' in crypto
-        ? crypto.randomUUID()
-        : String(Date.now())
-  const rowId = preserveCreatedId.length > 0 ? preserveCreatedId : `kpi-created-${pmOwnerKey}`
-
-  const pmOwners: GmHierarchyPm[] =
-    kpiType === 'cascading'
-      ? assignPMs.map((pmName, i) => ({
-          id: `new-pm-${pmOwnerKey}-${i}`,
-          name: pmName,
-          unitLine: 'PM · (mock — vừa gán)',
-          target: formatStrategicCreateTargetDisplay(
-            String(pmTargets[pmName] ?? payload.targetValue ?? ''),
-            unit,
-          ),
-          actual: '—',
-          status: 'warning' as GmHierarchyStatus,
-          blockerSummary: 'Chờ cập nhật tiến độ',
-          members: [],
-        }))
-      : []
-
-  return {
-    id: rowId,
-    name,
-    weight,
-    target,
-    actual: '—',
-    status: 'warning',
-    blockerSummary: 'KPI mới tạo (mock) — chưa có dữ liệu thực tế',
-    kpiType,
-    bscPerspective: normalizeGmBscPerspective(payload.perspective),
-    isImportant: payload.isImportant === true,
-    pmOwners,
-  }
-}
-
-/**
- * Ghép KPI từng phòng ban vào danh sách hierarchy diagnostics.
- * Bỏ qua cặp (deptId, tên KPI) đã có trên dòng hierarchy (investigate*) để tránh trùng mock.
- *
- * Các dòng pivot `layout-global-kpi-*` (11 KPI × mọi section trong `pmOwners`) được coi là
- * đã bao phủ mọi `(dept.id, investigateKpiName)` cho **cùng tên KPI** — không tạo thêm 110 dòng.
- */
-export function appendDeptKpisAsHierarchyRows(
-  existing: GmHierarchyKpi[],
-  departments: GmDepartmentMock[],
-): GmHierarchyKpi[] {
-  const covered = new Set<string>()
-  for (const r of existing) {
-    if (r.investigateDeptId && r.investigateKpiName) {
-      covered.add(`${r.investigateDeptId}::${String(r.investigateKpiName).trim()}`)
-    }
-  }
-  for (const r of existing) {
-    if (!String(r.id).startsWith('layout-global-kpi-')) continue
-    const kn = r.investigateKpiName?.trim()
-    if (!kn) continue
-    for (const d of departments) {
-      covered.add(`${d.id}::${kn}`)
-    }
-  }
-  const out = [...existing]
-  let seq = 0
-  for (const dept of departments) {
-    for (const k of dept.kpis) {
-      const key = `${dept.id}::${k.name.trim()}`
-      if (covered.has(key)) continue
-      covered.add(key)
-      out.push({
-        id: `dept-${dept.id}-kpi-${seq++}`,
-        name: `${k.name} · ${dept.name}`,
-        weight: `${k.weight}%`,
-        target: k.target,
-        actual: k.actual,
-        status: mapDeptKpiStatusToHierarchy(k.status),
-        blockerSummary: 'Theo dữ liệu phòng ban (mock)',
-        kpiType: k.kpiType,
-        bscPerspective: k.bscPerspective ?? normalizeGmBscPerspective(undefined),
-        pmOwners: [],
-        investigateDeptId: dept.id,
-        investigateKpiName: k.name,
-      })
-    }
-  }
-  return out
-}
-
-/** KPI phòng ban (danh sách master) từ cùng payload — gắn vào dept đầu khi demo. */
-export function buildDeptKpiFromStrategicCreatePayload(payload: Record<string, unknown>): GmDeptKpiMock {
-  const kpiType = normalizeStrategicKpiKind(payload.kpiType)
-  const name = String(payload.kpiName ?? '').trim() || 'Strategic KPI'
-  const w = Number.parseInt(String(payload.weightPct ?? '').replace(/%/g, ''), 10)
-  const weight = Number.isFinite(w) && w > 0 ? w : 5
-  return {
-    name,
-    weight,
-    target: formatStrategicCreateTargetDisplay(String(payload.targetValue ?? ''), String(payload.unit ?? 'MM')),
-    actual: '—',
-    status: 'active',
-    kpiType,
-    bscPerspective: normalizeGmBscPerspective(payload.perspective),
-  }
-}
-
-/** ISO `yyyy-mm-dd…` → năm dương lịch; không hợp lệ → `null`. */
-function calendarYearFromIsoBoundary(iso: string | undefined): number | null {
-  if (iso == null || !String(iso).trim()) return null
-  const m = /^(\d{4})/.exec(String(iso).trim())
-  if (!m) return null
-  const y = Number(m[1])
-  return Number.isFinite(y) ? y : null
-}
-
-/**
- * Gom các năm có KPI kèm `activityStartDate` / `activityEndDate` (mock).
- * Dữ liệu mẫu giả định khoảng hoạt động **nằm trong một năm dương lịch** (vd. 1/1–31/12 cùng năm).
- * Thứ tự: năm mới → cũ.
- */
-export function collectYearsFromKpiActivityInSnapshots(
-  snapshots: Record<string, GmWorkspaceCycleSnapshot>,
-): string[] {
-  const years = new Set<number>()
-  const addSpan = (start?: string, end?: string) => {
-    const ys = calendarYearFromIsoBoundary(start)
-    const ye = calendarYearFromIsoBoundary(end)
-    if (ys != null && ye != null) {
-      const a = Math.min(ys, ye)
-      const b = Math.max(ys, ye)
-      for (let y = a; y <= b; y++) years.add(y)
-    } else if (ys != null) years.add(ys)
-    else if (ye != null) years.add(ye)
-  }
-  for (const snap of Object.values(snapshots)) {
-    for (const k of snap.hierarchyKpis) addSpan(k.activityStartDate, k.activityEndDate)
-    for (const dept of snap.departments) {
-      for (const k of dept.kpis) addSpan(k.activityStartDate, k.activityEndDate)
-    }
-  }
-  return [...years].sort((a, b) => b - a).map(String)
-}
-
 export const gmLayoutCycleSnapshots: Record<string, GmWorkspaceCycleSnapshot> = {
   '2026': snap2026(),
   '2025': snap2025(),
-  '2024': snap2024(),
-  '2023': snap2023(),
 }

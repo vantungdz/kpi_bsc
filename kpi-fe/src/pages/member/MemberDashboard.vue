@@ -1,9 +1,119 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { memberKpiService } from '@/services/modules/kpi-member.service'
+import { useMemberKpiDraftStore } from '@/stores/member-kpi-drafts.store'
 import type { MemberKpiDashboard, KpiItem, EvidenceFormCase, MemberKpiEvaluationStatus } from '@/types/kpi'
 import MemberProcessTimeline from '@/components/member/MemberProcessTimeline.vue'
 import CreateIndividualKpiDrawer, { type CreateIndividualKpiPayload } from '@/components/kpi/CreateIndividualKpiDrawer.vue'
+import {
+  parseWeightedPayload,
+  buildWeightedPayload,
+  parseCommentPayload,
+  buildCommentPayload,
+  parseWorkAmountPayload,
+  buildWorkAmountPayload,
+  type WeightedFormState,
+  type UrlNamePair,
+  type WorkAmountFormState,
+} from '@/utils/memberKpiEvidenceDetail'
+
+const route = useRoute()
+const memberKpiDraftStore = useMemberKpiDraftStore()
+
+/** Cách build JSON evidences — tách KPI thư viện (801–804 + workAmounts) vs sheet cũ. */
+type EvidencePayloadKind = 'weighted' | 'comment' | 'workAmount_new' | 'legacy'
+
+/** JSON đã lưu dạng workAmounts — ưu tiên trước calculationRuleCode (tránh A.2a gán nhầm 804 trong DB). */
+function jsonHasWorkAmountsData(jsonSource: string): boolean {
+  const raw = jsonSource.trim()
+  if (!raw || raw === '{}' || raw === 'null') return false
+  try {
+    const o = JSON.parse(raw) as Record<string, unknown>
+    if (!Array.isArray(o.workAmounts) || o.workAmounts.length === 0) return false
+    return true
+  } catch {
+    return false
+  }
+}
+
+function resolveEvidencePayloadKind(item: KpiItem, jsonSource: string): EvidencePayloadKind {
+  if (jsonHasWorkAmountsData(jsonSource)) return 'workAmount_new'
+
+  const code = item.calculationRuleCode
+  if (code === 804) return 'weighted'
+  if (code === 803) return 'comment'
+  const raw = jsonSource.trim()
+  if (raw && raw !== '{}' && raw !== 'null') {
+    try {
+      const o = JSON.parse(raw) as Record<string, unknown>
+      if (Array.isArray(o.workAmounts)) return 'workAmount_new'
+    } catch {
+      /* ignore */
+    }
+  }
+  if (code === 801 || code === 802) {
+    if (isMonthlyWaTimesheetKpi(item)) return 'workAmount_new'
+  }
+  return 'legacy'
+}
+
+function urlPairsToPendingUrls(pairs: UrlNamePair[], idPrefix: string): PendingEvidenceUrl[] {
+  return pairs
+    .map(p => {
+      const u = String(p.url ?? '').trim()
+      if (!u) return null
+      const ref = normalizeEvidenceReference(u)
+      if (!ref || !isValidEvidenceReference(ref)) return null
+      const name = String(p.name ?? '').trim()
+      const row: PendingEvidenceUrl = {
+        id: `${idPrefix}-${Math.random().toString(36).slice(2, 9)}`,
+        url: ref,
+      }
+      if (name) row.name = name
+      return row
+    })
+    .filter((x): x is PendingEvidenceUrl => x != null)
+}
+
+function hydrateWorkAmountDrawerFromParsed(item: KpiItem, jsonSource: string) {
+  const parsed = parseWorkAmountPayload(jsonSource)
+  const raw = jsonSource.trim()
+  const hasJson = raw !== '' && raw !== '{}' && raw !== 'null'
+  const hasHours = parsed.workAmounts.some(
+    w => (Number(w.spentHours) || 0) !== 0 || (Number(w.standardHours) || 0) !== 0,
+  )
+  if (hasJson && hasHours) {
+    waTimeRows.value = parsed.workAmounts
+      .filter(w => (Number(w.spentHours) || 0) !== 0 || (Number(w.standardHours) || 0) !== 0)
+      .map((w, i) => ({
+        id: `${item.id}-wm-${i}`,
+        month: String(w.month),
+        spent: String(Number(w.spentHours) || 0),
+        standard: String(Number(w.standardHours) || 0),
+      }))
+    if (!waTimeRows.value.length) waTimeRows.value = [newWaTimeRow()]
+  } else if (item.waTimeRecords?.length) {
+    waTimeRows.value = item.waTimeRecords.map((r, i) => ({
+      id: `${item.id}-w-${i}`,
+      month: (() => {
+        const m = Number.parseInt(String((r as { month?: string }).month ?? '1'), 10)
+        return m >= 1 && m <= 12 ? String(m) : '1'
+      })(),
+      spent: r.spent,
+      standard: r.standard,
+    }))
+  } else {
+    waTimeRows.value = [newWaTimeRow()]
+  }
+  evidenceNoteDraft.value = parsed.note || item.evidenceNote || ''
+  pendingEvidenceUrls.value = urlPairsToPendingUrls(parsed.files, `${item.id}-f`)
+}
+
+function attachCertificateIfNeeded(payload: Record<string, unknown>) {
+  const cert = certificateOutcomeDraft.value.trim()
+  if (cert) payload.certificateOutcomeNote = cert
+}
 
 /** Tooltip Target — mock theo mã KPI (không dùng description từ API) */
 const MOCK_KPI_GUIDELINE_TOOLTIPS: Record<string, string> = {
@@ -82,12 +192,12 @@ function itemBlobText(item: KpiItem): string {
   return `${item.name} ${item.description ?? ''} ${item.target.replace(/<[^>]*>/g, '')}`
 }
 
-/** A.2a + Work Amount: layout timesheet (monthly) */
+/** A.2a + Work Amount: layout timesheet (monthly) — không dùng \\bWA\\b trong blob (dễ trùng chữ trong mô tả A.1…) */
 function isMonthlyWorkAmountCase(item: KpiItem): boolean {
-  const code = item.code.trim().toUpperCase()
+  const c = item.code.trim().toUpperCase().replace(/\s+/g, '')
   const blob = itemBlobText(item)
-  if (/^A\.2A\b/.test(code) || code.startsWith('A.2A')) return true
-  if (/WORK\s*AMOUNT|\bWA\b/i.test(blob)) return true
+  if (c.startsWith('A.2')) return true
+  if (/WORK\s*AMOUNT/i.test(blob)) return true
   if (item.evidenceFormCase === 'monthly') return true
   return false
 }
@@ -106,12 +216,58 @@ function resolveEvidenceCase(item: KpiItem): EvidenceFormCase {
   return 'general'
 }
 
+function formatEvidenceJsonSummary(item: KpiItem): string | undefined {
+  const jsonSource = memberKpiDraftStore.getDraft(item.id)?.evidencesJson ?? item.evidencesJson
+  const raw = String(jsonSource ?? '').trim()
+  if (!raw || raw === '{}' || raw === 'null') return undefined
+
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>
+    const note = String(parsed.note ?? parsed.text ?? '').trim()
+    const result = String(parsed.result ?? '').trim()
+    const planActualRecords = Array.isArray(parsed.planActualRecords)
+      ? (parsed.planActualRecords as unknown[])
+          .map((row) => {
+            if (!row || typeof row !== 'object') return undefined
+            const r = row as Record<string, unknown>
+            return String(r.actual ?? '').trim()
+          })
+          .filter(Boolean)
+      : []
+    const evdNames = Array.isArray(parsed.evd)
+      ? (parsed.evd as unknown[])
+          .map((row) => {
+            if (!row || typeof row !== 'object') return undefined
+            const r = row as Record<string, unknown>
+            return String(r.name ?? '').trim() || String(r.url ?? '').trim()
+          })
+          .filter(Boolean)
+      : []
+
+    if (item.group === 'B') {
+      if (note) return note.length > 64 ? `${note.slice(0, 63)}…` : note
+    }
+
+    if (result) return result
+    if (planActualRecords.length) return planActualRecords.join(' | ')
+    if (note) return note
+    if (evdNames.length) return evdNames.join(', ')
+  } catch {
+    // fallback to other fields when JSON parsing fails
+  }
+  return undefined
+}
+
 function formatKpiActualResult(item: KpiItem): string {
+  const evidenceDisplay = formatEvidenceJsonSummary(item)
+  if (evidenceDisplay) return evidenceDisplay
+
   if (item.group === 'B') {
     const c = item.evidenceNote?.trim()
     if (!c) return '-'
     return c.length > 64 ? `${c.slice(0, 63)}…` : c
   }
+
   const r = item.result?.toString().trim()
   return r || '-'
 }
@@ -126,7 +282,7 @@ function isA2MonthlyKpi(item: KpiItem): boolean {
 function isMonthlyWaTimesheetKpi(item: KpiItem): boolean {
   if (isA2MonthlyKpi(item)) return true
   const blob = itemBlobText(item)
-  return /WORK\s*AMOUNT|\bWA\b/i.test(blob)
+  return /WORK\s*AMOUNT/i.test(blob)
 }
 
 /** Tooltip cột Target: mock guideline theo mã A.1–A.5; các KPI khác chỉ dùng target (plain) */
@@ -200,13 +356,40 @@ function targetBannerPlain(item: KpiItem): string {
   return `${strip(item.target)}${item.description ? ` · ${item.description}` : ''}`
 }
 
+/** Hiển thị ka.target_value / ki.target_value trong drawer */
+function formatNumericTarget(v: number | null | undefined): string {
+  if (v === null || v === undefined || Number.isNaN(Number(v))) return '-'
+  const n = Number(v)
+  return Number.isInteger(n) ? String(Math.trunc(n)) : String(n)
+}
+
+/** Đồng bộ dropdown 1–5 với API (Double / string) */
+function normalizeDetailSelfScore(raw: unknown): number | null {
+  if (raw === null || raw === undefined) return null
+  const n = typeof raw === 'number' ? raw : Number(raw)
+  if (!Number.isFinite(n)) return null
+  const r = Math.round(n)
+  if (r < 1 || r > 5) return null
+  return r
+}
+
+/**
+ * Không chỉnh evidence khi: KPI đề xuất chờ duyệt (402/403), hoặc đã nộp đợt (5xx/6xx).
+ * README Flow 3 + Flow 5 — ASM từ init-db.sql.
+ */
+function isKpiWorkflowLocked(item: KpiItem): boolean {
+  const c = item.statusCode
+  if (c === undefined || c === null) return false
+  return [402, 403, 501, 502, 503, 601, 602, 603].includes(c)
+}
+
 const EVIDENCE_MAX_FILES = 5
 const EVIDENCE_MAX_URLS = 5
 /** Bộ lọc hộp thoại chọn file; validate thêm bằng `isEvidenceFileAllowed` */
 const EVIDENCE_ACCEPT_ATTR = '.pdf,.doc,.docx,.xls,.xlsx,.csv,.jpg,.jpeg,.png'
 
 type PendingEvidenceFile = { id: string; file: File }
-type PendingEvidenceUrl = { id: string; url: string }
+type PendingEvidenceUrl = { id: string; url: string; name?: string }
 
 const evidencePanelOpen = ref(false)
 const selectedDrawerItem = ref<KpiItem | null>(null)
@@ -222,6 +405,7 @@ const evidenceUrlHint = ref('')
 const detailSelfScore = ref<number | null>(null)
 /** Bản ghi Plan / Actual trong drawer (layout general) */
 const generalPlanActualRows = ref<PlanActualDraftRow[]>([newPlanActualRow()])
+
 /** KPI monthly (A.2…): Spent time / Standard time */
 const waTimeRows = ref<WaTimeDraftRow[]>([newWaTimeRow()])
 /** Lỗi validate form Work Amount (tháng / Spent / Standard) */
@@ -360,6 +544,15 @@ function normalizeEvidenceUrlInput(raw: string): string {
   return `https://${t}`
 }
 
+/** Giữ đường dẫn gốc `/evidence/...` — không gắn `https://` (tránh `https:///path`). */
+function normalizeEvidenceReference(raw: string): string {
+  const t = raw.trim()
+  if (!t) return ''
+  if (/^https?:\/\//i.test(t)) return t
+  if (t.startsWith('/')) return t
+  return normalizeEvidenceUrlInput(t)
+}
+
 function isValidEvidenceHttpUrl(s: string): boolean {
   try {
     const u = new URL(s)
@@ -367,6 +560,14 @@ function isValidEvidenceHttpUrl(s: string): boolean {
   } catch {
     return false
   }
+}
+
+/** Cho phép URL đầy đủ hoặc đường dẫn cùng site (bắt đầu bằng `/`). */
+function isValidEvidenceReference(s: string): boolean {
+  const t = s.trim()
+  if (!t) return false
+  if (t.startsWith('/')) return true
+  return isValidEvidenceHttpUrl(t)
 }
 
 function addPendingEvidenceUrl() {
@@ -419,8 +620,19 @@ const isUploadOnlyDrawer = computed(() => drawerCase.value === 'upload_only')
 
 const canSaveEvidence = computed(() => {
   const s = detailSelfScore.value
-  return s !== null && s >= 1 && s <= 5
+  if (s === null || s < 1 || s > 5) return false
+  if (selectedDrawerItem.value && isKpiWorkflowLocked(selectedDrawerItem.value)) return false
+  return true
 })
+
+const canAddEvidenceRecords = computed(
+  () => selectedDrawerItem.value && !isKpiWorkflowLocked(selectedDrawerItem.value),
+)
+
+/** Đã nộp KPI: chỉ xem, không lưu chỉnh sửa — vẫn mở được drawer */
+const evidenceDrawerReadOnly = computed(
+  () => !!(selectedDrawerItem.value && isKpiWorkflowLocked(selectedDrawerItem.value)),
+)
 
 const attachmentHubTitle = computed(() => {
   if (isUploadOnlyDrawer.value) return 'Chứng chỉ / Bằng cấp Đính kèm'
@@ -431,6 +643,21 @@ const attachmentHubTitle = computed(() => {
 const hasEvidenceAttachments = computed(
   () => pendingEvidenceFiles.value.length > 0 || pendingEvidenceUrls.value.length > 0,
 )
+
+/** evd có `name` → hiển thị trong khối FILE (theo tên); cùng bản ghi vẫn có dòng URL riêng. */
+const pendingEvidenceNamedRows = computed(() =>
+  pendingEvidenceUrls.value.filter(r => (r.name ?? '').trim().length > 0),
+)
+
+const evidenceFileSectionCount = computed(
+  () => pendingEvidenceFiles.value.length + pendingEvidenceNamedRows.value.length,
+)
+
+const hasFileAttachmentsSection = computed(
+  () => pendingEvidenceFiles.value.length > 0 || pendingEvidenceNamedRows.value.length > 0,
+)
+
+const hasEvidenceUrlList = computed(() => pendingEvidenceUrls.value.length > 0)
 
 function addGeneralPlanActualRow() {
   generalPlanActualRows.value.push(newPlanActualRow())
@@ -456,11 +683,121 @@ function removeWaTimeRow(id: string) {
   waTimeRows.value = waTimeRows.value.filter(r => r.id !== id)
 }
 
+function workAmountFormStateFromWaRows(): WorkAmountFormState {
+  const acc = new Map<number, { spent: number; std: number }>()
+  for (let m = 1; m <= 12; m++) acc.set(m, { spent: 0, std: 0 })
+  for (const r of waTimeRows.value) {
+    const m = Number.parseInt(String(r.month), 10)
+    if (!Number.isFinite(m) || m < 1 || m > 12) continue
+    const cur = acc.get(m) ?? { spent: 0, std: 0 }
+    cur.spent += parseNumericFromField(r.spent) ?? 0
+    cur.std += parseNumericFromField(r.standard) ?? 0
+    acc.set(m, cur)
+  }
+  const workAmounts = Array.from({ length: 12 }, (_, i) => {
+    const month = i + 1
+    const v = acc.get(month)!
+    return { month, spentHours: v.spent, standardHours: v.std }
+  })
+  const filePairs: UrlNamePair[] = pendingEvidenceUrls.value.map(u => ({
+    url: u.url,
+    name: (u.name ?? '').trim(),
+  }))
+  return {
+    note: evidenceNoteDraft.value.trim(),
+    workAmounts,
+    files: filePairs.length ? filePairs : [{ url: '', name: '' }],
+  }
+}
+
+function buildDrawerEvidencesPayload(item: KpiItem, kind: EvidencePayloadKind): Record<string, unknown> {
+  if (kind === 'weighted') {
+    const rows = generalPlanActualRows.value.map(({ plan, actual }) => ({ plan, actual }))
+    const w: WeightedFormState = {
+      text: evidenceNoteDraft.value.trim(),
+      result: joinActualResultTexts(generalPlanActualRows.value.map(({ actual }) => ({ actual }))) ?? '',
+      note: evidenceNoteDraft.value.trim(),
+      planActualRecords: rows,
+      evd: pendingEvidenceUrls.value.map(u => ({
+        url: u.url,
+        name: (u.name ?? '').trim(),
+      })),
+    }
+    const out = buildWeightedPayload(w)
+    attachCertificateIfNeeded(out)
+    return out
+  }
+  if (kind === 'comment') {
+    const out = buildCommentPayload({
+      note: evidenceNoteDraft.value.trim(),
+      files: pendingEvidenceUrls.value.map(u => ({
+        url: u.url,
+        name: (u.name ?? '').trim(),
+      })),
+    })
+    attachCertificateIfNeeded(out)
+    return out
+  }
+  if (kind === 'workAmount_new') {
+    const out = buildWorkAmountPayload(workAmountFormStateFromWaRows())
+    attachCertificateIfNeeded(out)
+    return out
+  }
+  return buildMemberEvidencesPayload(item, resolveEvidenceCase(item))
+}
+
 function openEvidencePanel(item: KpiItem) {
+  /* Flow 2 / 3 — BE từ chối PATCH nếu 404/402/403; chặn UI sớm */
+  if (item.statusCode === 404 || item.statusCode === 402 || item.statusCode === 403) return
   selectedDrawerItem.value = item
-  evidenceNoteDraft.value = item.evidenceNote ?? ''
+
+  const draft = memberKpiDraftStore.getDraft(item.id)
+  const jsonSource = draft?.evidencesJson ?? item.evidencesJson ?? ''
+  detailSelfScore.value =
+    draft?.selfScore != null && Number.isFinite(Number(draft.selfScore))
+      ? Math.min(5, Math.max(1, Math.round(Number(draft.selfScore))))
+      : normalizeDetailSelfScore(item.selfScore)
+
   certificateOutcomeDraft.value = item.certificateOutcomeNote ?? ''
-  detailSelfScore.value = item.selfScore
+  pendingEvidenceFiles.value = []
+  evidenceUrlDraft.value = ''
+  evidenceUploadHint.value = ''
+  evidenceUrlHint.value = ''
+  waFormError.value = ''
+
+  const kind = resolveEvidencePayloadKind(item, jsonSource)
+
+  if (kind === 'weighted') {
+    const p = parseWeightedPayload(jsonSource)
+    evidenceNoteDraft.value = p.note || p.text || item.evidenceNote || ''
+    generalPlanActualRows.value =
+      p.planActualRecords?.length
+        ? p.planActualRecords.map((row, i) => ({
+            id: `${item.id}-p-${i}`,
+            plan: row.plan,
+            actual: row.actual,
+          }))
+        : [newPlanActualRow()]
+    pendingEvidenceUrls.value = urlPairsToPendingUrls(p.evd, `${item.id}-evd`)
+    evidencePanelOpen.value = true
+    return
+  }
+
+  if (kind === 'comment') {
+    const p = parseCommentPayload(jsonSource)
+    evidenceNoteDraft.value = p.note || item.evidenceNote || ''
+    pendingEvidenceUrls.value = urlPairsToPendingUrls(p.files, `${item.id}-cf`)
+    evidencePanelOpen.value = true
+    return
+  }
+
+  if (kind === 'workAmount_new') {
+    hydrateWorkAmountDrawerFromParsed(item, jsonSource)
+    evidencePanelOpen.value = true
+    return
+  }
+
+  evidenceNoteDraft.value = item.evidenceNote ?? ''
   const persisted = item.planActualRecords
   if (persisted?.length) {
     generalPlanActualRows.value = persisted.map((r, i) => ({
@@ -487,12 +824,7 @@ function openEvidencePanel(item: KpiItem) {
     waTimeRows.value = [newWaTimeRow()]
   }
 
-  pendingEvidenceFiles.value = []
   pendingEvidenceUrls.value = []
-  evidenceUrlDraft.value = ''
-  evidenceUploadHint.value = ''
-  evidenceUrlHint.value = ''
-  waFormError.value = ''
   evidencePanelOpen.value = true
 }
 
@@ -553,6 +885,8 @@ async function loadDashboard() {
 
 onMounted(() => {
   window.addEventListener('keydown', onEscapeClose)
+  const qy = Number(route.query.year)
+  if (Number.isFinite(qy)) selectedYear.value = qy
   loadDashboard()
 })
 
@@ -574,23 +908,43 @@ const currentPhaseIndex = computed(() => {
   return PHASE_STEPS.findIndex(s => s.key === dashboardData.value!.phase)
 })
 
-function groupKpiItemsByGroup(items: KpiItem[]) {
-  return items.reduce<Record<string, KpiItem[]>>((acc, item) => {
-    (acc[item.group] ??= []).push(item)
-    return acc
-  }, {})
+/** Fallback header khi thiếu category từ API */
+const legacySheetGroupLabels: Record<string, string> = {
+  A: '(A) Hiệu suất, Cải tiến, Năng lực chuyên môn (Operational)',
+  B: '(B) Mục tiêu đào tạo, chia sẻ & nâng cấp bản thân',
+  C: '(C) Mục tiêu cấp quản lý (Management)',
+  P: '(P) Định hướng thăng tiến - Promotion KPI (Direct Assignment)',
+  I: '(I) Individual KPI (tự tạo)',
 }
 
-/** Bảng Personal KPI: không gồm nhóm Promotion (P) */
-const personalGroupedItems = computed(() => {
-  if (!sheet.value) return {}
-  return groupKpiItemsByGroup(sheet.value.items.filter(i => i.group !== 'P'))
+type KpiCategorySection = { key: string; headerLabel: string; items: KpiItem[] }
+
+/** Nhóm theo kpi_categories (categoryId / categoryName từ API). */
+function groupKpiItemsByCategory(items: KpiItem[]): KpiCategorySection[] {
+  const map = new Map<string, { headerLabel: string; items: KpiItem[] }>()
+  for (const item of items) {
+    const key = item.categoryId?.trim() || `sheet-group-${item.group}`
+    const headerLabel =
+      (item.categoryName && item.categoryName.trim()) ||
+      legacySheetGroupLabels[item.group] ||
+      `Nhóm ${item.group}`
+    const cur = map.get(key)
+    if (!cur) map.set(key, { headerLabel, items: [item] })
+    else cur.items.push(item)
+  }
+  return [...map.entries()].map(([key, v]) => ({ key, headerLabel: v.headerLabel, items: v.items }))
+}
+
+/** Bảng Personal KPI — không Promotion; header từ kpi_categories */
+const personalGroupedSections = computed((): KpiCategorySection[] => {
+  if (!sheet.value) return []
+  return groupKpiItemsByCategory(sheet.value.items.filter(i => i.group !== 'P'))
 })
 
-/** Tab Promotion KPI - chỉ nhóm P (Direct / thăng tiến) */
-const promotionGroupedItems = computed(() => {
-  if (!sheet.value) return {}
-  return groupKpiItemsByGroup(sheet.value.items.filter(i => i.group === 'P'))
+/** Tab Promotion — cùng cách nhóm theo category */
+const promotionGroupedSections = computed((): KpiCategorySection[] => {
+  if (!sheet.value) return []
+  return groupKpiItemsByCategory(sheet.value.items.filter(i => i.group === 'P'))
 })
 
 const promotionItemsFlat = computed(() => sheet.value?.items.filter(i => i.group === 'P') ?? [])
@@ -623,40 +977,17 @@ const promotionPmWeightedAvg = computed((): number | null => {
   return den ? num / den : null
 })
 
-const groupLabels: Record<string, string> = {
-  A: '(A) Hiệu suất, Cải tiến, Năng lực chuyên môn (Operational)',
-  B: '(B) Mục tiêu đào tạo, chia sẻ & nâng cấp bản thân',
-  C: '(C) Mục tiêu cấp quản lý (Management)',
-  P: '(P) Định hướng thăng tiến - Promotion KPI (Direct Assignment)',
-  I: '(I) Individual KPI (tự tạo)',
-}
-
-function onMemberIndividualKpiSaved(payload: CreateIndividualKpiPayload) {
-  const n = memberExtraSheetItems.value.length + 1
-  const code = `I.${n}`
-  const id = `local-ind-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
-  const metaLine = [payload.calculationSummary, `Unit: ${payload.unit}`, `Năm KPI: ${payload.cycleYear}`]
-    .filter(Boolean)
-    .join(' · ')
-  const description = [payload.description?.trim(), metaLine].filter(Boolean).join('\n') || metaLine
-
-  memberExtraSheetItems.value.push({
-    id,
-    code,
-    name: payload.kpiName,
-    description,
-    target: '—',
+/** README Flow 3 — POST /kpi/member/individual-kpi (ASM 402) */
+async function onMemberIndividualKpiSaved(payload: CreateIndividualKpiPayload) {
+  await memberKpiService.createIndividualKpi({
+    cycleYear: payload.cycleYear,
+    kpiName: payload.kpiName,
+    description: payload.description?.trim() || undefined,
     weight: payload.weight,
-    group: 'I',
-    evaluationStatus: 'not_started',
-    evidenceStatus: 'missing',
-    selfScore: null,
-    pmScore: null,
-    leaderScore: null,
-    result: null,
-    actual: null,
-    evidenceFormCase: 'general',
+    categoryId: payload.categoryId,
+    calculationRuleCode: payload.calculationRuleCode,
   })
+  await loadDashboard()
 }
 
 const isCurrentYear = computed(() => selectedYear.value === new Date().getFullYear())
@@ -732,34 +1063,75 @@ function scrollToKpiSelfEvalSection() {
   document.getElementById('member-kpi-self-eval-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
+/** Payload JSON lưu vào DB (kpi_assignments.evidences) — khớp parse phía BE */
+function buildMemberEvidencesPayload(item: KpiItem, caseKey: EvidenceFormCase): Record<string, unknown> {
+  const payload: Record<string, unknown> = {}
+  const noteTrim = evidenceNoteDraft.value.trim()
+  if (noteTrim) payload.text = noteTrim
+  const cert = certificateOutcomeDraft.value.trim()
+  if (cert) payload.certificateOutcomeNote = cert
+
+  if (caseKey === 'general') {
+    const rows = generalPlanActualRows.value.map(({ plan, actual }) => ({ plan, actual }))
+    payload.planActualRecords = rows
+    payload.result = joinActualResultTexts(rows)
+  } else if (caseKey === 'monthly' && isMonthlyWaTimesheetKpi(item)) {
+    payload.waTimeRecords = waTimeRows.value.map(({ month, spent, standard }) => ({
+      month,
+      spent,
+      standard,
+    }))
+    payload.result = waTimeTotalsRatio(waTimeRows.value)
+  } else if (caseKey === 'category_b') {
+    payload.result = noteTrim || undefined
+  }
+  return payload
+}
+
 // ── Actions ────────────────────────────────────────────────────────────────────
-async function saveEvidenceDetail() {
+/** Lưu vào Pinia draft + đồng bộ hiển thị local; không PATCH API (flush khi Submit Đánh Giá). */
+function saveEvidenceDetail() {
   if (!selectedDrawerItem.value || !canSaveEvidence.value) return
   const item = selectedDrawerItem.value
-  const caseKey = resolveEvidenceCase(item)
+  const jsonHint =
+    memberKpiDraftStore.getDraft(item.id)?.evidencesJson ?? item.evidencesJson ?? ''
+  const kind = resolveEvidencePayloadKind(item, jsonHint)
+
   waFormError.value = ''
-  if (caseKey === 'monthly' && isMonthlyWaTimesheetKpi(item)) {
+  const needsWa =
+    kind === 'workAmount_new'
+    || (kind === 'legacy' && resolveEvidenceCase(item) === 'monthly' && isMonthlyWaTimesheetKpi(item))
+  if (needsWa) {
     const waErr = validateWaTimeRows()
     if (waErr) {
       waFormError.value = waErr
       return
     }
   }
-  const score = detailSelfScore.value!
+
+  const scoreRaw = detailSelfScore.value!
+  const score = Math.min(5, Math.max(1, Math.round(Number(scoreRaw))))
   saving.value = true
   try {
-    await memberKpiService.updateSelfScore(item.id, score)
+    const payloadObj = buildDrawerEvidencesPayload(item, kind)
+    const evidencesJson = JSON.stringify(payloadObj)
+    memberKpiDraftStore.setDraft(item.id, { evidencesJson, selfScore: score })
+
     item.selfScore = score
+    item.evidencesJson = evidencesJson
     const noteTrim = evidenceNoteDraft.value.trim()
     item.evidenceNote = noteTrim || undefined
     item.certificateOutcomeNote = certificateOutcomeDraft.value.trim() || undefined
 
-    if (caseKey === 'general') {
+    if (kind === 'weighted') {
       const rows = generalPlanActualRows.value.map(({ plan, actual }) => ({ plan, actual }))
       item.planActualRecords = rows
       item.result = joinActualResultTexts(rows)
       item.actual = undefined
-    } else if (caseKey === 'monthly' && isMonthlyWaTimesheetKpi(item)) {
+    } else if (kind === 'comment') {
+      item.result = noteTrim || undefined
+      item.actual = undefined
+    } else if (kind === 'workAmount_new') {
       const waRows = waTimeRows.value.map(({ month, spent, standard }) => ({
         month,
         spent,
@@ -768,26 +1140,54 @@ async function saveEvidenceDetail() {
       item.waTimeRecords = waRows
       item.result = waTimeTotalsRatio(waTimeRows.value)
       item.actual = undefined
-    } else if (caseKey === 'category_b') {
-      item.result = noteTrim || undefined
-      item.actual = undefined
+    } else {
+      const caseKey = resolveEvidenceCase(item)
+      if (caseKey === 'general') {
+        const rows = generalPlanActualRows.value.map(({ plan, actual }) => ({ plan, actual }))
+        item.planActualRecords = rows
+        item.result = joinActualResultTexts(rows)
+        item.actual = undefined
+      } else if (caseKey === 'monthly' && isMonthlyWaTimesheetKpi(item)) {
+        const waRows = waTimeRows.value.map(({ month, spent, standard }) => ({
+          month,
+          spent,
+          standard,
+        }))
+        item.waTimeRecords = waRows
+        item.result = waTimeTotalsRatio(waTimeRows.value)
+        item.actual = undefined
+      } else if (caseKey === 'category_b') {
+        item.result = noteTrim || undefined
+        item.actual = undefined
+      }
     }
 
     if (item.evidenceStatus === 'missing') item.evidenceStatus = 'submitted'
     closeEvidencePanel()
-  } catch {
-    // silent - user can retry
   } finally {
     saving.value = false
   }
+}
+
+function apiSubmitErrorMessage(err: unknown): string {
+  if (typeof err === 'object' && err !== null && 'response' in err) {
+    const ax = err as { response?: { data?: { message?: string | null } } }
+    const m = ax.response?.data?.message
+    if (m != null && String(m).trim() !== '') return String(m)
+  }
+  if (err instanceof Error) return err.message
+  return 'Không thể nộp đánh giá.'
 }
 
 async function handleSubmit() {
   if (!dashboardData.value?.canSubmit) return
   submitting.value = true
   try {
+    await memberKpiDraftStore.flushAll((id, body) => memberKpiService.updateSheetItem(id, body))
     await memberKpiService.submit(selectedYear.value)
     await loadDashboard()
+  } catch (e: unknown) {
+    window.alert(apiSubmitErrorMessage(e))
   } finally {
     submitting.value = false
   }
@@ -1151,6 +1551,7 @@ function memberKpiTabIconClass(tab: MemberKpiMainTab) {
                   <tr class="text-[11px] font-bold uppercase tracking-wider text-slate-500">
                     <th class="w-12 px-5 py-4 text-center">STT</th>
                     <th class="min-w-[200px] px-5 py-4">Hạng Mục (Objectives)</th>
+                    <th class="min-w-[10rem] px-5 py-4 text-center">Trạng thái KPI</th>
                     <th class="px-5 py-4">Chỉ Tiêu (Target)</th>
                     <th class="w-24 px-5 py-4 text-center">Trọng số (W)</th>
                     <th class="min-w-[8rem] px-5 py-4 text-center">Actual Result</th>
@@ -1160,16 +1561,16 @@ function memberKpiTabIconClass(tab: MemberKpiMainTab) {
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100">
-                  <template v-for="(items, group) in personalGroupedItems" :key="group">
+                  <template v-for="section in personalGroupedSections" :key="section.key">
                     <!-- Group header -->
                     <tr class="bg-amber-50/80 border-y border-amber-100">
-                      <td colspan="8" class="py-2 px-5 text-xs font-bold text-amber-800 uppercase tracking-wider">
-                        {{ groupLabels[group] ?? `Group ${group}` }}
+                      <td colspan="9" class="py-2 px-5 text-xs font-bold text-amber-800 uppercase tracking-wider">
+                        {{ section.headerLabel }}
                       </td>
                     </tr>
 
                     <!-- KPI Items -->
-                    <tr v-for="(item, idx) in items" :key="item.id"
+                    <tr v-for="(item, idx) in section.items" :key="item.id"
                       class="group transition-colors hover:bg-slate-50"
                     >
                       <td class="py-4 px-5 text-center text-sm font-semibold text-slate-400">{{ idx + 1 }}</td>
@@ -1190,6 +1591,15 @@ function memberKpiTabIconClass(tab: MemberKpiMainTab) {
                             </template>
                           </template>
                         </div>
+                      </td>
+
+                      <td class="max-w-[11rem] px-3 py-4 text-center align-top">
+                        <span
+                          class="inline-flex max-w-full flex-col items-center gap-0.5 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-[10px] font-semibold leading-tight text-slate-800"
+                          :title="item.assignmentStatusName ?? ''">
+                          <span class="text-[9px] font-bold text-slate-400">{{ item.statusCode ?? '—' }}</span>
+                          <span class="line-clamp-3 text-center">{{ item.assignmentStatusName ?? '—' }}</span>
+                        </span>
                       </td>
 
                       <td class="max-w-xs py-4 px-5 align-top" :title="kpiTargetTooltip(item)">
@@ -1225,14 +1635,15 @@ function memberKpiTabIconClass(tab: MemberKpiMainTab) {
                         </span>
                       </td>
 
-                      <!-- Action -->
+                      <!-- Action — Flow 2: Accept gộp vào Submit Đánh Giá -->
                       <td class="py-4 px-5 text-center align-middle">
                         <template v-for="evSt in [resolveEvaluationStatus(item)]" :key="`${item.id}-evst`">
                           <button type="button"
                             class="mx-auto flex h-8 w-8 items-center justify-center rounded-full text-slate-500 transition-colors hover:bg-indigo-50 hover:text-indigo-600"
                             :class="evSt === 'approved' ? 'pointer-events-none opacity-50' : ''"
-                            :title="evSt === 'approved' ? 'Đã duyệt - không chỉnh sửa' : 'Tự đánh giá & bằng chứng'"
-                            :disabled="evSt === 'approved'" @click="openEvidencePanel(item)">
+                            :title="evSt === 'approved' ? 'Đã duyệt - không chỉnh sửa' : item.statusCode === 402 || item.statusCode === 403 ? 'Chờ PM/GM duyệt KPI đề xuất' : isKpiWorkflowLocked(item) ? 'Xem chi tiết minh chứng (đã nộp)' : 'Tự đánh giá & bằng chứng'"
+                            :disabled="evSt === 'approved' || item.statusCode === 402 || item.statusCode === 403"
+                            @click="openEvidencePanel(item)">
                             <i class="fas fa-pen text-sm" />
                           </button>
                         </template>
@@ -1245,7 +1656,7 @@ function memberKpiTabIconClass(tab: MemberKpiMainTab) {
                 <tfoot class="bg-slate-100/80 border-t-2 border-slate-200 font-bold">
                   <!-- Total Score -->
                   <tr>
-                    <td colspan="3" class="py-4 px-5 text-right text-slate-700 uppercase text-xs tracking-wider">Tổng
+                    <td colspan="4" class="py-4 px-5 text-right text-slate-700 uppercase text-xs tracking-wider">Tổng
                       cộng (Total
                       score):</td>
                     <td class="py-4 px-5 text-center">
@@ -1261,7 +1672,7 @@ function memberKpiTabIconClass(tab: MemberKpiMainTab) {
                   </tr>
                   <!-- Average Score -->
                   <tr class="bg-violet-50/50 border-t border-slate-200">
-                    <td colspan="3" class="py-4 px-5 text-right text-violet-800 uppercase text-xs tracking-wider">Điểm
+                    <td colspan="4" class="py-4 px-5 text-right text-violet-800 uppercase text-xs tracking-wider">Điểm
                       trung bình
                       (Average score):</td>
                     <td class="py-4 px-5"></td>
@@ -1356,6 +1767,7 @@ function memberKpiTabIconClass(tab: MemberKpiMainTab) {
                   <tr class="text-[11px] font-bold uppercase tracking-wider text-slate-500">
                     <th class="w-12 px-5 py-4 text-center">STT</th>
                     <th class="min-w-[200px] px-5 py-4">Hạng Mục (Objectives)</th>
+                    <th class="min-w-[10rem] px-5 py-4 text-center">Trạng thái KPI</th>
                     <th class="px-5 py-4">Chỉ Tiêu (Target)</th>
                     <th class="w-24 px-5 py-4 text-center">Trọng số (W)</th>
                     <th class="min-w-[8rem] px-5 py-4 text-center">Actual Result</th>
@@ -1365,13 +1777,13 @@ function memberKpiTabIconClass(tab: MemberKpiMainTab) {
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100">
-                  <template v-for="(items, group) in promotionGroupedItems" :key="'p-' + group">
+                  <template v-for="section in promotionGroupedSections" :key="'p-' + section.key">
                     <tr class="bg-amber-50/80 border-y border-amber-100">
-                      <td colspan="8" class="py-2 px-5 text-xs font-bold text-amber-800 uppercase tracking-wider">
-                        {{ groupLabels[group] ?? `Group ${group}` }}
+                      <td colspan="9" class="py-2 px-5 text-xs font-bold text-amber-800 uppercase tracking-wider">
+                        {{ section.headerLabel }}
                       </td>
                     </tr>
-                    <tr v-for="(item, idx) in items" :key="item.id"
+                    <tr v-for="(item, idx) in section.items" :key="item.id"
                       class="group transition-colors hover:bg-slate-50"
                     >
                       <td class="px-5 py-4 text-center text-sm font-semibold text-slate-400">{{ idx + 1 }}</td>
@@ -1397,6 +1809,14 @@ function memberKpiTabIconClass(tab: MemberKpiMainTab) {
                           <i class="fas fa-certificate mr-1 shrink-0 text-indigo-500" />
                           Thực tế (khác sheet): {{ item.certificateOutcomeNote }}
                         </p>
+                      </td>
+                      <td class="max-w-[11rem] px-3 py-4 text-center align-top">
+                        <span
+                          class="inline-flex max-w-full flex-col items-center gap-0.5 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-[10px] font-semibold leading-tight text-slate-800"
+                          :title="item.assignmentStatusName ?? ''">
+                          <span class="text-[9px] font-bold text-slate-400">{{ item.statusCode ?? '—' }}</span>
+                          <span class="line-clamp-3 text-center">{{ item.assignmentStatusName ?? '—' }}</span>
+                        </span>
                       </td>
                       <td class="max-w-xs px-5 py-4 align-top" :title="kpiTargetTooltip(item)">
                         <div class="cursor-help">
@@ -1431,8 +1851,9 @@ function memberKpiTabIconClass(tab: MemberKpiMainTab) {
                           <button type="button"
                             class="mx-auto flex h-8 w-8 items-center justify-center rounded-full text-slate-500 transition-colors hover:bg-indigo-50 hover:text-indigo-600"
                             :class="evSt === 'approved' ? 'pointer-events-none opacity-50' : ''"
-                            :title="evSt === 'approved' ? 'Đã duyệt - không chỉnh sửa' : 'Tự đánh giá & bằng chứng'"
-                            :disabled="evSt === 'approved'" @click="openEvidencePanel(item)">
+                            :title="evSt === 'approved' ? 'Đã duyệt - không chỉnh sửa' : item.statusCode === 402 || item.statusCode === 403 ? 'Chờ PM/GM duyệt KPI đề xuất' : isKpiWorkflowLocked(item) ? 'Xem chi tiết minh chứng (đã nộp)' : 'Tự đánh giá & bằng chứng'"
+                            :disabled="evSt === 'approved' || item.statusCode === 402 || item.statusCode === 403"
+                            @click="openEvidencePanel(item)">
                             <i class="fas fa-pen text-sm" />
                           </button>
                         </template>
@@ -1442,7 +1863,7 @@ function memberKpiTabIconClass(tab: MemberKpiMainTab) {
                 </tbody>
                 <tfoot class="border-t-2 border-slate-200 bg-slate-100/80 font-bold">
                   <tr>
-                    <td colspan="3" class="px-5 py-4 text-right text-xs uppercase tracking-wider text-slate-700">
+                    <td colspan="4" class="px-5 py-4 text-right text-xs uppercase tracking-wider text-slate-700">
                       Tổng trọng số (Promotion W):
                     </td>
                     <td class="px-5 py-4 text-center">
@@ -1496,7 +1917,8 @@ function memberKpiTabIconClass(tab: MemberKpiMainTab) {
                   Chi tiết Evidence
                 </h2>
                 <p class="mt-0.5 text-xs text-slate-500">
-                  Khai báo số liệu và Đính kèm tài liệu minh chứng
+                  Khai báo số liệu và đính kèm — bản nháp lưu trên trình duyệt; gửi server khi bạn bấm
+                  <span class="font-semibold text-slate-700">Submit Đánh Giá</span>.
                 </p>
               </div>
               <button type="button"
@@ -1504,6 +1926,12 @@ function memberKpiTabIconClass(tab: MemberKpiMainTab) {
                 aria-label="Đóng" @click="closeEvidencePanel">
                 <i class="fas fa-times text-lg" />
               </button>
+            </div>
+
+            <div v-if="evidenceDrawerReadOnly"
+              class="shrink-0 border-b border-amber-200 bg-amber-50 px-6 py-2.5 text-xs font-semibold leading-snug text-amber-950">
+              <i class="fas fa-eye mr-2 shrink-0 text-amber-600" />
+              Chế độ chỉ xem — KPI đã nộp hoặc đang chờ duyệt; bạn vẫn xem được minh chứng, không lưu chỉnh sửa.
             </div>
 
             <div class="relative shrink-0 overflow-hidden bg-slate-800 p-5 text-white">
@@ -1518,10 +1946,10 @@ function memberKpiTabIconClass(tab: MemberKpiMainTab) {
                   </span>
                 </div>
                 <h3 class="mb-1 text-xl font-bold">{{ selectedDrawerItem.name }}</h3>
-                <p class="flex cursor-help items-start text-sm text-slate-300"
+                <p class="mt-3 cursor-help border-t border-white/10 pt-2 text-xs leading-relaxed text-slate-300"
                   :title="kpiTargetTooltip(selectedDrawerItem)">
-                  <i class="fas fa-crosshairs mr-2 mt-0.5 shrink-0 text-indigo-400" />
-                  <span>Target: {{ targetBannerPlain(selectedDrawerItem) }}</span>
+                  <i class="fas fa-crosshairs mr-1 shrink-0 text-indigo-400" />
+                  Chỉ tiêu (mô tả): <span class="text-slate-100">{{ targetBannerPlain(selectedDrawerItem) }}</span>
                 </p>
               </div>
             </div>
@@ -1535,10 +1963,15 @@ function memberKpiTabIconClass(tab: MemberKpiMainTab) {
                     <div class="flex items-start gap-3">
                       <i class="fas fa-id-card mt-0.5 shrink-0 text-lg text-indigo-600" />
                       <div class="min-w-0">
-                        <p class="font-bold text-indigo-950">Mục tiêu theo bảng KPI (đã đăng ký)</p>
+                        <p class="font-bold text-indigo-950">Mục tiêu giao & chỉ tiêu chuẩn</p>
                         <p class="mt-1 font-medium text-slate-800">
-                          {{ targetBannerPlain(selectedDrawerItem) }}
+                          <span class="font-semibold text-indigo-900">Mục tiêu (assignment):</span>
+                          {{ formatNumericTarget(selectedDrawerItem.assignmentTargetValue) }}
+                          <span class="mx-2 text-slate-300">|</span>
+                          <span class="font-semibold text-indigo-900">Chỉ tiêu (target_value):</span>
+                          {{ formatNumericTarget(selectedDrawerItem.kpiTemplateTargetValue) }}
                         </p>
+                        <p class="mt-1 text-xs text-slate-600">{{ targetBannerPlain(selectedDrawerItem) }}</p>
                       </div>
                     </div>
                     <p class="border-t border-indigo-100/90 pt-3 text-xs leading-relaxed text-slate-600">
@@ -1554,7 +1987,8 @@ function memberKpiTabIconClass(tab: MemberKpiMainTab) {
                       </label>
                       <textarea v-model="certificateOutcomeDraft" rows="2"
                         placeholder="Ví dụ: JLPT N2 (12/2025) - đính kèm scan kết quả; mục tiêu TOEIC 700 chưa đạt / không thi lại trong năm."
-                        class="w-full resize-none rounded-md border border-indigo-200 bg-white px-3 py-2 text-sm focus:ring-1 focus:ring-indigo-500" />
+                        :readonly="evidenceDrawerReadOnly"
+                        class="w-full resize-none rounded-md border border-indigo-200 bg-white px-3 py-2 text-sm focus:ring-1 focus:ring-indigo-500 read-only:bg-slate-50 read-only:text-slate-700" />
                     </div>
                   </div>
 
@@ -1565,10 +1999,15 @@ function memberKpiTabIconClass(tab: MemberKpiMainTab) {
                       <div class="flex items-start gap-3">
                         <i class="fas fa-id-card mt-0.5 shrink-0 text-lg text-indigo-600" />
                         <div class="min-w-0">
-                          <p class="font-bold text-indigo-950">Mục tiêu theo bảng KPI (đã đăng ký)</p>
+                          <p class="font-bold text-indigo-950">Mục tiêu giao & chỉ tiêu chuẩn</p>
                           <p class="mt-1 font-medium text-slate-800">
-                            {{ targetBannerPlain(selectedDrawerItem) }}
+                            <span class="font-semibold text-indigo-900">Mục tiêu (assignment):</span>
+                            {{ formatNumericTarget(selectedDrawerItem.assignmentTargetValue) }}
+                            <span class="mx-2 text-slate-300">|</span>
+                            <span class="font-semibold text-indigo-900">Chỉ tiêu (target_value):</span>
+                            {{ formatNumericTarget(selectedDrawerItem.kpiTemplateTargetValue) }}
                           </p>
+                          <p class="mt-1 text-xs text-slate-600">{{ targetBannerPlain(selectedDrawerItem) }}</p>
                         </div>
                       </div>
                       <p class="border-t border-indigo-100/90 pt-3 text-xs leading-relaxed text-slate-600">
@@ -1585,7 +2024,8 @@ function memberKpiTabIconClass(tab: MemberKpiMainTab) {
                         </label>
                         <textarea v-model="certificateOutcomeDraft" rows="2"
                           placeholder="Ví dụ: JLPT N2 (12/2025) - đính kèm scan kết quả; mục tiêu TOEIC 700 chưa đạt / không thi lại trong năm."
-                          class="w-full resize-none rounded-md border border-indigo-200 bg-white px-3 py-2 text-sm focus:ring-1 focus:ring-indigo-500" />
+                          :readonly="evidenceDrawerReadOnly"
+                          class="w-full resize-none rounded-md border border-indigo-200 bg-white px-3 py-2 text-sm focus:ring-1 focus:ring-indigo-500 read-only:bg-slate-50 read-only:text-slate-700" />
                       </div>
                     </div>
 
@@ -1615,7 +2055,8 @@ function memberKpiTabIconClass(tab: MemberKpiMainTab) {
                               <tr v-for="row in waTimeRows" :key="row.id">
                                 <td class="px-3 py-2">
                                   <select v-model="row.month"
-                                    class="w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-sm font-medium text-slate-800 focus:ring-1 focus:ring-blue-500">
+                                    :disabled="evidenceDrawerReadOnly"
+                                    class="w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-sm font-medium text-slate-800 focus:ring-1 focus:ring-blue-500 disabled:cursor-default disabled:bg-slate-50 disabled:opacity-90">
                                     <option v-for="m in getWaMonthOptionsForRow(row)" :key="m.value" :value="m.value">
                                       {{ m.label }}
                                     </option>
@@ -1623,14 +2064,16 @@ function memberKpiTabIconClass(tab: MemberKpiMainTab) {
                                 </td>
                                 <td class="px-3 py-2">
                                   <input v-model="row.spent" type="text" inputmode="decimal" placeholder="0"
-                                    class="w-full min-w-[5rem] rounded border border-slate-300 px-2 py-1.5 text-sm focus:ring-1 focus:ring-blue-500" />
+                                    :readonly="evidenceDrawerReadOnly"
+                                    class="w-full min-w-[5rem] rounded border border-slate-300 px-2 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 read-only:bg-slate-50" />
                                 </td>
                                 <td class="px-3 py-2">
                                   <input v-model="row.standard" type="text" inputmode="decimal" placeholder="0"
-                                    class="w-full min-w-[5rem] rounded border border-slate-300 px-2 py-1.5 text-sm focus:ring-1 focus:ring-blue-500" />
+                                    :readonly="evidenceDrawerReadOnly"
+                                    class="w-full min-w-[5rem] rounded border border-slate-300 px-2 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 read-only:bg-slate-50" />
                                 </td>
                                 <td class="px-3 py-2 text-center">
-                                  <button v-if="waTimeRows.length > 1" type="button"
+                                  <button v-if="waTimeRows.length > 1 && canAddEvidenceRecords" type="button"
                                     class="rounded p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600"
                                     title="Xóa dòng" @click="removeWaTimeRow(row.id)">
                                     <i class="fas fa-trash-alt text-xs" />
@@ -1646,15 +2089,12 @@ function memberKpiTabIconClass(tab: MemberKpiMainTab) {
                           {{ waFormError }}
                         </p>
                         <div class="mt-3 flex flex-wrap items-center justify-between gap-2">
-                          <button type="button"
-                            class="inline-flex items-center rounded-md px-3 py-1.5 text-sm font-medium text-white transition-colors"
-                            :class="canAddMoreWaRows
-                                ? 'bg-blue-600 hover:bg-blue-700'
-                                : 'cursor-not-allowed bg-slate-400 opacity-70'
-                              " :disabled="!canAddMoreWaRows" :title="canAddMoreWaRows
-                          ? 'Thêm dòng (tháng chưa dùng)'
-                          : 'Đã đủ 12 dòng hoặc đã dùng hết 12 tháng'
-                        " @click="addWaTimeRow">
+                          <button v-if="canAddEvidenceRecords" type="button"
+                            class="inline-flex items-center rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                            :disabled="!canAddMoreWaRows" :title="canAddMoreWaRows
+                              ? 'Thêm dòng (tháng chưa dùng)'
+                              : 'Đã đủ 12 dòng hoặc đã dùng hết 12 tháng'
+                            " @click="addWaTimeRow">
                             <i class="fas fa-plus mr-1.5 text-xs" /> Thêm dòng
                           </button>
                           <p v-if="waTimeTotalsRatio(waTimeRows) != null" class="text-xs font-semibold text-blue-900">
@@ -1742,7 +2182,7 @@ function memberKpiTabIconClass(tab: MemberKpiMainTab) {
                               <span class="text-[10px] font-bold uppercase tracking-wider text-teal-800">Record {{
                                 rowIdx +
                                 1 }}</span>
-                              <button v-if="generalPlanActualRows.length > 1" type="button"
+                              <button v-if="generalPlanActualRows.length > 1 && canAddEvidenceRecords" type="button"
                                 class="rounded p-1 text-xs text-slate-400 hover:bg-rose-50 hover:text-rose-600"
                                 title="Xóa dòng" @click="removeGeneralPlanActualRow(row.id)">
                                 <i class="fas fa-trash-alt" />
@@ -1753,19 +2193,23 @@ function memberKpiTabIconClass(tab: MemberKpiMainTab) {
                                 <label class="mb-1 block text-xs font-bold text-slate-600">Mục tiêu
                                   (Plan/Target)</label>
                                 <textarea v-model="row.plan" rows="2"
-                                  class="w-full rounded border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-teal-500" />
+                                  :readonly="evidenceDrawerReadOnly"
+                                  class="w-full rounded border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-teal-500 read-only:bg-slate-50" 
+                                />
                               </div>
                               <div>
                                 <label class="mb-1 block text-xs font-bold text-slate-600">Thực tế
                                   (Actual/Result)</label>
                                 <textarea v-model="row.actual" rows="2"
-                                  class="w-full rounded border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-teal-500" />
+                                  :readonly="evidenceDrawerReadOnly"
+                                  class="w-full rounded border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-teal-500 read-only:bg-slate-50" />
                               </div>
                             </div>
                           </div>
-                          <div class="flex justify-end">
+                          <div v-if="canAddEvidenceRecords" class="flex justify-end">
                             <button type="button"
                               class="flex items-center rounded bg-teal-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-teal-700"
+                              title="Thêm một dòng Plan / Actual"
                               @click="addGeneralPlanActualRow">
                               <i class="fas fa-plus mr-1" /> Thêm Record
                             </button>
@@ -1791,17 +2235,19 @@ function memberKpiTabIconClass(tab: MemberKpiMainTab) {
                     <div class="space-y-4 p-5">
                       <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
                         <label
-                          class="group relative block rounded-lg border-2 border-dashed border-slate-300 bg-white p-5 text-center transition-colors"
-                          :class="pendingEvidenceFiles.length >= EVIDENCE_MAX_FILES
+                          class="group relative block rounded-lg border-2 border-dashed border-slate-300 bg-white p-5 text-center transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed disabled:pointer-events-none"
+                          :class="pendingEvidenceFiles.length >= EVIDENCE_MAX_FILES || evidenceDrawerReadOnly
                               ? 'cursor-not-allowed opacity-60'
                               : 'cursor-pointer hover:border-indigo-400 hover:bg-slate-50'
                             ">
                           <input v-if="pendingEvidenceFiles.length < EVIDENCE_MAX_FILES" type="file" multiple
                             :accept="EVIDENCE_ACCEPT_ATTR"
-                            class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-                            title="Chọn file (tối đa 5 file)" @change="onEvidenceFilesChange" />
+                            class="absolute inset-0 h-full w-full cursor-pointer opacity-0 "
+                            title="Chọn file (tối đa 5 file)" @change="onEvidenceFilesChange" 
+                            :disabled="evidenceDrawerReadOnly"
+                          />
                           <div
-                            class="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-indigo-50 text-indigo-500 transition-transform group-hover:scale-110">
+                            class="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-indigo-50 text-indigo-500 transition-transform group-hover:scale-110 ">
                             <i class="fas fa-cloud-upload-alt text-2xl" />
                           </div>
                           <p class="text-sm font-bold text-slate-700">Tải File Lên (PC)</p>
@@ -1821,7 +2267,7 @@ function memberKpiTabIconClass(tab: MemberKpiMainTab) {
                               <input v-model="evidenceUrlDraft" type="text" inputmode="url" autocomplete="url"
                                 placeholder="https://..."
                                 class="w-full rounded-md border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm shadow-sm focus:ring-1 focus:ring-indigo-500"
-                                :disabled="pendingEvidenceUrls.length >= EVIDENCE_MAX_URLS"
+                                :disabled="pendingEvidenceUrls.length >= EVIDENCE_MAX_URLS || evidenceDrawerReadOnly"
                                 @keydown="onEvidenceUrlDraftKeydown" />
                             </div>
                             <button type="button"
@@ -1835,56 +2281,96 @@ function memberKpiTabIconClass(tab: MemberKpiMainTab) {
                         </div>
                       </div>
 
-                      <!-- Danh sách chung: file + URL -->
-                      <div class="space-y-2">
-                        <div class="flex flex-wrap items-center justify-between gap-2">
-                          <p class="text-xs font-semibold text-slate-600">
-                            Minh chứng đã chọn:
-                            {{ pendingEvidenceFiles.length }}/{{ EVIDENCE_MAX_FILES }} file
-                            ·
-                            {{ pendingEvidenceUrls.length }}/{{ EVIDENCE_MAX_URLS }} URL
-                          </p>
-                          <div class="flex flex-wrap gap-2 text-[11px] font-medium text-amber-700">
-                            <span v-if="pendingEvidenceFiles.length >= EVIDENCE_MAX_FILES">Đủ số file</span>
-                            <span v-if="pendingEvidenceUrls.length >= EVIDENCE_MAX_URLS">Đủ số URL</span>
-                          </div>
+                      <!-- Hai khối: FILE (máy + tên file từ evd) và URL / đường dẫn (một dòng evd → hai chỗ nếu có name + url) -->
+                      <div class="space-y-4">
+                        <div class="flex flex-wrap gap-4 rounded-lg border border-slate-100 bg-slate-50/90 px-3 py-2 text-xs font-semibold text-slate-700">
+                          <span class="inline-flex items-center gap-2">
+                            <i class="fas fa-file-alt text-slate-500" aria-hidden="true" />
+                            File (máy):
+                            <span class="tabular-nums text-slate-900">{{ evidenceFileSectionCount }}/{{ EVIDENCE_MAX_FILES }}</span>
+                          </span>
+                          <span class="hidden sm:inline text-slate-300" aria-hidden="true">|</span>
+                          <span class="inline-flex items-center gap-2">
+                            <i class="fas fa-link text-indigo-500" aria-hidden="true" />
+                            URL / đường dẫn:
+                            <span class="tabular-nums text-slate-900">{{ pendingEvidenceUrls.length }}/{{ EVIDENCE_MAX_URLS }}</span>
+                          </span>
+                          <span v-if="pendingEvidenceFiles.length >= EVIDENCE_MAX_FILES || pendingEvidenceUrls.length >= EVIDENCE_MAX_URLS"
+                            class="ml-auto flex flex-wrap gap-2 text-[11px] font-medium text-amber-700">
+                            <span v-if="pendingEvidenceFiles.length >= EVIDENCE_MAX_FILES">Đủ file máy</span>
+                            <span v-if="pendingEvidenceUrls.length >= EVIDENCE_MAX_URLS">Đủ ô link</span>
+                          </span>
                         </div>
                         <p v-if="evidenceUploadHint" class="text-xs text-amber-700">{{ evidenceUploadHint }}</p>
-                        <ul v-if="hasEvidenceAttachments"
-                          class="max-h-56 divide-y divide-slate-100 overflow-y-auto rounded-lg border border-slate-200 bg-white">
-                          <li v-for="row in pendingEvidenceFiles" :key="'f-' + row.id"
-                            class="flex items-center gap-3 px-3 py-2.5">
-                            <span
-                              class="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold uppercase text-slate-500">File</span>
-                            <i class="fas fa-file-alt shrink-0 text-slate-400" />
-                            <div class="min-w-0 flex-1">
-                              <p class="truncate text-sm font-medium text-slate-800" :title="row.file.name">{{
-                                row.file.name
-                                }}</p>
-                              <p class="text-xs text-slate-500">{{ formatEvidenceFileSize(row.file.size) }}</p>
-                            </div>
-                            <button type="button"
-                              class="shrink-0 rounded p-1.5 text-slate-400 transition-colors hover:bg-rose-50 hover:text-rose-600"
-                              title="Xóa file" @click="removePendingEvidenceFile(row.id)">
-                              <i class="fas fa-times" />
-                            </button>
-                          </li>
-                          <li v-for="row in pendingEvidenceUrls" :key="'u-' + row.id"
-                            class="flex items-center gap-2 px-3 py-2.5">
-                            <span
-                              class="shrink-0 rounded bg-indigo-50 px-1.5 py-0.5 text-[10px] font-bold uppercase text-indigo-600">URL</span>
-                            <i class="fas fa-external-link-alt shrink-0 text-xs text-slate-400" />
-                            <a :href="row.url" target="_blank" rel="noopener noreferrer"
-                              class="min-w-0 flex-1 truncate text-sm font-medium text-indigo-700 hover:underline"
-                              :title="row.url">{{ row.url }}</a>
-                            <button type="button"
-                              class="shrink-0 rounded p-1.5 text-slate-400 transition-colors hover:bg-rose-50 hover:text-rose-600"
-                              title="Xóa URL" @click="removePendingEvidenceUrl(row.id)">
-                              <i class="fas fa-times" />
-                            </button>
-                          </li>
-                        </ul>
-                        <p v-else
+
+                        <!-- FILE ĐÍNH KÈM: upload PC + dòng tên file từ evd -->
+                        <div v-if="hasFileAttachmentsSection">
+                          <p class="mb-2 text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                            File đính kèm
+                          </p>
+                          <ul class="divide-y divide-slate-100 overflow-hidden rounded-lg border border-slate-200 bg-white">
+                            <li v-for="row in pendingEvidenceFiles" :key="'f-' + row.id"
+                              class="flex items-center gap-3 px-3 py-2.5">
+                              <span
+                                class="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold uppercase text-slate-600">FILE</span>
+                              <i class="fas fa-file-alt shrink-0 text-slate-400" />
+                              <div class="min-w-0 flex-1">
+                                <p class="truncate text-sm font-medium text-slate-800" :title="row.file.name">{{
+                                  row.file.name
+                                  }}</p>
+                              </div>
+                              <button type="button"
+                                class="shrink-0 rounded p-1.5 text-slate-400 transition-colors hover:bg-rose-50 hover:text-rose-600"
+                                title="Xóa file" @click="removePendingEvidenceFile(row.id)">
+                                <i class="fas fa-times" />
+                              </button>
+                            </li>
+                            <li v-for="row in pendingEvidenceNamedRows" :key="'evname-' + row.id"
+                              class="flex items-center gap-3 px-3 py-2.5">
+                              <span
+                                class="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold uppercase text-slate-600">FILE</span>
+                              <i class="fas fa-file-alt shrink-0 text-slate-400" />
+                              <div class="min-w-0 flex-1">
+                                <p class="truncate text-sm font-medium text-slate-800" :title="(row.name ?? '').trim()">
+                                  {{ (row.name ?? '').trim() }}
+                                </p>
+                              </div>
+                              <button type="button"
+                                class="shrink-0 rounded p-1.5 text-slate-400 transition-colors hover:bg-rose-50 hover:text-rose-600"
+                                title="Xóa minh chứng (gỡ cả tên và đường dẫn)" @click="removePendingEvidenceUrl(row.id)">
+                                <i class="fas fa-times" />
+                              </button>
+                            </li>
+                          </ul>
+                        </div>
+
+                        <!-- URL ĐƯỜNG DẪN MINH CHỨNG: luôn hiển thị url (đường dẫn hoặc http) -->
+                        <div v-if="hasEvidenceUrlList">
+                          <p class="mb-2 text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                            URL đường dẫn minh chứng
+                          </p>
+                          <ul class="divide-y divide-slate-100 overflow-hidden rounded-lg border border-indigo-100 bg-white">
+                            <li v-for="row in pendingEvidenceUrls" :key="'u-' + row.id"
+                              class="flex items-center gap-2 px-3 py-2.5">
+                              <span
+                                class="shrink-0 rounded bg-indigo-50 px-1.5 py-0.5 text-[10px] font-bold uppercase text-indigo-600">URL</span>
+                              <i class="fas fa-external-link-alt shrink-0 text-xs text-slate-400" />
+                              <div class="min-w-0 flex-1">
+                                <a :href="row.url" target="_blank" rel="noopener noreferrer"
+                                  class="block truncate text-sm font-medium text-indigo-700 hover:underline"
+                                  :title="row.url">
+                                  {{ row.url }}
+                                </a>
+                              </div>
+                              <button type="button"
+                                class="shrink-0 rounded p-1.5 text-slate-400 transition-colors hover:bg-rose-50 hover:text-rose-600"
+                                title="Xóa URL" @click="removePendingEvidenceUrl(row.id)">
+                                <i class="fas fa-times" />
+                              </button>
+                            </li>
+                          </ul>
+                        </div>
+                        <p v-if="!hasEvidenceAttachments"
                           class="rounded border border-dashed border-slate-200 bg-slate-50/80 px-3 py-2 text-center text-xs text-slate-500">
                           Chưa có file hoặc URL - thêm ở hai ô phía trên
                         </p>
@@ -1902,7 +2388,8 @@ function memberKpiTabIconClass(tab: MemberKpiMainTab) {
                     <div class="p-4">
                       <textarea v-model="evidenceNoteDraft" rows="3"
                         placeholder="Nhập diễn giải thêm về bằng chứng của bạn..."
-                        class="w-full resize-none rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:ring-1 focus:ring-indigo-500" />
+                        :readonly="evidenceDrawerReadOnly"
+                        class="w-full resize-none rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:ring-1 focus:ring-indigo-500 read-only:bg-slate-50" />
                     </div>
                   </div>
                 </div>
@@ -1917,7 +2404,8 @@ function memberKpiTabIconClass(tab: MemberKpiMainTab) {
                   Evaluation
                 </label>
                 <select
-                  class="w-40 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 shadow-sm focus:ring-1 focus:ring-sky-500"
+                  class="w-40 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 shadow-sm focus:ring-1 focus:ring-sky-500 disabled:cursor-default disabled:bg-slate-50"
+                  :disabled="evidenceDrawerReadOnly"
                   :value="detailSelfScore ?? ''" @change="
                     detailSelfScore =
                     ($event.target as HTMLSelectElement).value === ''
@@ -1937,7 +2425,7 @@ function memberKpiTabIconClass(tab: MemberKpiMainTab) {
                   Hủy bỏ
                 </button>
 
-                <button type="button"
+                <button v-if="!evidenceDrawerReadOnly" type="button"
                   class="flex items-center rounded-lg bg-slate-800 px-5 py-2 text-sm font-bold text-white shadow-md transition-colors hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-45"
                   :disabled="!canSaveEvidence || saving"
                   :title="!canSaveEvidence ? 'Vui lòng chọn điểm tự đánh giá (1–5) trước khi lưu' : undefined"
@@ -1945,6 +2433,9 @@ function memberKpiTabIconClass(tab: MemberKpiMainTab) {
                   <i :class="saving ? 'fas fa-spinner fa-spin' : 'fas fa-save'" class="mr-2 text-sm" />
                   Lưu Evidence
                 </button>
+                <span v-else class="rounded-lg border border-slate-200 bg-slate-50 px-4 py-2 text-xs font-semibold text-slate-500">
+                  Chỉ xem — không lưu chỉnh sửa
+                </span>
               </div>
             </div>
           </aside>

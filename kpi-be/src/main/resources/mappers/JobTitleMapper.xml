@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.company.kpi.mapper.JobTitleMapper">
+    <!-- Lấy danh sách chức danh -->
+    <select id="getJobTitles" resultType="com.company.kpi.response.admin.AdminJobTitleResponse">
+        SELECT
+            CAST(jt.id AS VARCHAR)  AS id,
+            jt.name                 AS name,
+            rk.code                 AS rankCode,
+            jf.code                 AS jobFamilyCode,
+            jf.name                 AS jobFamilyName
+        FROM job_titles jt
+        JOIN ranks rk        ON jt.rank_id       = rk.id AND rk.deleted_at IS NULL
+        JOIN job_families jf ON jt.job_family_id = jf.id AND jf.deleted_at IS NULL
+        WHERE jt.deleted_at IS NULL
+        ORDER BY jf.code, rk.code, jt.name
+    </select>
+
+    <!-- Tìm job_title_id theo rank code — ưu tiên DEV, fallback bất kỳ -->
+    <select id="findJobTitleIdByRankCode" resultType="java.lang.String">
+        SELECT CAST(jt.id AS VARCHAR)
+        FROM job_titles jt
+        JOIN ranks rk        ON jt.rank_id       = rk.id AND rk.deleted_at IS NULL
+        LEFT JOIN job_families jf ON jt.job_family_id = jf.id AND jf.deleted_at IS NULL
+        WHERE rk.code = #{rankCode}
+          AND jt.deleted_at IS NULL
+        ORDER BY
+            CASE WHEN jf.code = 'DEV' THEN 0 ELSE 1 END,
+            jf.code
+        LIMIT 1
+    </select>
+</mapper>

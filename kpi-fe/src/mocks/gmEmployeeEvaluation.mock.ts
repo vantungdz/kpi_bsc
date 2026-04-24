@@ -4,9 +4,17 @@
  * Teams contain only members the GM scores (direct PM line — no “via another member” rows in this dataset).
  */
 
-import { gmLayoutMockDepartments, type GmDepartmentMock } from './gm-kpi.mock'
+import { gmLayoutMockDepartments } from './gm-kpi.mock'
+import type { GmDepartmentMock } from '@/types/gm-workspace'
 
 export type GmEmployeeSheetStatus = 'pending_pm' | 'self_scoring' | 'approved'
+
+/** Mô tả mock đồng bộ `sys_status_codes` (ASM) trong `init-db.sql` — dùng cho cột tiến độ khi không có API. */
+export function gmMockAsmStatusDescription(status: GmEmployeeSheetStatus): string {
+  if (status === 'pending_pm') return 'Chờ PM chấm điểm Final'
+  if (status === 'self_scoring') return 'Member đã nộp bằng chứng 1st Half, chờ PM duyệt'
+  return 'Đã chốt sổ hoàn toàn (Kết thúc vòng đời)'
+}
 
 export interface GmEvidenceTable {
   title: string
@@ -32,6 +40,8 @@ export interface GmKpiItem {
   evidenceTone: 'blue' | 'emerald'
   selfScore: number
   evidence: GmEvidenceTable
+  /** ASM assignment từ hub API: 502 = review GM (không chấm), 602 = chấm điểm GM + comment. */
+  hubAssignmentStatusCode?: number | null
 }
 
 export interface GmKpiGroup {
@@ -48,6 +58,12 @@ export interface GmEvalMember {
   initialsClass: string
   rank: string
   status: GmEmployeeSheetStatus
+  /** `sys_status_codes.name` (ASM) — cột Tiến độ; mock dùng {@link gmMockAsmStatusDescription}. */
+  assignmentStatusDisplay?: string | null
+  /** Cột Thao tác (chấm/duyệt GM): bật khi có assignment ASM 502 hoặc 602. */
+  gmApprovalActionEnabled?: boolean
+  /** `users.id` (assignee) — API hub; mock: `GM_MOCK_HUB_EVAL_USER_UUID`. */
+  evaluationUserId?: string
   selfScoreDisplay: string | null
   canScore: boolean
   projectIds: string[]
@@ -85,6 +101,22 @@ export const GM_EVAL_PM_BROKERS: GmEvalPmBroker[] = [
   { id: 'pm-tran-b', name: 'Trần Thị B', unit: 'Quality Assurance' },
   { id: 'pm-le-c', name: 'Lê Văn C', unit: 'PMO' },
 ]
+
+/** UUID cố định (mock) — gửi kèm POST evaluation-hub/confirm (`evaluationUserId`). */
+const GM_MOCK_HUB_EVAL_USER_UUID: Record<string, string> = {
+  'gm-834': '10000000-0000-4000-a000-000000000834',
+  'gm-801': '10000000-0000-4000-a000-000000000801',
+  'gm-805': '10000000-0000-4000-a000-000000000805',
+  'gm-820': '10000000-0000-4000-a000-000000000820',
+  'pm-liem': '20000000-0000-4000-a000-000000000001',
+  'pm-nguyen-a': '20000000-0000-4000-a000-000000000002',
+  'pm-tran-b': '20000000-0000-4000-a000-000000000003',
+  'pm-le-c': '20000000-0000-4000-a000-000000000004',
+  'pm-liem-ld1': '30000000-0000-4000-a000-000000000101',
+  'pm-liem-ld2': '30000000-0000-4000-a000-000000000102',
+  'pm-na-ld1': '30000000-0000-4000-a000-000000000201',
+  'pm-lc-ld1': '30000000-0000-4000-a000-000000000301',
+}
 
 /** BSC — Financial (GM mock). */
 const gmBscFinancial: GmKpiGroup = {
@@ -310,6 +342,17 @@ function emptyGmGroups(): GmKpiGroup[] {
   return []
 }
 
+/** Mock: mặc định ASM 602 (chấm điểm GM) nếu chưa có `hubAssignmentStatusCode` trên từng KPI. */
+function withHubAsmDefaultOnItems(groups: GmKpiGroup[]): GmKpiGroup[] {
+  return groups.map((g) => ({
+    ...g,
+    items: g.items.map((it) => ({
+      ...it,
+      hubAssignmentStatusCode: it.hubAssignmentStatusCode ?? 602,
+    })),
+  }))
+}
+
 const teamLiem: GmEvalMember[] = [
   {
     id: 'gm-834',
@@ -320,11 +363,14 @@ const teamLiem: GmEvalMember[] = [
     initialsClass: 'bg-indigo-100 text-indigo-700',
     rank: 'R1',
     status: 'pending_pm',
+    assignmentStatusDisplay: gmMockAsmStatusDescription('pending_pm'),
+    gmApprovalActionEnabled: true,
+    evaluationUserId: GM_MOCK_HUB_EVAL_USER_UUID['gm-834'],
     selfScoreDisplay: '4.00',
     canScore: true,
     projectIds: ['alpha'],
     employeeComment: 'Direct PM line (GM mock).',
-    groups: GM_EVAL_FULL_MEMBER_GROUPS,
+    groups: withHubAsmDefaultOnItems(structuredClone(GM_EVAL_FULL_MEMBER_GROUPS)),
   },
   {
     id: 'gm-801',
@@ -335,10 +381,12 @@ const teamLiem: GmEvalMember[] = [
     initialsClass: 'bg-rose-100 text-rose-700',
     rank: 'R2',
     status: 'pending_pm',
+    assignmentStatusDisplay: gmMockAsmStatusDescription('pending_pm'),
+    gmApprovalActionEnabled: true,
     selfScoreDisplay: '4.00',
     canScore: true,
     projectIds: ['alpha'],
-    groups: GM_EVAL_FULL_MEMBER_GROUPS,
+    groups: withHubAsmDefaultOnItems(structuredClone(GM_EVAL_FULL_MEMBER_GROUPS)),
   },
   {
     id: 'gm-805',
@@ -349,10 +397,13 @@ const teamLiem: GmEvalMember[] = [
     initialsClass: 'bg-sky-100 text-sky-700',
     rank: 'R2',
     status: 'approved',
+    assignmentStatusDisplay: gmMockAsmStatusDescription('approved'),
+    gmApprovalActionEnabled: false,
+    evaluationUserId: GM_MOCK_HUB_EVAL_USER_UUID['gm-805'],
     selfScoreDisplay: '4.00',
     canScore: true,
     projectIds: ['beta'],
-    groups: [gmBscInternalProcess, gmGroupPromotion],
+    groups: withHubAsmDefaultOnItems(structuredClone([gmBscInternalProcess, gmGroupPromotion])),
   },
   {
     id: 'gm-820',
@@ -363,6 +414,9 @@ const teamLiem: GmEvalMember[] = [
     initialsClass: 'bg-violet-100 text-violet-700',
     rank: 'R1',
     status: 'self_scoring',
+    assignmentStatusDisplay: gmMockAsmStatusDescription('self_scoring'),
+    gmApprovalActionEnabled: false,
+    evaluationUserId: GM_MOCK_HUB_EVAL_USER_UUID['gm-820'],
     selfScoreDisplay: null,
     canScore: false,
     projectIds: ['alpha'],
@@ -397,12 +451,6 @@ export function flattenGmKpiItems(emp: GmEvalMember): GmKpiItem[] {
   return emp.groups.flatMap((g) => g.items)
 }
 
-export function statusLabelGm(s: GmEmployeeSheetStatus): string {
-  if (s === 'pending_pm') return 'Chờ duyệt'
-  if (s === 'self_scoring') return 'Đang tự chấm'
-  return 'Đã duyệt'
-}
-
 export function getGmEvalBroker(id: string): GmEvalPmBroker | undefined {
   return GM_EVAL_PM_BROKERS.find((b) => b.id === id)
 }
@@ -434,7 +482,7 @@ export function gmEvalPmRowStats(pmId: string) {
 function cloneKpiGroupsWithPmSlug(slug: string): GmKpiGroup[] {
   const safe = slug.replace(/[^a-zA-Z0-9-]/g, '')
   const templates: GmKpiGroup[] = GM_EVAL_FULL_MEMBER_GROUPS
-  return structuredClone(templates).map((g) => ({
+  return withHubAsmDefaultOnItems(structuredClone(templates)).map((g) => ({
     ...g,
     items: g.items.map((it) => ({ ...it, id: `${it.id}__${safe}` })),
   }))
@@ -446,7 +494,7 @@ function remapEvalMemberForSection(m: GmEvalMember, deptId: string): GmEvalMembe
   return {
     ...m,
     id: `${deptId}__${m.id}`,
-    groups: structuredClone(m.groups).map((g) => ({
+    groups: withHubAsmDefaultOnItems(structuredClone(m.groups)).map((g) => ({
       ...g,
       items: g.items.map((it) => ({ ...it, id: `${it.id}__${slug}` })),
     })),
@@ -471,6 +519,7 @@ function buildGmEvalPmHubMemberForBrokerScoped(b: GmEvalPmBroker, dept: GmDepart
     fullKpis: true,
     initialsClass: 'bg-indigo-100 text-indigo-700',
     rank: 'PM',
+    gmApprovalActionEnabled: false,
   }
   const slug = `${dept.id}-${b.id}`.replace(/[^a-zA-Z0-9-]/g, '')
   const groups = meta.fullKpis ? cloneKpiGroupsWithPmSlug(slug) : emptyGmGroups()
@@ -483,6 +532,9 @@ function buildGmEvalPmHubMemberForBrokerScoped(b: GmEvalPmBroker, dept: GmDepart
     initialsClass: meta.initialsClass,
     rank: meta.rank,
     status: meta.status,
+    assignmentStatusDisplay: gmMockAsmStatusDescription(meta.status),
+    gmApprovalActionEnabled: meta.gmApprovalActionEnabled,
+    evaluationUserId: GM_MOCK_HUB_EVAL_USER_UUID[b.id],
     selfScoreDisplay: avgSelfScoreFromGroups(groups),
     canScore: meta.canScore,
     projectIds: [b.id],
@@ -579,17 +631,54 @@ const GM_EVAL_PM_TREE_LAYOUT: Record<string, GmEvalPmTreeLayout> = {
 
 const GM_LEADER_EVAL_META: Record<
   string,
-  { status: GmEmployeeSheetStatus; canScore: boolean; fullKpis: boolean; rank: string }
+  {
+    status: GmEmployeeSheetStatus
+    canScore: boolean
+    fullKpis: boolean
+    rank: string
+    gmApprovalActionEnabled: boolean
+  }
 > = {
-  'pm-liem-ld1': { status: 'pending_pm', canScore: true, fullKpis: true, rank: 'TL' },
-  'pm-liem-ld2': { status: 'approved', canScore: true, fullKpis: true, rank: 'TL' },
-  'pm-na-ld1': { status: 'pending_pm', canScore: true, fullKpis: true, rank: 'EL' },
-  'pm-lc-ld1': { status: 'pending_pm', canScore: true, fullKpis: true, rank: 'DL' },
+  'pm-liem-ld1': {
+    status: 'pending_pm',
+    canScore: true,
+    fullKpis: true,
+    rank: 'TL',
+    gmApprovalActionEnabled: true,
+  },
+  'pm-liem-ld2': {
+    status: 'approved',
+    canScore: true,
+    fullKpis: true,
+    rank: 'TL',
+    gmApprovalActionEnabled: false,
+  },
+  'pm-na-ld1': {
+    status: 'pending_pm',
+    canScore: true,
+    fullKpis: true,
+    rank: 'EL',
+    gmApprovalActionEnabled: true,
+  },
+  'pm-lc-ld1': {
+    status: 'pending_pm',
+    canScore: true,
+    fullKpis: true,
+    rank: 'DL',
+    gmApprovalActionEnabled: true,
+  },
 }
 
 const GM_PM_HUB_ROW_META: Record<
   string,
-  { status: GmEmployeeSheetStatus; canScore: boolean; fullKpis: boolean; initialsClass: string; rank: string }
+  {
+    status: GmEmployeeSheetStatus
+    canScore: boolean
+    fullKpis: boolean
+    initialsClass: string
+    rank: string
+    gmApprovalActionEnabled: boolean
+  }
 > = {
   'pm-liem': {
     status: 'pending_pm',
@@ -597,6 +686,7 @@ const GM_PM_HUB_ROW_META: Record<
     fullKpis: true,
     initialsClass: 'bg-indigo-100 text-indigo-700',
     rank: 'PM',
+    gmApprovalActionEnabled: true,
   },
   'pm-nguyen-a': {
     status: 'pending_pm',
@@ -604,6 +694,7 @@ const GM_PM_HUB_ROW_META: Record<
     fullKpis: true,
     initialsClass: 'bg-rose-100 text-rose-700',
     rank: 'PM',
+    gmApprovalActionEnabled: true,
   },
   'pm-tran-b': {
     status: 'approved',
@@ -611,6 +702,7 @@ const GM_PM_HUB_ROW_META: Record<
     fullKpis: true,
     initialsClass: 'bg-sky-100 text-sky-700',
     rank: 'PM',
+    gmApprovalActionEnabled: false,
   },
   'pm-le-c': {
     status: 'self_scoring',
@@ -618,6 +710,7 @@ const GM_PM_HUB_ROW_META: Record<
     fullKpis: false,
     initialsClass: 'bg-violet-100 text-violet-700',
     rank: 'PM',
+    gmApprovalActionEnabled: false,
   },
 }
 
@@ -629,7 +722,7 @@ function withPmProjectId(emp: GmEvalMember, pmBrokerId: string): GmEvalMember {
 function cloneKpiGroupsForLeaderSlug(leaderSlug: string): GmKpiGroup[] {
   const safe = leaderSlug.replace(/[^a-zA-Z0-9-]/g, '')
   const templates: GmKpiGroup[] = GM_EVAL_FULL_MEMBER_GROUPS
-  return structuredClone(templates).map((g) => ({
+  return withHubAsmDefaultOnItems(structuredClone(templates)).map((g) => ({
     ...g,
     items: g.items.map((it) => ({ ...it, id: `${it.id}__ld-${safe}` })),
   }))
@@ -648,6 +741,7 @@ function buildLeaderBranchFromDef(
     canScore: true,
     fullKpis: true,
     rank: 'TL',
+    gmApprovalActionEnabled: false,
   }
   const leaderSlug = scopeDeptId ? `${scopeDeptId}-${def.key}` : def.key
   const groups = meta.fullKpis ? cloneKpiGroupsForLeaderSlug(leaderSlug) : emptyGmGroups()
@@ -660,6 +754,9 @@ function buildLeaderBranchFromDef(
     initialsClass: def.initialsClass,
     rank: meta.rank,
     status: meta.status,
+    assignmentStatusDisplay: gmMockAsmStatusDescription(meta.status),
+    gmApprovalActionEnabled: meta.gmApprovalActionEnabled,
+    evaluationUserId: GM_MOCK_HUB_EVAL_USER_UUID[def.key],
     selfScoreDisplay: avgSelfScoreFromGroups(groups),
     canScore: meta.canScore,
     projectIds: [pmBrokerId],

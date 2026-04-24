@@ -21,11 +21,13 @@ export const useAuthStore = defineStore('auth', () => {
   const isPm = computed(() => user.value?.role === 'PM')
   const isLeader = computed(() => user.value?.role === 'LEADER')
   const isMember = computed(() => user.value?.role === 'MEMBER')
+  const isAdmin = computed(() => user.value?.role === 'ADMIN')
 
   const homeRoute = computed(() => {
     if (user.value?.role === 'GM') return '/gm/dashboard'
     if (user.value?.role === 'PM') return '/pm/dashboard'
     if (user.value?.role === 'LEADER') return '/leader/dashboard'
+    if (user.value?.role === 'ADMIN') return '/admin/campaigns'
     return '/member/dashboard'
   })
 
@@ -63,6 +65,7 @@ export const useAuthStore = defineStore('auth', () => {
     isPm,
     isLeader,
     isMember,
+    isAdmin,
     homeRoute,
     setAuth,
     setAccessToken,

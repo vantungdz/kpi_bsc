@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.company.kpi.mapper.KpiCategoryMapper">
+    <select id="findAll" resultType="com.company.kpi.entity.KpiCategory">
+        SELECT id, name FROM kpi_categories WHERE deleted_at IS NULL
+    </select>
+    <select id="listAllActive" resultType="com.company.kpi.response.gm.GmKpiCategoryResponse">
+        SELECT
+            id,
+            name
+        FROM
+            kpi_categories
+        WHERE
+            deleted_at IS NULL
+        ORDER BY
+            name ASC
+    </select>
+
+    <select id="countActiveById" resultType="int">
+        SELECT COUNT(*)
+        FROM kpi_categories
+        WHERE id = #{id}
+          AND deleted_at IS NULL
+    </select>
+
+    <select id="findActiveById" resultType="com.company.kpi.response.gm.GmKpiCategoryResponse">
+        SELECT id, name
+        FROM kpi_categories
+        WHERE id = #{id}
+          AND deleted_at IS NULL
+    </select>
+    <!-- ── Thêm từ ReferenceDataMapper ─────────────────────────────────────────── -->
+    <select id="listKpiCategories" resultType="com.company.kpi.response.member.KpiCategoryOption">
+        SELECT id::text AS id, name
+        FROM kpi_categories
+        WHERE deleted_at IS NULL
+        ORDER BY name
+    </select>
+</mapper>

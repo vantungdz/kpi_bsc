@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.company.kpi.mapper.UserDepartmentMapper">
+
+    <select id="findLeaderMemberListInfo" resultType="com.company.kpi.response.leader.LeaderMemberInfoDTO">
+        SELECT
+            u.id AS member_id,
+            u.full_name,
+            u.email,
+            r.name AS rank,
+            jf.name AS job_title,
+            jt.name AS job_level
+        FROM public.user_departments ud
+            JOIN public.users u ON ud.user_id = u.id
+            JOIN public.job_titles jt ON u.job_title_id = jt.id
+            JOIN public.ranks r ON jt.rank_id = r.id
+            JOIN public.job_families jf ON jt.job_family_id = jf.id
+        WHERE ud.supervisor_id = #{leaderId, jdbcType=OTHER}
+            AND u.is_active = true
+            AND u.deleted_at IS NULL
+            AND jt.deleted_at IS NULL
+            AND r.deleted_at IS NULL
+            AND jf.deleted_at IS NULL
+    </select>
+    <!-- ── Thêm từ AdminMapper ─────────────────────────────────────────────────── -->
+    <insert id="insertUserDepartment">
+        INSERT INTO user_departments (user_id, department_id, supervisor_id, is_primary)
+        VALUES (#{userId},
+                #{departmentId, jdbcType=OTHER, typeHandler=com.company.kpi.common.mybatis.UUIDTypeHandler},
+                #{supervisorId, jdbcType=OTHER, typeHandler=com.company.kpi.common.mybatis.UUIDTypeHandler},
+                TRUE)
+        ON CONFLICT DO NOTHING
+    </insert>
+
+    <delete id="deletePrimaryDepartment">
+        DELETE FROM user_departments
+        WHERE user_id = #{userId} AND is_primary = TRUE
+    </delete>
+</mapper>

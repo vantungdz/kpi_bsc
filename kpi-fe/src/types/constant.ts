@@ -1,0 +1,2 @@
+export const KPI_TYPE_INDIVIDUAL = 'INDIVIDUAL';
+export const KPI_TYPE_PROMOTION = 'PROMOTION';

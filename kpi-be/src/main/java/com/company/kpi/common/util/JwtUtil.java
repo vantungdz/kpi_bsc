@@ -1,6 +1,10 @@
 package com.company.kpi.common.util;
 
 import com.company.kpi.entity.User;
+import com.company.kpi.common.Constants;
+import com.company.kpi.common.exception.AppException;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.security.Keys;
 import lombok.extern.slf4j.Slf4j;
@@ -78,5 +82,21 @@ public class JwtUtil {
 
     public long getRefreshExpirationMs() {
         return refreshExpiration;
+    }
+
+    /**
+     * Resolve current user's UUID from provided Authentication or SecurityContext.
+     * Throws an unauthorized AppException when authentication is missing or invalid.
+     */
+    public UUID resolveUserId(Authentication authentication) {
+        Authentication auth = (authentication != null)
+                ? authentication
+                : SecurityContextHolder.getContext().getAuthentication();
+
+        if (auth == null || !auth.isAuthenticated()) {
+            throw AppException.unauthorized(Constants.Error.USER_NOT_AUTHENTICATED);
+        }
+
+        return UUID.fromString(auth.getPrincipal().toString());
     }
 }

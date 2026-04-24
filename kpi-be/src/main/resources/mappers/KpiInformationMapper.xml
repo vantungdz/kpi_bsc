@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.company.kpi.mapper.KpiInformationMapper">
+
+    <select id="listCatalogByCycleId" resultType="com.company.kpi.response.gm.GmKpiCatalogItemResponse">
+        SELECT
+            ki.id,
+            ki.cycle_id,
+            km.id AS master_kpi_id,
+            km.code,
+            km.name,
+            km.category_id,
+            kc.name AS category_name,
+            km.type_code,
+            km.calculation_rule_code,
+            km.calculation_type_code,
+            km.unit_code,
+            km.is_global,
+            ki.target_description,
+            ki.target_value,
+            ki.weight,
+            ki.is_important
+        FROM
+            kpis_information ki
+            INNER JOIN kpi_master km ON ki.master_kpi_id = km.id
+                AND km.deleted_at IS NULL
+            LEFT JOIN kpi_categories kc ON km.category_id = kc.id
+                AND kc.deleted_at IS NULL
+        WHERE
+            ki.cycle_id = #{cycleId}
+            AND ki.deleted_at IS NULL
+        ORDER BY
+            km.code NULLS LAST,
+            km.name
+    </select>
+</mapper>

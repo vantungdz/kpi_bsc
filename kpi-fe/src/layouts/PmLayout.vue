@@ -1,6 +1,8 @@
 <script setup lang="ts">
+import { ref } from "vue";
 import { useRoute } from "vue-router";
 import { useAuth } from "@/composables/useAuth";
+import PmAssignKpiDrawer from "@/components/pm/drawers/PmAssignKpiDrawer.vue";
 
 const route = useRoute();
 const { user, logout } = useAuth();
@@ -10,6 +12,14 @@ const navItems = [
 ];
 
 const isActive = (path: string) => route.path.startsWith(path);
+
+// State điều khiển Drawer tạo mới KPI
+const showCreateDrawer = ref(false);
+
+const handleKpiCreated = (payload: any) => {
+  console.log("Đã tạo KPI mới:", payload);
+  // Thực tế sẽ gọi API và Toast thông báo ở đây
+}
 </script>
 
 <template>
@@ -97,17 +107,30 @@ const isActive = (path: string) => route.path.startsWith(path);
           </p>
           <h2 class="text-xl font-bold text-slate-800">KPI Management</h2>
         </div>
-        <div class="text-right pl-4 border-l border-slate-200">
-          <p class="text-sm font-bold text-slate-800">
-            {{ user?.name ?? "–" }}
-          </p>
-          <p class="text-xs text-slate-500">{{ user?.rank ?? "PM" }}</p>
+        <div class="flex items-center gap-4">
+          <button @click="showCreateDrawer = true" class="flex shrink-0 items-center gap-1.5 rounded-lg bg-purple-600 px-3 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:bg-purple-700">
+            <i class="fas fa-plus text-xs" /> Create Team KPI
+          </button>
+
+          <div class="text-right pl-4 border-l border-slate-200">
+            <p class="text-sm font-bold text-slate-800">
+              {{ user?.name ?? "–" }}
+            </p>
+            <p class="text-xs text-slate-500">{{ user?.rank ?? "PM" }}</p>
+          </div>
         </div>
       </header>
 
-      <div class="flex-1 overflow-y-auto bg-slate-50">
+      <div class="flex-1 overflow-y-auto bg-slate-50 relative">
         <RouterView />
       </div>
+
+      <PmAssignKpiDrawer 
+        :open="showCreateDrawer" 
+        mode="create" 
+        @close="showCreateDrawer = false" 
+        @save="handleKpiCreated" 
+      />
     </main>
   </div>
 </template>

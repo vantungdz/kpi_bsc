@@ -1,26 +1,78 @@
 ﻿-- ============================================================================
 -- V3__sample_data.sql
 -- Script tạo dữ liệu mẫu cho hệ thống KPI
--- Dựa trên schema init-db.sql và frontend layouts (Member, Leader, PM, GM)
 --
--- Cấu trúc tổ chức mẫu:
---   Công ty
---   └── Phòng Công Nghệ (Tech)   [Manager: PM Trần Quang Minh]
---       ├── Leader: Trần Đăng Huy
---       │   ├── Member: Nguyen Quang Huy  (Dev R1)
---       │   ├── Member: Trần Văn Phước    (Dev R2)
---       │   ├── Member: Lê Thị Mai        (QA R2)
---       │   └── Member: Phạm Đức Anh      (BA R2)
---       └── Leader: Nguyễn Thị Lan        (Dev R3 - Team 2)
---           ├── Member: Vũ Minh Tuấn      (Dev R1)
---           └── Member: Đặng Thị Hoa      (Dev R2)
+-- Cấu trúc tổ chức:
+--   1 GM (gm@kpi.com, R10)
+--   8 Section, mỗi section có:
+--     1 PM  (pm{n}@kpi.com, R8)       → quản lý section
+--     1 Leader (leader{n}@kpi.com, R6) → báo cáo PM, quản lý 1 member
+--     3 Member:
+--       - member{3n-2}@kpi.com (R2 Junior)   → báo cáo Leader
+--       - member{3n-1}@kpi.com (R3 Mid)      → báo cáo PM
+--       - member{3n}@kpi.com   (R4 Senior)   → báo cáo PM
+--
+-- UUID scheme:
+--   Users:       e1000000-0000-0000-0000-000000000001 (GM)
+--                e1000000-0000-0000-0000-000000000002 ~ 009 (PM1-8)
+--                e1000000-0000-0000-0000-000000000010 ~ 017 (Leader1-8)
+--                e1000000-0000-0000-0000-000000000018 ~ 041 (Member1-24)
+--   Departments: f1000000-0000-0000-0000-000000000001 (Company)
+--                f1000000-0000-0000-0000-000000000002 ~ 009 (Section1-8)
+--
+-- Password hash: "Abc@12345"
 -- ============================================================================
 
--- Bật extension uuid nếu chưa có
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- ============================================================================
--- SECTION 1: ROLES (Phân quyền hệ thống)
+-- SECTION 0: SYS_STATUS_CODES (Master codes - insert nếu chưa có)
+-- ============================================================================
+INSERT INTO sys_status_codes (code, category, name, description) VALUES
+-- 1xx: KPI TYPE
+(101, 'KPI_TYPE', 'INDIVIDUAL', 'Muc tieu ca nhan'),
+(102, 'KPI_TYPE', 'TEAM',       'Muc tieu phong ban/nhom'),
+(103, 'KPI_TYPE', 'PROMOTION',  'Muc tieu thang tien'),
+-- 2xx: CYCLE STATUS
+(201, 'CYCLE_STATUS', 'OPEN',   'Chu ky dang mo'),
+(202, 'CYCLE_STATUS', 'CLOSED', 'Chu ky da dong'),
+-- 4xx: ASM_STATUS Phase 1
+(401, 'ASM_STATUS', 'INACTIVE',              'KPI moi tao (Chua kich hoat)'),
+(402, 'ASM_STATUS', 'WAITING_PM_APPROVAL',   'Member tao, cho PM duyet'),
+(403, 'ASM_STATUS', 'WAITING_GM_APPROVAL',   'Cho GM duyet tao moi'),
+(404, 'ASM_STATUS', 'PENDING_ACCEPTANCE',    'Cho Member bam Accept'),
+(405, 'ASM_STATUS', 'ACCEPTED',              'Da chot muc tieu (Dang chay)'),
+(406, 'ASM_STATUS', 'REJECTED',              'Bi tu choi'),
+-- 5xx: ASM_STATUS Phase 2
+(501, 'ASM_STATUS', '1ST_WAITING_PM_APPROVAL', 'Member da nop bang chung 1st Half, cho PM duyet'),
+(502, 'ASM_STATUS', '1ST_WAITING_GM_APPROVAL', 'PM da duyet 1st Half, cho GM chot diem'),
+(503, 'ASM_STATUS', '1ST_COMPLETED',            'GM da chot diem 1st Half'),
+-- 6xx: ASM_STATUS Phase 3
+(601, 'ASM_STATUS', '2ND_WAITING_PM_APPROVAL', 'Cho PM cham diem Final'),
+(602, 'ASM_STATUS', '2ND_WAITING_GM_APPROVAL', 'Cho GM chot diem Final'),
+(603, 'ASM_STATUS', 'COMPLETED',               'Da chot so hoan toan (Ket thuc vong doi)'),
+-- 7xx: CALC_TYPE
+(701, 'CALC_TYPE', 'ACTUAL_OVER_PLAN', 'Actual / Plan'),
+(702, 'CALC_TYPE', 'PLAN_OVER_ACTUAL', 'Plan / Actual'),
+(703, 'CALC_TYPE', 'MANUAL_RATING',    'Manual Rating'),
+-- 8xx: CALC_RULE
+(801, 'CALC_RULE', 'SUM',         'Cong don diem cua cac KPI con'),
+(802, 'CALC_RULE', 'AVERAGE',     'Lay trung binh cong diem cac KPI con'),
+(803, 'CALC_RULE', 'COMMENT',     'Nhap diem thu cong dua tren nhan xet danh gia'),
+(804, 'CALC_RULE', 'WEIGHTED_AVG','Trung binh cong co trong so'),
+-- 9xx: KPI_UNIT
+(901, 'KPI_UNIT', 'MM',          'Man-Month'),
+(902, 'KPI_UNIT', 'Percent',     'Phan tram (%)'),
+(903, 'KPI_UNIT', 'Point',       'Diem so'),
+(904, 'KPI_UNIT', 'Product',     'San pham'),
+(905, 'KPI_UNIT', 'Project',     'Du an'),
+(906, 'KPI_UNIT', 'Certification','Chung chi'),
+(907, 'KPI_UNIT', 'Article',     'Bai viet / Bai bao'),
+(908, 'KPI_UNIT', 'Person',      'Nguoi / Nhan su')
+ON CONFLICT DO NOTHING;
+
+-- ============================================================================
+-- SECTION 1: ROLES
 -- ============================================================================
 INSERT INTO roles (id, code, name) VALUES
   ('a1000000-0000-0000-0000-000000000001', 'GM',     'General Manager'),
@@ -30,7 +82,7 @@ INSERT INTO roles (id, code, name) VALUES
 ON CONFLICT DO NOTHING;
 
 -- ============================================================================
--- SECTION 2: JOB FAMILIES (Nhóm ngành nghề)
+-- SECTION 2: JOB FAMILIES
 -- ============================================================================
 INSERT INTO job_families (id, code, name) VALUES
   ('b1000000-0000-0000-0000-000000000001', 'DEV',  'Software Development'),
@@ -40,14 +92,19 @@ INSERT INTO job_families (id, code, name) VALUES
 ON CONFLICT DO NOTHING;
 
 -- ============================================================================
--- SECTION 3: RANKS (Cấp bậc)
+-- SECTION 3: RANKS (10 cấp bậc R1 → R10, GM là R10)
 -- ============================================================================
 INSERT INTO ranks (id, code, name) VALUES
-  ('c1000000-0000-0000-0000-000000000001', 'R0', 'Director / GM'),
-  ('c1000000-0000-0000-0000-000000000002', 'R1', 'Junior'),
-  ('c1000000-0000-0000-0000-000000000003', 'R2', 'Mid-Level'),
-  ('c1000000-0000-0000-0000-000000000004', 'R3', 'Senior'),
-  ('c1000000-0000-0000-0000-000000000005', 'R4', 'Lead / Principal')
+  ('c1000000-0000-0000-0000-000000000001', 'R1',  'Fresher'),
+  ('c1000000-0000-0000-0000-000000000002', 'R2',  'Junior'),
+  ('c1000000-0000-0000-0000-000000000003', 'R3',  'Mid-Level'),
+  ('c1000000-0000-0000-0000-000000000004', 'R4',  'Senior'),
+  ('c1000000-0000-0000-0000-000000000005', 'R5',  'Principal'),
+  ('c1000000-0000-0000-0000-000000000006', 'R6',  'Technical Lead'),
+  ('c1000000-0000-0000-0000-000000000007', 'R7',  'Senior Lead'),
+  ('c1000000-0000-0000-0000-000000000008', 'R8',  'Manager'),
+  ('c1000000-0000-0000-0000-000000000009', 'R9',  'Senior Manager'),
+  ('c1000000-0000-0000-0000-000000000010', 'R10', 'Director / GM')
 ON CONFLICT DO NOTHING;
 
 -- ============================================================================
@@ -57,16 +114,16 @@ INSERT INTO job_titles (id, job_family_id, rank_id, name) VALUES
   -- Management
   ('d1000000-0000-0000-0000-000000000001',
    'b1000000-0000-0000-0000-000000000004',
-   'c1000000-0000-0000-0000-000000000001',
+   'c1000000-0000-0000-0000-000000000010',
    'General Manager'),
   ('d1000000-0000-0000-0000-000000000002',
    'b1000000-0000-0000-0000-000000000004',
-   'c1000000-0000-0000-0000-000000000005',
+   'c1000000-0000-0000-0000-000000000008',
    'Project Manager'),
   -- Dev
   ('d1000000-0000-0000-0000-000000000003',
    'b1000000-0000-0000-0000-000000000001',
-   'c1000000-0000-0000-0000-000000000005',
+   'c1000000-0000-0000-0000-000000000006',
    'Technical Lead'),
   ('d1000000-0000-0000-0000-000000000004',
    'b1000000-0000-0000-0000-000000000001',
@@ -80,13 +137,17 @@ INSERT INTO job_titles (id, job_family_id, rank_id, name) VALUES
    'b1000000-0000-0000-0000-000000000001',
    'c1000000-0000-0000-0000-000000000002',
    'Junior Developer'),
-  -- QA
   ('d1000000-0000-0000-0000-000000000007',
+   'b1000000-0000-0000-0000-000000000001',
+   'c1000000-0000-0000-0000-000000000001',
+   'Fresher Developer'),
+  -- QA
+  ('d1000000-0000-0000-0000-000000000008',
    'b1000000-0000-0000-0000-000000000002',
    'c1000000-0000-0000-0000-000000000003',
    'Mid-Level QA Engineer'),
   -- BA
-  ('d1000000-0000-0000-0000-000000000008',
+  ('d1000000-0000-0000-0000-000000000009',
    'b1000000-0000-0000-0000-000000000003',
    'c1000000-0000-0000-0000-000000000003',
    'Mid-Level Business Analyst')
@@ -94,162 +155,496 @@ ON CONFLICT DO NOTHING;
 
 -- ============================================================================
 -- SECTION 5: USERS
--- Password hash cho "Abc@12345"
+-- Mật khẩu "Abc@12345" → BCrypt hash:
+--   $2a$10$BjRmmksBiefPBieq4ClE9OTHwn8/VPampKpiJQNOn80Pg2Tt9kcMy
 -- ============================================================================
+
+-- ── GM ───────────────────────────────────────────────────────────────────────
 INSERT INTO users (id, username, email, password_hash, full_name, job_title_id, is_active) VALUES
-  -- GM
   ('e1000000-0000-0000-0000-000000000001',
-   'nguyen.gm', 'nguyen.gm@company.vn',
+   'gm', 'gm@kpi.com',
    '$2a$10$BjRmmksBiefPBieq4ClE9OTHwn8/VPampKpiJQNOn80Pg2Tt9kcMy',
-   'Nguyễn Văn Thắng',
+   'Tran GM',
    'd1000000-0000-0000-0000-000000000001',
-   true),
-  -- PM
-  ('e1000000-0000-0000-0000-000000000002',
-   'tran.pm', 'tran.pm@company.vn',
-   '$2a$10$BjRmmksBiefPBieq4ClE9OTHwn8/VPampKpiJQNOn80Pg2Tt9kcMy',
-   'Trần Quang Minh',
-   'd1000000-0000-0000-0000-000000000002',
-   true),
-  -- Leader 1 (Team Dev 1)
-  ('e1000000-0000-0000-0000-000000000003',
-   'tran.leader', 'tran.leader@company.vn',
-   '$2a$10$BjRmmksBiefPBieq4ClE9OTHwn8/VPampKpiJQNOn80Pg2Tt9kcMy',
-   'Trần Đăng Huy',
-   'd1000000-0000-0000-0000-000000000003',
-   true),
-  -- Leader 2 (Team Dev 2)
-  ('e1000000-0000-0000-0000-000000000004',
-   'nguyen.leader2', 'nguyen.leader2@company.vn',
-   '$2a$10$BjRmmksBiefPBieq4ClE9OTHwn8/VPampKpiJQNOn80Pg2Tt9kcMy',
-   'Nguyễn Thị Lan',
-   'd1000000-0000-0000-0000-000000000004',
-   true),
-  -- Members - Team 1 (under Leader Trần Đăng Huy)
-  ('e1000000-0000-0000-0000-000000000005',
-   'huy.nguyen', 'huy.nguyen@company.vn',
-   '$2a$10$BjRmmksBiefPBieq4ClE9OTHwn8/VPampKpiJQNOn80Pg2Tt9kcMy',
-   'Nguyễn Quang Huy',
-   'd1000000-0000-0000-0000-000000000006',
-   true),
-  ('e1000000-0000-0000-0000-000000000006',
-   'phuoc.tran', 'phuoc.tran@company.vn',
-   '$2a$10$BjRmmksBiefPBieq4ClE9OTHwn8/VPampKpiJQNOn80Pg2Tt9kcMy',
-   'Trần Văn Phước',
-   'd1000000-0000-0000-0000-000000000005',
-   true),
-  ('e1000000-0000-0000-0000-000000000007',
-   'mai.le', 'mai.le@company.vn',
-   '$2a$10$BjRmmksBiefPBieq4ClE9OTHwn8/VPampKpiJQNOn80Pg2Tt9kcMy',
-   'Lê Thị Mai',
-   'd1000000-0000-0000-0000-000000000007',
-   true),
-  ('e1000000-0000-0000-0000-000000000008',
-   'anh.pham', 'anh.pham@company.vn',
-   '$2a$10$BjRmmksBiefPBieq4ClE9OTHwn8/VPampKpiJQNOn80Pg2Tt9kcMy',
-   'Phạm Đức Anh',
-   'd1000000-0000-0000-0000-000000000008',
-   true),
-  -- Members - Team 2 (under Leader Nguyễn Thị Lan)
-  ('e1000000-0000-0000-0000-000000000009',
-   'tuan.vu', 'tuan.vu@company.vn',
-   '$2a$10$BjRmmksBiefPBieq4ClE9OTHwn8/VPampKpiJQNOn80Pg2Tt9kcMy',
-   'Vũ Minh Tuấn',
-   'd1000000-0000-0000-0000-000000000006',
-   true),
-  ('e1000000-0000-0000-0000-000000000010',
-   'hoa.dang', 'hoa.dang@company.vn',
-   '$2a$10$BjRmmksBiefPBieq4ClE9OTHwn8/VPampKpiJQNOn80Pg2Tt9kcMy',
-   'Đặng Thị Hoa',
-   'd1000000-0000-0000-0000-000000000005',
    true)
 ON CONFLICT DO NOTHING;
 
--- ============================================================================
--- SECTION 6: DEPARTMENTS (Cơ cấu tổ chức)
--- ============================================================================
-INSERT INTO departments (id, name, parent_id, manager_id) VALUES
-  -- Công ty (Top)
-  ('f1000000-0000-0000-0000-000000000001',
-   'Công ty TNHH KPI Solution',
-   NULL,
-   'e1000000-0000-0000-0000-000000000001'),  -- GM quản lý
-  -- Phòng Công Nghệ
-  ('f1000000-0000-0000-0000-000000000002',
-   'Phòng Công Nghệ',
-   'f1000000-0000-0000-0000-000000000001',
-   'e1000000-0000-0000-0000-000000000002'),  -- PM Trần Quang Minh
-  -- Team Dev 1
-  ('f1000000-0000-0000-0000-000000000003',
-   'Team Dev 1',
-   'f1000000-0000-0000-0000-000000000002',
-   'e1000000-0000-0000-0000-000000000003'),  -- Leader Trần Đăng Huy
-  -- Team Dev 2
-  ('f1000000-0000-0000-0000-000000000004',
-   'Team Dev 2',
-   'f1000000-0000-0000-0000-000000000002',
-   'e1000000-0000-0000-0000-000000000004')   -- Leader Nguyễn Thị Lan
+-- ── PM 1-8 ───────────────────────────────────────────────────────────────────
+INSERT INTO users (id, username, email, password_hash, full_name, job_title_id, is_active) VALUES
+  ('e1000000-0000-0000-0000-000000000002',
+   'pm1', 'pm1@kpi.com',
+   '$2a$10$BjRmmksBiefPBieq4ClE9OTHwn8/VPampKpiJQNOn80Pg2Tt9kcMy',
+   'Tran PM 1', 'd1000000-0000-0000-0000-000000000002', true),
+  ('e1000000-0000-0000-0000-000000000003',
+   'pm2', 'pm2@kpi.com',
+   '$2a$10$BjRmmksBiefPBieq4ClE9OTHwn8/VPampKpiJQNOn80Pg2Tt9kcMy',
+   'Tran PM 2', 'd1000000-0000-0000-0000-000000000002', true),
+  ('e1000000-0000-0000-0000-000000000004',
+   'pm3', 'pm3@kpi.com',
+   '$2a$10$BjRmmksBiefPBieq4ClE9OTHwn8/VPampKpiJQNOn80Pg2Tt9kcMy',
+   'Tran PM 3', 'd1000000-0000-0000-0000-000000000002', true),
+  ('e1000000-0000-0000-0000-000000000005',
+   'pm4', 'pm4@kpi.com',
+   '$2a$10$BjRmmksBiefPBieq4ClE9OTHwn8/VPampKpiJQNOn80Pg2Tt9kcMy',
+   'Tran PM 4', 'd1000000-0000-0000-0000-000000000002', true),
+  ('e1000000-0000-0000-0000-000000000006',
+   'pm5', 'pm5@kpi.com',
+   '$2a$10$BjRmmksBiefPBieq4ClE9OTHwn8/VPampKpiJQNOn80Pg2Tt9kcMy',
+   'Tran PM 5', 'd1000000-0000-0000-0000-000000000002', true),
+  ('e1000000-0000-0000-0000-000000000007',
+   'pm6', 'pm6@kpi.com',
+   '$2a$10$BjRmmksBiefPBieq4ClE9OTHwn8/VPampKpiJQNOn80Pg2Tt9kcMy',
+   'Tran PM 6', 'd1000000-0000-0000-0000-000000000002', true),
+  ('e1000000-0000-0000-0000-000000000008',
+   'pm7', 'pm7@kpi.com',
+   '$2a$10$BjRmmksBiefPBieq4ClE9OTHwn8/VPampKpiJQNOn80Pg2Tt9kcMy',
+   'Tran PM 7', 'd1000000-0000-0000-0000-000000000002', true),
+  ('e1000000-0000-0000-0000-000000000009',
+   'pm8', 'pm8@kpi.com',
+   '$2a$10$BjRmmksBiefPBieq4ClE9OTHwn8/VPampKpiJQNOn80Pg2Tt9kcMy',
+   'Tran PM 8', 'd1000000-0000-0000-0000-000000000002', true)
+ON CONFLICT DO NOTHING;
+
+-- ── Leader 1-8 ───────────────────────────────────────────────────────────────
+INSERT INTO users (id, username, email, password_hash, full_name, job_title_id, is_active) VALUES
+  ('e1000000-0000-0000-0000-000000000010',
+   'leader1', 'leader1@kpi.com',
+   '$2a$10$BjRmmksBiefPBieq4ClE9OTHwn8/VPampKpiJQNOn80Pg2Tt9kcMy',
+   'Tran Leader 1', 'd1000000-0000-0000-0000-000000000003', true),
+  ('e1000000-0000-0000-0000-000000000011',
+   'leader2', 'leader2@kpi.com',
+   '$2a$10$BjRmmksBiefPBieq4ClE9OTHwn8/VPampKpiJQNOn80Pg2Tt9kcMy',
+   'Tran Leader 2', 'd1000000-0000-0000-0000-000000000003', true),
+  ('e1000000-0000-0000-0000-000000000012',
+   'leader3', 'leader3@kpi.com',
+   '$2a$10$BjRmmksBiefPBieq4ClE9OTHwn8/VPampKpiJQNOn80Pg2Tt9kcMy',
+   'Tran Leader 3', 'd1000000-0000-0000-0000-000000000003', true),
+  ('e1000000-0000-0000-0000-000000000013',
+   'leader4', 'leader4@kpi.com',
+   '$2a$10$BjRmmksBiefPBieq4ClE9OTHwn8/VPampKpiJQNOn80Pg2Tt9kcMy',
+   'Tran Leader 4', 'd1000000-0000-0000-0000-000000000003', true),
+  ('e1000000-0000-0000-0000-000000000014',
+   'leader5', 'leader5@kpi.com',
+   '$2a$10$BjRmmksBiefPBieq4ClE9OTHwn8/VPampKpiJQNOn80Pg2Tt9kcMy',
+   'Tran Leader 5', 'd1000000-0000-0000-0000-000000000003', true),
+  ('e1000000-0000-0000-0000-000000000015',
+   'leader6', 'leader6@kpi.com',
+   '$2a$10$BjRmmksBiefPBieq4ClE9OTHwn8/VPampKpiJQNOn80Pg2Tt9kcMy',
+   'Tran Leader 6', 'd1000000-0000-0000-0000-000000000003', true),
+  ('e1000000-0000-0000-0000-000000000016',
+   'leader7', 'leader7@kpi.com',
+   '$2a$10$BjRmmksBiefPBieq4ClE9OTHwn8/VPampKpiJQNOn80Pg2Tt9kcMy',
+   'Tran Leader 7', 'd1000000-0000-0000-0000-000000000003', true),
+  ('e1000000-0000-0000-0000-000000000017',
+   'leader8', 'leader8@kpi.com',
+   '$2a$10$BjRmmksBiefPBieq4ClE9OTHwn8/VPampKpiJQNOn80Pg2Tt9kcMy',
+   'Tran Leader 8', 'd1000000-0000-0000-0000-000000000003', true)
+ON CONFLICT DO NOTHING;
+
+-- ── Member - Section 1 (member1-3) ───────────────────────────────────────────
+INSERT INTO users (id, username, email, password_hash, full_name, job_title_id, is_active) VALUES
+  ('e1000000-0000-0000-0000-000000000018',
+   'member1', 'member1@kpi.com',
+   '$2a$10$BjRmmksBiefPBieq4ClE9OTHwn8/VPampKpiJQNOn80Pg2Tt9kcMy',
+   'Tran Member 1', 'd1000000-0000-0000-0000-000000000006', true),
+  ('e1000000-0000-0000-0000-000000000019',
+   'member2', 'member2@kpi.com',
+   '$2a$10$BjRmmksBiefPBieq4ClE9OTHwn8/VPampKpiJQNOn80Pg2Tt9kcMy',
+   'Tran Member 2', 'd1000000-0000-0000-0000-000000000005', true),
+  ('e1000000-0000-0000-0000-000000000020',
+   'member3', 'member3@kpi.com',
+   '$2a$10$BjRmmksBiefPBieq4ClE9OTHwn8/VPampKpiJQNOn80Pg2Tt9kcMy',
+   'Tran Member 3', 'd1000000-0000-0000-0000-000000000004', true)
+ON CONFLICT DO NOTHING;
+
+-- ── Member - Section 2 (member4-6) ───────────────────────────────────────────
+INSERT INTO users (id, username, email, password_hash, full_name, job_title_id, is_active) VALUES
+  ('e1000000-0000-0000-0000-000000000021',
+   'member4', 'member4@kpi.com',
+   '$2a$10$BjRmmksBiefPBieq4ClE9OTHwn8/VPampKpiJQNOn80Pg2Tt9kcMy',
+   'Tran Member 4', 'd1000000-0000-0000-0000-000000000006', true),
+  ('e1000000-0000-0000-0000-000000000022',
+   'member5', 'member5@kpi.com',
+   '$2a$10$BjRmmksBiefPBieq4ClE9OTHwn8/VPampKpiJQNOn80Pg2Tt9kcMy',
+   'Tran Member 5', 'd1000000-0000-0000-0000-000000000005', true),
+  ('e1000000-0000-0000-0000-000000000023',
+   'member6', 'member6@kpi.com',
+   '$2a$10$BjRmmksBiefPBieq4ClE9OTHwn8/VPampKpiJQNOn80Pg2Tt9kcMy',
+   'Tran Member 6', 'd1000000-0000-0000-0000-000000000004', true)
+ON CONFLICT DO NOTHING;
+
+-- ── Member - Section 3 (member7-9) ───────────────────────────────────────────
+INSERT INTO users (id, username, email, password_hash, full_name, job_title_id, is_active) VALUES
+  ('e1000000-0000-0000-0000-000000000024',
+   'member7', 'member7@kpi.com',
+   '$2a$10$BjRmmksBiefPBieq4ClE9OTHwn8/VPampKpiJQNOn80Pg2Tt9kcMy',
+   'Tran Member 7', 'd1000000-0000-0000-0000-000000000006', true),
+  ('e1000000-0000-0000-0000-000000000025',
+   'member8', 'member8@kpi.com',
+   '$2a$10$BjRmmksBiefPBieq4ClE9OTHwn8/VPampKpiJQNOn80Pg2Tt9kcMy',
+   'Tran Member 8', 'd1000000-0000-0000-0000-000000000005', true),
+  ('e1000000-0000-0000-0000-000000000026',
+   'member9', 'member9@kpi.com',
+   '$2a$10$BjRmmksBiefPBieq4ClE9OTHwn8/VPampKpiJQNOn80Pg2Tt9kcMy',
+   'Tran Member 9', 'd1000000-0000-0000-0000-000000000004', true)
+ON CONFLICT DO NOTHING;
+
+-- ── Member - Section 4 (member10-12) ─────────────────────────────────────────
+INSERT INTO users (id, username, email, password_hash, full_name, job_title_id, is_active) VALUES
+  ('e1000000-0000-0000-0000-000000000027',
+   'member10', 'member10@kpi.com',
+   '$2a$10$BjRmmksBiefPBieq4ClE9OTHwn8/VPampKpiJQNOn80Pg2Tt9kcMy',
+   'Tran Member 10', 'd1000000-0000-0000-0000-000000000006', true),
+  ('e1000000-0000-0000-0000-000000000028',
+   'member11', 'member11@kpi.com',
+   '$2a$10$BjRmmksBiefPBieq4ClE9OTHwn8/VPampKpiJQNOn80Pg2Tt9kcMy',
+   'Tran Member 11', 'd1000000-0000-0000-0000-000000000005', true),
+  ('e1000000-0000-0000-0000-000000000029',
+   'member12', 'member12@kpi.com',
+   '$2a$10$BjRmmksBiefPBieq4ClE9OTHwn8/VPampKpiJQNOn80Pg2Tt9kcMy',
+   'Tran Member 12', 'd1000000-0000-0000-0000-000000000004', true)
+ON CONFLICT DO NOTHING;
+
+-- ── Member - Section 5 (member13-15) ─────────────────────────────────────────
+INSERT INTO users (id, username, email, password_hash, full_name, job_title_id, is_active) VALUES
+  ('e1000000-0000-0000-0000-000000000030',
+   'member13', 'member13@kpi.com',
+   '$2a$10$BjRmmksBiefPBieq4ClE9OTHwn8/VPampKpiJQNOn80Pg2Tt9kcMy',
+   'Tran Member 13', 'd1000000-0000-0000-0000-000000000006', true),
+  ('e1000000-0000-0000-0000-000000000031',
+   'member14', 'member14@kpi.com',
+   '$2a$10$BjRmmksBiefPBieq4ClE9OTHwn8/VPampKpiJQNOn80Pg2Tt9kcMy',
+   'Tran Member 14', 'd1000000-0000-0000-0000-000000000005', true),
+  ('e1000000-0000-0000-0000-000000000032',
+   'member15', 'member15@kpi.com',
+   '$2a$10$BjRmmksBiefPBieq4ClE9OTHwn8/VPampKpiJQNOn80Pg2Tt9kcMy',
+   'Tran Member 15', 'd1000000-0000-0000-0000-000000000004', true)
+ON CONFLICT DO NOTHING;
+
+-- ── Member - Section 6 (member16-18) ─────────────────────────────────────────
+INSERT INTO users (id, username, email, password_hash, full_name, job_title_id, is_active) VALUES
+  ('e1000000-0000-0000-0000-000000000033',
+   'member16', 'member16@kpi.com',
+   '$2a$10$BjRmmksBiefPBieq4ClE9OTHwn8/VPampKpiJQNOn80Pg2Tt9kcMy',
+   'Tran Member 16', 'd1000000-0000-0000-0000-000000000006', true),
+  ('e1000000-0000-0000-0000-000000000034',
+   'member17', 'member17@kpi.com',
+   '$2a$10$BjRmmksBiefPBieq4ClE9OTHwn8/VPampKpiJQNOn80Pg2Tt9kcMy',
+   'Tran Member 17', 'd1000000-0000-0000-0000-000000000005', true),
+  ('e1000000-0000-0000-0000-000000000035',
+   'member18', 'member18@kpi.com',
+   '$2a$10$BjRmmksBiefPBieq4ClE9OTHwn8/VPampKpiJQNOn80Pg2Tt9kcMy',
+   'Tran Member 18', 'd1000000-0000-0000-0000-000000000004', true)
+ON CONFLICT DO NOTHING;
+
+-- ── Member - Section 7 (member19-21) ─────────────────────────────────────────
+INSERT INTO users (id, username, email, password_hash, full_name, job_title_id, is_active) VALUES
+  ('e1000000-0000-0000-0000-000000000036',
+   'member19', 'member19@kpi.com',
+   '$2a$10$BjRmmksBiefPBieq4ClE9OTHwn8/VPampKpiJQNOn80Pg2Tt9kcMy',
+   'Tran Member 19', 'd1000000-0000-0000-0000-000000000006', true),
+  ('e1000000-0000-0000-0000-000000000037',
+   'member20', 'member20@kpi.com',
+   '$2a$10$BjRmmksBiefPBieq4ClE9OTHwn8/VPampKpiJQNOn80Pg2Tt9kcMy',
+   'Tran Member 20', 'd1000000-0000-0000-0000-000000000005', true),
+  ('e1000000-0000-0000-0000-000000000038',
+   'member21', 'member21@kpi.com',
+   '$2a$10$BjRmmksBiefPBieq4ClE9OTHwn8/VPampKpiJQNOn80Pg2Tt9kcMy',
+   'Tran Member 21', 'd1000000-0000-0000-0000-000000000004', true)
+ON CONFLICT DO NOTHING;
+
+-- ── Member - Section 8 (member22-24) ─────────────────────────────────────────
+INSERT INTO users (id, username, email, password_hash, full_name, job_title_id, is_active) VALUES
+  ('e1000000-0000-0000-0000-000000000039',
+   'member22', 'member22@kpi.com',
+   '$2a$10$BjRmmksBiefPBieq4ClE9OTHwn8/VPampKpiJQNOn80Pg2Tt9kcMy',
+   'Tran Member 22', 'd1000000-0000-0000-0000-000000000006', true),
+  ('e1000000-0000-0000-0000-000000000040',
+   'member23', 'member23@kpi.com',
+   '$2a$10$BjRmmksBiefPBieq4ClE9OTHwn8/VPampKpiJQNOn80Pg2Tt9kcMy',
+   'Tran Member 23', 'd1000000-0000-0000-0000-000000000005', true),
+  ('e1000000-0000-0000-0000-000000000041',
+   'member24', 'member24@kpi.com',
+   '$2a$10$BjRmmksBiefPBieq4ClE9OTHwn8/VPampKpiJQNOn80Pg2Tt9kcMy',
+   'Tran Member 24', 'd1000000-0000-0000-0000-000000000004', true)
 ON CONFLICT DO NOTHING;
 
 -- ============================================================================
--- SECTION 7: USER_DEPARTMENTS (Phân công phòng ban + supervisor)
+-- SECTION 6: DEPARTMENTS
 -- ============================================================================
+INSERT INTO departments (id, name, parent_id, manager_id) VALUES
+  -- Công ty (root) - do GM quản lý
+  ('f1000000-0000-0000-0000-000000000001',
+   'Công ty',
+   NULL,
+   'e1000000-0000-0000-0000-000000000001'),
+  -- 8 Section - mỗi section do 1 PM quản lý
+  ('f1000000-0000-0000-0000-000000000002',
+   'Section 1',
+   'f1000000-0000-0000-0000-000000000001',
+   'e1000000-0000-0000-0000-000000000002'),  -- PM1
+  ('f1000000-0000-0000-0000-000000000003',
+   'Section 2',
+   'f1000000-0000-0000-0000-000000000001',
+   'e1000000-0000-0000-0000-000000000003'),  -- PM2
+  ('f1000000-0000-0000-0000-000000000004',
+   'Section 3',
+   'f1000000-0000-0000-0000-000000000001',
+   'e1000000-0000-0000-0000-000000000004'),  -- PM3
+  ('f1000000-0000-0000-0000-000000000005',
+   'Section 4',
+   'f1000000-0000-0000-0000-000000000001',
+   'e1000000-0000-0000-0000-000000000005'),  -- PM4
+  ('f1000000-0000-0000-0000-000000000006',
+   'Section 5',
+   'f1000000-0000-0000-0000-000000000001',
+   'e1000000-0000-0000-0000-000000000006'),  -- PM5
+  ('f1000000-0000-0000-0000-000000000007',
+   'Section 6',
+   'f1000000-0000-0000-0000-000000000001',
+   'e1000000-0000-0000-0000-000000000007'),  -- PM6
+  ('f1000000-0000-0000-0000-000000000008',
+   'Section 7',
+   'f1000000-0000-0000-0000-000000000001',
+   'e1000000-0000-0000-0000-000000000008'),  -- PM7
+  ('f1000000-0000-0000-0000-000000000009',
+   'Section 8',
+   'f1000000-0000-0000-0000-000000000001',
+   'e1000000-0000-0000-0000-000000000009')   -- PM8
+ON CONFLICT DO NOTHING;
+
+-- ============================================================================
+-- SECTION 7: USER_DEPARTMENTS
+-- supervisor_id = người trực tiếp quản lý (PM báo cáo GM, Leader báo cáo PM,
+--   Member{3n-2} báo cáo Leader, Member{3n-1} & {3n} báo cáo PM)
+-- ============================================================================
+
+-- GM thuộc Công ty
 INSERT INTO user_departments (user_id, department_id, supervisor_id, is_primary) VALUES
-  -- GM thuộc công ty
   ('e1000000-0000-0000-0000-000000000001',
-   'f1000000-0000-0000-0000-000000000001', NULL, true),
-  -- PM thuộc Phòng Công Nghệ, báo cáo GM
+   'f1000000-0000-0000-0000-000000000001', NULL, true)
+ON CONFLICT DO NOTHING;
+
+-- ── Section 1 ────────────────────────────────────────────────────────────────
+INSERT INTO user_departments (user_id, department_id, supervisor_id, is_primary) VALUES
+  -- PM1 → báo cáo GM
   ('e1000000-0000-0000-0000-000000000002',
    'f1000000-0000-0000-0000-000000000002',
    'e1000000-0000-0000-0000-000000000001', true),
-  -- Leader 1 thuộc Team Dev 1, báo cáo PM
+  -- Leader1 → báo cáo PM1
+  ('e1000000-0000-0000-0000-000000000010',
+   'f1000000-0000-0000-0000-000000000002',
+   'e1000000-0000-0000-0000-000000000002', true),
+  -- member1 (Junior) → báo cáo Leader1
+  ('e1000000-0000-0000-0000-000000000018',
+   'f1000000-0000-0000-0000-000000000002',
+   'e1000000-0000-0000-0000-000000000010', true),
+  -- member2 (Mid) → báo cáo PM1
+  ('e1000000-0000-0000-0000-000000000019',
+   'f1000000-0000-0000-0000-000000000002',
+   'e1000000-0000-0000-0000-000000000002', true),
+  -- member3 (Senior) → báo cáo PM1
+  ('e1000000-0000-0000-0000-000000000020',
+   'f1000000-0000-0000-0000-000000000002',
+   'e1000000-0000-0000-0000-000000000002', true)
+ON CONFLICT DO NOTHING;
+
+-- ── Section 2 ────────────────────────────────────────────────────────────────
+INSERT INTO user_departments (user_id, department_id, supervisor_id, is_primary) VALUES
   ('e1000000-0000-0000-0000-000000000003',
    'f1000000-0000-0000-0000-000000000003',
-   'e1000000-0000-0000-0000-000000000002', true),
-  -- Leader 2 thuộc Team Dev 2, báo cáo PM
+   'e1000000-0000-0000-0000-000000000001', true),
+  ('e1000000-0000-0000-0000-000000000011',
+   'f1000000-0000-0000-0000-000000000003',
+   'e1000000-0000-0000-0000-000000000003', true),
+  ('e1000000-0000-0000-0000-000000000021',
+   'f1000000-0000-0000-0000-000000000003',
+   'e1000000-0000-0000-0000-000000000011', true),
+  ('e1000000-0000-0000-0000-000000000022',
+   'f1000000-0000-0000-0000-000000000003',
+   'e1000000-0000-0000-0000-000000000003', true),
+  ('e1000000-0000-0000-0000-000000000023',
+   'f1000000-0000-0000-0000-000000000003',
+   'e1000000-0000-0000-0000-000000000003', true)
+ON CONFLICT DO NOTHING;
+
+-- ── Section 3 ────────────────────────────────────────────────────────────────
+INSERT INTO user_departments (user_id, department_id, supervisor_id, is_primary) VALUES
   ('e1000000-0000-0000-0000-000000000004',
    'f1000000-0000-0000-0000-000000000004',
-   'e1000000-0000-0000-0000-000000000002', true),
-  -- Members Team 1, báo cáo Leader 1
-  ('e1000000-0000-0000-0000-000000000005',
-   'f1000000-0000-0000-0000-000000000003',
-   'e1000000-0000-0000-0000-000000000003', true),
-  ('e1000000-0000-0000-0000-000000000006',
-   'f1000000-0000-0000-0000-000000000003',
-   'e1000000-0000-0000-0000-000000000003', true),
-  ('e1000000-0000-0000-0000-000000000007',
-   'f1000000-0000-0000-0000-000000000003',
-   'e1000000-0000-0000-0000-000000000003', true),
-  ('e1000000-0000-0000-0000-000000000008',
-   'f1000000-0000-0000-0000-000000000003',
-   'e1000000-0000-0000-0000-000000000003', true),
-  -- Members Team 2, báo cáo Leader 2
-  ('e1000000-0000-0000-0000-000000000009',
+   'e1000000-0000-0000-0000-000000000001', true),
+  ('e1000000-0000-0000-0000-000000000012',
    'f1000000-0000-0000-0000-000000000004',
    'e1000000-0000-0000-0000-000000000004', true),
-  ('e1000000-0000-0000-0000-000000000010',
+  ('e1000000-0000-0000-0000-000000000024',
+   'f1000000-0000-0000-0000-000000000004',
+   'e1000000-0000-0000-0000-000000000012', true),
+  ('e1000000-0000-0000-0000-000000000025',
+   'f1000000-0000-0000-0000-000000000004',
+   'e1000000-0000-0000-0000-000000000004', true),
+  ('e1000000-0000-0000-0000-000000000026',
    'f1000000-0000-0000-0000-000000000004',
    'e1000000-0000-0000-0000-000000000004', true)
 ON CONFLICT DO NOTHING;
 
--- ============================================================================
--- SECTION 8: USER_ROLES (Phân quyền người dùng)
--- ============================================================================
-INSERT INTO user_roles (user_id, role_id) VALUES
-  ('e1000000-0000-0000-0000-000000000001', 'a1000000-0000-0000-0000-000000000001'), -- GM
-  ('e1000000-0000-0000-0000-000000000002', 'a1000000-0000-0000-0000-000000000002'), -- PM
-  ('e1000000-0000-0000-0000-000000000003', 'a1000000-0000-0000-0000-000000000003'), -- Leader 1
-  ('e1000000-0000-0000-0000-000000000004', 'a1000000-0000-0000-0000-000000000003'), -- Leader 2
-  ('e1000000-0000-0000-0000-000000000005', 'a1000000-0000-0000-0000-000000000004'), -- Huy
-  ('e1000000-0000-0000-0000-000000000006', 'a1000000-0000-0000-0000-000000000004'), -- Phước
-  ('e1000000-0000-0000-0000-000000000007', 'a1000000-0000-0000-0000-000000000004'), -- Mai
-  ('e1000000-0000-0000-0000-000000000008', 'a1000000-0000-0000-0000-000000000004'), -- Anh
-  ('e1000000-0000-0000-0000-000000000009', 'a1000000-0000-0000-0000-000000000004'), -- Tuấn
-  ('e1000000-0000-0000-0000-000000000010', 'a1000000-0000-0000-0000-000000000004')  -- Hoa
+-- ── Section 4 ────────────────────────────────────────────────────────────────
+INSERT INTO user_departments (user_id, department_id, supervisor_id, is_primary) VALUES
+  ('e1000000-0000-0000-0000-000000000005',
+   'f1000000-0000-0000-0000-000000000005',
+   'e1000000-0000-0000-0000-000000000001', true),
+  ('e1000000-0000-0000-0000-000000000013',
+   'f1000000-0000-0000-0000-000000000005',
+   'e1000000-0000-0000-0000-000000000005', true),
+  ('e1000000-0000-0000-0000-000000000027',
+   'f1000000-0000-0000-0000-000000000005',
+   'e1000000-0000-0000-0000-000000000013', true),
+  ('e1000000-0000-0000-0000-000000000028',
+   'f1000000-0000-0000-0000-000000000005',
+   'e1000000-0000-0000-0000-000000000005', true),
+  ('e1000000-0000-0000-0000-000000000029',
+   'f1000000-0000-0000-0000-000000000005',
+   'e1000000-0000-0000-0000-000000000005', true)
+ON CONFLICT DO NOTHING;
+
+-- ── Section 5 ────────────────────────────────────────────────────────────────
+INSERT INTO user_departments (user_id, department_id, supervisor_id, is_primary) VALUES
+  ('e1000000-0000-0000-0000-000000000006',
+   'f1000000-0000-0000-0000-000000000006',
+   'e1000000-0000-0000-0000-000000000001', true),
+  ('e1000000-0000-0000-0000-000000000014',
+   'f1000000-0000-0000-0000-000000000006',
+   'e1000000-0000-0000-0000-000000000006', true),
+  ('e1000000-0000-0000-0000-000000000030',
+   'f1000000-0000-0000-0000-000000000006',
+   'e1000000-0000-0000-0000-000000000014', true),
+  ('e1000000-0000-0000-0000-000000000031',
+   'f1000000-0000-0000-0000-000000000006',
+   'e1000000-0000-0000-0000-000000000006', true),
+  ('e1000000-0000-0000-0000-000000000032',
+   'f1000000-0000-0000-0000-000000000006',
+   'e1000000-0000-0000-0000-000000000006', true)
+ON CONFLICT DO NOTHING;
+
+-- ── Section 6 ────────────────────────────────────────────────────────────────
+INSERT INTO user_departments (user_id, department_id, supervisor_id, is_primary) VALUES
+  ('e1000000-0000-0000-0000-000000000007',
+   'f1000000-0000-0000-0000-000000000007',
+   'e1000000-0000-0000-0000-000000000001', true),
+  ('e1000000-0000-0000-0000-000000000015',
+   'f1000000-0000-0000-0000-000000000007',
+   'e1000000-0000-0000-0000-000000000007', true),
+  ('e1000000-0000-0000-0000-000000000033',
+   'f1000000-0000-0000-0000-000000000007',
+   'e1000000-0000-0000-0000-000000000015', true),
+  ('e1000000-0000-0000-0000-000000000034',
+   'f1000000-0000-0000-0000-000000000007',
+   'e1000000-0000-0000-0000-000000000007', true),
+  ('e1000000-0000-0000-0000-000000000035',
+   'f1000000-0000-0000-0000-000000000007',
+   'e1000000-0000-0000-0000-000000000007', true)
+ON CONFLICT DO NOTHING;
+
+-- ── Section 7 ────────────────────────────────────────────────────────────────
+INSERT INTO user_departments (user_id, department_id, supervisor_id, is_primary) VALUES
+  ('e1000000-0000-0000-0000-000000000008',
+   'f1000000-0000-0000-0000-000000000008',
+   'e1000000-0000-0000-0000-000000000001', true),
+  ('e1000000-0000-0000-0000-000000000016',
+   'f1000000-0000-0000-0000-000000000008',
+   'e1000000-0000-0000-0000-000000000008', true),
+  ('e1000000-0000-0000-0000-000000000036',
+   'f1000000-0000-0000-0000-000000000008',
+   'e1000000-0000-0000-0000-000000000016', true),
+  ('e1000000-0000-0000-0000-000000000037',
+   'f1000000-0000-0000-0000-000000000008',
+   'e1000000-0000-0000-0000-000000000008', true),
+  ('e1000000-0000-0000-0000-000000000038',
+   'f1000000-0000-0000-0000-000000000008',
+   'e1000000-0000-0000-0000-000000000008', true)
+ON CONFLICT DO NOTHING;
+
+-- ── Section 8 ────────────────────────────────────────────────────────────────
+INSERT INTO user_departments (user_id, department_id, supervisor_id, is_primary) VALUES
+  ('e1000000-0000-0000-0000-000000000009',
+   'f1000000-0000-0000-0000-000000000009',
+   'e1000000-0000-0000-0000-000000000001', true),
+  ('e1000000-0000-0000-0000-000000000017',
+   'f1000000-0000-0000-0000-000000000009',
+   'e1000000-0000-0000-0000-000000000009', true),
+  ('e1000000-0000-0000-0000-000000000039',
+   'f1000000-0000-0000-0000-000000000009',
+   'e1000000-0000-0000-0000-000000000017', true),
+  ('e1000000-0000-0000-0000-000000000040',
+   'f1000000-0000-0000-0000-000000000009',
+   'e1000000-0000-0000-0000-000000000009', true),
+  ('e1000000-0000-0000-0000-000000000041',
+   'f1000000-0000-0000-0000-000000000009',
+   'e1000000-0000-0000-0000-000000000009', true)
 ON CONFLICT DO NOTHING;
 
 -- ============================================================================
--- SECTION 9: KPI CATEGORIES (Nhóm KPI)
+-- SECTION 8: USER_ROLES
+-- ============================================================================
+
+-- GM
+INSERT INTO user_roles (user_id, role_id) VALUES
+  ('e1000000-0000-0000-0000-000000000001', 'a1000000-0000-0000-0000-000000000001')
+ON CONFLICT DO NOTHING;
+
+-- PM 1-8
+INSERT INTO user_roles (user_id, role_id) VALUES
+  ('e1000000-0000-0000-0000-000000000002', 'a1000000-0000-0000-0000-000000000002'),
+  ('e1000000-0000-0000-0000-000000000003', 'a1000000-0000-0000-0000-000000000002'),
+  ('e1000000-0000-0000-0000-000000000004', 'a1000000-0000-0000-0000-000000000002'),
+  ('e1000000-0000-0000-0000-000000000005', 'a1000000-0000-0000-0000-000000000002'),
+  ('e1000000-0000-0000-0000-000000000006', 'a1000000-0000-0000-0000-000000000002'),
+  ('e1000000-0000-0000-0000-000000000007', 'a1000000-0000-0000-0000-000000000002'),
+  ('e1000000-0000-0000-0000-000000000008', 'a1000000-0000-0000-0000-000000000002'),
+  ('e1000000-0000-0000-0000-000000000009', 'a1000000-0000-0000-0000-000000000002')
+ON CONFLICT DO NOTHING;
+
+-- Leader 1-8
+INSERT INTO user_roles (user_id, role_id) VALUES
+  ('e1000000-0000-0000-0000-000000000010', 'a1000000-0000-0000-0000-000000000003'),
+  ('e1000000-0000-0000-0000-000000000011', 'a1000000-0000-0000-0000-000000000003'),
+  ('e1000000-0000-0000-0000-000000000012', 'a1000000-0000-0000-0000-000000000003'),
+  ('e1000000-0000-0000-0000-000000000013', 'a1000000-0000-0000-0000-000000000003'),
+  ('e1000000-0000-0000-0000-000000000014', 'a1000000-0000-0000-0000-000000000003'),
+  ('e1000000-0000-0000-0000-000000000015', 'a1000000-0000-0000-0000-000000000003'),
+  ('e1000000-0000-0000-0000-000000000016', 'a1000000-0000-0000-0000-000000000003'),
+  ('e1000000-0000-0000-0000-000000000017', 'a1000000-0000-0000-0000-000000000003')
+ON CONFLICT DO NOTHING;
+
+-- Member 1-24
+INSERT INTO user_roles (user_id, role_id) VALUES
+  ('e1000000-0000-0000-0000-000000000018', 'a1000000-0000-0000-0000-000000000004'),
+  ('e1000000-0000-0000-0000-000000000019', 'a1000000-0000-0000-0000-000000000004'),
+  ('e1000000-0000-0000-0000-000000000020', 'a1000000-0000-0000-0000-000000000004'),
+  ('e1000000-0000-0000-0000-000000000021', 'a1000000-0000-0000-0000-000000000004'),
+  ('e1000000-0000-0000-0000-000000000022', 'a1000000-0000-0000-0000-000000000004'),
+  ('e1000000-0000-0000-0000-000000000023', 'a1000000-0000-0000-0000-000000000004'),
+  ('e1000000-0000-0000-0000-000000000024', 'a1000000-0000-0000-0000-000000000004'),
+  ('e1000000-0000-0000-0000-000000000025', 'a1000000-0000-0000-0000-000000000004'),
+  ('e1000000-0000-0000-0000-000000000026', 'a1000000-0000-0000-0000-000000000004'),
+  ('e1000000-0000-0000-0000-000000000027', 'a1000000-0000-0000-0000-000000000004'),
+  ('e1000000-0000-0000-0000-000000000028', 'a1000000-0000-0000-0000-000000000004'),
+  ('e1000000-0000-0000-0000-000000000029', 'a1000000-0000-0000-0000-000000000004'),
+  ('e1000000-0000-0000-0000-000000000030', 'a1000000-0000-0000-0000-000000000004'),
+  ('e1000000-0000-0000-0000-000000000031', 'a1000000-0000-0000-0000-000000000004'),
+  ('e1000000-0000-0000-0000-000000000032', 'a1000000-0000-0000-0000-000000000004'),
+  ('e1000000-0000-0000-0000-000000000033', 'a1000000-0000-0000-0000-000000000004'),
+  ('e1000000-0000-0000-0000-000000000034', 'a1000000-0000-0000-0000-000000000004'),
+  ('e1000000-0000-0000-0000-000000000035', 'a1000000-0000-0000-0000-000000000004'),
+  ('e1000000-0000-0000-0000-000000000036', 'a1000000-0000-0000-0000-000000000004'),
+  ('e1000000-0000-0000-0000-000000000037', 'a1000000-0000-0000-0000-000000000004'),
+  ('e1000000-0000-0000-0000-000000000038', 'a1000000-0000-0000-0000-000000000004'),
+  ('e1000000-0000-0000-0000-000000000039', 'a1000000-0000-0000-0000-000000000004'),
+  ('e1000000-0000-0000-0000-000000000040', 'a1000000-0000-0000-0000-000000000004'),
+  ('e1000000-0000-0000-0000-000000000041', 'a1000000-0000-0000-0000-000000000004')
+ON CONFLICT DO NOTHING;
+
+-- ============================================================================
+-- SECTION 9: KPI CATEGORIES
 -- ============================================================================
 INSERT INTO kpi_categories (id, name) VALUES
   ('a2000000-0000-0000-0000-000000000001', 'A - Hiệu quả công việc chuyên môn'),
@@ -259,284 +654,49 @@ INSERT INTO kpi_categories (id, name) VALUES
 ON CONFLICT DO NOTHING;
 
 -- ============================================================================
--- SECTION 10: CALCULATION RULES (Công thức tính điểm)
--- ============================================================================
-INSERT INTO calculation_rules (id, code, name, description, is_active) VALUES
-  ('b2000000-0000-0000-0000-000000000001',
-   'WEIGHTED_AVG',
-   'Trung bình có trọng số',
-   'Tính điểm = SUM(score * weight) / SUM(weight)',
-   true),
-  ('b2000000-0000-0000-0000-000000000002',
-   'PERCENTAGE',
-   'Tỉ lệ phần trăm hoàn thành',
-   'Điểm = (actual / target) * max_score',
-   true),
-  ('b2000000-0000-0000-0000-000000000003',
-   'MANUAL',
-   'Chấm điểm thủ công',
-   'PM/GM tự chấm điểm theo đánh giá định tính',
-   true)
-ON CONFLICT DO NOTHING;
-
--- ============================================================================
--- SECTION 11: KPI CYCLE 2026 (Chu kỳ đánh giá)
+-- SECTION 10: KPI CYCLES
 -- ============================================================================
 INSERT INTO kpi_cycles (id, year, name,
-  goal_setting_deadline, mid_year_deadline, end_year_deadline,
+    goal_setting_start, goal_setting_end,
+    mid_year_start, mid_year_end,
+    end_year_start, end_year_end,
   status_code) VALUES
   ('c2000000-0000-0000-0000-000000000001',
    2026,
    'Năm 2026',
+   '2026-02-01 23:59:59+07',
    '2026-02-28 23:59:59+07',
+   '2026-07-01 23:59:59+07',
    '2026-07-15 23:59:59+07',
+   '2026-12-01 23:59:59+07',
    '2026-12-20 23:59:59+07',
    201)   -- OPEN
 ON CONFLICT DO NOTHING;
 
--- Chu kỳ 2025 (đã đóng - dùng cho view lịch sử)
 INSERT INTO kpi_cycles (id, year, name,
-  goal_setting_deadline, mid_year_deadline, end_year_deadline,
+    goal_setting_start, goal_setting_end,
+    mid_year_start, mid_year_end,
+    end_year_start, end_year_end,
   status_code) VALUES
   ('c2000000-0000-0000-0000-000000000002',
    2025,
    'Năm 2025',
+   '2025-02-01 23:59:59+07',
    '2025-02-28 23:59:59+07',
+   '2025-07-01 23:59:59+07',
    '2025-07-15 23:59:59+07',
+   '2025-12-01 23:59:59+07',
    '2025-12-20 23:59:59+07',
    202)   -- CLOSED
 ON CONFLICT DO NOTHING;
 
 -- ============================================================================
--- SECTION 12: KPI MASTER (Thư viện KPI vĩnh cửu)
--- Group A: Hiệu quả công việc chuyên môn (type_code 101 = INDIVIDUAL)
--- Group B: Phát triển bản thân (type_code 101 = INDIVIDUAL)
--- Group P: Thăng tiến (type_code 103 = PROMOTION)
+-- SECTION 11: KPI MASTER, TEMPLATES, KPIS_INFORMATION
+-- Không tạo dữ liệu KPI - sẽ được tạo qua giao diện
 -- ============================================================================
-INSERT INTO kpi_master (id, code, name, category_id, calculation_rule_id,
-  type_code, objective, is_global) VALUES
-  -- === GROUP A: Hiệu quả công việc (7 items) ===
-  ('d2000000-0000-0000-0000-000000000001',
-   'A.1a', 'Hiệu suất cá nhân (Individual Efficiency)',
-   'a2000000-0000-0000-0000-000000000001',
-   'b2000000-0000-0000-0000-000000000002',
-   101,
-   'Đo lường tỷ lệ hoàn thành task đúng hạn và đúng yêu cầu trong kỳ đánh giá',
-   true),
-  ('d2000000-0000-0000-0000-000000000002',
-   'A.2a', 'Khối lượng công việc (Work Amount)',
-   'a2000000-0000-0000-0000-000000000001',
-   'b2000000-0000-0000-0000-000000000002',
-   101,
-   'Đo lường số lượng task/feature hoàn thành so với kế hoạch sprint/tháng',
-   true),
-  ('d2000000-0000-0000-0000-000000000003',
-   'A.3a', 'Chất lượng sản phẩm (Individual Quality)',
-   'a2000000-0000-0000-0000-000000000001',
-   'b2000000-0000-0000-0000-000000000002',
-   101,
-   'Đo lường tỷ lệ bug/defect do cá nhân tạo ra và số lần rework',
-   true),
-  ('d2000000-0000-0000-0000-000000000004',
-   'A.4',  'Hài lòng khách hàng (Customer Satisfaction)',
-   'a2000000-0000-0000-0000-000000000001',
-   'b2000000-0000-0000-0000-000000000003',
-   101,
-   'Đánh giá mức độ hài lòng của khách hàng/stakeholder qua feedback và survey',
-   true),
-  ('d2000000-0000-0000-0000-000000000005',
-   'A.5a', 'Giao việc đúng hạn (Task Delivery)',
-   'a2000000-0000-0000-0000-000000000001',
-   'b2000000-0000-0000-0000-000000000002',
-   101,
-   'Tỷ lệ task được bàn giao đúng deadline cam kết với PM/khách hàng',
-   true),
-  ('d2000000-0000-0000-0000-000000000006',
-   'A.6',  'Tuân thủ quy trình (Process Compliance)',
-   'a2000000-0000-0000-0000-000000000001',
-   'b2000000-0000-0000-0000-000000000003',
-   101,
-   'Tuân thủ quy trình phát triển: review code, viết test, cập nhật tài liệu',
-   true),
-  ('d2000000-0000-0000-0000-000000000007',
-   'A.7',  'An toàn thông tin (Security Compliance)',
-   'a2000000-0000-0000-0000-000000000001',
-   'b2000000-0000-0000-0000-000000000003',
-   101,
-   'Không vi phạm chính sách bảo mật: password, phân quyền, log truy cập',
-   true),
-
-  -- === GROUP B: Phát triển bản thân (4 items) ===
-  ('d2000000-0000-0000-0000-000000000008',
-   'B.1',  'Sáng kiến cải tiến (Improvement Initiative)',
-   'a2000000-0000-0000-0000-000000000002',
-   'b2000000-0000-0000-0000-000000000003',
-   101,
-   'Số lượng sáng kiến/đề xuất cải tiến quy trình hoặc kỹ thuật được triển khai',
-   true),
-  ('d2000000-0000-0000-0000-000000000009',
-   'B.2',  'Đóng góp cho team (Team Contribution)',
-   'a2000000-0000-0000-0000-000000000002',
-   'b2000000-0000-0000-0000-000000000003',
-   101,
-   'Hỗ trợ đồng nghiệp, chia sẻ kiến thức, mentor junior members',
-   true),
-  ('d2000000-0000-0000-0000-00000000000a',
-   'B.3',  'Ngoại ngữ (Language Capability)',
-   'a2000000-0000-0000-0000-000000000002',
-   'b2000000-0000-0000-0000-000000000003',
-   101,
-   'Cải thiện khả năng tiếng Anh: đọc tài liệu kỹ thuật, giao tiếp với khách hàng',
-   true),
-  ('d2000000-0000-0000-0000-00000000000b',
-   'B.4',  'Học tập & Chứng chỉ (Certificate)',
-   'a2000000-0000-0000-0000-000000000002',
-   'b2000000-0000-0000-0000-000000000003',
-   101,
-   'Hoàn thành các khóa học, chứng chỉ chuyên môn theo lộ trình phát triển',
-   true),
-
-  -- === GROUP P: Thăng tiến (promotion) ===
-  ('d2000000-0000-0000-0000-00000000000c',
-   'P.1',  'Năng lực lãnh đạo (Leadership Readiness)',
-   'a2000000-0000-0000-0000-000000000004',
-   'b2000000-0000-0000-0000-000000000003',
-   103,
-   'Đánh giá khả năng dẫn dắt nhóm nhỏ, ra quyết định, và giải quyết xung đột',
-   true),
-  ('d2000000-0000-0000-0000-00000000000d',
-   'P.2',  'Kiến thức hệ thống (System Knowledge)',
-   'a2000000-0000-0000-0000-000000000004',
-   'b2000000-0000-0000-0000-000000000003',
-   103,
-   'Nắm vững kiến trúc hệ thống, có thể tham gia thiết kế và review kỹ thuật',
-   true)
-ON CONFLICT DO NOTHING;
 
 -- ============================================================================
--- SECTION 13: KPI TEMPLATES (Bộ mẫu KPI theo Job Title)
--- ============================================================================
-INSERT INTO kpi_templates (id, name, description, job_family_id, rank_id) VALUES
-  ('e2000000-0000-0000-0000-000000000001',
-   'Template KPI - Junior Developer (R1)',
-   'Bộ KPI tiêu chuẩn cho vị trí Junior Developer',
-   'b1000000-0000-0000-0000-000000000001',
-   'c1000000-0000-0000-0000-000000000002'),
-  ('e2000000-0000-0000-0000-000000000002',
-   'Template KPI - Mid Developer (R2)',
-   'Bộ KPI tiêu chuẩn cho vị trí Mid-Level Developer',
-   'b1000000-0000-0000-0000-000000000001',
-   'c1000000-0000-0000-0000-000000000003'),
-  ('e2000000-0000-0000-0000-000000000003',
-   'Template KPI - QA Engineer (R2)',
-   'Bộ KPI tiêu chuẩn cho vị trí QA Engineer',
-   'b1000000-0000-0000-0000-000000000002',
-   'c1000000-0000-0000-0000-000000000003')
-ON CONFLICT DO NOTHING;
-
--- Template items cho Junior Dev (A.1a → A.7, B.1 → B.4) - tổng 160 điểm
-INSERT INTO kpi_template_items (id, template_id, master_kpi_id,
-  default_target_value, default_weight) VALUES
-  ('f2000000-0000-0000-0000-000000000001',
-   'e2000000-0000-0000-0000-000000000001',
-   'd2000000-0000-0000-0000-000000000001', 90.0,  20.0),  -- A.1a  20 pts
-  ('f2000000-0000-0000-0000-000000000002',
-   'e2000000-0000-0000-0000-000000000001',
-   'd2000000-0000-0000-0000-000000000002', 48.0,  20.0),  -- A.2a  20 pts
-  ('f2000000-0000-0000-0000-000000000003',
-   'e2000000-0000-0000-0000-000000000001',
-   'd2000000-0000-0000-0000-000000000003', 95.0,  15.0),  -- A.3a  15 pts
-  ('f2000000-0000-0000-0000-000000000004',
-   'e2000000-0000-0000-0000-000000000001',
-   'd2000000-0000-0000-0000-000000000004',  4.0,  10.0),  -- A.4   10 pts
-  ('f2000000-0000-0000-0000-000000000005',
-   'e2000000-0000-0000-0000-000000000001',
-   'd2000000-0000-0000-0000-000000000005', 95.0,  15.0),  -- A.5a  15 pts
-  ('f2000000-0000-0000-0000-000000000006',
-   'e2000000-0000-0000-0000-000000000001',
-   'd2000000-0000-0000-0000-000000000006', 100.0, 10.0),  -- A.6   10 pts
-  ('f2000000-0000-0000-0000-000000000007',
-   'e2000000-0000-0000-0000-000000000001',
-   'd2000000-0000-0000-0000-000000000007', 100.0, 10.0),  -- A.7   10 pts
-  ('f2000000-0000-0000-0000-000000000008',
-   'e2000000-0000-0000-0000-000000000001',
-   'd2000000-0000-0000-0000-000000000008',  2.0,  15.0),  -- B.1   15 pts
-  ('f2000000-0000-0000-0000-000000000009',
-   'e2000000-0000-0000-0000-000000000001',
-   'd2000000-0000-0000-0000-000000000009',  3.0,  15.0),  -- B.2   15 pts
-  ('f2000000-0000-0000-0000-00000000000a',
-   'e2000000-0000-0000-0000-000000000001',
-   'd2000000-0000-0000-0000-00000000000a',  3.5,  15.0),  -- B.3   15 pts
-  ('f2000000-0000-0000-0000-00000000000b',
-   'e2000000-0000-0000-0000-000000000001',
-   'd2000000-0000-0000-0000-00000000000b',  1.0,  15.0)   -- B.4   15 pts
-ON CONFLICT DO NOTHING;
-
--- ============================================================================
--- SECTION 14: KPIS_INFORMATION (Thư viện KPI áp dụng cho năm 2026)
--- ============================================================================
-INSERT INTO kpis_information (id, cycle_id, master_kpi_id,
-  target_description, target_value, weight, is_system_created) VALUES
-  -- Group A
-  ('a3000000-0000-0000-0000-000000000001',
-   'c2000000-0000-0000-0000-000000000001',
-   'd2000000-0000-0000-0000-000000000001',
-   'Tỷ lệ hoàn thành task đúng hạn ≥ 90%', 90.0, 20.0, true),
-  ('a3000000-0000-0000-0000-000000000002',
-   'c2000000-0000-0000-0000-000000000001',
-   'd2000000-0000-0000-0000-000000000002',
-   'Hoàn thành ≥ 48 story points/sprint/tháng', 48.0, 20.0, true),
-  ('a3000000-0000-0000-0000-000000000003',
-   'c2000000-0000-0000-0000-000000000001',
-   'd2000000-0000-0000-0000-000000000003',
-   'Tỷ lệ bug P1/P2 do cá nhân tạo ra ≤ 5%', 95.0, 15.0, true),
-  ('a3000000-0000-0000-0000-000000000004',
-   'c2000000-0000-0000-0000-000000000001',
-   'd2000000-0000-0000-0000-000000000004',
-   'Điểm hài lòng khách hàng ≥ 4.0/5.0', 4.0, 10.0, true),
-  ('a3000000-0000-0000-0000-000000000005',
-   'c2000000-0000-0000-0000-000000000001',
-   'd2000000-0000-0000-0000-000000000005',
-   'Tỷ lệ giao hàng đúng deadline ≥ 95%', 95.0, 15.0, true),
-  ('a3000000-0000-0000-0000-000000000006',
-   'c2000000-0000-0000-0000-000000000001',
-   'd2000000-0000-0000-0000-000000000006',
-   'Tuân thủ 100% quy trình code review và test', 100.0, 10.0, true),
-  ('a3000000-0000-0000-0000-000000000007',
-   'c2000000-0000-0000-0000-000000000001',
-   'd2000000-0000-0000-0000-000000000007',
-   'Không có vi phạm bảo mật trong kỳ', 100.0, 10.0, true),
-  -- Group B
-  ('a3000000-0000-0000-0000-000000000008',
-   'c2000000-0000-0000-0000-000000000001',
-   'd2000000-0000-0000-0000-000000000008',
-   '≥ 2 sáng kiến cải tiến được nghiệm thu trong năm', 2.0, 15.0, true),
-  ('a3000000-0000-0000-0000-000000000009',
-   'c2000000-0000-0000-0000-000000000001',
-   'd2000000-0000-0000-0000-000000000009',
-   'Hỗ trợ ≥ 3 đồng nghiệp/tháng, chia sẻ ≥ 2 tech talk/năm', 3.0, 15.0, true),
-  ('a3000000-0000-0000-0000-00000000000a',
-   'c2000000-0000-0000-0000-000000000001',
-   'd2000000-0000-0000-0000-00000000000a',
-   'Điểm TOEIC ≥ 550 hoặc cải thiện ≥ 50 điểm trong năm', 3.5, 15.0, true),
-  ('a3000000-0000-0000-0000-00000000000b',
-   'c2000000-0000-0000-0000-000000000001',
-   'd2000000-0000-0000-0000-00000000000b',
-   'Hoàn thành ≥ 1 chứng chỉ kỹ thuật trong năm', 1.0, 15.0, true),
-  -- Promotion KPIs (năm 2026)
-  ('a3000000-0000-0000-0000-00000000000c',
-   'c2000000-0000-0000-0000-000000000001',
-   'd2000000-0000-0000-0000-00000000000c',
-   'Dẫn dắt nhóm nhỏ ≥ 1 dự án/feature trong năm', 1.0, 25.0, true),
-  ('a3000000-0000-0000-0000-00000000000d',
-   'c2000000-0000-0000-0000-000000000001',
-   'd2000000-0000-0000-0000-00000000000d',
-   'Có thể thiết kế và giải thích kiến trúc module độc lập', 1.0, 25.0, true)
-ON CONFLICT DO NOTHING;
-
--- ============================================================================
--- SECTION 15: TẠO PARTITION CHO KPI_ASSIGNMENTS 2026
--- Bắt buộc vì bảng kpi_assignments PARTITION BY LIST (cycle_id)
+-- SECTION 12: TẠO PARTITION CHO KPI_ASSIGNMENTS
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS kpi_assignments_2026
   PARTITION OF kpi_assignments
@@ -547,789 +707,6 @@ CREATE TABLE IF NOT EXISTS kpi_assignments_2025
   FOR VALUES IN ('c2000000-0000-0000-0000-000000000002');
 
 -- ============================================================================
--- SECTION 16: KPI_ASSIGNMENTS (Giao KPI cho từng nhân viên - năm 2026)
--- Trạng thái đa dạng để phản ánh thực tế mid-year evaluation
---
--- Status codes:
---   401 = INACTIVE (mới tạo)
---   404 = PENDING_ACCEPTANCE (chờ member bấm Accept)
---   405 = ACCEPTED (đang chạy)
---   501 = 1ST_WAITING_PM_APPROVAL (nộp bằng chứng 1st half, chờ PM)
---   502 = 1ST_WAITING_GM_APPROVAL (PM đã duyệt, chờ GM)
---   503 = 1ST_COMPLETED (GM đã chốt 1st half)
+-- Không tạo KPI Assignments (kpi_assignments)
+-- Toàn bộ dữ liệu KPI sẽ được nhập qua giao diện
 -- ============================================================================
-
--- ─────────────────────────────────────────────────────────────────────────────
--- Member: Nguyễn Quang Huy (e1000000-05) - Junior Dev R1
--- Trạng thái: Đang đánh giá giữa kỳ, một số KPI đã nộp bằng chứng
--- ─────────────────────────────────────────────────────────────────────────────
-INSERT INTO kpi_assignments (id, cycle_id, kpi_info_id,
-  user_id, job_title_id, target_value,
-  mid_self_score, end_self_score, end_pm_score, end_gm_score,
-  evidences, status_code) VALUES
-
-  -- A.1a Hiệu suất (đã nộp bằng chứng, chờ PM)
-  ('b3000000-0001-0000-0000-000000000001',
-   'c2000000-0000-0000-0000-000000000001',
-   'a3000000-0000-0000-0000-000000000001',
-   'e1000000-0000-0000-0000-000000000005',
-   'd1000000-0000-0000-0000-000000000006',
-   90.0,
-   3.8, NULL, NULL, NULL,
-   '{"files":[{"name":"report_q1_huy.pdf","url":"/evidence/huy/a1a_q1.pdf"}],"note":"Hoàn thành 92/100 task đúng hạn Q1-Q2","metrics":{"completed":92,"total":100}}',
-   501),
-
-  -- A.2a Khối lượng (đã nộp, chờ PM)
-  ('b3000000-0001-0000-0000-000000000002',
-   'c2000000-0000-0000-0000-000000000001',
-   'a3000000-0000-0000-0000-000000000002',
-   'e1000000-0000-0000-0000-000000000005',
-   'd1000000-0000-0000-0000-000000000006',
-   48.0,
-   3.5, NULL, NULL, NULL,
-   '{"files":[{"name":"jira_export_h1.xlsx","url":"/evidence/huy/a2a_jira.xlsx"}],"note":"Trung bình 46 story points/tháng","metrics":{"avg_sp":46,"months":6}}',
-   501),
-
-  -- A.3a Chất lượng (đã nộp, chờ PM)
-  ('b3000000-0001-0000-0000-000000000003',
-   'c2000000-0000-0000-0000-000000000001',
-   'a3000000-0000-0000-0000-000000000003',
-   'e1000000-0000-0000-0000-000000000005',
-   'd1000000-0000-0000-0000-000000000006',
-   95.0,
-   4.0, NULL, NULL, NULL,
-   '{"files":[{"name":"bug_report_h1.pdf","url":"/evidence/huy/a3a_bugs.pdf"}],"note":"Tỷ lệ bug P1/P2: 3% (dưới mức 5%)","metrics":{"bug_rate":3,"target":5}}',
-   501),
-
-  -- A.4 Khách hàng (đang chạy - chưa nộp bằng chứng)
-  ('b3000000-0001-0000-0000-000000000004',
-   'c2000000-0000-0000-0000-000000000001',
-   'a3000000-0000-0000-0000-000000000004',
-   'e1000000-0000-0000-0000-000000000005',
-   'd1000000-0000-0000-0000-000000000006',
-   4.0,
-   NULL, NULL, NULL, NULL,
-   NULL,
-   405),
-
-  -- A.5a Task Delivery (đang chạy)
-  ('b3000000-0001-0000-0000-000000000005',
-   'c2000000-0000-0000-0000-000000000001',
-   'a3000000-0000-0000-0000-000000000005',
-   'e1000000-0000-0000-0000-000000000005',
-   'd1000000-0000-0000-0000-000000000006',
-   95.0,
-   3.7, NULL, NULL, NULL,
-   '{"files":[],"note":"Tự đánh giá 93% task giao đúng hạn"}',
-   501),
-
-  -- A.6 Process Compliance (đang chạy)
-  ('b3000000-0001-0000-0000-000000000006',
-   'c2000000-0000-0000-0000-000000000001',
-   'a3000000-0000-0000-0000-000000000006',
-   'e1000000-0000-0000-0000-000000000005',
-   'd1000000-0000-0000-0000-000000000006',
-   100.0,
-   4.0, NULL, NULL, NULL,
-   NULL,
-   405),
-
-  -- A.7 Security (đang chạy)
-  ('b3000000-0001-0000-0000-000000000007',
-   'c2000000-0000-0000-0000-000000000001',
-   'a3000000-0000-0000-0000-000000000007',
-   'e1000000-0000-0000-0000-000000000005',
-   'd1000000-0000-0000-0000-000000000006',
-   100.0,
-   5.0, NULL, NULL, NULL,
-   NULL,
-   405),
-
-  -- B.1 Sáng kiến (đang chạy)
-  ('b3000000-0001-0000-0000-000000000008',
-   'c2000000-0000-0000-0000-000000000001',
-   'a3000000-0000-0000-0000-000000000008',
-   'e1000000-0000-0000-0000-000000000005',
-   'd1000000-0000-0000-0000-000000000006',
-   2.0,
-   3.0, NULL, NULL, NULL,
-   '{"files":[],"note":"Đã đề xuất 1 cải tiến CI/CD pipeline, đang pending review"}',
-   405),
-
-  -- B.2 Team Contribution (đang chạy)
-  ('b3000000-0001-0000-0000-000000000009',
-   'c2000000-0000-0000-0000-000000000001',
-   'a3000000-0000-0000-0000-000000000009',
-   'e1000000-0000-0000-0000-000000000005',
-   'd1000000-0000-0000-0000-000000000006',
-   3.0,
-   3.5, NULL, NULL, NULL,
-   NULL,
-   405),
-
-  -- B.3 Ngoại ngữ (đang chạy)
-  ('b3000000-0001-0000-0000-00000000000a',
-   'c2000000-0000-0000-0000-000000000001',
-   'a3000000-0000-0000-0000-00000000000a',
-   'e1000000-0000-0000-0000-000000000005',
-   'd1000000-0000-0000-0000-000000000006',
-   3.5,
-   3.0, NULL, NULL, NULL,
-   '{"files":[{"name":"toeic_mock_test.pdf","url":"/evidence/huy/b3_toeic.pdf"}],"note":"Điểm TOEIC mock test: 520"}',
-   405),
-
-  -- B.4 Chứng chỉ (đang chạy)
-  ('b3000000-0001-0000-0000-00000000000b',
-   'c2000000-0000-0000-0000-000000000001',
-   'a3000000-0000-0000-0000-00000000000b',
-   'e1000000-0000-0000-0000-000000000005',
-   'd1000000-0000-0000-0000-000000000006',
-   1.0,
-   NULL, NULL, NULL, NULL,
-   NULL,
-   405)
-ON CONFLICT DO NOTHING;
-
--- ─────────────────────────────────────────────────────────────────────────────
--- Member: Trần Văn Phước (e1000000-06) - Mid Dev R2
--- Trạng thái: Tốt hơn, đã PM duyệt một số KPI
--- ─────────────────────────────────────────────────────────────────────────────
-INSERT INTO kpi_assignments (id, cycle_id, kpi_info_id,
-  user_id, job_title_id, target_value,
-  mid_self_score, end_self_score, end_pm_score, end_gm_score,
-  evidences, status_code) VALUES
-  ('b3000000-0002-0000-0000-000000000001',
-   'c2000000-0000-0000-0000-000000000001',
-   'a3000000-0000-0000-0000-000000000001',
-   'e1000000-0000-0000-0000-000000000006',
-   'd1000000-0000-0000-0000-000000000005',
-   90.0, 4.2, NULL, 4.0, NULL,
-   '{"files":[{"name":"sprint_summary_h1.pdf","url":"/evidence/phuoc/a1a.pdf"}],"note":"95% task hoàn thành đúng hạn"}',
-   502),  -- PM đã duyệt, chờ GM
-
-  ('b3000000-0002-0000-0000-000000000002',
-   'c2000000-0000-0000-0000-000000000001',
-   'a3000000-0000-0000-0000-000000000002',
-   'e1000000-0000-0000-0000-000000000006',
-   'd1000000-0000-0000-0000-000000000005',
-   48.0, 4.0, NULL, 4.0, NULL,
-   '{"files":[{"name":"jira_phuoc_h1.xlsx","url":"/evidence/phuoc/a2a.xlsx"}],"note":"Trung bình 50 story points/tháng"}',
-   502),
-
-  ('b3000000-0002-0000-0000-000000000003',
-   'c2000000-0000-0000-0000-000000000001',
-   'a3000000-0000-0000-0000-000000000003',
-   'e1000000-0000-0000-0000-000000000006',
-   'd1000000-0000-0000-0000-000000000005',
-   95.0, 4.5, NULL, 4.0, NULL,
-   '{"files":[{"name":"sonar_report.pdf","url":"/evidence/phuoc/a3a.pdf"}],"note":"Tỷ lệ bug P1: 2%"}',
-   502),
-
-  ('b3000000-0002-0000-0000-000000000004',
-   'c2000000-0000-0000-0000-000000000001',
-   'a3000000-0000-0000-0000-000000000004',
-   'e1000000-0000-0000-0000-000000000006',
-   'd1000000-0000-0000-0000-000000000005',
-   4.0, 4.0, NULL, 4.0, NULL,
-   '{"files":[],"note":"Feedback khách hàng: Satisfied"}',
-   502),
-
-  ('b3000000-0002-0000-0000-000000000005',
-   'c2000000-0000-0000-0000-000000000001',
-   'a3000000-0000-0000-0000-000000000005',
-   'e1000000-0000-0000-0000-000000000006',
-   'd1000000-0000-0000-0000-000000000005',
-   95.0, 4.3, NULL, 4.0, NULL, NULL, 502),
-
-  ('b3000000-0002-0000-0000-000000000006',
-   'c2000000-0000-0000-0000-000000000001',
-   'a3000000-0000-0000-0000-000000000006',
-   'e1000000-0000-0000-0000-000000000006',
-   'd1000000-0000-0000-0000-000000000005',
-   100.0, 5.0, NULL, 5.0, NULL, NULL, 502),
-
-  ('b3000000-0002-0000-0000-000000000007',
-   'c2000000-0000-0000-0000-000000000001',
-   'a3000000-0000-0000-0000-000000000007',
-   'e1000000-0000-0000-0000-000000000006',
-   'd1000000-0000-0000-0000-000000000005',
-   100.0, 5.0, NULL, 5.0, NULL, NULL, 502),
-
-  ('b3000000-0002-0000-0000-000000000008',
-   'c2000000-0000-0000-0000-000000000001',
-   'a3000000-0000-0000-0000-000000000008',
-   'e1000000-0000-0000-0000-000000000006',
-   'd1000000-0000-0000-0000-000000000005',
-   2.0, 3.5, NULL, 3.5, NULL,
-   '{"files":[],"note":"Đề xuất refactor auth module (đã được merge)"}',
-   502),
-
-  ('b3000000-0002-0000-0000-000000000009',
-   'c2000000-0000-0000-0000-000000000001',
-   'a3000000-0000-0000-0000-000000000009',
-   'e1000000-0000-0000-0000-000000000006',
-   'd1000000-0000-0000-0000-000000000005',
-   3.0, 4.0, NULL, 4.0, NULL, NULL, 502),
-
-  ('b3000000-0002-0000-0000-00000000000a',
-   'c2000000-0000-0000-0000-000000000001',
-   'a3000000-0000-0000-0000-00000000000a',
-   'e1000000-0000-0000-0000-000000000006',
-   'd1000000-0000-0000-0000-000000000005',
-   3.5, 3.5, NULL, 3.5, NULL, NULL, 502),
-
-  ('b3000000-0002-0000-0000-00000000000b',
-   'c2000000-0000-0000-0000-000000000001',
-   'a3000000-0000-0000-0000-00000000000b',
-   'e1000000-0000-0000-0000-000000000006',
-   'd1000000-0000-0000-0000-000000000005',
-   1.0, 4.0, NULL, 4.0, NULL,
-   '{"files":[{"name":"aws-cert.pdf","url":"/evidence/phuoc/b4_aws.pdf"}],"note":"Đã đạt AWS Cloud Practitioner"}',
-   502)
-ON CONFLICT DO NOTHING;
-
--- ─────────────────────────────────────────────────────────────────────────────
--- Member: Lê Thị Mai (e1000000-07) - QA R2
--- Trạng thái: Còn thiếu bằng chứng 1 số KPI
--- ─────────────────────────────────────────────────────────────────────────────
-INSERT INTO kpi_assignments (id, cycle_id, kpi_info_id,
-  user_id, job_title_id, target_value,
-  mid_self_score, end_self_score, end_pm_score, end_gm_score,
-  evidences, status_code) VALUES
-  ('b3000000-0003-0000-0000-000000000001',
-   'c2000000-0000-0000-0000-000000000001',
-   'a3000000-0000-0000-0000-000000000001',
-   'e1000000-0000-0000-0000-000000000007',
-   'd1000000-0000-0000-0000-000000000007',
-   90.0, 3.5, NULL, NULL, NULL,
-   '{"files":[],"note":"Đang tổng hợp báo cáo"}',
-   501),
-
-  ('b3000000-0003-0000-0000-000000000002',
-   'c2000000-0000-0000-0000-000000000001',
-   'a3000000-0000-0000-0000-000000000002',
-   'e1000000-0000-0000-0000-000000000007',
-   'd1000000-0000-0000-0000-000000000007',
-   48.0, 3.8, NULL, NULL, NULL, NULL, 501),
-
-  ('b3000000-0003-0000-0000-000000000003',
-   'c2000000-0000-0000-0000-000000000001',
-   'a3000000-0000-0000-0000-000000000003',
-   'e1000000-0000-0000-0000-000000000007',
-   'd1000000-0000-0000-0000-000000000007',
-   95.0, 4.2, NULL, NULL, NULL,
-   '{"files":[{"name":"test_report_q2.pdf","url":"/evidence/mai/a3a.pdf"}],"note":"Phát hiện và báo cáo 28 bugs P1/P2"}',
-   501),
-
-  ('b3000000-0003-0000-0000-000000000004',
-   'c2000000-0000-0000-0000-000000000001',
-   'a3000000-0000-0000-0000-000000000004',
-   'e1000000-0000-0000-0000-000000000007',
-   'd1000000-0000-0000-0000-000000000007',
-   4.0, NULL, NULL, NULL, NULL, NULL, 405),  -- Chưa tự đánh giá
-
-  ('b3000000-0003-0000-0000-000000000005',
-   'c2000000-0000-0000-0000-000000000001',
-   'a3000000-0000-0000-0000-000000000005',
-   'e1000000-0000-0000-0000-000000000007',
-   'd1000000-0000-0000-0000-000000000007',
-   95.0, 3.5, NULL, NULL, NULL, NULL, 405),
-
-  ('b3000000-0003-0000-0000-000000000006',
-   'c2000000-0000-0000-0000-000000000001',
-   'a3000000-0000-0000-0000-000000000006',
-   'e1000000-0000-0000-0000-000000000007',
-   'd1000000-0000-0000-0000-000000000007',
-   100.0, 4.5, NULL, NULL, NULL, NULL, 405),
-
-  ('b3000000-0003-0000-0000-000000000007',
-   'c2000000-0000-0000-0000-000000000001',
-   'a3000000-0000-0000-0000-000000000007',
-   'e1000000-0000-0000-0000-000000000007',
-   'd1000000-0000-0000-0000-000000000007',
-   100.0, 5.0, NULL, NULL, NULL, NULL, 405),
-
-  ('b3000000-0003-0000-0000-000000000008',
-   'c2000000-0000-0000-0000-000000000001',
-   'a3000000-0000-0000-0000-000000000008',
-   'e1000000-0000-0000-0000-000000000007',
-   'd1000000-0000-0000-0000-000000000007',
-   2.0, NULL, NULL, NULL, NULL, NULL, 405),  -- Thiếu bằng chứng
-
-  ('b3000000-0003-0000-0000-000000000009',
-   'c2000000-0000-0000-0000-000000000001',
-   'a3000000-0000-0000-0000-000000000009',
-   'e1000000-0000-0000-0000-000000000007',
-   'd1000000-0000-0000-0000-000000000007',
-   3.0, 3.5, NULL, NULL, NULL, NULL, 405),
-
-  ('b3000000-0003-0000-0000-00000000000a',
-   'c2000000-0000-0000-0000-000000000001',
-   'a3000000-0000-0000-0000-00000000000a',
-   'e1000000-0000-0000-0000-000000000007',
-   'd1000000-0000-0000-0000-000000000007',
-   3.5, 3.0, NULL, NULL, NULL, NULL, 405),
-
-  ('b3000000-0003-0000-0000-00000000000b',
-   'c2000000-0000-0000-0000-000000000001',
-   'a3000000-0000-0000-0000-00000000000b',
-   'e1000000-0000-0000-0000-000000000007',
-   'd1000000-0000-0000-0000-000000000007',
-   1.0, NULL, NULL, NULL, NULL, NULL, 405)  -- Thiếu bằng chứng
-ON CONFLICT DO NOTHING;
-
--- ─────────────────────────────────────────────────────────────────────────────
--- Member: Phạm Đức Anh (e1000000-08) - BA R2
--- Trạng thái: Hoàn chỉnh nhất - GM đã chốt 1st Half
--- ─────────────────────────────────────────────────────────────────────────────
-INSERT INTO kpi_assignments (id, cycle_id, kpi_info_id,
-  user_id, job_title_id, target_value,
-  mid_self_score, end_self_score, end_pm_score, end_gm_score,
-  evidences, status_code) VALUES
-  ('b3000000-0004-0000-0000-000000000001',
-   'c2000000-0000-0000-0000-000000000001',
-   'a3000000-0000-0000-0000-000000000001',
-   'e1000000-0000-0000-0000-000000000008',
-   'd1000000-0000-0000-0000-000000000008',
-   90.0, 4.5, NULL, 4.5, 4.5,
-   '{"files":[{"name":"report_h1_anh.pdf","url":"/evidence/anh/a1a.pdf"}],"note":"96% task hoàn thành đúng hạn"}',
-   503),  -- GM đã chốt 1st half
-
-  ('b3000000-0004-0000-0000-000000000002',
-   'c2000000-0000-0000-0000-000000000001',
-   'a3000000-0000-0000-0000-000000000002',
-   'e1000000-0000-0000-0000-000000000008',
-   'd1000000-0000-0000-0000-000000000008',
-   48.0, 4.0, NULL, 4.0, 4.0,
-   '{"files":[{"name":"ba_docs_h1.zip","url":"/evidence/anh/a2a.zip"}],"note":"Hoàn thành 52 story points/tháng TB"}',
-   503),
-
-  ('b3000000-0004-0000-0000-000000000003',
-   'c2000000-0000-0000-0000-000000000001',
-   'a3000000-0000-0000-0000-000000000003',
-   'e1000000-0000-0000-0000-000000000008',
-   'd1000000-0000-0000-0000-000000000008',
-   95.0, 4.0, NULL, 4.0, 4.0,
-   '{"files":[{"name":"review_comments.pdf","url":"/evidence/anh/a3a.pdf"}],"note":"Tỷ lệ requirement rework < 3%"}',
-   503),
-
-  ('b3000000-0004-0000-0000-000000000004',
-   'c2000000-0000-0000-0000-000000000001',
-   'a3000000-0000-0000-0000-000000000004',
-   'e1000000-0000-0000-0000-000000000008',
-   'd1000000-0000-0000-0000-000000000008',
-   4.0, 4.5, NULL, 4.5, 4.5,
-   '{"files":[{"name":"customer_survey.pdf","url":"/evidence/anh/a4.pdf"}],"note":"Điểm survey 4.6/5.0"}',
-   503),
-
-  ('b3000000-0004-0000-0000-000000000005',
-   'c2000000-0000-0000-0000-000000000001',
-   'a3000000-0000-0000-0000-000000000005',
-   'e1000000-0000-0000-0000-000000000008',
-   'd1000000-0000-0000-0000-000000000008',
-   95.0, 4.5, NULL, 4.5, 4.5, NULL, 503),
-
-  ('b3000000-0004-0000-0000-000000000006',
-   'c2000000-0000-0000-0000-000000000001',
-   'a3000000-0000-0000-0000-000000000006',
-   'e1000000-0000-0000-0000-000000000008',
-   'd1000000-0000-0000-0000-000000000008',
-   100.0, 5.0, NULL, 5.0, 5.0, NULL, 503),
-
-  ('b3000000-0004-0000-0000-000000000007',
-   'c2000000-0000-0000-0000-000000000001',
-   'a3000000-0000-0000-0000-000000000007',
-   'e1000000-0000-0000-0000-000000000008',
-   'd1000000-0000-0000-0000-000000000008',
-   100.0, 5.0, NULL, 5.0, 5.0, NULL, 503),
-
-  ('b3000000-0004-0000-0000-000000000008',
-   'c2000000-0000-0000-0000-000000000001',
-   'a3000000-0000-0000-0000-000000000008',
-   'e1000000-0000-0000-0000-000000000008',
-   'd1000000-0000-0000-0000-000000000008',
-   2.0, 4.0, NULL, 4.0, 4.0,
-   '{"files":[{"name":"initiative_doc.pdf","url":"/evidence/anh/b1.pdf"}],"note":"2 sáng kiến được approved: API versioning + DB index optimization"}',
-   503),
-
-  ('b3000000-0004-0000-0000-000000000009',
-   'c2000000-0000-0000-0000-000000000001',
-   'a3000000-0000-0000-0000-000000000009',
-   'e1000000-0000-0000-0000-000000000008',
-   'd1000000-0000-0000-0000-000000000008',
-   3.0, 4.5, NULL, 4.5, 4.5,
-   '{"files":[],"note":"Mentored 2 junior members, 3 tech sharing sessions"}',
-   503),
-
-  ('b3000000-0004-0000-0000-00000000000a',
-   'c2000000-0000-0000-0000-000000000001',
-   'a3000000-0000-0000-0000-00000000000a',
-   'e1000000-0000-0000-0000-000000000008',
-   'd1000000-0000-0000-0000-000000000008',
-   3.5, 4.0, NULL, 4.0, 4.0,
-   '{"files":[{"name":"toeic_cert.jpg","url":"/evidence/anh/b3.jpg"}],"note":"TOEIC 680 điểm"}',
-   503),
-
-  ('b3000000-0004-0000-0000-00000000000b',
-   'c2000000-0000-0000-0000-000000000001',
-   'a3000000-0000-0000-0000-00000000000b',
-   'e1000000-0000-0000-0000-000000000008',
-   'd1000000-0000-0000-0000-000000000008',
-   1.0, 5.0, NULL, 5.0, 5.0,
-   '{"files":[{"name":"pmp_cert.pdf","url":"/evidence/anh/b4.pdf"}],"note":"Đã hoàn thành PMP Certificate"}',
-   503)
-ON CONFLICT DO NOTHING;
-
--- ─────────────────────────────────────────────────────────────────────────────
--- Member: Vũ Minh Tuấn (e1000000-09) - Team 2, Junior Dev
--- Trạng thái: Còn ở bước ACCEPTED (đang chạy, chưa nộp bằng chứng)
--- ─────────────────────────────────────────────────────────────────────────────
-INSERT INTO kpi_assignments (id, cycle_id, kpi_info_id,
-  user_id, job_title_id, target_value,
-  mid_self_score, end_self_score, end_pm_score, end_gm_score,
-  evidences, status_code) VALUES
-  ('b3000000-0005-0000-0000-000000000001',
-   'c2000000-0000-0000-0000-000000000001',
-   'a3000000-0000-0000-0000-000000000001',
-   'e1000000-0000-0000-0000-000000000009',
-   'd1000000-0000-0000-0000-000000000006',
-   90.0, NULL, NULL, NULL, NULL, NULL, 405),
-  ('b3000000-0005-0000-0000-000000000002',
-   'c2000000-0000-0000-0000-000000000001',
-   'a3000000-0000-0000-0000-000000000002',
-   'e1000000-0000-0000-0000-000000000009',
-   'd1000000-0000-0000-0000-000000000006',
-   48.0, NULL, NULL, NULL, NULL, NULL, 405),
-  ('b3000000-0005-0000-0000-000000000003',
-   'c2000000-0000-0000-0000-000000000001',
-   'a3000000-0000-0000-0000-000000000003',
-   'e1000000-0000-0000-0000-000000000009',
-   'd1000000-0000-0000-0000-000000000006',
-   95.0, NULL, NULL, NULL, NULL, NULL, 405),
-  ('b3000000-0005-0000-0000-000000000004',
-   'c2000000-0000-0000-0000-000000000001',
-   'a3000000-0000-0000-0000-000000000004',
-   'e1000000-0000-0000-0000-000000000009',
-   'd1000000-0000-0000-0000-000000000006',
-   4.0, NULL, NULL, NULL, NULL, NULL, 405),
-  ('b3000000-0005-0000-0000-000000000005',
-   'c2000000-0000-0000-0000-000000000001',
-   'a3000000-0000-0000-0000-000000000005',
-   'e1000000-0000-0000-0000-000000000009',
-   'd1000000-0000-0000-0000-000000000006',
-   95.0, NULL, NULL, NULL, NULL, NULL, 405),
-  ('b3000000-0005-0000-0000-000000000006',
-   'c2000000-0000-0000-0000-000000000001',
-   'a3000000-0000-0000-0000-000000000006',
-   'e1000000-0000-0000-0000-000000000009',
-   'd1000000-0000-0000-0000-000000000006',
-   100.0, NULL, NULL, NULL, NULL, NULL, 405),
-  ('b3000000-0005-0000-0000-000000000007',
-   'c2000000-0000-0000-0000-000000000001',
-   'a3000000-0000-0000-0000-000000000007',
-   'e1000000-0000-0000-0000-000000000009',
-   'd1000000-0000-0000-0000-000000000006',
-   100.0, NULL, NULL, NULL, NULL, NULL, 405),
-  ('b3000000-0005-0000-0000-000000000008',
-   'c2000000-0000-0000-0000-000000000001',
-   'a3000000-0000-0000-0000-000000000008',
-   'e1000000-0000-0000-0000-000000000009',
-   'd1000000-0000-0000-0000-000000000006',
-   2.0, NULL, NULL, NULL, NULL, NULL, 405),
-  ('b3000000-0005-0000-0000-000000000009',
-   'c2000000-0000-0000-0000-000000000001',
-   'a3000000-0000-0000-0000-000000000009',
-   'e1000000-0000-0000-0000-000000000009',
-   'd1000000-0000-0000-0000-000000000006',
-   3.0, NULL, NULL, NULL, NULL, NULL, 405),
-  ('b3000000-0005-0000-0000-00000000000a',
-   'c2000000-0000-0000-0000-000000000001',
-   'a3000000-0000-0000-0000-00000000000a',
-   'e1000000-0000-0000-0000-000000000009',
-   'd1000000-0000-0000-0000-000000000006',
-   3.5, NULL, NULL, NULL, NULL, NULL, 405),
-  ('b3000000-0005-0000-0000-00000000000b',
-   'c2000000-0000-0000-0000-000000000001',
-   'a3000000-0000-0000-0000-00000000000b',
-   'e1000000-0000-0000-0000-000000000009',
-   'd1000000-0000-0000-0000-000000000006',
-   1.0, NULL, NULL, NULL, NULL, NULL, 405)
-ON CONFLICT DO NOTHING;
-
--- ─────────────────────────────────────────────────────────────────────────────
--- Member: Đặng Thị Hoa (e1000000-10) - Team 2, Mid Dev
--- Trạng thái: Đã nộp bằng chứng, chờ PM
--- ─────────────────────────────────────────────────────────────────────────────
-INSERT INTO kpi_assignments (id, cycle_id, kpi_info_id,
-  user_id, job_title_id, target_value,
-  mid_self_score, end_self_score, end_pm_score, end_gm_score,
-  evidences, status_code) VALUES
-  ('b3000000-0006-0000-0000-000000000001',
-   'c2000000-0000-0000-0000-000000000001',
-   'a3000000-0000-0000-0000-000000000001',
-   'e1000000-0000-0000-0000-000000000010',
-   'd1000000-0000-0000-0000-000000000005',
-   90.0, 3.8, NULL, NULL, NULL,
-   '{"files":[{"name":"hoa_report.pdf","url":"/evidence/hoa/a1a.pdf"}],"note":"Hoàn thành 91% task"}',
-   501),
-  ('b3000000-0006-0000-0000-000000000002',
-   'c2000000-0000-0000-0000-000000000001',
-   'a3000000-0000-0000-0000-000000000002',
-   'e1000000-0000-0000-0000-000000000010',
-   'd1000000-0000-0000-0000-000000000005',
-   48.0, 3.7, NULL, NULL, NULL, NULL, 501),
-  ('b3000000-0006-0000-0000-000000000003',
-   'c2000000-0000-0000-0000-000000000001',
-   'a3000000-0000-0000-0000-000000000003',
-   'e1000000-0000-0000-0000-000000000010',
-   'd1000000-0000-0000-0000-000000000005',
-   95.0, 4.0, NULL, NULL, NULL, NULL, 501),
-  ('b3000000-0006-0000-0000-000000000004',
-   'c2000000-0000-0000-0000-000000000001',
-   'a3000000-0000-0000-0000-000000000004',
-   'e1000000-0000-0000-0000-000000000010',
-   'd1000000-0000-0000-0000-000000000005',
-   4.0, 3.8, NULL, NULL, NULL, NULL, 405),
-  ('b3000000-0006-0000-0000-000000000005',
-   'c2000000-0000-0000-0000-000000000001',
-   'a3000000-0000-0000-0000-000000000005',
-   'e1000000-0000-0000-0000-000000000010',
-   'd1000000-0000-0000-0000-000000000005',
-   95.0, 3.9, NULL, NULL, NULL, NULL, 405),
-  ('b3000000-0006-0000-0000-000000000006',
-   'c2000000-0000-0000-0000-000000000001',
-   'a3000000-0000-0000-0000-000000000006',
-   'e1000000-0000-0000-0000-000000000010',
-   'd1000000-0000-0000-0000-000000000005',
-   100.0, 5.0, NULL, NULL, NULL, NULL, 405),
-  ('b3000000-0006-0000-0000-000000000007',
-   'c2000000-0000-0000-0000-000000000001',
-   'a3000000-0000-0000-0000-000000000007',
-   'e1000000-0000-0000-0000-000000000010',
-   'd1000000-0000-0000-0000-000000000005',
-   100.0, 5.0, NULL, NULL, NULL, NULL, 405),
-  ('b3000000-0006-0000-0000-000000000008',
-   'c2000000-0000-0000-0000-000000000001',
-   'a3000000-0000-0000-0000-000000000008',
-   'e1000000-0000-0000-0000-000000000010',
-   'd1000000-0000-0000-0000-000000000005',
-   2.0, 3.0, NULL, NULL, NULL, NULL, 405),
-  ('b3000000-0006-0000-0000-000000000009',
-   'c2000000-0000-0000-0000-000000000001',
-   'a3000000-0000-0000-0000-000000000009',
-   'e1000000-0000-0000-0000-000000000010',
-   'd1000000-0000-0000-0000-000000000005',
-   3.0, 3.5, NULL, NULL, NULL, NULL, 405),
-  ('b3000000-0006-0000-0000-00000000000a',
-   'c2000000-0000-0000-0000-000000000001',
-   'a3000000-0000-0000-0000-00000000000a',
-   'e1000000-0000-0000-0000-000000000010',
-   'd1000000-0000-0000-0000-000000000005',
-   3.5, 3.2, NULL, NULL, NULL, NULL, 405),
-  ('b3000000-0006-0000-0000-00000000000b',
-   'c2000000-0000-0000-0000-000000000001',
-   'a3000000-0000-0000-0000-00000000000b',
-   'e1000000-0000-0000-0000-000000000010',
-   'd1000000-0000-0000-0000-000000000005',
-   1.0, NULL, NULL, NULL, NULL, NULL, 405)
-ON CONFLICT DO NOTHING;
-
--- ─────────────────────────────────────────────────────────────────────────────
--- Leader: Trần Đăng Huy (e1000000-03) - KPI cá nhân Leader
--- Leader được giao thêm KPI C (quản lý) ngoài A và B
--- ─────────────────────────────────────────────────────────────────────────────
-INSERT INTO kpi_assignments (id, cycle_id, kpi_info_id,
-  user_id, job_title_id, target_value,
-  mid_self_score, end_self_score, end_pm_score, end_gm_score,
-  evidences, status_code) VALUES
-  ('b3000000-0007-0000-0000-000000000001',
-   'c2000000-0000-0000-0000-000000000001',
-   'a3000000-0000-0000-0000-000000000001',
-   'e1000000-0000-0000-0000-000000000003',
-   'd1000000-0000-0000-0000-000000000003',
-   90.0, 4.5, NULL, NULL, NULL,
-   '{"files":[{"name":"leader_perf_h1.pdf","url":"/evidence/leader1/a1a.pdf"}],"note":"Đảm bảo team đạt KPI đề ra"}',
-   501),
-
-  ('b3000000-0007-0000-0000-000000000002',
-   'c2000000-0000-0000-0000-000000000001',
-   'a3000000-0000-0000-0000-000000000002',
-   'e1000000-0000-0000-0000-000000000003',
-   'd1000000-0000-0000-0000-000000000003',
-   48.0, 4.2, NULL, NULL, NULL, NULL, 501),
-
-  ('b3000000-0007-0000-0000-000000000003',
-   'c2000000-0000-0000-0000-000000000001',
-   'a3000000-0000-0000-0000-000000000003',
-   'e1000000-0000-0000-0000-000000000003',
-   'd1000000-0000-0000-0000-000000000003',
-   95.0, 4.3, NULL, NULL, NULL, NULL, 501),
-
-  ('b3000000-0007-0000-0000-000000000004',
-   'c2000000-0000-0000-0000-000000000001',
-   'a3000000-0000-0000-0000-000000000004',
-   'e1000000-0000-0000-0000-000000000003',
-   'd1000000-0000-0000-0000-000000000003',
-   4.0, 4.0, NULL, NULL, NULL, NULL, 405),
-
-  ('b3000000-0007-0000-0000-000000000005',
-   'c2000000-0000-0000-0000-000000000001',
-   'a3000000-0000-0000-0000-000000000005',
-   'e1000000-0000-0000-0000-000000000003',
-   'd1000000-0000-0000-0000-000000000003',
-   95.0, 4.5, NULL, NULL, NULL, NULL, 405),
-
-  ('b3000000-0007-0000-0000-000000000006',
-   'c2000000-0000-0000-0000-000000000001',
-   'a3000000-0000-0000-0000-000000000006',
-   'e1000000-0000-0000-0000-000000000003',
-   'd1000000-0000-0000-0000-000000000003',
-   100.0, 5.0, NULL, NULL, NULL, NULL, 405),
-
-  ('b3000000-0007-0000-0000-000000000007',
-   'c2000000-0000-0000-0000-000000000001',
-   'a3000000-0000-0000-0000-000000000007',
-   'e1000000-0000-0000-0000-000000000003',
-   'd1000000-0000-0000-0000-000000000003',
-   100.0, 5.0, NULL, NULL, NULL, NULL, 405),
-
-  ('b3000000-0007-0000-0000-000000000008',
-   'c2000000-0000-0000-0000-000000000001',
-   'a3000000-0000-0000-0000-000000000008',
-   'e1000000-0000-0000-0000-000000000003',
-   'd1000000-0000-0000-0000-000000000003',
-   2.0, 4.0, NULL, NULL, NULL, NULL, 405),
-
-  ('b3000000-0007-0000-0000-000000000009',
-   'c2000000-0000-0000-0000-000000000001',
-   'a3000000-0000-0000-0000-000000000009',
-   'e1000000-0000-0000-0000-000000000003',
-   'd1000000-0000-0000-0000-000000000003',
-   3.0, 4.5, NULL, NULL, NULL, NULL, 405),
-
-  ('b3000000-0007-0000-0000-00000000000a',
-   'c2000000-0000-0000-0000-000000000001',
-   'a3000000-0000-0000-0000-00000000000a',
-   'e1000000-0000-0000-0000-000000000003',
-   'd1000000-0000-0000-0000-000000000003',
-   3.5, 3.5, NULL, NULL, NULL, NULL, 405),
-
-  ('b3000000-0007-0000-0000-00000000000b',
-   'c2000000-0000-0000-0000-000000000001',
-   'a3000000-0000-0000-0000-00000000000b',
-   'e1000000-0000-0000-0000-000000000003',
-   'd1000000-0000-0000-0000-000000000003',
-   1.0, 4.0, NULL, NULL, NULL, NULL, 405)
-ON CONFLICT DO NOTHING;
-
--- ============================================================================
--- SECTION 17: USER_KPI_SUMMARIES (Kết quả chốt sổ năm 2025)
--- Dữ liệu lịch sử để hiển thị trên dashboard các năm trước
--- ============================================================================
-INSERT INTO user_kpi_summaries (id, user_id, cycle_id,
-  final_score, final_rating,
-  calculation_snapshot,
-  evaluation_comments, evaluation_supervisor_comments, evaluator_id) VALUES
-  -- Huy 2025
-  ('c3000000-0000-0000-0000-000000000001',
-   'e1000000-0000-0000-0000-000000000005',
-   'c2000000-0000-0000-0000-000000000002',
-   3.85, 'B+',
-   '{"totalWeight":160,"groups":[{"code":"A","weight":100,"selfAvg":3.9,"pmAvg":3.8},{"code":"B","weight":60,"selfAvg":3.75,"pmAvg":3.7}],"formula":"WEIGHTED_AVG"}',
-   'Nhân viên tiềm năng, cần cải thiện kỹ năng tiếng Anh và chứng chỉ kỹ thuật.',
-   'Huy có sự tiến bộ tốt, kỳ vọng đạt Senior trong 2 năm tới.',
-   'e1000000-0000-0000-0000-000000000003'),
-
-  -- Phước 2025
-  ('c3000000-0000-0000-0000-000000000002',
-   'e1000000-0000-0000-0000-000000000006',
-   'c2000000-0000-0000-0000-000000000002',
-   4.15, 'A',
-   '{"totalWeight":160,"groups":[{"code":"A","weight":100,"selfAvg":4.2,"pmAvg":4.1},{"code":"B","weight":60,"selfAvg":4.0,"pmAvg":4.1}],"formula":"WEIGHTED_AVG"}',
-   'Xuất sắc, hoàn thành vượt KPI. Đã được đề xuất xét Senior Dev.',
-   'Phước là nhân tố nòng cốt của team, cần bổ sung thêm kỹ năng mentoring.',
-   'e1000000-0000-0000-0000-000000000003'),
-
-  -- Mai 2025
-  ('c3000000-0000-0000-0000-000000000003',
-   'e1000000-0000-0000-0000-000000000007',
-   'c2000000-0000-0000-0000-000000000002',
-   3.60, 'B',
-   '{"totalWeight":160,"groups":[{"code":"A","weight":100,"selfAvg":3.7,"pmAvg":3.5},{"code":"B","weight":60,"selfAvg":3.4,"pmAvg":3.4}],"formula":"WEIGHTED_AVG"}',
-   'Hoàn thành mức trung bình tốt. Cần cải thiện tốc độ kiểm thử.',
-   'Mai cần chủ động hơn trong việc đề xuất cải tiến quy trình QA.',
-   'e1000000-0000-0000-0000-000000000003'),
-
-  -- Anh 2025
-  ('c3000000-0000-0000-0000-000000000004',
-   'e1000000-0000-0000-0000-000000000008',
-   'c2000000-0000-0000-0000-000000000002',
-   4.40, 'A+',
-   '{"totalWeight":160,"groups":[{"code":"A","weight":100,"selfAvg":4.4,"pmAvg":4.4},{"code":"B","weight":60,"selfAvg":4.5,"pmAvg":4.4}],"formula":"WEIGHTED_AVG"}',
-   'Hoàn thành xuất sắc toàn bộ KPI. Là điểm sáng của team.',
-   'Đề xuất thăng tiến lên Senior BA / tham gia vào định hướng kiến trúc hệ thống.',
-   'e1000000-0000-0000-0000-000000000003'),
-
-  -- Leader Trần Đăng Huy 2025
-  ('c3000000-0000-0000-0000-000000000005',
-   'e1000000-0000-0000-0000-000000000003',
-   'c2000000-0000-0000-0000-000000000002',
-   4.20, 'A',
-   '{"totalWeight":160,"groups":[{"code":"A","weight":100,"selfAvg":4.2,"pmAvg":4.2},{"code":"B","weight":60,"selfAvg":4.2,"pmAvg":4.2}],"formula":"WEIGHTED_AVG"}',
-   'Leader hiệu quả, team đạt KPI tốt. Cần cải thiện kỹ năng quản lý rủi ro.',
-   'Trần Đăng Huy là Leader có năng lực, đề xuất mở rộng phạm vi quản lý.',
-   'e1000000-0000-0000-0000-000000000002')
-ON CONFLICT DO NOTHING;
-
--- ============================================================================
--- SECTION 18: VERIFICATION QUERIES (Kiểm tra dữ liệu sau khi insert)
--- Chạy các query dưới đây để xác nhận data đã được tạo đúng
--- ============================================================================
-/*
--- Kiểm tra danh sách người dùng và role
-SELECT u.full_name, u.email, r.code AS role, jt.name AS job_title
-FROM users u
-JOIN user_roles ur ON u.id = ur.user_id
-JOIN roles r ON ur.role_id = r.id
-LEFT JOIN job_titles jt ON u.job_title_id = jt.id
-ORDER BY r.code, u.full_name;
-
--- Kiểm tra cơ cấu tổ chức
-SELECT d.name AS department, p.name AS parent_dept,
-       u.full_name AS manager
-FROM departments d
-LEFT JOIN departments p ON d.parent_id = p.id
-LEFT JOIN users u ON d.manager_id = u.id
-ORDER BY d.name;
-
--- Kiểm tra KPI assignments theo member
-SELECT u.full_name, km.code AS kpi_code, km.name AS kpi_name,
-       ka.target_value, ka.mid_self_score, ka.end_pm_score,
-       sc.name AS status
-FROM kpi_assignments ka
-JOIN users u ON ka.user_id = u.id
-JOIN kpis_information ki ON ka.kpi_info_id = ki.id
-JOIN kpi_master km ON ki.master_kpi_id = km.id
-JOIN sys_status_codes sc ON ka.status_code = sc.code
-WHERE ka.cycle_id = 'c2000000-0000-0000-0000-000000000001'
-ORDER BY u.full_name, km.code;
-
--- Kiểm tra kết quả tổng hợp 2025
-SELECT u.full_name, ks.final_score, ks.final_rating,
-       ks.evaluation_comments
-FROM user_kpi_summaries ks
-JOIN users u ON ks.user_id = u.id
-JOIN kpi_cycles kc ON ks.cycle_id = kc.id
-WHERE kc.year = 2025
-ORDER BY ks.final_score DESC;
-
--- Thống kê trạng thái KPI theo phòng ban (GM view)
-SELECT d.name AS dept, sc.name AS status, COUNT(*) AS count
-FROM kpi_assignments ka
-JOIN user_departments ud ON ka.user_id = ud.user_id
-JOIN departments d ON ud.department_id = d.id
-JOIN sys_status_codes sc ON ka.status_code = sc.code
-WHERE ka.cycle_id = 'c2000000-0000-0000-0000-000000000001'
-GROUP BY d.name, sc.name
-ORDER BY d.name, sc.name;
-*/

@@ -5,6 +5,7 @@ import GmLayout from '@/layouts/GmLayout.vue'
 import MemberLayout from '@/layouts/MemberLayout.vue'
 import LeaderLayout from '@/layouts/LeaderLayout.vue'
 import PmLayout from '@/layouts/PmLayout.vue'
+import AdminLayout from '@/layouts/AdminLayout.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -41,8 +42,8 @@ const router = createRouter({
           component: () => import('@/pages/gm/GmEmployeeEvaluationHub.vue'),
         },
         {
-          path: 'settings/create-section',
-          name: 'gm-create-section',
+          path: 'settings/create-department',
+          name: 'gm-create-department',
           component: () => import('@/pages/gm/GmCreateSectionPage.vue'),
         },
         {
@@ -124,6 +125,34 @@ const router = createRouter({
       ],
     },
 
+    // ─── Admin area ───────────────────────────────────────────────────────────────
+    {
+      path: '/admin',
+      component: AdminLayout,
+      meta: { requiresAuth: true, role: 'ADMIN' },
+      children: [
+        {
+          path: '',
+          redirect: '/admin/campaigns',
+        },
+        {
+          path: 'campaigns',
+          name: 'admin-campaigns',
+          component: () => import('@/pages/admin/AdminCampaignPage.vue'),
+        },
+        {
+          path: 'employees',
+          name: 'admin-employees',
+          component: () => import('@/pages/admin/AdminEmployeePage.vue'),
+        },
+        {
+          path: 'email-templates',
+          name: 'admin-email-templates',
+          component: () => import('@/pages/admin/AdminEmailTemplatePage.vue'),
+        },
+      ],
+    },
+
     // ─── Fallback ─────────────────────────────────────────────────────────────
     {
       path: '/',
@@ -171,6 +200,11 @@ router.beforeEach((to, _from, next) => {
   }
 
   if (to.meta.role === 'MEMBER' && auth.user?.role !== 'MEMBER') {
+    next(auth.homeRoute)
+    return
+  }
+
+  if (to.meta.role === 'ADMIN' && auth.user?.role !== 'ADMIN') {
     next(auth.homeRoute)
     return
   }

@@ -34,7 +34,7 @@ export interface AuthUser {
   username?: string
   name: string
   fullName?: string
-  role: 'GM' | 'PM' | 'LEADER' | 'MEMBER'
+  role: 'GM' | 'PM' | 'LEADER' | 'MEMBER' | 'ADMIN'
   rank?: string
   position?: string
   isActive?: boolean

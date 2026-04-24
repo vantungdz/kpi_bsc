@@ -1,34 +1,83 @@
 <script setup lang="ts">
 /**
  * Khối đánh giá (GM) — dùng chung cho tab trên dashboard và route `/gm/employee-evaluation`.
+ * Mock (`VITE_USE_MOCK=true`): dữ liệu mock cây PM. Thật: `GET /kpi/gm/evaluation-hub/assignments?cycleId=`.
  */
-import { computed } from 'vue'
+import { computed, inject, ref, watch, type Ref } from 'vue'
 import { useRoute, RouterLink } from 'vue-router'
 import GmKpiEvaluationPanel from '@/components/gm/GmKpiEvaluationPanel.vue'
 import {
+  flattenGmEvalPmHubTreeForScores,
+  getGmEvalBroker,
   getGmEvalPmHubRows,
   getGmEvalPmHubTree,
-  getGmEvalBroker,
   type GmEvalMember,
   type GmEvalPmBranch,
 } from '@/mocks/gmEmployeeEvaluation.mock'
+import { gmKpiService } from '@/services/modules/kpi-gm.service'
+import { mapGmEvaluationHubApiToPmBranches } from '@/utils/mapGmEvaluationHubApiToPmBranches'
+import { pushGmNotification } from '@/composables/useGmNotifications'
 
 const route = useRoute()
+const useMock = import.meta.env.VITE_USE_MOCK === 'true'
+const selectedCycleId = inject<Ref<string>>('gmSelectedCycleId', ref(''))
 
 const pmBrokerId = computed(() => {
   const q = route.query.pm
   return typeof q === 'string' && q.trim() ? q.trim() : null
 })
 
+const hubLoading = ref(false)
+const basePmBranches = ref<GmEvalPmBranch[]>([])
+const baseEmployees = ref<GmEvalMember[]>([])
+
+async function loadEvaluationHub() {
+  if (useMock) {
+    basePmBranches.value = getGmEvalPmHubTree()
+    baseEmployees.value = getGmEvalPmHubRows()
+    return
+  }
+  const cid = String(selectedCycleId.value ?? '').trim()
+  if (!cid) {
+    basePmBranches.value = []
+    baseEmployees.value = []
+    return
+  }
+  hubLoading.value = true
+  try {
+    const data = await gmKpiService.getEvaluationHubAssignments(cid)
+    const tree = mapGmEvaluationHubApiToPmBranches(data)
+    basePmBranches.value = tree
+    baseEmployees.value = flattenGmEvalPmHubTreeForScores(tree)
+  } catch (e: unknown) {
+    basePmBranches.value = []
+    baseEmployees.value = []
+    pushGmNotification(e instanceof Error ? e.message : 'Không tải được dữ liệu tab Đánh giá', {
+      variant: 'error',
+      durationMs: 8000,
+    })
+  } finally {
+    hubLoading.value = false
+  }
+}
+
+watch(
+  () => [useMock, selectedCycleId.value] as const,
+  () => {
+    void loadEvaluationHub()
+  },
+  { immediate: true },
+)
+
 const employees = computed<GmEvalMember[]>(() => {
-  const all = getGmEvalPmHubRows()
+  const all = baseEmployees.value
   const id = pmBrokerId.value
   if (!id) return all
   return all.filter((e) => e.projectIds.includes(id))
 })
 
 const pmBranches = computed<GmEvalPmBranch[]>(() => {
-  const tree = getGmEvalPmHubTree()
+  const tree = basePmBranches.value
   const id = pmBrokerId.value
   if (!id) return tree
   return tree.filter((b) => b.pm.projectIds.includes(id))
@@ -62,6 +111,19 @@ const filterSubtitle = computed(() => {
         Xem tất cả PM
       </RouterLink>
     </div>
-    <GmKpiEvaluationPanel list-entity="pm" :employees="employees" :pm-branches="pmBranches" />
+    <div
+      v-if="hubLoading && !useMock"
+      class="px-4 py-10 text-center text-sm font-medium text-slate-500 sm:px-5"
+    >
+      <i class="fas fa-spinner fa-spin mr-2 text-indigo-500" aria-hidden="true" />
+      Đang tải dữ liệu đánh giá…
+    </div>
+    <GmKpiEvaluationPanel
+      v-else
+      list-entity="pm"
+      :employees="employees"
+      :pm-branches="pmBranches"
+      @reload-evaluation-hub="loadEvaluationHub"
+    />
   </div>
 </template>

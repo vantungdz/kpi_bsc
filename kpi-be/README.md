@@ -61,11 +61,6 @@ src/main
 └─ resources
 	├─ application.properties
 	├─ application-local.properties
-	└─ db
-        ├─ migration
-        │  └─ V1__create_schema.sql
-        └─ seed
-            └─ V2__seed_data.sql
 ```
 
 ## Lệnh nhanh

@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.company.kpi.mapper.EmailTemplateMapper">
+    <select id="getEmailTemplates"
+            resultType="com.company.kpi.response.admin.AdminEmailTemplateResponse">
+        SELECT
+            id                                          AS id,
+            name                                        AS name,
+            subject                                     AS subject,
+            body                                        AS body,
+            status                                      AS status,
+            send_mode                                   AS mode,
+            template_group                              AS "group",
+            TO_CHAR(updated_at, 'DD/MM/YYYY HH24:MI')  AS updatedAt
+        FROM email_templates
+        WHERE deleted_at IS NULL
+        ORDER BY template_group, name
+    </select>
+
+    <select id="getEmailTemplateById"
+            resultType="com.company.kpi.response.admin.AdminEmailTemplateResponse">
+        SELECT
+            id, name, subject, body, status,
+            send_mode AS mode,
+            template_group AS "group",
+            TO_CHAR(updated_at, 'DD/MM/YYYY HH24:MI') AS updatedAt
+        FROM email_templates
+        WHERE id = #{id} AND deleted_at IS NULL
+    </select>
+
+    <insert id="insertEmailTemplate">
+        INSERT INTO email_templates (id, name, subject, body, status, send_mode, template_group, created_by, updated_by)
+        VALUES (#{id}, #{name}, #{subject}, #{body}, #{status}, #{sendMode}, #{templateGroup},
+                #{createdBy, jdbcType=OTHER, typeHandler=com.company.kpi.common.mybatis.UUIDTypeHandler},
+                #{createdBy, jdbcType=OTHER, typeHandler=com.company.kpi.common.mybatis.UUIDTypeHandler})
+    </insert>
+
+    <update id="updateEmailTemplate">
+        UPDATE email_templates
+        SET name           = #{name},
+            subject        = #{subject},
+            body           = #{body},
+            status         = #{status},
+            send_mode      = #{sendMode},
+            template_group = #{templateGroup},
+            updated_by     = #{updatedBy, jdbcType=OTHER, typeHandler=com.company.kpi.common.mybatis.UUIDTypeHandler},
+            updated_at     = NOW()
+        WHERE id = #{id} AND deleted_at IS NULL
+    </update>
+</mapper>

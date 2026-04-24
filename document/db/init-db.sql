@@ -55,7 +55,28 @@ INSERT INTO sys_status_codes (code, category, name, description) VALUES
 -- 6xx: Phase 3 (Đánh giá 2nd Half & Final)
 (601, 'ASM_STATUS', '2ND_WAITING_PM_APPROVAL', 'Chờ PM chấm điểm Final'),
 (602, 'ASM_STATUS', '2ND_WAITING_GM_APPROVAL', 'Chờ GM chốt điểm Final'),
-(603, 'ASM_STATUS', 'COMPLETED', 'Đã chốt sổ hoàn toàn (Kết thúc vòng đời)');
+(603, 'ASM_STATUS', 'COMPLETED', 'Đã chốt sổ hoàn toàn (Kết thúc vòng đời)'),
+
+-- 7xx: CALC_TYPE (Chiều hướng tính toán & So sánh)
+(701, 'CALC_TYPE', 'ACTUAL_OVER_PLAN', 'Actual / Plan'),
+(702, 'CALC_TYPE', 'PLAN_OVER_ACTUAL', 'Plan / Actual'),
+(703, 'CALC_TYPE', 'MANUAL_RATING', 'Manual Rating'),
+
+-- 8xx: CALC_RULE (Quy tắc tổng hợp điểm)
+(801, 'CALC_RULE', 'SUM', 'Cộng dồn điểm của các KPI con'),
+(802, 'CALC_RULE', 'AVERAGE', 'Lấy trung bình cộng điểm các KPI con'),
+(803, 'CALC_RULE', 'COMMENT', 'Nhập điểm thủ công dựa trên nhận xét đánh giá'),
+(804, 'CALC_RULE', 'WEIGHTED_AVG', 'Trung bình cộng có trọng số'),
+
+-- 9xx: KPI_UNIT (Đơn vị tính của Chỉ tiêu)
+(901, 'KPI_UNIT', 'MM', 'Man-Month'),
+(902, 'KPI_UNIT', 'Percent', 'Phần trăm (%)'),
+(903, 'KPI_UNIT', 'Point', 'Điểm số'),
+(904, 'KPI_UNIT', 'Product', 'Sản phẩm'),
+(905, 'KPI_UNIT', 'Project', 'Dự án'),
+(906, 'KPI_UNIT', 'Certification', 'Chứng chỉ'),
+(907, 'KPI_UNIT', 'Article', 'Bài viết / Bài báo'),
+(908, 'KPI_UNIT', 'Person', 'Người / Nhân sự');
 
 -- ============================================================================
 -- MODULE 1 & 2: CƠ CẤU CHỨC DANH, TỔ CHỨC & USERS
@@ -153,13 +174,17 @@ CREATE TABLE user_roles (
 -- ============================================================================
 -- MODULE 3: MASTER DATA KPI, TEMPLATES & CHU KỲ (REFER CODE TỪ MODULE 0)
 -- ============================================================================
+DROP TABLE IF EXISTS kpi_cycles CASCADE;
 CREATE TABLE kpi_cycles (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     year INTEGER NOT NULL,
     name VARCHAR(100) NOT NULL,
-    goal_setting_deadline TIMESTAMP WITH TIME ZONE,
-    mid_year_deadline TIMESTAMP WITH TIME ZONE,
-    end_year_deadline TIMESTAMP WITH TIME ZONE,
+    goal_setting_start TIMESTAMP WITH TIME ZONE,
+    goal_setting_end TIMESTAMP WITH TIME ZONE,
+    mid_year_start TIMESTAMP WITH TIME ZONE,
+    mid_year_end TIMESTAMP WITH TIME ZONE,
+    end_year_start TIMESTAMP WITH TIME ZONE,
+    end_year_end TIMESTAMP WITH TIME ZONE,
     
     -- Tham chiếu bằng CODE (Mặc định 10: OPEN)
     status_code INTEGER REFERENCES sys_status_codes(code) DEFAULT 201,
@@ -178,31 +203,24 @@ CREATE TABLE kpi_categories (
     created_by UUID, updated_by UUID, deleted_at TIMESTAMP WITH TIME ZONE
 );
 
-CREATE TABLE calculation_rules (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    code VARCHAR(50) NOT NULL, 
-    name VARCHAR(100) NOT NULL,       
-    description TEXT,
-    is_active BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    created_by UUID, updated_by UUID, deleted_at TIMESTAMP WITH TIME ZONE
-);
-CREATE UNIQUE INDEX idx_calc_rules_code_active ON calculation_rules(code) WHERE deleted_at IS NULL;
-
 -- 3.1 BẢNG MASTER VĨNH CỬU XUYÊN NĂM
 CREATE TABLE kpi_master (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     code VARCHAR(50), 
     name VARCHAR(255) NOT NULL, 
     category_id UUID REFERENCES kpi_categories(id),
-    calculation_rule_id UUID REFERENCES calculation_rules(id) ON DELETE SET NULL,
     
     -- Tham chiếu type bằng CODE
     type_code INTEGER REFERENCES sys_status_codes(code) NOT NULL,
-    
-    objective TEXT NOT NULL, 
-    
+
+    calculation_rule_code INTEGER REFERENCES sys_status_codes(code) DEFAULT 801,
+
+    -- [Cập nhật]: Có thể NULL vì không phải lúc nào cũng dùng công thức chia
+    calculation_type_code INTEGER REFERENCES sys_status_codes(code),
+
+    -- Thêm cột Đơn vị tính (Tham chiếu CODE từ sys_status_codes)
+    unit_code INTEGER REFERENCES sys_status_codes(code),
+
     -- Cờ phân luồng: TRUE (Hàng công ty GM giao), FALSE (Member tự đề xuất)
     is_global BOOLEAN DEFAULT TRUE, 
     
@@ -241,9 +259,8 @@ CREATE TABLE kpis_information (
     target_description TEXT,
     target_value NUMERIC(10,2),   
     weight NUMERIC(5,2),          
-    is_system_created BOOLEAN DEFAULT TRUE, 
+    is_important BOOLEAN DEFAULT FALSE,
 
-    
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     created_by UUID, updated_by UUID, deleted_at TIMESTAMP WITH TIME ZONE,
@@ -329,3 +346,7 @@ CREATE INDEX idx_kpi_assign_parent ON kpi_assignments(parent_assignment_id) WHER
 CREATE INDEX idx_kpi_assign_cycle ON kpi_assignments(cycle_id) WHERE deleted_at IS NULL;
 CREATE INDEX idx_kpi_assign_status ON kpi_assignments(status_code) WHERE deleted_at IS NULL;
 CREATE INDEX idx_kpi_assign_evidences ON kpi_assignments USING GIN (evidences);
+
+-- ============================================================================
+-- (Xóa bảng calculation_rules cũ)
+DROP TABLE IF EXISTS calculation_rules CASCADE;

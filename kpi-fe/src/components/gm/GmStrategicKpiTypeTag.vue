@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { GmStrategicKpiKind } from '@/mocks/gm-kpi.mock'
+import type { GmStrategicKpiKind } from '@/types/gm-workspace'
 
 const props = withDefaults(
   defineProps<{

@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type {
-  GmModalKpiItemMock,
   GmMemberKpiDrawerProfile,
+  GmModalKpiItemMock,
   GmPmKpiRolloutPayload,
   GmStrategicKpiKind,
-} from '@/mocks/gm-kpi.mock'
+} from '@/types/gm-workspace'
 
 const props = withDefaults(
   defineProps<{
@@ -205,7 +205,7 @@ const rolloutDeptLabel = computed(() => {
                 <div class="mt-2.5 border-t border-slate-600/50 pt-2.5">
                   <p class="flex items-center gap-1.5 text-sm font-medium text-slate-300">
                     <i class="fas fa-user text-xs text-slate-400" />
-                    Quản lý (PM):
+                    Quản lý ({{ pmKpiRollout.rollupRoleLabel || '—' }}):
                     <span class="font-bold text-white">{{ pmKpiRollout.pmName }}</span>
                   </p>
                   <p

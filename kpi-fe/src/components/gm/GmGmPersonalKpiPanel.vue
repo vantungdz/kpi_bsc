@@ -1,20 +1,24 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import {
-  GM_BSC_LABELS,
-  GM_BSC_ORDER,
-  normalizeGmBscPerspective,
-  type GmBscPerspective,
-  type GmPersonalKpiRowMock,
-  type GmPersonalKpiRowStatus,
-} from '@/mocks/gm-kpi.mock'
+import { computed, ref, withDefaults } from 'vue'
+import { GM_BSC_LABELS, GM_BSC_ORDER, normalizeGmBscPerspective } from '@/utils/gm-bsc-diagnostics'
+import type {
+  GmBscPerspective,
+  GmPersonalKpiRowMock,
+  GmPersonalKpiRowStatus,
+} from '@/types/gm-workspace'
+import GmStrategicKpiTypeTag from '@/components/gm/GmStrategicKpiTypeTag.vue'
 
-const props = defineProps<{
-  /** Năm đánh giá (đồng bộ dropdown header GM). */
-  yearId: string
-  /** Dữ liệu mock — lấy từ `GmWorkspaceCycleSnapshot.personalKpiRows` / `buildDefaultGmPersonalKpiRows()`. */
-  rows: GmPersonalKpiRowMock[]
-}>()
+const props = withDefaults(
+  defineProps<{
+    /** Năm đánh giá (đồng bộ dropdown header GM). */
+    yearId: string
+    /** Dữ liệu từ `GET /kpi/leader/kpi-info` (INDIVIDUAL + PROMOTION) sau khi map. */
+    rows: GmPersonalKpiRowMock[]
+    /** Đang gọi API (hai loại KPI cá nhân). */
+    loading?: boolean
+  }>(),
+  { loading: false },
+)
 
 const yearLabel = computed(() => props.yearId.trim() || String(new Date().getFullYear()))
 
@@ -28,7 +32,7 @@ const groupedByBsc = computed((): BscGroup[] => {
   const m = new Map<GmBscPerspective, GmPersonalKpiRowMock[]>()
   for (const id of GM_BSC_ORDER) m.set(id, [])
   for (const r of props.rows) {
-    m.get(normalizeGmBscPerspective(r.bscPerspective))!.push(r)
+    m.get(normalizeGmBscPerspective(r.diagnosticsFallbackGroup))!.push(r)
   }
   let stt = 0
   const out: BscGroup[] = []
@@ -80,11 +84,20 @@ function statusLabel(s: GmPersonalKpiRowStatus) {
     </div>
 
     <div
-      v-if="rows.length === 0"
+      v-if="loading"
+      class="flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-12 text-sm font-medium text-slate-600 shadow-sm"
+      role="status"
+    >
+      <i class="fas fa-spinner fa-spin text-indigo-500" aria-hidden="true" />
+      Đang tải KPI cá nhân (Individual + Promotion)…
+    </div>
+
+    <div
+      v-else-if="rows.length === 0"
       class="rounded-2xl border border-dashed border-slate-200 bg-slate-50/80 px-4 py-10 text-center"
     >
       <p class="text-sm font-semibold text-slate-700">Chưa có dữ liệu KPI cá nhân</p>
-      <p class="mt-1 text-xs text-slate-500">Chưa cấu hình dữ liệu cho năm này.</p>
+      <p class="mt-1 text-xs text-slate-500">Không có assignment Individual/Promotion cho năm {{ yearLabel }}.</p>
     </div>
 
     <div v-else class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -155,8 +168,11 @@ function statusLabel(s: GmPersonalKpiRowStatus) {
                     {{ stt }}
                   </td>
                   <td class="min-w-0 px-2 py-3 sm:px-3">
-                    <div class="break-words font-bold leading-snug text-slate-800">
-                      {{ row.objective }}
+                    <div class="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1">
+                      <span class="break-words font-bold leading-snug text-slate-800">{{
+                        row.objective
+                      }}</span>
+                      <GmStrategicKpiTypeTag :type="row.kpiType" size="sm" class="shrink-0" />
                     </div>
                   </td>
                   <td class="min-w-0 px-2 py-3 text-[11px] font-medium leading-snug text-slate-600 sm:px-3 sm:text-xs">

@@ -1,14 +1,23 @@
 package com.company.kpi.mapper;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Result;
 import org.apache.ibatis.annotations.Results;
 import org.apache.ibatis.annotations.Select;
 
+import com.company.kpi.aggregate.PmDashboardAggregate;
+import com.company.kpi.aggregate.PmMemberOptionAggregate;
 import com.company.kpi.entity.User;
+import com.company.kpi.aggregate.UserJobTitlePair;
+import com.company.kpi.response.admin.AdminEmployeeProgressResponse;
+import com.company.kpi.response.admin.AdminEmployeeResponse;
+import com.company.kpi.response.reference.DepartmentManagerOptionResponse;
+import com.company.kpi.response.reference.MemberByRankOptionResponse;
 
 @Mapper
 public interface UserMapper {
@@ -44,4 +53,57 @@ public interface UserMapper {
     User findByEmail(String email);
 
     Optional<User> findById(UUID id);
+
+    /**
+     * Fetches a list of members (users) under a specific PM's department 
+     * along with their KPI assignments for a given cycle.
+     * Returns an Aggregate as it combines User and KpiAssignment data.
+     */
+    List<PmDashboardAggregate> findUsersWithAssignmentsByPmIdAndCycleId(
+            @Param("pmId") UUID pmId,
+            @Param("cycleId") UUID cycleId
+    );
+
+    List<PmMemberOptionAggregate> findMembersByPmDepartment(@Param("pmUserId") UUID pmUserId);
+
+     /** User active là {@code departments.manager_id} của ít nhất một department chưa xóa. */
+    List<DepartmentManagerOptionResponse> listActiveDepartmentManagers();
+
+    /** User có {@code job_titles} → {@code ranks.code} = {@code rankCode}. */
+    List<MemberByRankOptionResponse> listActiveUsersByRankCode(@Param("rankCode") String rankCode);
+
+    /**
+     * User active — KPI Promotion «Assign To Individuals»: phòng ban chính + cấp bậc (nếu có chức danh).
+     */
+    List<MemberByRankOptionResponse> listActiveUsersForPromotionAssignment();
+
+    int countTotalActiveEmployees();
+
+    List<AdminEmployeeProgressResponse> getEmployeeProgressByCycleId(@Param("cycleId") UUID cycleId);
+
+    AdminEmployeeResponse getEmployeeById(@Param("id") UUID id);
+
+    List<String> getAllActiveEmployeeEmails();
+
+    List<AdminEmployeeResponse> getEmployees();
+
+    void insertEmployee(
+            @Param("id") UUID id,
+            @Param("code") String code,
+            @Param("email") String email,
+            @Param("passwordHash") String passwordHash,
+            @Param("fullName") String fullName,
+            @Param("jobTitleId") UUID jobTitleId,
+            @Param("isActive") boolean isActive);
+
+    void updateEmployee(
+            @Param("id") UUID id,
+            @Param("fullName") String fullName,
+            @Param("email") String email,
+            @Param("jobTitleId") UUID jobTitleId,
+            @Param("isActive") boolean isActive);
+
+    List<UUID> listExistingActiveUserIds(@Param("userIds") List<UUID> userIds);
+
+    List<UserJobTitlePair> listUserJobTitlesByIds(@Param("userIds") List<UUID> userIds);
 }

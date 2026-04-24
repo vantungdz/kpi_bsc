@@ -1,0 +1,64 @@
+package com.company.kpi.response.gm;
+
+import lombok.Data;
+
+import java.math.BigDecimal;
+import java.util.UUID;
+
+/**
+ * One flattened row from {@code kpi_assignments} + org + KPI master (MyBatis result).
+ * <p>{@code sectionManager*} = {@code departments.manager_id} của đơn vị primary của assignee;
+ * {@code leaderName} = tên user {@code user_departments.supervisor_id} của assignee.
+ * Khi {@code member_id = section_manager_id}, hierarchy gom nhóm trực tiếp (không lồng assignee dưới supervisor).
+ */
+@Data
+public class GmDiagnosticsFlatRow {
+
+    private UUID kpiInfoId;
+    private UUID masterKpiId;
+    private String kpiCode;
+    private String kpiName;
+    private UUID categoryId;
+    private String categoryName;
+    private Integer typeCode;
+    /** {@code kpi_master.unit_code} — KPI_UNIT (sys_status_codes). */
+    private Integer unitCode;
+    private BigDecimal kpiWeight;
+    private BigDecimal catalogTargetValue;
+    private String kpiTargetDescription;
+    /** Cột `kpis_information.is_important` — KPI trọng điểm (hiển thị sao trên GM diagnostics). */
+    private Boolean isImportant;
+
+    private UUID sectionId;
+    private String sectionName;
+
+    private UUID sectionManagerId;
+    private String sectionManagerName;
+    /** Một {@code roles.code} của {@link #sectionManagerId} (GM → PM → LEADER → MEMBER). */
+    private String sectionManagerRoleCode;
+    /** {@code roles.name} tương ứng {@link #sectionManagerRoleCode}. */
+    private String sectionManagerRoleName;
+
+    private UUID memberId;
+    private String memberName;
+    /** Một {@code roles.code} của assignee {@link #memberId} (GM → PM → LEADER → MEMBER). */
+    private String memberRoleCode;
+    /** {@code roles.name} tương ứng {@link #memberRoleCode}. */
+    private String memberRoleName;
+    private String leaderName;
+    /** {@code user_departments.supervisor_id} — để map role supervisor. */
+    private UUID leaderId;
+    /** Một {@code roles.code} của supervisor (assignee). */
+    private String leaderRoleCode;
+    /** {@code roles.name} tương ứng {@link #leaderRoleCode}. */
+    private String leaderRoleName;
+    private String memberRank;
+
+    private UUID assignmentId;
+    private Integer statusCode;
+    private BigDecimal midSelfScore;
+    private BigDecimal endSelfScore;
+    private BigDecimal endPmScore;
+    private BigDecimal endGmScore;
+    private BigDecimal memberTargetValue;
+}

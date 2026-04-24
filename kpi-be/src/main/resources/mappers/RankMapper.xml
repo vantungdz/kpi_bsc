@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.company.kpi.mapper.RankMapper">
+
+    <select id="listActiveRanksOrderedByCode" resultType="com.company.kpi.response.reference.RankOptionResponse">
+        SELECT
+            id,
+            code,
+            name
+        FROM
+            ranks
+        WHERE
+            deleted_at IS NULL
+        ORDER BY
+            code ASC
+    </select>
+    <!-- ── Thêm từ AdminMapper ─────────────────────────────────────────────────── -->
+    <select id="getRanks"
+            resultType="com.company.kpi.response.admin.AdminRankResponse">
+        SELECT
+            CAST(id AS VARCHAR) AS id,
+            code                AS code,
+            name                AS name
+        FROM ranks
+        WHERE deleted_at IS NULL
+        ORDER BY code
+    </select>
+</mapper>

@@ -1,18 +1,101 @@
 package com.company.kpi.service.leader;
 
+import static com.company.kpi.common.constant.Constant.KpiType;
+
+import com.company.kpi.entity.KpiCycle;
+import com.company.kpi.entity.User;
+import com.company.kpi.entity.UserKpiSummary;
+import com.company.kpi.mapper.*;
 import com.company.kpi.request.leader.LeaderScoreRequest;
+import com.company.kpi.response.leader.*;
+
+import static com.company.kpi.response.leader.LeaderKpiInformationResponse.LeaderKpiCategoryGroup;
+import static com.company.kpi.response.leader.LeaderKpiInformationResponse.LeaderKpiSummary;
+import static com.company.kpi.response.leader.LeaderKpiInformationResponse.LeaderKpiAssignmentResponse;
+import static com.company.kpi.response.leader.LeaderMemberListResponse.MemberInfo;
+
 import com.company.kpi.response.pm.KpiSheetResponse;
-import com.company.kpi.response.leader.LeaderKpiDashboardResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
+import org.modelmapper.ModelMapper;
 import org.springframework.stereotype.Service;
 
-import java.util.UUID;
+import java.math.BigDecimal;
+import java.util.*;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class LeaderKpiService {
+
+    private final KpiAssignmentMapper kpiAssignmentMapper;
+    private final KpiCycleMapper kpiCycleMapper;
+    private final UserDepartmentMapper userDepartmentMapper;
+    private final UserMapper userMapper;
+    private final UserKpiSummaryMapper userKpiSummaryMapper;
+
+    private final ModelMapper modelMapper;
+
+    public LeaderKpiInformationResponse getKpiInfo(Integer year, KpiType type, UUID userId) {
+
+        Optional<KpiCycle> optionalKpiCycle = kpiCycleMapper.findByYear(year);
+        if (optionalKpiCycle.isEmpty()) {
+            return null;
+        }
+        KpiCycle cycle = optionalKpiCycle.get();
+
+        Optional<User> optionalUser = userMapper.findById(userId);
+        if (optionalUser.isEmpty()) {
+            return null;
+        }
+
+        List<LeaderKpiAssignmentDTO> assignmentDTOs = kpiAssignmentMapper.findDetailsByUserAndCycleAndRoleLeader(userId, cycle.getId(), type.name());
+        Map<UUID, LeaderKpiCategoryGroup> categoryMap = new LinkedHashMap<>();
+        for (LeaderKpiAssignmentDTO dto : assignmentDTOs) {
+
+            UUID categoryId = dto.getCategoryId();
+
+            categoryMap.computeIfAbsent(categoryId, id ->
+                    new LeaderKpiCategoryGroup(
+                            id,
+                            dto.getCategoryName(),
+                            new ArrayList<>()
+                    )
+            );
+
+            LeaderKpiAssignmentResponse assignment = modelMapper.map(dto, LeaderKpiAssignmentResponse.class);
+            categoryMap.get(categoryId).getAssignments().add(assignment);
+        }
+
+        LeaderKpiSummary kpiSummary = null;
+        if (!assignmentDTOs.isEmpty()) {
+            Optional<UserKpiSummary> optionalUserKpiSummary = userKpiSummaryMapper.findByUserIdAndCycleId(userId, cycle.getId());
+            kpiSummary = new LeaderKpiSummary();
+            UserKpiSummary userKpiSummary = optionalUserKpiSummary.orElse(new UserKpiSummary());
+
+            kpiSummary.setFinalScore(Optional.ofNullable(userKpiSummary.getFinalScore()).orElse(BigDecimal.ZERO));
+            kpiSummary.setEvaluationComments(Optional.ofNullable(userKpiSummary.getEvaluationComments()).orElse(StringUtils.EMPTY));
+            kpiSummary.setEvaluationSupervisorComments(Optional.ofNullable(userKpiSummary.getEvaluationSupervisorComments()).orElse(StringUtils.EMPTY));
+        }
+
+        return LeaderKpiInformationResponse.builder()
+                .year(year)
+                .categories(new ArrayList<>(categoryMap.values()))
+                .kpiSummary(kpiSummary)
+                .build();
+    }
+
+    public LeaderMemberListResponse getMemberList(UUID leaderId) {
+        List<LeaderMemberInfoDTO> memberInfoDTOs = userDepartmentMapper.findLeaderMemberListInfo(leaderId);
+        List<MemberInfo> memberInfoList = memberInfoDTOs.stream()
+                .map(dto -> modelMapper.map(dto, MemberInfo.class))
+                .toList();
+
+        return LeaderMemberListResponse.builder()
+                .members(memberInfoList)
+                .build();
+    }
 
     public LeaderKpiDashboardResponse getDashboard(Integer year) {
         throw new UnsupportedOperationException("LeaderKpiService.getDashboard() not yet implemented.");

@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.company.kpi.mapper.KpiMasterMapper">
+    
+    <insert id="insert" parameterType="com.company.kpi.entity.KpiMaster">
+        INSERT INTO kpi_master (id, name, type_code, calculation_rule_code, unit_code, is_global, created_by)
+        VALUES (#{id}, #{name}, #{typeCode}, #{calculationRuleCode}, #{unitCode}, #{isGlobal}, #{createdBy})
+    </insert>
+
+    <select id="findAvailableKpis" resultType="com.company.kpi.entity.KpiMaster">
+        SELECT * FROM kpi_master 
+        WHERE deleted_at IS NULL 
+          AND (is_global = true OR created_by = #{userId})
+    </select>
+    <!-- ── Thêm từ StrategicKpiWriteMapper ─────────────────────────────────────── -->
+    <insert id="insertKpiMaster">
+        INSERT INTO kpi_master (
+            id, code, name, category_id,
+            type_code, calculation_rule_code, calculation_type_code, unit_code, is_global,
+            created_by, updated_by
+        ) VALUES (
+            #{id}, NULL, #{name}, #{categoryId},
+            #{typeCode}, #{calculationRuleCode}, #{calculationTypeCode}, #{unitCode}, #{isGlobal},
+            #{createdBy}, #{createdBy}
+        )
+    </insert>
+
+    <update id="softDeleteKpiMasterById">
+        UPDATE kpi_master
+        SET deleted_at = CURRENT_TIMESTAMP,
+            updated_at = CURRENT_TIMESTAMP,
+            updated_by = #{updatedBy}
+        WHERE id = #{masterKpiId}
+          AND deleted_at IS NULL
+    </update>
+
+    <update id="updateKpiMasterStrategic">
+        UPDATE kpi_master
+        SET
+            name = #{name},
+            category_id = #{categoryId},
+            type_code = #{typeCode},
+            calculation_rule_code = #{calculationRuleCode},
+            calculation_type_code = #{calculationTypeCode},
+            unit_code = #{unitCode},
+            updated_at = CURRENT_TIMESTAMP,
+            updated_by = #{updatedBy}
+        WHERE id = #{masterKpiId}
+          AND deleted_at IS NULL
+    </update>
+</mapper>

@@ -13,7 +13,7 @@ Dự án là **Spring Boot 3.3** (Java 21), REST API, bảo mật **Spring Secur
 | File | Vai trò |
 |------|---------|
 | `controller/auth/AuthController.java` | Đăng nhập, refresh token, logout |
-| `controller/gm/GmKpiController.java` | Dashboard GM, danh sách member theo section |
+| `controller/gm/GmKpiController.java` | Dashboard GM, dữ liệu KPI năm (catalog + diagnostics), member theo section |
 | `controller/pm/PmKpiController.java` | Dashboard PM, chấm điểm PM, duyệt sheet |
 | `controller/leader/LeaderKpiController.java` | Dashboard Leader, chấm điểm Leader |
 | `controller/member/MemberKpiController.java` | Dashboard member, tự chấm, submit, save draft |
@@ -41,7 +41,11 @@ Các URL trên **không cần JWT** (cấu hình trong `SecurityConfig`).
 | Method | Đường dẫn | Mô tả |
 |--------|-----------|--------|
 | GET | `/v1/kpi/gm/dashboard?year=` | Dashboard GM |
+| GET | `/v1/kpi/gm/diagnostics-hierarchy?year=` | **Một API:** `catalogItems` (thư viện KPI kỳ) + `kpis` (cây đơn vị / assignment). `year` mặc định = năm hiện tại (`GmDiagnosticsHierarchyResponse`) |
+| GET | `/v1/kpi/gm/kpi-categories` | Danh sách `kpi_categories` (dropdown nhóm KPI) |
+| GET | `/v1/kpi/gm/kpi-cycles-with-kpis` | Chu kỳ `kpi_cycles` có dữ liệu KPI (`kpis_information` / `kpi_assignments` / `user_kpi_summaries`) — năm nguồn sao chép trên FE |
 | GET | `/v1/kpi/gm/sections/{sectionId}/members?year=` | Member trong section |
+| POST | `/v1/kpi/gm/strategic-kpis` | GM tạo KPI chiến lược (`kpi_master` + `kpis_information` + `kpi_assignments`) |
 
 ### PM — `PmKpiController` (`/v1/kpi/pm`) — role `PM` hoặc `GM`
 
@@ -136,3 +140,4 @@ Các URL trên **không cần JWT** (cấu hình trong `SecurityConfig`).
 | JWT & Security? | `common/config/SecurityConfig.java`, `common/security/JwtAuthFilter.java`, `common/util/JwtUtil.java` |
 
 *Tài liệu này mô tả theo trạng thái codebase tại thời điểm tạo file; nếu chỉnh controller, hãy cập nhật bảng endpoint tương ứng.*
+

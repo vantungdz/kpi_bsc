@@ -1,12 +1,38 @@
 <script setup lang="ts">
-import { ref, computed, watch, watchEffect, onUnmounted, nextTick } from 'vue'
+import { ref, computed, watch, onUnmounted, nextTick } from 'vue'
+import type { GmBscPerspective, GmHierarchyKpi, GmStrategicKpiKind } from '@/types/gm-workspace'
+import type { GmStrategicKpiEditData } from '@/types/gm-strategic-kpi-edit'
+import { normalizeStrategicKpiKind } from '@/utils/gm-strategic-kpi-kind'
+import { useGmKpiCategoryOptions } from '@/composables/useGmKpiCategoryOptions'
+import { useKpiCalculationReference } from '@/composables/useKpiCalculationReference'
+import { useKpiUnitOptions } from '@/composables/useKpiUnitOptions'
+import { useRankOptions } from '@/composables/useRankOptions'
+import { useDepartmentManagerOptions } from '@/composables/useDepartmentManagerOptions'
 import {
-  collectYearsFromKpiActivityInSnapshots,
-  gmLayoutCycleSnapshots,
-  normalizeStrategicKpiKind,
-  type GmHierarchyKpi,
-} from '@/mocks/gm-kpi.mock'
+  apiGetMembersByRank,
+  apiGetPromotionAssignees,
+  apiGetStrategicKpiTypes,
+} from '@/services/modules/kpi-reference.service'
+import { gmKpiService } from '@/services/modules/kpi-gm.service'
+import type { GmKpiCycleOption } from '@/types/gm-kpi-cycle'
+import { mapGmDiagnosticsApiKpisToHierarchyRows } from '@/utils/mapGmDiagnosticsApiToHierarchy'
+import { kpiFormUnitToUnitCode, kpiUnitCodeToFormUnit } from '@/utils/kpiUnitCodes'
+import {
+  codesFromPersistedCalculationMethod,
+  persistedCalculationMethodFromTypeAndRule,
+} from '@/utils/kpiCalculationCodes'
+import type { KpiTypeOption } from '@/types/kpi-type-option'
+import type { MemberByRankOption } from '@/types/member-by-rank'
+import {
+  strategicKpiKindFromCreatePayload,
+  strategicKpiKindFromTypeCode,
+  strategicKpiTypeIconClass,
+  typeCodeFromStrategicKpiKind,
+} from '@/utils/strategicKpiTypeCodes'
+import type { GmKpiTemplateItemRow, GmKpiTemplatePackageRow } from '@/types/gm-kpi-template'
+import type { DepartmentManagerOption } from '@/types/department-manager'
 import GmStrategicKpiTypeTag from '@/components/gm/GmStrategicKpiTypeTag.vue'
+import { GM_BSC_LABELS, GM_BSC_ORDER, normalizeGmBscPerspective } from '@/utils/gm-bsc-diagnostics'
 
 interface DirectMemberOption {
   val: string
@@ -22,156 +48,289 @@ const open = defineModel<boolean>({ default: false })
 
 const props = withDefaults(
   defineProps<{
-    /** Năm đang chọn ở header GM — dùng làm mặc định khi mở form (nếu nằm trong các lựa chọn hợp lệ). */
+    /** UUID `kpi_cycles.id` đang chọn ở header GM (sau khi tải `kpi-cycles-for-evaluation`). */
     cycleId: string
     /** Khi có — drawer mở ở chế độ sửa, điền form từ dòng diagnostics; không hiện block sao chép KPI. */
     editInitial?: GmHierarchyKpi | null
+    /**
+     * Chu kỳ đánh giá đã tải ở `GmLayout` — nếu có phần tử thì drawer không gọi lại `getKpiCyclesForEvaluation`.
+     */
+    prefetchedEvaluationCycles?: GmKpiCycleOption[] | null
   }>(),
   {
-    cycleId: '2026',
+    cycleId: '',
     editInitial: null,
+    prefetchedEvaluationCycles: null,
   },
 )
 
 const isEditingFromDiagnostics = computed(() => props.editInitial != null)
 
-const emit = defineEmits<{
-  saved: [payload: Record<string, unknown> | Record<string, unknown>[]]
-}>()
+const strategicEditDetailLoading = ref(false)
+const strategicEditDetailError = ref<string | null>(null)
 
-/** «Năm đánh giá»: năm hiện tại (theo máy) và **hai năm kế tiếp** (3 lựa chọn). */
-const evaluationYearOptions = computed(() => {
-  const y0 = new Date().getFullYear()
-  return [0, 1, 2].map((d) => {
-    const y = y0 + d
-    return { id: String(y), label: String(y) }
-  })
-})
-
-/** «Năm nguồn» sao chép nhanh: các năm có KPI với `activityStartDate` / `activityEndDate` trong mock snapshot. */
-const copySourceYearOptions = computed(() => {
-  const ids = collectYearsFromKpiActivityInSnapshots(gmLayoutCycleSnapshots)
-  if (ids.length > 0) return ids.map((id) => ({ id, label: id }))
-  return Object.keys(gmLayoutCycleSnapshots)
-    .sort((a, b) => Number(b) - Number(a))
-    .map((id) => ({ id, label: id }))
-})
-
-type StrategicKpiType = 'cascading' | 'individual' | 'promotion'
-
-const BSC_OPTIONS = [
-  { value: 'financial', label: '💰 Financial' },
-  { value: 'customer', label: '👥 Customer' },
-  { value: 'internal', label: '⚙️ Internal Process' },
-  { value: 'learning', label: '🎓 Learning & Growth' },
-] as const
-
-const UNIT_OPTIONS = [
-  { value: 'MM', label: 'MM' },
-  { value: 'POINT', label: 'POINT' },
-  { value: 'PRODUCT', label: 'PRODUCT' },
-  { value: 'PROJECT', label: 'PROJECT' },
-  { value: 'CERTIFICATION', label: 'CERTIFICATION' },
-  { value: 'ARTICLE', label: 'ARTICLE' },
-  { value: 'PERSON', label: 'PERSON' },
-] as const
-
-const PM_OPTIONS = [
-  { val: 'Thai Van Liem', label: 'Thai Van Liem (SD1)' },
-  { val: 'Nguyen Van A', label: 'Nguyen Van A (SD2)' },
-  { val: 'Tran Thi B', label: 'Tran Thi B (QA)' },
-  { val: 'Le Van C', label: 'Le Van C (PMO)' },
-] as const
-
-/** Direct / Ad-hoc — danh sách member + metadata để lọc (theo index.html). */
-const MEMBER_OPTIONS: DirectMemberOption[] = [
-  { val: 'E1', short: 'Tran Van Phuoc', label: 'Tran Van Phuoc (QA - R3)', dept: 'Quality Assurance', rank: 'R3', avatar: 'TP' },
-  { val: 'E2', short: 'Le Thi D', label: 'Le Thi D (SD2 - R2)', dept: 'Software Dev 2', rank: 'R2', avatar: 'LD' },
-  { val: 'E3', short: 'Nguyen Hoang E', label: 'Nguyen Hoang E (SD1 - R4)', dept: 'Software Dev 1', rank: 'R4', avatar: 'NE' },
-  { val: 'E4', short: 'Vu Thi H', label: 'Vu Thi H (QA - R3)', dept: 'Quality Assurance', rank: 'R3', avatar: 'VH' },
-  { val: 'E6', short: 'Ngo Quoc K', label: 'Ngo Quoc K (QA - R5)', dept: 'Quality Assurance', rank: 'R5', avatar: 'NK' },
-  { val: 'E7', short: 'Pham Van M', label: 'Pham Van M (PMO - R4)', dept: 'PMO', rank: 'R4', avatar: 'PM' },
-  { val: 'E8', short: 'Dao Quang P', label: 'Dao Quang P (SD1 - R2)', dept: 'Software Dev 1', rank: 'R2', avatar: 'DP' },
-]
-
-/** Ba lựa chọn trong dropdown; option 1–2 có radio phụ. */
-interface FormulaDef {
-  value: string
-  label: string
-  expression: string
+function parseDiagnosticsKpiInformationId(kpi: GmHierarchyKpi | null | undefined): string | null {
+  const id = String(kpi?.id ?? '').trim()
+  if (!id.startsWith('diag-kpi-')) return null
+  const raw = id.slice('diag-kpi-'.length).trim()
+  return raw || null
 }
 
-/** Option 1: chọn tỉ lệ Actual/Plan hoặc Plan/Actual. */
-const FORMULA_MEAN_RATIO = 'mean_by_ratio'
-/** Option 2: chọn gộp AVG hoặc SUM. */
-const FORMULA_MEAN_AGGREGATE = 'mean_by_aggregate'
+const emit = defineEmits<{
+  saved: [payload: Record<string, unknown> | Record<string, unknown>[]]
+  /** Khi drawer tự gọi API chu kỳ (không dùng `prefetchedEvaluationCycles`) — đồng bộ header. */
+  evaluationCyclesLoaded: [rows: GmKpiCycleOption[]]
+}>()
 
-const KPI_CALCULATION_FORMULAS: FormulaDef[] = [
-  {
-    value: FORMULA_MEAN_RATIO,
-    label: 'Trung bình — theo tỉ lệ',
-    expression: 'Chọn Actual/Plan hoặc Plan/Actual.',
+/** «Năm đánh giá»: `GET /kpi/gm/kpi-cycles-for-evaluation` — chỉ chu kỳ có `year` ≥ năm hiện tại. */
+const evaluationCycleRows = ref<GmKpiCycleOption[]>([])
+const evaluationCyclesLoading = ref(false)
+const evaluationCyclesError = ref<string | null>(null)
+
+async function loadEvaluationCycles() {
+  evaluationCyclesLoading.value = true
+  evaluationCyclesError.value = null
+  try {
+    evaluationCycleRows.value = await gmKpiService.getKpiCyclesForEvaluation()
+    emit('evaluationCyclesLoaded', evaluationCycleRows.value)
+  } catch (e: unknown) {
+    evaluationCycleRows.value = []
+    evaluationCyclesError.value = e instanceof Error ? e.message : 'Không tải được chu kỳ đánh giá'
+  } finally {
+    evaluationCyclesLoading.value = false
+  }
+}
+
+/** Dùng chu kỳ từ layout nếu đã có; tránh gọi trùng API khi mở drawer. */
+async function ensureEvaluationCyclesForDrawer() {
+  const pre = props.prefetchedEvaluationCycles
+  if (Array.isArray(pre) && pre.length > 0) {
+    evaluationCycleRows.value = [...pre]
+    evaluationCyclesError.value = null
+    evaluationCyclesLoading.value = false
+    return
+  }
+  await loadEvaluationCycles()
+}
+
+const evaluationYearOptions = computed(() =>
+  evaluationCycleRows.value.map((r) => ({
+    id: r.id,
+    label: String(r.year),
+  })),
+)
+
+function resolveDefaultFormCycleUuid(): string {
+  const rows = evaluationCycleRows.value
+  const header = String(props.cycleId).trim()
+  if (!rows.length) return header
+  if (rows.some((r) => r.id === header)) return header
+  if (/^\d+$/.test(header)) {
+    const y = parseInt(header, 10)
+    const match = rows.find((r) => r.year === y)
+    if (match) return match.id
+  }
+  return rows[0]?.id ?? header
+}
+
+/** «Năm nguồn» sao chép: `GET /kpi/gm/kpi-cycles-with-kpis` (chỉ dữ liệu từ API). */
+const copySourceCycleApiRows = ref<GmKpiCycleOption[]>([])
+const copyCyclesLoading = ref(false)
+const copyCyclesError = ref<string | null>(null)
+
+const copySourceYearOptions = computed(() =>
+  copySourceCycleApiRows.value.map((r) => {
+    const y = String(r.year)
+    return { id: y, label: y }
+  }),
+)
+
+async function loadCopySourceCycles() {
+  copyCyclesLoading.value = true
+  copyCyclesError.value = null
+  try {
+    copySourceCycleApiRows.value = await gmKpiService.getKpiCyclesWithKpis()
+  } catch (e: unknown) {
+    copySourceCycleApiRows.value = []
+    copyCyclesError.value = e instanceof Error ? e.message : 'Không tải được danh sách chu kỳ KPI'
+  } finally {
+    copyCyclesLoading.value = false
+  }
+}
+
+type StrategicKpiType = GmStrategicKpiKind
+
+/** Dropdown = quy tắc (RULE). Radio = chiều so sánh khi rule có nhiều lựa chọn. */
+const DEFAULT_CALCULATION_RULE_CODE = 802
+const DEFAULT_CALCULATION_TYPE_CODE = 701
+
+/** Mã `sys_status_codes` KPI_TYPE — mặc định 102 TEAM (Cascading). */
+const kpiTypeCode = ref<number>(102)
+const kpiType = computed<StrategicKpiType>({
+  get: () => strategicKpiKindFromTypeCode(kpiTypeCode.value),
+  set: (v) => {
+    kpiTypeCode.value = typeCodeFromStrategicKpiKind(v)
   },
-  {
-    value: FORMULA_MEAN_AGGREGATE,
-    label: 'Trung bình — gộp (AVG / SUM)',
-    expression: 'Chọn AVG (trung bình) hoặc SUM (tổng).',
-  },
-  {
-    value: 'manual_member_input',
-    label: 'Tự nhập — theo số member nhập',
-    expression: 'Dựa vào số mà member tự nhập để tính; không áp dụng công thức Plan/Actual cố định.',
-  },
-]
+})
 
-const DEFAULT_CALCULATION_METHOD = FORMULA_MEAN_RATIO
+const kpiTypeRows = ref<KpiTypeOption[]>([])
+const kpiTypesLoading = ref(false)
+const kpiTypesError = ref<string | null>(null)
 
-type MeanRatioKind = 'actual_plan' | 'plan_actual'
-type MeanAggregateKind = 'average' | 'sum'
+async function loadKpiTypes() {
+  kpiTypesLoading.value = true
+  kpiTypesError.value = null
+  try {
+    const rows = await apiGetStrategicKpiTypes()
+    kpiTypeRows.value = Array.isArray(rows) ? rows : []
+    const codes = new Set(kpiTypeRows.value.map((r) => r.code))
+    if (!codes.has(kpiTypeCode.value)) {
+      kpiTypeCode.value = kpiTypeRows.value[0]?.code ?? 102
+    }
+  } catch (e: unknown) {
+    kpiTypeRows.value = []
+    kpiTypesError.value = e instanceof Error ? e.message : 'Không tải được loại hình KPI'
+  } finally {
+    kpiTypesLoading.value = false
+  }
+}
 
-/** Mặc định khi lưu (form không còn chọn Chiều đánh giá). */
-const DEFAULT_EVALUATION_DIRECTION = 'maximize' as const
+const perspective = ref<string>('')
 
-const RANK_OPTIONS = [
-  { val: 'R1', label: 'Fresher / Junior' },
-  { val: 'R2', label: 'Associate' },
-  { val: 'R3', label: 'Mid-Level' },
-  { val: 'R4', label: 'Senior' },
-  { val: 'R5', label: 'Principal / Lead' },
-  { val: 'R6', label: 'Manager' },
-  { val: 'R7', label: 'Senior Manager' },
-  { val: 'R8', label: 'Director' },
-  { val: 'R9', label: 'Vice President' },
-  { val: 'R10', label: 'C-Level' },
-] as const
+const { categories: kpiCategories, loading: kpiCategoriesLoading, error: kpiCategoriesError, load: loadKpiCategories } =
+  useGmKpiCategoryOptions()
+const {
+  options: kpiUnitOptions,
+  loading: kpiUnitsLoading,
+  error: kpiUnitsError,
+  load: loadKpiUnits,
+} = useKpiUnitOptions()
+const {
+  calcRulesWithTypes,
+  loading: calcRefLoading,
+  error: calcRefError,
+  load: loadCalculationReference,
+} = useKpiCalculationReference()
+const {
+  users: pmUsers,
+  loading: pmUsersLoading,
+  error: pmUsersError,
+  load: loadPmUsers,
+} = useDepartmentManagerOptions()
+const {
+  ranks: rankRows,
+  loading: ranksLoading,
+  error: ranksError,
+  load: loadRanks,
+} = useRankOptions()
 
-const kpiType = ref<StrategicKpiType>('cascading')
-const perspective = ref<string>('internal')
+/** Checkbox rank — `val` = `ranks.code` (đồng bộ member mock / payload). */
+const rankOptionsForUi = computed(() =>
+  rankRows.value.map((r) => ({
+    val: r.code,
+    label: r.name,
+  })),
+)
+
+/** Member theo `ranks.code` — tải từ `GET /kpi/reference/members-by-rank`. */
+const membersByRankCache = ref<Record<string, MemberByRankOption[]>>({})
+const membersByRankLoading = ref<Record<string, boolean>>({})
+const membersByRankError = ref<Record<string, string | null>>({})
+
+function clearMembersByRankState() {
+  membersByRankCache.value = {}
+  membersByRankLoading.value = {}
+  membersByRankError.value = {}
+}
+
+function initialsFromFullName(name: string): string {
+  const parts = String(name ?? '')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+  if (parts.length === 0) return '??'
+  if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase()
+  return (parts[0]![0]! + parts[parts.length - 1]![0]!).toUpperCase()
+}
+
+function mapMemberByRankToDirect(m: MemberByRankOption): DirectMemberOption {
+  const dept = m.departmentName?.trim() || '—'
+  const rank = (m.rankCode && String(m.rankCode).trim()) || '—'
+  return {
+    val: m.id,
+    short: m.fullName,
+    label: `${m.fullName} — ${dept} · ${rank}`,
+    dept,
+    rank,
+    avatar: initialsFromFullName(m.fullName),
+  }
+}
+
+/** KPI Promotion — `GET /kpi/reference/promotion-assignees`. */
+const promotionAssigneeRows = ref<MemberByRankOption[]>([])
+const promotionAssigneesLoading = ref(false)
+const promotionAssigneesError = ref<string | null>(null)
+
+function clearPromotionAssigneeState() {
+  promotionAssigneeRows.value = []
+  promotionAssigneesLoading.value = false
+  promotionAssigneesError.value = null
+}
+
+async function loadPromotionAssignees() {
+  promotionAssigneesLoading.value = true
+  promotionAssigneesError.value = null
+  try {
+    const rows = await apiGetPromotionAssignees()
+    promotionAssigneeRows.value = Array.isArray(rows) ? rows : []
+  } catch (e: unknown) {
+    promotionAssigneeRows.value = []
+    promotionAssigneesError.value =
+      e instanceof Error ? e.message : 'Không tải được danh sách nhân sự (Promotion)'
+  } finally {
+    promotionAssigneesLoading.value = false
+  }
+}
+
+const promotionAssigneeDirectOptions = computed(() => promotionAssigneeRows.value.map(mapMemberByRankToDirect))
+
+async function ensureMembersLoadedForRank(rankCode: string) {
+  const code = String(rankCode ?? '').trim()
+  if (!code || membersByRankCache.value[code]) return
+  membersByRankLoading.value = { ...membersByRankLoading.value, [code]: true }
+  membersByRankError.value = { ...membersByRankError.value, [code]: null }
+  try {
+    const rows = await apiGetMembersByRank(code)
+    membersByRankCache.value = { ...membersByRankCache.value, [code]: Array.isArray(rows) ? rows : [] }
+  } catch (e: unknown) {
+    membersByRankCache.value = { ...membersByRankCache.value, [code]: [] }
+    membersByRankError.value = {
+      ...membersByRankError.value,
+      [code]: e instanceof Error ? e.message : 'Không tải được danh sách member',
+    }
+  } finally {
+    membersByRankLoading.value = { ...membersByRankLoading.value, [code]: false }
+  }
+}
+
 const kpiName = ref('')
 const description = ref('')
 const targetValue = ref<string>('')
 const unit = ref<string>('MM')
-const weightPct = ref<string>('')
-/** Một trong ba option dropdown (tỉ lệ / gộp AVG·SUM / tự nhập). */
-const calculationMethod = ref<string>(DEFAULT_CALCULATION_METHOD)
-
-/** Option 1 — Actual/Plan hay Plan/Actual. */
-const meanRatioKind = ref<MeanRatioKind>('actual_plan')
-/** Option 2 — AVG hay SUM. */
-const meanAggregateKind = ref<MeanAggregateKind>('average')
-
-/** KPI quan trọng (checkbox gọn trong form). */
+/** Đồng bộ `kpis_information.is_important` — không gửi mặc định true. */
 const isImportantKpi = ref(false)
+const weightPct = ref<string>('')
+/** Dropdown «Phân loại cách tính» — mã quy tắc (RULE). */
+const calculationRuleCode = ref(DEFAULT_CALCULATION_RULE_CODE)
+/** Radio chiều tính theo quy tắc đã chọn (có thể null). */
+const calculationTypeCode = ref<number | null>(DEFAULT_CALCULATION_TYPE_CODE)
 
-/** Năm đánh giá trong form — có thể khác header; mở drawer reset theo `cycleId`. */
-const formCycleId = ref(String(props.cycleId))
+const typesForSelectedRule = computed(
+  () => calcRulesWithTypes.value.find((row) => row.code === calculationRuleCode.value)?.calcTypes ?? [],
+)
 
-/** Start/end theo năm đánh giá đang chọn trong form. */
-const cycleDateBounds = computed(() => {
-  const m = /^(\d{4})$/.exec(String(formCycleId.value).trim())
-  const year = m?.[1] ?? '2025'
-  return { start: `${year}-01-01`, end: `${year}-12-31` }
-})
+/** UUID `kpi_cycles.id` — dropdown «Năm đánh giá» (đồng bộ DB). */
+const formCycleId = ref('')
 
 const selectedPMs = ref<string[]>([])
 const pmTargets = ref<Record<string, string>>({})
@@ -205,224 +364,285 @@ const isApplyingCopyTemplate = ref(false)
 /** Tránh watch(kpiType) xóa PM khi hydrate form sửa. */
 const isHydratingFromEdit = ref(false)
 
+/** Tab tạo KPI (chỉ khi tạo mới): tùy chỉnh · từ bộ mẫu. */
+const createTab = ref<'custom' | 'template'>('custom')
+const templatePackages = ref<GmKpiTemplatePackageRow[]>([])
+const templatePackageId = ref('')
+const templateItems = ref<GmKpiTemplateItemRow[]>([])
+const templatePackagesLoading = ref(false)
+const templateItemsLoading = ref(false)
+const templateApiError = ref<string | null>(null)
+const templateSelectedKeys = ref<Set<string>>(new Set())
+const savingTemplateBatch = ref(false)
+const templateSelectAllInputRef = ref<HTMLInputElement | null>(null)
+
+async function loadTemplatePackages() {
+  templatePackagesLoading.value = true
+  templateApiError.value = null
+  try {
+    const rows = await gmKpiService.getKpiTemplates()
+    templatePackages.value = rows
+    const cur = String(templatePackageId.value ?? '').trim()
+    if (cur && !rows.some((r) => r.id === cur)) {
+      templatePackageId.value = ''
+      templateItems.value = []
+    }
+  } catch (e: unknown) {
+    templatePackages.value = []
+    templatePackageId.value = ''
+    templateItems.value = []
+    templateApiError.value =
+      e instanceof Error ? e.message : 'Không tải được danh sách gói template KPI.'
+  } finally {
+    templatePackagesLoading.value = false
+  }
+}
+
+async function loadTemplateItemsForPackage(id: string) {
+  const tid = String(id ?? '').trim()
+  if (!tid) {
+    templateItems.value = []
+    return
+  }
+  templateItemsLoading.value = true
+  templateApiError.value = null
+  try {
+    templateItems.value = await gmKpiService.getKpiTemplateItems(tid)
+  } catch (e: unknown) {
+    templateItems.value = []
+    templateApiError.value =
+      e instanceof Error ? e.message : 'Không tải được KPI trong gói template.'
+  } finally {
+    templateItemsLoading.value = false
+  }
+}
+
+type GmTemplateKpiPickRow = {
+  key: string
+  label: string
+  kindLabel: string
+  item: GmKpiTemplateItemRow
+}
+
+const templateKpiRows = computed<GmTemplateKpiPickRow[]>(() =>
+  templateItems.value.map((it) => ({
+    key: it.templateItemId,
+    label: it.masterCode?.trim() ? `${it.masterCode.trim()} · ${it.masterName}` : it.masterName,
+    kindLabel: templateKindRowLabelFromTypeCode(it.typeCode),
+    item: it,
+  })),
+)
+
+/** Giống `buildDisplayGroups` trên Strategic KPIs Tracking & Diagnostics: category khi có `categoryId`, không thì 4 khía cạnh BSC (theo mock). */
+type GmTemplateKpiDisplayGroup = { key: string; label: string; rows: GmTemplateKpiPickRow[] }
+
+const templateKpiDisplayGroups = computed<GmTemplateKpiDisplayGroup[]>(() => {
+  const rows = templateKpiRows.value
+  if (!rows.length) return []
+
+  const useCategory = rows.some((r) => Boolean(String(r.item.categoryId ?? '').trim()))
+  if (useCategory) {
+    const meta = new Map<string, { label: string; rows: GmTemplateKpiPickRow[] }>()
+    for (const r of rows) {
+      const id = String(r.item.categoryId ?? '').trim() || 'uncategorized'
+      const label = String(r.item.categoryName ?? '').trim() || 'Không phân loại'
+      if (!meta.has(id)) meta.set(id, { label, rows: [] })
+      meta.get(id)!.rows.push(r)
+    }
+    return [...meta.entries()]
+      .sort((a, b) => a[1].label.localeCompare(b[1].label, 'vi'))
+      .map(([key, v]) => ({ key, label: v.label, rows: v.rows }))
+  }
+
+  const byBsc = new Map<GmBscPerspective, GmTemplateKpiPickRow[]>()
+  for (const id of GM_BSC_ORDER) byBsc.set(id, [])
+  for (const r of rows) {
+    const p = normalizeGmBscPerspective(r.item.diagnosticsFallbackGroup)
+    byBsc.get(p)!.push(r)
+  }
+  return GM_BSC_ORDER.map((perspective) => ({
+    key: perspective,
+    label: GM_BSC_LABELS[perspective],
+    rows: byBsc.get(perspective)!,
+  })).filter((g) => g.rows.length > 0)
+})
+
+function templateKindRowLabelFromTypeCode(typeCode: number): string {
+  const kind = strategicKpiKindFromTypeCode(typeCode)
+  if (kind === 'cascading') return 'CASCADING'
+  if (kind === 'individual') return 'INDIVIDUAL'
+  return 'PROMOTION'
+}
+
+const templateSelectAllChecked = computed(() => {
+  const keys = templateKpiRows.value.map((r) => r.key)
+  if (!keys.length) return false
+  return keys.every((k) => templateSelectedKeys.value.has(k))
+})
+
+const templateSelectAllIndeterminate = computed(() => {
+  const keys = templateKpiRows.value.map((r) => r.key)
+  if (!keys.length) return false
+  const n = keys.filter((k) => templateSelectedKeys.value.has(k)).length
+  return n > 0 && n < keys.length
+})
+
+watch(
+  [templateSelectAllChecked, templateSelectAllIndeterminate, templateKpiRows],
+  () => {
+    void nextTick(() => {
+      const el = templateSelectAllInputRef.value
+      if (!el) return
+      el.indeterminate = templateSelectAllIndeterminate.value
+      el.checked = templateSelectAllChecked.value
+    })
+  },
+  { flush: 'post' },
+)
+
+function toggleTemplateSelectAll() {
+  const keys = templateKpiRows.value.map((r) => r.key)
+  if (templateSelectAllChecked.value) templateSelectedKeys.value = new Set()
+  else templateSelectedKeys.value = new Set(keys)
+}
+
+function toggleTemplateRowKey(key: string) {
+  const next = new Set(templateSelectedKeys.value)
+  if (next.has(key)) next.delete(key)
+  else next.add(key)
+  templateSelectedKeys.value = next
+}
+
+watch(templatePackageId, (id) => {
+  templateSelectedKeys.value = new Set()
+  void loadTemplateItemsForPackage(String(id ?? ''))
+})
+
+watch(
+  () => props.editInitial,
+  () => {
+    createTab.value = 'custom'
+  },
+)
+
+function buildPayloadFromTemplateApiItem(it: GmKpiTemplateItemRow): Record<string, unknown> | null {
+  const cid = String(it.categoryId ?? '').trim()
+  if (!cid) return null
+  const typeCode = it.typeCode
+  if (!Number.isFinite(typeCode)) return null
+  const unitCode = it.unitCode
+  if (!Number.isFinite(unitCode)) return null
+  const kind = strategicKpiKindFromTypeCode(typeCode)
+  const calculationMethod = persistedCalculationMethodFromTypeAndRule(
+    it.calculationTypeCode ?? null,
+    it.calculationRuleCode ?? 802,
+  )
+  const base: Record<string, unknown> = {
+    cycleId: resolveDefaultFormCycleUuid(),
+    typeCode,
+    perspective: cid,
+    kpiName: String(it.masterName ?? '').trim() || 'KPI',
+    targetDescription: '',
+    targetValue: it.defaultTargetValue != null ? Number(it.defaultTargetValue) : null,
+    unitCode,
+    weightPct: it.defaultWeight != null ? String(it.defaultWeight) : '0',
+    calculationMethod,
+    isImportant: false,
+  }
+  if (kind === 'cascading') {
+    base.assignPMs = [] as string[]
+    base.pmTargets = {} as Record<string, string>
+  } else if (kind === 'individual') {
+    base.memberIds = [] as string[]
+  } else {
+    base.memberIds = [] as string[]
+  }
+  return base
+}
+
+async function confirmTemplateBatchCreate() {
+  if (!String(templatePackageId.value ?? '').trim()) {
+    clearFormErrors()
+    formErrors.value = { template: 'Vui lòng chọn gói template KPI trước.' }
+    await nextTick()
+    errorBannerRef.value?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    return
+  }
+  const rows = templateKpiRows.value.filter((r) => templateSelectedKeys.value.has(r.key))
+  if (!rows.length) {
+    clearFormErrors()
+    formErrors.value = { template: 'Chọn ít nhất một KPI trong gói mẫu.' }
+    await nextTick()
+    errorBannerRef.value?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    return
+  }
+  clearFormErrors()
+  savingTemplateBatch.value = true
+  const payloads: Record<string, unknown>[] = []
+  for (const row of rows) {
+    const p = buildPayloadFromTemplateApiItem(row.item)
+    if (p) payloads.push(p)
+  }
+  savingTemplateBatch.value = false
+  if (payloads.length === 0) {
+    formErrors.value = { template: 'Không tạo được payload từ mẫu đã chọn.' }
+    return
+  }
+  emit('saved', payloads)
+  open.value = false
+}
+
 /** Dropdown sao chép — năm nguồn + KPI (theo năm). */
-const copySourceYear = ref(String(props.cycleId))
+const copySourceYear = ref(String(new Date().getFullYear()))
 const copyFromId = ref('')
 const copyKpiPickerOpen = ref(false)
 const copyKpiFilterQuery = ref('')
 const copyKpiPickerSurfaceRef = ref<HTMLElement | null>(null)
 const copyKpiPickerSearchRef = ref<HTMLInputElement | null>(null)
 
-const COPY_KPI_ENTRY_IDS = ['kpi_1', 'kpi_2', 'kpi_ind', 'kpi_dir'] as const
-
-interface CopyKpiTemplate {
-  kpiType: StrategicKpiType
-  perspective: string
-  kpiName: string
-  description: string
-  /** Chỉ dùng khi `kpiType === 'cascading'`. */
-  targetValue?: string
-  unit: string
-  weightPct: string
-  calculationMethod: string
-  isImportant?: boolean
-  selectedPMs?: string[]
-  pmTargets?: Record<string, string>
-  selectedRanks?: string[]
-  selectedMembers?: string[]
-}
-
-const COPY_KPI_TEMPLATES: Record<string, CopyKpiTemplate> = {
-  kpi_1: {
-    kpiType: 'cascading',
-    perspective: 'internal',
-    kpiName: 'A.1a · Individual Efficiency',
-    description: 'KPI hiệu suất cá nhân; kế thừa mục tiêu từ Khối vận hành.',
-    targetValue: '95',
-    unit: 'MM',
-    weightPct: '30',
-    calculationMethod: 'mean_plan_actual',
-    isImportant: false,
-    selectedPMs: ['Thai Van Liem', 'Tran Thi B'],
-    pmTargets: { 'Thai Van Liem': '95', 'Tran Thi B': '90' },
-  },
-  kpi_2: {
-    kpiType: 'cascading',
-    perspective: 'internal',
-    kpiName: 'A.3a · Individual Quality',
-    description: 'Chỉ số chất lượng công việc cá nhân (IQ).',
-    targetValue: '98',
-    unit: 'POINT',
-    weightPct: '30',
-    calculationMethod: 'mean_plan_actual_pct',
-    isImportant: true,
-    selectedPMs: ['Thai Van Liem'],
-    pmTargets: { 'Thai Van Liem': '98' },
-  },
-  kpi_ind: {
-    kpiType: 'individual',
-    perspective: 'learning',
-    kpiName: 'B.2 · Training / Certifications',
-    description: 'Hoàn thành chứng chỉ / giờ đào tạo theo rank.',
-    unit: 'CERTIFICATION',
-    weightPct: '10',
-    calculationMethod: 'mean_plan_actual_pct',
-    isImportant: false,
-    selectedRanks: ['R2', 'R3', 'R4'],
-  },
-  kpi_dir: {
-    kpiType: 'promotion',
-    perspective: 'customer',
-    kpiName: 'C.1 · Customer touchpoint owner',
-    description: 'Giao đích danh xử lý phản hồi khách hàng.',
-    unit: 'PERSON',
-    weightPct: '15',
-    calculationMethod: 'manual_member_input',
-    isImportant: false,
-    selectedMembers: ['E2', 'E3'],
-  },
-}
-
-/** Tab tạo KPI (chỉ khi tạo mới). Tab 1 = form hiện tại; tab 2 = tạo hàng loạt từ template. */
-type CreateKpiFlowTab = 'custom' | 'template'
-const createKpiTab = ref<CreateKpiFlowTab>('custom')
-
-interface KpiTemplatePack {
-  id: string
-  label: string
-  entryIds: string[]
-}
-
-const KPI_TEMPLATE_PACKS: KpiTemplatePack[] = [
-  { id: 'tpl_ops', label: 'Gói KPI vận hành & chất lượng', entryIds: ['kpi_1', 'kpi_2'] },
-  { id: 'tpl_hr', label: 'Gói KPI nhân sự & promotion', entryIds: ['kpi_ind', 'kpi_dir'] },
-]
-
-const selectedTemplatePackId = ref('')
-const templateKpiSelection = ref<Record<string, boolean>>({})
-const bulkFormError = ref('')
-
-const templateKpiRows = computed(() => {
-  const pack = KPI_TEMPLATE_PACKS.find((p) => p.id === selectedTemplatePackId.value)
-  if (!pack) return []
-  return pack.entryIds.map((id) => {
-    const t = COPY_KPI_TEMPLATES[id]
-    return { id, name: t.kpiName, kind: t.kpiType, perspective: t.perspective }
-  })
-})
-
-const BSC_VALUE_ORDER = BSC_OPTIONS.map((o) => o.value)
-const bscLabelByValue = Object.fromEntries(BSC_OPTIONS.map((o) => [o.value, o.label])) as Record<
-  (typeof BSC_OPTIONS)[number]['value'],
-  string
->
-
-/** Danh sách tab template: nhóm theo khía cạnh BSC (thứ tự Financial → …), không collapse. */
-const templateKpiGroupedByBsc = computed(() => {
-  const rows = templateKpiRows.value
-  const allowed = new Set<string>(BSC_VALUE_ORDER)
-  const buckets = new Map<string, typeof rows>()
-  for (const row of rows) {
-    const key = allowed.has(row.perspective) ? row.perspective : 'internal'
-    const cur = buckets.get(key) ?? []
-    cur.push(row)
-    buckets.set(key, cur)
+/** Dropdown «Nhóm KPI»: `GET /kpi/gm/kpi-categories` + dòng đang sửa nếu chưa có trong danh sách. */
+const perspectiveOptions = computed((): { value: string; label: string }[] => {
+  const opts = kpiCategories.value.map((c) => ({ value: c.id, label: c.name }))
+  const snap = editSessionSnapshot.value
+  const cid = snap?.categoryId?.trim() ?? ''
+  const cname = snap?.categoryName?.trim() ?? ''
+  if (cid && cname && !opts.some((o) => o.value === cid)) {
+    opts.unshift({ value: cid, label: cname })
   }
-  return BSC_VALUE_ORDER.filter((v) => (buckets.get(v) ?? []).length > 0).map((perspective) => ({
-    perspective,
-    label: bscLabelByValue[perspective as keyof typeof bscLabelByValue] ?? perspective,
-    rows: buckets.get(perspective) ?? [],
-  }))
+  return opts
 })
 
-watch(selectedTemplatePackId, (packId) => {
-  bulkFormError.value = ''
-  const pack = KPI_TEMPLATE_PACKS.find((p) => p.id === packId)
-  const next: Record<string, boolean> = {}
-  if (pack) {
-    for (const eid of pack.entryIds) next[eid] = true
+/** KPI diagnostics theo «Năm nguồn» — `GET /kpi/gm/diagnostics-hierarchy?year=`. */
+const copyKpiHierarchyRows = ref<GmHierarchyKpi[]>([])
+const copyKpisLoading = ref(false)
+const copyKpisError = ref<string | null>(null)
+
+async function loadCopyKpisForSourceYear() {
+  const y = Number.parseInt(String(copySourceYear.value).trim(), 10)
+  if (!Number.isFinite(y)) {
+    copyKpiHierarchyRows.value = []
+    return
   }
-  templateKpiSelection.value = next
-})
-
-function toggleTemplateKpiRow(id: string, checked: boolean) {
-  templateKpiSelection.value = { ...templateKpiSelection.value, [id]: checked }
+  copyKpisLoading.value = true
+  copyKpisError.value = null
+  try {
+    const data = await gmKpiService.getDiagnosticsHierarchy(y)
+    copyKpiHierarchyRows.value = mapGmDiagnosticsApiKpisToHierarchyRows(data.kpis)
+  } catch (e: unknown) {
+    copyKpiHierarchyRows.value = []
+    copyKpisError.value = e instanceof Error ? e.message : 'Không tải được danh sách KPI theo năm'
+  } finally {
+    copyKpisLoading.value = false
+  }
 }
 
-function onToggleTemplateRow(id: string, ev: Event) {
-  const el = ev.target as HTMLInputElement | null
-  toggleTemplateKpiRow(id, !!el?.checked)
-}
-
-function onTemplateSelectAllChange(ev: Event) {
-  const el = ev.target as HTMLInputElement | null
-  const checked = !!el?.checked
-  const next = { ...templateKpiSelection.value }
-  for (const row of templateKpiRows.value) next[row.id] = checked
-  templateKpiSelection.value = next
-}
-
-const templateAllRowsChecked = computed(
-  () =>
-    templateKpiRows.value.length > 0 &&
-    templateKpiRows.value.every((r) => templateKpiSelection.value[r.id]),
+/** Danh sách KPI để sao chép — theo năm nguồn đã chọn (API). */
+const copyKpiListForYear = computed(() =>
+  copyKpiHierarchyRows.value.map((kpi) => ({
+    id: kpi.id,
+    label: String(kpi.name ?? '').trim() || kpi.id,
+  })),
 )
-
-/** Một phần (không phải không / không phải hết) — checkbox «Chọn tất cả» dạng indeterminate. */
-const templateSelectAllIndeterminate = computed(() => {
-  const rows = templateKpiRows.value
-  if (rows.length === 0) return false
-  const n = rows.filter((r) => templateKpiSelection.value[r.id]).length
-  return n > 0 && n < rows.length
-})
-
-const templateSelectAllCheckboxRef = ref<HTMLInputElement | null>(null)
-
-/** Có ít nhất một KPI được tick trong gói template hiện tại. */
-const templateHasAtLeastOneSelected = computed(() =>
-  templateKpiRows.value.some((r) => !!templateKpiSelection.value[r.id]),
-)
-
-/** Đủ điều kiện bấm «Tạo các KPI đã chọn» (tab template). */
-const canBulkCreateFromTemplate = computed(
-  () =>
-    !!selectedTemplatePackId.value &&
-    templateKpiRows.value.length > 0 &&
-    templateHasAtLeastOneSelected.value,
-)
-
-/** Tooltip khi nút tạo từ template bị tắt. */
-const templateBulkCreateDisabledTitle = computed(() => {
-  if (saving.value) return ''
-  if (!selectedTemplatePackId.value) return 'Chọn gói template KPI.'
-  if (templateKpiRows.value.length === 0) return 'Gói này không có KPI.'
-  if (!templateHasAtLeastOneSelected.value) return 'Chọn ít nhất một KPI trong gói template.'
-  return ''
-})
-
-watch(templateHasAtLeastOneSelected, (ok) => {
-  if (ok && bulkFormError.value) bulkFormError.value = ''
-})
-
-watchEffect(() => {
-  void templateSelectAllIndeterminate.value
-  void templateAllRowsChecked.value
-  void templateKpiRows.value.length
-  void nextTick(() => {
-    const el = templateSelectAllCheckboxRef.value
-    if (!el) return
-    el.indeterminate = templateSelectAllIndeterminate.value
-  })
-})
-
-/** Danh sách KPI mẫu để sao chép — theo năm đã chọn ở dropdown 1. */
-const copyKpiListForYear = computed(() => {
-  const y = copySourceYear.value
-  return COPY_KPI_ENTRY_IDS.map((id) => ({
-    id,
-    label: `${COPY_KPI_TEMPLATES[id].kpiName} (${y})`,
-  }))
-})
 
 const copyKpiSelectedLabel = computed(() => {
   if (!copyFromId.value) return ''
@@ -435,17 +655,17 @@ const filteredCopyKpisForPicker = computed(() => {
   const rows = copyKpiListForYear.value
   if (!q) return rows
   return rows.filter((o) => {
-    const t = COPY_KPI_TEMPLATES[o.id as keyof typeof COPY_KPI_TEMPLATES]
-    const name = t?.kpiName ?? ''
-    const hay = `${o.label} ${name}`.toLowerCase()
+    const hay = `${o.label} ${o.id}`.toLowerCase()
     return hay.includes(q)
   })
 })
 
-watch(copySourceYear, () => {
+watch(copySourceYear, async () => {
   copyFromId.value = ''
   copyKpiPickerOpen.value = false
   copyKpiFilterQuery.value = ''
+  if (!open.value || isEditingFromDiagnostics.value) return
+  await loadCopyKpisForSourceYear()
 })
 
 function closeCopyKpiPicker() {
@@ -476,190 +696,125 @@ function selectCopyKpiFromPicker(id: string) {
 function applyCopyFromKpi(id: string) {
   assignDropdown.value = null
   if (!id) return
-  const t = COPY_KPI_TEMPLATES[id as keyof typeof COPY_KPI_TEMPLATES]
-  if (!t) return
+  const kpi = copyKpiHierarchyRows.value.find((r) => r.id === id)
+  if (!kpi) return
   isApplyingCopyTemplate.value = true
-  kpiType.value = t.kpiType
-  perspective.value = t.perspective
-  kpiName.value = t.kpiName
-  description.value = t.description
-  targetValue.value = t.kpiType === 'cascading' ? (t.targetValue ?? '') : ''
-  unit.value = t.unit
-  weightPct.value = t.weightPct
-  hydrateCalculationFromPersisted(t.calculationMethod)
-  isImportantKpi.value = t.isImportant ?? false
-  selectedPMs.value = [...(t.selectedPMs ?? [])]
-  pmTargets.value = { ...(t.pmTargets ?? {}) }
-  selectedRanks.value = [...(t.selectedRanks ?? [])]
-  selectedMembers.value = [...(t.selectedMembers ?? [])]
-  selectedRankMembers.value = Object.fromEntries(
-    (t.selectedRanks ?? []).map((rank) => [rank, membersByRank(rank).map((member) => member.val)]),
-  )
-  expandedRankSections.value = [...(t.selectedRanks ?? [])]
-  memberAssignSearch.value = ''
+  formCycleId.value = String(props.cycleId)
+  fillCreateFormFieldsFromHierarchyKpi(kpi)
   isApplyingCopyTemplate.value = false
+  if (normalizeStrategicKpiKind(kpi.kpiType) === 'individual') {
+    void loadRanks()
+  } else if (normalizeStrategicKpiKind(kpi.kpiType) === 'promotion') {
+    void loadPromotionAssignees()
+  }
 }
 
 const assignLabel = computed(() => {
   if (kpiType.value === 'promotion') return 'Assign To Individuals'
   if (kpiType.value === 'individual') return 'Assign To Ranks / Roles'
-  return 'Assign To Project Managers'
+  return 'Giao cho quản lý department'
 })
-
-const formulaOptions = computed((): FormulaDef[] => [...KPI_CALCULATION_FORMULAS])
 
 /** Tooltip cho công thức đang chọn (select + icon). */
 const selectedFormulaExpression = computed(() => {
-  if (calculationMethod.value === 'manual_member_input') {
-    return (
-      formulaOptions.value.find((f) => f.value === 'manual_member_input')?.expression ??
-      'Tự nhập theo số member.'
-    )
-  }
-  if (calculationMethod.value === FORMULA_MEAN_RATIO) {
-    return meanRatioKind.value === 'actual_plan'
-      ? 'Theo tỉ lệ Actual / Plan.'
-      : 'Theo tỉ lệ Plan / Actual.'
-  }
-  if (calculationMethod.value === FORMULA_MEAN_AGGREGATE) {
-    return meanAggregateKind.value === 'sum'
-      ? 'Gộp kiểu SUM (tổng).'
-      : 'Gộp kiểu AVG (trung bình %).'
-  }
-  return 'Chọn công thức tính để xem biểu thức.'
+  const ruleRow = calcRulesWithTypes.value.find((row) => row.code === calculationRuleCode.value)
+  if (!ruleRow) return 'Chọn quy tắc tính toán.'
+  const parts = [ruleRow.label]
+  const types = typesForSelectedRule.value
+  const typeRow = types.find((t) => t.code === calculationTypeCode.value)
+  if (types.length > 1 && typeRow) parts.push(`Chiều tính: ${typeRow.label}.`)
+  else if (types.length === 1 && typeRow) parts.push(`Chiều tính: ${typeRow.label}.`)
+  return parts.join(' — ')
 })
 
+/** Rule COMMENT (803) luôn gắn MANUAL_RATING (703), kể cả khi API chưa trả đủ `calcTypes`. */
+const COMMENT_RULE_CODE = 803
+const MANUAL_RATING_TYPE_CODE = 703
+
+function clampCalculationTypeToRule() {
+  if (calculationRuleCode.value === COMMENT_RULE_CODE) {
+    calculationTypeCode.value = MANUAL_RATING_TYPE_CODE
+    return
+  }
+  const types = typesForSelectedRule.value
+  if (!types.length) {
+    calculationTypeCode.value = null
+    return
+  }
+  const cur = calculationTypeCode.value
+  if (cur != null && types.some((t) => t.code === cur)) return
+  calculationTypeCode.value = types[0]!.code
+}
+
 function resolvePersistedCalculationMethod(): string {
-  if (calculationMethod.value === 'manual_member_input') return 'manual_member_input'
-  if (calculationMethod.value === FORMULA_MEAN_RATIO) {
-    return meanRatioKind.value === 'actual_plan' ? 'mean_actual_plan' : 'mean_plan_actual'
-  }
-  if (calculationMethod.value === FORMULA_MEAN_AGGREGATE) {
-    return meanAggregateKind.value === 'sum' ? 'mean_plan_actual_sum' : 'mean_plan_actual_pct'
-  }
-  return 'manual_member_input'
+  return persistedCalculationMethodFromTypeAndRule(calculationTypeCode.value, calculationRuleCode.value)
 }
 
 /** Áp `calculationMethod` đã lưu / mẫu sao chép → state form. */
 function hydrateCalculationFromPersisted(cm: string) {
-  if (cm === 'manual_member_input') {
-    calculationMethod.value = 'manual_member_input'
-    return
-  }
-  if (cm === 'mean_plan_actual_pct' || cm === 'mean_plan_actual_sum') {
-    calculationMethod.value = FORMULA_MEAN_AGGREGATE
-    meanAggregateKind.value = cm === 'mean_plan_actual_sum' ? 'sum' : 'average'
-    return
-  }
-  calculationMethod.value = FORMULA_MEAN_RATIO
-  meanRatioKind.value = cm === 'mean_actual_plan' ? 'actual_plan' : 'plan_actual'
+  const { calculationTypeCode: tc, calculationRuleCode: rc } = codesFromPersistedCalculationMethod(cm)
+  calculationRuleCode.value = rc
+  calculationTypeCode.value = tc
+  clampCalculationTypeToRule()
 }
 
 const filteredMemberOptions = computed(() => {
   const q = memberAssignSearch.value.trim().toLowerCase()
-  if (!q) return MEMBER_OPTIONS
-  return MEMBER_OPTIONS.filter((m) => {
+  const base = promotionAssigneeDirectOptions.value
+  if (!q) return base
+  return base.filter((m) => {
     const hay = `${m.short} ${m.dept} ${m.rank} ${m.val} ${m.label}`.toLowerCase()
     return hay.includes(q)
   })
 })
 
 function memberByVal(id: string) {
-  return MEMBER_OPTIONS.find((m) => m.val === id)
+  const row = promotionAssigneeDirectOptions.value.find((m) => m.val === id)
+  if (row) return row
+  return {
+    val: id,
+    short: String(id).slice(0, 8),
+    label: id,
+    dept: '—',
+    rank: '—',
+    avatar: initialsFromFullName(String(id)),
+  }
 }
 
-function membersByRank(rank: string) {
-  return MEMBER_OPTIONS.filter((m) => m.rank === rank)
-}
-
-function buildPayloadFromCopyTemplate(entryId: string, cycleIdForEval: string): Record<string, unknown> | null {
-  const t = COPY_KPI_TEMPLATES[entryId as keyof typeof COPY_KPI_TEMPLATES]
-  if (!t) return null
-  const m = /^(\d{4})$/.exec(String(cycleIdForEval).trim())
-  const year = m?.[1] ?? String(new Date().getFullYear())
-  const start = `${year}-01-01`
-  const end = `${year}-12-31`
-  const base: Record<string, unknown> = {
-    kpiType: t.kpiType,
-    perspective: t.perspective,
-    kpiName: t.kpiName,
-    description: t.description,
-    targetValue: t.kpiType === 'cascading' ? (t.targetValue ?? '') : '',
-    unit: t.unit,
-    weightPct: t.weightPct,
-    startDate: start,
-    endDate: end,
-    cycleId: String(cycleIdForEval),
-    calculationMethod: t.calculationMethod,
-    evaluationDirection: DEFAULT_EVALUATION_DIRECTION,
-    isImportant: t.isImportant ?? false,
-  }
-  if (t.kpiType === 'cascading') {
-    base.assignPMs = [...(t.selectedPMs ?? [])]
-    base.pmTargets = { ...(t.pmTargets ?? {}) }
-  } else if (t.kpiType === 'individual') {
-    const ranks = [...(t.selectedRanks ?? [])]
-    const rankMemberIds = Object.fromEntries(
-      ranks.map((rank) => [rank, membersByRank(rank).map((member) => member.val)]),
-    )
-    base.ranks = ranks
-    base.rankMemberIds = rankMemberIds
-    base.memberIds = Object.values(rankMemberIds).flat()
-  } else {
-    base.memberIds = [...(t.selectedMembers ?? [])]
-  }
-  return base
-}
-
-async function bulkCreateFromTemplate() {
-  bulkFormError.value = ''
-  if (!selectedTemplatePackId.value) {
-    bulkFormError.value = 'Chọn một gói template KPI.'
-    return
-  }
-  const ids = templateKpiRows.value.map((r) => r.id).filter((id) => templateKpiSelection.value[id])
-  if (!ids.length) {
-    bulkFormError.value = 'Vui lòng chọn ít nhất một KPI trong gói template để tạo.'
-    await nextTick()
-    return
-  }
-  const payloads = ids
-    .map((id) => buildPayloadFromCopyTemplate(id, formCycleId.value))
-    .filter((p): p is Record<string, unknown> => p != null)
-  if (!payloads.length) return
-  saving.value = true
-  await new Promise((r) => setTimeout(r, 400))
-  saving.value = false
-  emit('saved', payloads)
-  open.value = false
+function membersByRank(rank: string): DirectMemberOption[] {
+  const raw = membersByRankCache.value[rank] ?? []
+  return raw.map(mapMemberByRankToDirect)
 }
 
 const individualRankCards = computed(() => {
   const query = individualRankMemberSearch.value.trim().toLowerCase()
 
-  return selectedRanks.value
-    .map((rank) => {
-      const rankMeta = RANK_OPTIONS.find((item) => item.val === rank)
-      const allMembers = membersByRank(rank)
-      const members = !query
-        ? allMembers
-        : allMembers.filter((member) => {
-            const haystack = `${member.short} ${member.dept} ${member.rank} ${member.label}`.toLowerCase()
-            return haystack.includes(query)
-          })
-      const selectedIds = selectedRankMembers.value[rank] ?? allMembers.map((member) => member.val)
-      return {
-        rank,
-        label: rankMeta?.label ?? rank,
-        allMembers,
-        members,
-        selectedIds,
-        selectedCount: selectedIds.length,
-        totalCount: allMembers.length,
-        isExpanded: expandedRankSections.value.includes(rank),
-      }
-    })
-    .filter((rankCard) => rankCard.members.length > 0)
+  return selectedRanks.value.map((rank) => {
+    const rankMeta = rankRows.value.find((item) => item.code === rank)
+    const allMembers = membersByRank(rank)
+    const loadingMembers = !!membersByRankLoading.value[rank]
+    const membersLoadError = membersByRankError.value[rank] ?? null
+    const members = !query
+      ? allMembers
+      : allMembers.filter((member) => {
+          const haystack = `${member.short} ${member.dept} ${member.rank} ${member.label}`.toLowerCase()
+          return haystack.includes(query)
+        })
+    const defaultIds = allMembers.map((member) => member.val)
+    const selectedIds = selectedRankMembers.value[rank] ?? defaultIds
+    return {
+      rank,
+      label: rankMeta?.name ?? rank,
+      allMembers,
+      members,
+      selectedIds,
+      selectedCount: selectedIds.length,
+      totalCount: allMembers.length,
+      isExpanded: expandedRankSections.value.includes(rank),
+      loadingMembers,
+      membersLoadError,
+    }
+  })
 })
 
 function selectedRankMemberCount(rank: string) {
@@ -681,12 +836,12 @@ function isRankPartiallySelected(rank: string) {
   return selected > 0 && selected < total
 }
 
-function typeCardClass(t: StrategicKpiType) {
+function typeCardClassForCode(code: number) {
   const base =
     'relative cursor-pointer rounded-lg border p-3 text-left transition-all hover:border-blue-300'
-  const selected = kpiType.value === t
+  const selected = kpiTypeCode.value === code
   if (!selected) return `${base} border-slate-200 bg-white`
-  if (t === 'promotion') return `${base} border-purple-500 bg-purple-50`
+  if (code === 103) return `${base} border-purple-500 bg-purple-50`
   return `${base} border-blue-500 bg-blue-50`
 }
 
@@ -702,13 +857,34 @@ function togglePm(val: string) {
   }
 }
 
-function toggleRank(val: string) {
+const USER_ID_UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
+function formatPmOptionLabel(u: DepartmentManagerOption): string {
+  const u0 = u.username?.trim()
+  const base = u0 ? `${u.fullName} (${u0})` : u.fullName
+  const depts = u.managingDepartmentsLabel?.trim()
+  if (depts) return `${base} — ${depts}`
+  return base
+}
+
+/** Chip / target row — ưu tiên dữ liệu từ API `department-managers`; chưa có thì rút gọn UUID hoặc chuỗi legacy. */
+function pmChipLabel(id: string): string {
+  const row = pmUsers.value.find((x) => x.id === id)
+  if (row) return formatPmOptionLabel(row)
+  if (USER_ID_UUID_RE.test(id)) return `User ${id.slice(0, 8)}…`
+  return id
+}
+
+async function toggleRank(val: string) {
   const i = selectedRanks.value.indexOf(val)
   if (i === -1) {
     selectedRanks.value = [...selectedRanks.value, val]
+    await ensureMembersLoadedForRank(val)
+    const members = membersByRank(val)
     selectedRankMembers.value = {
       ...selectedRankMembers.value,
-      [val]: membersByRank(val).map((member) => member.val),
+      [val]: members.map((member) => member.val),
     }
     if (!expandedRankSections.value.includes(val)) {
       expandedRankSections.value = [...expandedRankSections.value, val]
@@ -784,27 +960,14 @@ function extractLeadingNumberFromText(s: string): string {
   return m ? m[1]! : ''
 }
 
-function inferUnitFromTargetText(...parts: (string | undefined)[]): string {
-  const hay = parts.filter(Boolean).join(' ').toUpperCase()
-  if (/%|PHẦN TRĂM|PERCENT/i.test(hay)) return 'POINT'
-  if (/\bMM\b|MAN[\s-]?MONTH/i.test(hay)) return 'MM'
-  if (/ĐIỂM|POINT/i.test(hay)) return 'POINT'
-  if (/DỰ ÁN|PROJECT/i.test(hay)) return 'PROJECT'
-  if (/SẢN PHẨM|PRODUCT/i.test(hay)) return 'PRODUCT'
-  return 'MM'
-}
-
-function hydrateFormFromHierarchyKpi(kpi: GmHierarchyKpi) {
-  isHydratingFromEdit.value = true
-  createKpiTab.value = 'custom'
-  editSessionSnapshot.value = kpi
+/** Điền form tạo KPI từ một dòng diagnostics (dùng cho sửa từ bảng và cho sao chép nhanh). */
+function fillCreateFormFieldsFromHierarchyKpi(kpi: GmHierarchyKpi) {
   clearFormErrors()
-  copyFromId.value = ''
-  copyKpiPickerOpen.value = false
-  copyKpiFilterQuery.value = ''
-  formCycleId.value = String(props.cycleId)
-  kpiType.value = normalizeStrategicKpiKind(kpi.kpiType)
-  perspective.value = kpi.bscPerspective ? String(kpi.bscPerspective) : 'internal'
+  kpiTypeCode.value = typeCodeFromStrategicKpiKind(normalizeStrategicKpiKind(kpi.kpiType))
+  perspective.value =
+    kpi.categoryId && String(kpi.categoryId).trim()
+      ? String(kpi.categoryId).trim()
+      : kpiCategories.value[0]?.id ?? ''
   const plainName = (kpi.investigateKpiName?.trim() || extractPlainKpiName(kpi.name)).trim()
   kpiName.value = plainName || String(kpi.name ?? '').trim()
   description.value = ''
@@ -816,27 +979,144 @@ function hydrateFormFromHierarchyKpi(kpi: GmHierarchyKpi) {
     const fromPm = kpi.pmOwners[0]?.target
     const raw = extractLeadingNumberFromText(fromPm ?? '') || extractLeadingNumberFromText(kpi.target)
     targetValue.value = raw
-    unit.value = inferUnitFromTargetText(fromPm, kpi.target)
-    selectedPMs.value = kpi.pmOwners.map((p) => p.name)
+    unit.value = kpiUnitCodeToFormUnit(kpi.unitCode)
+    selectedPMs.value = kpi.pmOwners.map((p) => String(p.id || '').trim() || p.name)
     const nextPm: Record<string, string> = {}
     for (const p of kpi.pmOwners) {
+      const key = String(p.id || '').trim() || p.name
       const n = extractLeadingNumberFromText(p.target)
-      if (n) nextPm[p.name] = n
+      if (n) nextPm[key] = n
     }
     pmTargets.value = nextPm
   } else {
     targetValue.value = ''
-    unit.value = inferUnitFromTargetText(kpi.target)
+    unit.value = kpiUnitCodeToFormUnit(kpi.unitCode)
     selectedPMs.value = []
     pmTargets.value = {}
   }
 
   hydrateCalculationFromPersisted('mean_actual_plan')
-  isImportantKpi.value = kpi.isImportant === true
   selectedRanks.value = []
   selectedMembers.value = []
+  selectedRankMembers.value = {}
+  expandedRankSections.value = []
   memberAssignSearch.value = ''
+  isImportantKpi.value = kpi.isImportant === true
+}
+
+function hydrateFormFromHierarchyKpi(kpi: GmHierarchyKpi) {
+  isHydratingFromEdit.value = true
+  editSessionSnapshot.value = kpi
+  copyFromId.value = ''
+  copyKpiPickerOpen.value = false
+  copyKpiFilterQuery.value = ''
+  formCycleId.value = String(props.cycleId)
+  fillCreateFormFieldsFromHierarchyKpi(kpi)
   void nextTick(() => {
+    isHydratingFromEdit.value = false
+  })
+}
+
+function weightPctStringFromApi(w: unknown): string {
+  if (typeof w === 'number' && Number.isFinite(w)) return String(w)
+  return String(w ?? '')
+    .replace(/%/g, '')
+    .trim()
+}
+
+async function distributeIndividualMembersFromServerIds(memberIds: string[]) {
+  /** Luôn tải ranks trước — nếu `memberIds` rỗng (KPI từ template chưa giao) mà return sớm thì không gọi API → UI rank trống. */
+  await loadRanks()
+  const idSet = new Set(memberIds.map((x) => String(x).trim()).filter(Boolean))
+  if (idSet.size === 0) {
+    selectedRanks.value = []
+    selectedRankMembers.value = {}
+    expandedRankSections.value = []
+    return
+  }
+  const nextRanks: string[] = []
+  const nextMap: Record<string, string[]> = {}
+  for (const opt of rankOptionsForUi.value) {
+    const code = String(opt.val ?? '').trim()
+    if (!code) continue
+    await ensureMembersLoadedForRank(code)
+    const members = membersByRankCache.value[code] ?? []
+    const picked = members.filter((m) => idSet.has(String(m.id).trim())).map((m) => String(m.id).trim())
+    if (picked.length) {
+      nextRanks.push(code)
+      nextMap[code] = picked
+    }
+  }
+  selectedRanks.value = nextRanks
+  selectedRankMembers.value = nextMap
+  expandedRankSections.value = [...nextRanks]
+}
+
+async function hydrateFormFromStrategicKpiEditData(data: GmStrategicKpiEditData, kpiRow: GmHierarchyKpi) {
+  isHydratingFromEdit.value = true
+  editSessionSnapshot.value = kpiRow
+  copyFromId.value = ''
+  copyKpiPickerOpen.value = false
+  copyKpiFilterQuery.value = ''
+  clearFormErrors()
+  strategicEditDetailError.value = null
+
+  formCycleId.value = String(data.cycleId ?? '').trim()
+  kpiTypeCode.value =
+    typeof data.typeCode === 'number' && Number.isFinite(data.typeCode)
+      ? data.typeCode
+      : Number.parseInt(String(data.typeCode ?? '102'), 10) || 102
+  perspective.value =
+    data.perspective && String(data.perspective).trim()
+      ? String(data.perspective).trim()
+      : kpiCategories.value[0]?.id ?? ''
+  kpiName.value = String(data.kpiName ?? '').trim()
+  description.value =
+    data.targetDescription != null && String(data.targetDescription).trim() !== ''
+      ? String(data.targetDescription).trim()
+      : ''
+  weightPct.value = weightPctStringFromApi(data.weightPct)
+
+  if (kpiTypeCode.value === 102) {
+    const tv = data.targetValue
+    if (tv != null && tv !== '' && Number.isFinite(Number(tv))) {
+      targetValue.value = String(tv)
+    } else {
+      targetValue.value = ''
+    }
+  } else {
+    targetValue.value = ''
+  }
+
+  unit.value = kpiUnitCodeToFormUnit(data.unitCode)
+  hydrateCalculationFromPersisted(String(data.calculationMethod ?? 'mean_actual_plan').trim())
+  isImportantKpi.value = data.isImportant === true
+  selectedPMs.value = []
+  pmTargets.value = {}
+  selectedRanks.value = []
+  selectedMembers.value = []
+  selectedRankMembers.value = {}
+  expandedRankSections.value = []
+  individualRankMemberSearch.value = ''
+  memberAssignSearch.value = ''
+
+  if (kpiTypeCode.value === 102) {
+    selectedPMs.value = (data.assignPMs ?? []).map((u) => String(u).trim()).filter(Boolean)
+    const rawPm = data.pmTargets ?? {}
+    const nextPm: Record<string, string> = {}
+    for (const [k, v] of Object.entries(rawPm)) {
+      const key = String(k ?? '').trim()
+      if (!key || v == null || v === '') continue
+      nextPm[key] = typeof v === 'number' && Number.isFinite(v) ? String(v) : String(v).trim()
+    }
+    pmTargets.value = nextPm
+  } else if (kpiTypeCode.value === 101) {
+    await distributeIndividualMembersFromServerIds((data.memberIds ?? []).map(String))
+  } else if (kpiTypeCode.value === 103) {
+    selectedMembers.value = (data.memberIds ?? []).map((u) => String(u).trim()).filter(Boolean)
+  }
+
+  await nextTick(() => {
     isHydratingFromEdit.value = false
   })
 }
@@ -847,19 +1127,41 @@ watch(kpiType, () => {
   assignDropdown.value = null
   selectedPMs.value = []
   pmTargets.value = {}
+  clearMembersByRankState()
   selectedRanks.value = []
   selectedMembers.value = []
   selectedRankMembers.value = {}
   expandedRankSections.value = []
   individualRankMemberSearch.value = ''
   memberAssignSearch.value = ''
-  const allowed = new Set(KPI_CALCULATION_FORMULAS.map((f) => f.value))
-  if (!allowed.has(calculationMethod.value)) {
-    calculationMethod.value = DEFAULT_CALCULATION_METHOD
-    meanRatioKind.value = 'actual_plan'
-    meanAggregateKind.value = 'average'
+  const allowedRules = new Set(calcRulesWithTypes.value.map((row) => row.code))
+  if (!allowedRules.has(calculationRuleCode.value)) {
+    calculationRuleCode.value = calcRulesWithTypes.value[0]?.code ?? DEFAULT_CALCULATION_RULE_CODE
+    calculationTypeCode.value = DEFAULT_CALCULATION_TYPE_CODE
+  }
+  clampCalculationTypeToRule()
+  if (kpiType.value === 'individual' && open.value) {
+    void loadRanks()
+  } else if (kpiType.value === 'promotion' && open.value) {
+    void loadPromotionAssignees()
   }
 })
+
+watch(calculationRuleCode, () => {
+  clampCalculationTypeToRule()
+})
+
+watch(
+  calcRulesWithTypes,
+  (rows) => {
+    if (!rows.length) return
+    if (!rows.some((r) => r.code === calculationRuleCode.value)) {
+      calculationRuleCode.value = rows[0]!.code
+    }
+    clampCalculationTypeToRule()
+  },
+  { deep: true },
+)
 
 watch(assignDropdown, (v) => {
   if (v !== 'member') memberAssignSearch.value = ''
@@ -867,37 +1169,31 @@ watch(assignDropdown, (v) => {
 })
 
 function resetForm() {
-  createKpiTab.value = 'custom'
-  selectedTemplatePackId.value = ''
-  templateKpiSelection.value = {}
-  bulkFormError.value = ''
+  clearMembersByRankState()
+  clearPromotionAssigneeState()
   copyFromId.value = ''
-  const evalOpts = evaluationYearOptions.value
-  const evalIds = new Set(evalOpts.map((c) => c.id))
-  const header = String(props.cycleId)
-  const resolvedEvalYear = evalIds.has(header) ? header : String(evalOpts[0]?.id ?? new Date().getFullYear())
-  formCycleId.value = resolvedEvalYear
+  formCycleId.value = resolveDefaultFormCycleUuid()
+
+  const rows = evaluationCycleRows.value
+  const headerYear =
+    rows.find((r) => r.id === formCycleId.value)?.year ?? new Date().getFullYear()
 
   const copyOpts = copySourceYearOptions.value
   const copyIds = new Set(copyOpts.map((c) => c.id))
+  const hy = String(headerYear)
   const resolvedCopyYear =
-    copyOpts.length === 0
-      ? resolvedEvalYear
-      : copyIds.has(header)
-        ? header
-        : String(copyOpts[0]!.id)
+    copyOpts.length === 0 ? hy : copyIds.has(hy) ? hy : String(copyOpts[0]!.id)
   copySourceYear.value = resolvedCopyYear
   kpiType.value = 'cascading'
-  perspective.value = 'internal'
+  perspective.value = kpiCategories.value[0]?.id ?? ''
   kpiName.value = ''
   description.value = ''
   targetValue.value = ''
   unit.value = 'MM'
-  weightPct.value = ''
-  calculationMethod.value = DEFAULT_CALCULATION_METHOD
-  meanRatioKind.value = 'actual_plan'
-  meanAggregateKind.value = 'average'
   isImportantKpi.value = false
+  weightPct.value = ''
+  calculationRuleCode.value = DEFAULT_CALCULATION_RULE_CODE
+  calculationTypeCode.value = DEFAULT_CALCULATION_TYPE_CODE
   selectedPMs.value = []
   pmTargets.value = {}
   selectedRanks.value = []
@@ -908,22 +1204,109 @@ function resetForm() {
   memberAssignSearch.value = ''
   copyKpiPickerOpen.value = false
   copyKpiFilterQuery.value = ''
+  createTab.value = 'custom'
+  templatePackageId.value = ''
+  templatePackages.value = []
+  templateItems.value = []
+  templateApiError.value = null
+  templateSelectedKeys.value = new Set()
   clearFormErrors()
 }
 
-watch(open, (v) => {
+watch(open, async (v) => {
   if (v) {
-    if (props.editInitial) hydrateFormFromHierarchyKpi(props.editInitial)
-    else resetForm()
+    await Promise.all([
+      loadKpiCategories(),
+      loadKpiTypes(),
+      loadCopySourceCycles(),
+      ensureEvaluationCyclesForDrawer(),
+      loadKpiUnits(),
+      loadCalculationReference(),
+      loadPmUsers(),
+    ])
+    if (props.editInitial) {
+      createTab.value = 'custom'
+      strategicEditDetailError.value = null
+      const apiIdForEdit = parseDiagnosticsKpiInformationId(props.editInitial)
+      if (apiIdForEdit) {
+        strategicEditDetailLoading.value = true
+        try {
+          const data = await gmKpiService.getStrategicKpiForEdit(apiIdForEdit)
+          await hydrateFormFromStrategicKpiEditData(data, props.editInitial)
+        } catch (e: unknown) {
+          strategicEditDetailError.value =
+            e instanceof Error ? e.message : 'Không tải được dữ liệu KPI để sửa'
+          hydrateFormFromHierarchyKpi(props.editInitial)
+        } finally {
+          strategicEditDetailLoading.value = false
+        }
+      } else {
+        hydrateFormFromHierarchyKpi(props.editInitial)
+      }
+      const kind = normalizeStrategicKpiKind(props.editInitial.kpiType)
+      if (kind === 'individual' && !apiIdForEdit) {
+        await loadRanks()
+      } else if (kind === 'promotion') {
+        await loadPromotionAssignees()
+      }
+    } else {
+      resetForm()
+      await loadCopyKpisForSourceYear()
+      await loadTemplatePackages()
+    }
     window.addEventListener('click', onDocClick)
   } else {
     editSessionSnapshot.value = null
+    strategicEditDetailLoading.value = false
+    strategicEditDetailError.value = null
     window.removeEventListener('click', onDocClick)
     assignDropdown.value = null
     copyKpiPickerOpen.value = false
     copyKpiFilterQuery.value = ''
+    clearPromotionAssigneeState()
   }
 })
+
+watch(
+  () => props.cycleId,
+  (id) => {
+    if (!open.value) return
+    const t = String(id ?? '').trim()
+    if (!t) return
+    if (evaluationCycleRows.value.some((r) => r.id === t)) {
+      formCycleId.value = t
+    }
+  },
+)
+
+watch(
+  () => rankRows.value,
+  (rows) => {
+    if (!rows.length) return
+    const codes = new Set(rows.map((r) => r.code))
+    selectedRanks.value = selectedRanks.value.filter((c) => codes.has(c))
+    const next: Record<string, string[]> = { ...selectedRankMembers.value }
+    for (const k of Object.keys(next)) {
+      if (!codes.has(k)) delete next[k]
+    }
+    selectedRankMembers.value = next
+    expandedRankSections.value = expandedRankSections.value.filter((k) => codes.has(k))
+
+    const nextCache: Record<string, MemberByRankOption[]> = { ...membersByRankCache.value }
+    const nextLoad: Record<string, boolean> = { ...membersByRankLoading.value }
+    const nextErr: Record<string, string | null> = { ...membersByRankError.value }
+    for (const k of Object.keys(nextCache)) {
+      if (!codes.has(k)) {
+        delete nextCache[k]
+        delete nextLoad[k]
+        delete nextErr[k]
+      }
+    }
+    membersByRankCache.value = nextCache
+    membersByRankLoading.value = nextLoad
+    membersByRankError.value = nextErr
+  },
+)
 
 onUnmounted(() => {
   window.removeEventListener('click', onDocClick)
@@ -939,6 +1322,17 @@ function validateForm(): boolean {
 
   if (!kpiName.value.trim()) {
     err.kpiName = 'Vui lòng nhập tên KPI.'
+  }
+
+  if (!String(perspective.value).trim()) {
+    err.perspective = 'Chọn nhóm KPI (kpi_categories).'
+  }
+
+  if (evaluationYearOptions.value.length === 0) {
+    err.formCycleId =
+      evaluationCyclesError.value || 'Chưa có chu kỳ KPI (năm ≥ năm hiện tại) trong hệ thống.'
+  } else if (!String(formCycleId.value).trim()) {
+    err.formCycleId = 'Chọn chu kỳ đánh giá (năm KPI).'
   }
 
   if (kpiType.value === 'cascading') {
@@ -959,8 +1353,17 @@ function validateForm(): boolean {
     err.weightPct = 'Trọng số phải từ 1 đến 100.'
   }
 
-  if (!KPI_CALCULATION_FORMULAS.some((f) => f.value === calculationMethod.value)) {
-    err.calculationMethod = 'Chọn phân loại cách tính (công thức).'
+  const ruleOpts = calcRulesWithTypes.value
+  if (!ruleOpts.some((row) => row.code === calculationRuleCode.value)) {
+    err.calculationMethod = 'Chọn quy tắc tính toán.'
+  } else {
+    const types = typesForSelectedRule.value
+    if (types.length > 0) {
+      const tc = calculationTypeCode.value
+      if (tc == null || !types.some((t) => t.code === tc)) {
+        err.calculationMethod = 'Chọn chiều tính toán.'
+      }
+    }
   }
 
   formErrors.value = err
@@ -976,18 +1379,20 @@ async function save() {
 
   saving.value = true
   const payload: Record<string, unknown> = {
-    kpiType: kpiType.value,
+    typeCode: kpiTypeCode.value,
+    /** UUID `kpi_categories.id` — nhóm KPI trên DB (tên field legacy `perspective`). */
     perspective: perspective.value,
     kpiName: kpiName.value,
-    description: description.value,
-    targetValue: kpiType.value === 'cascading' ? targetValue.value : '',
+    targetDescription: description.value,
+    targetValue:
+      kpiType.value === 'cascading'
+        ? Number.parseFloat(String(targetValue.value).trim())
+        : null,
     unit: unit.value,
+    unitCode: kpiFormUnitToUnitCode(unit.value),
     weightPct: weightPct.value,
-    startDate: cycleDateBounds.value.start,
-    endDate: cycleDateBounds.value.end,
     cycleId: formCycleId.value,
     calculationMethod: resolvePersistedCalculationMethod(),
-    evaluationDirection: DEFAULT_EVALUATION_DIRECTION,
     isImportant: isImportantKpi.value,
   }
   if (kpiType.value === 'cascading') {
@@ -1064,8 +1469,58 @@ async function save() {
             </button>
           </div>
 
+          <!-- Tab: tạo tùy chỉnh · từ template (chỉ khi tạo mới) -->
+          <div
+            v-if="!isEditingFromDiagnostics"
+            class="shrink-0 border-b border-slate-200 bg-white px-5 pb-4 pt-1"
+          >
+            <div class="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                :class="[
+                  'flex items-center justify-center gap-2 rounded-xl border-2 py-3 text-xs font-bold transition-all',
+                  createTab === 'custom'
+                    ? 'border-blue-500 bg-blue-50/90 text-blue-800 shadow-sm ring-1 ring-blue-100'
+                    : 'border-transparent bg-slate-100/80 text-slate-600 hover:border-slate-200 hover:bg-slate-50',
+                ]"
+                @click="createTab = 'custom'"
+              >
+                <i class="fas fa-pen-to-square" aria-hidden="true" />
+                Tạo mới KPI
+              </button>
+              <button
+                type="button"
+                :class="[
+                  'flex items-center justify-center gap-2 rounded-xl border-2 py-3 text-xs font-bold transition-all',
+                  createTab === 'template'
+                    ? 'border-blue-500 bg-blue-50/90 text-blue-800 shadow-sm ring-1 ring-blue-100'
+                    : 'border-transparent bg-slate-100/80 text-slate-600 hover:border-slate-200 hover:bg-slate-50',
+                ]"
+                @click="createTab = 'template'"
+              >
+                <i class="fas fa-table-columns" aria-hidden="true" />
+                Từ Template
+              </button>
+            </div>
+          </div>
+
           <!-- Drawer Body -->
           <div class="custom-scrollbar flex-1 space-y-6 overflow-y-auto p-6">
+            <p
+              v-if="strategicEditDetailLoading"
+              class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700"
+              role="status"
+            >
+              Đang tải dữ liệu KPI từ máy chủ…
+            </p>
+            <p
+              v-else-if="strategicEditDetailError"
+              class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900"
+              role="alert"
+            >
+              {{ strategicEditDetailError }} — đã hiển thị tạm từ bảng diagnostics; kiểm tra lại assignee trước khi
+              lưu.
+            </p>
             <div
               v-if="Object.keys(formErrors).length > 0"
               id="gm-create-kpi-errors"
@@ -1082,53 +1537,7 @@ async function save() {
               </ul>
             </div>
 
-            <!-- Tab: Tạo mới KPI | Từ Template — chỉ khi tạo mới -->
-            <div
-              v-if="!isEditingFromDiagnostics"
-              class="rounded-xl border border-slate-200/90 bg-slate-100/90 p-1.5 shadow-inner"
-            >
-              <div class="grid grid-cols-1 gap-1 sm:grid-cols-2">
-                <button
-                  type="button"
-                  class="flex min-h-[36px] min-w-0 flex-row items-center justify-center gap-2 rounded-lg px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide transition-all sm:text-[11px] motion-reduce:transition-none"
-                  :class="
-                    createKpiTab === 'custom'
-                      ? 'border border-slate-200/80 bg-white text-blue-600 shadow-sm'
-                      : 'border border-transparent bg-transparent text-slate-600 hover:bg-white/70 hover:text-slate-800'
-                  "
-                  @click="createKpiTab = 'custom'"
-                >
-                  <i class="fas fa-pen shrink-0 text-sm" aria-hidden="true" />
-                  <span class="min-w-0 flex-1 truncate leading-tight normal-case">Tạo mới KPI</span>
-                </button>
-                <button
-                  type="button"
-                  class="flex min-h-[36px] min-w-0 flex-row items-center justify-center gap-2 rounded-lg px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide transition-all sm:text-[11px] motion-reduce:transition-none"
-                  :class="
-                    createKpiTab === 'template'
-                      ? 'border border-slate-200/80 bg-white text-blue-600 shadow-sm'
-                      : 'border border-transparent bg-transparent text-slate-600 hover:bg-white/70 hover:text-slate-800'
-                  "
-                  @click="createKpiTab = 'template'"
-                >
-                  <i class="fas fa-th-large shrink-0 text-sm" aria-hidden="true" />
-                  <span class="min-w-0 flex-1 truncate leading-tight normal-case">Từ Template</span>
-                </button>
-              </div>
-            </div>
-
-            <p
-              v-if="!isEditingFromDiagnostics && createKpiTab === 'template' && bulkFormError"
-              class="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-800"
-              role="alert"
-            >
-              {{ bulkFormError }}
-            </p>
-
-            <div
-              v-show="isEditingFromDiagnostics || createKpiTab === 'custom'"
-              class="space-y-6"
-            >
+            <div v-show="isEditingFromDiagnostics || createTab === 'custom'" class="space-y-6">
             <!-- Sao chép KPI — chỉ khi tạo mới -->
             <div
               v-if="!isEditingFromDiagnostics"
@@ -1148,14 +1557,18 @@ async function save() {
                   >
                     Năm nguồn
                   </label>
+                  <p v-if="copyCyclesError" class="mb-1 text-[9px] font-semibold text-rose-600">
+                    {{ copyCyclesError }}
+                  </p>
                   <div class="relative">
                     <select
                       id="gm-copy-source-year"
                       v-model="copySourceYear"
-                      class="w-full cursor-pointer appearance-none rounded-lg border border-indigo-200 bg-white py-2 pl-3 pr-9 text-sm font-semibold text-slate-800 shadow-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                      :disabled="copyCyclesLoading"
+                      class="w-full cursor-pointer appearance-none rounded-lg border border-indigo-200 bg-white py-2 pl-3 pr-9 text-sm font-semibold text-slate-800 shadow-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       <option v-for="c in copySourceYearOptions" :key="c.id" :value="c.id">
-                        Năm {{ c.label }}
+                        {{ c.label }}
                       </option>
                     </select>
                     <i
@@ -1171,11 +1584,15 @@ async function save() {
                   >
                     KPI
                   </label>
+                  <p v-if="copyKpisError" class="mb-1 text-[9px] font-semibold text-rose-600">
+                    {{ copyKpisError }}
+                  </p>
                   <div ref="copyKpiPickerSurfaceRef" class="relative">
                     <button
                       id="gm-copy-kpi-select"
                       type="button"
-                      class="flex w-full cursor-pointer items-center justify-between gap-2 rounded-lg border border-indigo-200 bg-white py-2 pl-3 pr-3 text-left text-sm shadow-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                      :disabled="copyKpisLoading"
+                      class="flex w-full cursor-pointer items-center justify-between gap-2 rounded-lg border border-indigo-200 bg-white py-2 pl-3 pr-3 text-left text-sm shadow-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 disabled:cursor-not-allowed disabled:opacity-60"
                       :class="copyFromId ? 'font-medium text-slate-800' : 'font-medium text-slate-500'"
                       :aria-expanded="copyKpiPickerOpen"
                       aria-haspopup="listbox"
@@ -1268,17 +1685,26 @@ async function save() {
                 <div class="flex flex-col gap-3 sm:flex-row">
                   <div class="sm:w-1/3">
                     <label class="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                      Perspective (BSC) <span class="text-rose-500">*</span>
+                      Nhóm KPI (kpi_categories) <span class="text-rose-500">*</span>
                     </label>
+                    <p v-if="kpiCategoriesError" class="mb-1 text-[10px] font-semibold text-rose-600">
+                      {{ kpiCategoriesError }}
+                    </p>
                     <div class="relative">
                       <select
                         v-model="perspective"
-                        class="input-required w-full cursor-pointer appearance-none rounded-md py-2 pl-3 pr-8 text-xs font-bold text-slate-800 outline-none transition-all"
+                        :disabled="kpiCategoriesLoading"
+                        class="input-required w-full cursor-pointer appearance-none rounded-md py-2 pl-3 pr-8 text-xs font-bold text-slate-800 outline-none transition-all disabled:cursor-not-allowed disabled:opacity-60"
+                        :class="formErrors.perspective ? '!border-rose-400 !bg-rose-50/50' : ''"
                       >
-                        <option v-for="o in BSC_OPTIONS" :key="o.value" :value="o.value">{{ o.label }}</option>
+                        <option value="" disabled>{{ kpiCategoriesLoading ? 'Đang tải…' : '— Chọn nhóm —' }}</option>
+                        <option v-for="o in perspectiveOptions" :key="o.value" :value="o.value">{{ o.label }}</option>
                       </select>
                       <i class="fas fa-chevron-down pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400" />
                     </div>
+                    <p v-if="formErrors.perspective" class="mt-1 text-[10px] font-semibold text-rose-600">
+                      {{ formErrors.perspective }}
+                    </p>
                   </div>
                   <div class="min-w-0 sm:flex-1">
                     <label class="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500">
@@ -1301,85 +1727,49 @@ async function save() {
                   <label class="mb-2 block text-[10px] font-bold uppercase tracking-wider text-slate-500">
                     Loại hình KPI (cách thức giao) <span class="text-rose-500">*</span>
                   </label>
-                  <div class="grid grid-cols-1 gap-3 md:grid-cols-3">
+                  <p v-if="kpiTypesError" class="mb-2 text-[10px] font-semibold text-rose-600">{{ kpiTypesError }}</p>
+                  <p v-else-if="kpiTypesLoading" class="mb-2 text-[10px] font-medium text-slate-500">
+                    Đang tải loại hình KPI từ hệ thống…
+                  </p>
+                  <div
+                    class="grid grid-cols-1 gap-3"
+                    :class="[
+                      kpiTypeRows.length <= 1 ? '' : kpiTypeRows.length === 2 ? 'md:grid-cols-2' : 'md:grid-cols-3',
+                    ]"
+                  >
                     <button
+                      v-for="opt in kpiTypeRows"
+                      :key="opt.code"
                       type="button"
-                      :class="typeCardClass('cascading')"
-                      @click="kpiType = 'cascading'"
+                      :disabled="kpiTypesLoading || strategicEditDetailLoading"
+                      :class="typeCardClassForCode(opt.code)"
+                      @click="kpiTypeCode = opt.code"
                     >
                       <span
-                        class="absolute right-2.5 top-2.5 text-blue-600 transition-all"
-                        :class="kpiType === 'cascading' ? 'opacity-100 scale-100' : 'scale-50 opacity-0'"
-                      >
-                        <i class="fas fa-check-circle text-base" />
-                      </span>
-                      <div class="mb-1.5 flex items-center gap-2">
-                        <span class="rounded border border-slate-100 bg-slate-50 p-1">
-                          <i class="fas fa-code-branch text-xs text-blue-600" />
-                        </span>
-                        <span class="text-xs font-bold text-slate-800">Cascading KPI</span>
-                      </div>
-                      <p class="text-[11px] font-medium leading-tight text-slate-500">
-                        Giao cho PM phân rã tiếp.
-                      </p>
-                    </button>
-
-                    <button
-                      type="button"
-                      :class="typeCardClass('individual')"
-                      @click="kpiType = 'individual'"
-                    >
-                      <span
-                        class="absolute right-2.5 top-2.5 text-blue-600 transition-all"
-                        :class="kpiType === 'individual' ? 'opacity-100 scale-100' : 'scale-50 opacity-0'"
-                      >
-                        <i class="fas fa-check-circle text-base" />
-                      </span>
-                      <div class="mb-1.5 flex items-center gap-2">
-                        <span class="rounded border border-slate-100 bg-slate-50 p-1">
-                          <i class="fas fa-crosshairs text-xs text-slate-600" />
-                        </span>
-                        <span class="text-xs font-bold text-slate-800">Individual KPI</span>
-                      </div>
-                      <p class="text-[11px] font-medium leading-tight text-slate-500">
-                        Giao hàng loạt cho Rank.
-                      </p>
-                    </button>
-
-                    <button
-                      type="button"
-                      :class="typeCardClass('promotion')"
-                      @click="kpiType = 'promotion'"
-                    >
-                      <span
-                        class="absolute right-2.5 top-2.5 text-purple-600 transition-all"
-                        :class="kpiType === 'promotion' ? 'opacity-100 scale-100' : 'scale-50 opacity-0'"
+                        class="absolute right-2.5 top-2.5 transition-all"
+                        :class="[
+                          opt.code === 103 ? 'text-purple-600' : 'text-blue-600',
+                          kpiTypeCode === opt.code ? 'opacity-100 scale-100' : 'scale-50 opacity-0',
+                        ]"
                       >
                         <i class="fas fa-check-circle text-base" />
                       </span>
                       <div class="mb-1.5 flex items-center gap-2">
                         <span class="rounded border border-slate-100 bg-slate-50 p-1 shadow-sm">
-                          <i class="fas fa-user-plus text-xs text-purple-600" />
+                          <i :class="strategicKpiTypeIconClass(opt.code)" />
                         </span>
-                        <span class="text-xs font-bold text-slate-800">Promotion KPI</span>
+                        <span class="text-xs font-bold leading-snug text-slate-800">{{
+                          opt.description || opt.name
+                        }}</span>
                       </div>
-                      <p class="text-[11px] font-medium leading-tight text-slate-500">
-                        Giao đích danh cá nhân.
-                      </p>
                     </button>
                   </div>
-                </div>
-
-                <div class="flex items-center gap-2 rounded-md border border-slate-200/90 bg-slate-50/60 px-2.5 py-1.5">
-                  <input
-                    id="gm-kpi-important"
-                    v-model="isImportantKpi"
-                    type="checkbox"
-                    class="h-3.5 w-3.5 shrink-0 rounded border-slate-300 text-amber-500 focus:ring-amber-400/50"
-                  />
-                  <label for="gm-kpi-important" class="cursor-pointer text-[11px] font-semibold text-slate-600">
-                    KPI quan trọng
-                  </label>
+                  <p
+                    v-if="!kpiTypesLoading && !kpiTypesError && kpiTypeRows.length === 0"
+                    class="mt-2 text-[11px] font-medium text-amber-800"
+                  >
+                    Chưa có dữ liệu loại KPI (nhóm KPI_TYPE trong hệ thống).
+                  </p>
                 </div>
 
                 <div
@@ -1429,12 +1819,16 @@ async function save() {
                     <label class="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500">
                       Unit <span class="text-rose-500">*</span>
                     </label>
+                    <p v-if="kpiUnitsError" class="mb-1 text-[10px] font-semibold text-amber-700">
+                      {{ kpiUnitsError }}
+                    </p>
                     <div class="relative">
                       <select
                         v-model="unit"
                         class="input-required min-h-[38px] w-full cursor-pointer appearance-none rounded-md py-2 pl-2.5 pr-7 text-xs font-bold text-slate-800 outline-none transition-all"
+                        :disabled="kpiUnitsLoading"
                       >
-                        <option v-for="u in UNIT_OPTIONS" :key="u.value" :value="u.value">{{ u.label }}</option>
+                        <option v-for="u in kpiUnitOptions" :key="u.value" :value="u.value">{{ u.label }}</option>
                       </select>
                       <i class="fas fa-chevron-down pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-slate-400" />
                     </div>
@@ -1443,10 +1837,15 @@ async function save() {
                     <label class="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500">
                       Năm đánh giá <span class="text-rose-500">*</span>
                     </label>
+                    <p v-if="evaluationCyclesError" class="mb-1 text-[10px] font-semibold text-amber-700">
+                      {{ evaluationCyclesError }}
+                    </p>
                     <div class="relative w-full">
                       <select
                         v-model="formCycleId"
                         class="input-required min-h-[38px] w-full cursor-pointer appearance-none rounded-md py-2 pl-2.5 pr-7 text-xs font-bold text-slate-800 outline-none transition-all"
+                        :class="formErrors.formCycleId ? '!border-rose-400 !bg-rose-50/50' : ''"
+                        :disabled="evaluationCyclesLoading || evaluationYearOptions.length === 0"
                       >
                         <option v-for="c in evaluationYearOptions" :key="c.id" :value="c.id">
                           {{ c.label }}
@@ -1454,17 +1853,33 @@ async function save() {
                       </select>
                       <i class="fas fa-chevron-down pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-slate-400" />
                     </div>
+                    <p v-if="formErrors.formCycleId" class="mt-1 text-[10px] font-semibold text-rose-600">
+                      {{ formErrors.formCycleId }}
+                    </p>
                   </div>
                 </div>
 
-                <!-- Phân loại cách tính (= công thức KPI) -->
+                <label
+                  class="flex cursor-pointer items-center gap-2 rounded-md border border-slate-200 bg-slate-50/80 px-3 py-2 text-[11px] font-semibold text-slate-700 transition hover:bg-slate-100"
+                >
+                  <input
+                    v-model="isImportantKpi"
+                    type="checkbox"
+                    class="h-3.5 w-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-400/40"
+                  />
+                  <span>KPI quan trọng <span class="font-normal text-slate-500">(is_important)</span></span>
+                </label>
+
+                <!-- Phân loại cách tính: quy tắc (dropdown) + chiều tính (radio khi có) -->
                 <div>
+                  <p v-if="calcRefError" class="mb-1 text-[10px] font-semibold text-amber-700">
+                    {{ calcRefError }}
+                  </p>
                   <div class="mb-1.5 flex items-center gap-1.5">
                     <label class="block flex-1 text-[10px] font-bold uppercase tracking-wider text-slate-500">
                       Phân loại cách tính <span class="text-rose-500">*</span>
                     </label>
                     <span
-                      v-if="calculationMethod !== 'manual_member_input'"
                       class="inline-flex shrink-0 cursor-help text-slate-400 transition-colors hover:text-blue-600"
                       :title="selectedFormulaExpression"
                       tabindex="0"
@@ -1479,90 +1894,48 @@ async function save() {
                       class="relative min-w-0 w-full sm:min-w-[22rem] md:min-w-[26rem] lg:min-w-[28rem] sm:flex-[1.35]"
                     >
                       <select
-                        v-model="calculationMethod"
-                        class="input-required min-h-[38px] w-full appearance-none rounded-md py-2 pr-7 text-xs font-bold text-slate-800 outline-none transition-all"
+                        v-model.number="calculationRuleCode"
+                        class="input-required min-h-[38px] w-full cursor-pointer appearance-none rounded-md py-2 pr-7 text-xs font-bold text-slate-800 outline-none transition-all"
                         :class="[
-                          calculationMethod === 'manual_member_input' ? 'pl-2.5' : 'cursor-help pl-8',
+                          typesForSelectedRule.length > 1 ? 'pl-8' : 'pl-2.5',
                           formErrors.calculationMethod ? '!border-rose-400 !bg-rose-50/50' : '',
                         ]"
-                        :title="
-                          calculationMethod === 'manual_member_input' ? undefined : selectedFormulaExpression
-                        "
+                        :disabled="calcRefLoading"
+                        :title="selectedFormulaExpression"
                       >
                         <option
-                          v-for="f in formulaOptions"
-                          :key="f.value"
-                          :value="f.value"
-                          :title="f.expression"
+                          v-for="row in calcRulesWithTypes"
+                          :key="row.code"
+                          :value="row.code"
+                          :title="row.label"
                         >
-                          {{ f.label }}
+                          {{ row.label }}
                         </option>
                       </select>
                       <i
-                        v-if="calculationMethod !== 'manual_member_input'"
+                        v-if="typesForSelectedRule.length > 1"
                         class="fas fa-calculator pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] text-slate-400"
                         aria-hidden="true"
                       />
                       <i class="fas fa-chevron-down pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-slate-400" />
                     </div>
                     <div
-                      v-if="calculationMethod === 'mean_by_ratio'"
+                      v-if="typesForSelectedRule.length > 1"
                       class="flex min-w-0 flex-1 flex-wrap items-center gap-x-4 gap-y-2 rounded-md border border-slate-200/90 bg-slate-50/70 px-2.5 py-2"
                     >
-                      <span class="text-[9px] font-bold uppercase tracking-wide text-slate-400">Tỉ lệ</span>
                       <label
+                        v-for="t in typesForSelectedRule"
+                        :key="t.code"
                         class="inline-flex cursor-pointer items-center gap-1.5 text-[11px] font-semibold text-slate-700"
                       >
                         <input
-                          v-model="meanRatioKind"
+                          v-model.number="calculationTypeCode"
                           type="radio"
-                          name="gm-kpi-mean-ratio"
-                          value="actual_plan"
+                          name="gm-kpi-calc-type"
+                          :value="t.code"
                           class="h-3.5 w-3.5 border-slate-300 text-slate-700 focus:ring-slate-400/40"
                         />
-                        Actual/Plan
-                      </label>
-                      <label
-                        class="inline-flex cursor-pointer items-center gap-1.5 text-[11px] font-semibold text-slate-700"
-                      >
-                        <input
-                          v-model="meanRatioKind"
-                          type="radio"
-                          name="gm-kpi-mean-ratio"
-                          value="plan_actual"
-                          class="h-3.5 w-3.5 border-slate-300 text-slate-700 focus:ring-slate-400/40"
-                        />
-                        Plan/Actual
-                      </label>
-                    </div>
-                    <div
-                      v-else-if="calculationMethod === 'mean_by_aggregate'"
-                      class="flex min-w-0 flex-1 flex-wrap items-center gap-x-4 gap-y-2 rounded-md border border-slate-200/90 bg-slate-50/70 px-2.5 py-2"
-                    >
-                      <span class="text-[9px] font-bold uppercase tracking-wide text-slate-400">Gộp</span>
-                      <label
-                        class="inline-flex cursor-pointer items-center gap-1.5 text-[11px] font-semibold text-slate-700"
-                      >
-                        <input
-                          v-model="meanAggregateKind"
-                          type="radio"
-                          name="gm-kpi-mean-agg"
-                          value="average"
-                          class="h-3.5 w-3.5 border-slate-300 text-slate-700 focus:ring-slate-400/40"
-                        />
-                        AVG
-                      </label>
-                      <label
-                        class="inline-flex cursor-pointer items-center gap-1.5 text-[11px] font-semibold text-slate-700"
-                      >
-                        <input
-                          v-model="meanAggregateKind"
-                          type="radio"
-                          name="gm-kpi-mean-agg"
-                          value="sum"
-                          class="h-3.5 w-3.5 border-slate-300 text-slate-700 focus:ring-slate-400/40"
-                        />
-                        SUM
+                        {{ t.label }}
                       </label>
                     </div>
                   </div>
@@ -1573,13 +1946,13 @@ async function save() {
 
                 <div>
                   <label class="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                    Description
+                    Mô tả mục tiêu
                     <span class="text-[9px] font-normal normal-case text-slate-400">(Optional)</span>
                   </label>
                   <textarea
                     v-model="description"
                     rows="2"
-                    placeholder="Giải thích ngắn gọn về mục tiêu và cách đo lường..."
+                    placeholder="Mô tả mục tiêu / cách đo — map sang target_description khi lưu..."
                     class="custom-scrollbar w-full resize-none rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-800 outline-none transition-all focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
                   />
                 </div>
@@ -1587,7 +1960,10 @@ async function save() {
             </div>
 
           <!-- Phân bổ / Giao việc -->
-          <div class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div
+            v-show="isEditingFromDiagnostics || createTab === 'custom'"
+            class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm"
+          >
             <div class="mb-3 flex items-center justify-between gap-2">
               <label class="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-800">
                 <span class="rounded-lg bg-slate-100 p-1.5 text-indigo-600">
@@ -1612,18 +1988,18 @@ async function save() {
                     @click.stop="toggleAssignPmDropdown"
                   >
                     <span v-if="selectedPMs.length === 0" class="w-full font-medium text-slate-400">
-                      Chọn một hoặc nhiều Project Manager...
+                      Chọn một hoặc nhiều quản lý department…
                     </span>
                     <span
                       v-for="pm in selectedPMs"
                       :key="pm"
                       class="inline-flex items-center gap-1 whitespace-nowrap rounded-md border border-blue-200 bg-blue-100 px-2 py-0.5 text-[10px] font-bold text-blue-700 shadow-sm"
                     >
-                      {{ pm }}
+                      {{ pmChipLabel(pm) }}
                       <button
                         type="button"
                         class="rounded p-0.5 text-blue-600 transition hover:bg-blue-200/60"
-                        aria-label="Bỏ chọn PM"
+                        aria-label="Bỏ chọn quản lý department"
                         @click.stop="togglePm(pm)"
                       >
                         <i class="fas fa-times text-[9px]" />
@@ -1638,19 +2014,35 @@ async function save() {
                     class="custom-scrollbar absolute left-0 z-50 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-xl"
                     @click.stop
                   >
-                    <label
-                      v-for="pm in PM_OPTIONS"
-                      :key="pm.val"
-                      class="group flex cursor-pointer items-center border-b border-slate-100 px-4 py-2.5 transition-colors last:border-0 hover:bg-slate-50"
+                    <p
+                      v-if="pmUsersError"
+                      class="border-b border-amber-100 bg-amber-50 px-4 py-2 text-[11px] text-amber-900"
                     >
-                      <input
-                        type="checkbox"
-                        class="mr-3 h-4 w-4 cursor-pointer rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                        :checked="pmSelected(pm.val)"
-                        @change="togglePm(pm.val)"
-                      />
-                      <span class="text-sm font-bold text-slate-700 group-hover:text-blue-600">{{ pm.label }}</span>
-                    </label>
+                      {{ pmUsersError }}
+                    </p>
+                    <div v-if="pmUsersLoading" class="px-4 py-3 text-xs font-medium text-slate-500">
+                      Đang tải danh sách quản lý department…
+                    </div>
+                    <template v-else>
+                      <label
+                        v-for="opt in pmUsers"
+                        :key="opt.id"
+                        class="group flex cursor-pointer items-center border-b border-slate-100 px-4 py-2.5 transition-colors last:border-0 hover:bg-slate-50"
+                      >
+                        <input
+                          type="checkbox"
+                          class="mr-3 h-4 w-4 cursor-pointer rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                          :checked="pmSelected(opt.id)"
+                          @change="togglePm(opt.id)"
+                        />
+                        <span class="text-sm font-bold text-slate-700 group-hover:text-blue-600">{{
+                          formatPmOptionLabel(opt)
+                        }}</span>
+                      </label>
+                      <p v-if="pmUsers.length === 0" class="px-4 py-3 text-xs text-slate-500">
+                        Không có department nào được gán manager.
+                      </p>
+                    </template>
                   </div>
                 </div>
 
@@ -1660,7 +2052,7 @@ async function save() {
                 >
                   <p class="mb-2 flex items-center gap-1.5 text-[10px] font-bold uppercase text-blue-800">
                     <i class="fas fa-crosshairs text-[10px]" />
-                    Set Specific Targets for PMs
+                    Mục tiêu theo từng quản lý
                   </p>
                   <div
                     v-for="pm in selectedPMs"
@@ -1669,7 +2061,7 @@ async function save() {
                   >
                     <span class="flex items-center gap-1.5 truncate text-[11px] font-bold text-slate-700 sm:w-1/2">
                       <i class="fas fa-user text-[10px] text-slate-400" />
-                      {{ PM_OPTIONS.find((p) => p.val === pm)?.label ?? pm }}
+                      {{ pmChipLabel(pm) }}
                     </span>
                     <div class="flex items-center gap-2 sm:w-1/2">
                       <input
@@ -1686,9 +2078,11 @@ async function save() {
 
               <!-- Independent: rank chips + member override -->
               <div v-else-if="kpiType === 'individual'" class="space-y-4">
+                <p v-if="ranksError" class="text-[11px] font-semibold text-amber-800">{{ ranksError }}</p>
+                <p v-else-if="ranksLoading" class="text-[11px] font-medium text-slate-500">Đang tải danh sách cấp bậc…</p>
                 <div class="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-5">
                   <label
-                    v-for="rk in RANK_OPTIONS"
+                    v-for="rk in rankOptionsForUi"
                     :key="rk.val"
                     class="flex cursor-pointer items-center gap-2 rounded-lg border bg-white p-2 shadow-sm transition-colors hover:bg-blue-50/50"
                     :class="
@@ -1760,8 +2154,18 @@ async function save() {
                       </button>
 
                       <div v-if="rankCard.isExpanded" class="border-t border-slate-100 px-4 py-3">
-                        <div v-if="rankCard.members.length === 0" class="text-xs font-medium text-slate-400">
-                          Không tìm thấy member phù hợp với bộ lọc trong rank này.
+                        <div v-if="rankCard.loadingMembers" class="text-xs font-medium text-slate-500">
+                          Đang tải danh sách member…
+                        </div>
+                        <p v-else-if="rankCard.membersLoadError" class="text-xs font-medium text-rose-700">
+                          {{ rankCard.membersLoadError }}
+                        </p>
+                        <div v-else-if="rankCard.members.length === 0" class="text-xs font-medium text-slate-400">
+                          {{
+                            individualRankMemberSearch.trim()
+                              ? 'Không tìm thấy member phù hợp với bộ lọc trong rank này.'
+                              : 'Không có nhân sự với cấp bậc này trong hệ thống.'
+                          }}
                         </div>
 
                         <div v-else class="space-y-2">
@@ -1851,6 +2255,18 @@ async function save() {
                       />
                     </div>
                   </div>
+                  <p
+                    v-if="promotionAssigneesError"
+                    class="shrink-0 border-b border-amber-100 bg-amber-50 px-3 py-2 text-[10px] font-semibold text-amber-800"
+                  >
+                    {{ promotionAssigneesError }}
+                  </p>
+                  <div
+                    v-if="promotionAssigneesLoading"
+                    class="shrink-0 border-b border-slate-100 px-3 py-6 text-center text-xs font-medium text-slate-500"
+                  >
+                    Đang tải danh sách nhân sự…
+                  </div>
                   <div class="custom-scrollbar flex-1 overflow-y-auto p-1">
                     <template v-if="filteredMemberOptions.length > 0">
                       <label
@@ -1886,95 +2302,131 @@ async function save() {
                       </label>
                     </template>
                     <p
-                      v-else
+                      v-else-if="!promotionAssigneesLoading"
                       class="px-3 py-4 text-center text-xs font-medium text-slate-500"
                     >
-                      Không có thành viên khớp bộ lọc.
+                      {{
+                        promotionAssigneeDirectOptions.length === 0
+                          ? 'Chưa có nhân sự khả dụng.'
+                          : 'Không có thành viên khớp bộ lọc.'
+                      }}
                     </p>
                   </div>
                 </div>
               </div>
             </div>
-          </div>
             </div>
+          </div>
 
-            <div
-              v-show="!isEditingFromDiagnostics && createKpiTab === 'template'"
-              class="space-y-4"
+          <!-- Tab: chọn KPI từ gói template -->
+          <div
+            v-show="!isEditingFromDiagnostics && createTab === 'template'"
+            class="space-y-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm"
+          >
+            <label
+              class="mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-500"
+              for="gm-template-package"
             >
-              <div>
-                <label class="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                  Gói template KPI
-                </label>
-                <div class="relative">
-                  <select
-                    v-model="selectedTemplatePackId"
-                    class="min-h-[38px] w-full cursor-pointer appearance-none rounded-md border border-slate-200 bg-white py-2 pl-2.5 pr-7 text-xs font-bold text-slate-800 outline-none transition-all"
-                  >
-                    <option value="">— Chọn template —</option>
-                    <option v-for="p in KPI_TEMPLATE_PACKS" :key="p.id" :value="p.id">{{ p.label }}</option>
-                  </select>
-                  <i class="fas fa-chevron-down pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-slate-400" />
-                </div>
-              </div>
-
-              <div
-                v-if="selectedTemplatePackId && templateKpiRows.length > 0"
-                class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"
+              Gói template KPI
+            </label>
+            <p v-if="templateApiError" class="mb-2 text-[11px] font-semibold text-rose-600">
+              {{ templateApiError }}
+            </p>
+            <div class="relative">
+              <select
+                id="gm-template-package"
+                v-model="templatePackageId"
+                :disabled="templatePackagesLoading || templatePackages.length === 0"
+                class="w-full cursor-pointer appearance-none rounded-lg border border-slate-200 bg-slate-50/80 py-2.5 pl-3 pr-9 text-sm font-bold text-slate-800 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                <div class="flex items-center gap-2 border-b border-slate-100 bg-slate-50/80 px-3 py-2">
-                  <input
-                    ref="templateSelectAllCheckboxRef"
-                    type="checkbox"
-                    class="h-3.5 w-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-400/40"
-                    :checked="templateAllRowsChecked"
-                    @change="onTemplateSelectAllChange"
-                  />
-                  <span class="text-[10px] font-bold uppercase tracking-wide text-slate-600">Chọn tất cả</span>
-                </div>
-                <div class="custom-scrollbar max-h-[min(50vh,420px)] overflow-y-auto">
-                  <div
-                    v-for="(group, gi) in templateKpiGroupedByBsc"
-                    :key="group.perspective"
-                    :class="gi > 0 ? 'border-t border-slate-200' : ''"
-                  >
+                <template v-if="templatePackages.length === 0">
+                  <option value="" disabled>
+                    {{ templatePackagesLoading ? 'Đang tải gói mẫu…' : 'Chưa có gói template trên hệ thống' }}
+                  </option>
+                </template>
+                <template v-else>
+                  <option value="" disabled>— Chọn gói template —</option>
+                  <option v-for="s in templatePackages" :key="s.id" :value="s.id">
+                    {{ s.name }}
+                  </option>
+                </template>
+              </select>
+              <i
+                class="fas fa-chevron-down pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400"
+                aria-hidden="true"
+              />
+            </div>
+            <p v-if="templateItemsLoading" class="text-[11px] font-medium text-slate-500">
+              Đang tải danh sách KPI trong gói…
+            </p>
+            <div
+              class="overflow-hidden rounded-lg border border-slate-200 bg-white"
+              :class="!templatePackageId.trim() ? 'pointer-events-none opacity-60' : ''"
+            >
+              <label
+                class="flex cursor-pointer items-center gap-3 border-b border-slate-100 px-4 py-3 text-slate-700"
+              >
+                <input
+                  ref="templateSelectAllInputRef"
+                  type="checkbox"
+                  class="h-4 w-4 shrink-0 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                  :disabled="!templatePackageId.trim()"
+                  :checked="templateSelectAllChecked"
+                  @change="toggleTemplateSelectAll()"
+                />
+                <span class="text-[10px] font-bold uppercase tracking-wider text-slate-600">Chọn tất cả</span>
+              </label>
+              <div class="divide-y divide-slate-100">
+                <p
+                  v-if="!templatePackageId.trim() && !templateItemsLoading"
+                  class="px-4 py-6 text-center text-xs font-medium text-slate-500"
+                >
+                  Chọn một gói template ở trên để tải danh sách KPI mẫu.
+                </p>
+                <p
+                  v-else-if="!templateItemsLoading && templateKpiRows.length === 0 && templatePackageId"
+                  class="px-4 py-6 text-center text-xs font-medium text-slate-500"
+                >
+                  Gói này chưa có KPI mẫu (kpi_template_items).
+                </p>
+                <template v-for="group in templateKpiDisplayGroups" :key="'tpl-grp-' + group.key">
+                  <div class="border-t border-slate-100 first:border-t-0">
                     <div
-                      class="border-b border-slate-100 bg-gradient-to-r from-slate-50 to-slate-50/40 px-3 py-2"
+                      class="flex items-center gap-2 border-b border-slate-100/80 bg-slate-50/90 px-4 py-2"
                     >
-                      <span class="text-[10px] font-bold uppercase tracking-wide text-slate-600">
-                        {{ group.label }}
-                      </span>
+                      <span class="text-[11px] font-bold uppercase tracking-wider text-slate-800">{{
+                        group.label
+                      }}</span>
+                      <span
+                        class="rounded-md border border-slate-200/80 bg-white px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-slate-600"
+                        >{{ group.rows.length }} KPI</span
+                      >
                     </div>
-                    <ul class="divide-y divide-slate-100">
-                      <li
+                    <div class="divide-y divide-slate-100">
+                      <label
                         v-for="row in group.rows"
-                        :key="row.id"
-                        class="flex items-center gap-3 px-3 py-2.5 text-xs hover:bg-slate-50/80"
+                        :key="row.key"
+                        class="flex cursor-pointer items-start gap-3 px-4 py-3 transition-colors hover:bg-slate-50/80"
                       >
                         <input
                           type="checkbox"
-                          class="h-3.5 w-3.5 shrink-0 rounded border-slate-300 text-blue-600 focus:ring-blue-400/40"
-                          :checked="!!templateKpiSelection[row.id]"
-                          @change="onToggleTemplateRow(row.id, $event)"
+                          class="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                          :checked="templateSelectedKeys.has(row.key)"
+                          @change="toggleTemplateRowKey(row.key)"
                         />
-                        <div class="flex min-w-0 flex-1 items-center gap-2">
-                          <p class="min-w-0 flex-1 truncate font-semibold text-slate-800">
-                            {{ row.name }}
+                        <div class="min-w-0 flex-1">
+                          <p class="text-sm font-bold text-slate-800">{{ row.label }}</p>
+                          <p class="mt-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                            {{ row.kindLabel }}
                           </p>
-                          <GmStrategicKpiTypeTag :type="row.kind" size="sm" class="shrink-0" />
                         </div>
-                      </li>
-                    </ul>
+                      </label>
+                    </div>
                   </div>
-                </div>
+                </template>
               </div>
-              <p
-                v-else-if="selectedTemplatePackId"
-                class="rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-[11px] text-amber-900"
-              >
-                Gói template không có KPI.
-              </p>
             </div>
+          </div>
 
           </div>
 
@@ -1988,27 +2440,32 @@ async function save() {
             Cancel
           </button>
           <button
-            v-if="isEditingFromDiagnostics || createKpiTab === 'custom'"
+            v-if="!isEditingFromDiagnostics && createTab === 'template'"
+            type="button"
+            class="flex items-center gap-1.5 rounded-lg bg-blue-600 px-6 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:bg-blue-700 disabled:opacity-60"
+            :disabled="
+              savingTemplateBatch ||
+              templatePackagesLoading ||
+              templateItemsLoading ||
+              !templatePackageId.trim() ||
+              templateSelectedKeys.size === 0
+            "
+            @click="confirmTemplateBatchCreate"
+          >
+            <i v-if="savingTemplateBatch" class="fas fa-spinner fa-spin text-sm" aria-hidden="true" />
+            <i v-else class="fas fa-layer-group text-sm" aria-hidden="true" />
+            {{ savingTemplateBatch ? 'Đang tạo…' : 'Tạo các KPI đã chọn' }}
+          </button>
+          <button
+            v-else
             type="button"
             class="flex items-center gap-1.5 rounded-lg bg-blue-600 px-6 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:bg-blue-700 disabled:opacity-60"
             :disabled="saving"
             @click="save"
           >
-            <i v-if="saving" class="fas fa-spinner fa-spin text-sm" />
-            <i v-else class="fas fa-save text-sm" />
+            <i v-if="saving" class="fas fa-spinner fa-spin text-sm" aria-hidden="true" />
+            <i v-else class="fas fa-save text-sm" aria-hidden="true" />
             {{ saving ? 'Saving...' : isEditingFromDiagnostics ? 'Lưu thay đổi' : 'Create KPI' }}
-          </button>
-          <button
-            v-if="!isEditingFromDiagnostics && createKpiTab === 'template'"
-            type="button"
-            class="flex items-center gap-1.5 rounded-lg bg-blue-600 px-6 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-            :disabled="saving || !canBulkCreateFromTemplate"
-            :title="templateBulkCreateDisabledTitle || undefined"
-            @click="bulkCreateFromTemplate"
-          >
-            <i v-if="saving" class="fas fa-spinner fa-spin text-sm" />
-            <i v-else class="fas fa-layer-group text-sm" />
-            {{ saving ? 'Đang tạo...' : 'Tạo các KPI đã chọn' }}
           </button>
         </div>
         </div>
