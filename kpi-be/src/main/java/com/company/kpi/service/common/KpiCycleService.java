@@ -32,8 +32,8 @@ public class KpiCycleService {
         KpiCycle kpiCycle = optionalKpiCycle.get();
         KpiCycleResponse response = modelMapper.map(kpiCycle, KpiCycleResponse.class);
         String activePhase = calculateActivePhase(
-                kpiCycle.getGoalSettingDeadline(),
-                kpiCycle.getMidYearDeadline()
+                kpiCycle.getGoalSettingEnd(),
+                kpiCycle.getMidYearEnd()
         );
         response.setActivePhase(activePhase);
 

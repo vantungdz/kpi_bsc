@@ -15,14 +15,20 @@ const isLoading = ref(true)
 
 const cycleData = ref<{
   activePhase: string | null
-  goalSettingDeadline: string | null
-  midYearDeadline: string | null
-  endYearDeadline: string | null
+  goalSettingStart: string | null
+  goalSettingEnd: string | null
+  midYearStart: string | null
+  midYearEnd: string | null
+  endYearStart: string | null
+  endYearEnd: string | null
 }>({
   activePhase: null,
-  goalSettingDeadline: null,
-  midYearDeadline: null,
-  endYearDeadline: null
+  goalSettingStart: null,
+  goalSettingEnd: null,
+  midYearStart: null,
+  midYearEnd: null,
+  endYearStart: null,
+  endYearEnd: null
 })
 
 watch(
@@ -34,17 +40,23 @@ watch(
 
         cycleData.value = {
           activePhase: responseData.activePhase,
-          goalSettingDeadline: responseData.goalSettingDeadline,
-          midYearDeadline: responseData.midYearDeadline,
-          endYearDeadline: responseData.endYearDeadline
+          goalSettingStart: responseData.goalSettingStart,
+          goalSettingEnd: responseData.goalSettingEnd,
+          midYearStart: responseData.midYearStart,
+          midYearEnd: responseData.midYearEnd,
+          endYearStart: responseData.endYearStart,
+          endYearEnd: responseData.endYearEnd
         }
       } catch (error) {
         console.error("Lỗi khi tải cycle data:", error)
         cycleData.value = {
           activePhase: null,
-          goalSettingDeadline: null,
-          midYearDeadline: null,
-          endYearDeadline: null
+          goalSettingStart: null,
+          goalSettingEnd: null,
+          midYearStart: null,
+          midYearEnd: null,
+          endYearStart: null,
+          endYearEnd: null
         }
       } finally {
         isLoading.value = false
@@ -59,29 +71,37 @@ watch(
 type PhaseStatus = 'upcoming' | 'active' | 'complete'
 
 const dynamicPhases = computed(() => {
-  const formatSub = (deadline: string | null, fallback: string) => {
-    if (!deadline) return fallback
-    return `Deadline: ${dayjs(deadline).format('DD/MM/YYYY')}`
+  const formatDuration = (start: string | null, end: string | null, fallback: string) => {
+    if (!start || !end) return fallback
+
+    const startMonth = dayjs(start).format('MMM')
+    const endMonth = dayjs(end).format('MMM')
+
+    if (startMonth === endMonth) {
+      return startMonth
+    }
+
+    return `${startMonth} - ${endMonth}`
   }
 
   return [
     {
       key: 'setting',
       title: 'KPI Setting',
-      sub: formatSub(cycleData.value.goalSettingDeadline, 'Q1'),
-      deadline: cycleData.value.goalSettingDeadline,
+      sub: formatDuration(cycleData.value.goalSettingStart, cycleData.value.goalSettingEnd, 'Q1'),
+      deadline: cycleData.value.goalSettingEnd,
     },
     {
       key: 'mid',
       title: 'Mid-Year Review',
-      sub: formatSub(cycleData.value.midYearDeadline, 'Q2-Q3'),
-      deadline: cycleData.value.midYearDeadline,
+      sub: formatDuration(cycleData.value.midYearStart, cycleData.value.midYearEnd, 'Q2-Q3'),
+      deadline: cycleData.value.midYearEnd,
     },
     {
       key: 'yearEnd',
       title: 'Year-End Review',
-      sub: formatSub(cycleData.value.endYearDeadline, 'Q4'),
-      deadline: cycleData.value.endYearDeadline,
+      sub: formatDuration(cycleData.value.endYearStart, cycleData.value.endYearEnd, 'Q4'),
+      deadline: cycleData.value.endYearEnd,
     },
   ]
 })

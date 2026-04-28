@@ -15,6 +15,13 @@ function gmStrategicKpiKindFromLeaderAssignmentType(t: string | null | undefined
   return 'individual'
 }
 
+function gmStrategicKpiKindFromRequestedType(t: string | null | undefined): GmStrategicKpiKind {
+  const u = String(t ?? '').trim().toUpperCase()
+  if (u === 'PROMOTION') return 'promotion'
+  if (u === 'INDIVIDUAL') return 'individual'
+  return 'individual'
+}
+
 function stripHtml(s: string): string {
   if (!s) return ''
   return s
@@ -52,12 +59,16 @@ function formatFinalScore(a: LeaderKpiAssignment): string {
  * thành dòng hiển thị cho `GmGmPersonalKpiPanel`.
  */
 export function mergeLeaderKpiInfoResponsesToGmPersonalRows(
-  responses: (LeaderKpiInformationResponse | null | undefined)[],
+  inputs: {
+    requestedType: 'INDIVIDUAL' | 'PROMOTION'
+    response: LeaderKpiInformationResponse | null | undefined
+  }[],
 ): GmPersonalKpiRowMock[] {
   const seen = new Set<string>()
   const out: GmPersonalKpiRowMock[] = []
 
-  for (const resp of responses) {
+  for (const input of inputs) {
+    const resp = input.response
     if (!resp?.categories?.length) continue
     for (const cat of resp.categories) {
       const bsc = inferBscFromCategoryName(String(cat.name ?? ''))
@@ -65,11 +76,18 @@ export function mergeLeaderKpiInfoResponsesToGmPersonalRows(
         const id = String(a.assignmentId ?? '').trim()
         if (!id || seen.has(id)) continue
         seen.add(id)
+        const fromAssignment = gmStrategicKpiKindFromLeaderAssignmentType(
+          (a as LeaderKpiAssignment & { type?: string | null }).type,
+        )
+        const kpiType =
+          fromAssignment === 'individual'
+            ? gmStrategicKpiKindFromRequestedType(input.requestedType)
+            : fromAssignment
         out.push({
           id,
           diagnosticsFallbackGroup: bsc,
           objective: String(a.kpiName ?? a.kpiCode ?? 'KPI').trim() || 'KPI',
-          kpiType: gmStrategicKpiKindFromLeaderAssignmentType(a.type),
+          kpiType,
           target: stripHtml(String(a.targetDescription ?? '')) || '—',
           weight: Number.isFinite(Number(a.weight)) ? Math.round(Number(a.weight)) : 0,
           actual: '—',

@@ -6,7 +6,7 @@ export const CALC_RULE_WEIGHTED_AVG = 804
 
 export type EvidenceDetailMode = 'weighted' | 'comment' | 'workAmount'
 
-export type PlanActualPair = { plan: string; actual: string }
+export type PlanActualPair = { plan: string; actual: string; comment?: string }
 export type UrlNamePair = { url: string; name: string }
 export type WorkAmountRow = { month: number; spentHours: number; standardHours: number }
 
@@ -21,6 +21,8 @@ export type WeightedFormState = {
 export type CommentFormState = {
   note: string
   files: UrlNamePair[]
+  /** KPI 803: Plan/Actual — cùng cấu trúc 804, lưu chung note + files */
+  planActualRecords: PlanActualPair[]
 }
 
 export type WorkAmountFormState = {
@@ -62,11 +64,12 @@ export function parseWeightedPayload(json: string | null | undefined): WeightedF
   const pairs = Array.isArray(o.planActualRecords)
     ? (o.planActualRecords as unknown[])
         .map((x) => {
-          if (!x || typeof x !== 'object') return { plan: '', actual: '' }
+          if (!x || typeof x !== 'object') return { plan: '', actual: '', comment: '' }
           const r = x as Record<string, unknown>
           return {
             plan: String(r.plan ?? ''),
             actual: String(r.actual ?? ''),
+            comment: String(r.comment ?? ''),
           }
         })
         .filter(Boolean)
@@ -84,14 +87,18 @@ export function parseWeightedPayload(json: string | null | undefined): WeightedF
     text: String(o.text ?? ''),
     result: String(o.result ?? ''),
     note: String(o.note ?? o.text ?? ''),
-    planActualRecords: pairs.length ? pairs : [{ plan: '', actual: '' }],
+    planActualRecords: pairs.length ? pairs : [{ plan: '', actual: '', comment: '' }],
     evd: evd.length ? evd : [{ url: '', name: '' }],
   }
 }
 
 export function buildWeightedPayload(s: WeightedFormState): Record<string, unknown> {
   const planActualRecords = s.planActualRecords
-    .map(({ plan, actual }) => ({ plan: plan.trim(), actual: actual.trim() }))
+    .map(({ plan, actual, comment }) => ({
+      plan: plan.trim(),
+      actual: actual.trim(),
+      ...(comment?.trim() ? { comment: comment.trim() } : {}),
+    }))
     .filter((r) => r.plan || r.actual)
   const evd = s.evd
     .map(({ url, name }) => ({ url: url.trim(), name: name.trim() }))
@@ -116,19 +123,48 @@ export function parseCommentPayload(json: string | null | undefined): CommentFor
         })
         .filter(Boolean)
     : []
+  const planPairs = Array.isArray(o.planActualRecords)
+    ? (o.planActualRecords as unknown[])
+        .map((x) => {
+          if (!x || typeof x !== 'object') return { plan: '', actual: '', comment: '' }
+          const r = x as Record<string, unknown>
+          return { plan: String(r.plan ?? ''), actual: String(r.actual ?? ''), comment: String(r.comment ?? '') }
+        })
+        .filter(Boolean)
+    : []
   return {
-    note: String(o.note ?? ''),
+    // Đồng bộ legacy / BE: từng dùng `text` thay `note` (A.x COMMENT); cột tóm tắt vẫn gộp ở formatEvidenceJsonSummary
+    note: String(o.note ?? o.text ?? ''),
     files: files.length ? files : [{ url: '', name: '' }],
+    planActualRecords: planPairs,
   }
 }
 
+function joinActualsFromPlanRecords(rows: PlanActualPair[]): string {
+  const parts = rows.map((r) => r.actual.trim()).filter(Boolean)
+  if (!parts.length) return ''
+  return parts.join(' | ')
+}
+
 export function buildCommentPayload(s: CommentFormState): Record<string, unknown> {
+  const planActualRecords = s.planActualRecords
+    .map(({ plan, actual, comment }) => ({
+      plan: plan.trim(),
+      actual: actual.trim(),
+      ...(comment?.trim() ? { comment: comment.trim() } : {}),
+    }))
+    .filter((r) => r.plan || r.actual)
   const files = s.files
     .map(({ url, name }) => ({ url: url.trim(), name: name.trim() }))
     .filter((r) => r.url || r.name)
   const out: Record<string, unknown> = {}
   if (s.note.trim()) out.note = s.note.trim()
   if (files.length) out.files = files
+  if (planActualRecords.length) {
+    out.planActualRecords = planActualRecords
+    const result = joinActualsFromPlanRecords(planActualRecords)
+    if (result) out.result = result
+  }
   return out
 }
 
@@ -142,23 +178,43 @@ const MONTH_DEFAULT = (): WorkAmountRow[] =>
 export function parseWorkAmountPayload(json: string | null | undefined): WorkAmountFormState {
   const o = safeParse(json)
   let workAmounts = MONTH_DEFAULT()
-  if (Array.isArray(o.workAmounts)) {
+  const rawWorkAmounts = Array.isArray(o.workAmounts) ? o.workAmounts : undefined
+  const rawLegacyWorkAmounts = Array.isArray(o.waTimeRecords) ? o.waTimeRecords : undefined
+
+  const parseRows = (source: unknown[]): WorkAmountRow[] => {
     const byMonth = new Map<number, WorkAmountRow>()
-    for (const x of o.workAmounts as unknown[]) {
+    for (const x of source as unknown[]) {
       if (!x || typeof x !== 'object') continue
       const r = x as Record<string, unknown>
       const m = Number(r.month)
       if (!Number.isFinite(m) || m < 1 || m > 12) continue
       byMonth.set(m, {
         month: m,
-        spentHours: Number(r.spentHours ?? 0) || 0,
-        standardHours: Number(r.standardHours ?? 0) || 0,
+        spentHours: Number(r.spentHours ?? r.spent ?? 0) || 0,
+        standardHours: Number(r.standardHours ?? r.standard ?? 0) || 0,
       })
     }
     if (byMonth.size > 0) {
-      workAmounts = MONTH_DEFAULT().map((row) => byMonth.get(row.month) ?? row)
+      return MONTH_DEFAULT().map((row) => byMonth.get(row.month) ?? row)
     }
+    return []
   }
+
+  let parsedWorkAmounts: WorkAmountRow[] = []
+  if (rawWorkAmounts) {
+    parsedWorkAmounts = parseRows(rawWorkAmounts)
+    const hasValues = parsedWorkAmounts.some(w => w.spentHours !== 0 || w.standardHours !== 0)
+    if (!hasValues && rawLegacyWorkAmounts) {
+      parsedWorkAmounts = parseRows(rawLegacyWorkAmounts)
+    }
+  } else if (rawLegacyWorkAmounts) {
+    parsedWorkAmounts = parseRows(rawLegacyWorkAmounts)
+  }
+
+  if (parsedWorkAmounts.length > 0) {
+    workAmounts = parsedWorkAmounts
+  }
+
   const files = Array.isArray(o.files)
     ? (o.files as unknown[])
         .map((x) => {

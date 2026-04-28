@@ -6,6 +6,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -13,8 +14,25 @@ import java.util.UUID;
 @Builder
 public class LeaderKpiInformationResponse {
     private Integer year;
+    private LeaderKpiCycleInfo kpiCycle;
     private List<LeaderKpiCategoryGroup> categories;
     private LeaderKpiSummary kpiSummary;
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class LeaderKpiCycleInfo {
+        private UUID id;
+        private Integer year;
+        private String name;
+        private OffsetDateTime goalSettingStart;
+        private OffsetDateTime goalSettingEnd;
+        private OffsetDateTime midYearStart;
+        private OffsetDateTime midYearEnd;
+        private OffsetDateTime endYearStart;
+        private OffsetDateTime endYearEnd;
+        private String activePhase;
+    }
 
     @Data
     @NoArgsConstructor
@@ -42,7 +60,8 @@ public class LeaderKpiInformationResponse {
         private String kpiCode;
         private String targetDescription;
         private Double weight;
-        private String statusCode;
+        private Integer statusCode;
+        private String statusName;
         private String statusDesc;
         // Mid-year: chỉ có self score
         private Double midSelfScore;

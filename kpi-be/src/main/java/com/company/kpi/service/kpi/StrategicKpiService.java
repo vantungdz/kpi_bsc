@@ -5,17 +5,14 @@ import com.company.kpi.aggregate.KpiAssignmentUserTargetRow;
 import com.company.kpi.aggregate.KpiInfoForDeleteRow;
 import com.company.kpi.aggregate.KpiStrategicEditMasterRow;
 import com.company.kpi.aggregate.UserJobTitlePair;
+import com.company.kpi.common.constant.Constant;
 import com.company.kpi.common.Constants;
 import com.company.kpi.common.exception.AppException;
 import com.company.kpi.entity.KpiAssignment;
-import com.company.kpi.mapper.KpiAssignmentMapper;
-import com.company.kpi.mapper.KpiCategoryMapper;
-import com.company.kpi.mapper.KpiCycleMapper;
-import com.company.kpi.mapper.KpiMasterMapper;
-import com.company.kpi.mapper.KpisInformationMapper;
-import com.company.kpi.mapper.UserMapper;
+import com.company.kpi.mapper.*;
 import com.company.kpi.request.kpi.AssignMemberRequest;
 import com.company.kpi.request.kpi.CreateStrategicKpiRequest;
+import com.company.kpi.request.kpi.UpdateKpiStatusRequest;
 import com.company.kpi.response.gm.GmKpiCategoryResponse;
 import com.company.kpi.response.kpi.StrategicKpiEditResponse;
 import com.company.kpi.response.kpi.StrategicKpiResponse;
@@ -26,7 +23,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -58,7 +54,7 @@ public class StrategicKpiService {
     // ── CREATE ────────────────────────────────────────────────────────────────
 
     @Transactional
-    public StrategicKpiResponse create(CreateStrategicKpiRequest req, UUID actorId) {
+    public StrategicKpiResponse create(CreateStrategicKpiRequest req, UUID actorId, String role) {
         if (req.getEditingKpiInformationId() != null) {
             throw AppException.badRequest(
                     "Updating an existing KPI via this endpoint is not supported; omit editingKpiInformationId.");
@@ -80,6 +76,10 @@ public class StrategicKpiService {
         boolean important = Boolean.TRUE.equals(req.getIsImportant());
 
         List<UUID> assigneeUserIds = resolveAssigneeUserIds(req, type);
+        if ((Constant.ROLE_MEMBER.equals(role) || Constant.ROLE_LEADER.equals(role)) && !assigneeUserIds.contains(actorId)) {
+            assigneeUserIds.add(actorId);
+        }
+
 
         UUID masterId = UUID.randomUUID();
         UUID infoId   = UUID.randomUUID();
@@ -226,7 +226,7 @@ public class StrategicKpiService {
 
     // ── GET FOR EDIT ──────────────────────────────────────────────────────────
 
-    public StrategicKpiEditResponse getForEdit(UUID kpiInformationId) {
+    public StrategicKpiEditResponse getForEdit(UUID kpiInformationId, UUID actorId) {
         KpiStrategicEditMasterRow row = kpisInformationMapper.selectStrategicKpiEditMaster(kpiInformationId);
         if (row == null) {
             throw AppException.notFound("KPI information not found: " + kpiInformationId);
@@ -266,14 +266,23 @@ public class StrategicKpiService {
                 }
             }
             b.assignPMs(new ArrayList<>(pmOrder)).pmTargets(pmTargets);
-        } else {
-            List<UUID> memberIds = assigns.stream()
-                    .map(KpiAssignmentUserTargetRow::getUserId)
-                    .filter(Objects::nonNull)
-                    .distinct()
-                    .toList();
-            b.memberIds(memberIds);
         }
+
+        List<UUID> memberIds = assigns.stream()
+                .map(KpiAssignmentUserTargetRow::getUserId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        Map<String, Object> memberTargets = assigns.stream()
+                .filter(targetRow -> targetRow.getUserId() != null)
+                .filter(targetRow -> targetRow.getTargetValue() != null)
+                .collect(Collectors.toMap(
+                        targetRow -> targetRow.getUserId().toString(),
+                        KpiAssignmentUserTargetRow::getTargetValue,
+                        (existing, replacement) -> existing
+                ));
+        b.memberIds(memberIds);
+        b.memberTargets(memberTargets);
 
         return b.build();
     }
@@ -390,7 +399,7 @@ public class StrategicKpiService {
 
     private List<UUID> resolveAssigneeUserIds(CreateStrategicKpiRequest req, int type) {
         List<UUID> ids = (type == TYPE_TEAM) ? req.getAssignPMs() : req.getMemberIds();
-        if (ids == null || ids.isEmpty()) return List.of();
+        if (ids == null || ids.isEmpty()) return new ArrayList<>();
         List<UUID> distinct = new ArrayList<>(new LinkedHashSet<>(ids));
         List<UUID> existing = userMapper.listExistingActiveUserIds(distinct);
         if (existing.size() != distinct.size()) {
@@ -508,5 +517,23 @@ public class StrategicKpiService {
         if (!rowsToInsert.isEmpty()) {
             kpiAssignmentMapper.insertKpiAssignmentsWithEntity(rowsToInsert);
         }
+    }
+
+    @Transactional
+    public int updateStatusesKpi(UpdateKpiStatusRequest request, UUID currentUserId) {
+
+        // Thực thi update hàng loạt
+        int updatedCount = kpiAssignmentMapper.updateKpiStatuses(
+                currentUserId,
+                request.getCycleId(),
+                request.getStatusCode(),
+                request.isPromotion()
+        );
+
+        if (updatedCount == 0) {
+            throw AppException.badRequest("Don't find KPI to update.");
+        }
+
+        return updatedCount;
     }
 }

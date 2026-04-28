@@ -2,6 +2,8 @@ package com.company.kpi.mapper;
 
 import com.company.kpi.aggregate.KpiAssignmentInsertRow;
 import com.company.kpi.aggregate.KpiAssignmentUserTargetRow;
+import com.company.kpi.aggregate.GmTimelineIssueRow;
+import com.company.kpi.aggregate.KpiAssignmentDetailAggregate;
 import com.company.kpi.aggregate.PmDashboardAggregate;
 import com.company.kpi.entity.KpiAssignment;
 import com.company.kpi.response.gm.GmApprovedKpiQueueItemResponse;
@@ -36,8 +38,8 @@ public interface KpiAssignmentMapper {
             @Param("id") UUID id,
             @Param("cycleId") UUID cycleId,
             @Param("userId") UUID userId,
-            @Param("midSelfScore") BigDecimal midSelfScore,
-            @Param("endSelfScore") BigDecimal endSelfScore,
+            @Param("midSelfScore") Double mid,
+            @Param("endSelfScore") Double end,
             @Param("evidences") String evidences);
 
     int submitAssignmentsForMidYear(
@@ -80,6 +82,12 @@ public interface KpiAssignmentMapper {
             @Param("kpiInfoId") UUID kpiInfoId,
             @Param("cycleId") UUID cycleId);
 
+    List<KpiAssignmentUserTargetRow> listAssignmentUserTargetsByDepartment(
+            @Param("kpiInfoId") UUID kpiInfoId,
+            @Param("cycleId") UUID cycleId,
+            UUID actorId,
+            UUID departmentId);
+
     int softDeleteKpiAssignmentById(
             @Param("assignmentId") UUID assignmentId,
             @Param("cycleId") UUID cycleId,
@@ -121,4 +129,28 @@ public interface KpiAssignmentMapper {
             @Param("cycleId") UUID cycleId,
             @Param("newStatus") int newStatus,
             @Param("updatedBy") UUID updatedBy);
+
+    /**
+     * Timeline issues: tất cả {@code kpi_assignments} có status 401–603 trong chu kỳ.
+     * Service tự phân loại phase + issue type. DISTINCT ON (ka.id) để tránh duplicate.
+     */
+    List<GmTimelineIssueRow> listTimelineAssignments(@Param("cycleId") UUID cycleId);
+
+    /**
+     * Not-submitted: ASM đang ở {@code statuses} (405 hoặc 405+503) trong review window của phase.
+     * {@code phase}: "mid" = kiểm tra {@code mid_year_start/end}; "yearEnd" = {@code end_year_start/end}.
+     */
+    List<GmTimelineIssueRow> listInProgressWithinPhaseWindow(
+            @Param("cycleId") UUID cycleId,
+            @Param("statuses") List<Integer> statuses,
+            @Param("phase") String phase);
+
+    int updateKpiStatuses(
+        @Param("userId") UUID userId,
+        @Param("cycleId") UUID cycleId,
+        @Param("statusCode") Integer statusCode,
+        @Param("promotion") Boolean promotion
+    );
+
+    List<KpiAssignmentDetailAggregate> findKpiDetailsByUserAndCycle(@Param("userId") UUID userId, @Param("cycleId") UUID cycleId);
 }

@@ -23,6 +23,7 @@ import {
   hierarchyInactiveKpiToDeptKpiMock,
 } from '@/utils/gm-strategic-create-preview'
 import { gmKpiService } from '@/services/modules/kpi-gm.service'
+import type { GmProcessTimelineApiResponse } from '@/services/modules/kpi-gm.service'
 import { leaderKpiService } from '@/services/modules/kpi-leader.service'
 import type { GmKpiCycleOption } from '@/types/gm-kpi-cycle'
 import { mapGmApprovedKpiQueueItemsToHierarchyRows } from '@/utils/mapGmApprovedKpiQueueToHierarchy'
@@ -48,11 +49,11 @@ const settingsNavItems = [
 ]
 
 /** Trang Organization đăng ký `open` — nút header «Thêm phòng ban mới» (route create-department). */
-const gmOrgSectionDrawer = reactive<{ open: () => void }>({ open: () => {} })
+const gmOrgSectionDrawer = reactive<{ open: () => void }>({ open: () => { } })
 provide('gmOrgSectionDrawer', gmOrgSectionDrawer)
 
 /** Trang KPI Template — trang gán `openCreate` để header gọi mở drawer tạo bộ mẫu. */
-const gmKpiTemplateLibrary = reactive<{ openCreate: () => void }>({ openCreate: () => {} })
+const gmKpiTemplateLibrary = reactive<{ openCreate: () => void }>({ openCreate: () => { } })
 provide('gmKpiTemplateLibrary', gmKpiTemplateLibrary)
 
 /** Tab Đánh giá / Approved KPI / KPI cá nhân — sidebar Overview active khi `?tab=pm`, `?tab=approved`, `?tab=personal`. */
@@ -149,7 +150,7 @@ provide('gmEvaluationYear', gmEvaluationYear)
 /** UUID `kpi_cycles.id` — tab Đánh giá gọi API hub theo chu kỳ đang chọn. */
 provide('gmSelectedCycleId', selectedCycleId)
 
-/** KPI cá nhân GM: `GET /kpi/leader/kpi-info` ×2 (INDIVIDUAL + PROMOTION), user = JWT. */
+/** KPI cá nhân GM: `GET /kpi/leader/kpi-info` ×2 (INDIVIDUAL + PROMOTION), user = JWT. Load khi mở tab «KPI cá nhân» / đổi chu kỳ trong tab đó. */
 const gmPersonalKpiRows = ref<GmPersonalKpiRowMock[]>([])
 const gmPersonalKpiLoading = ref(false)
 
@@ -172,11 +173,17 @@ async function loadGmPersonalKpiRows() {
       const s = settled[i]!
       const label = i === 0 ? 'INDIVIDUAL' : 'PROMOTION'
       if (s.status === 'fulfilled') {
-        parts.push(s.value)
+        parts.push({
+          requestedType: label,
+          response: s.value,
+        })
       } else {
         const msg = s.reason instanceof Error ? s.reason.message : String(s.reason)
         errs.push(`${label}: ${msg}`)
-        parts.push(null)
+        parts.push({
+          requestedType: label,
+          response: null,
+        })
       }
     }
     gmPersonalKpiRows.value = mergeLeaderKpiInfoResponsesToGmPersonalRows(parts)
@@ -200,9 +207,11 @@ async function loadGmPersonalKpiRows() {
   }
 }
 
+/** KPI cá nhân (INDIVIDUAL + PROMOTION): fetch khi vào tab «KPI cá nhân» hoặc đổi chu kỳ trong tab đó — không prefetch khi đang xem Diagnostics. */
 watch(
-  gmEvaluationYear,
-  () => {
+  [dashboardWorkspaceTab, gmEvaluationYear],
+  ([tab]) => {
+    if (tab !== 'personal') return
     void loadGmPersonalKpiRows()
   },
   { immediate: true },
@@ -247,6 +256,20 @@ onMounted(() => {
 
 const investigatingKPI = ref<string | null>(null)
 const selectedDept = ref<any>(null)
+
+/** Process Timeline data từ API — null khi chưa load hoặc đang loading. */
+const processTimelineData = ref<GmProcessTimelineApiResponse | null>(null)
+
+async function loadProcessTimeline() {
+  const cid = selectedCycleId.value
+  if (!cid) return
+  try {
+    processTimelineData.value = await gmKpiService.getProcessTimeline(cid)
+  } catch {
+    // giữ null — GmProcessTimeline sẽ fallback về trạng thái mặc định (không có issue)
+    processTimelineData.value = null
+  }
+}
 
 watch(
   () => route.name,
@@ -511,6 +534,9 @@ async function onStrategicKpiSaved(payload: Record<string, unknown> | Record<str
   } catch {
     /* bảng vẫn có thể lệch */
   }
+  if (dashboardWorkspaceTab.value === 'personal') {
+    void loadGmPersonalKpiRows()
+  }
 
   const allErr = [...editErrors, ...createErrors]
   if (allErr.length > 0) {
@@ -588,6 +614,7 @@ async function confirmDeleteKpi() {
         return
       }
       await loadStrategicDiagnosticsFromApi()
+      void loadProcessTimeline()
       closeDeleteKpiModal()
       showGmToast(`Đã xóa KPI «${name}».`, 4500)
     } catch (e: unknown) {
@@ -639,6 +666,7 @@ async function confirmDeleteKpi() {
   }
 
   closeDeleteKpiModal()
+  void loadProcessTimeline()
   showGmToast(`Đã xóa KPI «${name}».`, 4500)
 }
 
@@ -664,6 +692,7 @@ watch(selectedCycleId, (id) => {
   removedDiagnosticsKpiIdsByCycle.value = {}
   void loadStrategicDiagnosticsFromApi()
   void loadApprovedKpiQueueFromApi()
+  void loadProcessTimeline()
 }, { immediate: true })
 
 async function onApproveInactiveKpi(kpi: GmHierarchyKpi) {
@@ -674,6 +703,7 @@ async function onApproveInactiveKpi(kpi: GmHierarchyKpi) {
     try {
       await gmKpiService.decideApprovedKpiQueue({ cycleId: cid, assignmentId: aid, approve: true })
       await loadApprovedKpiQueueFromApi()
+      void loadProcessTimeline()
       showGmToast(`Đã duyệt (403→404) — «${title}».`, 4500)
     } catch (e: unknown) {
       showGmToast(e instanceof Error ? e.message : 'Không cập nhật được trạng thái', 5000, 'error')
@@ -700,6 +730,7 @@ async function onRejectInactiveKpi(kpi: GmHierarchyKpi) {
     try {
       await gmKpiService.decideApprovedKpiQueue({ cycleId: cid, assignmentId: aid, approve: false })
       await loadApprovedKpiQueueFromApi()
+      void loadProcessTimeline()
       showGmToast(`Đã từ chối — «${title}».`, 4500, 'info')
     } catch (e: unknown) {
       showGmToast(e instanceof Error ? e.message : 'Không cập nhật được trạng thái', 5000, 'error')
@@ -753,19 +784,13 @@ function closeModal() { showKpiModal.value = false; selectedMember.value = null 
       <!-- Nav -->
       <nav class="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
         <p class="px-2 text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-3">Navigation</p>
-        <RouterLink
-          v-for="item in navItems"
-          :key="item.to"
-          :to="item.to"
+        <RouterLink v-for="item in navItems" :key="item.to" :to="item.to"
           class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 group border"
           :class="isNavItemActive(item.to)
             ? 'bg-blue-50 text-blue-700 border-blue-100 shadow-sm'
-            : 'text-slate-600 border-transparent hover:bg-slate-50 hover:text-slate-900 hover:border-slate-200'"
-        >
-          <span
-            class="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
-            :class="isNavItemActive(item.to) ? 'bg-blue-100 text-blue-600' : 'bg-slate-100 text-slate-400 group-hover:bg-slate-200'"
-          >
+            : 'text-slate-600 border-transparent hover:bg-slate-50 hover:text-slate-900 hover:border-slate-200'">
+          <span class="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+            :class="isNavItemActive(item.to) ? 'bg-blue-100 text-blue-600' : 'bg-slate-100 text-slate-400 group-hover:bg-slate-200'">
             <i :class="[item.icon, 'text-xs']" />
           </span>
           <span class="flex-1">{{ item.name }}</span>
@@ -775,19 +800,13 @@ function closeModal() { showKpiModal.value = false; selectedMember.value = null 
         <p class="px-2 pt-5 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
           Settings
         </p>
-        <RouterLink
-          v-for="item in settingsNavItems"
-          :key="item.to"
-          :to="item.to"
+        <RouterLink v-for="item in settingsNavItems" :key="item.to" :to="item.to"
           class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 group border"
           :class="isNavItemActive(item.to)
             ? 'bg-blue-50 text-blue-700 border-blue-100 shadow-sm'
-            : 'text-slate-600 border-transparent hover:bg-slate-50 hover:text-slate-900 hover:border-slate-200'"
-        >
-          <span
-            class="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
-            :class="isNavItemActive(item.to) ? 'bg-blue-100 text-blue-600' : 'bg-slate-100 text-slate-400 group-hover:bg-slate-200'"
-          >
+            : 'text-slate-600 border-transparent hover:bg-slate-50 hover:text-slate-900 hover:border-slate-200'">
+          <span class="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+            :class="isNavItemActive(item.to) ? 'bg-blue-100 text-blue-600' : 'bg-slate-100 text-slate-400 group-hover:bg-slate-200'">
             <i :class="[item.icon, 'text-xs']" />
           </span>
           <span class="flex-1">{{ item.name }}</span>
@@ -799,8 +818,7 @@ function closeModal() { showKpiModal.value = false; selectedMember.value = null 
       <div class="p-4 border-t border-slate-200">
         <button
           class="w-full flex items-center gap-2.5 px-3 py-2 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors text-xs font-medium"
-          @click="logout"
-        >
+          @click="logout">
           <span class="w-7 h-7 rounded-lg bg-slate-100 flex items-center justify-center shrink-0">
             <i class="fas fa-sign-out-alt text-xs" />
           </span>
@@ -812,339 +830,232 @@ function closeModal() { showKpiModal.value = false; selectedMember.value = null 
     <!-- Main: anchor để modal/drawer GM chỉ phủ cột nội dung (không xám sidebar) -->
     <main class="flex h-screen min-h-0 min-w-0 flex-1 flex-col">
       <div id="gm-main-modal-anchor" class="relative flex min-h-0 flex-1 flex-col">
-      <header
-        class="z-10 flex min-h-16 shrink-0 flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white px-6 py-2 sm:px-8"
-      >
-        <div class="min-w-0">
-          <p class="text-xs font-bold uppercase tracking-widest text-blue-600">{{ headerConfig.category }}</p>
-          <h2 class="text-xl font-bold text-slate-800">{{ headerConfig.title }}</h2>
-          <p v-if="activeCycleLabel && !isGmSettingsRoute" class="mt-0.5 text-xs font-medium text-slate-500">
-            Đang xem: <span class="text-slate-700">{{ activeCycleLabel }}</span>
-          </p>
-        </div>
-        <div class="flex flex-wrap items-center gap-3 sm:gap-4">
-          <div v-if="!isGmSettingsRoute" class="flex items-center gap-2">
-            <label for="gm-year-select" class="whitespace-nowrap text-xs font-bold text-slate-500">Năm</label>
-            <div class="relative">
-              <select
-                id="gm-year-select"
-                v-model="selectedCycleId"
-                class="min-w-[11rem] cursor-pointer appearance-none rounded-lg border border-slate-200 bg-white py-2 pl-3 pr-9 text-sm font-semibold text-slate-800 shadow-sm outline-none hover:border-slate-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-              >
-                <option v-for="c in gmSelectableCycleOptions" :key="c.id" :value="c.id">
-                  {{ c.label }}
-                </option>
-              </select>
-              <i
-                class="fas fa-chevron-down pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400"
-              />
-            </div>
+        <header
+          class="z-10 flex min-h-16 shrink-0 flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white px-6 py-2 sm:px-8">
+          <div class="min-w-0">
+            <p class="text-xs font-bold uppercase tracking-widest text-blue-600">{{ headerConfig.category }}</p>
+            <h2 class="text-xl font-bold text-slate-800">{{ headerConfig.title }}</h2>
+            <p v-if="activeCycleLabel && !isGmSettingsRoute" class="mt-0.5 text-xs font-medium text-slate-500">
+              Đang xem: <span class="text-slate-700">{{ activeCycleLabel }}</span>
+            </p>
           </div>
-          <button
-            v-if="!isGmEvaluationRoute && !isGmSettingsRoute"
-            type="button"
-            class="flex shrink-0 items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:bg-blue-700"
-            @click="openCreateStrategicKpiDrawer"
-          >
-            <i class="fas fa-plus text-xs" />
-            Create Strategic KPI
-          </button>
-          <button
-            v-else-if="isGmCreateDepartmentRoute"
-            type="button"
-            class="flex shrink-0 items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:bg-blue-700"
-            @click="gmOrgSectionDrawer.open()"
-          >
-            <i class="fas fa-plus text-xs" />
-            Thêm phòng ban mới
-          </button>
-          <button
-            v-else-if="isGmKpiTemplateRoute"
-            type="button"
-            class="flex shrink-0 items-center gap-1.5 rounded-lg bg-purple-600 px-3 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:bg-purple-700"
-            @click="gmKpiTemplateLibrary?.openCreate?.()"
-          >
-            <i class="fas fa-plus text-xs" />
-            Tạo Bộ Template
-          </button>
-          <div class="text-right pl-4 border-l border-slate-200">
-            <p class="text-sm font-bold text-slate-800">{{ user?.name ?? '–' }}</p>
-            <p class="text-xs text-slate-500">{{ user?.rank ?? user?.role }}</p>
-          </div>
-        </div>
-      </header>
-
-      <!-- CONTENT: đánh giá theo PM (nested route) | workspace chiến lược -->
-      <div class="relative flex min-h-0 flex-1 flex-col overflow-y-auto bg-slate-50/50">
-        <RouterView v-if="isGmEvaluationRoute || isGmSettingsRoute" />
-
-        <!-- VIEW 1: OVERVIEW — dưới timeline: tab (dashboard) hoặc chỉ diagnostics -->
-        <div v-else-if="!selectedDept" class="space-y-4 p-3 sm:p-4 lg:p-6">
-          <GmProcessTimeline
-            :mid-year-issues="activeSnapshot.midYearIssues"
-            :setting-issues="activeSnapshot.settingIssues"
-            :year-end-issues="activeSnapshot.yearEndIssues"
-          />
-
-          <template v-if="isGmDashboardRoute">
-            <div class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-              <!-- Tab kiểu gọn, canh trái + gạch dưới (tham khảo Personal KPI) -->
-              <div
-                class="border-b border-slate-200 bg-white px-4 pt-2 sm:px-5"
-                role="tablist"
-                aria-label="Khu vực làm việc GM dưới timeline"
-              >
-                <nav class="flex flex-wrap items-end gap-1 sm:gap-2">
-                  <button
-                    type="button"
-                    role="tab"
-                    :aria-selected="dashboardWorkspaceTab === 'diagnostics'"
-                    class="-mb-px shrink-0 border-b-2 px-3 py-2.5 text-left text-xs font-semibold transition-colors sm:px-4 sm:text-sm"
-                    :class="
-                      dashboardWorkspaceTab === 'diagnostics'
-                        ? 'border-indigo-600 text-indigo-700'
-                        : 'border-transparent text-slate-500 hover:text-slate-800'
-                    "
-                    @click="setDashboardWorkspaceTab('diagnostics')"
-                  >
-                    <span class="flex max-w-[11rem] items-center gap-2 leading-snug sm:max-w-none sm:whitespace-nowrap">
-                      <i class="fas fa-table-list shrink-0 text-[11px] opacity-70" aria-hidden="true" />
-                      Strategic KPIs Tracking &amp; Diagnostics
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    role="tab"
-                    :aria-selected="dashboardWorkspaceTab === 'pm-eval'"
-                    class="-mb-px shrink-0 border-b-2 px-3 py-2.5 text-left text-xs font-semibold transition-colors sm:px-4 sm:text-sm"
-                    :class="
-                      dashboardWorkspaceTab === 'pm-eval'
-                        ? 'border-indigo-600 text-indigo-700'
-                        : 'border-transparent text-slate-500 hover:text-slate-800'
-                    "
-                    @click="setDashboardWorkspaceTab('pm-eval')"
-                  >
-                    <span class="flex items-center gap-2 sm:whitespace-nowrap">
-                      <i class="fas fa-user-tie shrink-0 text-[11px] opacity-70" aria-hidden="true" />
-                      Đánh giá
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    role="tab"
-                    :aria-selected="dashboardWorkspaceTab === 'approved-kpi'"
-                    class="-mb-px shrink-0 border-b-2 px-3 py-2.5 text-left text-xs font-semibold transition-colors sm:px-4 sm:text-sm"
-                    :class="
-                      dashboardWorkspaceTab === 'approved-kpi'
-                        ? 'border-indigo-600 text-indigo-700'
-                        : 'border-transparent text-slate-500 hover:text-slate-800'
-                    "
-                    @click="setDashboardWorkspaceTab('approved-kpi')"
-                  >
-                    <span class="flex items-center gap-2 sm:whitespace-nowrap">
-                      <i class="fas fa-clipboard-check shrink-0 text-[11px] opacity-70" aria-hidden="true" />
-                      Approved KPI
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    role="tab"
-                    :aria-selected="dashboardWorkspaceTab === 'personal'"
-                    class="-mb-px shrink-0 border-b-2 px-3 py-2.5 text-left text-xs font-semibold transition-colors sm:px-4 sm:text-sm"
-                    :class="
-                      dashboardWorkspaceTab === 'personal'
-                        ? 'border-indigo-600 text-indigo-700'
-                        : 'border-transparent text-slate-500 hover:text-slate-800'
-                    "
-                    @click="setDashboardWorkspaceTab('personal')"
-                  >
-                    <span class="flex items-center gap-2 sm:whitespace-nowrap">
-                      <i class="fas fa-bullseye shrink-0 text-[11px] opacity-70" aria-hidden="true" />
-                      KPI cá nhân
-                    </span>
-                  </button>
-                </nav>
-              </div>
-
-              <div class="min-h-0">
-                <div v-show="dashboardWorkspaceTab === 'diagnostics'" class="p-3 sm:p-4 lg:p-5">
-                  <p
-                    v-if="diagnosticsApiLoading"
-                    class="mb-3 text-xs font-medium text-slate-500"
-                    role="status"
-                  >
-                    Đang tải Strategic KPIs…
-                  </p>
-                  <p
-                    v-else-if="diagnosticsApiError"
-                    class="mb-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-800"
-                    role="alert"
-                  >
-                    {{ diagnosticsApiError }}
-                  </p>
-                  <GmKpiDiagnosticsTable
-                    :rows="diagnosticsHierarchyRows"
-                    @edit-kpi="onDiagnosticsEditKpi"
-                    @delete-kpi="onDiagnosticsDeleteKpi"
-                  />
-                </div>
-                <div v-show="dashboardWorkspaceTab === 'pm-eval'" class="p-3 sm:p-4 lg:p-5">
-                  <GmPmEvaluationWorkspace />
-                </div>
-                <div v-show="dashboardWorkspaceTab === 'approved-kpi'" class="p-3 sm:p-4 lg:p-5">
-                  <p
-                    v-if="!useMockHub && approvedKpiQueueLoading"
-                    class="mb-3 text-xs font-medium text-slate-500"
-                    role="status"
-                  >
-                    Đang tải Approved KPI…
-                  </p>
-                  <GmApprovedKpiPanel
-                    :rows="inactivePendingRowsForSelectedCycle"
-                    @approve-kpi="onApproveInactiveKpi"
-                    @reject-kpi="onRejectInactiveKpi"
-                  />
-                </div>
-                <div v-show="dashboardWorkspaceTab === 'personal'" class="p-3 sm:p-4 lg:p-5">
-                  <GmGmPersonalKpiPanel
-                    :year-id="String(gmEvaluationYear)"
-                    :rows="gmPersonalKpiRows"
-                    :loading="gmPersonalKpiLoading"
-                  />
-                </div>
+          <div class="flex flex-wrap items-center gap-3 sm:gap-4">
+            <div v-if="!isGmSettingsRoute" class="flex items-center gap-2">
+              <label for="gm-year-select" class="whitespace-nowrap text-xs font-bold text-slate-500">Năm</label>
+              <div class="relative">
+                <select id="gm-year-select" v-model="selectedCycleId"
+                  class="min-w-[11rem] cursor-pointer appearance-none rounded-lg border border-slate-200 bg-white py-2 pl-3 pr-9 text-sm font-semibold text-slate-800 shadow-sm outline-none hover:border-slate-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
+                  <option v-for="c in gmSelectableCycleOptions" :key="c.id" :value="c.id">
+                    {{ c.label }}
+                  </option>
+                </select>
+                <i
+                  class="fas fa-chevron-down pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400" />
               </div>
             </div>
-          </template>
-          <div v-else class="p-3 sm:p-4 lg:p-5">
-            <p
-              v-if="diagnosticsApiLoading"
-              class="mb-3 text-xs font-medium text-slate-500"
-              role="status"
-            >
-              Đang tải Strategic KPIs…
-            </p>
-            <p
-              v-else-if="diagnosticsApiError"
-              class="mb-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-800"
-              role="alert"
-            >
-              {{ diagnosticsApiError }}
-            </p>
-            <GmKpiDiagnosticsTable
-              :rows="diagnosticsHierarchyRows"
-              @edit-kpi="onDiagnosticsEditKpi"
-              @delete-kpi="onDiagnosticsDeleteKpi"
-            />
+            <button v-if="!isGmEvaluationRoute && !isGmSettingsRoute" type="button"
+              class="flex shrink-0 items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:bg-blue-700"
+              @click="openCreateStrategicKpiDrawer">
+              <i class="fas fa-plus text-xs" />
+              Create Strategic KPI
+            </button>
+            <button v-else-if="isGmCreateDepartmentRoute" type="button"
+              class="flex shrink-0 items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:bg-blue-700"
+              @click="gmOrgSectionDrawer.open()">
+              <i class="fas fa-plus text-xs" />
+              Thêm phòng ban mới
+            </button>
+            <button v-else-if="isGmKpiTemplateRoute" type="button"
+              class="flex shrink-0 items-center gap-1.5 rounded-lg bg-purple-600 px-3 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:bg-purple-700"
+              @click="gmKpiTemplateLibrary?.openCreate?.()">
+              <i class="fas fa-plus text-xs" />
+              Tạo Bộ Template
+            </button>
+            <div class="text-right pl-4 border-l border-slate-200">
+              <p class="text-sm font-bold text-slate-800">{{ user?.name ?? '–' }}</p>
+              <p class="text-xs text-slate-500">{{ user?.rank ?? user?.role }}</p>
+            </div>
           </div>
-        </div>
+        </header>
 
-        <!-- VIEW 2: chi tiết department / Investigate -->
-        <GmDepartmentInvestigation
-          v-else-if="selectedDept"
-          :department="selectedDept"
-          :investigating-kpi="investigatingKPI"
-          :members="mockMembersDetails"
-          @back="handleBack"
-          @view-kpi="openModal"
-        />
+        <!-- CONTENT: đánh giá theo PM (nested route) | workspace chiến lược -->
+        <div class="relative flex min-h-0 flex-1 flex-col overflow-y-auto bg-slate-50/50">
+          <RouterView v-if="isGmEvaluationRoute || isGmSettingsRoute" />
 
-        <GmCreateStrategicKpiModal
-          v-model="showCreateStrategicKpiModal"
-          :cycle-id="selectedCycleId"
-          :edit-initial="strategicKpiEditTarget"
-          :prefetched-evaluation-cycles="gmHeaderCycleRows"
-          @evaluation-cycles-loaded="onGmEvaluationCyclesLoaded"
-          @saved="onStrategicKpiSaved"
-        />
+          <!-- VIEW 1: OVERVIEW — dưới timeline: tab (dashboard) hoặc chỉ diagnostics -->
+          <div v-else-if="!selectedDept" class="space-y-4 p-3 sm:p-4 lg:p-6">
+            <GmProcessTimeline :mid-year-issues="processTimelineData?.midYear ?? activeSnapshot.midYearIssues"
+              :setting-issues="processTimelineData?.setting ?? activeSnapshot.settingIssues"
+              :year-end-issues="processTimelineData?.yearEnd ?? activeSnapshot.yearEndIssues" />
 
-        <Teleport to="body">
-          <div
-            class="pointer-events-none fixed right-4 top-20 z-[320] flex max-h-[calc(100vh-5rem)] w-[min(100vw-2rem,22rem)] flex-col items-end gap-2 overflow-y-auto overflow-x-hidden pb-2 pl-2 pt-1 sm:right-5 sm:top-24"
-            aria-live="polite"
-          >
-            <TransitionGroup name="gm-notify" tag="div" class="relative flex w-full flex-col gap-2">
-              <article
-                v-for="n in gmNotifications"
-                :key="n.id"
-                role="status"
-                :class="gmNotifyShellClass(n.variant)"
-              >
-                <i :class="gmNotifyIconClass(n.variant)" aria-hidden="true" />
-                <p class="min-w-0 flex-1 text-xs font-semibold leading-snug">{{ n.message }}</p>
-                <button
-                  type="button"
-                  class="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-black/5 hover:text-slate-800"
-                  aria-label="Đóng thông báo"
-                  @click.stop="dismissGmNotification(n.id)"
-                >
-                  <i class="fas fa-times text-[11px]" aria-hidden="true" />
-                </button>
-              </article>
-            </TransitionGroup>
+            <template v-if="isGmDashboardRoute">
+              <div class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                <!-- Tab kiểu gọn, canh trái + gạch dưới (tham khảo Personal KPI) -->
+                <div class="border-b border-slate-200 bg-white px-4 pt-2 sm:px-5" role="tablist"
+                  aria-label="Khu vực làm việc GM dưới timeline">
+                  <nav class="flex flex-wrap items-end gap-1 sm:gap-2">
+                    <button type="button" role="tab" :aria-selected="dashboardWorkspaceTab === 'diagnostics'"
+                      class="-mb-px shrink-0 border-b-2 px-3 py-2.5 text-left text-xs font-semibold transition-colors sm:px-4 sm:text-sm"
+                      :class="dashboardWorkspaceTab === 'diagnostics'
+                        ? 'border-indigo-600 text-indigo-700'
+                        : 'border-transparent text-slate-500 hover:text-slate-800'
+                        " @click="setDashboardWorkspaceTab('diagnostics')">
+                      <span
+                        class="flex max-w-[11rem] items-center gap-2 leading-snug sm:max-w-none sm:whitespace-nowrap">
+                        <i class="fas fa-table-list shrink-0 text-[11px] opacity-70" aria-hidden="true" />
+                        Strategic KPIs Tracking &amp; Diagnostics
+                      </span>
+                    </button>
+                    <button type="button" role="tab" :aria-selected="dashboardWorkspaceTab === 'pm-eval'"
+                      class="-mb-px shrink-0 border-b-2 px-3 py-2.5 text-left text-xs font-semibold transition-colors sm:px-4 sm:text-sm"
+                      :class="dashboardWorkspaceTab === 'pm-eval'
+                        ? 'border-indigo-600 text-indigo-700'
+                        : 'border-transparent text-slate-500 hover:text-slate-800'
+                        " @click="setDashboardWorkspaceTab('pm-eval')">
+                      <span class="flex items-center gap-2 sm:whitespace-nowrap">
+                        <i class="fas fa-user-tie shrink-0 text-[11px] opacity-70" aria-hidden="true" />
+                        Đánh giá
+                      </span>
+                    </button>
+                    <button type="button" role="tab" :aria-selected="dashboardWorkspaceTab === 'approved-kpi'"
+                      class="-mb-px shrink-0 border-b-2 px-3 py-2.5 text-left text-xs font-semibold transition-colors sm:px-4 sm:text-sm"
+                      :class="dashboardWorkspaceTab === 'approved-kpi'
+                        ? 'border-indigo-600 text-indigo-700'
+                        : 'border-transparent text-slate-500 hover:text-slate-800'
+                        " @click="setDashboardWorkspaceTab('approved-kpi')">
+                      <span class="flex items-center gap-2 sm:whitespace-nowrap">
+                        <i class="fas fa-clipboard-check shrink-0 text-[11px] opacity-70" aria-hidden="true" />
+                        Approved KPI
+                      </span>
+                    </button>
+                    <button type="button" role="tab" :aria-selected="dashboardWorkspaceTab === 'personal'"
+                      class="-mb-px shrink-0 border-b-2 px-3 py-2.5 text-left text-xs font-semibold transition-colors sm:px-4 sm:text-sm"
+                      :class="dashboardWorkspaceTab === 'personal'
+                        ? 'border-indigo-600 text-indigo-700'
+                        : 'border-transparent text-slate-500 hover:text-slate-800'
+                        " @click="setDashboardWorkspaceTab('personal')">
+                      <span class="flex items-center gap-2 sm:whitespace-nowrap">
+                        <i class="fas fa-bullseye shrink-0 text-[11px] opacity-70" aria-hidden="true" />
+                        KPI cá nhân
+                      </span>
+                    </button>
+                  </nav>
+                </div>
+
+                <div class="min-h-0">
+                  <div v-show="dashboardWorkspaceTab === 'diagnostics'" class="p-3 sm:p-4 lg:p-5">
+                    <p v-if="diagnosticsApiLoading" class="mb-3 text-xs font-medium text-slate-500" role="status">
+                      Đang tải Strategic KPIs…
+                    </p>
+                    <p v-else-if="diagnosticsApiError"
+                      class="mb-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-800"
+                      role="alert">
+                      {{ diagnosticsApiError }}
+                    </p>
+                    <GmKpiDiagnosticsTable :rows="diagnosticsHierarchyRows" @edit-kpi="onDiagnosticsEditKpi"
+                      @delete-kpi="onDiagnosticsDeleteKpi" />
+                  </div>
+                  <div v-show="dashboardWorkspaceTab === 'pm-eval'" class="p-3 sm:p-4 lg:p-5">
+                    <GmPmEvaluationWorkspace />
+                  </div>
+                  <div v-show="dashboardWorkspaceTab === 'approved-kpi'" class="p-3 sm:p-4 lg:p-5">
+                    <p v-if="!useMockHub && approvedKpiQueueLoading" class="mb-3 text-xs font-medium text-slate-500"
+                      role="status">
+                      Đang tải Approved KPI…
+                    </p>
+                    <GmApprovedKpiPanel :rows="inactivePendingRowsForSelectedCycle" @approve-kpi="onApproveInactiveKpi"
+                      @reject-kpi="onRejectInactiveKpi" />
+                  </div>
+                  <div v-show="dashboardWorkspaceTab === 'personal'" class="p-3 sm:p-4 lg:p-5">
+                    <GmGmPersonalKpiPanel :year-id="String(gmEvaluationYear)" :rows="gmPersonalKpiRows"
+                      :loading="gmPersonalKpiLoading" />
+                  </div>
+                </div>
+              </div>
+            </template>
+            <div v-else class="p-3 sm:p-4 lg:p-5">
+              <p v-if="diagnosticsApiLoading" class="mb-3 text-xs font-medium text-slate-500" role="status">
+                Đang tải Strategic KPIs…
+              </p>
+              <p v-else-if="diagnosticsApiError"
+                class="mb-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-800"
+                role="alert">
+                {{ diagnosticsApiError }}
+              </p>
+              <GmKpiDiagnosticsTable :rows="diagnosticsHierarchyRows" @edit-kpi="onDiagnosticsEditKpi"
+                @delete-kpi="onDiagnosticsDeleteKpi" />
+            </div>
           </div>
-        </Teleport>
 
-        <Teleport to="body">
-          <Transition name="gm-delete-kpi-modal">
+          <!-- VIEW 2: chi tiết department / Investigate -->
+          <GmDepartmentInvestigation v-else-if="selectedDept" :department="selectedDept"
+            :investigating-kpi="investigatingKPI" :members="mockMembersDetails" @back="handleBack"
+            @view-kpi="openModal" />
+
+          <GmCreateStrategicKpiModal v-model="showCreateStrategicKpiModal" :cycle-id="selectedCycleId"
+            :edit-initial="strategicKpiEditTarget" :prefetched-evaluation-cycles="gmHeaderCycleRows"
+            @evaluation-cycles-loaded="onGmEvaluationCyclesLoaded" @saved="onStrategicKpiSaved" />
+
+          <Teleport to="body">
             <div
-              v-if="deleteKpiModalOpen && deleteKpiTarget"
-              class="gm-delete-kpi-modal-root fixed inset-0 z-[160] flex items-center justify-center p-4"
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="gm-delete-kpi-title"
-            >
-              <div
-                class="gm-delete-kpi-modal-backdrop absolute inset-0 cursor-pointer bg-slate-900/60 backdrop-blur-sm"
-                @click="closeDeleteKpiModal"
-              />
-              <div
-                class="gm-delete-kpi-modal-panel relative z-10 w-full max-w-md overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl"
-              >
-              <div class="border-b border-rose-100 bg-rose-50/80 px-5 py-4">
-                <h3
-                  id="gm-delete-kpi-title"
-                  class="flex items-center gap-2 text-sm font-bold text-slate-900"
-                >
-                  <i class="fas fa-triangle-exclamation text-rose-600" aria-hidden="true" />
-                  Xóa KPI?
-                </h3>
-                <p class="mt-2 text-xs font-medium leading-relaxed text-slate-600">
-                  KPI
-                  <span class="font-bold text-slate-800">«{{ deleteKpiTarget.name }}»</span>
-                  sẽ bị gỡ khỏi bảng Strategic KPIs Tracking và Diagnostics. Thao tác này không thể hoàn tác.
-                </p>
-              </div>
-              <div class="flex justify-end gap-2 bg-white px-5 py-4">
-                <button
-                  type="button"
-                  class="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-600 shadow-sm transition-colors hover:bg-slate-50 disabled:opacity-50"
-                  :disabled="deleteKpiSaving"
-                  @click="closeDeleteKpiModal"
-                >
-                  Hủy
-                </button>
-                <button
-                  type="button"
-                  class="rounded-lg bg-rose-600 px-4 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:bg-rose-700 disabled:opacity-60"
-                  :disabled="deleteKpiSaving"
-                  @click="confirmDeleteKpi"
-                >
-                  {{ deleteKpiSaving ? 'Đang xóa…' : 'Xác nhận xóa' }}
-                </button>
-              </div>
-              </div>
+              class="pointer-events-none fixed right-4 top-20 z-[320] flex max-h-[calc(100vh-5rem)] w-[min(100vw-2rem,22rem)] flex-col items-end gap-2 overflow-y-auto overflow-x-hidden pb-2 pl-2 pt-1 sm:right-5 sm:top-24"
+              aria-live="polite">
+              <TransitionGroup name="gm-notify" tag="div" class="relative flex w-full flex-col gap-2">
+                <article v-for="n in gmNotifications" :key="n.id" role="status" :class="gmNotifyShellClass(n.variant)">
+                  <i :class="gmNotifyIconClass(n.variant)" aria-hidden="true" />
+                  <p class="min-w-0 flex-1 text-xs font-semibold leading-snug">{{ n.message }}</p>
+                  <button type="button"
+                    class="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-black/5 hover:text-slate-800"
+                    aria-label="Đóng thông báo" @click.stop="dismissGmNotification(n.id)">
+                    <i class="fas fa-times text-[11px]" aria-hidden="true" />
+                  </button>
+                </article>
+              </TransitionGroup>
             </div>
-          </Transition>
-        </Teleport>
+          </Teleport>
 
-        <GmMemberKpiDrawer
-          :open="showKpiModal && !!selectedMember"
-          :member="selectedMember"
-          :items="mockKPIItems"
-          @close="closeModal"
-        />
+          <Teleport to="body">
+            <Transition name="gm-delete-kpi-modal">
+              <div v-if="deleteKpiModalOpen && deleteKpiTarget"
+                class="gm-delete-kpi-modal-root fixed inset-0 z-[160] flex items-center justify-center p-4"
+                role="dialog" aria-modal="true" aria-labelledby="gm-delete-kpi-title">
+                <div
+                  class="gm-delete-kpi-modal-backdrop absolute inset-0 cursor-pointer bg-slate-900/60 backdrop-blur-sm"
+                  @click="closeDeleteKpiModal" />
+                <div
+                  class="gm-delete-kpi-modal-panel relative z-10 w-full max-w-md overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
+                  <div class="border-b border-rose-100 bg-rose-50/80 px-5 py-4">
+                    <h3 id="gm-delete-kpi-title" class="flex items-center gap-2 text-sm font-bold text-slate-900">
+                      <i class="fas fa-triangle-exclamation text-rose-600" aria-hidden="true" />
+                      Xóa KPI?
+                    </h3>
+                    <p class="mt-2 text-xs font-medium leading-relaxed text-slate-600">
+                      KPI
+                      <span class="font-bold text-slate-800">«{{ deleteKpiTarget.name }}»</span>
+                      sẽ bị gỡ khỏi bảng Strategic KPIs Tracking và Diagnostics. Thao tác này không thể hoàn tác.
+                    </p>
+                  </div>
+                  <div class="flex justify-end gap-2 bg-white px-5 py-4">
+                    <button type="button"
+                      class="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-600 shadow-sm transition-colors hover:bg-slate-50 disabled:opacity-50"
+                      :disabled="deleteKpiSaving" @click="closeDeleteKpiModal">
+                      Hủy
+                    </button>
+                    <button type="button"
+                      class="rounded-lg bg-rose-600 px-4 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:bg-rose-700 disabled:opacity-60"
+                      :disabled="deleteKpiSaving" @click="confirmDeleteKpi">
+                      {{ deleteKpiSaving ? 'Đang xóa…' : 'Xác nhận xóa' }}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </Transition>
+          </Teleport>
 
-      </div>
+          <GmMemberKpiDrawer :open="showKpiModal && !!selectedMember" :member="selectedMember" :items="mockKPIItems"
+            @close="closeModal" />
+
+        </div>
       </div>
     </main>
   </div>
@@ -1158,11 +1069,13 @@ function closeModal() { showKpiModal.value = false; selectedMember.value = null 
     opacity 0.26s ease,
     transform 0.32s cubic-bezier(0.22, 1, 0.36, 1);
 }
+
 .gm-notify-enter-from,
 .gm-notify-leave-to {
   opacity: 0;
   transform: translateX(110%);
 }
+
 .gm-notify-leave-active {
   position: absolute;
   right: 0;
@@ -1173,29 +1086,35 @@ function closeModal() { showKpiModal.value = false; selectedMember.value = null 
 .gm-delete-kpi-modal-leave-active {
   transition-duration: 0.26s;
 }
+
 .gm-delete-kpi-modal-enter-active .gm-delete-kpi-modal-backdrop,
 .gm-delete-kpi-modal-leave-active .gm-delete-kpi-modal-backdrop {
   transition: opacity 0.26s ease;
 }
+
 .gm-delete-kpi-modal-enter-active .gm-delete-kpi-modal-panel,
 .gm-delete-kpi-modal-leave-active .gm-delete-kpi-modal-panel {
   transition:
     opacity 0.26s ease,
     transform 0.32s cubic-bezier(0.22, 1, 0.36, 1);
 }
+
 .gm-delete-kpi-modal-enter-from .gm-delete-kpi-modal-backdrop,
 .gm-delete-kpi-modal-leave-to .gm-delete-kpi-modal-backdrop {
   opacity: 0;
 }
+
 .gm-delete-kpi-modal-enter-to .gm-delete-kpi-modal-backdrop,
 .gm-delete-kpi-modal-leave-from .gm-delete-kpi-modal-backdrop {
   opacity: 1;
 }
+
 .gm-delete-kpi-modal-enter-from .gm-delete-kpi-modal-panel,
 .gm-delete-kpi-modal-leave-to .gm-delete-kpi-modal-panel {
   opacity: 0;
   transform: scale(0.94) translateY(14px);
 }
+
 .gm-delete-kpi-modal-enter-to .gm-delete-kpi-modal-panel,
 .gm-delete-kpi-modal-leave-from .gm-delete-kpi-modal-panel {
   opacity: 1;
@@ -1203,6 +1122,7 @@ function closeModal() { showKpiModal.value = false; selectedMember.value = null 
 }
 
 @media (prefers-reduced-motion: reduce) {
+
   .gm-notify-move,
   .gm-notify-enter-active,
   .gm-notify-leave-active,
@@ -1216,6 +1136,15 @@ function closeModal() { showKpiModal.value = false; selectedMember.value = null 
   }
 }
 
-.overflow-x-auto::-webkit-scrollbar, .overflow-y-auto::-webkit-scrollbar { height: 6px; width: 6px; }
-.overflow-x-auto::-webkit-scrollbar-thumb, .overflow-y-auto::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 10px; }
+.overflow-x-auto::-webkit-scrollbar,
+.overflow-y-auto::-webkit-scrollbar {
+  height: 6px;
+  width: 6px;
+}
+
+.overflow-x-auto::-webkit-scrollbar-thumb,
+.overflow-y-auto::-webkit-scrollbar-thumb {
+  background-color: #cbd5e1;
+  border-radius: 10px;
+}
 </style>

@@ -21,8 +21,10 @@ export interface CreateIndividualKpiBody {
   weight: number
   /** Perspective BSC — FK kpi_categories.id */
   categoryId: string
-  /** CALC_RULE sys_status_codes: 801–804 */
+  /** CALC_RULE sys_status_codes: 802 AVERAGE | 803 COMMENT */
   calculationRuleCode: number
+  /** CALC_TYPE: 701 ACTUAL_OVER_PLAN | 702 PLAN_OVER_ACTUAL — null khi CALC_RULE = 803 */
+  calculationTypeCode?: number | null
 }
 
 /** GET …/kpi/member/dashboard?year= */
@@ -31,8 +33,8 @@ export async function apiGetMemberKpiDashboard(year?: number): Promise<ApiRespon
 }
 
 /** GET …/kpi/member/form-meta */
-export async function apiGetMemberKpiFormMeta(): Promise<ApiResponse<MemberKpiFormMeta>> {
-  return http.get('/kpi/member/form-meta').then(r => r.data)
+export async function apiGetMemberKpiFormMeta(year?: number): Promise<ApiResponse<MemberKpiFormMeta>> {
+  return http.get('/kpi/member/form-meta', { params: year ? { year } : {} }).then(r => r.data)
 }
 
 /** PUT …/kpi/member/sheet/:assignmentId */
@@ -62,7 +64,7 @@ export async function apiCreateIndividualKpi(
 
 export const memberKpiService = {
   getDashboard: (year?: number) => apiGetMemberKpiDashboard(year).then(r => r.data),
-  getFormMeta: () => apiGetMemberKpiFormMeta().then(r => r.data),
+  getFormMeta: (year?: number) => apiGetMemberKpiFormMeta(year).then(r => r.data),
   updateSheetItem: (assignmentId: string, body: UpdateMemberSheetItemBody) =>
     apiUpdateMemberSheetItem(assignmentId, body).then(r => r.data),
   submit: (year: number) => apiSubmitMemberSheet(year).then(r => r.data),

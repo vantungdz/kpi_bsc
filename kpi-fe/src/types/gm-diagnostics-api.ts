@@ -83,6 +83,8 @@ export interface GmDiagLeaderApi {
 export interface GmDiagMemberApi {
   id: string
   name: string
+  /** `kpi_assignments.status_code` (ASM). */
+  statusCode?: number | null
   target: string
   actual: string
   status: string

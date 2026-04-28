@@ -26,6 +26,8 @@ function mapMember(m: GmDiagMemberApi): GmHierarchyMember {
   return {
     id: m.id,
     name: m.name,
+    assignmentStatusCode:
+      typeof m.statusCode === 'number' && Number.isFinite(m.statusCode) ? m.statusCode : undefined,
     ownerRoleCode: m.ownerRoleCode ?? undefined,
     ownerRoleLabel: m.ownerRoleLabel ?? undefined,
     leaderRoleCode: m.leaderRoleCode ?? undefined,

@@ -203,8 +203,8 @@ const fetchKpiDetail = async (kpiId: string) => {
       }
     }
 
-    selectedMembers.value = []
-    memberTargets.value = {}
+    selectedMembers.value = detailData.memberIds || []
+    memberTargets.value = detailData.memberTargets || {}
     formErrors.value = {}
   } catch (error) {
     console.error('Error when getting KPI detail:', error)
@@ -318,7 +318,7 @@ const handleAssignMember = async () => {
   const cascadePayload = {
     kpiInformationId: props.kpi.infoId,
     cycleId: formCycleId.value,
-    parentAssignmentId: props.kpi.assignmentId || null, // ID assignment của phòng ban (nếu có truyền từ Dashboard)
+    parentAssignmentId: props.kpi.id || null, // ID assignment của phòng ban (nếu có truyền từ Dashboard)
     memberTargets: {} as Record<string, number|null>
   }
 

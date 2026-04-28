@@ -36,4 +36,13 @@
         DELETE FROM user_departments
         WHERE user_id = #{userId} AND is_primary = TRUE
     </delete>
+
+    <select id="getDepartmentIdByUserId" resultType="java.util.UUID">
+        SELECT ud.department_id
+        FROM public.user_departments ud
+            JOIN public.departments d ON ud.department_id = d.id
+        WHERE ud.user_id = #{userId, jdbcType=OTHER}
+            AND d.deleted_at IS NULL
+        LIMIT 1
+    </select>
 </mapper>

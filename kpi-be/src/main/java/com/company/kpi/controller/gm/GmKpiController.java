@@ -23,6 +23,7 @@ import com.company.kpi.response.gm.GmKpiCycleOptionResponse;
 import com.company.kpi.response.gm.GmKpiDashboardResponse;
 import com.company.kpi.response.gm.GmKpiTemplateItemResponse;
 import com.company.kpi.response.gm.GmKpiTemplatePackageResponse;
+import com.company.kpi.response.gm.GmProcessTimelineResponse;
 import com.company.kpi.response.gm.KpiSectionMemberResponse;
 import com.company.kpi.service.gm.GmApprovedKpiService;
 import com.company.kpi.service.gm.GmDepartmentService;
@@ -32,6 +33,7 @@ import com.company.kpi.service.gm.GmKpiCycleService;
 import com.company.kpi.service.gm.GmKpiDiagnosticsHierarchyService;
 import com.company.kpi.service.gm.GmKpiService;
 import com.company.kpi.service.gm.GmKpiTemplateService;
+import com.company.kpi.service.gm.GmProcessTimelineService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -85,6 +87,7 @@ public class GmKpiController extends BaseController {
     private final GmDepartmentService gmDepartmentService;
     private final GmEvaluationHubService gmEvaluationHubService;
     private final GmApprovedKpiService gmApprovedKpiService;
+    private final GmProcessTimelineService gmProcessTimelineService;
 
     /** Danh sách phòng ban — {@code departments} (chưa xóa mềm); {@code year} lọc KPI giao cho phòng theo năm chu kỳ. */
     @GetMapping("/departments")
@@ -223,6 +226,7 @@ public class GmKpiController extends BaseController {
 
     /** Danh sách nhóm KPI ({@code kpi_categories}) — không phụ thuộc năm. */
     @GetMapping("/kpi-categories")
+    @PreAuthorize("hasAnyRole('GM','LEADER','PM','MEMBER')")
     public ResponseEntity<BaseResponse<List<GmKpiCategoryResponse>>> listKpiCategories() {
         return success(gmKpiCategoryService.listActiveCategories());
     }
@@ -285,5 +289,15 @@ public class GmKpiController extends BaseController {
             @PathVariable UUID sectionId,
             @RequestParam(required = false) Integer year) {
         return success(gmKpiService.getSectionMembers(sectionId, year));
+    }
+
+    /**
+     * Process Timeline: 3 phases (setting / midYear / yearEnd) với issue buckets.
+     * {@code GET /api/v1/kpi/gm/process-timeline?cycleId=}
+     */
+    @GetMapping("/process-timeline")
+    public ResponseEntity<BaseResponse<GmProcessTimelineResponse>> getProcessTimeline(
+            @RequestParam("cycleId") UUID cycleId) {
+        return success(gmProcessTimelineService.getTimeline(cycleId));
     }
 }

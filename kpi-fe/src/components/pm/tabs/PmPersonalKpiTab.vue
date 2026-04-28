@@ -3,6 +3,11 @@ import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { pmKpiService } from '@/services/modules/kpi-pm.service'
 import EvaluationCommentBlock from '@/components/evaluation/EvaluationCommentBlock.vue'
 import EvaluationEvidenceDrawer from '@/components/evaluation/EvaluationEvidenceDrawer.vue'
+import { getSubmitButtonState } from '@/utils/common'
+import { KPI_STATUS } from '@/config/constants'
+import { useToast } from 'vue-toastification'
+
+const toast = useToast()
 
 const emit = defineEmits(['open-assign', 'open-member-detail'])
 
@@ -13,6 +18,7 @@ const KPI_TYPE_UI: Record<string, { label: string, badgeClass: string, icon: str
 }
 
 const personalKpisRaw = ref<any[]>([])
+const kpiCycleInfo = ref<any>(null)
 
 async function loadPmPortfolio(cycleId?: string) {
   try {
@@ -36,6 +42,7 @@ async function loadPmPortfolio(cycleId?: string) {
       target: kpi.target,
       actualResult: '', // Parent không có actualResult
       weight: kpi.weight,
+      statusCode: kpi.statusCode,
       selfScore: null,
       pmScore: null,
       isTree: kpi.isTree,
@@ -53,6 +60,8 @@ async function loadPmPortfolio(cycleId?: string) {
         status: statusMap[c.statusCode] || 'pending_approval'
       }))
     }))
+    
+    kpiCycleInfo.value = data.kpiCycle
   } catch (err) {
     console.error('Failed to load PM portfolio', err)
   }
@@ -68,8 +77,26 @@ const draftStatus = ref('')
 
 const filterPopoverOpen = ref(false)
 const filterPopoverWrapRef = ref<HTMLElement | null>(null)
-const filterPopoverPanelRef = ref<HTMLElement | null>(null)
 const filterPanelFixedStyle = ref<Record<string, string>>({})
+
+const currentStatusCode = computed(() => {
+  const firstKpi = personalKpisRaw.value?.[0]?.statusCode;
+  return firstKpi ?? KPI_STATUS.INACTIVE; 
+});
+
+const buttonState = computed(() => {
+  if (!kpiCycleInfo.value) {
+    return {
+      show: false,
+      disabled: true,
+      text: null,
+      actionType: 'COMPLETED'
+    };
+  }
+
+  return getSubmitButtonState(kpiCycleInfo.value, currentStatusCode.value);
+});
+console.log("🚀 ~ buttonState:", buttonState.value)
 
 const diagnosticsMemberOptions = computed(() => {
   const set = new Set<string>()
@@ -149,6 +176,27 @@ const saveEvidenceData = (data: any) => {
   const itemToUpdate = personalKpisRaw.value.find(k => k.id === data.id)
   if (itemToUpdate) { itemToUpdate.actualResult = data.actualResult; itemToUpdate.selfScore = data.selfScore }
   evidencePanelOpen.value = false; 
+}
+  
+const handleSubmitClick = async () => {
+  let nextStatusCode: number = KPI_STATUS.PENDING_ACCEPTANCE;
+  if (buttonState.value.actionType === 'GOAL_SETTING') {
+    nextStatusCode = KPI_STATUS.ACCEPTED;
+  } else if (buttonState.value.actionType === 'MID_YEAR') {
+    nextStatusCode = KPI_STATUS.FIRST_WAITING_GM_APPROVAL;
+  } else if (buttonState.value.actionType === 'END_YEAR') {
+    nextStatusCode = KPI_STATUS.SECOND_WAITING_GM_APPROVAL;
+  }
+
+  pmKpiService.bulkUpdateKpiStatus({
+    cycleId: kpiCycleInfo.value?.id,
+    statusCode: nextStatusCode
+  }).then(() => {
+    toast.success('Update KPI statuses successfully!');
+    loadPmPortfolio(String(new Date().getFullYear()))
+  }).catch(err => {
+    console.error('Failed to update KPI statuses', err)
+  })
 }
 </script>
 
@@ -306,8 +354,11 @@ const saveEvidenceData = (data: any) => {
     />
     <div class="mt-6 mb-8 flex justify-center">
       <button type="button"
+        v-if="buttonState.show"
+        :disabled="buttonState.disabled"
+        @click="handleSubmitClick"
         class="inline-flex items-center gap-2 rounded-lg bg-slate-800 px-6 py-2.5 text-sm font-bold text-white shadow-md transition-colors hover:bg-slate-900">
-        <i class="fas fa-paper-plane text-sm" /> Submit Đánh Giá
+        <i class="fas fa-paper-plane text-sm" /> {{ buttonState.text }}
       </button>
     </div>
     <EvaluationEvidenceDrawer :open="evidencePanelOpen" :item="selectedKpiItem" @close="evidencePanelOpen = false" @save="saveEvidenceData" />

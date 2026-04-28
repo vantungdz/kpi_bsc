@@ -60,13 +60,10 @@ INSERT INTO sys_status_codes (code, category, name, description) VALUES
 -- 7xx: CALC_TYPE (Chiều hướng tính toán & So sánh)
 (701, 'CALC_TYPE', 'ACTUAL_OVER_PLAN', 'Actual / Plan'),
 (702, 'CALC_TYPE', 'PLAN_OVER_ACTUAL', 'Plan / Actual'),
-(703, 'CALC_TYPE', 'MANUAL_RATING', 'Manual Rating'),
 
 -- 8xx: CALC_RULE (Quy tắc tổng hợp điểm)
-(801, 'CALC_RULE', 'SUM', 'Cộng dồn điểm của các KPI con'),
 (802, 'CALC_RULE', 'AVERAGE', 'Lấy trung bình cộng điểm các KPI con'),
 (803, 'CALC_RULE', 'COMMENT', 'Nhập điểm thủ công dựa trên nhận xét đánh giá'),
-(804, 'CALC_RULE', 'WEIGHTED_AVG', 'Trung bình cộng có trọng số'),
 
 -- 9xx: KPI_UNIT (Đơn vị tính của Chỉ tiêu)
 (901, 'KPI_UNIT', 'MM', 'Man-Month'),

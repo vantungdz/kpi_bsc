@@ -109,6 +109,62 @@ function statusBlock(item: GmModalKpiItemMock) {
   return { kind: 'missing' as const, label: 'Thiếu Dữ Liệu', icon: 'fas fa-exclamation-circle' }
 }
 
+function asmStatusMeta(item: GmModalKpiItemMock): { label: string; badgeClass: string } {
+  const code = item.assignmentStatusCode
+  if (code == null) {
+    return {
+      label: '—',
+      badgeClass: 'border-slate-200 bg-slate-100 text-slate-600',
+    }
+  }
+  if (code === 403 || code === 502 || code === 602) {
+    return {
+      label:
+        code === 403
+          ? 'Chờ GM duyệt (tạo mới)'
+          : code === 502
+            ? '1st Half · Chờ GM'
+            : 'Final · Chờ GM',
+      badgeClass: 'border-rose-200 bg-rose-50 text-rose-700',
+    }
+  }
+  if (code === 402 || code === 404 || code === 501 || code === 601) {
+    return {
+      label:
+        code === 402
+          ? 'Chờ PM duyệt (tạo mới)'
+          : code === 404
+            ? 'Chờ Member Accept'
+            : code === 501
+              ? 'Đã nộp 1st Half · Chờ PM'
+              : 'Final · Chờ PM',
+      badgeClass: 'border-amber-200 bg-amber-50 text-amber-900',
+    }
+  }
+  if (code === 405 || code === 503 || code === 603) {
+    return {
+      label: code === 405 ? 'Đang chạy' : code === 503 ? 'Đã chốt 1st Half' : 'Đã chốt sổ',
+      badgeClass: 'border-emerald-200 bg-emerald-50 text-emerald-800',
+    }
+  }
+  if (code === 406) {
+    return {
+      label: 'Từ chối',
+      badgeClass: 'border-slate-300 bg-slate-100 text-slate-700',
+    }
+  }
+  if (code === 401) {
+    return {
+      label: 'Chưa kích hoạt',
+      badgeClass: 'border-slate-200 bg-slate-100 text-slate-600',
+    }
+  }
+  return {
+    label: `Mã ASM ${code}`,
+    badgeClass: 'border-slate-200 bg-slate-100 text-slate-600',
+  }
+}
+
 function extractEvidenceNote(item: GmModalKpiItemMock) {
   const src = item.targetSummary ?? ''
   const m = src.match(/Minh chứng\s*\/\s*ghi chú:\s*(.*?)\s*(?:·\s*PM:|$)/i)
@@ -275,6 +331,15 @@ const rolloutDeptLabel = computed(() => {
                             :class="rolloutMemberCardStyle(row.item).actualValueClass"
                           >
                             {{ row.item.actual }}
+                          </span>
+                        </div>
+                        <div class="flex items-start justify-between gap-2">
+                          <span class="shrink-0 font-medium text-slate-500">Trạng thái KPI</span>
+                          <span
+                            class="inline-flex min-w-0 max-w-[65%] items-center justify-end rounded-full border px-2 py-0.5 text-right text-[10px] font-bold leading-tight"
+                            :class="asmStatusMeta(row.item).badgeClass"
+                          >
+                            {{ asmStatusMeta(row.item).label }}
                           </span>
                         </div>
                         <div

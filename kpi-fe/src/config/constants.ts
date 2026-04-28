@@ -33,3 +33,24 @@ export const CALC_TYPE = {
   ACTUAL_OVER_PLAN: 701, // Actual / Plan
   PLAN_OVER_ACTUAL: 702  // Plan / Actual
 } as const;
+
+// Status code KPI
+export const KPI_STATUS = {
+  // Phase 1
+  INACTIVE: 401,
+  WAITING_PM_APPROVAL: 402,
+  WAITING_GM_APPROVAL: 403,
+  PENDING_ACCEPTANCE: 404,
+  ACCEPTED: 405,
+  REJECTED: 406,
+
+  // Phase 2 - 1st Half
+  FIRST_WAITING_PM_APPROVAL: 501,
+  FIRST_WAITING_GM_APPROVAL: 502,
+  FIRST_COMPLETED: 503,
+
+  // Phase 3 - Final
+  SECOND_WAITING_PM_APPROVAL: 601,
+  SECOND_WAITING_GM_APPROVAL: 602,
+  COMPLETED: 603,
+} as const;

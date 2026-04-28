@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onUnmounted, nextTick } from 'vue'
-import type { GmBscPerspective, GmHierarchyKpi, GmStrategicKpiKind } from '@/types/gm-workspace'
+import type { GmBscPerspective, GmHierarchyKpi, GmHierarchyPm, GmStrategicKpiKind } from '@/types/gm-workspace'
 import type { GmStrategicKpiEditData } from '@/types/gm-strategic-kpi-edit'
 import { normalizeStrategicKpiKind } from '@/utils/gm-strategic-kpi-kind'
 import { useGmKpiCategoryOptions } from '@/composables/useGmKpiCategoryOptions'
@@ -71,9 +71,13 @@ const strategicEditDetailError = ref<string | null>(null)
 
 function parseDiagnosticsKpiInformationId(kpi: GmHierarchyKpi | null | undefined): string | null {
   const id = String(kpi?.id ?? '').trim()
-  if (!id.startsWith('diag-kpi-')) return null
-  const raw = id.slice('diag-kpi-'.length).trim()
-  return raw || null
+  if (!id) return null
+  if (id.startsWith('diag-kpi-')) {
+    const raw = id.slice('diag-kpi-'.length).trim()
+    return raw || null
+  }
+  if (USER_ID_UUID_RE.test(id)) return id
+  return null
 }
 
 const emit = defineEmits<{
@@ -707,6 +711,18 @@ function applyCopyFromKpi(id: string) {
   } else if (normalizeStrategicKpiKind(kpi.kpiType) === 'promotion') {
     void loadPromotionAssignees()
   }
+  const apiIdForCopy = parseDiagnosticsKpiInformationId(kpi)
+  if (!apiIdForCopy) return
+  void gmKpiService
+    .getStrategicKpiForEdit(apiIdForCopy)
+    .then((data) => {
+      const cm = String(data.calculationMethod ?? '').trim()
+      if (!cm) return
+      hydrateCalculationFromPersisted(cm)
+    })
+    .catch(() => {
+      // Giữ giá trị công thức hiện tại nếu không tải được dữ liệu chi tiết KPI nguồn.
+    })
 }
 
 const assignLabel = computed(() => {
@@ -869,6 +885,25 @@ function formatPmOptionLabel(u: DepartmentManagerOption): string {
 }
 
 /** Chip / target row — ưu tiên dữ liệu từ API `department-managers`; chưa có thì rút gọn UUID hoặc chuỗi legacy. */
+function pmSelectionKey(pm: Pick<GmHierarchyPm, 'ownerUserId' | 'id' | 'name'>): string {
+  return String(pm.ownerUserId || '').trim() || String(pm.id || '').trim() || String(pm.name || '').trim()
+}
+
+function normalizeUniqueDepartmentManagerIds(ids: string[]): string[] {
+  const validManagerIds = new Set(pmUsers.value.map((u) => String(u.id ?? '').trim()).filter(Boolean))
+  const fallbackKeepAll = validManagerIds.size === 0
+  const seen = new Set<string>()
+  const result: string[] = []
+  for (const rawId of ids) {
+    const id = String(rawId ?? '').trim()
+    if (!id || seen.has(id)) continue
+    if (!fallbackKeepAll && !validManagerIds.has(id)) continue
+    seen.add(id)
+    result.push(id)
+  }
+  return result
+}
+
 function pmChipLabel(id: string): string {
   const row = pmUsers.value.find((x) => x.id === id)
   if (row) return formatPmOptionLabel(row)
@@ -980,10 +1015,11 @@ function fillCreateFormFieldsFromHierarchyKpi(kpi: GmHierarchyKpi) {
     const raw = extractLeadingNumberFromText(fromPm ?? '') || extractLeadingNumberFromText(kpi.target)
     targetValue.value = raw
     unit.value = kpiUnitCodeToFormUnit(kpi.unitCode)
-    selectedPMs.value = kpi.pmOwners.map((p) => String(p.id || '').trim() || p.name)
+    selectedPMs.value = normalizeUniqueDepartmentManagerIds(kpi.pmOwners.map(pmSelectionKey).filter(Boolean))
     const nextPm: Record<string, string> = {}
     for (const p of kpi.pmOwners) {
-      const key = String(p.id || '').trim() || p.name
+      const key = pmSelectionKey(p)
+      if (!selectedPMs.value.includes(key)) continue
       const n = extractLeadingNumberFromText(p.target)
       if (n) nextPm[key] = n
     }
@@ -1101,17 +1137,25 @@ async function hydrateFormFromStrategicKpiEditData(data: GmStrategicKpiEditData,
   memberAssignSearch.value = ''
 
   if (kpiTypeCode.value === 102) {
-    selectedPMs.value = (data.assignPMs ?? []).map((u) => String(u).trim()).filter(Boolean)
+    selectedPMs.value = normalizeUniqueDepartmentManagerIds(
+      (data.assignPMs ?? []).map((u) => String(u).trim()).filter(Boolean),
+    )
+    const selectedPmSet = new Set(selectedPMs.value)
     const rawPm = data.pmTargets ?? {}
     const nextPm: Record<string, string> = {}
     for (const [k, v] of Object.entries(rawPm)) {
       const key = String(k ?? '').trim()
-      if (!key || v == null || v === '') continue
+      if (!key || !selectedPmSet.has(key) || v == null || v === '') continue
       nextPm[key] = typeof v === 'number' && Number.isFinite(v) ? String(v) : String(v).trim()
     }
     pmTargets.value = nextPm
   } else if (kpiTypeCode.value === 101) {
-    await distributeIndividualMembersFromServerIds((data.memberIds ?? []).map(String))
+    const fromMemberIds = (data.memberIds ?? []).map((u) => String(u).trim()).filter(Boolean)
+    const fromMemberTargets = Object.keys((data as { memberTargets?: Record<string, unknown> }).memberTargets ?? {})
+      .map((u) => String(u).trim())
+      .filter(Boolean)
+    const merged = [...new Set([...fromMemberIds, ...fromMemberTargets])]
+    await distributeIndividualMembersFromServerIds(merged)
   } else if (kpiTypeCode.value === 103) {
     selectedMembers.value = (data.memberIds ?? []).map((u) => String(u).trim()).filter(Boolean)
   }

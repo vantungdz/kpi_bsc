@@ -38,5 +38,10 @@ public class KpiSheetResponse {
         private Integer selfScore;
         private Integer pmScore;
         private Integer leaderScore;
+        private boolean canEditEvidence;
+        private boolean canViewEvidence;
+        private boolean canEditScore;
+        private String evidenceTooltip;
+        private String evaluationState;
     }
 }

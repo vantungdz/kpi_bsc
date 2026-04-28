@@ -1,14 +1,22 @@
 package com.company.kpi.service.pm;
 
+import com.company.kpi.aggregate.KpiAssignmentDetailAggregate;
 import com.company.kpi.aggregate.PmDashboardAggregate;
+import com.company.kpi.aggregate.UserTeamHierarchyAggregate;
 import com.company.kpi.mapper.KpiAssignmentMapper;
 import com.company.kpi.mapper.KpiCycleMapper;
+import com.company.kpi.mapper.UserMapper;
+import com.company.kpi.response.common.KpiCycleResponse;
+import com.company.kpi.response.pm.MemberKpiDetailResponse;
 import com.company.kpi.response.pm.PmDashboardResponse;
+import com.company.kpi.response.pm.TeamMemberResponse;
+
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -20,13 +28,14 @@ public class PmDashboardService {
 
     private final KpiCycleMapper kpiCycleMapper;
     private final KpiAssignmentMapper kpiAssignmentMapper;
+    private final UserMapper userMapper;
 
     public PmDashboardResponse getDashboardInitialization(UUID pmId, Integer year) {
         
         // lấy cycle id từ mapper (sử dụng findByYear hiện có)
         var cycleOpt = kpiCycleMapper.findByYear(year);
         if (cycleOpt.isEmpty()) {
-            throw new IllegalArgumentException("Không tìm thấy chu kỳ KPI cho năm: " + year);
+            throw new IllegalArgumentException("Can't find KPI cycle for year: " + year);
         }
 
         UUID cycleId = cycleOpt.get().getId();
@@ -55,6 +64,7 @@ public class PmDashboardService {
                         .isImportant(agg.getKpiInfo() != null ? agg.getKpiInfo().getIsImportant() : null)
                         .target(agg.getKpiInfo() != null ? agg.getKpiInfo().getTargetDescription() : null)
                         .weight(agg.getKpiInfo() != null ? agg.getKpiInfo().getWeight() : null)
+                        .statusCode(agg.getPmAssignment() != null ? agg.getPmAssignment().getStatusCode() : null)
                         .actualResult(agg.getPmAssignment().getEvidences())
                         .selfScore(pmSelfScore)
                         .pmScore(agg.getPmAssignment().getEndPmScore())
@@ -81,8 +91,92 @@ public class PmDashboardService {
             }
         }
 
+        // Get cycle info for response
+        KpiCycleResponse cycleResponse = cycleOpt
+                .map(cycle -> {
+                    KpiCycleResponse resp = new KpiCycleResponse();
+                    resp.setId(cycle.getId());
+                    resp.setYear(cycle.getYear());
+                    resp.setName(cycle.getName());
+                    resp.setGoalSettingStart(cycle.getGoalSettingStart());
+                    resp.setGoalSettingEnd(cycle.getGoalSettingEnd());
+                    resp.setMidYearStart(cycle.getMidYearStart());
+                    resp.setMidYearEnd(cycle.getMidYearEnd());
+                    resp.setEndYearStart(cycle.getEndYearStart());
+                    resp.setEndYearEnd(cycle.getEndYearEnd());
+                    return resp;
+                })
+                .orElse(null);
         return PmDashboardResponse.builder()
             .kpis(new ArrayList<>(kpiGroupMap.values()))
+            .kpiCycle(cycleResponse)
             .build();
+    }
+
+    public List<TeamMemberResponse> getTeamHierarchy(UUID pmId, Integer year) {
+        var cycleOpt = kpiCycleMapper.findByYear(year);
+        if (cycleOpt.isEmpty()) {
+            throw new IllegalArgumentException("Can't find KPI cycle for year: " + year);
+        }
+        UUID cycleId = cycleOpt.get().getId();
+
+        List<UserTeamHierarchyAggregate> aggregates = userMapper.findTeamHierarchyBySupervisor(pmId, cycleId);
+        
+        Map<UUID, TeamMemberResponse> lookupMap = new HashMap<>();
+        List<TeamMemberResponse> roots = new ArrayList<>();
+
+        for (UserTeamHierarchyAggregate agg : aggregates) {
+            TeamMemberResponse res = new TeamMemberResponse();
+            res.setId(agg.getId());
+            res.setName(agg.getFullName());
+            res.setRole(agg.getJobTitle() != null ? agg.getJobTitle().getName() : "");
+            res.setSupervisorId(agg.getSupervisorId());
+            res.setScore(agg.getTotalScore());
+            res.setStatusCode(agg.getMinStatusCode()); // Pass raw code
+            res.setExpanded(true);
+            
+            lookupMap.put(res.getId(), res);
+        }
+
+        // 2. Build Tree
+        for (TeamMemberResponse res : lookupMap.values()) {
+            if (pmId.equals(res.getSupervisorId())) {
+                res.setDepth(0);
+                roots.add(res);
+            } else {
+                TeamMemberResponse parent = lookupMap.get(res.getSupervisorId());
+                if (parent != null) {
+                    res.setDepth(parent.getDepth() + 1);
+                    parent.getChildren().add(res);
+                }
+            }
+        }
+
+        return roots;
+    }
+
+    public List<MemberKpiDetailResponse> getMemberKpiDetails(UUID memberId, Integer year) {
+        List<KpiAssignmentDetailAggregate> aggregates = kpiAssignmentMapper.findKpiDetailsByUserAndCycle(memberId, cycleId);
+        List<MemberKpiDetailResponse> result = new ArrayList<>();
+        
+        for (KpiAssignmentDetailAggregate agg : aggregates) {
+            MemberKpiDetailResponse res = new MemberKpiDetailResponse();
+            res.setId(agg.getId());
+            res.setGroup(agg.getKpiCategory() != null ? agg.getKpiCategory().getName() : null);
+            res.setCode(agg.getKpiMaster().getCode());
+            res.setName(agg.getKpiMaster().getName());
+            res.setDescription(agg.getKpiMaster().getName());
+            res.setTarget(agg.getKpisInformation().getTargetDescription());
+            res.setWeight(agg.getKpisInformation().getWeight());
+            res.setSelfScore(agg.getEndSelfScore() != null ? agg.getEndSelfScore() : agg.getMidSelfScore());
+            res.setPmScore(agg.getEndPmScore());
+            res.setStatusCode(agg.getStatusCode());
+            res.setKpiTypeCode(agg.getKpiMaster().getTypeCode());
+            res.setCalcRuleCode(agg.getKpiMaster().getCalculationRuleCode());
+            res.setEvidences(agg.getEvidences());
+            result.add(res);
+        }
+
+        return result;
     }
 }

@@ -29,5 +29,6 @@ public class KpiRegistrationInitResponse {
         private String fullName;
         private String departmentName;
         private String rankCode;
+        private boolean assigned;
     }
 }

@@ -11,7 +11,8 @@ public class LeaderKpiAssignmentDTO {
     private String kpiCode;
     private String targetDescription;
     private Double weight;
-    private String statusCode;
+    private Integer statusCode;
+    private String statusName;
     private String statusDesc;
     // Mid-year: chỉ có self score theo init-db.sql schema
     private Double midSelfScore;

@@ -11,6 +11,7 @@ import com.company.kpi.response.leader.*;
 
 import static com.company.kpi.response.leader.LeaderKpiInformationResponse.LeaderKpiCategoryGroup;
 import static com.company.kpi.response.leader.LeaderKpiInformationResponse.LeaderKpiSummary;
+import static com.company.kpi.response.leader.LeaderKpiInformationResponse.LeaderKpiCycleInfo;
 import static com.company.kpi.response.leader.LeaderKpiInformationResponse.LeaderKpiAssignmentResponse;
 import static com.company.kpi.response.leader.LeaderMemberListResponse.MemberInfo;
 
@@ -79,8 +80,11 @@ public class LeaderKpiService {
             kpiSummary.setEvaluationSupervisorComments(Optional.ofNullable(userKpiSummary.getEvaluationSupervisorComments()).orElse(StringUtils.EMPTY));
         }
 
+        LeaderKpiCycleInfo leaderKpiCycleInfo = modelMapper.map(cycle, LeaderKpiCycleInfo.class);
+
         return LeaderKpiInformationResponse.builder()
                 .year(year)
+                .kpiCycle(leaderKpiCycleInfo)
                 .categories(new ArrayList<>(categoryMap.values()))
                 .kpiSummary(kpiSummary)
                 .build();

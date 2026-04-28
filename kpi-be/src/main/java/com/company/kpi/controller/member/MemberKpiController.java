@@ -41,10 +41,10 @@ public class MemberKpiController extends BaseController {
     }
 
     /** Meta form tạo KPI: {@code kpi_categories} + CALC_RULE (801–804). */
-    @GetMapping("/form-meta")
-    public ResponseEntity<BaseResponse<MemberKpiFormMetaResponse>> getFormMeta() {
-        return success(memberKpiService.getFormMeta());
-    }
+    // @GetMapping("/form-meta")
+    // public ResponseEntity<BaseResponse<MemberKpiFormMetaResponse>> getFormMeta(@RequestParam Integer year) {
+    //     return success(memberKpiService.getFormMeta(year));
+    // }
 
     @PutMapping("/sheet/{assignmentId}")
     public ResponseEntity<BaseResponse<KpiSheetResponse>> updateSheetItem(

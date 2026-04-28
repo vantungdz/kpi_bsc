@@ -7,6 +7,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+import com.company.kpi.response.common.KpiCycleResponse;
+
 @Getter
 @Builder
 public class PmDashboardResponse {
@@ -14,6 +16,8 @@ public class PmDashboardResponse {
     @Builder.Default
     private List<KpiGroupDto> kpis = new ArrayList<>();
 
+    @Builder.Default
+    private KpiCycleResponse kpiCycle = null;
     @Getter
     @Builder
     public static class KpiGroupDto {
@@ -26,6 +30,7 @@ public class PmDashboardResponse {
         private Boolean isImportant; 
         private String target;      // target_description
         private BigDecimal weight;
+        private Integer statusCode;
         // Bổ sung Data của riêng PM
         private String actualResult; 
         private BigDecimal selfScore;

@@ -217,6 +217,22 @@ function allMembersUnderPm(pm: GmHierarchyPm): GmHierarchyMember[] {
   return [...pm.members, ...fromLeaders]
 }
 
+function pmSelfMember(pm: GmHierarchyPm): GmHierarchyMember | null {
+  const ownerUserId = String(pm.ownerUserId ?? '').trim()
+  if (!ownerUserId) return null
+  return pm.members.find((member) => String(member.id ?? '').trim() === ownerUserId) ?? null
+}
+
+function pmDirectReportMembers(pm: GmHierarchyPm): GmHierarchyMember[] {
+  const selfMember = pmSelfMember(pm)
+  if (!selfMember) return pm.members
+  return pm.members.filter((member) => String(member.id ?? '').trim() !== String(selfMember.id ?? '').trim())
+}
+
+function pmSelfBranchHasChildren(pm: GmHierarchyPm): boolean {
+  return pmDirectReportMembers(pm).length > 0 || (pm.leaders?.length ?? 0) > 0
+}
+
 function pmHasRollout(pm: GmHierarchyPm): boolean {
   return allMembersUnderPm(pm).length > 0
 }
@@ -274,9 +290,17 @@ function memberTableActualDisplay(member: GmHierarchyMember) {
 function memberDiagnosticsStatusLabel(member: GmHierarchyMember): string {
   const pl = member.performanceLabel?.trim()
   if (pl) return pl
-  if (member.status === 'danger') return 'Fail'
-  if (member.status === 'warning') return 'Warning'
+  const st = memberStatusForUi(member)
+  if (st === 'danger') return 'Fail'
+  if (st === 'warning') return 'Warning'
   return 'Done'
+}
+
+function memberStatusForUi(member: GmHierarchyMember | null | undefined): GmHierarchyStatus {
+  if (!member) return 'warning'
+  const pl = String(member.performanceLabel ?? '').trim().toLowerCase()
+  if (pl.includes('chưa cấu hình mục tiêu')) return 'warning'
+  return member.status
 }
 
 /**
@@ -657,11 +681,12 @@ function memberRowToModalItem(member: GmHierarchyMember, kpi: GmHierarchyKpi, pm
     weight: parseWeightPct(kpi.weight),
     target: drawerTarget,
     actual: drawerActual,
-    isFail: member.status === 'danger',
+    isFail: memberStatusForUi(member) === 'danger',
     rootCause: member.blocker !== '-' ? member.blocker : '',
     score: member.actual,
     kpiType: kpi.kpiType,
-    submissionStatus: submissionFromMemberStatus(member.status),
+    submissionStatus: submissionFromMemberStatus(memberStatusForUi(member)),
+    assignmentStatusCode: member.assignmentStatusCode ?? null,
     targetSummary: `Đóng góp trong KPI «${kpi.name}» · Minh chứng / ghi chú: ${evidenceNote} · ${pmRollupShortRoleForLabel(pm)}: ${pm.name}`,
     actualProgressPct: memberDrawerActualProgressPct(member),
     evidenceAttachmentUrl: member.evidenceAttachmentUrl ?? null,
@@ -702,72 +727,51 @@ function closeMemberDrawer() {
 
 <template>
   <div>
-  <div
-    id="diagnostics-section"
-    class="w-auto animate-fade-in overflow-hidden rounded-2xl border border-slate-200 bg-white pb-4 shadow-sm"
-  >
-    <!-- Header + nút Bộ lọc (popover theo Documents/index.html) -->
-    <div class="flex flex-col gap-3 border-b border-slate-200 bg-white p-5">
-      <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div class="min-w-0">
-          <h3
-            class="flex flex-wrap items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-800 sm:text-sm"
-          >
-            <i class="fas fa-layer-group text-[11px] text-blue-600 sm:text-xs" />
-            Strategic KPIs Tracking & Diagnostics
-          </h3>
-        </div>
+    <div id="diagnostics-section"
+      class="w-auto animate-fade-in overflow-hidden rounded-2xl border border-slate-200 bg-white pb-4 shadow-sm">
+      <!-- Header + nút Bộ lọc (popover theo Documents/index.html) -->
+      <div class="flex flex-col gap-3 border-b border-slate-200 bg-white p-5">
+        <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div class="min-w-0">
+            <h3
+              class="flex flex-wrap items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-800 sm:text-sm">
+              <i class="fas fa-layer-group text-[11px] text-blue-600 sm:text-xs" />
+              Strategic KPIs Tracking & Diagnostics
+            </h3>
+          </div>
 
-        <div class="flex shrink-0 flex-wrap items-center justify-end gap-2 self-start lg:self-auto">
-          <button
-            v-if="appliedFilterCount > 0"
-            type="button"
-            class="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 shadow-sm transition-colors hover:border-rose-200 hover:bg-rose-50/80 hover:text-rose-800"
-            aria-label="Đặt lại tất cả bộ lọc"
-            @click.stop="resetAllDiagnosticFilters"
-          >
-            <i class="fas fa-rotate-left text-[11px] text-slate-500" aria-hidden="true" />
-            Đặt lại bộ lọc
-          </button>
-          <div ref="filterPopoverWrapRef" class="relative">
-            <button
-              type="button"
-              class="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 shadow-sm transition-colors hover:border-slate-300 hover:bg-slate-50"
-              aria-haspopup="dialog"
-              :aria-expanded="filterPopoverOpen"
-              @click.stop="toggleFilterPopover"
-            >
-              <i class="fas fa-sliders-h text-sm text-slate-500" aria-hidden="true" />
-              Bộ lọc
-              <span
-                v-if="appliedFilterCount > 0"
-                class="rounded-full bg-blue-100 px-1.5 py-0.5 text-[10px] font-extrabold leading-none text-blue-700"
-              >{{ appliedFilterCount }}</span>
+          <div class="flex shrink-0 flex-wrap items-center justify-end gap-2 self-start lg:self-auto">
+            <button v-if="appliedFilterCount > 0" type="button"
+              class="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 shadow-sm transition-colors hover:border-rose-200 hover:bg-rose-50/80 hover:text-rose-800"
+              aria-label="Đặt lại tất cả bộ lọc" @click.stop="resetAllDiagnosticFilters">
+              <i class="fas fa-rotate-left text-[11px] text-slate-500" aria-hidden="true" />
+              Đặt lại bộ lọc
             </button>
+            <div ref="filterPopoverWrapRef" class="relative">
+              <button type="button"
+                class="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 shadow-sm transition-colors hover:border-slate-300 hover:bg-slate-50"
+                aria-haspopup="dialog" :aria-expanded="filterPopoverOpen" @click.stop="toggleFilterPopover">
+                <i class="fas fa-sliders-h text-sm text-slate-500" aria-hidden="true" />
+                Bộ lọc
+                <span v-if="appliedFilterCount > 0"
+                  class="rounded-full bg-blue-100 px-1.5 py-0.5 text-[10px] font-extrabold leading-none text-blue-700">{{
+                  appliedFilterCount }}</span>
+              </button>
+            </div>
           </div>
         </div>
-      </div>
 
-      <Teleport to="body">
-        <Transition name="gm-diag-filter-pop">
-          <div
-            v-if="filterPopoverOpen"
-            ref="filterPopoverPanelRef"
-            class="fixed z-[200] flex max-h-[min(24rem,calc(100vh-1rem))] origin-top-right flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl"
-            :style="filterPanelFixedStyle"
-            role="dialog"
-            aria-label="Tùy chỉnh bộ lọc"
-            @click.stop
-          >
+        <Teleport to="body">
+          <Transition name="gm-diag-filter-pop">
+            <div v-if="filterPopoverOpen" ref="filterPopoverPanelRef"
+              class="fixed z-[200] flex max-h-[min(24rem,calc(100vh-1rem))] origin-top-right flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl"
+              :style="filterPanelFixedStyle" role="dialog" aria-label="Tùy chỉnh bộ lọc" @click.stop>
               <div class="flex shrink-0 items-center justify-between border-b border-slate-100 bg-slate-50 px-3 py-2.5">
                 <h4 class="text-[11px] font-bold uppercase tracking-wider text-slate-600">
                   Tùy chỉnh hiển thị
                 </h4>
-                <button
-                  type="button"
-                  class="text-[10px] font-bold text-blue-600 hover:text-blue-800 hover:underline"
-                  @click="resetAllDiagnosticFilters"
-                >
+                <button type="button" class="text-[10px] font-bold text-blue-600 hover:text-blue-800 hover:underline"
+                  @click="resetAllDiagnosticFilters">
                   Đặt lại bộ lọc
                 </button>
               </div>
@@ -777,29 +781,18 @@ function closeMemberDrawer() {
                   <label class="mb-1.5 block text-[10px] font-bold text-slate-500">
                     Section
                   </label>
-                  <div
-                    v-if="diagnosticsSectionOptions.length === 0"
-                    class="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500"
-                  >
+                  <div v-if="diagnosticsSectionOptions.length === 0"
+                    class="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500">
                     Không có section trong dữ liệu hiện tại.
                   </div>
-                  <div
-                    v-else
+                  <div v-else
                     class="custom-scrollbar max-h-36 space-y-1 overflow-y-auto rounded-lg border border-slate-200 bg-white p-2"
-                    role="group"
-                    aria-label="Chọn section"
-                  >
-                    <label
-                      v-for="s in diagnosticsSectionOptions"
-                      :key="s"
-                      class="flex cursor-pointer items-start gap-2 rounded-md px-2 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                    >
-                      <input
-                        type="checkbox"
+                    role="group" aria-label="Chọn section">
+                    <label v-for="s in diagnosticsSectionOptions" :key="s"
+                      class="flex cursor-pointer items-start gap-2 rounded-md px-2 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50">
+                      <input type="checkbox"
                         class="mt-0.5 h-3.5 w-3.5 shrink-0 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                        :checked="draftSections.includes(s)"
-                        @change="toggleDraftSection(s)"
-                      />
+                        :checked="draftSections.includes(s)" @change="toggleDraftSection(s)" />
                       <span class="min-w-0 leading-snug">{{ s }}</span>
                     </label>
                   </div>
@@ -808,29 +801,18 @@ function closeMemberDrawer() {
                   <label class="mb-1.5 block text-[10px] font-bold text-slate-500">
                     Thành viên
                   </label>
-                  <div
-                    v-if="diagnosticsMemberOptions.length === 0"
-                    class="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500"
-                  >
+                  <div v-if="diagnosticsMemberOptions.length === 0"
+                    class="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500">
                     Không có thành viên trong dữ liệu hiện tại.
                   </div>
-                  <div
-                    v-else
+                  <div v-else
                     class="custom-scrollbar max-h-36 space-y-1 overflow-y-auto rounded-lg border border-slate-200 bg-white p-2"
-                    role="group"
-                    aria-label="Chọn thành viên"
-                  >
-                    <label
-                      v-for="n in diagnosticsMemberOptions"
-                      :key="n"
-                      class="flex cursor-pointer items-start gap-2 rounded-md px-2 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                    >
-                      <input
-                        type="checkbox"
+                    role="group" aria-label="Chọn thành viên">
+                    <label v-for="n in diagnosticsMemberOptions" :key="n"
+                      class="flex cursor-pointer items-start gap-2 rounded-md px-2 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50">
+                      <input type="checkbox"
                         class="mt-0.5 h-3.5 w-3.5 shrink-0 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                        :checked="draftMembers.includes(n)"
-                        @change="toggleDraftMember(n)"
-                      />
+                        :checked="draftMembers.includes(n)" @change="toggleDraftMember(n)" />
                       <span class="min-w-0 leading-snug">{{ n }}</span>
                     </label>
                   </div>
@@ -840,41 +822,27 @@ function closeMemberDrawer() {
                     Mức độ quan trọng
                   </label>
                   <div class="relative">
-                    <select
-                      id="diag-draft-important"
-                      v-model="draftImportant"
-                      class="w-full cursor-pointer appearance-none rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm outline-none focus:border-amber-500"
-                    >
+                    <select id="diag-draft-important" v-model="draftImportant"
+                      class="w-full cursor-pointer appearance-none rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm outline-none focus:border-amber-500">
                       <option value="">Tất cả</option>
                       <option value="yes">Chỉ KPI quan trọng (⭐)</option>
                       <option value="no">KPI thường (không sao)</option>
                     </select>
-                    <i
-                      class="fas fa-chevron-down pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400"
-                      aria-hidden="true"
-                    />
+                    <i class="fas fa-chevron-down pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400"
+                      aria-hidden="true" />
                   </div>
                 </div>
                 <div>
                   <label class="mb-1.5 block text-[10px] font-bold text-slate-500">
                     Trạng thái KPI
                   </label>
-                  <div
-                    class="space-y-1 rounded-lg border border-slate-200 bg-white p-2"
-                    role="group"
-                    aria-label="Chọn trạng thái KPI"
-                  >
-                    <label
-                      v-for="st in STATUS_FILTER_OPTIONS"
-                      :key="st"
-                      class="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                    >
-                      <input
-                        type="checkbox"
+                  <div class="space-y-1 rounded-lg border border-slate-200 bg-white p-2" role="group"
+                    aria-label="Chọn trạng thái KPI">
+                    <label v-for="st in STATUS_FILTER_OPTIONS" :key="st"
+                      class="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50">
+                      <input type="checkbox"
                         class="h-3.5 w-3.5 shrink-0 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                        :checked="draftStatuses.includes(st)"
-                        @change="toggleDraftStatus(st)"
-                      />
+                        :checked="draftStatuses.includes(st)" @change="toggleDraftStatus(st)" />
                       <span>{{ kpiStatusLabel(st) }}</span>
                     </label>
                   </div>
@@ -882,583 +850,695 @@ function closeMemberDrawer() {
               </div>
 
               <div class="flex items-center justify-end gap-2 border-t border-slate-100 bg-slate-50/80 px-3 py-2.5">
-                <button
-                  type="button"
+                <button type="button"
                   class="rounded-lg px-3 py-1.5 text-xs font-bold text-slate-600 transition-colors hover:bg-slate-200/60"
-                  @click="cancelFilterPopover"
-                >
+                  @click="cancelFilterPopover">
                   Huỷ
                 </button>
-                <button
-                  type="button"
+                <button type="button"
                   class="rounded-lg bg-blue-600 px-4 py-1.5 text-xs font-bold text-white shadow-sm transition-colors hover:bg-blue-700"
-                  @click="applyPopoverFilters"
-                >
+                  @click="applyPopoverFilters">
                   Áp dụng / Lọc
                 </button>
               </div>
             </div>
           </Transition>
-      </Teleport>
+        </Teleport>
 
-      <!-- Chip bộ lọc đang áp dụng (index.html #active-filters-container) -->
-      <div
-        v-if="activeFilterChips.length > 0"
-        class="flex flex-wrap items-start gap-2 border-t border-slate-100 pt-3"
-      >
-        <span class="mt-1.5 shrink-0 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-          Đang lọc theo:
-        </span>
-        <div class="flex flex-wrap gap-2">
-          <span
-            v-for="chip in activeFilterChips"
-            :key="chip.key + chip.label"
-            class="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-bold text-blue-800"
-          >
-            {{ chip.label }}
-            <button
-              type="button"
-              class="ml-0.5 rounded p-0.5 text-blue-400 hover:text-blue-900 focus:outline-none focus-visible:ring-1 focus-visible:ring-blue-400"
-              :aria-label="`Bỏ lọc ${chip.label}`"
-              @click="removeAppliedFilterChip(chip.key)"
-            >
-              <i class="fas fa-times text-[10px]" aria-hidden="true" />
-            </button>
+        <!-- Chip bộ lọc đang áp dụng (index.html #active-filters-container) -->
+        <div v-if="activeFilterChips.length > 0"
+          class="flex flex-wrap items-start gap-2 border-t border-slate-100 pt-3">
+          <span class="mt-1.5 shrink-0 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+            Đang lọc theo:
           </span>
+          <div class="flex flex-wrap gap-2">
+            <span v-for="chip in activeFilterChips" :key="chip.key + chip.label"
+              class="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-bold text-blue-800">
+              {{ chip.label }}
+              <button type="button"
+                class="ml-0.5 rounded p-0.5 text-blue-400 hover:text-blue-900 focus:outline-none focus-visible:ring-1 focus-visible:ring-blue-400"
+                :aria-label="`Bỏ lọc ${chip.label}`" @click="removeAppliedFilterChip(chip.key)">
+                <i class="fas fa-times text-[10px]" aria-hidden="true" />
+              </button>
+            </span>
+          </div>
         </div>
       </div>
-    </div>
 
-    <div class="overflow-x-auto">
-      <div class="min-w-[860px] divide-y divide-slate-200">
-        <!-- 4+1+2+2+2+1 — Target/Actual rộng hơn; cột Thao tác căn nút Chi tiết -->
-        <div
-          class="sticky top-0 z-10 grid grid-cols-12 gap-2 border-b border-slate-200 bg-slate-100 px-3 py-2 text-xs font-bold uppercase tracking-wider text-slate-600 sm:gap-3"
-        >
-          <div class="col-span-4 pl-6">Mục tiêu KPI &amp; PM / Leader / Member</div>
-          <div class="col-span-1 text-center">Trọng số</div>
-          <div class="col-span-2 text-center">Target</div>
-          <div class="col-span-2 text-center">Actual</div>
-          <div class="col-span-2 text-center">Trạng thái</div>
-          <div class="col-span-1 text-center">Thao tác</div>
-        </div>
-
-        <template v-for="group in visibleRowGroups" :key="'sec-' + group.key">
-          <div class="border-b border-slate-200 bg-slate-50">
-            <button
-              type="button"
-              class="flex w-full items-center gap-2.5 px-3 py-2.5 text-left transition-colors hover:bg-slate-100/80"
-              :aria-expanded="expandedSectionKeys.has(group.key)"
-              :aria-controls="sectionDomId(group.key)"
-              @click="toggleSection(group.key)"
-            >
-              <i
-                class="fas fa-chevron-right w-3 shrink-0 text-center text-[10px] text-slate-500 transition-transform duration-200 motion-reduce:transition-none"
-                :class="expandedSectionKeys.has(group.key) ? 'rotate-90' : ''"
-                aria-hidden="true"
-              />
-              <span class="text-[11px] font-bold uppercase tracking-wider text-slate-800">{{ group.label }}</span>
-              <span
-                class="rounded-md border border-slate-200/80 bg-white px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-slate-600"
-                >{{ group.rows.length }} KPI</span>
-            </button>
-          </div>
+      <div class="overflow-x-auto">
+        <div class="min-w-[860px] divide-y divide-slate-200">
+          <!-- 4+1+2+2+2+1 — Target/Actual rộng hơn; cột Thao tác căn nút Chi tiết -->
           <div
-            :id="sectionDomId(group.key)"
-            class="grid overflow-hidden border-b border-slate-200 transition-[grid-template-rows] duration-300 ease-in-out motion-reduce:transition-none"
-            :class="expandedSectionKeys.has(group.key) ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'"
-          >
-            <div class="min-h-0 divide-y divide-slate-200">
-            <template v-for="kpi in group.rows" :key="kpi.id">
-          <!-- Dòng KPI -->
-          <div class="flex flex-col">
-            <div
-              class="grid cursor-pointer grid-cols-12 items-center gap-2 px-3 py-2.5 transition-colors sm:gap-3"
-              :class="expandedKpis.has(kpi.id) ? 'bg-indigo-50/50' : 'hover:bg-slate-50'"
-              @click="toggleKpi(kpi.id)"
-            >
-              <div class="col-span-4 flex items-center">
-                <button
-                  type="button"
-                  class="mr-1 p-0.5 text-slate-500 hover:text-slate-800"
-                  aria-label="Mở rộng KPI"
-                  :aria-expanded="expandedKpis.has(kpi.id)"
-                  @click.stop="toggleKpi(kpi.id)"
-                >
-                  <i
-                    class="fas fa-chevron-right text-xs transition-transform duration-300 ease-out motion-reduce:transition-none"
-                    :class="expandedKpis.has(kpi.id) ? 'rotate-90' : 'rotate-0'"
-                  />
-                </button>
-                <div
-                  class="mr-2 flex h-7 w-7 shrink-0 items-center justify-center rounded-md shadow-sm"
-                  :class="kpiIconWrapClass(kpi.status)"
-                >
-                  <i class="fas fa-bullseye text-[11px]" />
-                </div>
-                <div class="min-w-0">
-                  <div class="flex flex-wrap items-center gap-x-1.5 gap-y-1">
-                    <i
-                      v-if="kpi.isImportant"
-                      class="fas fa-star shrink-0 text-[11px] text-amber-500"
-                      title="KPI quan trọng (Important)"
-                      aria-label="KPI quan trọng"
-                    />
-                    <span class="text-sm font-bold leading-snug text-slate-800">{{ kpi.name }}</span>
-                    <GmStrategicKpiTypeTag :type="kpi.kpiType" size="sm" class="shrink-0" />
-                  </div>
-                </div>
-              </div>
-              <div class="col-span-1 text-center">
-                <span
-                  class="inline-block min-w-[2.25rem] rounded-md bg-slate-100 px-1.5 py-1 text-xs font-semibold tabular-nums text-slate-700"
-                >{{ kpi.weight }}</span>
-              </div>
-              <div class="col-span-2 text-center text-xs font-semibold tabular-nums text-slate-600">
-                {{ kpi.target }}
-              </div>
-              <div
-                class="col-span-2 text-center text-sm font-bold tabular-nums"
-                :class="actualBelowTarget(kpi.actual, kpi.target) ? 'text-red-600' : 'text-green-600'"
-              >
-                {{ kpi.actual }}
-              </div>
-              <div class="col-span-2 flex justify-center">
-                <span
-                  class="inline-flex max-w-full cursor-default items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold leading-tight"
-                  :class="badgeClass(kpi.status)"
-                  :title="diagnosticsReasonTooltip(kpi.blockerSummary)"
-                >
-                  <i
-                    class="fas shrink-0 text-[11px]"
-                    :class="
-                      kpi.status === 'success'
-                        ? 'fa-check-circle'
-                        : kpi.status === 'warning'
-                          ? 'fa-exclamation-circle'
-                          : 'fa-times-circle'
-                    "
-                  />
-                  <span class="truncate">{{ kpiStatusLabel(kpi.status) }}</span>
-                </span>
-              </div>
-              <div class="col-span-1 flex flex-wrap items-center justify-center gap-1" @click.stop>
-                <button
-                  type="button"
-                  class="rounded border border-slate-200 bg-white px-1.5 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-600 shadow-sm transition-colors hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-800"
-                  title="Sửa KPI"
-                  aria-label="Sửa KPI"
-                  @click="onEditKpiClick(kpi)"
-                >
-                  <i class="fas fa-pen text-[9px]" aria-hidden="true" />
-                </button>
-                <button
-                  type="button"
-                  class="rounded border border-slate-200 bg-white px-1.5 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-600 shadow-sm transition-colors hover:border-rose-200 hover:bg-rose-50 hover:text-rose-800"
-                  title="Xóa KPI"
-                  aria-label="Xóa KPI"
-                  @click="onDeleteKpiClick(kpi)"
-                >
-                  <i class="fas fa-trash text-[9px]" aria-hidden="true" />
-                </button>
-              </div>
-            </div>
+            class="sticky top-0 z-10 grid grid-cols-12 gap-2 border-b border-slate-200 bg-slate-100 px-3 py-2 text-xs font-bold uppercase tracking-wider text-slate-600 sm:gap-3">
+            <div class="col-span-4 pl-6">Mục tiêu KPI &amp; PM / Leader / Member</div>
+            <div class="col-span-1 text-center">Trọng số</div>
+            <div class="col-span-2 text-center">Target</div>
+            <div class="col-span-2 text-center">Actual</div>
+            <div class="col-span-2 text-center">Trạng thái</div>
+            <div class="col-span-1 text-center">Thao tác</div>
+          </div>
 
-            <!-- Khối quản lý → PM + cấp dưới (collapse) -->
-            <div
-              v-if="kpi.pmOwners.length > 0"
-              class="grid overflow-hidden transition-[grid-template-rows] duration-300 ease-in-out motion-reduce:transition-none"
-              :class="expandedKpis.has(kpi.id) ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'"
-            >
-              <div class="min-h-0">
-                <div class="border-t border-slate-100 bg-white pb-2">
-                  <template v-for="pm in kpi.pmOwners" :key="pm.id">
-                    <div class="flex flex-col">
-                      <div
-                        class="grid grid-cols-12 items-center gap-2 border-b border-slate-50 px-3 py-2 sm:gap-3"
-                        :class="pmHasRollout(pm) ? 'cursor-pointer hover:bg-slate-50' : ''"
-                        @click="pmHasRollout(pm) && togglePm(pm.id)"
-                      >
-                        <div class="col-span-4 flex min-w-0 items-center pl-9">
-                          <button
-                            type="button"
-                            class="mr-1 shrink-0 p-1 text-slate-400"
-                            :disabled="!pmHasRollout(pm)"
-                            :aria-expanded="pmHasRollout(pm) ? expandedPms.has(pm.id) : undefined"
-                            @click.stop="pmHasRollout(pm) && togglePm(pm.id)"
-                          >
-                            <i
-                              v-if="pmHasRollout(pm)"
-                              class="fas fa-chevron-right text-xs transition-transform duration-300 ease-out motion-reduce:transition-none"
-                              :class="expandedPms.has(pm.id) ? 'rotate-90' : 'rotate-0'"
-                            />
-                            <span v-else class="inline-block h-4 w-4" />
-                          </button>
-                          <i class="fas fa-sitemap mr-2 shrink-0 text-[11px] text-indigo-500" />
-                          <div class="min-w-0">
-                            <div class="truncate text-xs font-bold text-slate-800">
-                              {{ pmManagedSectionLabel(pm) }}
-                            </div>
-                            <div v-if="!pmHasRollout(pm)" class="mt-0.5 truncate text-xs font-medium text-slate-500">
-                              {{ pmRollupOwnerSubtitle(pm) }}: {{ pm.name }}
-                            </div>
+          <template v-for="group in visibleRowGroups" :key="'sec-' + group.key">
+            <div class="border-b border-slate-200 bg-slate-50">
+              <button type="button"
+                class="flex w-full items-center gap-2.5 px-3 py-2.5 text-left transition-colors hover:bg-slate-100/80"
+                :aria-expanded="expandedSectionKeys.has(group.key)" :aria-controls="sectionDomId(group.key)"
+                @click="toggleSection(group.key)">
+                <i class="fas fa-chevron-right w-3 shrink-0 text-center text-[10px] text-slate-500 transition-transform duration-200 motion-reduce:transition-none"
+                  :class="expandedSectionKeys.has(group.key) ? 'rotate-90' : ''" aria-hidden="true" />
+                <span class="text-[11px] font-bold uppercase tracking-wider text-slate-800">{{ group.label }}</span>
+                <span
+                  class="rounded-md border border-slate-200/80 bg-white px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-slate-600">{{
+                    group.rows.length }} KPI</span>
+              </button>
+            </div>
+            <div :id="sectionDomId(group.key)"
+              class="grid overflow-hidden border-b border-slate-200 transition-[grid-template-rows] duration-300 ease-in-out motion-reduce:transition-none"
+              :class="expandedSectionKeys.has(group.key) ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'">
+              <div class="min-h-0 divide-y divide-slate-200">
+                <template v-for="kpi in group.rows" :key="kpi.id">
+                  <!-- Dòng KPI -->
+                  <div class="flex flex-col">
+                    <div
+                      class="grid cursor-pointer grid-cols-12 items-center gap-2 px-3 py-2.5 transition-colors sm:gap-3"
+                      :class="expandedKpis.has(kpi.id) ? 'bg-indigo-50/50' : 'hover:bg-slate-50'"
+                      @click="toggleKpi(kpi.id)">
+                      <div class="col-span-4 flex items-center">
+                        <button type="button" class="mr-1 p-0.5 text-slate-500 hover:text-slate-800"
+                          aria-label="Mở rộng KPI" :aria-expanded="expandedKpis.has(kpi.id)"
+                          @click.stop="toggleKpi(kpi.id)">
+                          <i class="fas fa-chevron-right text-xs transition-transform duration-300 ease-out motion-reduce:transition-none"
+                            :class="expandedKpis.has(kpi.id) ? 'rotate-90' : 'rotate-0'" />
+                        </button>
+                        <div class="mr-2 flex h-7 w-7 shrink-0 items-center justify-center rounded-md shadow-sm"
+                          :class="kpiIconWrapClass(kpi.status)">
+                          <i class="fas fa-bullseye text-[11px]" />
+                        </div>
+                        <div class="min-w-0">
+                          <div class="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+                            <i v-if="kpi.isImportant" class="fas fa-star shrink-0 text-[11px] text-amber-500"
+                              title="KPI quan trọng (Important)" aria-label="KPI quan trọng" />
+                            <span class="text-sm font-bold leading-snug text-slate-800">{{ kpi.name }}</span>
+                            <GmStrategicKpiTypeTag :type="kpi.kpiType" size="sm" class="shrink-0" />
                           </div>
                         </div>
-                        <div class="col-span-1 text-center text-xs text-slate-300">-</div>
-                        <div class="col-span-2 text-center text-xs font-semibold tabular-nums text-slate-600">
-                          {{ pm.target }}
-                        </div>
-                        <div class="col-span-2 text-center text-xs font-bold tabular-nums text-slate-800">
-                          {{ pm.actual }}
-                        </div>
-                        <div class="col-span-2 flex justify-center">
-                          <span
-                            class="inline-flex max-w-full cursor-default items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold leading-tight"
-                            :class="badgeClass(pm.status)"
-                            :title="diagnosticsReasonTooltip(pm.blockerSummary)"
-                          >
-                            <i
-                              class="fas shrink-0 text-[11px]"
-                              :class="
-                                pm.status === 'success'
-                                  ? 'fa-check-circle'
-                                  : pm.status === 'warning'
-                                    ? 'fa-exclamation-circle'
-                                    : 'fa-times-circle'
-                              "
-                            />
-                            <span class="truncate">{{ kpiStatusLabel(pm.status) }}</span>
-                          </span>
-                        </div>
-                        <div class="col-span-1 flex justify-center pr-0.5">
-                          <button
-                            v-if="pmHasRollout(pm)"
-                            type="button"
-                            class="rounded border border-indigo-200 bg-indigo-50 px-2 py-1 text-[10px] font-bold leading-tight text-indigo-700 transition-colors hover:bg-indigo-100 sm:px-2.5 sm:text-xs"
-                            @click.stop="openPmKpiDrawer(pm, kpi)"
-                          >
-                            Chi tiết
-                          </button>
-                        </div>
                       </div>
+                      <div class="col-span-1 text-center">
+                        <span
+                          class="inline-block min-w-[2.25rem] rounded-md bg-slate-100 px-1.5 py-1 text-xs font-semibold tabular-nums text-slate-700">{{
+                          kpi.weight }}</span>
+                      </div>
+                      <div class="col-span-2 text-center text-xs font-semibold tabular-nums text-slate-600">
+                        {{ kpi.target }}
+                      </div>
+                      <div class="col-span-2 text-center text-sm font-bold tabular-nums"
+                        :class="actualBelowTarget(kpi.actual, kpi.target) ? 'text-red-600' : 'text-green-600'">
+                        {{ kpi.actual }}
+                      </div>
+                      <div class="col-span-2 flex justify-center">
+                        <span
+                          class="inline-flex max-w-full cursor-default items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold leading-tight"
+                          :class="badgeClass(kpi.status)" :title="diagnosticsReasonTooltip(kpi.blockerSummary)">
+                          <i class="fas shrink-0 text-[11px]" :class="kpi.status === 'success'
+                              ? 'fa-check-circle'
+                              : kpi.status === 'warning'
+                                ? 'fa-exclamation-circle'
+                                : 'fa-times-circle'
+                            " />
+                          <span class="truncate">{{ kpiStatusLabel(kpi.status) }}</span>
+                        </span>
+                      </div>
+                      <div class="col-span-1 flex flex-wrap items-center justify-center gap-1" @click.stop>
+                        <button type="button"
+                          class="rounded border border-slate-200 bg-white px-1.5 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-600 shadow-sm transition-colors hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-800"
+                          title="Sửa KPI" aria-label="Sửa KPI" @click="onEditKpiClick(kpi)">
+                          <i class="fas fa-pen text-[9px]" aria-hidden="true" />
+                        </button>
+                        <button type="button"
+                          class="rounded border border-slate-200 bg-white px-1.5 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-600 shadow-sm transition-colors hover:border-rose-200 hover:bg-rose-50 hover:text-rose-800"
+                          title="Xóa KPI" aria-label="Xóa KPI" @click="onDeleteKpiClick(kpi)">
+                          <i class="fas fa-trash text-[9px]" aria-hidden="true" />
+                        </button>
+                      </div>
+                    </div>
 
-                      <div
-                        v-if="pmHasRollout(pm)"
-                        class="grid overflow-hidden transition-[grid-template-rows] duration-300 ease-in-out motion-reduce:transition-none"
-                        :class="expandedPms.has(pm.id) ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'"
-                      >
-                        <div class="min-h-0">
-                          <div class="border-y border-slate-100 bg-slate-50/50 py-1">
-                            <div
-                              v-if="!(pmHasRollout(pm) && pmRolloutSelfOnlyRedundantSummaryBand(pm))"
-                              class="flex flex-wrap items-center gap-2 border-b border-indigo-100/90 bg-gradient-to-r from-indigo-50/50 to-transparent py-2 pl-20 pr-3"
-                              :title="`Target, Actual và trạng thái tổng hợp của nhóm «${pmManagedSectionLabel(pm)}» nằm ở dòng khối phía trên. Phía dưới: ${pm.members.length > 0 && pmUsesLeaderTree(pm) ? 'thành viên trực tiếp và nhóm theo supervisor' : pmUsesLeaderTree(pm) ? 'nhóm theo supervisor' : 'từng thành viên'}.`"
-                            >
-                              <span class="sr-only">
-                                {{ pmRollupOwnerSrOnly(pm) }}; chỉ số tổng hợp nằm ở dòng khối phía trên.
-                              </span>
+                    <!-- Khối quản lý → PM + cấp dưới (collapse) -->
+                    <div v-if="kpi.pmOwners.length > 0"
+                      class="grid overflow-hidden transition-[grid-template-rows] duration-300 ease-in-out motion-reduce:transition-none"
+                      :class="expandedKpis.has(kpi.id) ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'">
+                      <div class="min-h-0">
+                        <div class="border-t border-slate-100 bg-white pb-2">
+                          <template v-for="pm in kpi.pmOwners" :key="pm.id">
+                            <div class="flex flex-col">
                               <div
-                                class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-indigo-200 bg-white shadow-sm"
-                              >
-                                <i class="fas fa-user-tie text-[10px] text-indigo-600" aria-hidden="true" />
-                              </div>
-                              <div class="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                                <span class="text-xs font-semibold text-slate-800">{{ pm.name }}</span>
-                                <template v-for="rb in [pmRollupRoleBadge(pm)]" :key="`rb-${pm.id}`">
-                                  <span
-                                    v-if="rb"
-                                    class="rounded border px-1.5 py-px text-[9px] font-bold uppercase tracking-wide"
-                                    :class="rb.badgeClass"
-                                  >{{ rb.label }}</span>
-                                </template>
-                              </div>
-                              <span
-                                class="ml-auto hidden shrink-0 items-center gap-1 text-[10px] font-medium text-slate-400 sm:inline-flex"
-                                aria-hidden="true"
-                              >
-                                <i class="fas fa-arrow-up text-[9px]" />
-                                Chỉ số nhóm · dòng khối
-                              </span>
-                            </div>
-
-                            <template v-if="pm.members.length > 0">
-                              <div
-                                v-for="member in pm.members"
-                                :key="member.id"
-                                class="grid grid-cols-12 items-center gap-2 px-3 py-1.5 transition-colors hover:bg-white sm:gap-3"
-                              >
-                                <div class="col-span-4 flex items-center pl-20">
-                                  <div
-                                    class="mr-2 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white"
-                                  >
-                                    <i class="fas fa-user text-[10px] text-slate-400" />
-                                  </div>
-                                  <div class="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                                    <span class="text-xs font-semibold text-slate-700">{{ member.name }}</span>
-                                    <template v-for="mb in [memberRollupRoleBadge(member)]" :key="`mbr-${member.id}`">
-                                      <span
-                                        v-if="mb"
-                                        class="shrink-0 rounded border px-1.5 py-px text-[9px] font-bold uppercase tracking-wide"
-                                        :class="mb.badgeClass"
-                                      >{{ mb.label }}</span>
-                                    </template>
+                                class="grid grid-cols-12 items-center gap-2 border-b border-slate-50 px-3 py-2 sm:gap-3"
+                                :class="pmHasRollout(pm) ? 'cursor-pointer hover:bg-slate-50' : ''"
+                                @click="pmHasRollout(pm) && togglePm(pm.id)">
+                                <div class="col-span-4 flex min-w-0 items-center pl-6">
+                                  <button type="button"
+                                    class="mr-1 flex h-6 w-6 shrink-0 items-center justify-center text-slate-400"
+                                    :disabled="!pmHasRollout(pm)"
+                                    :aria-expanded="pmHasRollout(pm) ? expandedPms.has(pm.id) : undefined"
+                                    @click.stop="pmHasRollout(pm) && togglePm(pm.id)">
+                                    <i v-if="pmHasRollout(pm)"
+                                      class="fas fa-chevron-right text-[10px] transition-transform duration-300 ease-out motion-reduce:transition-none"
+                                      :class="expandedPms.has(pm.id) ? 'rotate-90' : 'rotate-0'" />
+                                  </button>
+                                  <i class="fas fa-sitemap mr-2 shrink-0 text-[11px] text-indigo-500" />
+                                  <div class="min-w-0">
+                                    <div class="truncate text-xs font-bold text-slate-800">
+                                      {{ pmManagedSectionLabel(pm) }}
+                                    </div>
+                                    <div v-if="!pmHasRollout(pm)"
+                                      class="mt-0.5 truncate text-xs font-medium text-slate-500">
+                                      {{ pmRollupOwnerSubtitle(pm) }}: {{ pm.name }}
+                                    </div>
                                   </div>
                                 </div>
                                 <div class="col-span-1 text-center text-xs text-slate-300">-</div>
                                 <div class="col-span-2 text-center text-xs font-semibold tabular-nums text-slate-600">
-                                  {{ memberTableTargetDisplay(member) }}
+                                  {{ pm.target }}
                                 </div>
-                                <div
-                                  class="col-span-2 text-center text-xs font-bold tabular-nums"
-                                  :class="
-                                    member.status === 'danger'
-                                      ? 'text-red-600'
-                                      : member.status === 'warning'
-                                        ? 'text-yellow-600'
-                                        : 'text-green-600'
-                                  "
-                                  :title="
-                                    hasMemberSubmissionProgress(member)
-                                      ? `PM giao: ${member.submissionTarget}, Member nộp: ${member.submissionActual} → ${memberTableActualDisplay(member)}`
-                                      : undefined
-                                  "
-                                >
-                                  {{ memberTableActualDisplay(member) }}
+                                <div class="col-span-2 text-center text-xs font-bold tabular-nums text-slate-800">
+                                  {{ pm.actual }}
                                 </div>
-                                <div class="col-span-2 flex justify-center text-xs font-semibold">
+                                <div class="col-span-2 flex justify-center">
                                   <span
-                                    class="inline-flex max-w-full cursor-default items-center gap-1 truncate rounded px-0.5 py-0.5"
-                                    :title="diagnosticsReasonTooltip(member.blocker)"
-                                  >
-                                    <template v-if="member.status === 'danger'">
-                                      <span class="inline-flex items-center text-red-600">
-                                        <i class="fas fa-times-circle mr-1 shrink-0 text-[11px]" />
-                                        {{ memberDiagnosticsStatusLabel(member) }}
-                                      </span>
-                                    </template>
-                                    <template v-else-if="member.status === 'warning'">
-                                      <span class="inline-flex items-center text-yellow-700">
-                                        <i class="fas fa-exclamation-circle mr-1 shrink-0 text-[11px]" />
-                                        {{ memberDiagnosticsStatusLabel(member) }}
-                                      </span>
-                                    </template>
-                                    <template v-else>
-                                      <span class="inline-flex items-center text-green-600">
-                                        <i class="fas fa-check-circle mr-1 shrink-0 text-[11px]" />
-                                        {{ memberDiagnosticsStatusLabel(member) }}
-                                      </span>
-                                    </template>
+                                    class="inline-flex max-w-full cursor-default items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold leading-tight"
+                                    :class="badgeClass(pm.status)" :title="diagnosticsReasonTooltip(pm.blockerSummary)">
+                                    <i class="fas shrink-0 text-[11px]" :class="pm.status === 'success'
+                                        ? 'fa-check-circle'
+                                        : pm.status === 'warning'
+                                          ? 'fa-exclamation-circle'
+                                          : 'fa-times-circle'
+                                      " />
+                                    <span class="truncate">{{ kpiStatusLabel(pm.status) }}</span>
                                   </span>
                                 </div>
-                                <div class="col-span-1 text-center text-xs text-slate-200">—</div>
-                              </div>
-                            </template>
-
-                            <template v-if="pmUsesLeaderTree(pm)">
-                              <div
-                                v-for="leader in pm.leaders"
-                                :key="leader.id"
-                                class="border-b border-slate-100/80 last:border-b-0"
-                              >
-                                <div
-                                  class="grid grid-cols-12 items-center gap-2 border-l-2 border-violet-200/70 bg-violet-50/35 px-3 py-1.5 sm:gap-3"
-                                  :class="leader.members.length ? 'cursor-pointer hover:bg-violet-50/70' : ''"
-                                  @click="leader.members.length && toggleLeader(pm.id, leader.id)"
-                                >
-                                  <div class="col-span-4 flex min-w-0 items-center pl-24">
-                                    <button
-                                      type="button"
-                                      class="mr-1 shrink-0 p-1 text-slate-400"
-                                      :disabled="!leader.members.length"
-                                      :aria-expanded="
-                                        leader.members.length
-                                          ? expandedLeaders.has(leaderExpandKey(pm.id, leader.id))
-                                          : undefined
-                                      "
-                                      @click.stop="leader.members.length && toggleLeader(pm.id, leader.id)"
-                                    >
-                                      <i
-                                        v-if="leader.members.length"
-                                        class="fas fa-chevron-right text-[11px] transition-transform duration-300 ease-out motion-reduce:transition-none"
-                                        :class="
-                                          expandedLeaders.has(leaderExpandKey(pm.id, leader.id))
-                                            ? 'rotate-90'
-                                            : 'rotate-0'
-                                        "
-                                      />
-                                      <span v-else class="inline-block h-3.5 w-3.5" />
-                                    </button>
-                                    <div
-                                      class="mr-2 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-violet-200 bg-white shadow-sm"
-                                    >
-                                      <i class="fas fa-user text-[10px] text-violet-600" aria-hidden="true" />
-                                    </div>
-                                    <div class="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                                      <span class="truncate text-xs font-semibold text-slate-800">{{ leader.name }}</span>
-                                      <template v-for="lb in [leaderRollupRoleBadge(leader)]" :key="`lrb-${leader.id}`">
-                                        <span
-                                          v-if="lb"
-                                          class="shrink-0 rounded border px-1.5 py-px text-[9px] font-bold uppercase tracking-wide"
-                                          :class="lb.badgeClass"
-                                        >{{ lb.label }}</span>
-                                      </template>
-                                    </div>
-                                  </div>
-                                  <div class="col-span-1 text-center text-xs text-slate-300">-</div>
-                                  <div
-                                    class="col-span-2 text-center text-xs font-semibold tabular-nums text-slate-600"
-                                  >
-                                    {{ leader.target }}
-                                  </div>
-                                  <div
-                                    class="col-span-2 text-center text-xs font-bold tabular-nums text-slate-800"
-                                  >
-                                    {{ leader.actual }}
-                                  </div>
-                                  <div class="col-span-2 flex justify-center">
-                                    <span
-                                      class="inline-flex max-w-full cursor-default items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold leading-tight"
-                                      :class="badgeClass(leader.status)"
-                                      :title="diagnosticsReasonTooltip(leader.blockerSummary)"
-                                    >
-                                      <i
-                                        class="fas shrink-0 text-[11px]"
-                                        :class="
-                                          leader.status === 'success'
-                                            ? 'fa-check-circle'
-                                            : leader.status === 'warning'
-                                              ? 'fa-exclamation-circle'
-                                              : 'fa-times-circle'
-                                        "
-                                      />
-                                      <span class="truncate">{{ kpiStatusLabel(leader.status) }}</span>
-                                    </span>
-                                  </div>
-                                  <div class="col-span-1 text-center text-xs text-slate-200">—</div>
+                                <div class="col-span-1 flex justify-center pr-0.5">
+                                  <button v-if="pmHasRollout(pm)" type="button"
+                                    class="rounded border border-indigo-200 bg-indigo-50 px-2 py-1 text-[10px] font-bold leading-tight text-indigo-700 transition-colors hover:bg-indigo-100 sm:px-2.5 sm:text-xs"
+                                    @click.stop="openPmKpiDrawer(pm, kpi)">
+                                    Chi tiết
+                                  </button>
                                 </div>
+                              </div>
 
-                                <div
-                                  v-if="leader.members.length > 0"
-                                  class="grid overflow-hidden transition-[grid-template-rows] duration-300 ease-in-out motion-reduce:transition-none"
-                                  :class="
-                                    expandedLeaders.has(leaderExpandKey(pm.id, leader.id))
-                                      ? 'grid-rows-[1fr]'
-                                      : 'grid-rows-[0fr]'
-                                  "
-                                >
-                                  <div class="min-h-0">
-                                    <div
-                                      v-for="member in leader.members"
-                                      :key="member.id"
-                                      class="grid grid-cols-12 items-center gap-2 border-l-2 border-slate-200/80 px-3 py-1.5 transition-colors hover:bg-white sm:gap-3"
-                                    >
-                                      <div class="col-span-4 flex items-center pl-28">
+                              <div v-if="pmHasRollout(pm)"
+                                class="grid overflow-hidden transition-[grid-template-rows] duration-300 ease-in-out motion-reduce:transition-none"
+                                :class="expandedPms.has(pm.id) ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'">
+                                <div class="min-h-0">
+                                  <div class="border-y border-slate-100 bg-slate-50/50 py-1">
+
+                                    <template v-if="pmSelfMember(pm)">
+                                      <div class="border-b border-slate-100/80 last:border-b-0">
                                         <div
-                                          class="mr-2 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white"
-                                        >
-                                          <i class="fas fa-user text-[10px] text-slate-400" />
-                                        </div>
-                                        <div class="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                                          <span class="text-xs font-semibold text-slate-700">{{ member.name }}</span>
-                                          <template v-for="mb in [memberRollupRoleBadge(member)]" :key="`mbr-l-${member.id}`">
+                                          class="grid grid-cols-12 items-center gap-2 border-l-2 border-indigo-200/70 bg-indigo-50/35 px-3 py-1.5 sm:gap-3"
+                                          :class="pmSelfBranchHasChildren(pm) ? 'cursor-pointer hover:bg-indigo-50/70' : ''"
+                                          @click="pmSelfBranchHasChildren(pm) && toggleLeader(pm.id, `self-${pmSelfMember(pm)?.id}`)">
+                                          <div class="col-span-4 flex min-w-0 items-center pl-16">
+                                            <button type="button" class="mr-1 shrink-0 p-1 text-slate-400"
+                                              :disabled="!pmSelfBranchHasChildren(pm)"
+                                              :aria-expanded="pmSelfBranchHasChildren(pm) ? expandedLeaders.has(leaderExpandKey(pm.id, `self-${pmSelfMember(pm)?.id}`)) : undefined"
+                                              @click.stop="pmSelfBranchHasChildren(pm) && toggleLeader(pm.id, `self-${pmSelfMember(pm)?.id}`)">
+                                              <i v-if="pmSelfBranchHasChildren(pm)"
+                                                class="fas fa-chevron-right text-[11px] transition-transform duration-300 ease-out motion-reduce:transition-none"
+                                                :class="expandedLeaders.has(leaderExpandKey(pm.id, `self-${pmSelfMember(pm)?.id}`)) ? 'rotate-90' : 'rotate-0'" />
+                                              <span v-else class="inline-block h-3.5 w-3.5" />
+                                            </button>
+                                            <div
+                                              class="mr-2 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-indigo-200 bg-white shadow-sm">
+                                              <i class="fas fa-user text-[10px] text-indigo-600" aria-hidden="true" />
+                                            </div>
+                                            <div class="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                                              <span class="truncate text-xs font-semibold text-slate-800">{{ pmSelfMember(pm)?.name }}</span>
+                                              <template v-for="mb in [pmSelfMember(pm) ? memberRollupRoleBadge(pmSelfMember(pm)!) : null]" :key="`mbr-self-${pm.id}`">
+                                                <span v-if="mb"
+                                                  class="shrink-0 rounded border px-1.5 py-px text-[9px] font-bold uppercase tracking-wide"
+                                                  :class="mb.badgeClass">{{ mb.label }}</span>
+                                              </template>
+                                            </div>
+                                          </div>
+                                          <div class="col-span-1 text-center text-xs text-slate-300">-</div>
+                                          <div class="col-span-2 text-center text-xs font-semibold tabular-nums text-slate-600">
+                                            {{ pmSelfMember(pm) ? memberTableTargetDisplay(pmSelfMember(pm)!) : '—' }}
+                                          </div>
+                                          <div class="col-span-2 text-center text-xs font-bold tabular-nums"
+                                            :class="memberStatusForUi(pmSelfMember(pm)) === 'danger' ? 'text-red-600' : memberStatusForUi(pmSelfMember(pm)) === 'warning' ? 'text-yellow-600' : 'text-green-600'"
+                                            :title="pmSelfMember(pm) && hasMemberSubmissionProgress(pmSelfMember(pm)!) ? `PM giao: ${pmSelfMember(pm)!.submissionTarget}, Member ná»™p: ${pmSelfMember(pm)!.submissionActual} â†’ ${memberTableActualDisplay(pmSelfMember(pm)!)}`
+                                              : undefined">
+                                            {{ pmSelfMember(pm) ? memberTableActualDisplay(pmSelfMember(pm)!) : '—' }}
+                                          </div>
+                                          <div class="col-span-2 flex justify-center text-xs font-semibold">
                                             <span
-                                              v-if="mb"
-                                              class="shrink-0 rounded border px-1.5 py-px text-[9px] font-bold uppercase tracking-wide"
-                                              :class="mb.badgeClass"
-                                            >{{ mb.label }}</span>
-                                          </template>
+                                              class="inline-flex max-w-full cursor-default items-center gap-1 truncate rounded px-0.5 py-0.5"
+                                              :title="diagnosticsReasonTooltip(pmSelfMember(pm)?.blocker ?? '')">
+                                              <template v-if="memberStatusForUi(pmSelfMember(pm)) === 'danger'">
+                                                <span class="inline-flex items-center text-red-600">
+                                                  <i class="fas fa-times-circle mr-1 shrink-0 text-[11px]" />
+                                                  {{ pmSelfMember(pm) ? memberDiagnosticsStatusLabel(pmSelfMember(pm)!) : '—' }}
+                                                </span>
+                                              </template>
+                                              <template v-else-if="memberStatusForUi(pmSelfMember(pm)) === 'warning'">
+                                                <span class="inline-flex items-center text-yellow-700">
+                                                  <i class="fas fa-exclamation-circle mr-1 shrink-0 text-[11px]" />
+                                                  {{ pmSelfMember(pm) ? memberDiagnosticsStatusLabel(pmSelfMember(pm)!) : '—' }}
+                                                </span>
+                                              </template>
+                                              <template v-else>
+                                                <span class="inline-flex items-center text-green-600">
+                                                  <i class="fas fa-check-circle mr-1 shrink-0 text-[11px]" />
+                                                  {{ pmSelfMember(pm) ? memberDiagnosticsStatusLabel(pmSelfMember(pm)!) : '—' }}
+                                                </span>
+                                              </template>
+                                            </span>
+                                          </div>
+                                          <div class="col-span-1 text-center text-xs text-slate-200">â€”</div>
+                                        </div>
+
+                                        <div v-if="pmSelfBranchHasChildren(pm)"
+                                          class="grid overflow-hidden transition-[grid-template-rows] duration-300 ease-in-out motion-reduce:transition-none"
+                                          :class="expandedLeaders.has(leaderExpandKey(pm.id, `self-${pmSelfMember(pm)?.id}`)) ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'">
+                                          <div class="min-h-0">
+                                            <div v-for="member in pmDirectReportMembers(pm)" :key="member.id"
+                                              class="grid grid-cols-12 items-center gap-2 border-l-2 border-indigo-200/60 px-3 py-1.5 pl-2 transition-colors hover:bg-white sm:gap-3">
+                                              <div class="col-span-4 flex items-center pl-20">
+                                                <span class="mr-1 inline-block h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                                                <div
+                                                  class="mr-2 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white">
+                                                  <i class="fas fa-user text-[10px] text-slate-400" />
+                                                </div>
+                                                <div class="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                                                  <span class="text-xs font-semibold text-slate-700">{{ member.name }}</span>
+                                                  <template v-for="mb in [memberRollupRoleBadge(member)]" :key="`mbr-self-child-${member.id}`">
+                                                    <span v-if="mb"
+                                                      class="shrink-0 rounded border px-1.5 py-px text-[9px] font-bold uppercase tracking-wide"
+                                                      :class="mb.badgeClass">{{ mb.label }}</span>
+                                                  </template>
+                                                </div>
+                                              </div>
+                                              <div class="col-span-1 text-center text-xs text-slate-300">-</div>
+                                              <div class="col-span-2 text-center text-xs font-semibold tabular-nums text-slate-600">
+                                                {{ memberTableTargetDisplay(member) }}
+                                              </div>
+                                              <div class="col-span-2 text-center text-xs font-bold tabular-nums" :class="memberStatusForUi(member) === 'danger'
+                                                  ? 'text-red-600'
+                                                  : memberStatusForUi(member) === 'warning'
+                                                    ? 'text-yellow-600'
+                                                    : 'text-green-600'
+                                                " :title="hasMemberSubmissionProgress(member)
+                                            ? `PM giao: ${member.submissionTarget}, Member ná»™p: ${member.submissionActual} â†’ ${memberTableActualDisplay(member)}`
+                                            : undefined
+                                          ">
+                                                {{ memberTableActualDisplay(member) }}
+                                              </div>
+                                              <div class="col-span-2 flex justify-center text-xs font-semibold">
+                                                <span
+                                                  class="inline-flex max-w-full cursor-default items-center gap-1 truncate rounded px-0.5 py-0.5"
+                                                  :title="diagnosticsReasonTooltip(member.blocker)">
+                                                  <template v-if="memberStatusForUi(member) === 'danger'">
+                                                    <span class="inline-flex items-center text-red-600">
+                                                      <i class="fas fa-times-circle mr-1 shrink-0 text-[11px]" />
+                                                      {{ memberDiagnosticsStatusLabel(member) }}
+                                                    </span>
+                                                  </template>
+                                                  <template v-else-if="memberStatusForUi(member) === 'warning'">
+                                                    <span class="inline-flex items-center text-yellow-700">
+                                                      <i class="fas fa-exclamation-circle mr-1 shrink-0 text-[11px]" />
+                                                      {{ memberDiagnosticsStatusLabel(member) }}
+                                                    </span>
+                                                  </template>
+                                                  <template v-else>
+                                                    <span class="inline-flex items-center text-green-600">
+                                                      <i class="fas fa-check-circle mr-1 shrink-0 text-[11px]" />
+                                                      {{ memberDiagnosticsStatusLabel(member) }}
+                                                    </span>
+                                                  </template>
+                                                </span>
+                                              </div>
+                                              <div class="col-span-1 text-center text-xs text-slate-200">â€”</div>
+                                            </div>
+
+                                            <template v-if="pmUsesLeaderTree(pm)">
+                                              <div v-for="leader in pm.leaders" :key="leader.id"
+                                                class="border-b border-slate-100/80 last:border-b-0">
+                                                <div
+                                                  class="grid grid-cols-12 items-center gap-2 border-l-2 border-violet-200/70 bg-violet-50/35 px-3 py-1.5 sm:gap-3"
+                                                  :class="leader.members.length ? 'cursor-pointer hover:bg-violet-50/70' : ''"
+                                                  @click="leader.members.length && toggleLeader(pm.id, leader.id)">
+                                                  <div class="col-span-4 flex min-w-0 items-center pl-20">
+                                                    <button type="button" class="mr-1 shrink-0 p-1 text-slate-400"
+                                                      :disabled="!leader.members.length" :aria-expanded="leader.members.length
+                                                          ? expandedLeaders.has(leaderExpandKey(pm.id, leader.id))
+                                                          : undefined
+                                                        " @click.stop="leader.members.length && toggleLeader(pm.id, leader.id)">
+                                                      <i v-if="leader.members.length"
+                                                        class="fas fa-chevron-right text-[11px] transition-transform duration-300 ease-out motion-reduce:transition-none"
+                                                        :class="expandedLeaders.has(leaderExpandKey(pm.id, leader.id))
+                                                            ? 'rotate-90'
+                                                            : 'rotate-0'
+                                                          " />
+                                                      <span v-else class="inline-block h-3.5 w-3.5" />
+                                                    </button>
+                                                    <div
+                                                      class="mr-2 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-violet-200 bg-white shadow-sm">
+                                                      <i class="fas fa-user text-[10px] text-violet-600" aria-hidden="true" />
+                                                    </div>
+                                                    <div class="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                                                      <span class="truncate text-xs font-semibold text-slate-800">{{ leader.name
+                                                        }}</span>
+                                                      <template v-for="lb in [leaderRollupRoleBadge(leader)]"
+                                                        :key="`lrb-self-${leader.id}`">
+                                                        <span v-if="lb"
+                                                          class="shrink-0 rounded border px-1.5 py-px text-[9px] font-bold uppercase tracking-wide"
+                                                          :class="lb.badgeClass">{{ lb.label }}</span>
+                                                      </template>
+                                                    </div>
+                                                  </div>
+                                                  <div class="col-span-1 text-center text-xs text-slate-300">-</div>
+                                                  <div
+                                                    class="col-span-2 text-center text-xs font-semibold tabular-nums text-slate-600">
+                                                    {{ leader.target }}
+                                                  </div>
+                                                  <div
+                                                    class="col-span-2 text-center text-xs font-bold tabular-nums text-slate-800">
+                                                    {{ leader.actual }}
+                                                  </div>
+                                                  <div class="col-span-2 flex justify-center">
+                                                    <span
+                                                      class="inline-flex max-w-full cursor-default items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold leading-tight"
+                                                      :class="badgeClass(leader.status)"
+                                                      :title="diagnosticsReasonTooltip(leader.blockerSummary)">
+                                                      <i class="fas shrink-0 text-[11px]" :class="leader.status === 'success'
+                                                          ? 'fa-check-circle'
+                                                          : leader.status === 'warning'
+                                                            ? 'fa-exclamation-circle'
+                                                            : 'fa-times-circle'
+                                                        " />
+                                                      <span class="truncate">{{ kpiStatusLabel(leader.status) }}</span>
+                                                    </span>
+                                                  </div>
+                                                  <div class="col-span-1 text-center text-xs text-slate-200">â€”</div>
+                                                </div>
+
+                                                <div v-if="leader.members.length > 0"
+                                                  class="grid overflow-hidden transition-[grid-template-rows] duration-300 ease-in-out motion-reduce:transition-none"
+                                                  :class="expandedLeaders.has(leaderExpandKey(pm.id, leader.id))
+                                                      ? 'grid-rows-[1fr]'
+                                                      : 'grid-rows-[0fr]'
+                                                    ">
+                                                  <div class="min-h-0">
+                                                    <div v-for="member in leader.members" :key="member.id"
+                                                      class="grid grid-cols-12 items-center gap-2 border-l-2 border-violet-200/60 px-3 py-1.5 pl-2 transition-colors hover:bg-white sm:gap-3">
+                                                      <div class="col-span-4 flex items-center pl-28">
+                                                        <div
+                                                          class="mr-2 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white">
+                                                          <i class="fas fa-user text-[10px] text-slate-400" />
+                                                        </div>
+                                                        <div class="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                                                          <span class="text-xs font-semibold text-slate-700">{{ member.name
+                                                            }}</span>
+                                                          <template v-for="mb in [memberRollupRoleBadge(member)]"
+                                                            :key="`mbr-l-self-${member.id}`">
+                                                            <span v-if="mb"
+                                                              class="shrink-0 rounded border px-1.5 py-px text-[9px] font-bold uppercase tracking-wide"
+                                                              :class="mb.badgeClass">{{ mb.label }}</span>
+                                                          </template>
+                                                        </div>
+                                                      </div>
+                                                      <div class="col-span-1 text-center text-xs text-slate-300">-</div>
+                                                      <div
+                                                        class="col-span-2 text-center text-xs font-semibold tabular-nums text-slate-600">
+                                                        {{ memberTableTargetDisplay(member) }}
+                                                      </div>
+                                                      <div class="col-span-2 text-center text-xs font-bold tabular-nums" :class="memberStatusForUi(member) === 'danger'
+                                                          ? 'text-red-600'
+                                                          : memberStatusForUi(member) === 'warning'
+                                                            ? 'text-yellow-600'
+                                                            : 'text-green-600'
+                                                        " :title="hasMemberSubmissionProgress(member)
+                                                    ? `PM giao: ${member.submissionTarget}, Member ná»™p: ${member.submissionActual} â†’ ${memberTableActualDisplay(member)}`
+                                                    : undefined
+                                                  ">
+                                                        {{ memberTableActualDisplay(member) }}
+                                                      </div>
+                                                      <div class="col-span-2 flex justify-center text-xs font-semibold">
+                                                        <span
+                                                          class="inline-flex max-w-full cursor-default items-center gap-1 truncate rounded px-0.5 py-0.5"
+                                                          :title="diagnosticsReasonTooltip(member.blocker)">
+                                                          <template v-if="memberStatusForUi(member) === 'danger'">
+                                                            <span class="inline-flex items-center text-red-600">
+                                                              <i class="fas fa-times-circle mr-1 shrink-0 text-[11px]" />
+                                                              {{ memberDiagnosticsStatusLabel(member) }}
+                                                            </span>
+                                                          </template>
+                                                          <template v-else-if="memberStatusForUi(member) === 'warning'">
+                                                            <span class="inline-flex items-center text-yellow-700">
+                                                              <i class="fas fa-exclamation-circle mr-1 shrink-0 text-[11px]" />
+                                                              {{ memberDiagnosticsStatusLabel(member) }}
+                                                            </span>
+                                                          </template>
+                                                          <template v-else>
+                                                            <span class="inline-flex items-center text-green-600">
+                                                              <i class="fas fa-check-circle mr-1 shrink-0 text-[11px]" />
+                                                              {{ memberDiagnosticsStatusLabel(member) }}
+                                                            </span>
+                                                          </template>
+                                                        </span>
+                                                      </div>
+                                                      <div class="col-span-1 text-center text-xs text-slate-200">â€”</div>
+                                                    </div>
+                                                  </div>
+                                                </div>
+                                              </div>
+                                            </template>
+                                          </div>
                                         </div>
                                       </div>
-                                      <div class="col-span-1 text-center text-xs text-slate-300">-</div>
-                                      <div
-                                        class="col-span-2 text-center text-xs font-semibold tabular-nums text-slate-600"
-                                      >
-                                        {{ memberTableTargetDisplay(member) }}
-                                      </div>
-                                      <div
-                                        class="col-span-2 text-center text-xs font-bold tabular-nums"
-                                        :class="
-                                          member.status === 'danger'
+                                    </template>
+
+                                    <template v-if="!pmSelfMember(pm) && pm.members.length > 0">
+                                      <div v-for="member in pm.members" :key="member.id"
+                                        class="grid grid-cols-12 items-center gap-2 px-3 py-1.5 transition-colors hover:bg-white sm:gap-3">
+                                        <div class="col-span-4 flex items-center pl-14">
+                                          <div
+                                            class="mr-2 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white">
+                                            <i class="fas fa-user text-[10px] text-slate-400" />
+                                          </div>
+                                          <div class="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                                            <span class="text-xs font-semibold text-slate-700">{{ member.name }}</span>
+                                            <template v-for="mb in [memberRollupRoleBadge(member)]"
+                                              :key="`mbr-${member.id}`">
+                                              <span v-if="mb"
+                                                class="shrink-0 rounded border px-1.5 py-px text-[9px] font-bold uppercase tracking-wide"
+                                                :class="mb.badgeClass">{{ mb.label }}</span>
+                                            </template>
+                                          </div>
+                                        </div>
+                                        <div class="col-span-1 text-center text-xs text-slate-300">-</div>
+                                        <div
+                                          class="col-span-2 text-center text-xs font-semibold tabular-nums text-slate-600">
+                                          {{ memberTableTargetDisplay(member) }}
+                                        </div>
+                                        <div class="col-span-2 text-center text-xs font-bold tabular-nums" :class="memberStatusForUi(member) === 'danger'
                                             ? 'text-red-600'
-                                            : member.status === 'warning'
+                                            : memberStatusForUi(member) === 'warning'
                                               ? 'text-yellow-600'
                                               : 'text-green-600'
-                                        "
-                                        :title="
-                                          hasMemberSubmissionProgress(member)
+                                          " :title="hasMemberSubmissionProgress(member)
+                                      ? `PM giao: ${member.submissionTarget}, Member nộp: ${member.submissionActual} → ${memberTableActualDisplay(member)}`
+                                      : undefined
+                                    ">
+                                          {{ memberTableActualDisplay(member) }}
+                                        </div>
+                                        <div class="col-span-2 flex justify-center text-xs font-semibold">
+                                          <span
+                                            class="inline-flex max-w-full cursor-default items-center gap-1 truncate rounded px-0.5 py-0.5"
+                                            :title="diagnosticsReasonTooltip(member.blocker)">
+                                            <template v-if="memberStatusForUi(member) === 'danger'">
+                                              <span class="inline-flex items-center text-red-600">
+                                                <i class="fas fa-times-circle mr-1 shrink-0 text-[11px]" />
+                                                {{ memberDiagnosticsStatusLabel(member) }}
+                                              </span>
+                                            </template>
+                                            <template v-else-if="memberStatusForUi(member) === 'warning'">
+                                              <span class="inline-flex items-center text-yellow-700">
+                                                <i class="fas fa-exclamation-circle mr-1 shrink-0 text-[11px]" />
+                                                {{ memberDiagnosticsStatusLabel(member) }}
+                                              </span>
+                                            </template>
+                                            <template v-else>
+                                              <span class="inline-flex items-center text-green-600">
+                                                <i class="fas fa-check-circle mr-1 shrink-0 text-[11px]" />
+                                                {{ memberDiagnosticsStatusLabel(member) }}
+                                              </span>
+                                            </template>
+                                          </span>
+                                        </div>
+                                        <div class="col-span-1 text-center text-xs text-slate-200">—</div>
+                                      </div>
+                                    </template>
+
+                                    <template v-if="!pmSelfMember(pm) && pmUsesLeaderTree(pm)">
+                                      <div v-for="leader in pm.leaders" :key="leader.id"
+                                        class="border-b border-slate-100/80 last:border-b-0">
+                                        <div
+                                          class="grid grid-cols-12 items-center gap-2 border-l-2 border-violet-200/70 bg-violet-50/35 px-3 py-1.5 sm:gap-3"
+                                          :class="leader.members.length ? 'cursor-pointer hover:bg-violet-50/70' : ''"
+                                          @click="leader.members.length && toggleLeader(pm.id, leader.id)">
+                                          <div class="col-span-4 flex min-w-0 items-center pl-16">
+                                            <button type="button" class="mr-1 shrink-0 p-1 text-slate-400"
+                                              :disabled="!leader.members.length" :aria-expanded="leader.members.length
+                                                  ? expandedLeaders.has(leaderExpandKey(pm.id, leader.id))
+                                                  : undefined
+                                                " @click.stop="leader.members.length && toggleLeader(pm.id, leader.id)">
+                                              <i v-if="leader.members.length"
+                                                class="fas fa-chevron-right text-[11px] transition-transform duration-300 ease-out motion-reduce:transition-none"
+                                                :class="expandedLeaders.has(leaderExpandKey(pm.id, leader.id))
+                                                    ? 'rotate-90'
+                                                    : 'rotate-0'
+                                                  " />
+                                              <span v-else class="inline-block h-3.5 w-3.5" />
+                                            </button>
+                                            <div
+                                              class="mr-2 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-violet-200 bg-white shadow-sm">
+                                              <i class="fas fa-user text-[10px] text-violet-600" aria-hidden="true" />
+                                            </div>
+                                            <div class="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                                              <span class="truncate text-xs font-semibold text-slate-800">{{ leader.name
+                                                }}</span>
+                                              <template v-for="lb in [leaderRollupRoleBadge(leader)]"
+                                                :key="`lrb-${leader.id}`">
+                                                <span v-if="lb"
+                                                  class="shrink-0 rounded border px-1.5 py-px text-[9px] font-bold uppercase tracking-wide"
+                                                  :class="lb.badgeClass">{{ lb.label }}</span>
+                                              </template>
+                                            </div>
+                                          </div>
+                                          <div class="col-span-1 text-center text-xs text-slate-300">-</div>
+                                          <div
+                                            class="col-span-2 text-center text-xs font-semibold tabular-nums text-slate-600">
+                                            {{ leader.target }}
+                                          </div>
+                                          <div
+                                            class="col-span-2 text-center text-xs font-bold tabular-nums text-slate-800">
+                                            {{ leader.actual }}
+                                          </div>
+                                          <div class="col-span-2 flex justify-center">
+                                            <span
+                                              class="inline-flex max-w-full cursor-default items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold leading-tight"
+                                              :class="badgeClass(leader.status)"
+                                              :title="diagnosticsReasonTooltip(leader.blockerSummary)">
+                                              <i class="fas shrink-0 text-[11px]" :class="leader.status === 'success'
+                                                  ? 'fa-check-circle'
+                                                  : leader.status === 'warning'
+                                                    ? 'fa-exclamation-circle'
+                                                    : 'fa-times-circle'
+                                                " />
+                                              <span class="truncate">{{ kpiStatusLabel(leader.status) }}</span>
+                                            </span>
+                                          </div>
+                                          <div class="col-span-1 text-center text-xs text-slate-200">—</div>
+                                        </div>
+
+                                        <div v-if="leader.members.length > 0"
+                                          class="grid overflow-hidden transition-[grid-template-rows] duration-300 ease-in-out motion-reduce:transition-none"
+                                          :class="expandedLeaders.has(leaderExpandKey(pm.id, leader.id))
+                                              ? 'grid-rows-[1fr]'
+                                              : 'grid-rows-[0fr]'
+                                            ">
+                                          <div class="min-h-0">
+                                            <div v-for="member in leader.members" :key="member.id"
+                                              class="grid grid-cols-12 items-center gap-2 border-l-2 border-violet-200/60 px-3 py-1.5 pl-2 transition-colors hover:bg-white sm:gap-3">
+                                              <div class="col-span-4 flex items-center pl-24">
+                                                <div
+                                                  class="mr-2 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white">
+                                                  <i class="fas fa-user text-[10px] text-slate-400" />
+                                                </div>
+                                                <div class="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                                                  <span class="text-xs font-semibold text-slate-700">{{ member.name
+                                                    }}</span>
+                                                  <template v-for="mb in [memberRollupRoleBadge(member)]"
+                                                    :key="`mbr-l-${member.id}`">
+                                                    <span v-if="mb"
+                                                      class="shrink-0 rounded border px-1.5 py-px text-[9px] font-bold uppercase tracking-wide"
+                                                      :class="mb.badgeClass">{{ mb.label }}</span>
+                                                  </template>
+                                                </div>
+                                              </div>
+                                              <div class="col-span-1 text-center text-xs text-slate-300">-</div>
+                                              <div
+                                                class="col-span-2 text-center text-xs font-semibold tabular-nums text-slate-600">
+                                                {{ memberTableTargetDisplay(member) }}
+                                              </div>
+                                              <div class="col-span-2 text-center text-xs font-bold tabular-nums" :class="memberStatusForUi(member) === 'danger'
+                                                  ? 'text-red-600'
+                                                  : memberStatusForUi(member) === 'warning'
+                                                    ? 'text-yellow-600'
+                                                    : 'text-green-600'
+                                                " :title="hasMemberSubmissionProgress(member)
                                             ? `PM giao: ${member.submissionTarget}, Member nộp: ${member.submissionActual} → ${memberTableActualDisplay(member)}`
                                             : undefined
-                                        "
-                                      >
-                                        {{ memberTableActualDisplay(member) }}
+                                          ">
+                                                {{ memberTableActualDisplay(member) }}
+                                              </div>
+                                              <div class="col-span-2 flex justify-center text-xs font-semibold">
+                                                <span
+                                                  class="inline-flex max-w-full cursor-default items-center gap-1 truncate rounded px-0.5 py-0.5"
+                                                  :title="diagnosticsReasonTooltip(member.blocker)">
+                                                  <template v-if="memberStatusForUi(member) === 'danger'">
+                                                    <span class="inline-flex items-center text-red-600">
+                                                      <i class="fas fa-times-circle mr-1 shrink-0 text-[11px]" />
+                                                      {{ memberDiagnosticsStatusLabel(member) }}
+                                                    </span>
+                                                  </template>
+                                                  <template v-else-if="memberStatusForUi(member) === 'warning'">
+                                                    <span class="inline-flex items-center text-yellow-700">
+                                                      <i class="fas fa-exclamation-circle mr-1 shrink-0 text-[11px]" />
+                                                      {{ memberDiagnosticsStatusLabel(member) }}
+                                                    </span>
+                                                  </template>
+                                                  <template v-else>
+                                                    <span class="inline-flex items-center text-green-600">
+                                                      <i class="fas fa-check-circle mr-1 shrink-0 text-[11px]" />
+                                                      {{ memberDiagnosticsStatusLabel(member) }}
+                                                    </span>
+                                                  </template>
+                                                </span>
+                                              </div>
+                                              <div class="col-span-1 text-center text-xs text-slate-200">—</div>
+                                            </div>
+                                          </div>
+                                        </div>
                                       </div>
-                                      <div class="col-span-2 flex justify-center text-xs font-semibold">
-                                        <span
-                                          class="inline-flex max-w-full cursor-default items-center gap-1 truncate rounded px-0.5 py-0.5"
-                                          :title="diagnosticsReasonTooltip(member.blocker)"
-                                        >
-                                          <template v-if="member.status === 'danger'">
-                                            <span class="inline-flex items-center text-red-600">
-                                              <i class="fas fa-times-circle mr-1 shrink-0 text-[11px]" />
-                                              {{ memberDiagnosticsStatusLabel(member) }}
-                                            </span>
-                                          </template>
-                                          <template v-else-if="member.status === 'warning'">
-                                            <span class="inline-flex items-center text-yellow-700">
-                                              <i class="fas fa-exclamation-circle mr-1 shrink-0 text-[11px]" />
-                                              {{ memberDiagnosticsStatusLabel(member) }}
-                                            </span>
-                                          </template>
-                                          <template v-else>
-                                            <span class="inline-flex items-center text-green-600">
-                                              <i class="fas fa-check-circle mr-1 shrink-0 text-[11px]" />
-                                              {{ memberDiagnosticsStatusLabel(member) }}
-                                            </span>
-                                          </template>
-                                        </span>
-                                      </div>
-                                      <div class="col-span-1 text-center text-xs text-slate-200">—</div>
-                                    </div>
+                                    </template>
                                   </div>
                                 </div>
                               </div>
-                            </template>
-                          </div>
+                            </div>
+                          </template>
                         </div>
                       </div>
                     </div>
-                  </template>
-                </div>
+                  </div>
+                </template>
               </div>
             </div>
-          </div>
-            </template>
-            </div>
-          </div>
-        </template>
+          </template>
 
-        <div v-if="prunedFilteredRows.length === 0" class="p-8 text-center text-xs font-medium text-slate-500">
-          <p>Không có KPI nào phù hợp với bộ lọc hiện tại.</p>
-          <button
-            v-if="appliedFilterCount > 0"
-            type="button"
-            class="mt-3 text-xs font-bold text-blue-600 hover:underline"
-            @click="resetAllDiagnosticFilters"
-          >
-            Xóa bộ lọc
-          </button>
+          <div v-if="prunedFilteredRows.length === 0" class="p-8 text-center text-xs font-medium text-slate-500">
+            <p>Không có KPI nào phù hợp với bộ lọc hiện tại.</p>
+            <button v-if="appliedFilterCount > 0" type="button"
+              class="mt-3 text-xs font-bold text-blue-600 hover:underline" @click="resetAllDiagnosticFilters">
+              Xóa bộ lọc
+            </button>
+          </div>
         </div>
       </div>
     </div>
-  </div>
 
-  <GmMemberKpiDrawer
-    :open="showMemberDrawer"
-    :member="drawerMember"
-    :items="drawerKpiItems"
-    :pm-kpi-rollout="drawerPmKpiRollout"
-    @close="closeMemberDrawer"
-  />
+    <GmMemberKpiDrawer :open="showMemberDrawer" :member="drawerMember" :items="drawerKpiItems"
+      :pm-kpi-rollout="drawerPmKpiRollout" @close="closeMemberDrawer" />
   </div>
 </template>
 
@@ -1469,11 +1549,13 @@ function closeMemberDrawer() {
     opacity 0.2s ease,
     transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
+
 .gm-diag-filter-pop-enter-from,
 .gm-diag-filter-pop-leave-to {
   opacity: 0;
   transform: scale(0.95);
 }
+
 .gm-diag-filter-pop-enter-to,
 .gm-diag-filter-pop-leave-from {
   opacity: 1;

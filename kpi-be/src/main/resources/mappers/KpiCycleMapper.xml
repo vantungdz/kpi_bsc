@@ -7,9 +7,12 @@
         <id property="id" column="id" />
         <result property="year" column="year" />
         <result property="name" column="name" />
-        <result property="goalSettingDeadline" column="goal_setting_deadline" />
-        <result property="midYearDeadline" column="mid_year_deadline" />
-        <result property="endYearDeadline" column="end_year_deadline" />
+        <result property="goalSettingStart" column="goal_setting_start" />
+        <result property="goalSettingEnd" column="goal_setting_end" />
+        <result property="midYearStart" column="mid_year_start" />
+        <result property="midYearEnd" column="mid_year_end" />       
+        <result property="endYearStart" column="end_year_start" />
+        <result property="endYearEnd" column="end_year_end" />
         <result property="statusCode" column="status_code" />
         <result property="createdAt" column="created_at" />
         <result property="updatedAt" column="updated_at" />
@@ -26,22 +29,24 @@
         LIMIT 1
     </select>
 
-    <!--
-        findByYear: lấy chu kỳ KPI theo năm.
-        init-db.sql dùng 'status_code' (INTEGER) thay vì 'status' (ENUM).
-        Alias status_code AS status để map vào KpiCycle.status field.
-    -->
+    <!-- findByYear: lấy chu kỳ KPI theo năm (status_code INTEGER, map vào KpiCycle.statusCode). -->
     <select id="findByYear" resultMap="KpiCycleResultMap">
         SELECT
             id,
             year,
             name,
-            goal_setting_deadline,
-            mid_year_deadline,
-            end_year_deadline,
-            status_code AS status,
+            goal_setting_start,
+            goal_setting_end,
+            mid_year_start,
+            mid_year_end,
+            end_year_start,
+            end_year_end,
+            status_code,
             created_at,
-            updated_at
+            updated_at,
+            created_by,
+            updated_by,
+            deleted_at
         FROM
             kpi_cycles
         WHERE
@@ -49,17 +54,23 @@
             AND deleted_at IS NULL
     </select>
 
-    <select id="findById" resultType="com.company.kpi.entity.KpiCycle">
+    <select id="findById" resultMap="KpiCycleResultMap">
         SELECT
             id,
             year,
             name,
-            goal_setting_deadline,
-            mid_year_deadline,
-            end_year_deadline,
-            status_code AS status,
+            goal_setting_start,
+            goal_setting_end,
+            mid_year_start,
+            mid_year_end,
+            end_year_start,
+            end_year_end,
+            status_code,
             created_at,
-            updated_at
+            updated_at,
+            created_by,
+            updated_by,
+            deleted_at
         FROM
             kpi_cycles
         WHERE
@@ -67,7 +78,7 @@
             AND deleted_at IS NULL
     </select>
 
-    <!--
+<!--
         Năm nguồn sao chép: kỳ đang hoạt động và có ít nhất một trong:
         thư viện KPI theo năm (kpis_information), giao KPI (kpi_assignments), hoặc chốt sổ (user_kpi_summaries).
         Ví dụ V3: 2026 có kpis_information; 2025 chỉ có user_kpi_summaries lịch sử.
@@ -122,15 +133,15 @@
     </select>
 
     <!-- ── Thêm từ AdminMapper ─────────────────────────────────────────────────── -->
-    <select id="getCycles" resultType="com.company.kpi.entity.KpiCycle">
+    <select id="getCycles" resultMap="KpiCycleResultMap">
         SELECT
             id,
             year,
             name,
-            status_code AS status,
-            goal_setting_deadline,
-            mid_year_deadline,
-            end_year_deadline,
+            status_code,
+            goal_setting_end,
+            mid_year_end,
+            end_year_end,
             created_at,
             updated_at
         FROM kpi_cycles

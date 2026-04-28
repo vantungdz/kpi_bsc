@@ -29,4 +29,5 @@ public class StrategicKpiEditResponse {
     private List<UUID> assignPMs;
     private Map<String, Object> pmTargets;
     private List<UUID> memberIds;
+    private Map<String, Object> memberTargets;
 }

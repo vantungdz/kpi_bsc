@@ -55,6 +55,22 @@ export async function apiCascadeKpi(payload: any): Promise<any> {
   return http.post('/kpi/strategic-kpis/cascade', payload).then(r => r.data)
 }
 
+/** POST /kpi/strategic-kpis/status/bulk-update — PM update status KPI */
+export async function apiBulkUpdateKpiStatus(payload: any): Promise<any> {
+  return http.put('/kpi/strategic-kpis/status/bulk-update', payload).then(r => r.data)
+}
+
+/** GET /api/pm/dashboard/team-members?year=... — Get team hierarchy (Used in PmTeamMembersTab.vue) */
+export async function apiGetTeamHierarchy(year?: string): Promise<ApiResponse<any>> {
+  return http.get('/pm/dashboard/team-members', { params: year ? { year } : {} }).then(r => r.data)
+}
+
+/** GET /api/pm/dashboard/member-kpis?year=... — Get member KPI (Used in PmTeamMembersTab.vue) */
+export async function apiGetMemberKpi(year?: string): Promise<ApiResponse<any>> {
+  return http.get('/pm/dashboard/member-kpis', { params: year ? { year } : {} }).then(r => r.data)
+}
+
+
 // ==========================================
 // SERVICE EXPORT
 // ==========================================
@@ -70,6 +86,9 @@ export const pmKpiService = {
   registerKpi: (payload: KpiRegistrationRequest) => apiRegisterKpi(payload).then(r => r.data),
   getKpiDetail: (kpiId: string) => apiGetKpiDetail(kpiId).then(r => r.data),
   cascadeKpi: (payload: any) => apiCascadeKpi(payload).then(r => r.data),
+  bulkUpdateKpiStatus: (payload: any) => apiBulkUpdateKpiStatus(payload).then(r => r.data),
+  getTeamHierarchy: (year?: string) => apiGetTeamHierarchy(year).then(r => r.data),
+  getMemberKpi: (year?: string) => apiGetMemberKpi(year).then(r => r.data),
 }
 
 // Thêm alias để tương thích với file PmAssignKpiDrawer.vue ở bước trước (vì component đang import tên này)

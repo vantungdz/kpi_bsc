@@ -1,9 +1,12 @@
 package com.company.kpi.controller.kpi;
 
+import com.company.kpi.common.constant.Constant;
 import com.company.kpi.common.dto.BaseResponse;
+import com.company.kpi.common.util.JwtUtil;
 import com.company.kpi.controller.base.BaseController;
 import com.company.kpi.request.kpi.AssignMemberRequest;
 import com.company.kpi.request.kpi.CreateStrategicKpiRequest;
+import com.company.kpi.request.kpi.UpdateKpiStatusRequest;
 import com.company.kpi.response.kpi.StrategicKpiEditResponse;
 import com.company.kpi.response.kpi.StrategicKpiResponse;
 import com.company.kpi.service.kpi.StrategicKpiService;
@@ -11,6 +14,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.UUID;
@@ -28,6 +32,7 @@ import java.util.UUID;
 public class StrategicKpiController extends BaseController {
 
     private final StrategicKpiService strategicKpiService;
+    private final JwtUtil jwtUtil;
 
     /** Tạo KPI chiến lược: {@code kpi_master}, {@code kpis_information}, {@code kpi_assignments}. */
     @PostMapping
@@ -35,14 +40,23 @@ public class StrategicKpiController extends BaseController {
             @Valid @RequestBody CreateStrategicKpiRequest request,
             Authentication authentication) {
         UUID actorId = UUID.fromString((String) authentication.getPrincipal());
-        return created(strategicKpiService.create(request, actorId));
+
+        String role = authentication.getAuthorities().stream()
+                .map(GrantedAuthority::getAuthority)
+                .map(r -> r.replace("ROLE_", ""))
+                .filter(r -> r.equals(Constant.ROLE_MEMBER) || r.equals(Constant.ROLE_LEADER))
+                .findFirst()
+                .orElse("");
+
+        return created(strategicKpiService.create(request, actorId, role));
     }
 
     /** Dữ liệu form sửa KPI chiến lược. */
     @GetMapping("/{kpiInformationId}")
     public ResponseEntity<BaseResponse<StrategicKpiEditResponse>> getStrategicKpiForEdit(
-            @PathVariable UUID kpiInformationId) {
-        return success(strategicKpiService.getForEdit(kpiInformationId));
+            @PathVariable UUID kpiInformationId, Authentication authentication) {
+        UUID actorId = UUID.fromString((String) authentication.getPrincipal());
+        return success(strategicKpiService.getForEdit(kpiInformationId, actorId));
     }
 
     /** Cập nhật KPI chiến lược + đồng bộ danh sách giao. */
@@ -82,5 +96,20 @@ public class StrategicKpiController extends BaseController {
         UUID pmId = UUID.fromString((String) authentication.getPrincipal());
         strategicKpiService.assignToMembers(request, pmId);
         return success(null, "KPI has been cascaded to all members successfully.");
+    }
+
+    /**
+     * API to update the status of all KPIs for the current user (bulk update).
+     */
+    @PutMapping("/status/bulk-update")
+    public ResponseEntity<BaseResponse<Integer>> bulkUpdateKpiStatus(
+            @Valid @RequestBody UpdateKpiStatusRequest request,
+            Authentication authentication) {
+            
+        UUID currentUserId = jwtUtil.resolveUserId(authentication);
+
+        int updatedCount = strategicKpiService.updateStatusesKpi(request, currentUserId);
+
+        return success(updatedCount,  "Update status successfully.");
     }
 }

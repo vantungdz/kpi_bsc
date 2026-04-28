@@ -1,61 +1,105 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import { useTransientToast } from '@/composables/useTransientToast'
 import { memberKpiService } from '@/services/modules/kpi-member.service'
 import { useMemberKpiDraftStore } from '@/stores/member-kpi-drafts.store'
 import type { MemberKpiDashboard, KpiItem, EvidenceFormCase, MemberKpiEvaluationStatus } from '@/types/kpi'
 import MemberProcessTimeline from '@/components/member/MemberProcessTimeline.vue'
-import CreateIndividualKpiDrawer, { type CreateIndividualKpiPayload } from '@/components/kpi/CreateIndividualKpiDrawer.vue'
+import MemberCreateIndividualKpiDrawer from '@/components/kpi/MemberCreateIndividualKpiDrawer.vue'
 import {
-  parseWeightedPayload,
-  buildWeightedPayload,
-  parseCommentPayload,
-  buildCommentPayload,
-  parseWorkAmountPayload,
-  buildWorkAmountPayload,
-  type WeightedFormState,
   type UrlNamePair,
-  type WorkAmountFormState,
 } from '@/utils/memberKpiEvidenceDetail'
 
 const route = useRoute()
 const memberKpiDraftStore = useMemberKpiDraftStore()
 
-/** Cách build JSON evidences — tách KPI thư viện (801–804 + workAmounts) vs sheet cũ. */
-type EvidencePayloadKind = 'weighted' | 'comment' | 'workAmount_new' | 'legacy'
+const {
+  visible: submitToastVisible,
+  message: submitToastMessage,
+  variant: submitToastVariant,
+  show: showSubmitToast,
+} = useTransientToast(4500)
 
-/** JSON đã lưu dạng workAmounts — ưu tiên trước calculationRuleCode (tránh A.2a gán nhầm 804 trong DB). */
-function jsonHasWorkAmountsData(jsonSource: string): boolean {
-  const raw = jsonSource.trim()
-  if (!raw || raw === '{}' || raw === 'null') return false
-  try {
-    const o = JSON.parse(raw) as Record<string, unknown>
-    if (!Array.isArray(o.workAmounts) || o.workAmounts.length === 0) return false
-    return true
-  } catch {
-    return false
-  }
+/** Evidence form mode — driven purely by CALC_RULE + CALC_TYPE from DB */
+type EvidenceFormMode = 'average' | 'comment'
+
+const CALC_RULE_AVERAGE = 802
+const CALC_RULE_COMMENT = 803
+const CALC_TYPE_PLAN_OVER_ACTUAL = 702
+
+/** 802 + 701/702 → ratio form with auto-preview; 803 → text + content textarea */
+function resolveFormMode(item: KpiItem): EvidenceFormMode {
+  if (item.calculationRuleCode === CALC_RULE_COMMENT) return 'comment'
+  if (item.calculationRuleCode === CALC_RULE_AVERAGE) return 'average'
+  return 'comment'
 }
 
-function resolveEvidencePayloadKind(item: KpiItem, jsonSource: string): EvidencePayloadKind {
-  if (jsonHasWorkAmountsData(jsonSource)) return 'workAmount_new'
+/** Compute Actual/Plan or Plan/Actual ratio preview for a single record row */
+function computeRatioPreview(
+  planStr: string,
+  actualStr: string,
+  calcTypeCode: number | null | undefined,
+): string | null {
+  const plan = parseNumericFromField(planStr)
+  const actual = parseNumericFromField(actualStr)
+  if (plan === null || actual === null || plan === 0) return null
+  const ratio =
+    calcTypeCode === CALC_TYPE_PLAN_OVER_ACTUAL
+      ? (plan / actual) * 100
+      : (actual / plan) * 100
+  return ratio.toFixed(1) + '%'
+}
 
-  const code = item.calculationRuleCode
-  if (code === 804) return 'weighted'
-  if (code === 803) return 'comment'
-  const raw = jsonSource.trim()
-  if (raw && raw !== '{}' && raw !== 'null') {
-    try {
-      const o = JSON.parse(raw) as Record<string, unknown>
-      if (Array.isArray(o.workAmounts)) return 'workAmount_new'
-    } catch {
-      /* ignore */
-    }
+/** Labels for Plan/Actual columns based on CALC_TYPE direction */
+function ratioLabels(calcTypeCode: number | null | undefined): { plan: string; actual: string; formula: string } {
+  if (calcTypeCode === CALC_TYPE_PLAN_OVER_ACTUAL) {
+    return { plan: 'Plan (số)', actual: 'Actual (số)', formula: 'Plan / Actual × 100%' }
   }
-  if (code === 801 || code === 802) {
-    if (isMonthlyWaTimesheetKpi(item)) return 'workAmount_new'
+  return { plan: 'Plan (số)', actual: 'Actual (số)', formula: 'Actual / Plan × 100%' }
+}
+
+/** Unified JSON parser for evidence drawer (replaces all legacy parsers) */
+function parseEvidencesJson(jsonSource: string): {
+  note: string
+  content: string
+  planActualRecords: Array<{ plan: string; actual: string; comment: string }>
+  urlPairs: UrlNamePair[]
+} {
+  const raw = (jsonSource ?? '').trim()
+  const empty = { note: '', content: '', planActualRecords: [], urlPairs: [] }
+  if (!raw || raw === '{}' || raw === 'null') return empty
+  try {
+    const o = JSON.parse(raw) as Record<string, unknown>
+    const note = String(o.note ?? o.text ?? '').trim()
+    const content = String(o.content ?? '').trim()
+    const planActualRecords = Array.isArray(o.planActualRecords)
+      ? (o.planActualRecords as unknown[])
+          .map(x => {
+            if (!x || typeof x !== 'object') return null
+            const r = x as Record<string, unknown>
+            return {
+              plan: String(r.plan ?? ''),
+              actual: String(r.actual ?? ''),
+              comment: String(r.comment ?? ''),
+            }
+          })
+          .filter((r): r is { plan: string; actual: string; comment: string } => r !== null)
+      : []
+    const rawEvd = Array.isArray(o.evd) ? (o.evd as unknown[]) : []
+    const rawFiles = Array.isArray(o.files) ? (o.files as unknown[]) : []
+    const urlPairs = [...rawEvd, ...rawFiles]
+      .map(x => {
+        if (!x || typeof x !== 'object') return null
+        const r = x as Record<string, unknown>
+        const url = String(r.url ?? '').trim()
+        return url ? { url, name: String(r.name ?? '').trim() } : null
+      })
+      .filter((r): r is UrlNamePair => r !== null)
+    return { note, content, planActualRecords, urlPairs }
+  } catch {
+    return empty
   }
-  return 'legacy'
 }
 
 function urlPairsToPendingUrls(pairs: UrlNamePair[], idPrefix: string): PendingEvidenceUrl[] {
@@ -74,45 +118,6 @@ function urlPairsToPendingUrls(pairs: UrlNamePair[], idPrefix: string): PendingE
       return row
     })
     .filter((x): x is PendingEvidenceUrl => x != null)
-}
-
-function hydrateWorkAmountDrawerFromParsed(item: KpiItem, jsonSource: string) {
-  const parsed = parseWorkAmountPayload(jsonSource)
-  const raw = jsonSource.trim()
-  const hasJson = raw !== '' && raw !== '{}' && raw !== 'null'
-  const hasHours = parsed.workAmounts.some(
-    w => (Number(w.spentHours) || 0) !== 0 || (Number(w.standardHours) || 0) !== 0,
-  )
-  if (hasJson && hasHours) {
-    waTimeRows.value = parsed.workAmounts
-      .filter(w => (Number(w.spentHours) || 0) !== 0 || (Number(w.standardHours) || 0) !== 0)
-      .map((w, i) => ({
-        id: `${item.id}-wm-${i}`,
-        month: String(w.month),
-        spent: String(Number(w.spentHours) || 0),
-        standard: String(Number(w.standardHours) || 0),
-      }))
-    if (!waTimeRows.value.length) waTimeRows.value = [newWaTimeRow()]
-  } else if (item.waTimeRecords?.length) {
-    waTimeRows.value = item.waTimeRecords.map((r, i) => ({
-      id: `${item.id}-w-${i}`,
-      month: (() => {
-        const m = Number.parseInt(String((r as { month?: string }).month ?? '1'), 10)
-        return m >= 1 && m <= 12 ? String(m) : '1'
-      })(),
-      spent: r.spent,
-      standard: r.standard,
-    }))
-  } else {
-    waTimeRows.value = [newWaTimeRow()]
-  }
-  evidenceNoteDraft.value = parsed.note || item.evidenceNote || ''
-  pendingEvidenceUrls.value = urlPairsToPendingUrls(parsed.files, `${item.id}-f`)
-}
-
-function attachCertificateIfNeeded(payload: Record<string, unknown>) {
-  const cert = certificateOutcomeDraft.value.trim()
-  if (cert) payload.certificateOutcomeNote = cert
 }
 
 /** Tooltip Target — mock theo mã KPI (không dùng description từ API) */
@@ -234,15 +239,26 @@ function formatEvidenceJsonSummary(item: KpiItem): string | undefined {
           })
           .filter(Boolean)
       : []
-    const evdNames = Array.isArray(parsed.evd)
-      ? (parsed.evd as unknown[])
-          .map((row) => {
-            if (!row || typeof row !== 'object') return undefined
-            const r = row as Record<string, unknown>
-            return String(r.name ?? '').trim() || String(r.url ?? '').trim()
-          })
-          .filter(Boolean)
-      : []
+    const evdNames = [
+      ...(Array.isArray(parsed.evd)
+        ? (parsed.evd as unknown[])
+            .map((row) => {
+              if (!row || typeof row !== 'object') return undefined
+              const r = row as Record<string, unknown>
+              return String(r.name ?? '').trim() || String(r.url ?? '').trim()
+            })
+            .filter(Boolean)
+        : []),
+      ...(Array.isArray(parsed.files)
+        ? (parsed.files as unknown[])
+            .map((row) => {
+              if (!row || typeof row !== 'object') return undefined
+              const r = row as Record<string, unknown>
+              return String(r.name ?? '').trim() || String(r.url ?? '').trim()
+            })
+            .filter(Boolean)
+        : []),
+    ]
 
     if (item.group === 'B') {
       if (note) return note.length > 64 ? `${note.slice(0, 63)}…` : note
@@ -293,13 +309,14 @@ function kpiTargetTooltip(item: KpiItem): string {
   return strip(item.target) || '—'
 }
 
-type PlanActualDraftRow = { id: string; plan: string; actual: string }
+type PlanActualDraftRow = { id: string; plan: string; actual: string; comment: string }
 
 function newPlanActualRow(): PlanActualDraftRow {
   return {
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
     plan: '',
     actual: '',
+    comment: '',
   }
 }
 
@@ -311,12 +328,6 @@ function parseNumericFromField(s: string): number | null {
   return Number.isFinite(v) ? v : null
 }
 
-/** Nối các giá trị Thực tế (Actual) đã nhập - hiển thị cột Actual Result */
-function joinActualResultTexts(records: { actual: string }[]): string | undefined {
-  const parts = records.map(r => r.actual.trim()).filter(Boolean)
-  if (!parts.length) return undefined
-  return parts.join(' | ')
-}
 
 type WaTimeDraftRow = { id: string; month: string; spent: string; standard: string }
 
@@ -373,16 +384,6 @@ function normalizeDetailSelfScore(raw: unknown): number | null {
   return r
 }
 
-/**
- * Không chỉnh evidence khi: KPI đề xuất chờ duyệt (402/403), hoặc đã nộp đợt (5xx/6xx).
- * README Flow 3 + Flow 5 — ASM từ init-db.sql.
- */
-function isKpiWorkflowLocked(item: KpiItem): boolean {
-  const c = item.statusCode
-  if (c === undefined || c === null) return false
-  return [402, 403, 501, 502, 503, 601, 602, 603].includes(c)
-}
-
 const EVIDENCE_MAX_FILES = 5
 const EVIDENCE_MAX_URLS = 5
 /** Bộ lọc hộp thoại chọn file; validate thêm bằng `isEvidenceFileAllowed` */
@@ -405,6 +406,8 @@ const evidenceUrlHint = ref('')
 const detailSelfScore = ref<number | null>(null)
 /** Bản ghi Plan / Actual trong drawer (layout general) */
 const generalPlanActualRows = ref<PlanActualDraftRow[]>([newPlanActualRow()])
+/** CALC_RULE 803 (COMMENT): textarea nội dung mô tả/nhận xét tổng thể */
+const contentDraft = ref('')
 
 /** KPI monthly (A.2…): Spent time / Standard time */
 const waTimeRows = ref<WaTimeDraftRow[]>([newWaTimeRow()])
@@ -618,20 +621,26 @@ const drawerCase = computed<EvidenceFormCase>(() => {
 
 const isUploadOnlyDrawer = computed(() => drawerCase.value === 'upload_only')
 
+/** Mode đơn giản hoá từ CALC_RULE + CALC_TYPE (chỉ dùng cho form non-B) */
+const drawerFormMode = computed<EvidenceFormMode>(() => {
+  if (!selectedDrawerItem.value) return 'comment'
+  return resolveFormMode(selectedDrawerItem.value)
+})
+
 const canSaveEvidence = computed(() => {
   const s = detailSelfScore.value
   if (s === null || s < 1 || s > 5) return false
-  if (selectedDrawerItem.value && isKpiWorkflowLocked(selectedDrawerItem.value)) return false
+  if (selectedDrawerItem.value?.canEditEvidence !== true) return false
   return true
 })
 
 const canAddEvidenceRecords = computed(
-  () => selectedDrawerItem.value && !isKpiWorkflowLocked(selectedDrawerItem.value),
+  () => selectedDrawerItem.value?.canEditEvidence === true,
 )
 
-/** Đã nộp KPI: chỉ xem, không lưu chỉnh sửa — vẫn mở được drawer */
+/** Drawer chỉ xem — theo cờ API */
 const evidenceDrawerReadOnly = computed(
-  () => !!(selectedDrawerItem.value && isKpiWorkflowLocked(selectedDrawerItem.value)),
+  () => !!(selectedDrawerItem.value && selectedDrawerItem.value.canEditEvidence !== true),
 )
 
 const attachmentHubTitle = computed(() => {
@@ -683,72 +692,68 @@ function removeWaTimeRow(id: string) {
   waTimeRows.value = waTimeRows.value.filter(r => r.id !== id)
 }
 
-function workAmountFormStateFromWaRows(): WorkAmountFormState {
-  const acc = new Map<number, { spent: number; std: number }>()
-  for (let m = 1; m <= 12; m++) acc.set(m, { spent: 0, std: 0 })
-  for (const r of waTimeRows.value) {
-    const m = Number.parseInt(String(r.month), 10)
-    if (!Number.isFinite(m) || m < 1 || m > 12) continue
-    const cur = acc.get(m) ?? { spent: 0, std: 0 }
-    cur.spent += parseNumericFromField(r.spent) ?? 0
-    cur.std += parseNumericFromField(r.standard) ?? 0
-    acc.set(m, cur)
-  }
-  const workAmounts = Array.from({ length: 12 }, (_, i) => {
-    const month = i + 1
-    const v = acc.get(month)!
-    return { month, spentHours: v.spent, standardHours: v.std }
-  })
-  const filePairs: UrlNamePair[] = pendingEvidenceUrls.value.map(u => ({
-    url: u.url,
-    name: (u.name ?? '').trim(),
-  }))
-  return {
-    note: evidenceNoteDraft.value.trim(),
-    workAmounts,
-    files: filePairs.length ? filePairs : [{ url: '', name: '' }],
-  }
-}
+function buildDrawerEvidencesPayload(item: KpiItem): Record<string, unknown> {
+  const mode = resolveFormMode(item)
+  const calcTypeCode = item.calculationTypeCode
 
-function buildDrawerEvidencesPayload(item: KpiItem, kind: EvidencePayloadKind): Record<string, unknown> {
-  if (kind === 'weighted') {
-    const rows = generalPlanActualRows.value.map(({ plan, actual }) => ({ plan, actual }))
-    const w: WeightedFormState = {
-      text: evidenceNoteDraft.value.trim(),
-      result: joinActualResultTexts(generalPlanActualRows.value.map(({ actual }) => ({ actual }))) ?? '',
-      note: evidenceNoteDraft.value.trim(),
-      planActualRecords: rows,
-      evd: pendingEvidenceUrls.value.map(u => ({
-        url: u.url,
-        name: (u.name ?? '').trim(),
-      })),
-    }
-    const out = buildWeightedPayload(w)
-    attachCertificateIfNeeded(out)
+  // category_b: only note + cert + files
+  if (item.group === 'B') {
+    const out: Record<string, unknown> = {}
+    const noteTrim = evidenceNoteDraft.value.trim()
+    if (noteTrim) out.note = noteTrim
+    const filePairs = pendingEvidenceUrls.value
+      .map(u => ({ url: u.url, name: (u.name ?? '').trim() }))
+      .filter(r => r.url)
+    if (filePairs.length) out.files = filePairs
+    const cert = certificateOutcomeDraft.value.trim()
+    if (cert) out.certificateOutcomeNote = cert
     return out
   }
-  if (kind === 'comment') {
-    const out = buildCommentPayload({
-      note: evidenceNoteDraft.value.trim(),
-      files: pendingEvidenceUrls.value.map(u => ({
-        url: u.url,
-        name: (u.name ?? '').trim(),
-      })),
-    })
-    attachCertificateIfNeeded(out)
-    return out
+
+  const rows = generalPlanActualRows.value
+    .map(({ plan, actual, comment }) => ({
+      plan: plan.trim(),
+      actual: actual.trim(),
+      ...(comment.trim() ? { comment: comment.trim() } : {}),
+    }))
+    .filter(r => r.plan || r.actual)
+
+  const out: Record<string, unknown> = {}
+  if (rows.length) out.planActualRecords = rows
+
+  // result: for average mode try to compute ratio preview; else join actuals
+  if (mode === 'average') {
+    const results = rows
+      .map(r => computeRatioPreview(r.plan, r.actual, calcTypeCode) ?? r.actual)
+      .filter(Boolean)
+    if (results.length) out.result = results.join(' | ')
+  } else {
+    const actuals = rows.map(r => r.actual).filter(Boolean)
+    if (actuals.length) out.result = actuals.join(' | ')
   }
-  if (kind === 'workAmount_new') {
-    const out = buildWorkAmountPayload(workAmountFormStateFromWaRows())
-    attachCertificateIfNeeded(out)
-    return out
+
+  const note = evidenceNoteDraft.value.trim()
+  if (note) out.note = note
+
+  // COMMENT mode: store the content field
+  if (mode === 'comment') {
+    const content = contentDraft.value.trim()
+    if (content) out.content = content
   }
-  return buildMemberEvidencesPayload(item, resolveEvidenceCase(item))
+
+  const filePairs = pendingEvidenceUrls.value
+    .map(u => ({ url: u.url, name: (u.name ?? '').trim() }))
+    .filter(r => r.url)
+  if (filePairs.length) out.files = filePairs
+
+  const cert = certificateOutcomeDraft.value.trim()
+  if (cert) out.certificateOutcomeNote = cert
+
+  return out
 }
 
 function openEvidencePanel(item: KpiItem) {
-  /* Flow 2 / 3 — BE từ chối PATCH nếu 404/402/403; chặn UI sớm */
-  if (item.statusCode === 404 || item.statusCode === 402 || item.statusCode === 403) return
+  if (item.canViewEvidence !== true) return
   selectedDrawerItem.value = item
 
   const draft = memberKpiDraftStore.getDraft(item.id)
@@ -765,73 +770,91 @@ function openEvidencePanel(item: KpiItem) {
   evidenceUrlHint.value = ''
   waFormError.value = ''
 
-  const kind = resolveEvidencePayloadKind(item, jsonSource)
+  // Unified parse — single path for all non-B KPIs
+  const p = parseEvidencesJson(jsonSource)
+  evidenceNoteDraft.value = p.note || item.evidenceNote || ''
+  contentDraft.value = p.content
 
-  if (kind === 'weighted') {
-    const p = parseWeightedPayload(jsonSource)
-    evidenceNoteDraft.value = p.note || p.text || item.evidenceNote || ''
-    generalPlanActualRows.value =
-      p.planActualRecords?.length
-        ? p.planActualRecords.map((row, i) => ({
-            id: `${item.id}-p-${i}`,
-            plan: row.plan,
-            actual: row.actual,
-          }))
-        : [newPlanActualRow()]
-    pendingEvidenceUrls.value = urlPairsToPendingUrls(p.evd, `${item.id}-evd`)
-    evidencePanelOpen.value = true
-    return
-  }
+  const persistedRows =
+    p.planActualRecords.length ? p.planActualRecords
+    : item.planActualRecords?.length
+      ? item.planActualRecords.map(r => ({
+          plan: r.plan,
+          actual: r.actual,
+          comment: (r as Record<string, unknown>).comment
+            ? String((r as Record<string, unknown>).comment)
+            : '',
+        }))
+      : null
 
-  if (kind === 'comment') {
-    const p = parseCommentPayload(jsonSource)
-    evidenceNoteDraft.value = p.note || item.evidenceNote || ''
-    pendingEvidenceUrls.value = urlPairsToPendingUrls(p.files, `${item.id}-cf`)
-    evidencePanelOpen.value = true
-    return
-  }
+  generalPlanActualRows.value = persistedRows?.length
+    ? persistedRows.map((r, i) => ({
+        id: `${item.id}-p-${i}`,
+        plan: r.plan,
+        actual: r.actual,
+        comment: r.comment ?? '',
+      }))
+    : [newPlanActualRow()]
 
-  if (kind === 'workAmount_new') {
-    hydrateWorkAmountDrawerFromParsed(item, jsonSource)
-    evidencePanelOpen.value = true
-    return
-  }
-
-  evidenceNoteDraft.value = item.evidenceNote ?? ''
-  const persisted = item.planActualRecords
-  if (persisted?.length) {
-    generalPlanActualRows.value = persisted.map((r, i) => ({
-      id: `${item.id}-p-${i}`,
-      plan: r.plan,
-      actual: r.actual,
-    }))
-  } else {
-    generalPlanActualRows.value = [newPlanActualRow()]
-  }
-
-  const waPersisted = item.waTimeRecords
-  if (waPersisted?.length) {
-    waTimeRows.value = waPersisted.map((r, i) => ({
-      id: `${item.id}-w-${i}`,
-      month: (() => {
-        const m = Number.parseInt(String((r as { month?: string }).month ?? '1'), 10)
-        return m >= 1 && m <= 12 ? String(m) : '1'
-      })(),
-      spent: r.spent,
-      standard: r.standard,
-    }))
-  } else {
-    waTimeRows.value = [newWaTimeRow()]
-  }
-
-  pendingEvidenceUrls.value = []
+  pendingEvidenceUrls.value = urlPairsToPendingUrls(p.urlPairs, `${item.id}-u`)
   evidencePanelOpen.value = true
+}
+
+function parseLegacyEvidencesJson(jsonSource: string) {
+  const raw = jsonSource.trim()
+  if (!raw || raw === '{}' || raw === 'null') {
+    return {
+      note: '',
+      planActualRecords: [] as Array<{ plan: string; actual: string }>,
+      waTimeRecords: [] as Array<{ month: string; spent: string; standard: string }>,
+    }
+  }
+  try {
+    const o = JSON.parse(raw) as Record<string, unknown>
+    const planActualRecords = Array.isArray(o.planActualRecords)
+      ? (o.planActualRecords as unknown[])
+          .map((row) => {
+            if (!row || typeof row !== 'object') return null
+            const r = row as Record<string, unknown>
+            return {
+              plan: String(r.plan ?? ''),
+              actual: String(r.actual ?? ''),
+            }
+          })
+          .filter((row): row is { plan: string; actual: string } => row != null)
+      : []
+    const waTimeRecords = Array.isArray(o.waTimeRecords)
+      ? (o.waTimeRecords as unknown[])
+          .map((row) => {
+            if (!row || typeof row !== 'object') return null
+            const r = row as Record<string, unknown>
+            return {
+              month: String(r.month ?? '1'),
+              spent: String(r.spent ?? r.spentHours ?? ''),
+              standard: String(r.standard ?? r.standardHours ?? ''),
+            }
+          })
+          .filter((row): row is { month: string; spent: string; standard: string } => row != null)
+      : []
+    return {
+      note: String(o.note ?? o.text ?? ''),
+      planActualRecords,
+      waTimeRecords,
+    }
+  } catch {
+    return {
+      note: '',
+      planActualRecords: [],
+      waTimeRecords: [],
+    }
+  }
 }
 
 function closeEvidencePanel() {
   evidencePanelOpen.value = false
   selectedDrawerItem.value = null
   certificateOutcomeDraft.value = ''
+  contentDraft.value = ''
   detailSelfScore.value = null
   generalPlanActualRows.value = [newPlanActualRow()]
   waTimeRows.value = [newWaTimeRow()]
@@ -861,6 +884,7 @@ const loading = ref(true)
 const saving = ref(false)
 const submitting = ref(false)
 const dashboardData = ref<MemberKpiDashboard | null>(null)
+
 const selectedYear = ref(new Date().getFullYear())
 
 const memberExtraSheetItems = ref<KpiItem[]>([])
@@ -902,11 +926,32 @@ const sheet = computed(() => {
     totalWeight: s.totalWeight + extraWeight,
   }
 })
-
-const currentPhaseIndex = computed(() => {
-  if (!dashboardData.value) return 2
-  return PHASE_STEPS.findIndex(s => s.key === dashboardData.value!.phase)
+/** Nhãn nút nộp theo phase (API `canSubmit` đã gộp cửa sổ + chưa nộp). */
+const memberSheetSubmitLabel = computed(() => {
+  const p = dashboardData.value?.phase
+  if (p === 'target_setup') return 'Nộp mục tiêu KPI (Goal Setting)'
+  if (p === 'mid_year') return 'Nộp KPI giữa năm (Mid-Year)'
+  if (p === 'year_end') return 'Nộp KPI cuối năm (End-Year)'
+  return 'Nộp đánh giá KPI'
 })
+
+/** Nhãn nút nộp tab Thăng tiến */
+const promotionSubmitLabel = computed(() => {
+  const p = dashboardData.value?.phase
+  if (p === 'target_setup') return 'Nộp KPI Đề Xuất Thăng Tiến'
+  if (p === 'mid_year') return 'Nộp KPI Thăng Tiến Giữa Năm'
+  if (p === 'year_end') return 'Nộp KPI Thăng Tiến Cuối Năm'
+  return 'Nộp KPI Thăng Tiến'
+})
+
+const hasMissingMidYearSelfScore = computed(() => {
+  if (dashboardData.value?.phase !== 'mid_year') return false
+  const items = sheet.value?.items ?? []
+  if (!items.length) return false
+  return items.some(it => it.selfScore == null)
+})
+
+const isSubmitDisabled = computed(() => submitting.value || hasMissingMidYearSelfScore.value)
 
 /** Fallback header khi thiếu category từ API */
 const legacySheetGroupLabels: Record<string, string> = {
@@ -977,16 +1022,9 @@ const promotionPmWeightedAvg = computed((): number | null => {
   return den ? num / den : null
 })
 
-/** README Flow 3 — POST /kpi/member/individual-kpi (ASM 402) */
-async function onMemberIndividualKpiSaved(payload: CreateIndividualKpiPayload) {
-  await memberKpiService.createIndividualKpi({
-    cycleYear: payload.cycleYear,
-    kpiName: payload.kpiName,
-    description: payload.description?.trim() || undefined,
-    weight: payload.weight,
-    categoryId: payload.categoryId,
-    calculationRuleCode: payload.calculationRuleCode,
-  })
+/** README Flow 3 — POST /kpi/member/individual-kpi (KPI đề xuất chờ PM) */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+async function onMemberIndividualKpiSaved(_response: unknown) {
   await loadDashboard()
 }
 
@@ -1063,57 +1101,20 @@ function scrollToKpiSelfEvalSection() {
   document.getElementById('member-kpi-self-eval-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
-/** Payload JSON lưu vào DB (kpi_assignments.evidences) — khớp parse phía BE */
-function buildMemberEvidencesPayload(item: KpiItem, caseKey: EvidenceFormCase): Record<string, unknown> {
-  const payload: Record<string, unknown> = {}
-  const noteTrim = evidenceNoteDraft.value.trim()
-  if (noteTrim) payload.text = noteTrim
-  const cert = certificateOutcomeDraft.value.trim()
-  if (cert) payload.certificateOutcomeNote = cert
-
-  if (caseKey === 'general') {
-    const rows = generalPlanActualRows.value.map(({ plan, actual }) => ({ plan, actual }))
-    payload.planActualRecords = rows
-    payload.result = joinActualResultTexts(rows)
-  } else if (caseKey === 'monthly' && isMonthlyWaTimesheetKpi(item)) {
-    payload.waTimeRecords = waTimeRows.value.map(({ month, spent, standard }) => ({
-      month,
-      spent,
-      standard,
-    }))
-    payload.result = waTimeTotalsRatio(waTimeRows.value)
-  } else if (caseKey === 'category_b') {
-    payload.result = noteTrim || undefined
-  }
-  return payload
-}
 
 // ── Actions ────────────────────────────────────────────────────────────────────
 /** Lưu vào Pinia draft + đồng bộ hiển thị local; không PATCH API (flush khi Submit Đánh Giá). */
 function saveEvidenceDetail() {
   if (!selectedDrawerItem.value || !canSaveEvidence.value) return
   const item = selectedDrawerItem.value
-  const jsonHint =
-    memberKpiDraftStore.getDraft(item.id)?.evidencesJson ?? item.evidencesJson ?? ''
-  const kind = resolveEvidencePayloadKind(item, jsonHint)
 
   waFormError.value = ''
-  const needsWa =
-    kind === 'workAmount_new'
-    || (kind === 'legacy' && resolveEvidenceCase(item) === 'monthly' && isMonthlyWaTimesheetKpi(item))
-  if (needsWa) {
-    const waErr = validateWaTimeRows()
-    if (waErr) {
-      waFormError.value = waErr
-      return
-    }
-  }
 
   const scoreRaw = detailSelfScore.value!
   const score = Math.min(5, Math.max(1, Math.round(Number(scoreRaw))))
   saving.value = true
   try {
-    const payloadObj = buildDrawerEvidencesPayload(item, kind)
+    const payloadObj = buildDrawerEvidencesPayload(item)
     const evidencesJson = JSON.stringify(payloadObj)
     memberKpiDraftStore.setDraft(item.id, { evidencesJson, selfScore: score })
 
@@ -1123,44 +1124,23 @@ function saveEvidenceDetail() {
     item.evidenceNote = noteTrim || undefined
     item.certificateOutcomeNote = certificateOutcomeDraft.value.trim() || undefined
 
-    if (kind === 'weighted') {
-      const rows = generalPlanActualRows.value.map(({ plan, actual }) => ({ plan, actual }))
-      item.planActualRecords = rows
-      item.result = joinActualResultTexts(rows)
-      item.actual = undefined
-    } else if (kind === 'comment') {
+    // Sync local display
+    const rows = generalPlanActualRows.value.map(({ plan, actual, comment }) => ({ plan, actual, comment }))
+    item.planActualRecords = rows
+    if (item.group === 'B') {
       item.result = noteTrim || undefined
-      item.actual = undefined
-    } else if (kind === 'workAmount_new') {
-      const waRows = waTimeRows.value.map(({ month, spent, standard }) => ({
-        month,
-        spent,
-        standard,
-      }))
-      item.waTimeRecords = waRows
-      item.result = waTimeTotalsRatio(waTimeRows.value)
-      item.actual = undefined
     } else {
-      const caseKey = resolveEvidenceCase(item)
-      if (caseKey === 'general') {
-        const rows = generalPlanActualRows.value.map(({ plan, actual }) => ({ plan, actual }))
-        item.planActualRecords = rows
-        item.result = joinActualResultTexts(rows)
-        item.actual = undefined
-      } else if (caseKey === 'monthly' && isMonthlyWaTimesheetKpi(item)) {
-        const waRows = waTimeRows.value.map(({ month, spent, standard }) => ({
-          month,
-          spent,
-          standard,
-        }))
-        item.waTimeRecords = waRows
-        item.result = waTimeTotalsRatio(waTimeRows.value)
-        item.actual = undefined
-      } else if (caseKey === 'category_b') {
-        item.result = noteTrim || undefined
-        item.actual = undefined
+      const calcTypeCode = item.calculationTypeCode
+      if (resolveFormMode(item) === 'average') {
+        const ratios = rows
+          .map(r => computeRatioPreview(r.plan, r.actual, calcTypeCode) ?? r.actual)
+          .filter(Boolean)
+        item.result = ratios.join(' | ') || undefined
+      } else {
+        item.result = rows.map(r => r.actual).filter(Boolean).join(' | ') || undefined
       }
     }
+    item.actual = undefined
 
     if (item.evidenceStatus === 'missing') item.evidenceStatus = 'submitted'
     closeEvidencePanel()
@@ -1176,30 +1156,44 @@ function apiSubmitErrorMessage(err: unknown): string {
     if (m != null && String(m).trim() !== '') return String(m)
   }
   if (err instanceof Error) return err.message
-  return 'Không thể nộp đánh giá.'
+  return 'Cập nhật KPI thất bại, vui lòng thử lại'
 }
 
 async function handleSubmit() {
   if (!dashboardData.value?.canSubmit) return
+  if (isSubmitDisabled.value) return
   submitting.value = true
   try {
     await memberKpiDraftStore.flushAll((id, body) => memberKpiService.updateSheetItem(id, body))
     await memberKpiService.submit(selectedYear.value)
     await loadDashboard()
+    showSubmitToast('KPI đã được cập nhật thành công', 'success')
   } catch (e: unknown) {
-    window.alert(apiSubmitErrorMessage(e))
+    showSubmitToast(apiSubmitErrorMessage(e), 'error')
   } finally {
     submitting.value = false
   }
 }
 
-// ── Helpers: Trạng thái đánh giá KPI (badge cạnh Hạng mục — không hiện Chờ duyệt / Đã duyệt)
-function resolveEvaluationStatus(item: KpiItem): MemberKpiEvaluationStatus {
-  if (item.evaluationStatus) return item.evaluationStatus
-  if (item.pmScore !== null) return 'approved'
-  if (item.evidenceStatus === 'pending') return 'pending_approval'
-  if (item.evidenceStatus === 'submitted' && item.selfScore !== null) return 'pending_approval'
+const MEMBER_EVAL_ALLOWED = new Set<MemberKpiEvaluationStatus>([
+  'not_started',
+  'pending_approval',
+  'approved',
+  'revision',
+  'overdue',
+])
+
+/** Chuẩn hóa chuỗi API → union FE (thiếu / lạ → an toàn not_started) */
+function toMemberKpiEvaluationStatus(raw: string | null | undefined): MemberKpiEvaluationStatus {
+  if (raw && MEMBER_EVAL_ALLOWED.has(raw as MemberKpiEvaluationStatus))
+    return raw as MemberKpiEvaluationStatus
   return 'not_started'
+}
+
+function memberItemEvalStatus(item: KpiItem): MemberKpiEvaluationStatus {
+  return toMemberKpiEvaluationStatus(
+    item.evaluationStatus != null ? String(item.evaluationStatus) : undefined,
+  )
 }
 
 const MEMBER_EVALUATION_STATUS_UI: Record<
@@ -1346,7 +1340,7 @@ const memberKpiStatusCounts = computed(() => {
     approved: 0,
   }
   for (const i of items) {
-    c[resolveEvaluationStatus(i)]++
+    c[memberItemEvalStatus(i)]++
   }
   return c
 })
@@ -1520,6 +1514,7 @@ function memberKpiTabIconClass(tab: MemberKpiMainTab) {
             </button>
           </nav>
           <button
+            v-if="memberKpiMainTab === 'personal'"
             type="button"
             class="mb-1.5 mr-1 flex shrink-0 items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:bg-blue-700"
             @click="showCreateIndividualKpiDrawer = true"
@@ -1529,7 +1524,7 @@ function memberKpiTabIconClass(tab: MemberKpiMainTab) {
           </button>
         </div>
 
-        <CreateIndividualKpiDrawer
+        <MemberCreateIndividualKpiDrawer
           v-model="showCreateIndividualKpiDrawer"
           :cycle-id="String(selectedYear)"
           @saved="onMemberIndividualKpiSaved"
@@ -1578,17 +1573,15 @@ function memberKpiTabIconClass(tab: MemberKpiMainTab) {
                       <td class="py-4 px-5">
                         <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
                           <p class="text-sm font-bold text-slate-900">{{ item.code }} {{ item.name }}</p>
-                          <template v-if="memberShowsInlineEvalStatus(resolveEvaluationStatus(item))">
-                            <template v-for="evSt in [resolveEvaluationStatus(item)]" :key="`${item.id}-inline-st`">
-                              <span
-                                class="inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-bold leading-none"
-                                :class="memberEvalUi(evSt).chip"
-                                :title="`${memberEvalUi(evSt).labelVi} · ${memberEvaluationActionHint(evSt)}`"
-                              >
-                                <span class="h-1.5 w-1.5 shrink-0 rounded-full" :class="memberEvalUi(evSt).dot" />
-                                {{ memberEvalUi(evSt).labelVi }}
-                              </span>
-                            </template>
+                          <template v-if="memberShowsInlineEvalStatus(memberItemEvalStatus(item))">
+                            <span
+                              class="inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-bold leading-none"
+                              :class="memberEvalUi(memberItemEvalStatus(item)).chip"
+                              :title="`${memberEvalUi(memberItemEvalStatus(item)).labelVi} · ${memberEvaluationActionHint(memberItemEvalStatus(item))}`"
+                            >
+                              <span class="h-1.5 w-1.5 shrink-0 rounded-full" :class="memberEvalUi(memberItemEvalStatus(item)).dot" />
+                              {{ memberEvalUi(memberItemEvalStatus(item)).labelVi }}
+                            </span>
                           </template>
                         </div>
                       </td>
@@ -1597,7 +1590,7 @@ function memberKpiTabIconClass(tab: MemberKpiMainTab) {
                         <span
                           class="inline-flex max-w-full flex-col items-center gap-0.5 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-[10px] font-semibold leading-tight text-slate-800"
                           :title="item.assignmentStatusName ?? ''">
-                          <span class="text-[9px] font-bold text-slate-400">{{ item.statusCode ?? '—' }}</span>
+                          <span class="text-[9px] font-bold text-slate-500">{{ item.evaluationState ?? '—' }}</span>
                           <span class="line-clamp-3 text-center">{{ item.assignmentStatusName ?? '—' }}</span>
                         </span>
                       </td>
@@ -1637,16 +1630,14 @@ function memberKpiTabIconClass(tab: MemberKpiMainTab) {
 
                       <!-- Action — Flow 2: Accept gộp vào Submit Đánh Giá -->
                       <td class="py-4 px-5 text-center align-middle">
-                        <template v-for="evSt in [resolveEvaluationStatus(item)]" :key="`${item.id}-evst`">
-                          <button type="button"
-                            class="mx-auto flex h-8 w-8 items-center justify-center rounded-full text-slate-500 transition-colors hover:bg-indigo-50 hover:text-indigo-600"
-                            :class="evSt === 'approved' ? 'pointer-events-none opacity-50' : ''"
-                            :title="evSt === 'approved' ? 'Đã duyệt - không chỉnh sửa' : item.statusCode === 402 || item.statusCode === 403 ? 'Chờ PM/GM duyệt KPI đề xuất' : isKpiWorkflowLocked(item) ? 'Xem chi tiết minh chứng (đã nộp)' : 'Tự đánh giá & bằng chứng'"
-                            :disabled="evSt === 'approved' || item.statusCode === 402 || item.statusCode === 403"
-                            @click="openEvidencePanel(item)">
-                            <i class="fas fa-pen text-sm" />
-                          </button>
-                        </template>
+                        <button type="button"
+                          class="mx-auto flex h-8 w-8 items-center justify-center rounded-full text-slate-500 transition-colors hover:bg-indigo-50 hover:text-indigo-600"
+                          :class="item.canViewEvidence !== true ? 'pointer-events-none opacity-50' : ''"
+                          :title="item.evidenceTooltip ?? ''"
+                          :disabled="item.canViewEvidence !== true"
+                          @click="openEvidencePanel(item)">
+                          <i class="fas fa-pen text-sm" />
+                        </button>
                       </td>
                     </tr>
                   </template>
@@ -1727,13 +1718,18 @@ function memberKpiTabIconClass(tab: MemberKpiMainTab) {
 
             <!-- Footer -->
             <div class="bg-slate-50 p-4 border-t border-slate-200 flex justify-center gap-3">
-              <button v-if="isCurrentYear" :disabled="!dashboardData.canSubmit || submitting"
-                class="px-4 py-2 bg-slate-900 border border-transparent rounded-lg text-sm font-semibold text-white shadow-sm hover:bg-slate-800 flex items-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                @click="handleSubmit">
-                <i v-if="submitting" class="fas fa-spinner fa-spin text-xs" />
-                <i v-else class="fas fa-paper-plane text-xs" />
-                Submit Đánh Giá
-              </button>
+              <template v-if="isCurrentYear">
+                <button
+                  v-if="dashboardData?.canSubmit"
+                  type="button"
+                  :disabled="isSubmitDisabled"
+                  class="px-4 py-2 bg-slate-900 border border-transparent rounded-lg text-sm font-semibold text-white shadow-sm hover:bg-slate-800 flex items-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  @click="handleSubmit">
+                  <i v-if="submitting" class="fas fa-spinner fa-spin text-xs" />
+                  <i v-else class="fas fa-paper-plane text-xs" />
+                  {{ submitting ? 'Đang xử lý...' : memberSheetSubmitLabel }}
+                </button>
+              </template>
               <div v-else class="text-sm text-slate-500 font-medium">
                 Dữ liệu năm {{ selectedYear }} chỉ để xem
               </div>
@@ -1790,17 +1786,15 @@ function memberKpiTabIconClass(tab: MemberKpiMainTab) {
                       <td class="px-5 py-4">
                         <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
                           <p class="text-sm font-bold text-slate-900">{{ item.code }} {{ item.name }}</p>
-                          <template v-if="memberShowsInlineEvalStatus(resolveEvaluationStatus(item))">
-                            <template v-for="evSt in [resolveEvaluationStatus(item)]" :key="`${item.id}-promo-inline`">
-                              <span
-                                class="inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-bold leading-none"
-                                :class="memberEvalUi(evSt).chip"
-                                :title="`${memberEvalUi(evSt).labelVi} · ${memberEvaluationActionHint(evSt)}`"
-                              >
-                                <span class="h-1.5 w-1.5 shrink-0 rounded-full" :class="memberEvalUi(evSt).dot" />
-                                {{ memberEvalUi(evSt).labelVi }}
-                              </span>
-                            </template>
+                          <template v-if="memberShowsInlineEvalStatus(memberItemEvalStatus(item))">
+                            <span
+                              class="inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-bold leading-none"
+                              :class="memberEvalUi(memberItemEvalStatus(item)).chip"
+                              :title="`${memberEvalUi(memberItemEvalStatus(item)).labelVi} · ${memberEvaluationActionHint(memberItemEvalStatus(item))}`"
+                            >
+                              <span class="h-1.5 w-1.5 shrink-0 rounded-full" :class="memberEvalUi(memberItemEvalStatus(item)).dot" />
+                              {{ memberEvalUi(memberItemEvalStatus(item)).labelVi }}
+                            </span>
                           </template>
                         </div>
                         <p v-if="item.certificateOutcomeNote"
@@ -1814,7 +1808,7 @@ function memberKpiTabIconClass(tab: MemberKpiMainTab) {
                         <span
                           class="inline-flex max-w-full flex-col items-center gap-0.5 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-[10px] font-semibold leading-tight text-slate-800"
                           :title="item.assignmentStatusName ?? ''">
-                          <span class="text-[9px] font-bold text-slate-400">{{ item.statusCode ?? '—' }}</span>
+                          <span class="text-[9px] font-bold text-slate-500">{{ item.evaluationState ?? '—' }}</span>
                           <span class="line-clamp-3 text-center">{{ item.assignmentStatusName ?? '—' }}</span>
                         </span>
                       </td>
@@ -1847,16 +1841,14 @@ function memberKpiTabIconClass(tab: MemberKpiMainTab) {
                         </span>
                       </td>
                       <td class="px-5 py-4 text-center align-middle">
-                        <template v-for="evSt in [resolveEvaluationStatus(item)]" :key="`${item.id}-promo-evst`">
-                          <button type="button"
-                            class="mx-auto flex h-8 w-8 items-center justify-center rounded-full text-slate-500 transition-colors hover:bg-indigo-50 hover:text-indigo-600"
-                            :class="evSt === 'approved' ? 'pointer-events-none opacity-50' : ''"
-                            :title="evSt === 'approved' ? 'Đã duyệt - không chỉnh sửa' : item.statusCode === 402 || item.statusCode === 403 ? 'Chờ PM/GM duyệt KPI đề xuất' : isKpiWorkflowLocked(item) ? 'Xem chi tiết minh chứng (đã nộp)' : 'Tự đánh giá & bằng chứng'"
-                            :disabled="evSt === 'approved' || item.statusCode === 402 || item.statusCode === 403"
-                            @click="openEvidencePanel(item)">
-                            <i class="fas fa-pen text-sm" />
-                          </button>
-                        </template>
+                        <button type="button"
+                          class="mx-auto flex h-8 w-8 items-center justify-center rounded-full text-slate-500 transition-colors hover:bg-indigo-50 hover:text-indigo-600"
+                          :class="item.canViewEvidence !== true ? 'pointer-events-none opacity-50' : ''"
+                          :title="item.evidenceTooltip ?? ''"
+                          :disabled="item.canViewEvidence !== true"
+                          @click="openEvidencePanel(item)">
+                          <i class="fas fa-pen text-sm" />
+                        </button>
                       </td>
                     </tr>
                   </template>
@@ -1882,13 +1874,18 @@ function memberKpiTabIconClass(tab: MemberKpiMainTab) {
                 </tfoot>
               </table>
               <div class="bg-slate-50 p-4 border-t border-slate-200 flex justify-center gap-3">
-                <button v-if="isCurrentYear" :disabled="!dashboardData.canSubmit || submitting"
-                  class="px-4 py-2 bg-slate-900 border border-transparent rounded-lg text-sm font-semibold text-white shadow-sm hover:bg-slate-800 flex items-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  @click="handleSubmit">
-                  <i v-if="submitting" class="fas fa-spinner fa-spin text-xs" />
-                  <i v-else class="fas fa-paper-plane text-xs" />
-                  Submit Điểm Promotion
-                </button>
+                <template v-if="isCurrentYear">
+                  <button
+                    v-if="dashboardData?.canSubmit"
+                    type="button"
+                    :disabled="isSubmitDisabled"
+                    class="px-4 py-2 bg-violet-700 border border-transparent rounded-lg text-sm font-semibold text-white shadow-sm hover:bg-violet-800 flex items-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    @click="handleSubmit">
+                    <i v-if="submitting" class="fas fa-spinner fa-spin text-xs" />
+                    <i v-else class="fas fa-arrow-trend-up text-xs" />
+                    {{ submitting ? 'Đang xử lý...' : promotionSubmitLabel }}
+                  </button>
+                </template>
                 <div v-else class="text-sm text-slate-500 font-medium">
                   Dữ liệu năm {{ selectedYear }} chỉ để xem
                 </div>
@@ -2029,191 +2026,113 @@ function memberKpiTabIconClass(tab: MemberKpiMainTab) {
                       </div>
                     </div>
 
-                    <!-- CASE: monthly - A.2 / Work Amount: chỉ Spent / Standard; Actual Result = tổng Spent ÷ tổng Standard -->
-                    <div
-                      v-show="drawerCase === 'monthly' && selectedDrawerItem && isMonthlyWaTimesheetKpi(selectedDrawerItem)"
+                    <!-- CASE: general / monthly — form driven by drawerFormMode (CALC_RULE + CALC_TYPE) -->
+                    <div v-show="drawerCase === 'general' || drawerCase === 'monthly'"
                       class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-                      <div class="flex items-center justify-between border-b border-blue-100 bg-blue-50/50 px-4 py-3">
-                        <h4 class="flex items-center text-sm font-bold text-blue-800">
-                          <i class="fas fa-clock mr-2 text-blue-600" />
-                          Khai báo thời gian (Work Amount)
-                        </h4>
-                      </div>
-                      <div class="p-4">
-                        <div class="overflow-x-auto rounded-lg border border-blue-100 bg-blue-50/20">
-                          <table class="w-full min-w-[420px] text-left text-sm">
-                            <thead
-                              class="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-600">
-                              <tr>
-                                <th class="min-w-[8.5rem] px-3 py-2">Tháng</th>
-                                <th class="px-3 py-2">Spent (h)</th>
-                                <th class="px-3 py-2">Standard (h)</th>
-                                <th class="w-14 px-3 py-2 text-center">Xóa</th>
-                              </tr>
-                            </thead>
-                            <tbody class="divide-y divide-slate-100 bg-white">
-                              <tr v-for="row in waTimeRows" :key="row.id">
-                                <td class="px-3 py-2">
-                                  <select v-model="row.month"
-                                    :disabled="evidenceDrawerReadOnly"
-                                    class="w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-sm font-medium text-slate-800 focus:ring-1 focus:ring-blue-500 disabled:cursor-default disabled:bg-slate-50 disabled:opacity-90">
-                                    <option v-for="m in getWaMonthOptionsForRow(row)" :key="m.value" :value="m.value">
-                                      {{ m.label }}
-                                    </option>
-                                  </select>
-                                </td>
-                                <td class="px-3 py-2">
-                                  <input v-model="row.spent" type="text" inputmode="decimal" placeholder="0"
-                                    :readonly="evidenceDrawerReadOnly"
-                                    class="w-full min-w-[5rem] rounded border border-slate-300 px-2 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 read-only:bg-slate-50" />
-                                </td>
-                                <td class="px-3 py-2">
-                                  <input v-model="row.standard" type="text" inputmode="decimal" placeholder="0"
-                                    :readonly="evidenceDrawerReadOnly"
-                                    class="w-full min-w-[5rem] rounded border border-slate-300 px-2 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 read-only:bg-slate-50" />
-                                </td>
-                                <td class="px-3 py-2 text-center">
-                                  <button v-if="waTimeRows.length > 1 && canAddEvidenceRecords" type="button"
-                                    class="rounded p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600"
-                                    title="Xóa dòng" @click="removeWaTimeRow(row.id)">
-                                    <i class="fas fa-trash-alt text-xs" />
-                                  </button>
-                                </td>
-                              </tr>
-                            </tbody>
-                          </table>
-                        </div>
-                        <p v-if="waFormError"
-                          class="mt-2 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-800"
-                          role="alert">
-                          {{ waFormError }}
-                        </p>
-                        <div class="mt-3 flex flex-wrap items-center justify-between gap-2">
-                          <button v-if="canAddEvidenceRecords" type="button"
-                            class="inline-flex items-center rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-                            :disabled="!canAddMoreWaRows" :title="canAddMoreWaRows
-                              ? 'Thêm dòng (tháng chưa dùng)'
-                              : 'Đã đủ 12 dòng hoặc đã dùng hết 12 tháng'
-                            " @click="addWaTimeRow">
-                            <i class="fas fa-plus mr-1.5 text-xs" /> Thêm dòng
-                          </button>
-                          <p v-if="waTimeTotalsRatio(waTimeRows) != null" class="text-xs font-semibold text-blue-900">
-                            Xem trước tỉ lệ: {{ waTimeTotalsRatio(waTimeRows) }}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
 
-                    <!-- CASE: project_metrics -->
-                    <div v-show="drawerCase === 'project_metrics'"
-                      class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-                      <div
-                        class="flex items-center justify-between border-b border-purple-100 bg-purple-50/50 px-4 py-3">
-                        <h4 class="flex items-center text-sm font-bold text-purple-800">
-                          <i class="fas fa-chart-line mr-2 text-purple-600" />
-                          Khai báo Chỉ số (Metrics) theo Dự án
+                      <!-- Header with mode indicator -->
+                      <div class="flex items-center justify-between border-b px-4 py-3"
+                        :class="drawerFormMode === 'average' ? 'border-blue-100 bg-blue-50/50' : 'border-teal-100 bg-teal-50/50'">
+                        <h4 class="flex items-center text-sm font-bold"
+                          :class="drawerFormMode === 'average' ? 'text-blue-800' : 'text-teal-800'">
+                          <i class="mr-2"
+                            :class="drawerFormMode === 'average' ? 'fas fa-calculator text-blue-600' : 'fas fa-comment-dots text-teal-600'" />
+                          {{ drawerFormMode === 'average' ? 'Khai báo Số liệu (Auto tính tỉ lệ)' : 'Khai báo Mục tiêu / Kết quả' }}
                         </h4>
+                        <span v-if="drawerFormMode === 'average' && selectedDrawerItem"
+                          class="rounded bg-blue-100 px-2 py-0.5 text-[10px] font-bold text-blue-700">
+                          {{ ratioLabels(selectedDrawerItem.calculationTypeCode).formula }}
+                        </span>
                       </div>
-                      <div class="p-4">
-                        <div
-                          class="mb-4 grid grid-cols-12 items-end gap-3 rounded-lg border border-purple-100 bg-purple-50/30 p-3">
-                          <div class="col-span-12 sm:col-span-3">
-                            <label class="mb-1 block text-[10px] font-bold uppercase text-slate-500">Dự án</label>
-                            <input type="text" placeholder="Tên dự án..."
-                              class="w-full rounded border border-slate-300 px-2 py-1.5 text-sm focus:ring-1 focus:ring-purple-500" />
-                          </div>
-                          <div class="col-span-4 sm:col-span-2">
-                            <label class="mb-1 block text-[10px] font-bold uppercase text-slate-500">Rework %</label>
-                            <input type="number" placeholder="0%"
-                              class="w-full rounded border border-slate-300 px-2 py-1.5 text-sm focus:ring-1 focus:ring-purple-500" />
-                          </div>
-                          <div class="col-span-4 sm:col-span-2">
-                            <label class="mb-1 block text-[10px] font-bold uppercase text-slate-500">UT Bug %</label>
-                            <input type="number" placeholder="0%"
-                              class="w-full rounded border border-slate-300 px-2 py-1.5 text-sm focus:ring-1 focus:ring-purple-500" />
-                          </div>
-                          <div class="col-span-4 sm:col-span-2">
-                            <label class="mb-1 block text-[10px] font-bold uppercase text-slate-500">Degraded %</label>
-                            <input type="number" placeholder="0%"
-                              class="w-full rounded border border-slate-300 px-2 py-1.5 text-sm focus:ring-1 focus:ring-purple-500" />
-                          </div>
-                          <div class="col-span-12 sm:col-span-3">
-                            <button type="button"
-                              class="flex w-full items-center justify-center rounded bg-purple-600 px-2 py-1.5 text-sm font-medium text-white hover:bg-purple-700">
-                              <i class="fas fa-plus mr-1" /> Cập nhật
-                            </button>
-                          </div>
-                        </div>
-                        <table class="w-full overflow-hidden rounded-lg border border-slate-200 text-left text-sm">
-                          <thead class="bg-slate-50 text-xs text-slate-500">
-                            <tr>
-                              <th class="border-b border-slate-200 px-3 py-2 font-medium">Dự án</th>
-                              <th class="border-b border-slate-200 px-3 py-2 text-center font-medium">Rework</th>
-                              <th class="border-b border-slate-200 px-3 py-2 text-center font-medium">UT Bug</th>
-                              <th class="border-b border-slate-200 px-3 py-2 text-center font-medium">Degraded</th>
-                              <th class="border-b border-slate-200 px-3 py-2 text-center font-medium">Xóa</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            <tr>
-                              <td colspan="5" class="bg-slate-50 py-4 text-center text-xs italic text-slate-400">
-                                Chưa có dự án nào được khai báo
-                              </td>
-                            </tr>
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
 
-                    <!-- CASE: general -->
-                    <div v-show="drawerCase === 'general'"
-                      class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-                      <div class="flex items-center justify-between border-b border-teal-100 bg-teal-50/50 px-4 py-3">
-                        <h4 class="flex items-center text-sm font-bold text-teal-800">
-                          <i class="fas fa-comment-dots mr-2 text-teal-600" />
-                          Khai báo Hành vi / Sự kiện
-                        </h4>
-                      </div>
                       <div class="p-4">
-                        <div class="space-y-4 rounded-lg border border-teal-100 bg-teal-50/30 p-4">
+                        <div class="space-y-4 rounded-lg p-4"
+                          v-show="drawerFormMode === 'average'"
+                          :class="drawerFormMode === 'average' ? 'border border-blue-100 bg-blue-50/20' : 'border border-teal-100 bg-teal-50/30'">
                           <div v-for="(row, rowIdx) in generalPlanActualRows" :key="row.id"
-                            class="rounded-lg border border-teal-100/80 bg-white p-3 shadow-sm">
+                            class="rounded-lg border bg-white p-3 shadow-sm"
+                            :class="drawerFormMode === 'average' ? 'border-blue-100/80' : 'border-teal-100/80'">
                             <div class="mb-2 flex items-center justify-between gap-2">
-                              <span class="text-[10px] font-bold uppercase tracking-wider text-teal-800">Record {{
-                                rowIdx +
-                                1 }}</span>
+                              <span class="text-[10px] font-bold uppercase tracking-wider"
+                                :class="drawerFormMode === 'average' ? 'text-blue-800' : 'text-teal-800'">
+                                Record {{ rowIdx + 1 }}
+                              </span>
                               <button v-if="generalPlanActualRows.length > 1 && canAddEvidenceRecords" type="button"
                                 class="rounded p-1 text-xs text-slate-400 hover:bg-rose-50 hover:text-rose-600"
                                 title="Xóa dòng" @click="removeGeneralPlanActualRow(row.id)">
                                 <i class="fas fa-trash-alt" />
                               </button>
                             </div>
-                            <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
+
+                            <div class="grid grid-cols-1 gap-3 md:grid-cols-3">
                               <div>
-                                <label class="mb-1 block text-xs font-bold text-slate-600">Mục tiêu
-                                  (Plan/Target)</label>
-                                <textarea v-model="row.plan" rows="2"
+                                <label class="mb-1 block text-xs font-bold text-slate-600">
+                                  {{ drawerFormMode === 'average'
+                                    ? ratioLabels(selectedDrawerItem?.calculationTypeCode).plan
+                                    : 'Mục tiêu (Plan/Target)' }}
+                                </label>
+                                <input v-if="drawerFormMode === 'average'"
+                                  v-model="row.plan" type="text" inputmode="decimal" placeholder="0"
                                   :readonly="evidenceDrawerReadOnly"
-                                  class="w-full rounded border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-teal-500 read-only:bg-slate-50" 
-                                />
-                              </div>
-                              <div>
-                                <label class="mb-1 block text-xs font-bold text-slate-600">Thực tế
-                                  (Actual/Result)</label>
-                                <textarea v-model="row.actual" rows="2"
+                                  class="w-full rounded border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-blue-500 read-only:bg-slate-50" />
+                                <textarea v-else v-model="row.plan" rows="2"
                                   :readonly="evidenceDrawerReadOnly"
                                   class="w-full rounded border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-teal-500 read-only:bg-slate-50" />
                               </div>
+                              <div>
+                                <label class="mb-1 block text-xs font-bold text-slate-600">
+                                  {{ drawerFormMode === 'average'
+                                    ? ratioLabels(selectedDrawerItem?.calculationTypeCode).actual
+                                    : 'Thực tế (Actual/Result)' }}
+                                </label>
+                                <input v-if="drawerFormMode === 'average'"
+                                  v-model="row.actual" type="text" inputmode="decimal" placeholder="0"
+                                  :readonly="evidenceDrawerReadOnly"
+                                  class="w-full rounded border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-blue-500 read-only:bg-slate-50" />
+                                <textarea v-else v-model="row.actual" rows="2"
+                                  :readonly="evidenceDrawerReadOnly"
+                                  class="w-full rounded border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-teal-500 read-only:bg-slate-50" />
+                              </div>
+                              <div>
+                                <label class="mb-1 block text-xs font-bold text-slate-600">Comment</label>
+                                <textarea v-model="row.comment" rows="2"
+                                  :readonly="evidenceDrawerReadOnly"
+                                  placeholder="Ghi chú thêm..."
+                                  class="w-full rounded border border-slate-300 px-3 py-2 text-sm read-only:bg-slate-50"
+                                  :class="drawerFormMode === 'average' ? 'focus:ring-1 focus:ring-blue-500' : 'focus:ring-1 focus:ring-teal-500'" />
+                              </div>
+                            </div>
+
+                            <!-- Ratio preview row (average mode only) -->
+                            <div v-if="drawerFormMode === 'average' && selectedDrawerItem"
+                              class="mt-2 flex items-center gap-2">
+                              <span class="text-[10px] font-semibold text-slate-500">Kết quả tính:</span>
+                              <span class="rounded bg-blue-50 px-2 py-0.5 text-xs font-bold text-blue-700">
+                                {{ computeRatioPreview(row.plan, row.actual, selectedDrawerItem.calculationTypeCode) ?? '—' }}
+                              </span>
                             </div>
                           </div>
+
                           <div v-if="canAddEvidenceRecords" class="flex justify-end">
                             <button type="button"
-                              class="flex items-center rounded bg-teal-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-teal-700"
-                              title="Thêm một dòng Plan / Actual"
+                              class="flex items-center rounded px-4 py-1.5 text-sm font-medium text-white"
+                              :class="drawerFormMode === 'average' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-teal-600 hover:bg-teal-700'"
                               @click="addGeneralPlanActualRow">
                               <i class="fas fa-plus mr-1" /> Thêm Record
                             </button>
                           </div>
+                        </div>
+
+                        <!-- Content textarea — COMMENT mode only (CALC_RULE 803) -->
+                        <div v-if="drawerFormMode === 'comment'" class="mt-4">
+                          <label class="mb-1 block text-xs font-bold text-slate-700">
+                            <i class="fas fa-align-left mr-1 text-teal-500" />
+                            Nội dung nhận xét / diễn giải (Content)
+                          </label>
+                          <textarea v-model="contentDraft" rows="4"
+                            placeholder="Mô tả chi tiết bối cảnh, kết quả hoặc diễn giải thêm để PM tham chiếu khi cho điểm..."
+                            :readonly="evidenceDrawerReadOnly"
+                            class="w-full resize-none rounded-md border border-teal-200 bg-white px-3 py-2 text-sm focus:ring-1 focus:ring-teal-500 read-only:bg-slate-50 read-only:text-slate-700" />
                         </div>
                       </div>
                     </div>
@@ -2405,7 +2324,7 @@ function memberKpiTabIconClass(tab: MemberKpiMainTab) {
                 </label>
                 <select
                   class="w-40 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 shadow-sm focus:ring-1 focus:ring-sky-500 disabled:cursor-default disabled:bg-slate-50"
-                  :disabled="evidenceDrawerReadOnly"
+                  :disabled="evidenceDrawerReadOnly || selectedDrawerItem?.canEditScore !== true"
                   :value="detailSelfScore ?? ''" @change="
                     detailSelfScore =
                     ($event.target as HTMLSelectElement).value === ''
@@ -2442,6 +2361,27 @@ function memberKpiTabIconClass(tab: MemberKpiMainTab) {
         </div>
       </Transition>
     </Teleport>
+
+    <Teleport to="body">
+      <Transition name="member-submit-toast">
+        <div
+          v-if="submitToastVisible"
+          class="fixed top-5 right-5 z-[140] flex max-w-[min(90vw,24rem)] items-start gap-3 rounded-lg border px-4 py-3 text-sm shadow-lg"
+          :class="
+            submitToastVariant === 'success'
+              ? 'border-emerald-200 bg-emerald-50 text-emerald-950'
+              : 'border-rose-200 bg-rose-50 text-rose-950'
+          "
+          role="status"
+        >
+          <i
+            class="fas mt-0.5 shrink-0 text-base"
+            :class="submitToastVariant === 'success' ? 'fa-check-circle text-emerald-600' : 'fa-circle-exclamation text-rose-600'"
+          />
+          <span class="font-medium leading-snug">{{ submitToastMessage }}</span>
+        </div>
+      </Transition>
+    </Teleport>
   </div>
 </template>
 
@@ -2464,5 +2404,16 @@ function memberKpiTabIconClass(tab: MemberKpiMainTab) {
 .evidence-drawer-enter-from .evidence-drawer-panel,
 .evidence-drawer-leave-to .evidence-drawer-panel {
   transform: translateX(100%);
+}
+
+.member-submit-toast-enter-active,
+.member-submit-toast-leave-active {
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+.member-submit-toast-enter-from,
+.member-submit-toast-leave-to {
+  opacity: 0;
+  transform: translateX(120%);
 }
 </style>

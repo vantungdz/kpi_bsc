@@ -107,16 +107,16 @@ const handleRefresh = () => {
       </div>
 
       <div class="bg-white">
-        <PmPersonalKpiTab v-show="activeTab === 'personal'" :key="personalKpiKey" @open-assign="openAssignDrawer" @open-member-detail="openKpiChildDetail" />
-        <PmTeamMembersTab v-show="activeTab === 'team'" @open-member="openMemberDrawer" />
-        <PmRequestsTab v-show="activeTab === 'requests'" :requests="requests" @open-request="openRequestDrawer" />
+        <PmPersonalKpiTab v-if="activeTab === 'personal'" :key="personalKpiKey" @open-assign="openAssignDrawer" @open-member-detail="openKpiChildDetail" />
+        <PmTeamMembersTab v-if="activeTab === 'team'" @open-member="openMemberDrawer" />
+        <PmRequestsTab v-if="activeTab === 'requests'" :requests="requests" @open-request="openRequestDrawer" />
       </div>
     </div>
 
-    <PmAssignKpiDrawer :open="rightPanelVisible && rightPanelMode === 'assign'" :kpi="activeItem" @close="closePanel" @refresh="handleRefresh" />
-    <PmMemberDetailDrawer :open="rightPanelVisible && rightPanelMode === 'member_detail'" :member="activeItem" @close="closePanel" />
-    <PmRequestDetailDrawer :open="rightPanelVisible && rightPanelMode === 'request_detail'" :request="activeItem" @close="closePanel" />
-    <GmMemberKpiDrawer :open="isGmDrawerOpen" :member="gmDrawerMember" :items="gmDrawerItems" @close="isGmDrawerOpen = false" />
+    <PmAssignKpiDrawer v-if="rightPanelVisible && rightPanelMode === 'assign'" :open="rightPanelVisible && rightPanelMode === 'assign'" :kpi="activeItem" @close="closePanel" @refresh="handleRefresh" />
+    <PmMemberDetailDrawer v-if="rightPanelVisible && rightPanelMode === 'member_detail'" :open="rightPanelVisible && rightPanelMode === 'member_detail'" :member="activeItem" @close="closePanel" />
+    <PmRequestDetailDrawer v-if="rightPanelVisible && rightPanelMode === 'request_detail'" :open="rightPanelVisible && rightPanelMode === 'request_detail'" :request="activeItem" @close="closePanel" />
+    <GmMemberKpiDrawer v-if="isGmDrawerOpen" :open="isGmDrawerOpen" :member="gmDrawerMember" :items="gmDrawerItems" @close="isGmDrawerOpen = false" />
   </div>
 </template>
 

@@ -82,10 +82,10 @@ public class AdminService {
                     .label(buildLabel(cycle))
                     .period(derivePeriod(cycle, currentYear))
                     .status(deriveStatus(cycle, currentYear))
-                    .startDate(cycle.getGoalSettingDeadline() != null
-                            ? DATE_FMT.format(cycle.getGoalSettingDeadline()) : null)
-                    .endDate(cycle.getEndYearDeadline() != null
-                            ? DATE_FMT.format(cycle.getEndYearDeadline()) : null)
+                    .startDate(cycle.getGoalSettingEnd() != null
+                            ? DATE_FMT.format(cycle.getGoalSettingEnd()) : null)
+                    .endDate(cycle.getEndYearEnd() != null
+                            ? DATE_FMT.format(cycle.getEndYearEnd()) : null)
                     .stats(stats)
                     .build();
         }).collect(Collectors.toList());

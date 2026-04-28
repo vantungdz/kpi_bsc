@@ -28,6 +28,8 @@ public class MemberKpiAssignmentDTO {
     private String evidences;
     /** {@code kpi_master.calculation_rule_code} — CALC_RULE 801–804 */
     private Integer calculationRuleCode;
+    /** {@code kpi_master.calculation_type_code} — CALC_TYPE 701 (Actual/Plan) | 702 (Plan/Actual) */
+    private Integer calculationTypeCode;
     private UUID categoryId;
     private String categoryName;
 }

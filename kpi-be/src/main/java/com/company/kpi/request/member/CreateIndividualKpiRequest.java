@@ -39,4 +39,12 @@ public class CreateIndividualKpiRequest {
     @Min(801)
     @Max(804)
     private Integer calculationRuleCode;
+
+    /**
+     * CALC_TYPE: 701 ACTUAL_OVER_PLAN, 702 PLAN_OVER_ACTUAL.
+     * Null khi CALC_RULE = 803 (COMMENT) — không cần chiều tính.
+     */
+    @Min(701)
+    @Max(702)
+    private Integer calculationTypeCode;
 }

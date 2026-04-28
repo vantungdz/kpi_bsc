@@ -18,4 +18,6 @@ public interface UserDepartmentMapper {
                               @Param("supervisorId") UUID supervisorId);
 
     void deletePrimaryDepartment(@Param("userId") UUID userId);
+
+    UUID getDepartmentIdByUserId(@Param("userId") UUID userId);
 }

@@ -37,8 +37,8 @@ public class GmKpiDiagnosticsHierarchyService {
     /** {@code kpi_master.type_code} — team / cascading; GM chỉ gán user (PM) trên assignment. */
     private static final int KPI_TYPE_TEAM_CASCADING = 102;
 
-    /** {@code kpi_assignments.status_code >= 503} — coi như đã qua giữa kỳ, dùng tỉ lệ cuối kỳ. */
-    private static final int ASSIGNMENT_STATUS_END_PHASE = 503;
+    /** {@code kpi_assignments.status_code >= 601} — vào phase Final (year-end), dùng tỉ lệ cuối kỳ. */
+    private static final int ASSIGNMENT_STATUS_END_PHASE = 601;
 
     private static final BigDecimal HALF = new BigDecimal("0.5");
     private static final BigDecimal MID_THRESH_HIGH = new BigDecimal("1.10");
@@ -122,7 +122,19 @@ public class GmKpiDiagnosticsHierarchyService {
             pmOwners.add(buildPmNode(kpiInfoId, se.getKey(), se.getValue(), first));
         }
 
-        var rollup = rollupFromPmOwners(pmOwners, formatKpiTarget(first));
+        // Với INDIVIDUAL/PROMOTION: PM status bị ép cứng = "warning" (supervisor không theo dõi),
+        // nên không dùng được để roll-up lên KPI. Thay vào đó roll-up trực tiếp từ member statuses.
+        final Rollup rollup;
+        if (shouldSuppressSupervisorMetrics(first.getTypeCode())) {
+            List<GmDiagMemberNode> allMembers = pmOwners.stream()
+                    .flatMap(pm -> allMembersFromPmNode(pm).stream())
+                    .collect(Collectors.toList());
+            rollup = allMembers.isEmpty()
+                    ? rollupFromPmOwners(pmOwners, formatKpiTarget(first))
+                    : rollupFromMembers(allMembers, formatKpiTarget(first));
+        } else {
+            rollup = rollupFromPmOwners(pmOwners, formatKpiTarget(first));
+        }
 
         String displayName = (first.getKpiCode() != null && !first.getKpiCode().isBlank())
                 ? first.getKpiCode() + " · " + first.getKpiName()
@@ -154,14 +166,35 @@ public class GmKpiDiagnosticsHierarchyService {
                 .build();
     }
 
+    /**
+     * Thu thập tất cả {@link GmDiagMemberNode} từ một PM node (bao gồm cả members dưới leader subtree).
+     * Dùng để roll-up KPI level cho các loại INDIVIDUAL/PROMOTION khi PM status bị suppress.
+     */
+    private static List<GmDiagMemberNode> allMembersFromPmNode(GmDiagPmNode pm) {
+        List<GmDiagMemberNode> result = new ArrayList<>();
+        if (pm.getMembers() != null) {
+            result.addAll(pm.getMembers());
+        }
+        if (pm.getLeaders() != null) {
+            for (GmDiagLeaderNode leader : pm.getLeaders()) {
+                if (leader.getMembers() != null) {
+                    result.addAll(leader.getMembers());
+                }
+            }
+        }
+        return result;
+    }
+
     private static UUID sectionGroupKey(GmDiagnosticsFlatRow r) {
         UUID sid = r.getSectionId();
         return sid != null ? sid : SECTION_GROUP_FALLBACK;
     }
 
     private GmDiagPmNode buildPmNode(UUID kpiInfoId, UUID sectionId, List<GmDiagnosticsFlatRow> secRows, GmDiagnosticsFlatRow kpiFirst) {
+        Integer kpiTypeCode = kpiFirst.getTypeCode();
+        boolean suppressSupervisorMetrics = shouldSuppressSupervisorMetrics(kpiTypeCode);
         if (secRows.stream().allMatch(r -> r.getAssignmentId() == null)) {
-            String sectionTargetLabel = formatPmSectionTargetFromRows(secRows, kpiFirst);
+            String sectionTargetLabel = suppressSupervisorMetrics ? "—" : formatPmSectionTargetFromRows(secRows, kpiFirst);
             return GmDiagPmNode.builder()
                     .id("diag-pm-unassigned-" + kpiInfoId)
                     .name("Chưa giao")
@@ -180,19 +213,18 @@ public class GmKpiDiagnosticsHierarchyService {
 
         GmDiagnosticsFlatRow sf = secRows.get(0);
         String pmRowId = "diag-pm-" + sectionId + "-" + kpiInfoId;
-        Integer kpiTypeCode = kpiFirst.getTypeCode();
 
         List<GmDiagMemberNode> pmMembers = secRows.stream()
                 .map(r -> toMemberNode(r, kpiFirst))
                 .collect(Collectors.toList());
 
         /** Target hiển thị trên dòng PM/đơn vị: từ {@code kpi_assignments.target_value} (flat), không dùng catalog KPI. */
-        String sectionTargetLabel = formatPmSectionTargetFromRows(secRows, kpiFirst);
+        String sectionTargetLabel = suppressSupervisorMetrics ? "—" : formatPmSectionTargetFromRows(secRows, kpiFirst);
 
         boolean anyLeaderNames = secRows.stream()
                 .anyMatch(r -> r.getLeaderName() != null && !r.getLeaderName().isBlank());
-        // Team KPI: leader_name chỉ là supervisor HR, không tạo cây leader giả dưới node PM.
-        boolean useLeaderTree = anyLeaderNames && (kpiTypeCode == null || kpiTypeCode != KPI_TYPE_TEAM_CASCADING);
+        // Tạo cây cho mọi loại KPI nếu có supervisor
+        boolean useLeaderTree = anyLeaderNames;
 
         List<GmDiagLeaderNode> leaders = null;
         List<GmDiagMemberNode> directMembers = pmMembers;
@@ -202,7 +234,8 @@ public class GmKpiDiagnosticsHierarchyService {
                     pmRowId,
                     sectionTargetLabel,
                     sf.getSectionManagerName(),
-                    sf.getSectionManagerId());
+                    sf.getSectionManagerId(),
+                    suppressSupervisorMetrics);
             if (split == null) {
                 leaders = null;
                 directMembers = pmMembers;
@@ -215,34 +248,19 @@ public class GmKpiDiagnosticsHierarchyService {
         }
 
         var rollup = rollupFromMembers(pmMembers, sectionTargetLabel);
+        String pmActualLabel = suppressSupervisorMetrics ? "—" : rollup.actual();
+        String pmStatus = rollup.status();
 
-        // 102: tên node rollup = người trên assignment (member_*), không dùng manager department cha.
-        String pmDisplayName = (kpiTypeCode != null && kpiTypeCode == KPI_TYPE_TEAM_CASCADING)
-                ? pickTeamAssigneeDisplayName(secRows)
-                : pickPmDisplayName(sf);
+        // 102: Không gộp tên assignee vào cùng PM
+        String pmDisplayName = pickPmDisplayName(sf);
 
         String sectionName = sf.getSectionName() != null ? sf.getSectionName() : "—";
-        final String ownerRoleCode;
-        final String ownerRoleLabel;
-        final String unitLine;
-        if (kpiTypeCode != null && kpiTypeCode == KPI_TYPE_TEAM_CASCADING) {
-            ownerRoleCode = "TEAM";
-            ownerRoleLabel = null;
-            unitLine = "TEAM · " + sectionName;
-        } else {
-            ownerRoleCode = normalizedSectionManagerRole(sf);
-            ownerRoleLabel = trimOrNull(sf.getSectionManagerRoleName());
-            String prefix = roleCodeToUnitLinePrefix(ownerRoleCode);
-            unitLine = (prefix != null && !prefix.isBlank()) ? prefix + " · " + sectionName : sectionName;
-        }
+        final String ownerRoleCode = normalizedSectionManagerRole(sf);
+        final String ownerRoleLabel = trimOrNull(sf.getSectionManagerRoleName());
+        String prefix = roleCodeToUnitLinePrefix(ownerRoleCode);
+        final String unitLine = (prefix != null && !prefix.isBlank()) ? prefix + " · " + sectionName : sectionName;
 
         List<GmDiagMemberNode> membersForResponse = directMembers;
-        if (kpiTypeCode != null
-                && kpiTypeCode == KPI_TYPE_TEAM_CASCADING
-                && !useLeaderTree
-                && directMembers.size() == 1) {
-            membersForResponse = List.of();
-        }
 
         String blockerSummary = (kpiTypeCode != null && kpiTypeCode == KPI_TYPE_TEAM_CASCADING)
                 ? (pmMembers.size() == 1 ? "1 người nhận KPI" : pmMembers.size() + " người nhận KPI")
@@ -256,8 +274,8 @@ public class GmKpiDiagnosticsHierarchyService {
                 .ownerRoleLabel(ownerRoleLabel)
                 .unitLine(unitLine)
                 .target(sectionTargetLabel)
-                .actual(rollup.actual())
-                .status(rollup.status())
+                .actual(pmActualLabel)
+                .status(pmStatus)
                 .blockerSummary(blockerSummary)
                 .members(membersForResponse)
                 .leaders(leaders)
@@ -311,10 +329,11 @@ public class GmKpiDiagnosticsHierarchyService {
             return GmDiagMemberNode.builder()
                     .id("diag-member-" + fallbackId)
                     .name("(Không tải được user giao)")
+                    .statusCode(r.getStatusCode())
                     .target(formatKpiTarget(kpiFirst))
                     .actual("—")
-                    .status("warning")
-                    .performanceLabel(null)
+                    .status("danger")
+                    .performanceLabel("Không xác định")
                     .blocker("—")
                     .rank(r.getMemberRank())
                     .leader(r.getLeaderName())
@@ -328,6 +347,7 @@ public class GmKpiDiagnosticsHierarchyService {
         return GmDiagMemberNode.builder()
                 .id(r.getMemberId().toString())
                 .name(r.getMemberName())
+                .statusCode(r.getStatusCode())
                 .target(formatMemberTarget(r.getMemberTargetValue(), kpiFirst))
                 .actual(formatMemberActual(r))
                 .status(perf.status())
@@ -441,7 +461,8 @@ public class GmKpiDiagnosticsHierarchyService {
             String pmRowId,
             String kpiTarget,
             String sectionManagerName,
-            UUID sectionManagerId) {
+            UUID sectionManagerId,
+            boolean suppressSupervisorMetrics) {
         Map<String, List<GmDiagMemberNode>> groups = new LinkedHashMap<>();
         for (GmDiagMemberNode mem : pmMembers) {
             String key = leaderGroupKey(
@@ -469,21 +490,25 @@ public class GmKpiDiagnosticsHierarchyService {
             List<GmDiagMemberNode> members = groups.get(key);
             String slug = slug(key, idx);
             var rollup = rollupFromMembers(members, kpiTarget);
+            String leaderTarget = formatGroupTargetFromMemberNodes(members, kpiTarget);
+            String leaderTargetLabel = suppressSupervisorMetrics ? "—" : leaderTarget;
+            String leaderActualLabel = suppressSupervisorMetrics ? "—" : rollup.actual();
+            String leaderStatus = rollup.status();
             out.add(GmDiagLeaderNode.builder()
                     .id(pmRowId + "-ldr-" + idx + "-" + slug)
                     .name(key)
                     .ownerRoleCode(firstMemberLeaderRoleCode(members))
                     .ownerRoleLabel(firstMemberLeaderRoleName(members))
-                    .target(kpiTarget)
-                    .actual(rollup.actual())
-                    .status(rollup.status())
+                    .target(leaderTargetLabel)
+                    .actual(leaderActualLabel)
+                    .status(leaderStatus)
                     .blockerSummary("")
                     .members(members)
                     .build());
             idx++;
         }
 
-        membersUnderPm = filterDirectMembersNotDuplicatingLeaders(membersUnderPm, subgroupKeys, groups);
+        membersUnderPm = filterDirectMembersNotDuplicatingLeaders(membersUnderPm, subgroupKeys, groups, sectionManagerName, sectionManagerId);
 
         return new PmLeadersSplit(out, membersUnderPm);
     }
@@ -495,11 +520,14 @@ public class GmKpiDiagnosticsHierarchyService {
     private static List<GmDiagMemberNode> filterDirectMembersNotDuplicatingLeaders(
             List<GmDiagMemberNode> membersUnderPm,
             List<String> subgroupKeys,
-            Map<String, List<GmDiagMemberNode>> groups) {
+            Map<String, List<GmDiagMemberNode>> groups,
+            String sectionManagerName,
+            UUID sectionManagerId) {
         if (membersUnderPm.isEmpty() || subgroupKeys.isEmpty()) {
             return membersUnderPm;
         }
 
+        // Lọc theo UUID của member dưới leader subtrees
         Set<UUID> assigneeIdsInLeaderSubtrees = new HashSet<>();
         for (String leaderKey : subgroupKeys) {
             for (GmDiagMemberNode m : groups.getOrDefault(leaderKey, List.of())) {
@@ -510,16 +538,28 @@ public class GmKpiDiagnosticsHierarchyService {
             }
         }
 
+        // Chuẩn hóa tên leader để so sánh (loại bỏ người đã có leader node)
+        Set<String> leaderNodeNameKeys = new HashSet<>();
+        for (String key : subgroupKeys) {
+            leaderNodeNameKeys.add(normalizePersonNameKey(key));
+        }
+
         List<GmDiagMemberNode> kept = new ArrayList<>(membersUnderPm.size());
         for (GmDiagMemberNode m : membersUnderPm) {
             UUID u = memberNodeUuidOrNull(m);
-            if (u == null) {
-                kept.add(m);
+
+            // Loại bỏ nếu UUID đã nằm trong subtree của leader
+            if (u != null && assigneeIdsInLeaderSubtrees.contains(u)) {
                 continue;
             }
-            if (assigneeIdsInLeaderSubtrees.contains(u)) {
+
+            // Loại bỏ nếu tên của member này CHÍNH LÀ tên của một leader node
+            // (Tran Leader 1 có assignment riêng nhưng cũng là supervisor → không hiện ở flat list)
+            String memberNameKey = normalizePersonNameKey(m.getName());
+            if (!memberNameKey.isEmpty() && leaderNodeNameKeys.contains(memberNameKey)) {
                 continue;
             }
+
             kept.add(m);
         }
         return kept;
@@ -603,6 +643,15 @@ public class GmKpiDiagnosticsHierarchyService {
         if (secRows == null || secRows.isEmpty()) {
             return formatKpiTarget(kpiFirst);
         }
+        // Ưu tiên target của chính manager phòng (nếu manager cũng là assignee của KPI này).
+        UUID sectionManagerId = secRows.get(0).getSectionManagerId();
+        if (sectionManagerId != null) {
+            for (GmDiagnosticsFlatRow r : secRows) {
+                if (sectionManagerId.equals(r.getMemberId()) && r.getMemberTargetValue() != null) {
+                    return r.getMemberTargetValue().stripTrailingZeros().toPlainString();
+                }
+            }
+        }
         List<BigDecimal> vals = new ArrayList<>();
         for (GmDiagnosticsFlatRow r : secRows) {
             if (r.getMemberTargetValue() != null) {
@@ -624,6 +673,44 @@ public class GmKpiDiagnosticsHierarchyService {
     }
 
     /**
+     * Target trên node Leader: chỉ tính trong subtree của leader đó (không lấy toàn section).
+     * Nếu các member cùng một target thì hiển thị 1 số; khác nhau thì hiển thị min-max.
+     */
+    private static String formatGroupTargetFromMemberNodes(List<GmDiagMemberNode> members, String fallbackTarget) {
+        if (members == null || members.isEmpty()) {
+            return fallbackTarget != null ? fallbackTarget : "—";
+        }
+        List<BigDecimal> vals = new ArrayList<>();
+        for (GmDiagMemberNode m : members) {
+            String raw = m.getTarget();
+            if (raw == null) {
+                continue;
+            }
+            String t = raw.trim();
+            if (t.isEmpty() || "—".equals(t)) {
+                continue;
+            }
+            try {
+                vals.add(new BigDecimal(t).stripTrailingZeros());
+            } catch (NumberFormatException ignored) {
+                // Nhóm target có text không phải số (vd mô tả) -> fallback về target hiện có.
+            }
+        }
+        if (vals.isEmpty()) {
+            return fallbackTarget != null ? fallbackTarget : "—";
+        }
+        BigDecimal min = vals.stream().min(BigDecimal::compareTo).orElse(null);
+        BigDecimal max = vals.stream().max(BigDecimal::compareTo).orElse(null);
+        if (min != null && max != null && min.compareTo(max) == 0) {
+            return min.toPlainString();
+        }
+        if (min != null && max != null) {
+            return min.toPlainString() + "–" + max.toPlainString();
+        }
+        return fallbackTarget != null ? fallbackTarget : "—";
+    }
+
+    /**
      * Target (KPI / PM / Leader): {@code kpis_information.target_value} nếu có,
      * không thì {@code kpis_information.target_description}.
      */
@@ -635,6 +722,10 @@ public class GmKpiDiagnosticsHierarchyService {
             return r.getKpiTargetDescription();
         }
         return "—";
+    }
+
+    private static boolean shouldSuppressSupervisorMetrics(Integer typeCode) {
+        return typeCode != null && (typeCode == 101 || typeCode == 103);
     }
 
     /**
@@ -650,6 +741,12 @@ public class GmKpiDiagnosticsHierarchyService {
 
     private static boolean isEndPhaseAssignment(GmDiagnosticsFlatRow r) {
         return r.getStatusCode() != null && r.getStatusCode() >= ASSIGNMENT_STATUS_END_PHASE;
+    }
+
+    private static boolean isMidPhaseAssignment(GmDiagnosticsFlatRow r) {
+        if (r.getStatusCode() == null) return false;
+        int sc = r.getStatusCode();
+        return sc >= 501 && sc <= 503;
     }
 
     private static BigDecimal firstNonNull(BigDecimal... vals) {
@@ -686,16 +783,22 @@ public class GmKpiDiagnosticsHierarchyService {
             BigDecimal endAct = endPhaseDisplayScore(r);
             return endAct != null ? formatScaledOne(endAct) : "—";
         }
-        if (r.getMidSelfScore() != null) {
+        if (isMidPhaseAssignment(r) && r.getMidSelfScore() != null) {
             return formatScaledOne(r.getMidSelfScore());
         }
         return "—";
     }
 
     /**
-     * Traffic-light + nhãn theo quy ước GM: MID — actual/(0.5×annual); END (status ≥ 503) — actual/annual.
+     * Traffic-light + nhãn theo quy ước GM:
+     * MID (501/502/503) — actual/(0.5×annual);
+     * END (601/602/603) — actual/annual.
      */
     private static PerfStatus computeMemberPerformance(GmDiagnosticsFlatRow r) {
+        if (!isMidPhaseAssignment(r) && !isEndPhaseAssignment(r)) {
+            return new PerfStatus("warning", "Chờ kỳ đánh giá");
+        }
+
         BigDecimal annual = annualTargetForRatio(r);
         if (annual == null) {
             return new PerfStatus("warning", "Chưa cấu hình mục tiêu");

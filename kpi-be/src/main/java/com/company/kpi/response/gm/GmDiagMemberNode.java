@@ -8,6 +8,8 @@ import lombok.Data;
 public class GmDiagMemberNode {
     private String id;
     private String name;
+    /** {@code kpi_assignments.status_code} (ASM) của assignee. */
+    private Integer statusCode;
     private String target;
     private String actual;
     private String status;

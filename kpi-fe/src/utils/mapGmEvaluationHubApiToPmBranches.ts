@@ -227,6 +227,10 @@ function toKpiItem(row: GmEvaluationHubAssignmentApiRow, index: number): GmKpiIt
   }
 }
 
+function isPromotionAssignmentRow(row: GmEvaluationHubAssignmentApiRow): boolean {
+  return /\bpromotion\b/i.test(String(row.kpiTypeName ?? '').trim())
+}
+
 function avgSelfFromItems(items: GmKpiItem[]): string | null {
   if (!items.length) return null
   const s = items.reduce((a, i) => a + i.selfScore, 0) / items.length
@@ -242,12 +246,40 @@ function buildUserMember(
   rankFallback: string,
 ): GmEvalMember {
   const safeName = displayName.trim() || userId
-  const items = rows.map((r, i) => toKpiItem(r, i))
-  const cats = [...new Set(rows.map((r) => r.categoryName).filter((x): x is string => Boolean(x?.trim())))]
-  const group: GmKpiGroup = {
-    groupTitle: cats.length ? cats.join(' · ') : 'KPI được giao (chu kỳ)',
-    items,
+  const promotionRows = rows.filter(isPromotionAssignmentRow)
+  const nonPromotionRows = rows.filter((r) => !isPromotionAssignmentRow(r))
+  const groups: GmKpiGroup[] = []
+
+  if (nonPromotionRows.length > 0) {
+    const items = nonPromotionRows.map((r, i) => toKpiItem(r, i))
+    const cats = [
+      ...new Set(nonPromotionRows.map((r) => r.categoryName).filter((x): x is string => Boolean(x?.trim()))),
+    ]
+    groups.push({
+      groupTitle: cats.length ? cats.join(' · ') : 'KPI Individual / Cascading',
+      items,
+    })
   }
+
+  if (promotionRows.length > 0) {
+    const items = promotionRows.map((r, i) => toKpiItem(r, i))
+    const cats = [
+      ...new Set(promotionRows.map((r) => r.categoryName).filter((x): x is string => Boolean(x?.trim()))),
+    ]
+    groups.push({
+      groupTitle: cats.length ? `Promotion · ${cats.join(' · ')}` : 'Promotion',
+      items,
+    })
+  }
+
+  if (groups.length === 0) {
+    groups.push({
+      groupTitle: 'KPI được giao (chu kỳ)',
+      items: [],
+    })
+  }
+
+  const flatItems = groups.flatMap((g) => g.items)
   const st = sheetStatusFromRows(rows)
   return {
     id: `hub-${brokerId}-u-${userId}`,
@@ -261,10 +293,10 @@ function buildUserMember(
     assignmentStatusDisplay: assignmentStatusDisplayFromRows(rows),
     gmApprovalActionEnabled: gmApprovalActionEnabledFromRows(rows),
     evaluationUserId: userId,
-    selfScoreDisplay: avgSelfFromItems(items),
+    selfScoreDisplay: avgSelfFromItems(flatItems),
     canScore: true,
     projectIds: [brokerId],
-    groups: [group],
+    groups,
   }
 }
 

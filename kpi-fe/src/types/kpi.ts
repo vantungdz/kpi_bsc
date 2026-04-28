@@ -1,3 +1,5 @@
+import {KpiCycleResponse} from "@/types/shared/kpi-cycle.type";
+
 /** Evaluation period: start-of-year, mid-year, year-end */
 export type EvalPhase = 'target_setup' | 'mid_year' | 'year_end'
 
@@ -50,10 +52,19 @@ export interface KpiItem {
   categoryName?: string | null
   /** kpi_master.calculation_rule_code (801–804) */
   calculationRuleCode?: number | null
+  /** kpi_master.calculation_type_code — 701 (Actual/Plan) | 702 (Plan/Actual) */
+  calculationTypeCode?: number | null
   /** JSON string kpi_assignments.evidences — dùng trang chi tiết */
   evidencesJson?: string | null
-  /** Trạng thái đánh giá KPI (ưu tiên hiển thị cột Trạng thái) */
-  evaluationStatus?: MemberKpiEvaluationStatus
+  /** Trạng thái đánh giá KPI — chuỗi từ API (member sheet) */
+  evaluationStatus?: MemberKpiEvaluationStatus | string
+  /** Nhãn hiển thị tùy chọn từ API (song song evaluationStatus) */
+  evaluationState?: string | null
+  /** Luồng member: quyền chỉnh minh chứng / mở drawer — mặc định an toàn khi thiếu */
+  canEditEvidence?: boolean
+  canViewEvidence?: boolean
+  canEditScore?: boolean
+  evidenceTooltip?: string | null
   evidenceStatus: 'submitted' | 'missing' | 'pending'
   /** Nếu backend không gửi, FE có thể suy luận theo mã KPI */
   evidenceFormCase?: EvidenceFormCase
@@ -180,6 +191,8 @@ export interface CalcRuleOption {
 }
 
 export interface MemberKpiFormMeta {
+  cycleId: string;
+  cycleYear: number;
   kpiCategories: KpiCategoryOption[]
   calcRules: CalcRuleOption[]
 }
@@ -291,6 +304,7 @@ export interface KpiRegistrationRequest {
 
 export interface LeaderKpiInformationResponse {
   year: number;
+  kpiCycle: KpiCycleResponse;
   categories: LeaderKpiCategoryGroup[];
   kpiSummary: LeaderKpiSummary;
 }
@@ -307,7 +321,8 @@ export interface LeaderKpiAssignment {
   kpiCode: string;
   targetDescription: string;
   weight: number;
-  statusCode: string;
+  statusCode: number;
+  statusName: string;
   statusDesc: string;
   midSelfScore: number | null;
   endSelfScore: number | null;

@@ -78,6 +78,8 @@ public class MemberKpiDashboardResponse {
         private String categoryName;
         /** {@code kpi_master.calculation_rule_code} — 801–804 */
         private Integer calculationRuleCode;
+        /** {@code kpi_master.calculation_type_code} — 701 (Actual/Plan) | 702 (Plan/Actual) */
+        private Integer calculationTypeCode;
         /**
          * JSON thô từ {@code kpi_assignments.evidences} (trang chi tiết / map form).
          */
@@ -94,6 +96,13 @@ public class MemberKpiDashboardResponse {
         private String actual;
         private List<PlanActualRecord> planActualRecords;
         private List<WaTimeRecord> waTimeRecords;
+        /** Member sheet: chỉnh minh chứng / drawer — nguồn sự thật luồng ASM + phase (FE chỉ bind). */
+        private boolean canEditEvidence;
+        private boolean canViewEvidence;
+        private boolean canEditScore;
+        private String evidenceTooltip;
+        /** Nhãn ngắn trạng thái đánh giá (hiển thị); optional. */
+        private String evaluationState;
     }
 
     @Data

@@ -7,6 +7,7 @@ public final class Constants {
     public static final class CycleStatus {
         private CycleStatus() {}
         public static final int OPEN = 201;
+        public static final int CLOSED = 202;
     }
 
     public static final class AssignStatus {

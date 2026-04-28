@@ -14,6 +14,7 @@ import com.company.kpi.aggregate.PmDashboardAggregate;
 import com.company.kpi.aggregate.PmMemberOptionAggregate;
 import com.company.kpi.entity.User;
 import com.company.kpi.aggregate.UserJobTitlePair;
+import com.company.kpi.aggregate.UserTeamHierarchyAggregate;
 import com.company.kpi.response.admin.AdminEmployeeProgressResponse;
 import com.company.kpi.response.admin.AdminEmployeeResponse;
 import com.company.kpi.response.reference.DepartmentManagerOptionResponse;
@@ -106,4 +107,6 @@ public interface UserMapper {
     List<UUID> listExistingActiveUserIds(@Param("userIds") List<UUID> userIds);
 
     List<UserJobTitlePair> listUserJobTitlesByIds(@Param("userIds") List<UUID> userIds);
+
+    List<UserTeamHierarchyAggregate> findTeamHierarchyBySupervisor(@Param("pmId") UUID pmId, @Param("cycleId") UUID cycleId);
 }
