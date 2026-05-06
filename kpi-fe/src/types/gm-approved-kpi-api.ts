@@ -11,11 +11,14 @@ export interface GmApprovedKpiQueueItemApi {
   userUsername: string | null
   masterCode: string | null
   masterName: string | null
+  targetValue: number | string | null
   targetDescription: string | null
   weight: number | string | null
   important: boolean | null
   categoryName: string | null
   typeCode: number | null
+  unitCode: number | null
+  feedbackNote: string | null
 }
 
 export interface GmApprovedKpiDecisionBody {

@@ -3,10 +3,12 @@ package com.company.kpi.mapper;
 import com.company.kpi.aggregate.KpiAssignmentInsertRow;
 import com.company.kpi.aggregate.KpiAssignmentUserTargetRow;
 import com.company.kpi.aggregate.GmTimelineIssueRow;
+import com.company.kpi.aggregate.GmUnassignedMemberRow;
 import com.company.kpi.aggregate.KpiAssignmentDetailAggregate;
 import com.company.kpi.aggregate.PmDashboardAggregate;
 import com.company.kpi.entity.KpiAssignment;
 import com.company.kpi.response.gm.GmApprovedKpiQueueItemResponse;
+import com.company.kpi.response.pm.PmMemberKpiApprovalItemResponse;
 import com.company.kpi.response.leader.LeaderKpiAssignmentDTO;
 import com.company.kpi.response.member.MemberKpiAssignmentDTO;
 import org.apache.ibatis.annotations.Mapper;
@@ -40,7 +42,15 @@ public interface KpiAssignmentMapper {
             @Param("userId") UUID userId,
             @Param("midSelfScore") Double mid,
             @Param("endSelfScore") Double end,
-            @Param("evidences") String evidences);
+            @Param("evidences") String evidences,
+            @Param("statusCode") Integer statusCode);
+
+    int submitAssignmentFeedback(
+            @Param("id") UUID id,
+            @Param("cycleId") UUID cycleId,
+            @Param("userId") UUID userId,
+            @Param("feedbackComment") String feedbackComment,
+            @Param("statusCode") Integer statusCode);
 
     int submitAssignmentsForMidYear(
             @Param("userId") UUID userId,
@@ -82,6 +92,21 @@ public interface KpiAssignmentMapper {
             @Param("kpiInfoId") UUID kpiInfoId,
             @Param("cycleId") UUID cycleId);
 
+    /** PM cascade: chỉ các assignment có parent = assignment của PM. */
+    List<KpiAssignmentUserTargetRow> listChildAssignmentsByParentId(
+            @Param("parentAssignmentId") UUID parentAssignmentId);
+
+    /** Xác nhận assignment thuộc PM và đúng KPI information (khi lọc cascade). */
+    int countAssignmentOwnedByUserForKpiInfo(
+            @Param("assignmentId") UUID assignmentId,
+            @Param("userId") UUID userId,
+            @Param("kpiInfoId") UUID kpiInfoId);
+
+    /** Parent assignment hiện tại (owner + target) trong đúng chu kỳ. */
+    KpiAssignmentUserTargetRow findAssignmentUserTargetByIdAndCycle(
+            @Param("assignmentId") UUID assignmentId,
+            @Param("cycleId") UUID cycleId);
+
     List<KpiAssignmentUserTargetRow> listAssignmentUserTargetsByDepartment(
             @Param("kpiInfoId") UUID kpiInfoId,
             @Param("cycleId") UUID cycleId,
@@ -90,6 +115,15 @@ public interface KpiAssignmentMapper {
 
     int softDeleteKpiAssignmentById(
             @Param("assignmentId") UUID assignmentId,
+            @Param("cycleId") UUID cycleId,
+            @Param("updatedBy") UUID updatedBy);
+
+    /**
+     * PM chỉnh sửa phân bổ: gỡ toàn bộ assignment con dưới parent trước khi insert danh sách mới
+     * (tránh trùng bản ghi / member đã bỏ chọn vẫn còn).
+     */
+    int softDeleteChildAssignmentsByParentAndCycle(
+            @Param("parentAssignmentId") UUID parentAssignmentId,
             @Param("cycleId") UUID cycleId,
             @Param("updatedBy") UUID updatedBy);
 
@@ -130,11 +164,40 @@ public interface KpiAssignmentMapper {
             @Param("newStatus") int newStatus,
             @Param("updatedBy") UUID updatedBy);
 
+    /** PM gửi feedback lên GM: assignment do PM sở hữu, 404→407. */
+    int updatePmAssignmentStatusToFeedbackInProgress(
+            @Param("assignmentId") UUID assignmentId,
+            @Param("cycleId") UUID cycleId,
+            @Param("pmId") UUID pmId,
+            @Param("updatedBy") UUID updatedBy);
+
+    int insertAssignmentFeedbackForGm(
+            @Param("assignmentId") UUID assignmentId,
+            @Param("cycleId") UUID cycleId,
+            @Param("feedbackNote") String feedbackNote,
+            @Param("createdBy") UUID createdBy);
+
+    /** Resolve feedback đang active cho GM trên assignment/cycle. */
+    int resolveActiveGmFeedback(
+            @Param("assignmentId") UUID assignmentId,
+            @Param("cycleId") UUID cycleId,
+            @Param("resolvedBy") UUID resolvedBy);
+
+    /** 407→404 sau khi GM xử lý feedback PM. */
+    int updateAssignmentStatusFromFeedbackToPendingAcceptance(
+            @Param("assignmentId") UUID assignmentId,
+            @Param("cycleId") UUID cycleId,
+            @Param("updatedBy") UUID updatedBy);
+
     /**
      * Timeline issues: tất cả {@code kpi_assignments} có status 401–603 trong chu kỳ.
      * Service tự phân loại phase + issue type. DISTINCT ON (ka.id) để tránh duplicate.
      */
     List<GmTimelineIssueRow> listTimelineAssignments(@Param("cycleId") UUID cycleId);
+
+    /** Giống {@link #listTimelineAssignments} nhưng chỉ assignments thuộc phòng có {@code departments.manager_id = pmId}. */
+    List<GmTimelineIssueRow> listTimelineAssignmentsForPm(
+            @Param("cycleId") UUID cycleId, @Param("pmId") UUID pmId);
 
     /**
      * Not-submitted: ASM đang ở {@code statuses} (405 hoặc 405+503) trong review window của phase.
@@ -145,12 +208,69 @@ public interface KpiAssignmentMapper {
             @Param("statuses") List<Integer> statuses,
             @Param("phase") String phase);
 
+    /** Giống {@link #listInProgressWithinPhaseWindow} nhưng chỉ phòng có {@code assign_dept.manager_id = pmId}. */
+    List<GmTimelineIssueRow> listInProgressWithinPhaseWindowForPm(
+            @Param("cycleId") UUID cycleId,
+            @Param("statuses") List<Integer> statuses,
+            @Param("phase") String phase,
+            @Param("pmId") UUID pmId);
+
+    /**
+     * MEMBER-role users (primary dept) không có bản ghi {@code kpi_assignments} cá nhân trong chu kỳ.
+     */
+    List<GmUnassignedMemberRow> listMembersWithoutKpiAssignment(@Param("cycleId") UUID cycleId);
+
+    /** Giống {@link #listMembersWithoutKpiAssignment} nhưng chỉ primary department có {@code d.manager_id = pmId}. */
+    List<GmUnassignedMemberRow> listMembersWithoutKpiAssignmentForPm(
+            @Param("cycleId") UUID cycleId, @Param("pmId") UUID pmId);
+
     int updateKpiStatuses(
         @Param("userId") UUID userId,
         @Param("cycleId") UUID cycleId,
         @Param("statusCode") Integer statusCode,
-        @Param("promotion") Boolean promotion
+        @Param("promotion") Boolean promotion,
+        @Param("onlyFromStatusCode") Integer onlyFromStatusCode
     );
 
+    /**
+     * PM Accept KPI (404→405): chặn nếu còn KPI Team (cascade) chưa có con hoặc còn assignment con chưa đạt 405.
+     */
+    boolean existsTeamCascadeBlockingPmAccept(@Param("pmId") UUID pmId, @Param("cycleId") UUID cycleId);
+
+    /**
+     * Giống {@link #updateKpiStatuses} nhưng áp dụng cho mọi assignment của user thuộc cây dưới PM (recursive {@code user_departments.supervisor_id}).
+     */
+    int updateKpiStatusesForPmManagedMembers(
+            @Param("pmId") UUID pmId,
+            @Param("cycleId") UUID cycleId,
+            @Param("statusCode") Integer statusCode,
+            @Param("promotion") boolean promotion,
+            @Param("onlyFromStatusCode") Integer onlyFromStatusCode);
+
     List<KpiAssignmentDetailAggregate> findKpiDetailsByUserAndCycle(@Param("userId") UUID userId, @Param("cycleId") UUID cycleId);
+
+    /**
+     * KPI cá nhân do member tạo, ASM 402, assignee thuộc cây báo cáo dưới PM
+     * (supervisor trực tiếp hoặc gián tiếp qua Leader, đồng bộ {@code findTeamHierarchyBySupervisor}).
+     */
+    List<PmMemberKpiApprovalItemResponse> listPmPendingMemberKpiApprovals(
+            @Param("pmId") UUID pmId,
+            @Param("cycleId") UUID cycleId);
+
+    /**
+     * PM duyệt (403) hoặc từ chối (406) — chỉ khi đang 402 và assignee thuộc cây dưới PM.
+     */
+    int updateMemberKpiApprovalStatusByPm(
+            @Param("assignmentId") UUID assignmentId,
+            @Param("cycleId") UUID cycleId,
+            @Param("pmId") UUID pmId,
+            @Param("newStatus") int newStatus,
+            @Param("updatedBy") UUID updatedBy);
+
+    /** PM xử lý feedback member: 407→404 cho assignment thuộc cây báo cáo dưới PM. */
+    int updateMemberFeedbackStatusByPm(
+            @Param("assignmentId") UUID assignmentId,
+            @Param("cycleId") UUID cycleId,
+            @Param("pmId") UUID pmId,
+            @Param("updatedBy") UUID updatedBy);
 }

@@ -11,11 +11,15 @@ import java.util.List;
  */
 @Data
 public class GmTimelinePhaseData {
-    /** True nếu có ít nhất 1 item trong bất kỳ bucket nào. */
+    /** True nếu có ít nhất một nhóm vấn đề vận hành ({@code issueGroups} không rỗng). */
     private boolean hasOpenIssues;
-    /** Vd: "5 KPI chưa hoàn thành" — đếm theo DISTINCT assignmentId. */
+    /** Số nhóm vấn đề vận hành (mỗi phần tử {@code issueGroups} = 1 issue). */
+    private int operationalIssueCount;
+    /** Số nhân sự distinct (theo {@code subjectUserId} / fallback tên) across all groups. */
+    private int totalDistinctEmployeesAffected;
+    /** Vd: «3 issues» — nhãn nút; không kèm số nhân sự. */
     private String pendingKpisLine;
-    /** Vd: "3 issues — KPI Setting" — tiêu đề popover. */
+    /** Vd: «3 issues — KPI Setting». */
     private String popoverTitle;
-    private List<GmTimelineIssueBucketDto> issueDetails = new ArrayList<>();
+    private List<GmTimelineIssueGroupDto> issueGroups = new ArrayList<>();
 }

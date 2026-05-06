@@ -10,5 +10,6 @@ public class KpiAssignmentUserTargetRow {
     private UUID id;
     private UUID userId;
     private BigDecimal targetValue;
+    private Integer statusCode;
 }
 

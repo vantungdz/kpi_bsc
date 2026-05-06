@@ -20,7 +20,11 @@ public class GmDiagPmNode {
     /** {@code roles.name} của manager phòng — nhãn hiển thị tag. */
     private String ownerRoleLabel;
     private String unitLine;
+    /** Cùng nhãn trọng số KPI (`kpis_information.weight`) — diagnostics không chia nhỏ theo cây. */
+    private String weight;
     private String target;
+    /** So nhãn target khối với tổng assignment trong section: {@code short} | {@code ok} | {@code excess}. */
+    private String targetBalance;
     private String actual;
     private String status;
     private String blockerSummary;

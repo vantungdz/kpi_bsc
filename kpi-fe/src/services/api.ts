@@ -87,12 +87,20 @@ http.interceptors.response.use(
       }
     }
 
-    const message =
-      error?.response?.data?.message ??
-      error?.message ??
+    const raw = error?.response?.data as Record<string, unknown> | string | undefined
+    let message: string | undefined
+    if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+      const m = raw.message
+      if (typeof m === 'string' && m.trim()) message = m.trim()
+    } else if (typeof raw === 'string' && raw.trim()) {
+      message = raw.trim()
+    }
+    const out =
+      message ??
+      (typeof error?.message === 'string' && error.message.trim() ? error.message.trim() : null) ??
       'Unexpected server error'
 
-    return Promise.reject(new Error(message))
+    return Promise.reject(new Error(out))
   },
 )
 

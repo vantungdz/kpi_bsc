@@ -83,13 +83,13 @@ public class KpiReferenceDataService {
         return userMapper.listActiveUsersForPromotionAssignment();
     }
 
-    /** AVERAGE (802) → ACTUAL_OVER_PLAN / PLAN_OVER_ACTUAL; COMMENT (803) → MANUAL_RATING; còn lại không radio. */
+    /** AVERAGE (802) → ACTUAL_OVER_PLAN / PLAN_OVER_ACTUAL; COMMENT (803) không có CALC_TYPE (radio). */
     private static List<StatusCodeOptionResponse> calcTypesForRuleCode(
             int ruleCode,
             Map<Integer, StatusCodeOptionResponse> typesByCode) {
         int[] typeCodes = switch (ruleCode) {
             case 802 -> new int[] {701, 702};
-            case 803 -> new int[] {703};
+            case 803 -> new int[0];
             default -> new int[0];
         };
         List<StatusCodeOptionResponse> list = new ArrayList<>();

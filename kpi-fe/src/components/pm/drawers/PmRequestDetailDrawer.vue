@@ -3,24 +3,25 @@ import { watch, onUnmounted } from 'vue'
 
 const props = defineProps({
   open: { type: Boolean, default: false },
-  request: { type: Object, default: null }
+  request: { type: Object, default: null },
+  actionBusy: { type: Boolean, default: false },
 })
-const emit = defineEmits(['close'])
+const emit = defineEmits(['close', 'approve', 'reject'])
 
 watch(() => props.open, (val) => { document.body.style.overflow = val ? 'hidden' : '' })
 onUnmounted(() => { document.body.style.overflow = '' })
 
-const handleApprove = () => { emit('close') }
-const handleReject = () => { emit('close') }
+const handleApprove = () => { emit('approve') }
+const handleReject = () => { emit('reject') }
 </script>
 
 <template>
   <Teleport to="body">
-    <Transition name="drawer-slide">
+    <Transition name="pm-drawer">
       <div v-if="open && request" class="fixed inset-0 z-[100] flex justify-end">
-        <div class="absolute inset-0 cursor-pointer bg-slate-900/60 backdrop-blur-sm" @click="emit('close')" />
+        <div class="pm-drawer-backdrop absolute inset-0 cursor-pointer bg-slate-900/60 backdrop-blur-sm" @click="emit('close')" />
         
-        <div class="drawer-panel relative flex h-full w-full flex-col border-l border-slate-200 bg-slate-50 shadow-2xl md:w-[500px] lg:w-[600px]">
+        <div class="pm-drawer-panel will-change-transform relative flex h-full w-full flex-col border-l border-slate-200 bg-slate-50 shadow-2xl md:w-[500px] lg:w-[600px]">
           
           <div class="z-10 flex shrink-0 items-center justify-between border-b border-slate-200 bg-white p-5 shadow-sm">
             <div>
@@ -54,8 +55,24 @@ const handleReject = () => { emit('close') }
           </div>
 
           <div class="z-10 flex shrink-0 justify-end gap-3 border-t border-slate-200 bg-white p-4 shadow-sm">
-            <button @click="handleReject" class="rounded-lg border border-rose-200 bg-rose-50 px-6 py-2 text-xs font-bold text-rose-700 hover:bg-rose-100">Reject</button>
-            <button @click="handleApprove" class="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-6 py-2 text-xs font-bold text-white hover:bg-emerald-700"><i class="fas fa-check text-sm"></i> Approve</button>
+            <button
+              type="button"
+              :disabled="actionBusy"
+              @click="handleReject"
+              class="rounded-lg border border-rose-200 bg-rose-50 px-6 py-2 text-xs font-bold text-rose-700 hover:bg-rose-100 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Từ chối (406)
+            </button>
+            <button
+              type="button"
+              :disabled="actionBusy"
+              @click="handleApprove"
+              class="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-6 py-2 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <i v-if="actionBusy" class="fas fa-spinner fa-spin text-sm" />
+              <i v-else class="fas fa-check text-sm" />
+              Duyệt (403)
+            </button>
           </div>
         </div>
       </div>
@@ -64,8 +81,47 @@ const handleReject = () => { emit('close') }
 </template>
 
 <style scoped>
-.drawer-slide-enter-active, .drawer-slide-leave-active { transition: opacity 0.3s ease; }
-.drawer-slide-enter-active .drawer-panel, .drawer-slide-leave-active .drawer-panel { transition: transform 0.3s ease-in-out; }
-.drawer-slide-enter-from, .drawer-slide-leave-to { opacity: 0; }
-.drawer-slide-enter-from .drawer-panel, .drawer-slide-leave-to .drawer-panel { transform: translateX(100%); }
+.pm-drawer-enter-active,
+.pm-drawer-leave-active {
+  transition-duration: 0.36s;
+}
+.pm-drawer-enter-active .pm-drawer-backdrop,
+.pm-drawer-leave-active .pm-drawer-backdrop {
+  transition: opacity 0.36s ease;
+}
+.pm-drawer-enter-active .pm-drawer-panel,
+.pm-drawer-leave-active .pm-drawer-panel {
+  transition: transform 0.36s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.pm-drawer-enter-from .pm-drawer-backdrop,
+.pm-drawer-leave-to .pm-drawer-backdrop {
+  opacity: 0;
+}
+.pm-drawer-enter-to .pm-drawer-backdrop,
+.pm-drawer-leave-from .pm-drawer-backdrop {
+  opacity: 1;
+}
+.pm-drawer-enter-from .pm-drawer-panel,
+.pm-drawer-leave-to .pm-drawer-panel {
+  transform: translate3d(100%, 0, 0);
+}
+.pm-drawer-enter-to .pm-drawer-panel,
+.pm-drawer-leave-from .pm-drawer-panel {
+  transform: translate3d(0, 0, 0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pm-drawer-enter-active,
+  .pm-drawer-leave-active,
+  .pm-drawer-enter-active .pm-drawer-backdrop,
+  .pm-drawer-leave-active .pm-drawer-backdrop,
+  .pm-drawer-enter-active .pm-drawer-panel,
+  .pm-drawer-leave-active .pm-drawer-panel {
+    transition-duration: 0.01ms !important;
+  }
+  .pm-drawer-enter-from .pm-drawer-panel,
+  .pm-drawer-leave-to .pm-drawer-panel {
+    transform: none;
+  }
+}
 </style>

@@ -14,7 +14,11 @@ public class GmApprovedKpiDecisionRequest {
     @NotNull
     private UUID assignmentId;
 
-    /** {@code true} → 404 (chờ member accept), {@code false} → 406 (từ chối). Chỉ áp dụng khi assignment đang 403. */
+    /**
+     * Quyết định của GM:
+     * - Nếu assignment đang 403: {@code true} → 405, {@code false} → 406.
+     * - Nếu assignment đang 407 (feedback từ PM): resolve feedback và đưa về 404.
+     */
     @NotNull
     private Boolean approve;
 }

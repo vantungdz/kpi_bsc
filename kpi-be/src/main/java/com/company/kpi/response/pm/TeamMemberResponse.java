@@ -11,8 +11,12 @@ public class TeamMemberResponse {
     private UUID id;
     private String name;
     private String role;
-    private BigDecimal score;
+    private BigDecimal selfScore;
+    private BigDecimal pmScore;
+    private String pmComment;
     private Integer statusCode;
+    /** true nếu có assignment trong kỳ đang ở cửa đánh giá PM (501 / 601). */
+    private boolean requiresPmEvaluation;
     private boolean expanded = true;
     private int depth;
     private UUID supervisorId;

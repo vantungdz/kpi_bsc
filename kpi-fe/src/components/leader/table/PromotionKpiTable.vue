@@ -2,10 +2,12 @@
 import {computed, onMounted, ref, watch} from "vue";
 import {useToast} from "vue-toastification";
 import {leaderKpiService} from "@/services/modules/kpi-leader.service";
-import {pmKpiService} from "@/services/modules/kpi-pm.service";
+import {memberKpiService} from "@/services/modules/kpi-member.service";
 import type {LeaderKpiInformationResponse} from "@/types/kpi";
 import {KPI_STATUS} from "@/config/constants";
 import {getSubmitButtonState} from "@/utils/common";
+import {computeRatioPreview, parseNumericFromField, CALC_RULE_AVERAGE} from "@/utils/memberKpiHelpers";
+import { extractRawInputFromApiTargetDescription } from "@/utils/kpiScoringRulesDsl";
 import EvidenceDrawer from '@/components/leader/drawer/EvidenceDrawer.vue';
 
 const toast = useToast();
@@ -13,39 +15,79 @@ const toast = useToast();
 const props = defineProps<{
   year: number;
   isReadonly: boolean;
+  totals?: {
+    averageScore: number;
+  };
 }>();
-
 
 // ==========================================
 // 1. CORE DATA STATE
 // ==========================================
 const loading = ref(true);
+const submitting = ref(false);
 const apiData = ref<LeaderKpiInformationResponse | null>(null);
-
 const employeeComment = ref("");
 const supervisorComment = ref("");
+const emit = defineEmits(['updateAverage'])
 
+// draftMap: lưu tạm evidence/score/actualResult chưa submit lên server
+type DraftEntry = { evidencesJson: string; selfScore: number | null; actualResult: string | null }
+const draftMap = ref<Record<string, DraftEntry>>({})
+
+const hasPromotionAssignments = computed(() =>
+  (apiData.value?.categories ?? []).some(c => (c.assignments?.length ?? 0) > 0),
+)
 
 // ==========================================
 // 2. DRAWER STATE
 // ==========================================
 const isDrawerOpen = ref(false);
 const selectedKpi = ref<any>(null);
+const drawerMode = ref<'detail' | 'feedback'>('detail')
 
-function openEvidence(assign: any) {
+function openEvidence(assign: any, mode: 'detail' | 'feedback' = 'detail') {
+  drawerMode.value = mode
   selectedKpi.value = assign;
   isDrawerOpen.value = true;
 }
 
-function onEvidenceSaved(payload: any) {
-  // Cập nhật giá trị hiển thị tức thời trên table trước khi reload (nếu cần)
-  if (selectedKpi.value) {
-    selectedKpi.value.endSelfScore = payload.selfScore;
-    selectedKpi.value.evidenceNote = payload.evidenceNote;
+async function onEvidenceSaved(payload: any) {
+  if (!selectedKpi.value) { isDrawerOpen.value = false; return; }
+  const assignId = selectedKpi.value.assignmentId;
+  if (payload?.feedbackMode) {
+    try {
+      await memberKpiService.submitFeedback(assignId, String(payload.feedbackComment ?? '').trim())
+      selectedKpi.value.statusCode = 407
+      selectedKpi.value.statusDesc = 'Chờ PM kiểm tra feedback'
+      selectedKpi.value.feedbackComment = String(payload.feedbackComment ?? '').trim()
+      isDrawerOpen.value = false
+      toast.success('Gửi feedback thành công')
+    } catch (error) {
+      console.error('Failed to submit Promotion KPI feedback', error)
+      toast.error('Gửi feedback thất bại')
+    }
+    return
   }
+  try {
+    const scorePayload = payload.selfScore == null ? undefined : Number(payload.selfScore)
+    await memberKpiService.updateSheetItem(assignId, {
+      selfScore: scorePayload,
+      evidences: payload.evidencesJson,
+    })
+  } catch (error) {
+    console.error('Failed to save Promotion KPI evidence', error)
+    toast.error('Lưu evidence thất bại')
+    return
+  }
+  draftMap.value[assignId] = {
+    evidencesJson: payload.evidencesJson,
+    selfScore: payload.selfScore ?? null,
+    actualResult: payload.actualResult ?? null,
+  };
+  selectedKpi.value.endSelfScore = payload.selfScore;
+  selectedKpi.value.evidences = payload.evidencesJson;
   isDrawerOpen.value = false;
 }
-
 
 // ==========================================
 // 3. COMPUTED (TOTALS & BUTTON STATE)
@@ -56,14 +98,14 @@ const totals = computed(() => {
   let pmWeighted = 0;
   let pmWeightSum = 0;
 
-  // Tính điểm các KPI Promotion gốc từ API
   if (apiData.value?.categories) {
     apiData.value.categories.forEach((category) => {
       category.assignments.forEach((assign) => {
         const w = assign.weight || 0;
         totalWeight += w;
 
-        const s = assign.endSelfScore ?? 0;
+        const draft = draftMap.value[assign.assignmentId];
+        const s = (draft?.selfScore ?? assign.endSelfScore) ?? 0;
         weighted += s * w;
 
         const pm = assign.endPmScore ?? 0;
@@ -85,10 +127,34 @@ const totals = computed(() => {
   };
 });
 
+watch(
+  () => totals.value.averageScore,
+  (val) => emit('updateAverage', val),
+  { immediate: true }
+)
+
 const currentStatusCode = computed(() => {
-  const firstAssignment = apiData.value?.categories?.[0]?.assignments?.[0];
-  return firstAssignment?.statusCode ?? KPI_STATUS.INACTIVE;
-});
+  const all = apiData.value?.categories?.flatMap(c => c.assignments) ?? []
+  if (!all.length) return KPI_STATUS.INACTIVE
+  return Math.min(...all.map(a => a.statusCode ?? KPI_STATUS.INACTIVE))
+})
+
+const hasMissingMidYearSelfScore = computed(() => {
+  if (buttonState.value.actionType !== 'MID_YEAR') return false
+  const all = apiData.value?.categories?.flatMap(c => c.assignments) ?? []
+  return all.some(a => {
+    const draft = draftMap.value[a.assignmentId]
+    return (draft?.selfScore ?? a.endSelfScore) == null
+  })
+})
+
+const hasSubmitBlockingStatus = computed(() => {
+  const all = apiData.value?.categories?.flatMap(c => c.assignments) ?? []
+  return all.some(a => {
+    const status = Number(a.statusCode ?? 0)
+    return status === 407 || (status > 0 && status < 404)
+  })
+})
 
 const buttonState = computed(() => {
   if (!apiData.value?.kpiCycle) {
@@ -97,6 +163,12 @@ const buttonState = computed(() => {
   return getSubmitButtonState(apiData.value.kpiCycle, currentStatusCode.value);
 });
 
+const submitLabel = computed(() => {
+  if (buttonState.value.actionType === 'GOAL_SETTING') return 'Nộp mục tiêu KPI (Goal Setting)'
+  if (buttonState.value.actionType === 'MID_YEAR') return 'Nộp KPI giữa năm (Mid-Year)'
+  if (buttonState.value.actionType === 'END_YEAR') return 'Nộp KPI cuối năm (End-Year)'
+  return 'Nộp đánh giá KPI'
+});
 
 // ==========================================
 // 4. API FETCHING & ACTIONS
@@ -105,6 +177,7 @@ async function fetchData() {
   loading.value = true;
   try {
     apiData.value = await leaderKpiService.getKpiInfo(props.year, 'PROMOTION');
+    draftMap.value = {};
   } catch (error) {
     console.error("Lỗi khi tải dữ liệu Promotion KPI:", error);
   } finally {
@@ -113,63 +186,142 @@ async function fetchData() {
 }
 
 async function submitEvaluation() {
-  if (props.isReadonly) return;
-
-  // Xác định next status code
-  let nextStatusCode: number = KPI_STATUS.PENDING_ACCEPTANCE;
-  if (buttonState.value.actionType === 'GOAL_SETTING') {
-    nextStatusCode = KPI_STATUS.ACCEPTED;
-  } else if (buttonState.value.actionType === 'MID_YEAR') {
-    nextStatusCode = KPI_STATUS.FIRST_WAITING_GM_APPROVAL;
-  } else if (buttonState.value.actionType === 'END_YEAR') {
-    nextStatusCode = KPI_STATUS.SECOND_WAITING_GM_APPROVAL;
-  }
-
+  if (props.isReadonly || submitting.value || hasMissingMidYearSelfScore.value) return
+  submitting.value = true
   try {
-    await pmKpiService.bulkUpdateKpiStatus({
-      cycleId: apiData.value?.kpiCycle?.id,
-      statusCode: nextStatusCode,
-      promotion: true // Flag cho backend
-    });
-
-    toast.success('Update KPI Promotion statuses successfully!');
-    fetchData(); // Tải lại dữ liệu bảng
+    const draftEntries = Object.entries(draftMap.value)
+    if (draftEntries.length > 0) {
+      await Promise.all(
+        draftEntries.map(([assignId, draft]) =>
+          memberKpiService.updateSheetItem(assignId, {
+            selfScore: draft.selfScore ?? undefined,
+            evidences: draft.evidencesJson,
+          })
+        )
+      )
+    }
+    await memberKpiService.submit(props.year, 'PROMOTION')
+    toast.success('Nộp Promotion KPI thành công!')
+    fetchData()
   } catch (error) {
-    console.error('Failed to update KPI Promotion statuses', error);
-    toast.error('Có lỗi xảy ra khi cập nhật trạng thái Promotion KPI.');
+    console.error('Failed to submit Promotion KPI', error)
+    toast.error('Có lỗi xảy ra khi nộp Promotion KPI.')
+  } finally {
+    submitting.value = false
   }
 }
 
-watch(() => props.year, () => {
-  fetchData();
-});
-
+watch(() => props.year, fetchData);
 onMounted(fetchData);
 
+defineExpose({ submitEvaluation, buttonState, submitting })
 
-// ==========================================
-// 5. UI HELPERS
-// ==========================================
-const getStatusStyle = (code: string) => {
-  const styles: Record<string, string> = {
-    INACTIVE: "bg-slate-100 text-slate-600 border-slate-200",
-    WAITING_PM_APPROVAL: "bg-amber-50 text-amber-700 border-amber-200",
-    WAITING_GM_APPROVAL: "bg-orange-50 text-orange-700 border-orange-200",
-    PENDING_ACCEPTANCE: "bg-sky-50 text-sky-700 border-sky-200",
-    ACCEPTED: "bg-emerald-50 text-emerald-700 border-emerald-200",
-    REJECTED: "bg-rose-50 text-rose-700 border-rose-200",
-    COMPLETED: "bg-indigo-50 text-indigo-700 border-indigo-200"
-  };
-  return styles[code] || "bg-slate-50 text-slate-500 border-slate-100";
-};
+function statusPhaseClass(code: number): string {
+  if ([501, 502, 601, 602].includes(code)) return 'text-sky-700';
+  if (code === 407) return 'text-violet-700';
+  if (code === 406) return 'text-orange-700';
+  if ([503, 603].includes(code)) return 'text-emerald-700';
+  if ([402, 403, 404, 405].includes(code)) return 'text-slate-700';
+  return 'text-slate-600';
+}
 
-const getStatusIcon = (code: string) => {
-  if (code.includes('WAITING')) return 'fa-clock';
-  if (code === 'ACCEPTED') return 'fa-play-circle';
-  if (code === 'COMPLETED') return 'fa-check-double';
-  if (code === 'REJECTED') return 'fa-times-circle';
-  return 'fa-info-circle';
-};
+function statusCodeForUi(assign: any): number {
+  return Number(assign?.statusCode ?? 0)
+}
+
+function isOverdueEval(assign: any): boolean {
+  return String(assign?.evaluationStatus ?? '').toLowerCase() === 'overdue'
+}
+
+function statusTextClass(assign: any): string {
+  if (isOverdueEval(assign)) return 'text-rose-700'
+  return statusPhaseClass(statusCodeForUi(assign))
+}
+
+function statusDescForUi(assign: any): string {
+  if (isOverdueEval(assign)) {
+    return String(assign?.evaluationState ?? '').trim() || 'Đã quá hạn tự đánh giá KPI'
+  }
+  return assign?.statusDesc ?? '—'
+}
+
+function statusBadgeClass(code: number): string {
+  if ([501, 502, 601, 602].includes(code)) return 'border-sky-200 bg-sky-50'
+  if (code === 407) return 'border-violet-200 bg-violet-50'
+  if (code === 406) return 'border-orange-200 bg-orange-50'
+  if ([503, 603].includes(code)) return 'border-emerald-200 bg-emerald-50'
+  if ([402, 403, 404, 405].includes(code)) return 'border-slate-200 bg-slate-50'
+  return 'border-slate-200 bg-slate-50'
+}
+
+function rowAlertClass(code: number): string {
+  if (code === 406) return 'bg-orange-50/50'
+  if (code === 407) return 'bg-violet-100/70 ring-1 ring-inset ring-violet-200'
+  if ([501, 502, 601, 602].includes(code)) return 'bg-sky-50/45'
+  if ([503, 603].includes(code)) return 'bg-emerald-50/35'
+  if ([402, 403, 404, 405].includes(code)) return 'bg-slate-50/50'
+  return ''
+}
+
+function canSendFeedback(assign: any): boolean {
+  const status = Number(assign?.statusCode ?? 0)
+  return status === 404 || status === 407
+}
+
+function formatTargetDisplay(assign: any): string {
+  const raw = assign?.targetValue
+  if (raw == null || raw === '') return '-'
+  const unit = String(assign?.unitName ?? '').trim()
+  return unit ? `${raw} ${unit}` : String(raw)
+}
+
+function targetDataTooltip(assign: any): string {
+  const rawRules = extractRawInputFromApiTargetDescription(assign?.targetDescription ?? '')
+  if (rawRules) return `Quy tắc chấm điểm:\n${rawRules}`
+  const fallback = String(assign?.targetDescription ?? '').trim()
+  return fallback || formatTargetDisplay(assign)
+}
+
+function getActualResult(assign: any): string {
+  const draft = draftMap.value[assign.assignmentId]
+  if (draft?.actualResult) return draft.actualResult
+  return parseActualResultFromEvidences(
+    assign.evidences,
+    assign.calculationRuleCode,
+    assign.calculationTypeCode,
+  )
+}
+
+function parseActualResultFromEvidences(
+  evidencesJson: string | null | undefined,
+  calcRule: number | null | undefined,
+  calcType: number | null | undefined,
+): string {
+  if (!evidencesJson) return '-'
+  try {
+    const parsed = JSON.parse(evidencesJson)
+    const records: any[] = parsed.planActualRecords ?? []
+    if (records.length && calcRule === CALC_RULE_AVERAGE) {
+      const values = records
+        .map(r => computeRatioPreview(r.plan ?? '', r.actual ?? '', calcType))
+        .filter((v): v is string => v !== null)
+        .map(v => parseNumericFromField(v))
+        .filter((n): n is number => n !== null)
+      if (values.length) {
+        const avg = values.reduce((s, x) => s + x, 0) / values.length
+        return `${avg.toFixed(1)}%`
+      }
+    }
+    const waRecords: any[] = parsed.waTimeRecords ?? []
+    if (waRecords.length) {
+      const totalSpent = waRecords.reduce((s, r) => s + (parseFloat(r.spent) || 0), 0)
+      if (totalSpent > 0) return `${totalSpent}h`
+    }
+    const note: string = parsed.note ?? parsed.content ?? ''
+    if (note.trim()) return note.trim().length > 40 ? note.trim().slice(0, 40) + '…' : note.trim()
+  } catch { /* ignore */ }
+  return '-'
+}
 </script>
 
 <template>
@@ -188,7 +340,18 @@ const getStatusIcon = (code: string) => {
         </h3>
       </div>
 
-      <div class="overflow-x-auto">
+      <div
+        v-if="!hasPromotionAssignments && !loading"
+        class="flex min-h-[220px] flex-col items-center justify-center bg-slate-50/60 px-5 py-16 text-center text-sm text-slate-500"
+      >
+        <i class="fas fa-medal mb-3 text-3xl text-violet-200" />
+        <p class="font-medium text-slate-600">Chưa có KPI Promotion</p>
+        <p class="mt-1 mx-auto max-w-md text-xs text-slate-400">
+          Khi PM/Leader giao mục tiêu thăng tiến (Direct), các dòng sẽ hiển thị tại đây.
+        </p>
+      </div>
+
+      <div v-else class="overflow-x-auto">
         <table class="w-full text-left border-collapse text-sm">
           <thead class="border-b border-slate-200 bg-white">
           <tr class="text-[11px] font-bold uppercase tracking-wider text-slate-500">
@@ -197,7 +360,11 @@ const getStatusIcon = (code: string) => {
             <th class="min-w-[10rem] px-5 py-4 text-center">Trạng thái KPI</th>
             <th class="px-5 py-4">Chỉ Tiêu (Target)</th>
             <th class="w-24 px-5 py-4 text-center">Trọng số (W)</th>
-            <th class="min-w-[8rem] px-5 py-4 text-center">Actual Result</th>
+            <th class="min-w-[8rem] px-5 py-4 text-center">
+              <span class="inline-flex items-center gap-1">
+                Actual Result
+              </span>
+            </th>
             <th class="w-28 px-5 py-4 text-center text-slate-600">Self Score</th>
             <th class="w-28 px-5 py-4 text-center">PM Score</th>
             <th class="w-28 px-5 py-4 text-right">Thao tác</th>
@@ -205,9 +372,6 @@ const getStatusIcon = (code: string) => {
           </thead>
 
           <tbody class="divide-y divide-slate-100">
-          <tr v-if="!apiData?.categories?.length && !loading">
-            <td colspan="9" class="p-8 text-center text-slate-500">Chưa có dữ liệu Promotion KPI cho năm {{ year }}</td>
-          </tr>
 
           <template v-for="(category, catIndex) in apiData?.categories" :key="'cat-' + catIndex">
             <tr class="bg-amber-50/80 border-y border-amber-100">
@@ -217,7 +381,8 @@ const getStatusIcon = (code: string) => {
             </tr>
 
             <tr v-for="(assign, assignIndex) in category.assignments" :key="assign.assignmentId"
-                class="group transition-colors hover:bg-slate-50">
+                class="group transition-colors hover:bg-slate-50"
+                :class="rowAlertClass(statusCodeForUi(assign))">
 
               <td class="py-4 px-5 text-center text-sm font-semibold text-slate-400">
                 {{ assignIndex + 1 }}
@@ -229,17 +394,28 @@ const getStatusIcon = (code: string) => {
                 </div>
               </td>
 
-              <td class="px-4 py-4 text-center">
+              <td class="max-w-[11rem] px-3 py-4 text-center align-top">
                 <span
-                    class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border font-semibold text-[10px] whitespace-nowrap"
-                    :class="getStatusStyle(assign.statusName)"
+                  class="inline-flex max-w-full flex-col items-center gap-0.5 rounded-lg border px-2 py-1.5 text-[10px] font-semibold leading-tight"
+                  :class="statusBadgeClass(statusCodeForUi(assign))"
+                  :title="statusDescForUi(assign)"
                 >
-                  <i class="fas" :class="getStatusIcon(assign.statusName)"></i> {{ assign.statusDesc }}
+                  <span class="line-clamp-3 text-center" :class="statusTextClass(assign)">{{ statusDescForUi(assign) }}</span>
                 </span>
               </td>
 
-              <td class="max-w-xs py-4 px-5 align-top">
-                <p class="text-sm font-medium text-slate-700">{{ assign.targetDescription || '' }}</p>
+              <td class="max-w-xs py-4 px-5 align-middle">
+                <div class="inline-flex items-center gap-1">
+                  <p class="text-sm font-medium text-slate-700">
+                    {{ formatTargetDisplay(assign) }}
+                  </p>
+                  <span
+                    class="inline-flex h-4 w-4 items-center justify-center rounded-full border border-slate-300 text-[10px] font-bold text-slate-500 cursor-help"
+                    :title="targetDataTooltip(assign)"
+                  >
+                    ?
+                  </span>
+                </div>
               </td>
 
               <td class="py-4 px-5 text-center">
@@ -250,14 +426,17 @@ const getStatusIcon = (code: string) => {
               </td>
 
               <td class="py-4 px-5 text-center align-middle">
-                  <span class="text-sm font-semibold leading-snug text-slate-700 inline-block">
-                    -
-                  </span>
+                <span
+                  class="text-sm font-semibold leading-snug inline-block"
+                  :class="getActualResult(assign) !== '-' ? 'text-emerald-700' : 'text-slate-400'"
+                >
+                  {{ getActualResult(assign) }}
+                </span>
               </td>
 
               <td class="py-4 px-5 text-center align-middle">
                 <span class="text-sm font-semibold leading-snug text-slate-700 inline-block">
-                    {{ assign.endSelfScore ?? 0 }}
+                  {{ (draftMap[assign.assignmentId]?.selfScore ?? assign.endSelfScore) ?? 0 }}
                 </span>
               </td>
 
@@ -269,15 +448,21 @@ const getStatusIcon = (code: string) => {
 
               <td class="py-4 px-5 text-right align-middle">
                 <div class="flex items-center justify-end gap-2">
-                  <button v-if="isReadonly" type="button"
-                          class="flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-[10px] font-bold text-slate-600 hover:bg-slate-50 hover:text-indigo-600 shadow-sm"
-                          @click.stop="openEvidence(assign)">
-                    <i class="fas fa-eye text-xs"></i> Detail
+                  <button
+                    type="button"
+                    class="flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-[10px] font-bold text-slate-600 shadow-sm transition-colors hover:bg-slate-50 hover:text-indigo-600"
+                    @click.stop="openEvidence(assign)"
+                  >
+                    <i class="fas fa-pen text-[10px]"></i>
                   </button>
-                  <button v-else type="button"
-                          class="flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-[10px] font-bold text-slate-600 hover:bg-slate-50 hover:text-blue-600 shadow-sm"
-                          @click.stop="openEvidence(assign)">
-                    <i class="fas fa-pen text-xs"></i> Edit
+                  <button
+                    type="button"
+                    class="flex h-8 items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-3 text-[10px] font-bold text-violet-700 shadow-sm transition-colors hover:bg-violet-100 disabled:cursor-not-allowed disabled:opacity-45"
+                    :disabled="isReadonly || !canSendFeedback(assign)"
+                    title="Mở KPI này để nhập và gửi feedback riêng"
+                    @click.stop="openEvidence(assign, 'feedback')"
+                  >
+                    <i class="fas fa-message text-[10px]"></i> Feedback
                   </button>
                 </div>
               </td>
@@ -296,7 +481,7 @@ const getStatusIcon = (code: string) => {
                 </span>
               <span class="text-xs text-slate-500 font-medium ml-1">pts</span>
             </td>
-            <td class="py-4 px-5 text-center text-xs font-medium text-slate-400">—</td>
+            <td class="py-4 px-5 text-center text-xs font-medium text-slate-400">-</td>
             <td class="bg-sky-50/90 py-4 px-5 text-center text-sm text-slate-700">
               {{ totals.weightedSelfPoints }}
             </td>
@@ -310,7 +495,7 @@ const getStatusIcon = (code: string) => {
               Điểm trung bình (Average score):
             </td>
             <td class="py-4 px-5"></td>
-            <td class="py-4 px-5 text-center text-xs font-medium text-slate-400">—</td>
+            <td class="py-4 px-5 text-center text-xs font-medium text-slate-400">-</td>
             <td class="bg-sky-50/90 py-4 px-5 text-center text-sm text-slate-700">
               {{ totals.averageScore.toFixed(2) }}
             </td>
@@ -325,7 +510,7 @@ const getStatusIcon = (code: string) => {
         </table>
       </div>
 
-      <div class="p-6 border-t border-slate-200 bg-slate-50/30">
+      <div v-if="hasPromotionAssignments && !loading" class="p-6 border-t border-slate-200 bg-slate-50/30">
         <h4 class="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
           <i class="fas fa-comments text-blue-600"/>
           Comment of employee and supervisor
@@ -356,15 +541,28 @@ const getStatusIcon = (code: string) => {
         </div>
       </div>
 
-      <div class="bg-slate-50 p-4 border-t border-slate-200 flex justify-center gap-3">
-        <button v-if="!isReadonly && buttonState.show" type="button"
-                :disabled="buttonState.disabled"
-                class="px-6 py-2.5 bg-slate-800 border border-transparent rounded-lg text-sm font-bold text-white shadow-md hover:bg-slate-900 flex items-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                @click="submitEvaluation">
-          <i class="fas fa-paper-plane text-sm"/> {{ buttonState.text }}
+      <div v-if="!isReadonly && hasPromotionAssignments && !loading" class="bg-slate-50 p-4 border-t border-slate-200 flex flex-col items-center gap-2">
+        <button
+          v-if="buttonState.show"
+          type="button"
+          :disabled="buttonState.disabled || submitting || hasMissingMidYearSelfScore || hasSubmitBlockingStatus"
+          class="px-4 py-2 bg-violet-700 border border-transparent rounded-lg text-sm font-semibold text-white shadow-sm hover:bg-violet-800 flex items-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          @click="submitEvaluation"
+        >
+          <i v-if="submitting" class="fas fa-spinner fa-spin text-xs" />
+          <i v-else class="fas fa-paper-plane text-xs" />
+          {{ submitting ? 'Đang xử lý...' : submitLabel }}
         </button>
+        <p
+          v-if="hasSubmitBlockingStatus"
+          class="text-xs font-medium text-amber-700"
+        >
+          Có KPI đang chờ feedback hoặc KPI mới chưa được PM duyệt, tạm thời chưa thể submit.
+        </p>
+      </div>
 
-        <div v-else-if="isReadonly" class="text-sm text-slate-500 font-medium">
+      <div v-if="isReadonly && hasPromotionAssignments && !loading" class="bg-slate-50 p-4 border-t border-slate-200 flex flex-col items-center gap-2">
+        <div class="text-sm text-slate-500 font-medium">
           Dữ liệu năm {{ year }} chỉ để xem
         </div>
       </div>
@@ -374,6 +572,7 @@ const getStatusIcon = (code: string) => {
     <EvidenceDrawer
         :open="isDrawerOpen"
         :item="selectedKpi"
+        :mode="drawerMode"
         @close="isDrawerOpen = false"
         @save="onEvidenceSaved"
     />

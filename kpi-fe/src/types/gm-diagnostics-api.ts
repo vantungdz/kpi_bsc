@@ -33,6 +33,8 @@ export interface GmDiagKpiApi {
   name: string
   weight: string
   target: string
+  /** `short` | `ok` | `excess` — so với tổng target assignment. */
+  targetBalance?: string | null
   actual: string
   status: string
   blockerSummary: string
@@ -45,6 +47,8 @@ export interface GmDiagKpiApi {
   categoryName?: string | null
   lifecycleStatus?: string | null
   isImportant?: boolean | null
+  /** `kpi_master.is_global` — GM giao công ty vs member đề xuất. */
+  isGlobal?: boolean | null
   pmOwners: GmDiagPmApi[]
   investigateDeptId?: string | null
   investigateKpiName?: string | null
@@ -59,7 +63,10 @@ export interface GmDiagPmApi {
   /** `roles.name` manager phòng — nhãn tag (không suy từ code trên FE). */
   ownerRoleLabel?: string | null
   unitLine: string
+  /** Cùng trọng số KPI (diagnostics). */
+  weight?: string | null
   target: string
+  targetBalance?: string | null
   actual: string
   status: string
   blockerSummary: string
@@ -73,7 +80,9 @@ export interface GmDiagLeaderApi {
   ownerRoleCode?: string | null
   /** `roles.name` supervisor nhóm. */
   ownerRoleLabel?: string | null
+  weight?: string | null
   target: string
+  targetBalance?: string | null
   actual: string
   status: string
   blockerSummary: string
@@ -82,10 +91,13 @@ export interface GmDiagLeaderApi {
 
 export interface GmDiagMemberApi {
   id: string
+  assignmentId?: string | null
   name: string
+  weight?: string | null
   /** `kpi_assignments.status_code` (ASM). */
   statusCode?: number | null
   target: string
+  targetBalance?: string | null
   actual: string
   status: string
   /** `roles.code` của assignee — badge cạnh tên trong breakdown. */
@@ -98,6 +110,11 @@ export interface GmDiagMemberApi {
   leaderRoleName?: string | null
   /** Nhãn trạng thái hiệu suất (tiếng Việt) từ BE; mock có thể thiếu. */
   performanceLabel?: string | null
+  /** Mục tiêu năm (số trần) — đồng bộ % Actual và tiến độ trên bảng diagnostics. */
+  submissionTarget?: number | string | null
+  /** Giữa kỳ: điểm giữa kỳ; cuối kỳ: điểm final sau GM→PM→self. */
+  submissionActual?: number | string | null
+  feedbackNote?: string | null
   blocker: string
   rank?: string | null
   leader?: string | null

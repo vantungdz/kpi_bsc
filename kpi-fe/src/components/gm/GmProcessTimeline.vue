@@ -1,13 +1,22 @@
 <script setup lang="ts">
 import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import type {
-  GmIssueTypeId,
   GmMidYearIssuesData,
-  GmTimelineIssueBucket,
+  GmTimelineBreakdownGroup,
+  GmTimelineIssueDetail,
+  GmTimelineIssueGroup,
   GmTimelineIssueType,
+  GmTimelineKpiGroup,
 } from '@/types/gm-workspace'
+import {
+  buildTimelineBreakdownGroupsFromEmployees,
+  kpiGroupKey,
+  resolveTimelineKpiGroups,
+} from '@/utils/gm-timeline-breakdown'
 import { gmTimelinePhaseHasOpenIssues } from '@/utils/gm-timeline-phase'
 import GmProcessTimelineTrack from '@/components/gm/GmProcessTimelineTrack.vue'
+import GmTimelineDrawerAssigneeTreeItem from '@/components/gm/GmTimelineDrawerAssigneeTreeItem.vue'
+import { gmDrawerEmployeeRowKey } from '@/utils/gm-drawer-assignee-keys'
 
 const props = defineProps<{
   midYearIssues: GmMidYearIssuesData
@@ -24,87 +33,44 @@ const midIssuesPopoverRoot = ref<HTMLElement | null>(null)
 const yearEndIssuesPopoverRoot = ref<HTMLElement | null>(null)
 const drawerOpen = ref(false)
 const drawerIssuesPhase = ref<TimelineIssuesPhase | null>(null)
-const activeIssueTypeId = ref<GmIssueTypeId | null>(null)
+/** Operational issue group id from API (process timeline). */
+const activeIssueGroupId = ref<string | null>(null)
 
-const FALLBACK_ISSUE_TYPES: GmTimelineIssueType[] = [
-  { id: 'pending_approval', text: '6 pending approval', dotClass: 'text-amber-600' },
-  { id: 'not_submitted', text: '5 chưa submit', dotClass: 'text-amber-600' },
-  { id: 'missing_evidence', text: '4 thiếu evidence', dotClass: 'text-rose-500' },
-]
+function severityDotClass(sev: GmTimelineIssueGroup['severity']): string {
+  if (sev === 'critical') return 'text-rose-500'
+  if (sev === 'warning') return 'text-amber-600'
+  return 'text-slate-400'
+}
 
-const FALLBACK_ISSUE_DETAILS: GmTimelineIssueBucket[] = [
-  {
-    id: 'pending_approval',
-    title: 'KPIs Pending Approval',
-    iconClass: 'bg-orange-100 text-orange-600',
-    items: [
-      {
-        kpi: 'Quality Index',
-        pm: 'Tran Thi B',
-        leader: 'Tran Quoc L3',
-        member: 'Vu Thi H',
-        bottleneck: 'PM',
-        reason: 'Waiting for Final PM Review',
-      },
-      {
-        kpi: 'Delivery Rate',
-        pm: 'Thai Van Liem',
-        leader: 'Nguyen Van L1',
-        member: 'Nguyen Hoang E',
-        bottleneck: 'Leader',
-        reason: 'Score disputed by Leader',
-      },
-    ],
-  },
-  {
-    id: 'not_submitted',
-    title: 'KPIs Chưa Submit',
-    iconClass: 'bg-orange-100 text-orange-600',
-    items: [
-      {
-        kpi: 'Process Compliance',
-        pm: 'Thai Van Liem',
-        leader: 'Le Thi L2',
-        member: 'Tran Van F',
-        bottleneck: 'Member',
-        reason: 'Missed deadline to submit form',
-      },
-      {
-        kpi: 'Training Hours',
-        pm: 'Le Van C',
-        leader: 'Dao Quang P',
-        member: 'Pham Van M',
-        bottleneck: 'Member',
-        reason: 'No submission found on system',
-      },
-    ],
-  },
-  {
-    id: 'missing_evidence',
-    title: 'KPIs Thiếu Evidence',
-    iconClass: 'bg-rose-100 text-rose-600',
-    items: [
-      {
-        kpi: 'Quality Index',
-        pm: 'Tran Thi B',
-        leader: 'Tran Quoc L3',
-        member: 'Tran Van Phuoc',
-        bottleneck: 'Member',
-        reason: 'Jira links missing in the report',
-      },
-      {
-        kpi: 'Delivery Rate',
-        pm: 'Nguyen Van A',
-        leader: 'Le Thi L2',
-        member: 'Le Thi D',
-        bottleneck: 'Leader',
-        reason: 'Leader requested timesheet re-upload',
-      },
-    ],
-  },
-]
+function issueGroupsForPhase(phase: GmMidYearIssuesData | null | undefined): GmTimelineIssueGroup[] {
+  if (!phase) return []
+  if (phase.issueGroups?.length) return phase.issueGroups
+  if (phase.issueDetails?.length) {
+    return phase.issueDetails.map((b) => ({
+      id: b.id,
+      title: b.title,
+      severity: b.id === 'missing_evidence' || b.id === 'unassigned_members' ? 'warning' : 'warning',
+      blockedRole: 'Member',
+      affectedEmployees: b.items.length,
+      affectedKpis: new Set(b.items.map((i) => i.kpi).filter(Boolean)).size,
+      affectedDepartments: 0,
+      iconClass: b.iconClass,
+      employees: b.items.map((i) => ({
+        ...i,
+        leader: i.leader ?? null,
+        bottleneck: i.bottleneck as GmTimelineIssueDetail['bottleneck'],
+      })),
+    }))
+  }
+  return []
+}
 
-const FLOW_ROLES = ['Member', 'Leader', 'PM'] as const
+type IssuePopoverRow = {
+  id: string
+  title: string
+  subline: string
+  dotClass: string
+}
 
 /** Calendar month 1–12 for each review phase (labels match UI: Jan–Mar, Jun–Jul, Nov–Dec). */
 const PHASE_WINDOWS = [
@@ -152,7 +118,7 @@ const showYearEndViewIssues = computed(
   () => yearEndStatus.value !== 'upcoming' && gmTimelinePhaseHasOpenIssues(props.yearEndIssues),
 )
 
-const issueTypesForPopover = computed((): GmTimelineIssueType[] => {
+const issuePopoverRows = computed((): IssuePopoverRow[] => {
   const getPhaseData = () => {
     if (issuesPopoverPhase.value === 'yearEnd') return props.yearEndIssues
     if (issuesPopoverPhase.value === 'setting') return props.settingIssues
@@ -162,19 +128,37 @@ const issueTypesForPopover = computed((): GmTimelineIssueType[] => {
   const phase = getPhaseData()
   if (!phase) return []
 
-  if (phase.issueTypes?.length) {
-    return phase.issueTypes as GmTimelineIssueType[]
+  if (phase.issueGroups?.length) {
+    const groups = issueGroupsForPhase(phase)
+    return groups.map((g) => ({
+      id: g.id,
+      title: g.title,
+      subline:
+        g.affectedEmployees > 0
+          ? `${g.affectedEmployees} employees · ${g.affectedKpis} KPIs`
+          : '',
+      dotClass: severityDotClass(g.severity),
+    }))
   }
 
-  if (phase.issueDetails?.length) {
-    return phase.issueDetails.map((bucket) => ({
-      id: bucket.id,
-      text: `${bucket.items.length} ${bucket.title.replace('KPIs ', '')}`,
-      dotClass: bucket.id === 'missing_evidence' ? 'text-rose-500' : 'text-amber-600',
-    } as GmTimelineIssueType))
+  if (phase.issueTypes?.length && !phase.issueDetails?.length) {
+    return (phase.issueTypes as GmTimelineIssueType[]).map((t) => ({
+      id: String(t.id),
+      title: t.text,
+      subline: '',
+      dotClass: t.dotClass,
+    }))
   }
 
-  return FALLBACK_ISSUE_TYPES
+  return issueGroupsForPhase(phase).map((g) => ({
+    id: g.id,
+    title: g.title,
+    subline:
+      g.affectedEmployees > 0
+        ? `${g.affectedEmployees} employees · ${g.affectedKpis} KPIs`
+        : '',
+    dotClass: severityDotClass(g.severity),
+  }))
 })
 
 const popoverTitleForOpen = computed(() => {
@@ -255,17 +239,116 @@ const nowMarkerLabel = computed(() => {
   return `Vị trí theo thời gian hệ thống: ${d.toLocaleDateString('vi-VN')}`
 })
 
-const drawerIssueDetails = computed((): GmTimelineIssueBucket[] => {
+const drawerIssueGroups = computed((): GmTimelineIssueGroup[] => {
   if (drawerIssuesPhase.value === 'yearEnd')
-    return props.yearEndIssues?.issueDetails ?? FALLBACK_ISSUE_DETAILS
+    return issueGroupsForPhase(props.yearEndIssues ?? null)
   if (drawerIssuesPhase.value === 'setting')
-    return props.settingIssues?.issueDetails ?? FALLBACK_ISSUE_DETAILS
-  return props.midYearIssues.issueDetails ?? FALLBACK_ISSUE_DETAILS
+    return issueGroupsForPhase(props.settingIssues ?? null)
+  return issueGroupsForPhase(props.midYearIssues)
 })
 
-const activeIssueBucket = computed(() => {
-  if (!activeIssueTypeId.value) return null
-  return drawerIssueDetails.value.find((b) => b.id === activeIssueTypeId.value) ?? null
+const activeIssueGroup = computed(() => {
+  if (!activeIssueGroupId.value) return null
+  return drawerIssueGroups.value.find((g) => g.id === activeIssueGroupId.value) ?? null
+})
+
+/** Drawer: KPI → department → employees (API or derived from flat employees). */
+const activeKpiGroups = computed((): GmTimelineKpiGroup[] => {
+  const g = activeIssueGroup.value
+  if (!g) return []
+  return resolveTimelineKpiGroups(g)
+})
+
+/** Department-first drawer layout for `unassigned_members` only. */
+const isUnassignedMembersIssue = computed(
+  () => activeIssueGroup.value?.id === 'unassigned_members',
+)
+
+const unassignedDeptGroups = computed((): GmTimelineBreakdownGroup[] => {
+  const g = activeIssueGroup.value
+  if (!g || g.id !== 'unassigned_members') return []
+  return buildTimelineBreakdownGroupsFromEmployees(g.employees)
+})
+
+const drawerDisplayTitle = computed(() => activeIssueGroup.value?.title ?? '')
+
+/** KPI cluster subline under title (by issue group id). */
+function timelineClusterStatusEn(issueId: string): string {
+  switch (issueId) {
+    case 'pending_acceptance':
+      return 'Awaiting member acceptance'
+    case 'pending_pm_review':
+      return 'Pending PM review'
+    case 'pending_gm_approval':
+      return 'Pending GM approval'
+    case 'kpi_not_submitted':
+      return 'Submission pending'
+    case 'missing_evidence':
+      return 'Evidence incomplete'
+    default:
+      return 'In progress'
+  }
+}
+
+const drawerClusterStatusLine = computed(() => timelineClusterStatusEn(activeIssueGroup.value?.id ?? ''))
+
+function kpiGroupHasEmployeeRows(kg: GmTimelineKpiGroup): boolean {
+  return kg.departments.some((d) => (d.employees?.length ?? 0) > 0)
+}
+
+function unassignedMemberSubline(item: GmTimelineIssueDetail): string {
+  const p = (item.pm ?? '').trim()
+  if (p && p !== '—') return `Section head: ${p}`
+  return ''
+}
+
+function timelineMemberRoleLabel(item: GmTimelineIssueDetail): string {
+  const c = (item.roleCode ?? '').trim()
+  if (c.length) return c
+  return '—'
+}
+
+const expandedBreakdownKeys = ref<Record<string, boolean>>({})
+const expandedEmployeeRowKey = ref<string | null>(null)
+
+watch(activeIssueGroupId, () => {
+  expandedBreakdownKeys.value = {}
+  expandedEmployeeRowKey.value = null
+})
+
+function isBreakdownExpanded(groupKey: string): boolean {
+  return !!expandedBreakdownKeys.value[groupKey]
+}
+
+function toggleBreakdownGroup(groupKey: string) {
+  expandedBreakdownKeys.value = {
+    ...expandedBreakdownKeys.value,
+    [groupKey]: !expandedBreakdownKeys.value[groupKey],
+  }
+}
+
+function toggleEmployeeRow(key: string) {
+  expandedEmployeeRowKey.value = expandedEmployeeRowKey.value === key ? null : key
+}
+
+const drawerSeverityTheme = computed(() => {
+  const s = activeIssueGroup.value?.severity ?? 'info'
+  if (s === 'critical') {
+    return {
+      headerCard:
+        'border-rose-200/35 bg-gradient-to-br from-rose-50/70 via-white to-indigo-50/25 shadow-[0_1px_2px_rgba(15,23,42,0.04)]',
+    }
+  }
+  if (s === 'warning') {
+    return {
+      headerCard:
+        'border-amber-200/40 bg-gradient-to-br from-amber-50/65 via-white to-sky-50/30 shadow-[0_1px_2px_rgba(15,23,42,0.04)]',
+    }
+  }
+  return {
+    headerCard:
+      'border-sky-200/35 bg-gradient-to-br from-sky-50/55 via-white to-violet-50/25 shadow-[0_1px_2px_rgba(15,23,42,0.04)]',
+  }
 })
 
 function onIssuesDocPointerDown(e: MouseEvent) {
@@ -301,40 +384,56 @@ function toggleIssuesPhase(phase: TimelineIssuesPhase) {
   issuesPopoverPhase.value = issuesPopoverPhase.value === phase ? null : phase
 }
 
-function openIssueDrawer(id: GmIssueTypeId) {
+function openIssueDrawer(id: string) {
   const ph = issuesPopoverPhase.value
   if (!ph) return
   drawerIssuesPhase.value = ph
-  activeIssueTypeId.value = id
+  activeIssueGroupId.value = id
   issuesPopoverPhase.value = null
   drawerOpen.value = true
+  nextTick(() => {
+    const g = drawerIssueGroups.value.find((x) => x.id === id)
+    if (!g) return
+    if (id === 'unassigned_members') {
+      const depts = buildTimelineBreakdownGroupsFromEmployees(g.employees)
+      const keys: Record<string, boolean> = {}
+      for (const d of depts) keys[d.groupKey] = true
+      expandedBreakdownKeys.value = keys
+      return
+    }
+    const kpis = resolveTimelineKpiGroups(g)
+    const keys: Record<string, boolean> = {}
+    for (const kg of kpis) keys[kpiGroupKey(kg)] = true
+    expandedBreakdownKeys.value = keys
+  })
 }
 
 function closeIssueDrawer() {
   drawerOpen.value = false
-  activeIssueTypeId.value = null
+  activeIssueGroupId.value = null
   drawerIssuesPhase.value = null
+  expandedBreakdownKeys.value = {}
+  expandedEmployeeRowKey.value = null
 }
 
-function statusOf(role: 'Member' | 'Leader' | 'PM', bottleneck: 'PM' | 'Leader' | 'Member') {
-  const order: Array<'Member' | 'Leader' | 'PM'> = ['Member', 'Leader', 'PM']
-  const roleIdx = order.indexOf(role)
-  const blockIdx = order.indexOf(bottleneck)
-  if (roleIdx < blockIdx) return 'done'
-  if (roleIdx === blockIdx) return 'blocked'
-  return 'pending'
-}
-
-function nodeClass(status: 'done' | 'blocked' | 'pending') {
-  if (status === 'done') return 'bg-emerald-500 border-emerald-600'
-  if (status === 'blocked') return 'bg-rose-500 border-rose-600 ring-4 ring-rose-100 shadow-sm'
-  return 'bg-slate-50 border-slate-200'
-}
-
-function labelClass(status: 'done' | 'blocked' | 'pending') {
-  if (status === 'done') return 'text-emerald-700'
-  if (status === 'blocked') return 'text-rose-600 font-extrabold'
-  return 'text-slate-400'
+/** One-line operational summary for clusters (same issue = same headline). */
+function issueBlockerShortLabel(g: GmTimelineIssueGroup): string {
+  switch (g.id) {
+    case 'pending_acceptance':
+      return 'Acceptance pending'
+    case 'pending_pm_review':
+      return 'PM review pending'
+    case 'pending_gm_approval':
+      return 'GM approval pending'
+    case 'kpi_not_submitted':
+      return 'Submission pending'
+    case 'missing_evidence':
+      return 'Evidence incomplete'
+    case 'unassigned_members':
+      return 'No KPI assigned'
+    default:
+      return `${g.blockedRole} action pending`
+  }
 }
 
 const trackMilestones = computed(() =>
@@ -523,17 +622,22 @@ onUnmounted(() => {
                         {{ popoverTitleForOpen }}
                       </h4>
                     </div>
-                    <ul class="space-y-1 px-2 py-2 text-xs font-medium leading-snug text-amber-950/90">
-                      <li v-for="it in issueTypesForPopover" :key="it.id">
+                    <ul class="max-h-72 space-y-1 overflow-y-auto px-2 py-2 text-xs font-medium leading-snug text-amber-950/90">
+                      <li v-for="it in issuePopoverRows" :key="it.id">
                         <button type="button"
-                          class="group flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left transition-colors hover:bg-orange-100/70"
+                          class="group flex w-full items-start justify-between gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-orange-100/70"
                           @click="openIssueDrawer(it.id)">
-                          <span class="flex items-center gap-1.5">
-                            <span class="text-[11px]" :class="it.dotClass">●</span>
-                            <span>{{ it.text }}</span>
+                          <span class="min-w-0 flex-1">
+                            <span class="flex items-start gap-1.5">
+                              <span class="mt-0.5 shrink-0 text-[11px]" :class="it.dotClass">●</span>
+                              <span>
+                                <span class="block font-semibold leading-snug">{{ it.title }}</span>
+                                <span v-if="it.subline" class="mt-0.5 block text-[10px] font-normal opacity-80">{{ it.subline }}</span>
+                              </span>
+                            </span>
                           </span>
                           <i
-                            class="fas fa-chevron-right text-[10px] text-amber-500 transition-colors group-hover:text-amber-700" />
+                            class="fas fa-chevron-right mt-0.5 shrink-0 text-[10px] text-amber-500 transition-colors group-hover:text-amber-700" />
                         </button>
                       </li>
                     </ul>
@@ -596,17 +700,22 @@ onUnmounted(() => {
                         {{ popoverTitleForOpen }}
                       </h4>
                     </div>
-                    <ul class="space-y-1 px-2 py-2 text-xs font-medium leading-snug text-amber-950/90">
-                      <li v-for="it in issueTypesForPopover" :key="it.id">
+                    <ul class="max-h-72 space-y-1 overflow-y-auto px-2 py-2 text-xs font-medium leading-snug text-amber-950/90">
+                      <li v-for="it in issuePopoverRows" :key="it.id">
                         <button type="button"
-                          class="group flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left transition-colors hover:bg-orange-100/70"
+                          class="group flex w-full items-start justify-between gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-orange-100/70"
                           @click="openIssueDrawer(it.id)">
-                          <span class="flex items-center gap-1.5">
-                            <span class="text-[11px]" :class="it.dotClass">●</span>
-                            <span>{{ it.text }}</span>
+                          <span class="min-w-0 flex-1">
+                            <span class="flex items-start gap-1.5">
+                              <span class="mt-0.5 shrink-0 text-[11px]" :class="it.dotClass">●</span>
+                              <span>
+                                <span class="block font-semibold leading-snug">{{ it.title }}</span>
+                                <span v-if="it.subline" class="mt-0.5 block text-[10px] font-normal opacity-80">{{ it.subline }}</span>
+                              </span>
+                            </span>
                           </span>
                           <i
-                            class="fas fa-chevron-right text-[10px] text-amber-500 transition-colors group-hover:text-amber-700" />
+                            class="fas fa-chevron-right mt-0.5 shrink-0 text-[10px] text-amber-500 transition-colors group-hover:text-amber-700" />
                         </button>
                       </li>
                     </ul>
@@ -669,17 +778,22 @@ onUnmounted(() => {
                         {{ popoverTitleForOpen }}
                       </h4>
                     </div>
-                    <ul class="space-y-1 px-2 py-2 text-xs font-medium leading-snug text-amber-950/90">
-                      <li v-for="it in issueTypesForPopover" :key="it.id">
+                    <ul class="max-h-72 space-y-1 overflow-y-auto px-2 py-2 text-xs font-medium leading-snug text-amber-950/90">
+                      <li v-for="it in issuePopoverRows" :key="it.id">
                         <button type="button"
-                          class="group flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left transition-colors hover:bg-orange-100/70"
+                          class="group flex w-full items-start justify-between gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-orange-100/70"
                           @click="openIssueDrawer(it.id)">
-                          <span class="flex items-center gap-1.5">
-                            <span class="text-[11px]" :class="it.dotClass">●</span>
-                            <span>{{ it.text }}</span>
+                          <span class="min-w-0 flex-1">
+                            <span class="flex items-start gap-1.5">
+                              <span class="mt-0.5 shrink-0 text-[11px]" :class="it.dotClass">●</span>
+                              <span>
+                                <span class="block font-semibold leading-snug">{{ it.title }}</span>
+                                <span v-if="it.subline" class="mt-0.5 block text-[10px] font-normal opacity-80">{{ it.subline }}</span>
+                              </span>
+                            </span>
                           </span>
                           <i
-                            class="fas fa-chevron-right text-[10px] text-amber-500 transition-colors group-hover:text-amber-700" />
+                            class="fas fa-chevron-right mt-0.5 shrink-0 text-[10px] text-amber-500 transition-colors group-hover:text-amber-700" />
                         </button>
                       </li>
                     </ul>
@@ -695,69 +809,233 @@ onUnmounted(() => {
 
   <Teleport to="body">
     <Transition name="gm-issue-drawer">
-      <div v-if="drawerOpen && activeIssueBucket" class="fixed inset-0 z-[90]">
+      <div v-if="drawerOpen && activeIssueGroup" class="fixed inset-0 z-[90]">
         <div class="gm-issue-drawer-backdrop absolute inset-0 cursor-pointer bg-slate-900/60 backdrop-blur-sm"
           @click="closeIssueDrawer" />
         <div
-          class="gm-issue-drawer-panel absolute bottom-0 right-0 top-0 flex w-full max-w-full flex-col border-l border-slate-200 bg-slate-50 shadow-2xl md:max-w-[600px]">
-          <div class="z-10 flex shrink-0 items-center justify-between border-b border-slate-200 bg-white p-5 shadow-sm">
-            <div>
-              <h2 class="flex items-center gap-2 text-lg font-bold text-slate-800">
-                <span class="rounded-lg p-1.5 shadow-sm" :class="activeIssueBucket.iconClass">
-                  <i class="fas fa-exclamation-triangle text-sm" />
-                </span>
-                {{ activeIssueBucket.title }}
-              </h2>
-              <p class="mt-1 text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                Review and resolve process blockers
-              </p>
+          class="gm-issue-drawer-panel absolute bottom-0 right-0 top-0 flex min-h-0 w-full max-w-full flex-col border-l border-sky-100/80 bg-gradient-to-b from-slate-50 to-sky-50/40 shadow-[0_0_0_1px_rgba(14,116,144,0.06)] md:max-w-[min(92vw,880px)] lg:max-w-[900px]">
+          <!-- Layout 1: unassigned members — by department -->
+          <template v-if="isUnassignedMembersIssue">
+            <div
+              class="gm-drawer-scroll custom-scrollbar min-h-0 flex-1 overflow-y-auto bg-slate-50/40 px-4 pb-6 pt-4 md:px-5">
+              <div
+                class="rounded-xl border border-rose-100 bg-gradient-to-br from-rose-50/95 via-white to-rose-50/25 p-5 shadow-sm">
+                <h2 class="text-[17px] font-semibold leading-snug tracking-tight text-zinc-900 md:text-[18px]">
+                  {{ drawerDisplayTitle }}
+                </h2>
+                <p class="mt-4 text-[12px] font-medium leading-6 text-zinc-600">
+                  <span class="font-semibold tabular-nums text-zinc-900">{{ activeIssueGroup.affectedEmployees }}</span>
+                  <span class="font-normal text-zinc-500"> assignees</span>
+                  <span class="mx-1.5 text-zinc-300">·</span>
+                  <span class="font-semibold tabular-nums text-zinc-900">{{ activeIssueGroup.affectedKpis }}</span>
+                  <span class="font-normal text-zinc-500"> KPIs</span>
+                  <template v-if="activeIssueGroup.affectedDepartments">
+                    <span class="mx-1.5 text-zinc-300">·</span>
+                    <span class="font-semibold tabular-nums text-zinc-900">{{ activeIssueGroup.affectedDepartments }}</span>
+                    <span class="font-normal text-zinc-500"> departments</span>
+                  </template>
+                </p>
+              </div>
+
+              <section class="mt-8">
+                <h3 class="mb-3 text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-400">
+                  Detailed list
+                </h3>
+                <div v-if="!unassignedDeptGroups.length" class="rounded-lg border border-zinc-200 bg-white p-6 text-center text-sm text-zinc-500">
+                  No member data.
+                </div>
+                <div v-else class="space-y-4">
+                  <article
+                    v-for="bg in unassignedDeptGroups"
+                    :key="bg.groupKey"
+                    class="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
+                    <button
+                      type="button"
+                      class="flex w-full items-start justify-between gap-3 p-4 text-left transition-colors hover:bg-zinc-50/90 active:bg-zinc-100/80"
+                      :aria-expanded="isBreakdownExpanded(bg.groupKey)"
+                      @click="toggleBreakdownGroup(bg.groupKey)">
+                      <div class="min-w-0 flex-1">
+                        <p class="text-sm font-semibold text-zinc-900">{{ bg.groupLabel }}</p>
+                        <p class="mt-1 text-xs text-zinc-500">
+                          <span class="tabular-nums text-zinc-600">{{ bg.affectedEmployees }}</span>
+                          assignees
+                        </p>
+                        <p class="mt-1 text-xs font-medium text-amber-600">
+                          No KPI yet
+                        </p>
+                      </div>
+                      <span class="mt-0.5 shrink-0 select-none text-sm text-zinc-400" aria-hidden="true">
+                        {{ isBreakdownExpanded(bg.groupKey) ? '▲' : '▼' }}
+                      </span>
+                    </button>
+                    <div
+                      class="gm-drawer-acc-shell border-t border-zinc-100 bg-zinc-50/50"
+                      :class="isBreakdownExpanded(bg.groupKey) ? 'gm-drawer-acc-shell--open' : ''">
+                      <div class="gm-drawer-acc-shell-inner">
+                        <div class="p-4">
+                          <ul class="space-y-2">
+                            <li v-for="(item, midx) in bg.employees" :key="`${bg.groupKey}-${midx}`">
+                              <div
+                                class="rounded-lg border border-rose-100 bg-white p-3 transition-colors hover:border-rose-200">
+                                <div class="min-w-0">
+                                  <div class="flex items-start justify-between gap-2">
+                                    <p class="truncate text-sm font-semibold text-zinc-900">{{ item.member }}</p>
+                                    <span
+                                      class="max-w-[55%] shrink-0 truncate rounded bg-zinc-100 px-2 py-0.5 text-[10px] font-medium text-zinc-600"
+                                      :title="timelineMemberRoleLabel(item)">
+                                      {{ timelineMemberRoleLabel(item) }}
+                                    </span>
+                                  </div>
+                                  <p v-if="unassignedMemberSubline(item)" class="mt-0.5 truncate text-xs text-zinc-500">
+                                    {{ unassignedMemberSubline(item) }}
+                                  </p>
+                                </div>
+                              </div>
+                            </li>
+                          </ul>
+                        </div>
+                      </div>
+                    </div>
+                  </article>
+                </div>
+              </section>
             </div>
-            <button type="button"
-              class="rounded-full p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-800"
-              aria-label="Đóng chi tiết issue" @click="closeIssueDrawer">
-              <i class="fas fa-times text-base" />
-            </button>
-          </div>
-
-          <div class="custom-scrollbar flex-1 space-y-4 overflow-y-auto p-5">
-            <article v-for="(item, idx) in activeIssueBucket.items" :key="`${activeIssueBucket.id}-${item.kpi}-${idx}`"
-              class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition-colors hover:border-blue-300">
-              <div class="mb-3">
-                <h4 class="text-sm font-bold leading-tight text-slate-800">{{ item.kpi }}</h4>
+            <div class="shrink-0 border-t border-zinc-200 bg-white px-4 py-3 md:px-5">
+              <div class="flex justify-end">
+                <button
+                  type="button"
+                  class="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-50 active:bg-zinc-100/80"
+                  @click="closeIssueDrawer">
+                  Close
+                </button>
               </div>
+            </div>
+          </template>
 
-              <div class="relative mb-3 mt-1 flex items-start justify-between px-4">
-                <div class="absolute left-8 right-8 top-3.5 z-0 h-0.5 -translate-y-1/2 bg-slate-100" />
-
-                <div v-for="role in FLOW_ROLES" :key="role"
-                  class="relative z-10 flex w-1/3 flex-col items-center gap-1.5">
-                  <div class="flex h-7 w-7 items-center justify-center rounded-full border"
-                    :class="nodeClass(statusOf(role, item.bottleneck))">
-                    <i v-if="statusOf(role, item.bottleneck) === 'done'" class="fas fa-check text-[10px] text-white" />
-                    <i v-else-if="statusOf(role, item.bottleneck) === 'blocked'"
-                      class="fas fa-times text-[10px] text-white" />
-                    <span v-else class="h-1.5 w-1.5 rounded-full bg-slate-300" />
-                  </div>
-                  <span class="mt-0.5 text-[9px] uppercase tracking-wider"
-                    :class="labelClass(statusOf(role, item.bottleneck))">
-                    {{ role }}
+          <!-- Layout 2: other issues — KPI → department → member cards -->
+          <template v-else>
+            <div
+              class="gm-drawer-scroll custom-scrollbar min-h-0 flex-1 overflow-y-auto bg-slate-50/40 px-4 pb-6 pt-4 md:px-5">
+              <div
+                class="rounded-xl border p-5 shadow-sm"
+                :class="[
+                  drawerSeverityTheme.headerCard,
+                  activeIssueGroup.severity === 'critical' ? 'border-rose-100' : '',
+                  activeIssueGroup.severity === 'warning' ? 'border-amber-100' : '',
+                  activeIssueGroup.severity === 'info' ? 'border-sky-100' : '',
+                ]">
+                <h2 class="text-[17px] font-semibold leading-snug tracking-tight text-zinc-900 md:text-[18px]">
+                  {{ drawerDisplayTitle }}
+                </h2>
+                <p class="mt-4 flex flex-wrap items-center gap-x-2 gap-y-1.5 text-[13px] font-medium text-zinc-700">
+                  <span>
+                    <span class="tabular-nums font-semibold text-zinc-900">{{ activeIssueGroup.affectedEmployees }}</span>
+                    assignees
                   </span>
-                  <span class="w-full truncate px-1 text-center text-[10px] font-medium text-slate-600"
-                    :title="role === 'Member' ? item.member : role === 'Leader' ? item.leader : item.pm">
-                    {{ role === 'Member' ? item.member : role === 'Leader' ? item.leader : item.pm }}
+                  <span class="text-zinc-300">·</span>
+                  <span>
+                    <span class="tabular-nums font-semibold text-zinc-900">{{ activeIssueGroup.affectedKpis }}</span>
+                    KPIs
                   </span>
-                </div>
+                  <template v-if="activeIssueGroup.affectedDepartments">
+                    <span class="text-zinc-300">·</span>
+                    <span>
+                      <span class="tabular-nums font-semibold text-zinc-900">{{ activeIssueGroup.affectedDepartments }}</span>
+                      departments
+                    </span>
+                  </template>
+                </p>
               </div>
 
-              <div class="mt-2 flex items-start gap-2 rounded-lg border p-2.5 text-xs"
-                :class="activeIssueBucket.id === 'missing_evidence' ? 'border-rose-200 bg-rose-50 text-rose-700' : 'border-orange-200 bg-orange-50 text-orange-700'">
-                <i class="fas fa-info-circle mt-0.5 shrink-0 text-sm opacity-80" />
-                <div class="leading-relaxed">
-                  <span class="font-bold">Blocker at {{ item.bottleneck }}:</span> {{ item.reason }}
+              <section class="mt-8">
+                <h3 class="mb-3 text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-400">
+                  Detailed list
+                </h3>
+                <div class="flex flex-col gap-4">
+                  <article
+                    v-for="kg in activeKpiGroups"
+                    :key="kpiGroupKey(kg)"
+                    class="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm transition-shadow hover:shadow-md">
+                    <button
+                      type="button"
+                      class="flex w-full items-start justify-between gap-3 p-4 text-left transition-colors hover:bg-zinc-50/90 active:bg-zinc-100/80"
+                      :aria-expanded="isBreakdownExpanded(kpiGroupKey(kg))"
+                      @click="toggleBreakdownGroup(kpiGroupKey(kg))">
+                      <div class="min-w-0 flex-1">
+                        <p class="text-sm font-semibold text-zinc-900">{{ kg.kpiName }}</p>
+                        <p class="mt-1 text-xs text-zinc-500">
+                          <span class="tabular-nums text-zinc-700">{{ kg.affectedEmployees }}</span>
+                          assignees
+                          <span class="mx-1.5 text-zinc-300">·</span>
+                          <span class="tabular-nums text-zinc-700">{{ kg.affectedDepartments }}</span>
+                          departments
+                        </p>
+                        <p class="mt-1 text-xs font-medium text-amber-700">
+                          {{ drawerClusterStatusLine }}
+                        </p>
+                      </div>
+                      <span class="mt-0.5 shrink-0 select-none text-sm text-zinc-400" aria-hidden="true">
+                        {{ isBreakdownExpanded(kpiGroupKey(kg)) ? '▲' : '▼' }}
+                      </span>
+                    </button>
+                    <div
+                      class="gm-drawer-acc-shell border-t border-zinc-100 bg-zinc-50/50"
+                      :class="isBreakdownExpanded(kpiGroupKey(kg)) ? 'gm-drawer-acc-shell--open' : ''">
+                      <div class="gm-drawer-acc-shell-inner">
+                        <div class="p-4">
+                          <template v-if="!kpiGroupHasEmployeeRows(kg)">
+                            <p class="py-4 text-center text-sm italic text-zinc-500">
+                              No member details for this item.
+                            </p>
+                          </template>
+                          <template v-else>
+                            <div
+                              v-for="dg in kg.departments"
+                              v-show="(dg.employees?.length ?? 0) > 0"
+                              :key="`${kpiGroupKey(kg)}|${dg.departmentName ?? '_'}`"
+                              class="mb-5 last:mb-0">
+                              <div class="mb-2 flex flex-wrap items-center gap-2">
+                                <h4 class="text-[11px] font-bold uppercase tracking-[0.1em] text-zinc-500">
+                                  {{ dg.departmentName ?? 'No department' }}
+                                </h4>
+                                <span
+                                  class="inline-flex items-center rounded-full border border-zinc-200 bg-white px-2 py-0.5 text-[11px] font-medium text-zinc-600">
+                                  {{ dg.affectedEmployees }} assignees
+                                </span>
+                              </div>
+                              <ul class="space-y-2">
+                                <GmTimelineDrawerAssigneeTreeItem
+                                  v-for="(item, idx) in dg.employees"
+                                  :key="gmDrawerEmployeeRowKey(kg, dg, item, idx)"
+                                  :item="item"
+                                  :kg="kg"
+                                  :dg="dg"
+                                  :idx="idx"
+                                  :expanded-employee-row-key="expandedEmployeeRowKey"
+                                  :kg-blocker-summary="kg.blockerSummary"
+                                  variant="card"
+                                  @toggle="toggleEmployeeRow" />
+                              </ul>
+                            </div>
+                          </template>
+                        </div>
+                      </div>
+                    </div>
+                  </article>
                 </div>
+              </section>
+            </div>
+            <div class="shrink-0 border-t border-zinc-200 bg-white px-4 py-3 md:px-5">
+              <div class="flex justify-end">
+                <button
+                  type="button"
+                  class="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-50 active:bg-zinc-100/80"
+                  @click="closeIssueDrawer">
+                  Close
+                </button>
               </div>
-            </article>
-          </div>
+            </div>
+          </template>
         </div>
       </div>
     </Transition>
@@ -877,5 +1155,59 @@ onUnmounted(() => {
 .custom-scrollbar::-webkit-scrollbar-thumb {
   border-radius: 4px;
   background-color: #e2e8f0;
+}
+
+/* GM issue drawer: polish only (typography rhythm, hovers, inset detail) */
+.gm-drawer-scroll {
+  background: linear-gradient(180deg, rgb(248 250 252) 0%, rgb(241 245 249) 45%, rgb(238 242 255 / 0.35) 100%);
+}
+
+.gm-drawer-insight-row {
+  transition: background-color 0.12s ease;
+}
+
+.gm-drawer-insight-row + .gm-drawer-insight-row {
+  border-top: 1px solid rgb(244 244 245 / 0.95);
+}
+
+.gm-drawer-insight-row:hover {
+  background-color: rgb(255 255 255 / 0.72);
+}
+
+.gm-drawer-cluster-toggle:focus-visible,
+.gm-drawer-employee-toggle:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgb(255 255 255), 0 0 0 4px rgb(161 161 170 / 0.45);
+}
+
+.gm-drawer-row-detail {
+  padding: 0.625rem 0.75rem 0.75rem;
+  border-radius: 0.375rem;
+  border: 1px solid rgb(228 228 231 / 0.95);
+  background-color: rgb(255 255 255 / 0.92);
+  box-shadow: 0 1px 0 rgb(0 0 0 / 0.03);
+}
+
+/* Issue drawer: accordion body height animation */
+.gm-drawer-acc-shell {
+  display: grid;
+  grid-template-rows: 0fr;
+  overflow: hidden;
+  transition: grid-template-rows 0.32s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.gm-drawer-acc-shell--open {
+  grid-template-rows: 1fr;
+}
+
+.gm-drawer-acc-shell-inner {
+  min-height: 0;
+  overflow: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gm-drawer-acc-shell {
+    transition-duration: 0.01ms !important;
+  }
 }
 </style>

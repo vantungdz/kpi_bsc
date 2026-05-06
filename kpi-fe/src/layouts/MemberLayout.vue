@@ -24,7 +24,7 @@ const isActive = (path: string) => route.path.startsWith(path)
       </div>
 
       <nav class="flex-1 px-4 py-6 space-y-1.5 overflow-y-auto">
-        <p class="px-2 text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-3">Menu Chính</p>
+        <p class="px-2 text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-3">Navigation</p>
         <RouterLink
           v-for="item in navItems"
           :key="item.to"
@@ -44,7 +44,7 @@ const isActive = (path: string) => route.path.startsWith(path)
           <span v-if="isActive(item.to)" class="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0" />
         </RouterLink>
 
-        <p class="px-2 text-[11px] font-bold text-slate-400 uppercase tracking-wider mt-6 mb-3">Hỗ Trợ</p>
+        <!-- <p class="px-2 text-[11px] font-bold text-slate-400 uppercase tracking-wider mt-6 mb-3">Hỗ Trợ</p>
         <RouterLink
           to="/member/guidelines"
           class="flex items-center gap-3 px-3 py-2.5 text-slate-600 hover:bg-slate-50 hover:text-slate-900 rounded-lg font-medium transition-colors"
@@ -52,7 +52,7 @@ const isActive = (path: string) => route.path.startsWith(path)
         >
           <i class="fas fa-book-open w-5 text-center" />
           Guideline & Quy Định
-        </RouterLink>
+        </RouterLink> -->
       </nav>
 
       <div class="p-4 border-t border-slate-200">
@@ -73,8 +73,13 @@ const isActive = (path: string) => route.path.startsWith(path)
             <i class="fas fa-bars" />
           </button>
           <div>
-            <h1 class="text-lg font-bold text-slate-900 tracking-tight leading-tight hidden sm:block">Quản lí KPI cá nhân</h1>
-          </div>
+          <p
+            class="text-xs font-bold text-blue-600 uppercase tracking-widest"
+          >
+            Member Portal
+          </p>
+          <h2 class="text-xl font-bold text-slate-800">KPI Management</h2>
+        </div>
         </div>
 
         <div class="flex items-center gap-4">
@@ -86,7 +91,6 @@ const isActive = (path: string) => route.path.startsWith(path)
               <p class="text-sm font-bold text-slate-700 leading-tight">{{ user?.name ?? '–' }}</p>
               <p class="text-xs text-slate-400 font-medium">Rank: {{ user?.rank ?? user?.role }}</p>
             </div>
-            <i class="fas fa-chevron-down text-slate-400 text-xs" />
           </div>
         </div>
       </header>

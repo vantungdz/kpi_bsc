@@ -1,3 +1,5 @@
+import type { KpiScoringRulesPayload } from '@/types/gm-strategic-kpi-edit'
+
 /**
  * POST /api/v1/kpi/strategic-kpis — tạo KPI chiến lược (đồng bộ payload form GM).
  */
@@ -14,7 +16,7 @@ export interface GmCreateStrategicKpiResponseData {
   calculationTypeCode: number | null
   unitCode: number
   isGlobal: boolean
-  targetDescription: string | null
+  targetDescription: KpiScoringRulesPayload | null
   targetValue: number | null
   weight: number
   isImportant: boolean

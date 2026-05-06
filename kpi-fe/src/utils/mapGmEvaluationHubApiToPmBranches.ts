@@ -25,7 +25,7 @@ function sheetStatusFromRows(rows: GmEvaluationHubAssignmentApiRow[]): GmEmploye
     .map((r) => r.statusCode)
     .filter((c): c is number => typeof c === 'number' && Number.isFinite(c))
   if (!codes.length) return 'self_scoring'
-  if (codes.some((c) => c === 503)) return 'pending_pm'
+  if (codes.some((c) => c === 502 || c === 602)) return 'pending_pm'
   if (codes.every((c) => c >= 601)) return 'approved'
   return 'self_scoring'
 }
@@ -144,7 +144,11 @@ function evidenceRowsFromObject(o: Record<string, unknown>): string[][] {
   if (textTrim && textTrim !== noteTrim) {
     rows.push(['Text', textTrim])
   }
-  pushScalarField(rows, 'Kết quả', o.result)
+  const resultNorm =
+    o.result !== undefined && o.result !== null ? evidenceJsonCell(o.result).trim() : ''
+  if (resultNorm) {
+    rows.push(['Kết quả', resultNorm])
+  }
   appendPlanActualRecords(rows, o.planActualRecords)
 
   const consumed = new Set([
@@ -156,6 +160,11 @@ function evidenceRowsFromObject(o: Record<string, unknown>): string[][] {
     'result',
     'planActualRecords',
   ])
+  const actualNorm =
+    o.actual !== undefined && o.actual !== null ? evidenceJsonCell(o.actual).trim() : ''
+  if (actualNorm !== '' && actualNorm === resultNorm) {
+    consumed.add('actual')
+  }
   for (const [k, v] of Object.entries(o)) {
     if (consumed.has(k)) continue
     rows.push([k, evidenceJsonCell(v)])
@@ -213,7 +222,8 @@ function toKpiItem(row: GmEvaluationHubAssignmentApiRow, index: number): GmKpiIt
     id: String(row.assignmentId),
     index: index + 1,
     title,
-    target: row.targetDescription?.trim() ? `Target: ${row.targetDescription}` : 'Target: —',
+    /** Không gán mô tả target JSON dài vào drawer — chỉ hiển thị tiêu đề KPI (UI GM). */
+    target: '',
     weight: parseWeight(row),
     evidenceButtonLabel: 'Minh chứng',
     evidenceButtonIcon: 'fas fa-file-alt',
@@ -416,7 +426,9 @@ export function mapGmEvaluationHubApiToPmBranches(api: GmEvaluationHubApiRespons
       })
     }
 
-    const directMembers = groupRowsByUserId(directRows, brokerId)
+    const leaderIds = new Set(bySup.keys())
+    const actualDirectRows = directRows.filter((r) => !leaderIds.has(String(r.userId)))
+    const directMembers = groupRowsByUserId(actualDirectRows, brokerId)
     for (const m of directMembers) {
       if (!m.projectIds.includes(brokerId)) m.projectIds = [...m.projectIds, brokerId]
     }

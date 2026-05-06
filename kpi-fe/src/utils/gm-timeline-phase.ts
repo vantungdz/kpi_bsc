@@ -4,6 +4,9 @@ import type { GmMidYearIssuesData } from '@/types/gm-workspace'
 export function gmTimelinePhaseHasOpenIssues(data: GmMidYearIssuesData | null | undefined): boolean {
   if (!data) return false
   if (data.hasOpenIssues === false) return false
+  const groups = data.issueGroups
+  if (groups && groups.length === 0) return false
+  if (groups && groups.length > 0) return true
   const types = data.issueTypes
   if (types && types.length === 0) return false
   if (types && types.length > 0) return true

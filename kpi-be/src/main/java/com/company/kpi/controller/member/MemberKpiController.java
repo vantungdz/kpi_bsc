@@ -5,6 +5,7 @@ import com.company.kpi.controller.base.BaseController;
 import com.company.kpi.request.member.CreateIndividualKpiRequest;
 import com.company.kpi.request.member.MemberSheetItemUpdateRequest;
 import com.company.kpi.request.member.SaveDraftRequest;
+import com.company.kpi.request.member.SubmitFeedbackRequest;
 import com.company.kpi.request.member.SubmitEvalRequest;
 import com.company.kpi.request.member.SubmitMemberSheetRequest;
 import com.company.kpi.response.member.MemberKpiDashboardResponse;
@@ -53,6 +54,16 @@ public class MemberKpiController extends BaseController {
             Authentication authentication) {
         UUID userId = UUID.fromString((String) authentication.getPrincipal());
         return success(memberKpiService.updateSheetItem(assignmentId, userId, request));
+    }
+
+    @PostMapping("/sheet/{assignmentId}/feedback")
+    public ResponseEntity<BaseResponse<Void>> submitFeedback(
+            @PathVariable UUID assignmentId,
+            @Valid @RequestBody SubmitFeedbackRequest request,
+            Authentication authentication) {
+        UUID userId = UUID.fromString((String) authentication.getPrincipal());
+        memberKpiService.submitFeedback(assignmentId, userId, request.getFeedbackComment());
+        return success();
     }
 
     @PostMapping("/evidences/submit")

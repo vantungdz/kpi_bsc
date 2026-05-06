@@ -1,20 +1,23 @@
 import type { LeaderKpiAssignment, LeaderKpiInformationResponse } from '@/types/kpi'
-import type {
-  GmBscPerspective,
-  GmPersonalKpiRowMock,
-  GmPersonalKpiRowStatus,
-  GmStrategicKpiKind,
-} from '@/types/gm-workspace'
+import type { GmBscPerspective, GmPersonalKpiRowMock, GmStrategicKpiKind } from '@/types/gm-workspace'
 
-/** `LeaderKpiAssignment.type` (INDIVIDUAL / PROMOTION / …) → tag GM workspace. */
-function gmStrategicKpiKindFromLeaderAssignmentType(t: string | null | undefined): GmStrategicKpiKind {
-  const u = String(t ?? '').trim().toUpperCase()
+/** Loại KPI từ DB (`type_code` + `type_name` từ API leader kpi-info). */
+function gmStrategicKpiKindFromDbKpiType(
+  typeCode: number | null | undefined,
+  typeName: string | null | undefined,
+): GmStrategicKpiKind {
+  const code = typeof typeCode === 'number' && Number.isFinite(typeCode) ? Math.round(typeCode) : null
+  if (code === 103) return 'promotion'
+  if (code === 102) return 'cascading'
+  if (code === 101) return 'individual'
+  const u = String(typeName ?? '').trim().toUpperCase()
   if (u === 'PROMOTION' || u === '103') return 'promotion'
-  if (u === 'INDIVIDUAL' || u === '101') return 'individual'
   if (u === 'TEAM' || u === 'CASCADING' || u === '102') return 'cascading'
+  if (u === 'INDIVIDUAL' || u === '101') return 'individual'
   return 'individual'
 }
 
+/** Fallback khi API cũ không trả typeCode (chỉ theo tham số ?type= của request). */
 function gmStrategicKpiKindFromRequestedType(t: string | null | undefined): GmStrategicKpiKind {
   const u = String(t ?? '').trim().toUpperCase()
   if (u === 'PROMOTION') return 'promotion'
@@ -22,12 +25,28 @@ function gmStrategicKpiKindFromRequestedType(t: string | null | undefined): GmSt
   return 'individual'
 }
 
-function stripHtml(s: string): string {
-  if (!s) return ''
-  return s
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
+function resolveGmPersonalRowKpiType(
+  a: LeaderKpiAssignment,
+  requestedType: 'INDIVIDUAL' | 'PROMOTION',
+): GmStrategicKpiKind {
+  const hasTypeCode = typeof a.typeCode === 'number' && Number.isFinite(a.typeCode)
+  const hasTypeName = a.typeName != null && String(a.typeName).trim() !== ''
+  if (hasTypeCode || hasTypeName) {
+    return gmStrategicKpiKindFromDbKpiType(
+      hasTypeCode ? (a.typeCode as number) : null,
+      hasTypeName ? String(a.typeName) : null,
+    )
+  }
+  return gmStrategicKpiKindFromRequestedType(requestedType)
+}
+
+/** Cột Target trên tab KPI cá nhân GM: chỉ số; không lấy targetDescription (JSON quy tắc chấm điểm). */
+function formatPersonalTargetDisplay(a: LeaderKpiAssignment): string {
+  const raw = a.targetValue
+  if (raw == null || raw === '') return '-'
+  const n = typeof raw === 'number' ? raw : Number.parseFloat(String(raw).trim())
+  if (!Number.isFinite(n)) return '-'
+  return String(n)
 }
 
 /** Gợi ý nhóm BSC từ tên danh mục (API `kpi_categories.name`). */
@@ -40,12 +59,19 @@ function inferBscFromCategoryName(name: string): GmBscPerspective {
   return 'internal'
 }
 
-function resolveStatus(a: LeaderKpiAssignment): GmPersonalKpiRowStatus {
-  const v = a.endSelfScore ?? a.midSelfScore ?? null
-  if (v == null) return 'pending'
-  if (v >= 4) return 'good'
-  if (v >= 3) return 'warn'
-  return 'pending'
+/** Nhãn hiển thị từ join `sys_status_codes` trên API leader (description ưu tiên). */
+function assignmentStatusFields(a: LeaderKpiAssignment): {
+  assignmentStatusCode: number | null
+  assignmentStatusName: string
+  assignmentStatusDisplay: string
+} {
+  const codeRaw = a.statusCode
+  const assignmentStatusCode =
+    typeof codeRaw === 'number' && Number.isFinite(codeRaw) ? Math.round(codeRaw) : null
+  const name = String(a.statusName ?? '').trim()
+  const desc = String(a.statusDesc ?? '').trim()
+  const assignmentStatusDisplay = desc || name || '—'
+  return { assignmentStatusCode, assignmentStatusName: name, assignmentStatusDisplay }
 }
 
 function formatFinalScore(a: LeaderKpiAssignment): string {
@@ -54,9 +80,42 @@ function formatFinalScore(a: LeaderKpiAssignment): string {
   return '—'
 }
 
+/** Cột Actual tab KPI cá nhân GM — tóm tắt từ JSON `kpi_assignments.evidences` (đồng bộ drawer minh chứng). */
+function formatPersonalKpiActualFromEvidences(evidences: string | null | undefined): string {
+  const raw = String(evidences ?? '').trim()
+  if (!raw || raw === '{}' || raw === 'null') return '—'
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>
+    const result = String(parsed.result ?? '').trim()
+    // Mode 803 (comment): drawer lưu field `actual` (kết quả thực tế nhập tay)
+    const actualField = String(parsed.actual ?? '').trim()
+    const planActualRecords = Array.isArray(parsed.planActualRecords)
+      ? (parsed.planActualRecords as unknown[])
+          .map((row) => {
+            if (!row || typeof row !== 'object') return ''
+            return String((row as Record<string, unknown>).actual ?? '').trim()
+          })
+          .filter(Boolean)
+      : []
+    const note = String(parsed.note ?? parsed.text ?? '').trim()
+    // Mode comment (non-803): drawer lưu field `content` (diễn giải tự do)
+    const content = String(parsed.content ?? '').trim()
+    const pick =
+      result ||
+      actualField ||
+      (planActualRecords.length ? planActualRecords.join(' | ') : '') ||
+      content ||
+      note
+    if (!pick) return '—'
+    return pick.length > 120 ? `${pick.slice(0, 117)}…` : pick
+  } catch {
+    return raw.length > 120 ? `${raw.slice(0, 117)}…` : raw
+  }
+}
+
 /**
- * Gộp một hoặc nhiều payload `GET /kpi/leader/kpi-info` (ví dụ INDIVIDUAL + PROMOTION)
- * thành dòng hiển thị cho `GmGmPersonalKpiPanel`.
+ * Gộp payload `GET /kpi/leader/kpi-info` (INDIVIDUAL + PROMOTION) → dòng cho `GmGmPersonalKpiPanel`
+ * (tab **KPI cá nhân** trên dashboard GM — GM cũng gọi endpoint này cho KPI của chính mình).
  */
 export function mergeLeaderKpiInfoResponsesToGmPersonalRows(
   inputs: {
@@ -76,23 +135,20 @@ export function mergeLeaderKpiInfoResponsesToGmPersonalRows(
         const id = String(a.assignmentId ?? '').trim()
         if (!id || seen.has(id)) continue
         seen.add(id)
-        const fromAssignment = gmStrategicKpiKindFromLeaderAssignmentType(
-          (a as LeaderKpiAssignment & { type?: string | null }).type,
-        )
-        const kpiType =
-          fromAssignment === 'individual'
-            ? gmStrategicKpiKindFromRequestedType(input.requestedType)
-            : fromAssignment
+        const kpiType = resolveGmPersonalRowKpiType(a, input.requestedType)
+        const st = assignmentStatusFields(a)
         out.push({
           id,
           diagnosticsFallbackGroup: bsc,
           objective: String(a.kpiName ?? a.kpiCode ?? 'KPI').trim() || 'KPI',
           kpiType,
-          target: stripHtml(String(a.targetDescription ?? '')) || '—',
+          target: formatPersonalTargetDisplay(a),
+          unitCode:
+            typeof a.unitCode === 'number' && Number.isFinite(a.unitCode) ? a.unitCode : null,
           weight: Number.isFinite(Number(a.weight)) ? Math.round(Number(a.weight)) : 0,
-          actual: '—',
+          actual: formatPersonalKpiActualFromEvidences(a.evidences),
           finalScore: formatFinalScore(a),
-          status: resolveStatus(a),
+          ...st,
         })
       }
     }

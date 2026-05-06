@@ -10,11 +10,13 @@ import GmGmPersonalKpiPanel from '@/components/gm/GmGmPersonalKpiPanel.vue'
 import GmApprovedKpiPanel from '@/components/gm/GmApprovedKpiPanel.vue'
 import GmMemberKpiDrawer from '@/components/gm/GmMemberKpiDrawer.vue'
 import GmCreateStrategicKpiModal from '@/components/gm/GmCreateStrategicKpiModal.vue'
-import { gmLayoutMockMemberModalKpiItems, gmLayoutCycleSnapshots } from '@/mocks/gm-kpi.mock'
+import { mapGmDepartmentApiRowToWorkspaceMock } from '@/utils/gm-department-from-api'
+import { EMPTY_GM_WORKSPACE_CYCLE_SNAPSHOT } from '@/utils/gm-workspace-empty-snapshot'
 import type {
   GmHierarchyKpi,
   GmInvestigationMember,
   GmMemberKpiDrawerProfile,
+  GmModalKpiItemMock,
   GmPersonalKpiRowMock,
 } from '@/types/gm-workspace'
 import {
@@ -25,10 +27,12 @@ import {
 import { gmKpiService } from '@/services/modules/kpi-gm.service'
 import type { GmProcessTimelineApiResponse } from '@/services/modules/kpi-gm.service'
 import { leaderKpiService } from '@/services/modules/kpi-leader.service'
+import type { LeaderKpiAssignment, LeaderKpiInformationResponse } from '@/types/kpi'
 import type { GmKpiCycleOption } from '@/types/gm-kpi-cycle'
 import { mapGmApprovedKpiQueueItemsToHierarchyRows } from '@/utils/mapGmApprovedKpiQueueToHierarchy'
 import { mapGmDiagnosticsApiKpisToHierarchyRows } from '@/utils/mapGmDiagnosticsApiToHierarchy'
 import { mapStrategicKpiCreatePayloadToApi } from '@/utils/mapStrategicKpiCreatePayloadToApi'
+import { getApiErrorMessage } from '@/utils/apiErrorMessage'
 import { mergeLeaderKpiInfoResponsesToGmPersonalRows } from '@/utils/mapLeaderPersonalKpiToGmPersonalRows'
 import {
   clearAllGmNotifications,
@@ -37,6 +41,7 @@ import {
   useGmNotificationItems,
   type GmNotificationVariant,
 } from '@/composables/useGmNotifications'
+import { KPI_STATUS } from '@/config/constants'
 
 const route = useRoute()
 const { user, logout } = useAuth()
@@ -139,11 +144,6 @@ function cycleYearFromCycleId(cycleId: string): number {
   return Number.isFinite(n) ? n : new Date().getFullYear()
 }
 
-function resolveGmLayoutSnapshot(cycleId: string) {
-  const y = String(cycleYearFromCycleId(cycleId))
-  return gmLayoutCycleSnapshots[y] ?? gmLayoutCycleSnapshots['2026'] ?? gmLayoutCycleSnapshots['2025']!
-}
-
 /** Đồng bộ `GmKpiEvaluationPanel` / template — năm dương lịch suy ra từ chu kỳ đang chọn. */
 const gmEvaluationYear = computed(() => cycleYearFromCycleId(selectedCycleId.value))
 provide('gmEvaluationYear', gmEvaluationYear)
@@ -153,15 +153,38 @@ provide('gmSelectedCycleId', selectedCycleId)
 /** KPI cá nhân GM: `GET /kpi/leader/kpi-info` ×2 (INDIVIDUAL + PROMOTION), user = JWT. Load khi mở tab «KPI cá nhân» / đổi chu kỳ trong tab đó. */
 const gmPersonalKpiRows = ref<GmPersonalKpiRowMock[]>([])
 const gmPersonalKpiLoading = ref(false)
+/** Cache phản hồi leader — map `assignmentId` → assignment cho drawer minh chứng (tab KPI cá nhân). */
+const gmPersonalKpiLeaderIndividual = ref<LeaderKpiInformationResponse | null>(null)
+const gmPersonalKpiLeaderPromotion = ref<LeaderKpiInformationResponse | null>(null)
+
+const gmPersonalKpiAssignmentsById = computed((): Record<string, LeaderKpiAssignment> => {
+  const m: Record<string, LeaderKpiAssignment> = {}
+  function ingest(resp: LeaderKpiInformationResponse | null) {
+    if (!resp?.categories?.length) return
+    for (const cat of resp.categories) {
+      for (const a of cat.assignments ?? []) {
+        const id = String(a.assignmentId ?? '').trim()
+        if (id) m[id] = a
+      }
+    }
+  }
+  ingest(gmPersonalKpiLeaderIndividual.value)
+  ingest(gmPersonalKpiLeaderPromotion.value)
+  return m
+})
 
 async function loadGmPersonalKpiRows() {
   const y = gmEvaluationYear.value
   if (!Number.isFinite(y)) {
     gmPersonalKpiRows.value = []
+    gmPersonalKpiLeaderIndividual.value = null
+    gmPersonalKpiLeaderPromotion.value = null
     gmPersonalKpiLoading.value = false
     return
   }
   gmPersonalKpiLoading.value = true
+  gmPersonalKpiLeaderIndividual.value = null
+  gmPersonalKpiLeaderPromotion.value = null
   try {
     const settled = await Promise.allSettled([
       leaderKpiService.getKpiInfo(y, 'INDIVIDUAL'),
@@ -173,6 +196,8 @@ async function loadGmPersonalKpiRows() {
       const s = settled[i]!
       const label = i === 0 ? 'INDIVIDUAL' : 'PROMOTION'
       if (s.status === 'fulfilled') {
+        if (label === 'INDIVIDUAL') gmPersonalKpiLeaderIndividual.value = s.value
+        else gmPersonalKpiLeaderPromotion.value = s.value
         parts.push({
           requestedType: label,
           response: s.value,
@@ -198,6 +223,8 @@ async function loadGmPersonalKpiRows() {
     }
   } catch (e: unknown) {
     gmPersonalKpiRows.value = []
+    gmPersonalKpiLeaderIndividual.value = null
+    gmPersonalKpiLeaderPromotion.value = null
     pushGmNotification(e instanceof Error ? e.message : 'Không tải được KPI cá nhân', {
       variant: 'error',
       durationMs: 8000,
@@ -217,7 +244,8 @@ watch(
   { immediate: true },
 )
 
-const activeSnapshot = computed(() => resolveGmLayoutSnapshot(selectedCycleId.value))
+/** Fallback timeline khi API process-timeline lỗi — không dùng mock theo chu kỳ. */
+const activeSnapshot = computed(() => EMPTY_GM_WORKSPACE_CYCLE_SNAPSHOT)
 
 const activeCycleLabel = computed(() => {
   const row = gmHeaderCycleRows.value.find((c) => c.id === selectedCycleId.value)
@@ -287,21 +315,35 @@ const showCreateStrategicKpiModal = ref(false)
 const strategicKpiEditTarget = ref<GmHierarchyKpi | null>(null)
 const selectedMember = ref<GmMemberKpiDrawerProfile | null>(null)
 
-// Dữ liệu mock theo năm — đổi `selectedCycleId` để đồng bộ UI (API thật: fetch theo năm)
-const initialSnap = resolveGmLayoutSnapshot(selectedCycleId.value)
-const departments = ref(structuredClone(initialSnap.departments))
-const mockMembersDetails = ref(structuredClone(initialSnap.membersDetails))
-const mockKPIItems = ref(structuredClone(gmLayoutMockMemberModalKpiItems))
+// Phòng ban / member — `GET /kpi/gm/departments`; đổi `selectedCycleId` tải lại theo năm chu kỳ.
+const departments = ref(structuredClone(EMPTY_GM_WORKSPACE_CYCLE_SNAPSHOT.departments))
+const mockMembersDetails = ref(structuredClone(EMPTY_GM_WORKSPACE_CYCLE_SNAPSHOT.membersDetails))
+const mockKPIItems = ref<GmModalKpiItemMock[]>([])
 
 const useMockHub = import.meta.env.VITE_USE_MOCK === 'true'
+
+async function loadGmWorkspaceDepartmentsFromApi() {
+  const y = cycleYearFromCycleId(selectedCycleId.value)
+  if (!Number.isFinite(y)) {
+    departments.value = []
+    mockMembersDetails.value = []
+    return
+  }
+  try {
+    const rows = await gmKpiService.listDepartments(y)
+    departments.value = rows.map(mapGmDepartmentApiRowToWorkspaceMock)
+    mockMembersDetails.value = departments.value.flatMap((d) => d.staffDetails ?? [])
+  } catch {
+    departments.value = []
+    mockMembersDetails.value = []
+  }
+}
 /** Tab Approved KPI — nguồn API (401/402/403); mock vẫn dùng snapshot `inactivePendingKpis`. */
 const approvedKpiQueueApiRows = ref<GmHierarchyKpi[]>([])
 const approvedKpiQueueLoading = ref(false)
 
-/** KPI inactive chờ GM duyệt (tab Approved KPI) — theo năm; đổi năm reset từ snapshot. */
-const inactivePendingKpisByCycle = ref<Record<string, GmHierarchyKpi[]>>({
-  [selectedCycleId.value]: structuredClone(initialSnap.inactivePendingKpis ?? []),
-})
+/** KPI inactive chờ GM duyệt (tab Approved KPI) — mock hub; API dùng `approvedKpiQueueApiRows`. */
+const inactivePendingKpisByCycle = ref<Record<string, GmHierarchyKpi[]>>({})
 
 const inactivePendingRowsForSelectedCycle = computed(() => {
   if (!useMockHub) return approvedKpiQueueApiRows.value
@@ -378,6 +420,32 @@ const diagnosticsHierarchyRows = computed(() => {
   const extra = (extraHierarchyKpisByCycle.value[id] ?? []).filter((r) => !removed.has(r.id))
   return [...extra, ...fromApi]
 })
+
+function hasPendingFeedbackInKpiRow(kpi: GmHierarchyKpi): boolean {
+  for (const pm of kpi.pmOwners ?? []) {
+    for (const m of pm.members ?? []) {
+      if (Number(m.assignmentStatusCode) === 407) return true
+    }
+    for (const leader of pm.leaders ?? []) {
+      for (const m of leader.members ?? []) {
+        if (Number(m.assignmentStatusCode) === 407) return true
+      }
+    }
+  }
+  return false
+}
+
+const gmDiagnosticsPendingFeedbackKpiCount = computed(() => {
+  return diagnosticsHierarchyRows.value.filter((kpi) => hasPendingFeedbackInKpiRow(kpi)).length
+})
+
+const gmPmEvaluationPendingCount = ref(0)
+function onGmPmEvaluationPendingCount(count: number) {
+  const safe = Number.isFinite(Number(count)) ? Math.max(0, Number(count)) : 0
+  gmPmEvaluationPendingCount.value = safe
+}
+
+const gmApprovedKpiPendingCount = computed(() => inactivePendingRowsForSelectedCycle.value.length)
 
 const gmNotifications = useGmNotificationItems()
 
@@ -512,7 +580,7 @@ async function onStrategicKpiSaved(payload: Record<string, unknown> | Record<str
         editErrors.push(String(res.message ?? `«${String(p.kpiName ?? 'KPI')}»`))
       }
     } catch (e: unknown) {
-      editErrors.push(e instanceof Error ? e.message : 'Lỗi không xác định')
+      editErrors.push(getApiErrorMessage(e, 'Lỗi không xác định'))
     }
   }
 
@@ -525,7 +593,7 @@ async function onStrategicKpiSaved(payload: Record<string, unknown> | Record<str
         createErrors.push(String(res.message ?? `«${String(p.kpiName ?? 'KPI')}»`))
       }
     } catch (e: unknown) {
-      createErrors.push(e instanceof Error ? e.message : 'Lỗi không xác định')
+      createErrors.push(getApiErrorMessage(e, 'Lỗi không xác định'))
     }
   }
 
@@ -679,17 +747,15 @@ onUnmounted(() => {
 })
 
 watch(selectedCycleId, (id) => {
-  const snap = resolveGmLayoutSnapshot(id)
-  departments.value = structuredClone(snap.departments)
-  mockMembersDetails.value = structuredClone(snap.membersDetails)
   inactivePendingKpisByCycle.value = {
     ...inactivePendingKpisByCycle.value,
-    [id]: structuredClone(snap.inactivePendingKpis ?? []),
+    [id]: [],
   }
   selectedDept.value = null
   investigatingKPI.value = null
   closeDeleteKpiModal()
   removedDiagnosticsKpiIdsByCycle.value = {}
+  void loadGmWorkspaceDepartmentsFromApi()
   void loadStrategicDiagnosticsFromApi()
   void loadApprovedKpiQueueFromApi()
   void loadProcessTimeline()
@@ -699,12 +765,18 @@ async function onApproveInactiveKpi(kpi: GmHierarchyKpi) {
   const title = String(kpi.name ?? '').trim() || 'KPI'
   const cid = String(selectedCycleId.value ?? '').trim()
   const aid = String(kpi.assignmentId ?? '').trim()
+  const isFeedbackRow = Number(kpi.assignmentStatusCode) === KPI_STATUS.FEEDBACK_IN_PROGRESS
   if (!useMockHub && aid) {
     try {
       await gmKpiService.decideApprovedKpiQueue({ cycleId: cid, assignmentId: aid, approve: true })
       await loadApprovedKpiQueueFromApi()
       void loadProcessTimeline()
-      showGmToast(`Đã duyệt (403→404) — «${title}».`, 4500)
+      showGmToast(
+        isFeedbackRow
+          ? `Đã xử lý feedback và trả KPI về chờ chấp nhận — «${title}».`
+          : `Đã duyệt — «${title}».`,
+        4500,
+      )
     } catch (e: unknown) {
       showGmToast(e instanceof Error ? e.message : 'Không cập nhật được trạng thái', 5000, 'error')
     }
@@ -726,12 +798,19 @@ async function onRejectInactiveKpi(kpi: GmHierarchyKpi) {
   const title = String(kpi.name ?? '').trim() || 'KPI'
   const cid = String(selectedCycleId.value ?? '').trim()
   const aid = String(kpi.assignmentId ?? '').trim()
+  const isFeedbackRow = Number(kpi.assignmentStatusCode) === KPI_STATUS.FEEDBACK_IN_PROGRESS
   if (!useMockHub && aid) {
     try {
       await gmKpiService.decideApprovedKpiQueue({ cycleId: cid, assignmentId: aid, approve: false })
       await loadApprovedKpiQueueFromApi()
       void loadProcessTimeline()
-      showGmToast(`Đã từ chối — «${title}».`, 4500, 'info')
+      showGmToast(
+        isFeedbackRow
+          ? `Đã đóng feedback và trả KPI về chờ chấp nhận — «${title}».`
+          : `Đã từ chối — «${title}».`,
+        4500,
+        'info',
+      )
     } catch (e: unknown) {
       showGmToast(e instanceof Error ? e.message : 'Không cập nhật được trạng thái', 5000, 'error')
     }
@@ -743,6 +822,28 @@ async function onRejectInactiveKpi(kpi: GmHierarchyKpi) {
     [cid]: cur.filter((r) => r.id !== kpi.id),
   }
   showGmToast(`Đã từ chối đề xuất KPI «${title}».`, 4500, 'info')
+}
+
+async function onResolveDiagnosticsFeedback(payload: { assignmentId: string; approve: boolean }) {
+  const aid = String(payload.assignmentId ?? '').trim()
+  const cid = String(selectedCycleId.value ?? '').trim()
+  const approve = payload.approve === true
+  if (!aid || !cid) return
+  try {
+    await gmKpiService.decideApprovedKpiQueue({ cycleId: cid, assignmentId: aid, approve })
+    await loadStrategicDiagnosticsFromApi()
+    await loadApprovedKpiQueueFromApi()
+    void loadProcessTimeline()
+    showGmToast(
+      approve
+        ? 'Đã duyệt Feedback'
+        : 'Đã từ chối Feedback',
+      4500,
+      approve ? 'success' : 'info',
+    )
+  } catch (e: unknown) {
+    showGmToast(e instanceof Error ? e.message : 'Không xử lý được Feedback', 6000, 'error')
+  }
 }
 
 // ── Methods ───────────────────────────────────────────────────────────────────
@@ -904,6 +1005,11 @@ function closeModal() { showKpiModal.value = false; selectedMember.value = null 
                         class="flex max-w-[11rem] items-center gap-2 leading-snug sm:max-w-none sm:whitespace-nowrap">
                         <i class="fas fa-table-list shrink-0 text-[11px] opacity-70" aria-hidden="true" />
                         Strategic KPIs Tracking &amp; Diagnostics
+                        <span
+                          v-if="gmDiagnosticsPendingFeedbackKpiCount > 0"
+                          class="inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold leading-none text-white">
+                          {{ gmDiagnosticsPendingFeedbackKpiCount }}
+                        </span>
                       </span>
                     </button>
                     <button type="button" role="tab" :aria-selected="dashboardWorkspaceTab === 'pm-eval'"
@@ -915,6 +1021,11 @@ function closeModal() { showKpiModal.value = false; selectedMember.value = null 
                       <span class="flex items-center gap-2 sm:whitespace-nowrap">
                         <i class="fas fa-user-tie shrink-0 text-[11px] opacity-70" aria-hidden="true" />
                         Đánh giá
+                        <span
+                          v-if="gmPmEvaluationPendingCount > 0"
+                          class="inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold leading-none text-white">
+                          {{ gmPmEvaluationPendingCount }}
+                        </span>
                       </span>
                     </button>
                     <button type="button" role="tab" :aria-selected="dashboardWorkspaceTab === 'approved-kpi'"
@@ -926,6 +1037,11 @@ function closeModal() { showKpiModal.value = false; selectedMember.value = null 
                       <span class="flex items-center gap-2 sm:whitespace-nowrap">
                         <i class="fas fa-clipboard-check shrink-0 text-[11px] opacity-70" aria-hidden="true" />
                         Approved KPI
+                        <span
+                          v-if="gmApprovedKpiPendingCount > 0"
+                          class="inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold leading-none text-white">
+                          {{ gmApprovedKpiPendingCount }}
+                        </span>
                       </span>
                     </button>
                     <button type="button" role="tab" :aria-selected="dashboardWorkspaceTab === 'personal'"
@@ -953,10 +1069,10 @@ function closeModal() { showKpiModal.value = false; selectedMember.value = null 
                       {{ diagnosticsApiError }}
                     </p>
                     <GmKpiDiagnosticsTable :rows="diagnosticsHierarchyRows" @edit-kpi="onDiagnosticsEditKpi"
-                      @delete-kpi="onDiagnosticsDeleteKpi" />
+                      @delete-kpi="onDiagnosticsDeleteKpi" @resolve-feedback="onResolveDiagnosticsFeedback" />
                   </div>
                   <div v-show="dashboardWorkspaceTab === 'pm-eval'" class="p-3 sm:p-4 lg:p-5">
-                    <GmPmEvaluationWorkspace />
+                    <GmPmEvaluationWorkspace @pending-count="onGmPmEvaluationPendingCount" />
                   </div>
                   <div v-show="dashboardWorkspaceTab === 'approved-kpi'" class="p-3 sm:p-4 lg:p-5">
                     <p v-if="!useMockHub && approvedKpiQueueLoading" class="mb-3 text-xs font-medium text-slate-500"
@@ -967,8 +1083,10 @@ function closeModal() { showKpiModal.value = false; selectedMember.value = null 
                       @reject-kpi="onRejectInactiveKpi" />
                   </div>
                   <div v-show="dashboardWorkspaceTab === 'personal'" class="p-3 sm:p-4 lg:p-5">
-                    <GmGmPersonalKpiPanel :year-id="String(gmEvaluationYear)" :rows="gmPersonalKpiRows"
-                      :loading="gmPersonalKpiLoading" />
+                    <GmGmPersonalKpiPanel :year-id="String(gmEvaluationYear)" :cycle-id="selectedCycleId"
+                      :rows="gmPersonalKpiRows" :loading="gmPersonalKpiLoading"
+                      :assignments-by-id="gmPersonalKpiAssignmentsById"
+                      @sheet-saved="() => void loadGmPersonalKpiRows()" />
                   </div>
                 </div>
               </div>
@@ -983,7 +1101,7 @@ function closeModal() { showKpiModal.value = false; selectedMember.value = null 
                 {{ diagnosticsApiError }}
               </p>
               <GmKpiDiagnosticsTable :rows="diagnosticsHierarchyRows" @edit-kpi="onDiagnosticsEditKpi"
-                @delete-kpi="onDiagnosticsDeleteKpi" />
+                @delete-kpi="onDiagnosticsDeleteKpi" @resolve-feedback="onResolveDiagnosticsFeedback" />
             </div>
           </div>
 

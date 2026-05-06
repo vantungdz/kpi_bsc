@@ -44,7 +44,7 @@ public class GmEvaluationHubService {
                 gmEvaluationHubMapper.listAssignmentsForEvaluationHub(cycleId);
 
         List<GmEvaluationHubAssignmentResponse> assignments = rows.stream()
-                .map(GmEvaluationHubService::toAssignmentResponse)
+                .map(this::toAssignmentResponse)
                 .toList();
 
         GmEvaluationHubResponse out = new GmEvaluationHubResponse();
@@ -131,7 +131,7 @@ public class GmEvaluationHubService {
         return out;
     }
 
-    private static GmEvaluationHubAssignmentResponse toAssignmentResponse(GmEvaluationHubAssignmentRow r) {
+    private GmEvaluationHubAssignmentResponse toAssignmentResponse(GmEvaluationHubAssignmentRow r) {
         GmEvaluationHubAssignmentResponse a = new GmEvaluationHubAssignmentResponse();
         a.setAssignmentId(r.getAssignmentId());
         a.setStatusCode(r.getStatusCode());

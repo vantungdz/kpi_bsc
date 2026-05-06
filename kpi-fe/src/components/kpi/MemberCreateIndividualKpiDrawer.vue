@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick } from 'vue'
 import { gmKpiService } from '@/services/modules/kpi-gm.service'
-import { memberKpiService } from '@/services/modules/kpi-member.service'
 import { useGmKpiCategoryOptions } from '@/composables/useGmKpiCategoryOptions'
 import { useKpiCalculationReference } from '@/composables/useKpiCalculationReference'
-import type { GmKpiCycleOption } from '@/types/gm-kpi-cycle'
+import { persistedCalculationMethodFromTypeAndRule } from '@/utils/kpiCalculationCodes'
+import { validateScoringRulesDsl, buildScoringRulesPayload, SCORING_RULES_EXAMPLE_TOOLTIP } from '@/utils/kpiScoringRulesDsl'
+import { useKpiUnitOptions } from '@/composables/useKpiUnitOptions'
+import { kpiCycleService } from '@/services/shared/kpi-cycle.service'
+import { kpiFormUnitToUnitCode } from '@/utils/kpiUnitCodes'
 
 const open = defineModel<boolean>({ default: false })
 
@@ -21,41 +24,9 @@ const emit = defineEmits<{
   saved: [response: any]
 }>()
 
-// ── Evaluation cycles ──────────────────────────────────────────────────────────
-const evaluationCycleRows = ref<GmKpiCycleOption[]>([])
-const evaluationCyclesLoading = ref(false)
-const evaluationCyclesError = ref<string | null>(null)
-
-async function loadEvaluationCycles() {
-  evaluationCyclesLoading.value = true
-  evaluationCyclesError.value = null
-  try {
-    evaluationCycleRows.value = await gmKpiService.getKpiCyclesForEvaluation()
-  } catch (e: unknown) {
-    evaluationCycleRows.value = []
-    evaluationCyclesError.value =
-      e instanceof Error ? e.message : 'Không tải được chu kỳ đánh giá'
-  } finally {
-    evaluationCyclesLoading.value = false
-  }
-}
-
-const evaluationYearOptions = computed(() =>
-  evaluationCycleRows.value.map((r) => ({ id: r.id, label: String(r.year) })),
-)
-
-function resolveDefaultFormCycleUuid(): string {
-  const rows = evaluationCycleRows.value
-  const header = String(props.cycleId).trim()
-  if (!rows.length) return header
-  if (rows.some((r) => r.id === header)) return header
-  if (/^\d+$/.test(header)) {
-    const y = parseInt(header, 10)
-    const match = rows.find((r) => r.year === y)
-    if (match) return match.id
-  }
-  return rows[0]?.id ?? header
-}
+const realCycleId = ref<string>('')
+const loadingCycle = ref(false)
+const errorCycle = ref<string | null>(null)
 
 // ── Data composables ────────────────────────────────────────────────────────────
 const {
@@ -71,22 +42,61 @@ const {
   error: calcRefError,
   load: loadCalculationReference,
 } = useKpiCalculationReference()
+const {
+  options: kpiUnitOptions,
+  loading: kpiUnitLoading,
+  error: kpiUnitError,
+  load: loadKpiUnits,
+} = useKpiUnitOptions()
 
 const perspectiveOptions = computed((): { value: string; label: string }[] =>
   kpiCategories.value.map((c) => ({ value: c.id, label: c.name })),
 )
 
+const cycleYearNumFallback = computed(() => {
+  const n = Number.parseInt(String(props.cycleId), 10)
+  return Number.isFinite(n) ? n : new Date().getFullYear()
+})
+
+const isLoadingMeta = computed(
+  () => kpiCategoriesLoading.value || calcRefLoading.value || kpiUnitLoading.value || loadingCycle.value,
+)
+
+const metaLoadError = computed(() => {
+  const errs = [kpiCategoriesError.value, calcRefError.value, kpiUnitError.value, errorCycle.value]
+    .filter(Boolean)
+  return errs.length ? errs.join(' | ') : null
+})
+
+async function loadFormMeta() {
+  loadingCycle.value = true
+  errorCycle.value = null
+  try {
+    const [cycleData] = await Promise.all([
+      kpiCycleService.getKpiCycleByYear(cycleYearNumFallback.value),
+      loadKpiCategories(),
+      loadCalculationReference(),
+      loadKpiUnits(),
+    ])
+    realCycleId.value = cycleData.id
+  } catch (e: unknown) {
+    realCycleId.value = ''
+    errorCycle.value = e instanceof Error ? e.message : 'Không lấy được thông tin chu kỳ KPI năm nay.'
+  } finally {
+    loadingCycle.value = false
+  }
+}
+
 // ── Form state ──────────────────────────────────────────────────────────────────
 const DEFAULT_CALCULATION_RULE_CODE = 802
 const DEFAULT_CALCULATION_TYPE_CODE = 701
-
 const perspective = ref('')
 const kpiName = ref('')
 const description = ref('')
 const weightPct = ref<string>('')
 const calculationRuleCode = ref(DEFAULT_CALCULATION_RULE_CODE)
 const calculationTypeCode = ref<number | null>(DEFAULT_CALCULATION_TYPE_CODE)
-const formCycleId = ref('')
+const unit = ref('MM')
 
 const typesForSelectedRule = computed(
   () =>
@@ -107,26 +117,9 @@ const selectedFormulaExpression = computed(() => {
 watch(open, async (v) => {
   if (v) {
     resetForm()
-    await Promise.all([
-      loadEvaluationCycles(),
-      loadKpiCategories(),
-      loadCalculationReference(),
-    ])
-    formCycleId.value = resolveDefaultFormCycleUuid()
+    await loadFormMeta()
   }
 })
-
-watch(
-  () => props.cycleId,
-  (id) => {
-    if (!open.value) return
-    const t = String(id ?? '').trim()
-    if (!t) return
-    if (evaluationCycleRows.value.some((r) => r.id === t)) {
-      formCycleId.value = t
-    }
-  },
-)
 
 watch(calculationRuleCode, () => {
   const types = typesForSelectedRule.value
@@ -144,9 +137,10 @@ function resetForm() {
   kpiName.value = ''
   description.value = ''
   weightPct.value = ''
+  unit.value = 'MM'
   calculationRuleCode.value = DEFAULT_CALCULATION_RULE_CODE
   calculationTypeCode.value = DEFAULT_CALCULATION_TYPE_CODE
-  formCycleId.value = ''
+  realCycleId.value = ''
   clearFormErrors()
 }
 
@@ -182,8 +176,8 @@ function validateForm(): boolean {
     err.weightPct = 'Trọng số phải từ 1 đến 100.'
   }
 
-  if (!formCycleId.value.trim()) {
-    err.formCycleId = 'Chọn năm đánh giá.'
+  if (!realCycleId.value.trim()) {
+    err.formCycleId = 'Không tìm thấy ID chu kỳ KPI hợp lệ.'
   }
 
   const ruleOpts = calcRulesWithTypes.value
@@ -199,6 +193,14 @@ function validateForm(): boolean {
     }
   }
 
+  const scoringTrim = description.value.trim()
+  if (!scoringTrim) {
+    err.scoringRules = 'Vui lòng nhập quy tắc chấm điểm (đủ các mức 1–5 theo cú pháp).'
+  } else {
+    const vr = validateScoringRulesDsl(description.value)
+    if (!vr.ok) err.scoringRules = vr.errors.join(' ')
+  }
+
   formErrors.value = err
   return Object.keys(err).length === 0
 }
@@ -210,23 +212,25 @@ async function save() {
     return
   }
 
-  // Derive cycleYear from selected cycle UUID
-  const selectedCycle = evaluationCycleRows.value.find(r => r.id === formCycleId.value)
-  if (!selectedCycle) {
-    formErrors.value = { formCycleId: 'Không tìm thấy năm đánh giá đã chọn.' }
-    return
-  }
-
   saving.value = true
   try {
-    const response = await memberKpiService.createIndividualKpi({
-      cycleYear: selectedCycle.year,
+    const response = await gmKpiService.createStrategicKpi({
+      cycleId: realCycleId.value,
+      typeCode: 101,
+      perspective: perspective.value,
       kpiName: kpiName.value.trim(),
-      description: description.value.trim() || undefined,
-      weight: Number.parseFloat(String(weightPct.value).trim()),
-      categoryId: perspective.value,
-      calculationRuleCode: calculationRuleCode.value,
-      calculationTypeCode: calculationRuleCode.value === 803 ? null : calculationTypeCode.value ?? null,
+      targetDescription: buildScoringRulesPayload(description.value),
+      targetValue: null,
+      unit: unit.value,
+      unitCode: kpiFormUnitToUnitCode(unit.value),
+      weightPct: Number.parseFloat(String(weightPct.value).trim()),
+      calculationMethod: persistedCalculationMethodFromTypeAndRule(
+        calculationTypeCode.value,
+        calculationRuleCode.value,
+      ),
+      isImportant: false,
+      memberIds: [],
+      editingKpiInformationId: null,
     })
     emit('saved', response)
     open.value = false
@@ -292,6 +296,14 @@ async function save() {
           <!-- Body -->
           <div class="custom-scrollbar flex-1 space-y-6 overflow-y-auto p-6">
             <!-- Error banner -->
+            <div
+              v-if="metaLoadError"
+              class="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-900"
+              role="alert"
+            >
+              {{ metaLoadError }}
+            </div>
+
             <div
               v-if="Object.keys(formErrors).length > 0"
               id="member-ind-create-kpi-errors"
@@ -387,7 +399,7 @@ async function save() {
                   </div>
                 </div>
 
-                <!-- Row 2: Trọng số + Năm đánh giá -->
+                <!-- Row 2: Trọng số + Unit -->
                 <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-x-6">
                   <div class="min-w-0">
                     <label
@@ -423,28 +435,15 @@ async function save() {
                     <label
                       class="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500"
                     >
-                      Năm đánh giá <span class="text-rose-500">*</span>
+                      Unit <span class="text-rose-500">*</span>
                     </label>
-                    <p
-                      v-if="evaluationCyclesError"
-                      class="mb-1 text-[10px] font-semibold text-amber-700"
-                    >
-                      {{ evaluationCyclesError }}
-                    </p>
-                    <div class="relative w-full">
+                    <div class="relative">
                       <select
-                        v-model="formCycleId"
-                        class="input-required min-h-[38px] w-full cursor-pointer appearance-none rounded-md py-2 pl-2.5 pr-7 text-xs font-bold text-slate-800 outline-none transition-all"
-                        :class="formErrors.formCycleId ? '!border-rose-400 !bg-rose-50/50' : ''"
-                        :disabled="evaluationCyclesLoading || evaluationYearOptions.length === 0"
+                        v-model="unit"
+                        class="input-required min-h-[38px] w-full cursor-pointer appearance-none rounded-md py-2 pl-2.5 pr-7 text-xs font-bold text-slate-800 outline-none transition-all disabled:opacity-60"
+                        :disabled="isLoadingMeta"
                       >
-                        <option
-                          v-for="c in evaluationYearOptions"
-                          :key="c.id"
-                          :value="c.id"
-                        >
-                          {{ c.label }}
-                        </option>
+                        <option v-for="u in kpiUnitOptions" :key="u.value" :value="u.value">{{ u.label }}</option>
                       </select>
                       <i
                         class="fas fa-chevron-down pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-slate-400"
@@ -548,22 +547,43 @@ async function save() {
                   </p>
                 </div>
 
-                <!-- Row 4: Mô tả mục tiêu -->
+                <p class="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-semibold text-slate-600">
+                  Năm đánh giá KPI:
+                  <span class="font-bold text-slate-800">{{ cycleYearNumFallback }}</span>
+                  (theo năm đang chọn trên dashboard)
+                </p>
+
+                <!-- Row 4: Quy tắc chấm điểm -->
                 <div>
-                  <label
-                    class="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500"
-                  >
-                    Mô tả mục tiêu
-                    <span class="text-[9px] font-normal normal-case text-slate-400"
-                      >(Optional)</span
-                    >
-                  </label>
+                  <div class="mb-1.5 flex items-center gap-1.5">
+                    <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                      Quy tắc chấm điểm <span class="text-rose-500">*</span>
+                    </label>
+                    <span class="group relative inline-flex shrink-0">
+                      <button
+                        type="button"
+                        class="cursor-help rounded p-0.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-blue-600 focus-visible:outline focus-visible:ring-2 focus-visible:ring-slate-300"
+                        aria-label="Ví dụ cú pháp quy tắc chấm điểm"
+                      >
+                        <i class="fas fa-circle-question text-[12px]" aria-hidden="true" />
+                      </button>
+                      <span
+                        role="tooltip"
+                        class="pointer-events-none absolute right-0 top-full z-[110] mt-1 hidden min-w-[11rem] max-w-[20rem] whitespace-pre-line rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-left text-[10px] font-medium leading-snug text-slate-700 shadow-lg group-hover:block group-focus-within:block"
+                      >{{ SCORING_RULES_EXAMPLE_TOOLTIP }}</span>
+                    </span>
+                  </div>
+                  
                   <textarea
                     v-model="description"
-                    rows="2"
-                    placeholder="Mô tả mục tiêu / cách đo — map sang target_description khi lưu..."
-                    class="custom-scrollbar w-full resize-none rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-800 outline-none transition-all focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
+                    rows="6"
+                    placeholder="1: <50&#10;2: 50-70&#10;3: 71-85&#10;4: 86-99&#10;5: >=100"
+                    class="custom-scrollbar min-h-[7.5rem] w-full resize-y rounded-md px-2.5 py-1.5 text-xs font-medium text-slate-800 outline-none transition-all focus:ring-2"
+                    :class="formErrors.scoringRules ? '!border-rose-400 !bg-rose-50/70 focus:border-rose-400 focus:ring-rose-100' : 'input-required focus:border-blue-400 focus:ring-blue-100'"
                   />
+                  <p v-if="formErrors.scoringRules" class="mt-1 text-[10px] font-semibold text-rose-600">
+                    {{ formErrors.scoringRules }}
+                  </p>
                 </div>
               </div>
             </div>
@@ -583,7 +603,7 @@ async function save() {
             <button
               type="button"
               class="flex items-center gap-1.5 rounded-lg bg-blue-600 px-6 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:bg-blue-700 disabled:opacity-60"
-              :disabled="saving"
+              :disabled="saving || isLoadingMeta || !kpiCategories.length"
               @click="save"
             >
               <i

@@ -1,5 +1,5 @@
 /**
- * GM workspace / diagnostics — **chỉ type**, tách khỏi `mocks/gm-kpi.mock.ts`
+ * GM workspace / diagnostics — **chỉ type** (dữ liệu mẫu UI đã bỏ khỏi repo).
  * để có thể xóa file mock khi toàn bộ dữ liệu lấy từ API.
  */
 
@@ -86,6 +86,12 @@ export type GmKpiSubmissionStatus =
   | "submitted_with_file"
   | "missing_data";
 
+/** Link/file trong JSON evidences (`urls` | `files` | `evd`). */
+export interface GmEvidenceAttachmentPair {
+  url: string;
+  name: string;
+}
+
 export interface GmModalKpiItemMock {
   code: string;
   obj: string;
@@ -102,6 +108,9 @@ export interface GmModalKpiItemMock {
   targetSummary?: string;
   actualProgressPct?: string | null;
   evidenceAttachmentUrl?: string | null;
+  /** Ghi chú / content hiển thị trong drawer rollout (PM Portfolio…). */
+  evidenceNoteDisplay?: string | null;
+  evidenceAttachments?: GmEvidenceAttachmentPair[];
 }
 
 export interface GmMemberKpiDrawerProfile {
@@ -126,35 +135,107 @@ export interface GmPmKpiRolloutPayload {
   rows: GmPmKpiMemberRolloutRow[];
 }
 
+/** Legacy bucket id + operational group ids from API (process-timeline). */
 export type GmIssueTypeId =
   | "pending_approval"
   | "pending_acceptance"
   | "not_submitted"
-  | "missing_evidence";
+  | "missing_evidence"
+  | "unassigned_members"
+  | "kpi_not_submitted"
+  | "pending_pm_review"
+  | "pending_gm_approval";
+
+export type GmTimelineIssueSeverity = "critical" | "warning" | "info";
 
 export interface GmTimelineIssueType {
-  id: GmIssueTypeId;
+  id: GmIssueTypeId | string;
   text: string;
   dotClass: string;
 }
 
 export interface GmTimelineIssueDetail {
+  assignmentId?: string | null;
+  parentAssignmentId?: string | null;
+  subjectUserId?: string | null;
+  /** `kpi_master.id` from process-timeline API — gom drawer theo KPI. */
+  masterKpiId?: string | null;
   kpi: string;
+  /** Trưởng phòng / section — `departments.manager_id`. */
   pm: string;
-  leader: string;
+  /** Cấp trên trực tiếp — `user_departments.supervisor_id` (khác bước Leader trong sơ đồ 4 cấp). */
+  leader: string | null;
+  /** Người giữ KPI (assignee) — subject bị ảnh hưởng trong timeline issue. */
   member: string;
-  bottleneck: "PM" | "Leader" | "Member";
+  /** `roles.code` của assignee (process timeline API). */
+  roleCode?: string | null;
+  departmentName?: string | null;
+  bottleneck: "PM" | "Leader" | "Member" | "GM" | "Organization";
   reason: string;
+  /** Drawer: assignment con cùng phòng (BE nest theo `parent_assignment_id`). */
+  cascadeChildren?: GmTimelineIssueDetail[];
+}
+
+/** Operational cluster inside one timeline issue (drawer: group → expand → employees). */
+export interface GmTimelineBreakdownGroup {
+  groupKey: string;
+  groupLabel: string;
+  departmentName?: string | null;
+  pmName?: string | null;
+  leaderName?: string | null;
+  affectedEmployees: number;
+  affectedKpis: number;
+  employees: GmTimelineIssueDetail[];
+}
+
+/** Department slice under one KPI in the GM timeline drawer. */
+export interface GmTimelineDepartmentGroup {
+  departmentName?: string | null;
+  affectedEmployees: number;
+  employees: GmTimelineIssueDetail[];
+}
+
+/** KPI-first cluster: KPI → departments → assignees. */
+export interface GmTimelineKpiGroup {
+  masterKpiId?: string | null;
+  kpiName: string;
+  affectedEmployees: number;
+  affectedDepartments: number;
+  blockerSummary: string;
+  /** Không dùng ở cấp KPI (PM theo phòng, leader theo người). Giữ field cho tương thích API. */
+  pmName?: string | null;
+  leaderName?: string | null;
+  departments: GmTimelineDepartmentGroup[];
 }
 
 export interface GmTimelineIssueBucket {
-  id: GmIssueTypeId;
+  id: GmIssueTypeId | string;
   title: string;
   iconClass: string;
   items: GmTimelineIssueDetail[];
 }
 
+/** One business-level operational issue (aggregated) for GM timeline. */
+export interface GmTimelineIssueGroup {
+  id: string;
+  title: string;
+  severity: GmTimelineIssueSeverity;
+  blockedRole: string;
+  affectedEmployees: number;
+  affectedKpis: number;
+  affectedDepartments: number;
+  iconClass: string;
+  /** @deprecated Server no longer fills; use {@link kpiGroups}. */
+  breakdownGroups?: GmTimelineBreakdownGroup[];
+  /** KPI → department → employees (preferred drawer hierarchy). */
+  kpiGroups?: GmTimelineKpiGroup[];
+  employees: GmTimelineIssueDetail[];
+}
+
 export type GmHierarchyStatus = "success" | "warning" | "danger";
+
+/** So khớp target hiển thị với tổng đã giao (diagnostics). */
+export type GmHierarchyTargetBalance = "short" | "ok" | "excess";
 
 export interface GmHierarchyLeader {
   id: string;
@@ -163,7 +244,10 @@ export interface GmHierarchyLeader {
   ownerRoleCode?: string | null;
   /** `roles.name` supervisor — nhãn tag. */
   ownerRoleLabel?: string | null;
+  /** Cùng trọng số KPI (BE diagnostics — không chia theo nhánh). */
+  weight?: string | null;
   target: string;
+  targetBalance?: GmHierarchyTargetBalance | null;
   actual: string;
   status: GmHierarchyStatus;
   blockerSummary: string;
@@ -172,7 +256,10 @@ export interface GmHierarchyLeader {
 
 export interface GmHierarchyMember {
   id: string;
+  assignmentId?: string | null;
   name: string;
+  /** Cùng trọng số KPI (BE diagnostics — không chia theo nhánh). */
+  weight?: string | null;
   /** `kpi_assignments.status_code` (ASM). */
   assignmentStatusCode?: number | null;
   /** GM / PM / LEADER / MEMBER / … — từ BE `GmDiagMemberNode.ownerRoleCode`. */
@@ -184,6 +271,7 @@ export interface GmHierarchyMember {
   /** `roles.name` supervisor. */
   leaderRoleName?: string | null;
   target: string;
+  targetBalance?: GmHierarchyTargetBalance | null;
   actual: string;
   status: GmHierarchyStatus;
   /** Nhãn cột trạng thái (tiếng Việt) khi API diagnostics trả về. */
@@ -193,6 +281,7 @@ export interface GmHierarchyMember {
   leader?: string;
   submissionTarget?: number;
   submissionActual?: number;
+  feedbackNote?: string | null;
   evidenceAttachmentUrl?: string;
 }
 
@@ -206,7 +295,10 @@ export interface GmHierarchyPm {
   /** `roles.name` manager phòng — nhãn tag rollup. */
   ownerRoleLabel?: string | null;
   unitLine?: string;
+  /** Cùng trọng số KPI (BE diagnostics — không chia theo nhánh). */
+  weight?: string | null;
   target: string;
+  targetBalance?: GmHierarchyTargetBalance | null;
   actual: string;
   status: GmHierarchyStatus;
   blockerSummary: string;
@@ -221,6 +313,7 @@ export interface GmHierarchyKpi {
   name: string;
   weight: string;
   target: string;
+  targetBalance?: GmHierarchyTargetBalance | null;
   actual: string;
   status: GmHierarchyStatus;
   blockerSummary: string;
@@ -230,6 +323,8 @@ export interface GmHierarchyKpi {
   categoryName?: string;
   lifecycleStatus?: GmKpiLifecycleStatus;
   isImportant?: boolean;
+  /** `kpi_master.is_global`: true = KPI GM (công ty), false = member đề xuất; undefined = API cũ / không rõ. */
+  isGlobal?: boolean | null;
   unitCode?: number;
   pmOwners: GmHierarchyPm[];
   investigateDeptId?: string;
@@ -249,11 +344,18 @@ export interface GmHierarchyKpi {
 
 export interface GmMidYearIssuesData {
   hasOpenIssues?: boolean;
+  /** Số nhóm vấn đề vận hành (API); optional trên mock cũ. */
+  operationalIssueCount?: number;
+  /** Nhân sự distinct across groups (API). */
+  totalDistinctEmployeesAffected?: number;
   pendingKpisLine: string;
   popoverTitle: string;
   bullets?: { text: string; dotClass: string }[];
   issueTypes?: GmTimelineIssueType[];
+  /** @deprecated Dùng {@link issueGroups}; giữ để tương thích mock cũ. */
   issueDetails?: GmTimelineIssueBucket[];
+  /** Nhóm vấn đề vận hành (API + mock mới). */
+  issueGroups?: GmTimelineIssueGroup[];
 }
 
 export interface GmPortfolioDonutData {
@@ -291,8 +393,6 @@ export interface GmWorkspaceCycleSnapshot {
   personalKpiRows: GmPersonalKpiRowMock[];
 }
 
-export type GmPersonalKpiRowStatus = "good" | "warn" | "pending";
-
 export interface GmPersonalKpiRowMock {
   id: string;
   diagnosticsFallbackGroup: GmBscPerspective;
@@ -303,5 +403,12 @@ export interface GmPersonalKpiRowMock {
   weight: number;
   actual: string;
   finalScore: string;
-  status: GmPersonalKpiRowStatus;
+  /** `kpi_assignments.status_code` (FK logic tới `sys_status_codes.code`). */
+  assignmentStatusCode: number | null;
+  /** `sys_status_codes.name` — tooltip / bổ sung khi cột dùng `description`. */
+  assignmentStatusName: string;
+  /** Ưu tiên `sys_status_codes.description`, sau đó `name` (đồng bộ API leader kpi-info). */
+  assignmentStatusDisplay: string;
+  /** `kpi_master.unit_code` — hiển thị kèm Target. */
+  unitCode?: number | null;
 }

@@ -14,7 +14,11 @@ public class GmDiagLeaderNode {
     private String ownerRoleCode;
     /** {@code roles.name} của supervisor nhóm — nhãn tag. */
     private String ownerRoleLabel;
+    /** Cùng nhãn trọng số KPI như dòng KPI cha. */
+    private String weight;
     private String target;
+    /** So nhãn target nhóm leader với tổng target member trong nhóm. */
+    private String targetBalance;
     private String actual;
     private String status;
     private String blockerSummary;

@@ -8,6 +8,7 @@ public class Constant {
     // -----------------------------------------------
     public static final String ROLE_MEMBER = "MEMBER";
     public static final String ROLE_LEADER = "LEADER";
+    public static final String ROLE_PM = "PM";
 
     public static final String TARGET_SETUP_PHASE = "target_setup";
     public static final String MID_YEAR_PHASE = "mid_year";

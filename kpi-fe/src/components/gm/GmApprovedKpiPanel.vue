@@ -52,9 +52,14 @@ function onReject(kpi: GmHierarchyKpi) {
   emit('reject-kpi', kpi)
 }
 
+function rejectButtonTitle(kpi: GmHierarchyKpi): string {
+  if (kpi.assignmentStatusCode === 407) return 'Đóng feedback và trả KPI về 404'
+  return 'Từ chối (403→406)'
+}
+
 /** API: chỉ 403 bật ✓/✗; mock snapshot không có `assignmentStatusCode` → giữ hành vi cũ (luôn bật). */
 function gmApprovedActionsEnabled(kpi: GmHierarchyKpi): boolean {
-  if (kpi.assignmentStatusCode != null) return kpi.assignmentStatusCode === 403
+  if (kpi.assignmentStatusCode != null) return kpi.assignmentStatusCode === 403 || kpi.assignmentStatusCode === 407
   return true
 }
 
@@ -72,11 +77,12 @@ function approvedKpiStatusTitle(kpi: GmHierarchyKpi): string {
   return desc
 }
 
-/** Giống `statusBadgeClass` trong `GmKpiEvaluationPanel` — màu theo mã ASM 401/402/403. */
+/** Giống `statusBadgeClass` trong `GmKpiEvaluationPanel` — màu theo mã ASM 401/402/403/407. */
 function approvedKpiStatusBadgeClass(kpi: GmHierarchyKpi): string {
   const base =
     'inline-flex max-w-full min-w-0 items-start gap-1.5 rounded-full border px-2 py-1 text-left text-[10px] font-bold leading-snug sm:gap-1.5 sm:px-2.5 sm:py-1 sm:text-xs'
   const c = kpi.assignmentStatusCode
+  if (c === 407) return `${base} border-violet-200 bg-violet-50 text-violet-700`
   if (c === 403) return `${base} border-rose-200 bg-rose-50 text-rose-700`
   if (c === 402) return `${base} border-amber-200 bg-amber-50 text-amber-900`
   if (c === 401) return `${base} border-slate-200 bg-slate-100 text-slate-600`
@@ -182,6 +188,11 @@ function approvedKpiStatusBadgeClass(kpi: GmHierarchyKpi): string {
                           aria-hidden="true"
                         />
                         <i
+                          v-else-if="kpi.assignmentStatusCode === 407"
+                          class="fas fa-message text-[10px] text-violet-700"
+                          aria-hidden="true"
+                        />
+                        <i
                           v-else-if="kpi.assignmentStatusCode === 402"
                           class="fas fa-user-clock text-[10px] text-amber-700"
                           aria-hidden="true"
@@ -206,7 +217,7 @@ function approvedKpiStatusBadgeClass(kpi: GmHierarchyKpi): string {
                     <button
                       type="button"
                       class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 shadow-sm transition-colors hover:border-emerald-300 hover:bg-emerald-100 hover:text-emerald-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-emerald-200 disabled:hover:bg-emerald-50 disabled:hover:text-emerald-700"
-                      title="Đồng ý duyệt (403→404)"
+                      title="Đồng ý duyệt "
                       aria-label="Đồng ý duyệt KPI"
                       :disabled="!gmApprovedActionsEnabled(kpi)"
                       @click="onApprove(kpi)"
@@ -216,7 +227,7 @@ function approvedKpiStatusBadgeClass(kpi: GmHierarchyKpi): string {
                     <button
                       type="button"
                       class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-rose-200 bg-rose-50 text-rose-700 shadow-sm transition-colors hover:border-rose-300 hover:bg-rose-100 hover:text-rose-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-400 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-rose-200 disabled:hover:bg-rose-50 disabled:hover:text-rose-700"
-                      title="Từ chối (403→406)"
+                      :title="rejectButtonTitle(kpi)"
                       aria-label="Từ chối KPI"
                       :disabled="!gmApprovedActionsEnabled(kpi)"
                       @click="onReject(kpi)"

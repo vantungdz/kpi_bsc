@@ -85,6 +85,7 @@ export function buildHierarchyKpiFromStrategicCreatePayload(
     blockerSummary: 'KPI mới tạo (mock) — chưa có dữ liệu thực tế',
     kpiType,
     isImportant: payload.isImportant === true,
+    isGlobal: true,
     pmOwners,
   }
   if (categoryIdFromPayload) {

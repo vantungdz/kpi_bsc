@@ -378,8 +378,11 @@
         <id property="id" column="user_id"/>
         <result property="fullName" column="full_name"/>
         <result property="supervisorId" column="supervisor_id"/>
-        <result property="totalScore" column="total_score"/>
+        <result property="selfScore" column="self_score"/>
+        <result property="pmScore" column="pm_score"/>
+        <result property="pmComment" column="pm_comment"/>
         <result property="minStatusCode" column="min_status_code"/>
+        <result property="requiresPmEvaluation" column="requires_pm_evaluation"/>
         
         <association property="jobTitle" javaType="com.company.kpi.entity.JobTitle" autoMapping="true">
             <id property="id" column="job_title_id"/>
@@ -405,12 +408,20 @@
             jt.id AS job_title_id,
             jt.name AS job_title_name,
             tt.supervisor_id,
-            COALESCE(AVG(ka.end_pm_score), AVG(ka.end_self_score), 0) AS total_score,
-            MIN(ka.status_code) AS min_status_code
+            AVG(COALESCE(ka.end_self_score, ka.mid_self_score)) AS self_score,
+            AVG(ka.end_pm_score) AS pm_score,
+            <!-- user_kpi_summaries là /user+cycle: không hiển thị khi còn KPI ở giai đoạn giao/chấp nhận (404…) để tránh nhầm nhận xét từ KPI khác -->
+            CASE
+                WHEN MIN(ka.status_code) IS NOT NULL AND MIN(ka.status_code) >= 501 THEN MAX(uks.evaluation_supervisor_comments)
+                ELSE NULL
+            END AS pm_comment,
+            MIN(ka.status_code) AS min_status_code,
+            (COUNT(*) FILTER (WHERE ka.status_code IN (501, 601))) > 0 AS requires_pm_evaluation
         FROM team_tree tt
         JOIN users u ON u.id = tt.user_id
         LEFT JOIN job_titles jt ON u.job_title_id = jt.id
         LEFT JOIN kpi_assignments ka ON ka.user_id = u.id AND ka.cycle_id = #{cycleId} AND ka.deleted_at IS NULL
+        LEFT JOIN user_kpi_summaries uks ON uks.user_id = u.id AND uks.cycle_id = #{cycleId} AND uks.deleted_at IS NULL
         WHERE u.deleted_at IS NULL
         GROUP BY u.id, u.full_name, jt.id, jt.name, tt.supervisor_id
     </select>

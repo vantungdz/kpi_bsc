@@ -12,12 +12,11 @@ import {
 } from '@/services/modules/kpi-gm.service'
 import type {
   GmDepartmentApiRow,
-  GmDepartmentMemberApiRow,
   GmDepartmentMemberCandidateApiRow,
 } from '@/types/gm-department-api'
 import type { GmDepartmentMock, GmMemberDetailMock } from '@/types/gm-workspace'
 import type { DepartmentManagerOption } from '@/types/department-manager'
-import { strategicKpiKindFromTypeCode } from '@/utils/strategicKpiTypeCodes'
+import { mapGmDepartmentApiRowToWorkspaceMock } from '@/utils/gm-department-from-api'
 import { pushGmNotification } from '@/composables/useGmNotifications'
 
 /** Khớp `#gm-main-modal-anchor` trong `GmLayout.vue` — overlay chỉ phủ cột nội dung, không xám sidebar. */
@@ -101,44 +100,6 @@ function formatManagerRoleCode(code: string | null | undefined): string {
   return c
 }
 
-function apiMemberToDetail(mem: GmDepartmentMemberApiRow, deptId: string): GmMemberDetailMock {
-  return {
-    id: mem.userId,
-    name: mem.fullName?.trim() || '—',
-    rank: mem.rankCode?.trim() || '',
-    leader: '',
-    status: '',
-    rootCause: '',
-    dueIn: null,
-    priority: '',
-    scoreSelf: '',
-    scoreMgr: '',
-    deptId,
-    relatedKpi: '',
-    relatedKpiType: strategicKpiKindFromTypeCode(102),
-  }
-}
-
-function mapApiRowToLocal(r: GmDepartmentApiRow): GmDepartmentMock {
-  const members = r.members ?? []
-  return {
-    id: r.id,
-    name: r.name,
-    manager: r.managerFullName?.trim() || '—',
-    managerUserId: r.managerId,
-    parentId: r.parentId,
-    managerRoleCode: r.managerRoleCode ?? null,
-    health: 0,
-    progress: 0,
-    risks: { critical: 0, medium: 0 },
-    responsibility: '-',
-    breakdown: '—',
-    impact: null,
-    kpis: [],
-    staffDetails: members.map((m) => apiMemberToDetail(m, r.id)),
-  }
-}
-
 /** Phòng ban từ API `GET /kpi/gm/departments`. */
 const departmentsLocal = ref<GmDepartmentMock[]>([])
 
@@ -150,7 +111,7 @@ async function loadDepartments() {
   listError.value = null
   try {
     const rows = await apiListGmDepartments(new Date().getFullYear())
-    departmentsLocal.value = rows.map(mapApiRowToLocal)
+    departmentsLocal.value = rows.map(mapGmDepartmentApiRowToWorkspaceMock)
   } catch (e: unknown) {
     listError.value = e instanceof Error ? e.message : 'Không tải được danh sách phòng ban'
     departmentsLocal.value = []

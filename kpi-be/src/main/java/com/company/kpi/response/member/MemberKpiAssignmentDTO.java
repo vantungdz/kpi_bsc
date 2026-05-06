@@ -16,6 +16,8 @@ public class MemberKpiAssignmentDTO {
     /** KPI_TYPE name from sys_status_codes e.g. INDIVIDUAL / PROMOTION */
     private String type;
     private Integer typeCode;
+    private Integer unitCode;
+    private String unitName;
     private Integer statusCode;
     private Double kpiInfoTargetValue;
     private Double assignmentTargetValue;
@@ -26,6 +28,8 @@ public class MemberKpiAssignmentDTO {
     private Double endPmScore;
     /** JSON string (JSONB column) */
     private String evidences;
+    /** Feedback tách riêng khỏi evidences JSON */
+    private String feedbackComment;
     /** {@code kpi_master.calculation_rule_code} — CALC_RULE 801–804 */
     private Integer calculationRuleCode;
     /** {@code kpi_master.calculation_type_code} — CALC_TYPE 701 (Actual/Plan) | 702 (Plan/Actual) */

@@ -58,6 +58,10 @@ public class LeaderKpiInformationResponse {
         private UUID assignmentId;
         private String kpiName;
         private String kpiCode;
+        /** Mục tiêu số (assignment hoặc catalog) — cột Target tab KPI cá nhân GM. */
+        private BigDecimal targetValue;
+        private Integer unitCode;
+        private String unitName;
         private String targetDescription;
         private Double weight;
         private Integer statusCode;
@@ -69,5 +73,16 @@ public class LeaderKpiInformationResponse {
         private Double endSelfScore;
         private Double endPmScore;
         private String evidences;
+        private String feedbackComment;
+        private String evaluationStatus;
+        private String evaluationState;
+        /** kpi_master.calculation_rule_code — 801 (none) | 802 (average/ratio) | 803 (comment/text) */
+        private Integer calculationRuleCode;
+        /** kpi_master.calculation_type_code — 701 (Actual/Plan×100%) | 702 (Plan/Actual×100%) */
+        private Integer calculationTypeCode;
+        /** kpi_master.type_code (101 INDIVIDUAL, 102 TEAM, 103 PROMOTION, …). */
+        private Integer typeCode;
+        /** sys_status_codes.name — loại KPI từ master. */
+        private String typeName;
     }
 }

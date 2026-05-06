@@ -39,15 +39,25 @@ export function mapStrategicKpiCreatePayloadToApi(
     targetValue = Number.isFinite(n) ? n : null
   }
 
+  const td = payload.targetDescription
+  let targetDescription: unknown = null
+  if (td != null && typeof td === 'object' && !Array.isArray(td)) {
+    const o = td as Record<string, unknown>
+    const raw = String(o.rawInput ?? '').trim()
+    if (raw !== '') {
+      targetDescription = {
+        rawInput: o.rawInput,
+        rules: Array.isArray(o.rules) ? o.rules : [],
+      }
+    }
+  }
+
   const body: Record<string, unknown> = {
     cycleId: payload.cycleId,
     typeCode,
     perspective: payload.perspective,
     kpiName: String(payload.kpiName ?? '').trim(),
-    targetDescription:
-      payload.targetDescription != null && String(payload.targetDescription).trim() !== ''
-        ? String(payload.targetDescription).trim()
-        : null,
+    targetDescription,
     targetValue,
     unitCode,
     weightPct,

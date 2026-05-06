@@ -61,6 +61,8 @@ public class MemberKpiDashboardResponse {
          * Cột "Chỉ tiêu" trên lưới: ưu tiên mô tả chỉ tiêu (HTML/plain) từ kpis_information.target_description.
          */
         private String target;
+        /** Raw target_description từ DB (DSL/JSON rules) để FE parse Quy tắc chấm điểm. */
+        private String targetDescription;
         /** ka.target_value — mục tiêu giao cho cá nhân */
         private Double assignmentTargetValue;
         /** ki.target_value — chỉ tiêu chuẩn theo thư viện KPI năm */
@@ -80,6 +82,8 @@ public class MemberKpiDashboardResponse {
         private Integer calculationRuleCode;
         /** {@code kpi_master.calculation_type_code} — 701 (Actual/Plan) | 702 (Plan/Actual) */
         private Integer calculationTypeCode;
+        private Integer unitCode;
+        private String unitName;
         /**
          * JSON thô từ {@code kpi_assignments.evidences} (trang chi tiết / map form).
          */
@@ -88,6 +92,10 @@ public class MemberKpiDashboardResponse {
         private String evidenceStatus;
         private String evidenceFormCase;
         private String evidenceNote;
+        private String memberFeedback;
+        private String leaderFeedback;
+        private String feedbackComment;
+        private String gmComment;
         private String certificateOutcomeNote;
         private Double selfScore;
         private Double pmScore;

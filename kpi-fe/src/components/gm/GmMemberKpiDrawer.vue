@@ -6,6 +6,7 @@ import type {
   GmPmKpiRolloutPayload,
   GmStrategicKpiKind,
 } from '@/types/gm-workspace'
+import { isEvidenceImageUrl, normalizeEvidenceHref } from '@/utils/memberKpiHelpers'
 
 const props = withDefaults(
   defineProps<{
@@ -96,7 +97,11 @@ const groupedSections = computed(() => {
 })
 
 function targetLine(item: GmModalKpiItemMock) {
-  return item.targetSummary ?? `Mục tiêu: ${item.target} (W: ${item.weight}%)`
+  if (item.targetSummary?.trim()) return item.targetSummary
+  const w = item.weight
+  const wPart =
+    w != null && w !== '' && Number.isFinite(Number(w)) ? ` (W: ${Number(w)}%)` : ''
+  return `Mục tiêu: ${item.target}${wPart}`
 }
 
 function statusBlock(item: GmModalKpiItemMock) {
@@ -165,30 +170,98 @@ function asmStatusMeta(item: GmModalKpiItemMock): { label: string; badgeClass: s
   }
 }
 
-function extractEvidenceNote(item: GmModalKpiItemMock) {
-  const src = item.targetSummary ?? ''
-  const m = src.match(/Minh chứng\s*\/\s*ghi chú:\s*(.*?)\s*(?:·\s*PM:|$)/i)
-  return m?.[1]?.trim() || ''
+/** Phần sau «Minh chứng / ghi chú:» trong targetSummary (rollout PM/GM). */
+function rolloutMinhChungTail(item: GmModalKpiItemMock): string {
+  const src = (item.targetSummary ?? '').trim()
+  const m = src.match(/Minh chứng\s*\/\s*ghi chú:\s*(.+)$/i)
+  const tail = m?.[1]?.trim()
+  if (tail) return tail
+  if (item.evidenceAttachmentUrl) return ''
+  return '—'
 }
 
-/**
- * Ghi chú minh chứng (text).
- * Có URL đính kèm nhưng không có ghi chú thật → chuỗi rỗng (chỉ hiện link, tránh «-» gây hiểu nhầm).
- * Không URL và không ghi chú → «-».
- */
-function rolloutEvidenceNoteDisplay(item: GmModalKpiItemMock): string {
-  const raw = extractEvidenceNote(item).trim()
-  const meaningful = raw.length > 0 && raw !== '-' && raw !== '—'
-  if (meaningful) return raw
-  if (item.evidenceAttachmentUrl) return ''
-  return '-'
+/** Ưu tiên note/content đã parse (PM Portfolio); fallback đuôi targetSummary. */
+function rolloutEvidenceNoteText(item: GmModalKpiItemMock): string {
+  const explicit = (item.evidenceNoteDisplay ?? '').trim()
+  if (explicit && explicit !== '—') return explicit
+  const tail = rolloutMinhChungTail(item).trim()
+  return tail || '—'
+}
+
+/** Chỉ hiển thị ô ghi chú khi có nội dung thật (không hiện placeholder «—»). */
+function rolloutEvidenceNoteOnly(item: GmModalKpiItemMock): string {
+  const t = rolloutEvidenceNoteText(item).trim()
+  if (!t || t === '—') return ''
+  return t
+}
+
+/** % hoàn thành 0–100: từ actualProgressPct hoặc chuỗi Actual kiểu «10 (100%)» / «100%». */
+function rolloutProgressPctNumeric(item: GmModalKpiItemMock): number | null {
+  const fromPctStr = (s: string): number | null => {
+    const m = s.trim().match(/(\d+(?:\.\d+)?)\s*%/)
+    if (!m) return null
+    const n = parseFloat(m[1])
+    return Number.isFinite(n) ? Math.min(100, Math.max(0, n)) : null
+  }
+  const ap = item.actualProgressPct
+  if (ap != null && String(ap).trim() !== '') {
+    const n = fromPctStr(String(ap))
+    if (n != null) return n
+  }
+  const act = String(item.actual ?? '')
+  const paren = act.match(/\(\s*(\d+(?:\.\d+)?)\s*%\s*\)/)
+  if (paren) {
+    const n = parseFloat(paren[1])
+    if (Number.isFinite(n)) return Math.min(100, Math.max(0, n))
+  }
+  return fromPctStr(act)
+}
+
+/** Đã có % trong cột Actual → không lặp lại hàng «Tỷ lệ Actual» riêng. */
+function rolloutActualProgressRedundant(item: GmModalKpiItemMock): boolean {
+  const pct = String(item.actualProgressPct ?? '')
+    .trim()
+    .replace(/\s+/g, '')
+  const act = String(item.actual ?? '')
+    .trim()
+    .replace(/\s+/g, '')
+  if (!pct || !act) return false
+  return act.includes(pct)
+}
+
+function rolloutProgressPctRounded(item: GmModalKpiItemMock): number | null {
+  const n = rolloutProgressPctNumeric(item)
+  return n != null ? Math.round(n) : null
+}
+
+/** Actual hiển thị kiểu mẫu a.ts: số/chữ chính + (% riêng) khi parse được % — tránh lặp «10 (100%)». */
+function rolloutMetricHeadline(item: GmModalKpiItemMock): {
+  actualMain: string
+  actualPct: number | null
+} {
+  const pctN = rolloutProgressPctNumeric(item)
+  const act = String(item.actual ?? '').trim()
+  if (pctN != null) {
+    const withoutParenSuffix = act
+      .replace(/\(\s*\d+(?:\.\d+)?\s*%\s*\)\s*$/, '')
+      .trim()
+    const onlyPct = act.match(/^\s*(\d+(?:\.\d+)?)\s*%\s*$/)
+    const main = (
+      onlyPct ? onlyPct[1] : withoutParenSuffix || act
+    ).trim()
+    return {
+      actualMain: main || '—',
+      actualPct: Math.round(Math.min(100, Math.max(0, pctN))),
+    }
+  }
+  return { actualMain: act || '—', actualPct: null }
 }
 
 function rolloutMemberCardStyle(item: GmModalKpiItemMock) {
   const fail = item.submissionStatus === 'missing_data' || item.isFail
   if (fail) {
     return {
-      outerCard: 'bg-rose-50/30 rounded-lg border border-rose-200 shadow-sm',
+      outerCard: 'bg-rose-50/30 rounded-2xl border border-rose-200 shadow-sm',
       accentClass: 'bg-rose-500',
       avatarWrap: 'bg-white border border-rose-200 text-rose-500',
       nameClass: 'text-sm font-bold text-rose-800',
@@ -197,7 +270,7 @@ function rolloutMemberCardStyle(item: GmModalKpiItemMock) {
     }
   }
   return {
-    outerCard: 'bg-white rounded-lg border border-slate-200 shadow-sm',
+    outerCard: 'bg-white rounded-2xl border border-slate-200 shadow-sm',
     accentClass: 'bg-emerald-500',
     avatarWrap: 'bg-slate-100 border border-slate-200 text-slate-500',
     nameClass: 'text-sm font-bold text-slate-800',
@@ -222,7 +295,7 @@ const rolloutDeptLabel = computed(() => {
           @click="emit('close')"
         />
         <div
-          class="gm-member-drawer-panel absolute bottom-0 right-0 top-0 flex w-full max-w-full flex-col border-l border-slate-200 bg-slate-50 shadow-[0_0_40px_rgba(0,0,0,0.2)] md:w-[500px] lg:w-[600px]"
+          class="gm-member-drawer-panel absolute bottom-0 right-0 top-0 flex w-full max-w-full flex-col border-l border-slate-200 bg-slate-50 shadow-[0_0_40px_rgba(0,0,0,0.2)] md:w-[520px] lg:w-[min(42rem,100vw)] xl:w-[min(44rem,100vw)]"
         >
           <!-- ─── PM + một KPI (diagnostics) — bám submission-detail-drawer trong index.html ─── -->
           <template v-if="showRolloutPanel && pmKpiRollout">
@@ -275,13 +348,13 @@ const rolloutDeptLabel = computed(() => {
               </div>
             </div>
 
-            <div class="custom-scrollbar flex-1 space-y-2 overflow-y-auto bg-slate-50/50 p-3 sm:p-4">
-              <div class="mb-0.5 flex items-center justify-between">
-                <h3 class="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-700">
+            <div class="custom-scrollbar flex-1 space-y-3 overflow-y-auto bg-gradient-to-b from-slate-100/40 to-slate-50 p-3 sm:p-4">
+              <div class="flex items-center justify-between px-0.5">
+                <h3 class="text-[11px] font-extrabold uppercase tracking-[0.12em] text-slate-600">
                   Danh sách nhân sự thực hiện
                 </h3>
                 <span
-                  class="rounded-full border border-emerald-200 bg-emerald-100/80 px-2 py-0.5 text-[10px] font-bold text-emerald-700"
+                  class="rounded-full border border-emerald-300/80 bg-emerald-100 px-2.5 py-1 text-[10px] font-bold text-emerald-800 shadow-sm"
                 >
                   {{ pmKpiRollout.rows.length }} Members
                 </span>
@@ -290,63 +363,106 @@ const rolloutDeptLabel = computed(() => {
               <div
                 v-for="(row, idx) in pmKpiRollout.rows"
                 :key="`${row.item.code}-${idx}`"
-                class="group relative overflow-hidden transition-colors"
+                class="group relative overflow-hidden ring-1 ring-slate-900/[0.03] transition-shadow hover:shadow-md"
                 :class="rolloutMemberCardStyle(row.item).outerCard"
               >
                 <div
-                  class="pointer-events-none absolute bottom-0 left-0 top-0 w-0.5"
+                  class="pointer-events-none absolute bottom-0 left-0 top-0 w-1 rounded-l-2xl"
                   :class="rolloutMemberCardStyle(row.item).accentClass"
                 />
-                <div class="px-3 py-2.5 pl-3.5">
-                  <div class="flex min-w-0 gap-2.5">
+                <div class="relative pl-4 pr-3 py-4 sm:pl-5 sm:pr-4">
+                  <div class="flex min-w-0 gap-3">
                     <div
-                      class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border"
+                      class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border shadow-sm"
                       :class="rolloutMemberCardStyle(row.item).avatarWrap"
                     >
-                      <i class="fas fa-user text-[11px]" />
+                      <i class="fas fa-user text-sm" />
                     </div>
-                    <div class="min-w-0 flex-1">
-                      <div class="flex min-w-0 items-center gap-1.5">
-                        <h4 class="min-w-0 truncate leading-tight" :class="rolloutMemberCardStyle(row.item).nameClass">
-                          {{ row.profile.name }}
-                        </h4>
+                    <div class="min-w-0 flex-1 space-y-3">
+                      <div class="flex min-w-0 flex-wrap items-start justify-between gap-2">
+                        <div class="min-w-0 flex flex-wrap items-center gap-2">
+                          <h4
+                            class="max-w-full text-[15px] font-bold leading-snug tracking-tight"
+                            :class="rolloutMemberCardStyle(row.item).nameClass"
+                          >
+                            {{ row.profile.name }}
+                          </h4>
+                          <span
+                            class="rounded-md border px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide"
+                            :class="rolloutMemberCardStyle(row.item).rankBadgeClass"
+                          >
+                            {{ row.profile.rank ?? '—' }}
+                          </span>
+                        </div>
                         <span
-                          class="shrink-0 rounded border px-1.5 py-px text-[10px] font-extrabold tabular-nums leading-none"
-                          :class="rolloutMemberCardStyle(row.item).rankBadgeClass"
+                          class="inline-flex max-w-full items-center rounded-full border px-3 py-1 text-[11px] font-bold leading-snug shadow-sm"
+                          :class="asmStatusMeta(row.item).badgeClass"
                         >
-                          {{ row.profile.rank ?? '—' }}
+                          {{ asmStatusMeta(row.item).label }}
                         </span>
                       </div>
-                      <div class="mt-2 space-y-1.5 border-t border-slate-100 pt-2 text-[12px] leading-snug">
-                        <div class="flex items-start justify-between gap-2">
-                          <span class="shrink-0 font-medium text-slate-500">Target (PM)</span>
-                          <span class="min-w-0 text-right font-bold tabular-nums text-slate-800">
-                            {{ row.item.target }}
-                          </span>
+
+                      <div
+                        class="rounded-xl border border-slate-100 bg-slate-50/90 p-3 shadow-inner sm:p-4"
+                      >
+                        <div class="mb-2 flex items-end justify-between gap-3">
+                          <div class="min-w-0">
+                            <p class="mb-1 text-[11px] font-semibold text-slate-500">
+                              Target (PM)
+                            </p>
+                            <p class="text-lg font-bold tabular-nums text-slate-900">
+                              {{ row.item.target }}
+                            </p>
+                          </div>
+                          <div class="min-w-0 text-right">
+                            <p class="mb-1 text-[11px] font-semibold text-slate-500">Actual</p>
+                            <div class="flex flex-wrap items-baseline justify-end gap-1">
+                              <span
+                                class="max-w-full text-lg font-bold tabular-nums leading-snug"
+                                :class="rolloutMemberCardStyle(row.item).actualValueClass"
+                              >
+                                {{ rolloutMetricHeadline(row.item).actualMain }}
+                              </span>
+                              <span
+                                v-if="rolloutMetricHeadline(row.item).actualPct != null"
+                                class="text-sm font-semibold tabular-nums"
+                                :class="rolloutMemberCardStyle(row.item).actualValueClass"
+                              >
+                                ({{ rolloutMetricHeadline(row.item).actualPct }}%)
+                              </span>
+                            </div>
+                          </div>
                         </div>
-                        <div class="flex items-start justify-between gap-2">
-                          <span class="shrink-0 font-medium text-slate-500">Actual</span>
-                          <span
-                            class="min-w-0 text-right tabular-nums font-bold"
-                            :class="rolloutMemberCardStyle(row.item).actualValueClass"
+
+                        <div
+                          v-if="rolloutProgressPctRounded(row.item) != null"
+                          class="relative mt-2 h-2 w-full overflow-visible rounded-full bg-slate-200/90"
+                        >
+                          <div
+                            class="relative h-2 rounded-full bg-gradient-to-r from-emerald-600 to-teal-500 shadow-sm transition-[width] duration-500 ease-out"
+                            :style="{
+                              width:
+                                Math.min(
+                                  100,
+                                  Math.max(0, rolloutProgressPctRounded(row.item) ?? 0),
+                                ) + '%',
+                            }"
                           >
-                            {{ row.item.actual }}
-                          </span>
-                        </div>
-                        <div class="flex items-start justify-between gap-2">
-                          <span class="shrink-0 font-medium text-slate-500">Trạng thái KPI</span>
-                          <span
-                            class="inline-flex min-w-0 max-w-[65%] items-center justify-end rounded-full border px-2 py-0.5 text-right text-[10px] font-bold leading-tight"
-                            :class="asmStatusMeta(row.item).badgeClass"
-                          >
-                            {{ asmStatusMeta(row.item).label }}
-                          </span>
+                            <i
+                              v-if="(rolloutProgressPctRounded(row.item) ?? 0) >= 100"
+                              class="fas fa-check-circle absolute -right-0.5 -top-1 text-[13px] text-emerald-600 drop-shadow-sm ring-2 ring-white"
+                              aria-hidden="true"
+                            />
+                          </div>
                         </div>
                         <div
-                          v-if="row.item.actualProgressPct"
-                          class="flex items-start justify-between gap-2 rounded-md bg-slate-50/90 px-1.5 py-1"
+                          v-else-if="
+                            row.item.actualProgressPct &&
+                            !rolloutActualProgressRedundant(row.item)
+                          "
+                          class="mt-3 flex items-start justify-between gap-3 border-t border-slate-200/60 pt-3 text-xs"
                         >
-                          <span class="shrink-0 font-semibold text-slate-500">Tỷ lệ Actual</span>
+                          <span class="font-semibold text-slate-500">Tỷ lệ Actual</span>
                           <span
                             class="font-extrabold tabular-nums"
                             :class="rolloutMemberCardStyle(row.item).actualValueClass"
@@ -354,29 +470,69 @@ const rolloutDeptLabel = computed(() => {
                             {{ row.item.actualProgressPct }}
                           </span>
                         </div>
+                      </div>
+
+                      <div class="space-y-3 border-t border-slate-100 pt-1">
+                        <p class="text-[11px] font-extrabold uppercase tracking-[0.1em] text-slate-500">
+                          Minh chứng / ghi chú
+                        </p>
                         <div
-                          class="flex items-start justify-between gap-2 border-t border-slate-100 pt-1.5 leading-snug"
+                          v-if="rolloutEvidenceNoteOnly(row.item)"
+                          class="rounded-xl border border-amber-200/80 bg-amber-50/95 px-3.5 py-3 text-[13px] leading-relaxed text-amber-950 shadow-sm"
                         >
-                          <span class="shrink-0 font-medium text-slate-500">Minh chứng / ghi chú</span>
-                          <div class="flex min-w-0 flex-col items-end gap-0.5 text-right">
-                            <span
-                              v-if="rolloutEvidenceNoteDisplay(row.item)"
-                              class="max-w-full font-medium text-slate-700 break-words"
-                            >
-                              {{ rolloutEvidenceNoteDisplay(row.item) }}
-                            </span>
-                            <a
-                              v-if="row.item.evidenceAttachmentUrl"
-                              :href="row.item.evidenceAttachmentUrl"
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              class="inline-flex max-w-full items-center justify-end gap-1 break-all font-bold text-indigo-600 hover:text-indigo-800 hover:underline"
-                            >
-                              <i class="fas fa-paperclip shrink-0 text-[12px]" />
-                              Xem bằng chứng đính kèm
-                            </a>
-                          </div>
+                          {{ rolloutEvidenceNoteOnly(row.item) }}
                         </div>
+                        <p
+                          v-else
+                          class="rounded-lg border border-dashed border-slate-200 bg-slate-50/80 px-3 py-2 text-xs italic text-slate-400"
+                        >
+                          Không có ghi chú kèm theo.
+                        </p>
+
+                        <ul
+                          v-if="row.item.evidenceAttachments && row.item.evidenceAttachments.length > 0"
+                          class="space-y-2"
+                        >
+                          <li
+                            v-for="(att, ai) in row.item.evidenceAttachments"
+                            :key="'ev-' + ai"
+                            class="flex gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2.5 shadow-sm transition-colors hover:border-indigo-200 hover:bg-indigo-50/30"
+                          >
+                            <span
+                              class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600"
+                            >
+                              <i class="fas fa-link text-sm" />
+                            </span>
+                            <div class="min-w-0 flex-1 space-y-2">
+                              <a
+                                :href="normalizeEvidenceHref(att.url)"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                class="break-all text-[13px] font-semibold text-indigo-700 hover:text-indigo-900 hover:underline"
+                              >
+                                {{ att.name || att.url }}
+                              </a>
+                              <div v-if="isEvidenceImageUrl(att.url)" class="overflow-hidden rounded-lg border border-slate-100 bg-slate-50">
+                                <img
+                                  :src="normalizeEvidenceHref(att.url)"
+                                  :alt="att.name || 'Minh chứng'"
+                                  class="max-h-40 w-full object-contain"
+                                />
+                              </div>
+                            </div>
+                          </li>
+                        </ul>
+
+                        <a
+                          v-if="row.item.evidenceAttachmentUrl"
+                          :href="row.item.evidenceAttachmentUrl"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          class="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50/80 px-3 py-2.5 text-xs font-bold text-indigo-800 transition-colors hover:bg-indigo-100"
+                        >
+                          <i class="fas fa-paperclip" />
+                          Xem bằng chứng đính kèm
+                        </a>
                       </div>
                     </div>
                   </div>
@@ -472,7 +628,7 @@ const rolloutDeptLabel = computed(() => {
                       {{ item.obj }}
                     </p>
                     <p
-                      class="mt-1.5 text-[11px] leading-relaxed"
+                      class="mt-1.5 whitespace-pre-line text-[11px] leading-relaxed"
                       :class="isMissing(item) ? 'text-rose-700/90' : 'text-slate-500'"
                     >
                       {{ targetLine(item) }}

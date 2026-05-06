@@ -1,8 +1,14 @@
 <script setup lang="ts">
 const props = defineProps({
-  requests: { type: Array as () => any[], required: true }
+  requests: { type: Array as () => any[], required: true },
+  loading: { type: Boolean, default: false },
+  actionBusy: { type: Boolean, default: false },
 })
-const emit = defineEmits(['open-request'])
+const emit = defineEmits<{
+  'open-request': [req: any]
+  approve: [req: any]
+  reject: [req: any]
+}>()
 
 // HELPERS UI
 const getRequestTypeColor = (type: string) => {
@@ -17,8 +23,8 @@ const getRequestStatusColor = (status: string) => {
 }
 
 const openRequestDetail = (req: any) => emit('open-request', req)
-const approveRequest = (req: any) => { req.status = 'APPROVED' }
-const rejectRequest = (req: any) => { req.status = 'REJECTED' }
+const approveRequest = (req: any) => emit('approve', req)
+const rejectRequest = (req: any) => emit('reject', req)
 </script>
 
 <template>
@@ -32,7 +38,12 @@ const rejectRequest = (req: any) => { req.status = 'REJECTED' }
       </div>
     </div>
 
-    <table class="w-full text-left">
+    <div v-if="loading" class="flex items-center justify-center gap-2 py-16 text-slate-500 text-sm">
+      <i class="fas fa-spinner fa-spin" />
+      Đang tải đề xuất…
+    </div>
+
+    <table v-else class="w-full text-left">
       <thead class="bg-white border-b border-slate-200 text-[10px] font-bold uppercase tracking-wider text-slate-500">
         <tr>
           <th class="py-4 px-5 w-1/4">User</th>
@@ -43,6 +54,14 @@ const rejectRequest = (req: any) => { req.status = 'REJECTED' }
         </tr>
       </thead>
       <tbody class="divide-y divide-slate-100">
+        <tr
+          v-if="!props.requests.length"
+          class="bg-white"
+        >
+          <td colspan="5" class="py-12 text-center text-sm text-slate-500">
+            Không có đề xuất KPI nào chờ duyệt (402).
+          </td>
+        </tr>
         <tr v-for="req in props.requests" :key="req.id" class="hover:bg-slate-50 transition-colors cursor-pointer" @click="openRequestDetail(req)">
           <td class="py-4 px-5 align-top">
             <div class="flex items-center gap-3">
@@ -74,10 +93,22 @@ const rejectRequest = (req: any) => { req.status = 'REJECTED' }
           </td>
           <td class="py-4 px-5 text-right align-top">
             <div v-if="req.status === 'PENDING'" class="flex items-center justify-end gap-2">
-              <button @click.stop="approveRequest(req)" class="w-8 h-8 flex items-center justify-center bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border border-emerald-200 rounded shadow-sm transition-colors" title="Approve">
+              <button
+                type="button"
+                :disabled="actionBusy"
+                @click.stop="approveRequest(req)"
+                class="w-8 h-8 flex items-center justify-center bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border border-emerald-200 rounded shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Duyệt — chuyển 403 (chờ GM)"
+              >
                 <i class="fas fa-check text-xs"></i>
               </button>
-              <button @click.stop="rejectRequest(req)" class="w-8 h-8 flex items-center justify-center bg-rose-50 text-rose-600 hover:bg-rose-100 border border-rose-200 rounded shadow-sm transition-colors" title="Reject">
+              <button
+                type="button"
+                :disabled="actionBusy"
+                @click.stop="rejectRequest(req)"
+                class="w-8 h-8 flex items-center justify-center bg-rose-50 text-rose-600 hover:bg-rose-100 border border-rose-200 rounded shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Từ chối — chuyển 406"
+              >
                 <i class="fas fa-times text-xs"></i>
               </button>
             </div>

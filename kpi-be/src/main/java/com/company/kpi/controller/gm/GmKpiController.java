@@ -8,6 +8,7 @@ import com.company.kpi.request.gm.CreateKpiTemplateItemRequest;
 import com.company.kpi.request.gm.CreateKpiTemplateRequest;
 import com.company.kpi.request.gm.GmApprovedKpiDecisionRequest;
 import com.company.kpi.request.gm.GmEvaluationHubConfirmRequest;
+import com.company.kpi.request.gm.GmPersonalEvaluationSubmitRequest;
 import com.company.kpi.request.gm.UpdateDepartmentRequest;
 import com.company.kpi.request.gm.UpdateKpiTemplateItemRequest;
 import com.company.kpi.request.gm.UpdateKpiTemplateRequest;
@@ -34,6 +35,7 @@ import com.company.kpi.service.gm.GmKpiDiagnosticsHierarchyService;
 import com.company.kpi.service.gm.GmKpiService;
 import com.company.kpi.service.gm.GmKpiTemplateService;
 import com.company.kpi.service.gm.GmProcessTimelineService;
+import com.company.kpi.service.member.MemberKpiService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -54,8 +56,8 @@ import java.util.UUID;
  *   GET /api/v1/kpi/gm/kpi-cycles-for-evaluation — chu kỳ {@code year} ≥ năm hiện tại (dropdown năm đánh giá)
  *   GET /api/v1/kpi/gm/evaluation-hub/assignments?cycleId= — tab đánh giá: assignments ASM 501/502/503/601/602/603
  *   POST /api/v1/kpi/gm/evaluation-hub/confirm — GM xác nhận drawer: 502→503, 602→603
- *   GET /api/v1/kpi/gm/approved-kpi-queue?cycleId= — KPI cá nhân ASM 401/402/403 (tab Approved KPI)
- *   POST /api/v1/kpi/gm/approved-kpi-queue/decision — 403→404 (duyệt) hoặc 403→406 (từ chối)
+ *   GET /api/v1/kpi/gm/approved-kpi-queue?cycleId= — KPI cá nhân ASM 401/402/403
+ *   POST /api/v1/kpi/gm/approved-kpi-queue/decision — 403→405/406 hoặc 407→404 (resolve feedback)
  *   GET /api/v1/kpi/gm/sections/:sectionId/members?year=2025
  *   GET /api/v1/kpi/gm/kpi-templates — {@code kpi_templates}
  *   POST /api/v1/kpi/gm/kpi-templates — tạo gói template
@@ -88,6 +90,7 @@ public class GmKpiController extends BaseController {
     private final GmEvaluationHubService gmEvaluationHubService;
     private final GmApprovedKpiService gmApprovedKpiService;
     private final GmProcessTimelineService gmProcessTimelineService;
+    private final MemberKpiService memberKpiService;
 
     /** Danh sách phòng ban — {@code departments} (chưa xóa mềm); {@code year} lọc KPI giao cho phòng theo năm chu kỳ. */
     @GetMapping("/departments")
@@ -233,12 +236,14 @@ public class GmKpiController extends BaseController {
 
     /** Chu kỳ có dữ liệu KPI trên DB — «Năm nguồn» sao chép nhanh (form GM). */
     @GetMapping("/kpi-cycles-with-kpis")
+    @PreAuthorize("hasAnyRole('GM','LEADER','PM','MEMBER')")
     public ResponseEntity<BaseResponse<List<GmKpiCycleOptionResponse>>> listKpiCyclesWithKpis() {
         return success(gmKpiCycleService.listCyclesWithKpisInformation());
     }
 
     /** Chu kỳ trong DB có {@code year} ≥ năm hiện tại — không hiển thị năm quá khứ. */
     @GetMapping("/kpi-cycles-for-evaluation")
+    @PreAuthorize("hasAnyRole('GM','LEADER','PM','MEMBER')")
     public ResponseEntity<BaseResponse<List<GmKpiCycleOptionResponse>>> listKpiCyclesForEvaluation() {
         return success(gmKpiCycleService.listCyclesForEvaluationFromCurrentYear());
     }
@@ -270,7 +275,7 @@ public class GmKpiController extends BaseController {
         return success(gmApprovedKpiService.listQueue(cycleId));
     }
 
-    /** GM duyệt (✓) hoặc từ chối (✗) đề xuất KPI — chỉ khi đang 403. */
+    /** GM duyệt/từ chối đề xuất KPI (403) hoặc xử lý feedback PM (407→404). */
     @PostMapping("/approved-kpi-queue/decision")
     public ResponseEntity<BaseResponse<GmApprovedKpiDecisionResponse>> decideApprovedKpi(
             @Valid @RequestBody GmApprovedKpiDecisionRequest body, Authentication authentication) {
@@ -299,5 +304,17 @@ public class GmKpiController extends BaseController {
     public ResponseEntity<BaseResponse<GmProcessTimelineResponse>> getProcessTimeline(
             @RequestParam("cycleId") UUID cycleId) {
         return success(gmProcessTimelineService.getTimeline(cycleId));
+    }
+
+    /**
+     * KPI cá nhân (GM): sau khi lưu Actual / điểm từng dòng, GM «Gửi» để khóa đợt —
+     * giữa kỳ {@code 405→503}, cuối kỳ {@code 503→603} (theo cửa sổ {@code kpi_cycles}).
+     */
+    @PostMapping("/personal-evaluation/submit")
+    public ResponseEntity<BaseResponse<Void>> submitGmPersonalEvaluation(
+            @Valid @RequestBody GmPersonalEvaluationSubmitRequest body, Authentication authentication) {
+        UUID userId = UUID.fromString((String) authentication.getPrincipal());
+        memberKpiService.submitGmPersonalEvaluation(userId, body.getCycleId());
+        return success(null);
     }
 }

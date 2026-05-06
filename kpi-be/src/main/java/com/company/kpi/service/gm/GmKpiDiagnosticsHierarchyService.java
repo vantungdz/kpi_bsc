@@ -28,6 +28,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 @Service
@@ -46,7 +48,20 @@ public class GmKpiDiagnosticsHierarchyService {
     private static final BigDecimal END_THRESH_HIGH = BigDecimal.ONE;
     private static final BigDecimal END_THRESH_LOW = new BigDecimal("0.85");
 
+    /** Dùng so sánh target catalog / nhãn hiển thị với tổng đã giao (tránh nhiễu số thực). */
+    private static final BigDecimal TARGET_CMP_EPS = new BigDecimal("0.01");
+
+    /** Nhãn dạng {@code min–max} (en-dash) hoặc {@code min-max} giữa hai số. */
+    private static final Pattern TARGET_RANGE_NUMERIC =
+            Pattern.compile("^(\\d+(?:\\.\\d+)?)\\s*(?:\u2013|-)\\s*(\\d+(?:\\.\\d+)?)$");
+
     private record PerfStatus(String status, String label) {}
+
+    /**
+     * Số trần đồng bộ chuỗi hiển thị Actual và FE tiến độ ({@code submissionTarget}/{@code submissionActual});
+     * chỉ điền trong cửa mid (501–503) hoặc end (≥601).
+     */
+    private record SubmissionSnapshot(BigDecimal target, BigDecimal actual) {}
 
     /**
      * Không phải {@code departments.id} thật — chỉ dùng làm khóa {@link Collectors#groupingBy} khi
@@ -117,9 +132,11 @@ public class GmKpiDiagnosticsHierarchyService {
         Map<UUID, List<GmDiagnosticsFlatRow>> bySection = kpiRows.stream()
                 .collect(Collectors.groupingBy(GmKpiDiagnosticsHierarchyService::sectionGroupKey, LinkedHashMap::new, Collectors.toList()));
 
+        String kpiWeightDisplay = formatWeight(first.getKpiWeight());
+
         List<GmDiagPmNode> pmOwners = new ArrayList<>();
         for (Map.Entry<UUID, List<GmDiagnosticsFlatRow>> se : bySection.entrySet()) {
-            pmOwners.add(buildPmNode(kpiInfoId, se.getKey(), se.getValue(), first));
+            pmOwners.add(buildPmNode(kpiInfoId, se.getKey(), se.getValue(), first, kpiWeightDisplay));
         }
 
         // Với INDIVIDUAL/PROMOTION: PM status bị ép cứng = "warning" (supervisor không theo dõi),
@@ -146,15 +163,29 @@ public class GmKpiDiagnosticsHierarchyService {
 
         long assignmentCount = kpiRows.stream().map(GmDiagnosticsFlatRow::getAssignmentId).filter(Objects::nonNull).count();
 
+        // KPI: so catalog với tổng target **theo nhãn từng khối** (5 + 5 = 10), không cộng trùng từng assignment con.
+        BigDecimal kpiAllocatedTotal = sumDepartmentTargetsFromPmNodes(pmOwners);
+        BigDecimal kpiRefTarget = first.getCatalogTargetValue();
+        if (kpiRefTarget == null) {
+            kpiRefTarget = tryParseBigDecimalForBalance(formatKpiTarget(first));
+        }
+        String kpiTargetBalance = classifyNumericBalance(kpiRefTarget, kpiAllocatedTotal);
+        // INDIVIDUAL / PROMOTION: mỗi đơn vị nhận đúng target KPI gốc — không so «tổng các khối» với catalog (khác semantics KPI Team).
+        if (shouldSuppressSupervisorMetrics(first.getTypeCode())) {
+            kpiTargetBalance = null;
+        }
+
         return GmDiagKpiNode.builder()
                 .id("diag-kpi-" + kpiInfoId)
                 .name(displayName)
                 .weight(formatWeight(first.getKpiWeight()))
                 .target(formatKpiTarget(first))
+                .targetBalance(kpiTargetBalance)
                 .actual(rollup.actual())
                 .status(rollup.status())
                 .blockerSummary(pmOwners.size() + " đơn vị · " + assignmentCount + " assignment")
                 .kpiType(mapTypeCodeToKpiType(first.getTypeCode()))
+                .isGlobal(first.getIsGlobal())
                 .unitCode(first.getUnitCode())
                 .categoryId(first.getCategoryId() != null ? first.getCategoryId().toString() : null)
                 .categoryName(first.getCategoryName())
@@ -190,7 +221,172 @@ public class GmKpiDiagnosticsHierarchyService {
         return sid != null ? sid : SECTION_GROUP_FALLBACK;
     }
 
-    private GmDiagPmNode buildPmNode(UUID kpiInfoId, UUID sectionId, List<GmDiagnosticsFlatRow> secRows, GmDiagnosticsFlatRow kpiFirst) {
+    /**
+     * Lấy một số từ nhãn target dòng khối để cộng lên KPI: một số thuần, hoặc khoảng {@code min–max} thì lấy {@code max}
+     * (trần ngân sách hiển thị cho khối).
+     */
+    private static BigDecimal parsePmDisplayTargetForKpiRollup(String targetLabel) {
+        if (targetLabel == null) {
+            return null;
+        }
+        String d = targetLabel.trim();
+        if (d.isEmpty() || "—".equals(d) || "-".equals(d)) {
+            return null;
+        }
+        Matcher rangeMatch = TARGET_RANGE_NUMERIC.matcher(d);
+        if (rangeMatch.matches()) {
+            BigDecimal min = new BigDecimal(rangeMatch.group(1));
+            BigDecimal max = new BigDecimal(rangeMatch.group(2));
+            if (min.compareTo(max) > 0) {
+                BigDecimal swap = min;
+                min = max;
+                max = swap;
+            }
+            return max;
+        }
+        return tryParseBigDecimalForBalance(d);
+    }
+
+    /** Tổng target theo các dòng department (bỏ «Chưa giao») — dùng so với target catalog KPI. */
+    private static BigDecimal sumDepartmentTargetsFromPmNodes(List<GmDiagPmNode> pmOwners) {
+        if (pmOwners == null) {
+            return BigDecimal.ZERO;
+        }
+        BigDecimal s = BigDecimal.ZERO;
+        for (GmDiagPmNode pm : pmOwners) {
+            if (pm.getId() != null && pm.getId().startsWith("diag-pm-unassigned-")) {
+                continue;
+            }
+            BigDecimal part = parsePmDisplayTargetForKpiRollup(pm.getTarget());
+            if (part != null) {
+                s = s.add(part);
+            }
+        }
+        return s;
+    }
+
+    private static BigDecimal tryParseBigDecimalForBalance(String raw) {
+        if (raw == null) {
+            return null;
+        }
+        String t = raw.trim();
+        if (t.isEmpty() || "—".equals(t) || "-".equals(t)) {
+            return null;
+        }
+        try {
+            return new BigDecimal(t);
+        } catch (NumberFormatException ex) {
+            return null;
+        }
+    }
+
+    /**
+     * So sánh một mục tiêu tham chiếu (catalog KPI) với tổng target đã giao trên assignment
+     * ({@code short} / {@code ok} / {@code excess}).
+     */
+    private static String classifyNumericBalance(BigDecimal reference, BigDecimal allocatedSum) {
+        if (reference == null || allocatedSum == null) {
+            return null;
+        }
+        if (allocatedSum.add(TARGET_CMP_EPS).compareTo(reference) < 0) {
+            return "short";
+        }
+        if (allocatedSum.subtract(TARGET_CMP_EPS).compareTo(reference) > 0) {
+            return "excess";
+        }
+        return "ok";
+    }
+
+    /**
+     * So nhãn target hiển thị (một số hoặc khoảng {@code min–max}) với tổng đã giao.
+     * Khoảng: dưới min → thiếu, trên max → thừa, trong đoạn → đủ.
+     */
+    private static String classifyDisplayAgainstAllocated(
+            String displayTarget, BigDecimal allocatedSum, boolean suppressed) {
+        if (suppressed || displayTarget == null) {
+            return null;
+        }
+        String d = displayTarget.trim();
+        if (d.isEmpty() || "—".equals(d) || "-".equals(d)) {
+            return null;
+        }
+        BigDecimal allocated = allocatedSum != null ? allocatedSum : BigDecimal.ZERO;
+        Matcher rangeMatch = TARGET_RANGE_NUMERIC.matcher(d);
+        if (rangeMatch.matches()) {
+            BigDecimal min = new BigDecimal(rangeMatch.group(1));
+            BigDecimal max = new BigDecimal(rangeMatch.group(2));
+            if (min.compareTo(max) > 0) {
+                BigDecimal swap = min;
+                min = max;
+                max = swap;
+            }
+            if (allocated.add(TARGET_CMP_EPS).compareTo(min) < 0) {
+                return "short";
+            }
+            if (allocated.subtract(TARGET_CMP_EPS).compareTo(max) > 0) {
+                return "excess";
+            }
+            return "ok";
+        }
+        BigDecimal single = tryParseBigDecimalForBalance(d);
+        return classifyNumericBalance(single, allocated);
+    }
+
+    private static BigDecimal sumParsedMemberTargets(List<GmDiagMemberNode> members) {
+        if (members == null || members.isEmpty()) {
+            return BigDecimal.ZERO;
+        }
+        BigDecimal s = BigDecimal.ZERO;
+        for (GmDiagMemberNode mem : members) {
+            BigDecimal p = tryParseBigDecimalForBalance(mem.getTarget());
+            if (p != null) {
+                s = s.add(p);
+            }
+        }
+        return s;
+    }
+
+    private static BigDecimal sumDisplayTargetsFromLeaders(List<GmDiagLeaderNode> leaders) {
+        if (leaders == null || leaders.isEmpty()) {
+            return BigDecimal.ZERO;
+        }
+        BigDecimal s = BigDecimal.ZERO;
+        for (GmDiagLeaderNode leader : leaders) {
+            BigDecimal p = parsePmDisplayTargetForKpiRollup(leader.getTarget());
+            if (p != null) {
+                s = s.add(p);
+            }
+        }
+        return s;
+    }
+
+    private static BigDecimal sumImmediateChildTargets(
+            List<GmDiagMemberNode> members,
+            List<GmDiagLeaderNode> leaders) {
+        return sumParsedMemberTargets(members).add(sumDisplayTargetsFromLeaders(leaders));
+    }
+
+    private static BigDecimal sumSectionChildTargets(
+            List<GmDiagMemberNode> membersForResponse,
+            List<GmDiagLeaderNode> leaders,
+            UUID sectionManagerId) {
+        if (membersForResponse != null && sectionManagerId != null) {
+            for (GmDiagMemberNode member : membersForResponse) {
+                if (sectionManagerId.equals(memberNodeUuidOrNull(member))) {
+                    BigDecimal selfTarget = tryParseBigDecimalForBalance(member.getTarget());
+                    return selfTarget != null ? selfTarget : BigDecimal.ZERO;
+                }
+            }
+        }
+        return sumImmediateChildTargets(membersForResponse, leaders);
+    }
+
+    private GmDiagPmNode buildPmNode(
+            UUID kpiInfoId,
+            UUID sectionId,
+            List<GmDiagnosticsFlatRow> secRows,
+            GmDiagnosticsFlatRow kpiFirst,
+            String kpiWeightDisplay) {
         Integer kpiTypeCode = kpiFirst.getTypeCode();
         boolean suppressSupervisorMetrics = shouldSuppressSupervisorMetrics(kpiTypeCode);
         if (secRows.stream().allMatch(r -> r.getAssignmentId() == null)) {
@@ -202,7 +398,9 @@ public class GmKpiDiagnosticsHierarchyService {
                     .ownerRoleCode(null)
                     .ownerRoleLabel(null)
                     .unitLine("—")
+                    .weight(null)
                     .target(sectionTargetLabel)
+                    .targetBalance(null)
                     .actual("—")
                     .status("warning")
                     .blockerSummary("Chưa có bản ghi giao (kpi_assignments)")
@@ -214,9 +412,8 @@ public class GmKpiDiagnosticsHierarchyService {
         GmDiagnosticsFlatRow sf = secRows.get(0);
         String pmRowId = "diag-pm-" + sectionId + "-" + kpiInfoId;
 
-        List<GmDiagMemberNode> pmMembers = secRows.stream()
-                .map(r -> toMemberNode(r, kpiFirst))
-                .collect(Collectors.toList());
+        List<GmDiagMemberNode> pmMembers =
+                secRows.stream().map(r -> toMemberNode(r, kpiFirst, kpiWeightDisplay)).collect(Collectors.toList());
 
         /** Target hiển thị trên dòng PM/đơn vị: từ {@code kpi_assignments.target_value} (flat), không dùng catalog KPI. */
         String sectionTargetLabel = suppressSupervisorMetrics ? "—" : formatPmSectionTargetFromRows(secRows, kpiFirst);
@@ -235,7 +432,8 @@ public class GmKpiDiagnosticsHierarchyService {
                     sectionTargetLabel,
                     sf.getSectionManagerName(),
                     sf.getSectionManagerId(),
-                    suppressSupervisorMetrics);
+                    suppressSupervisorMetrics,
+                    kpiWeightDisplay);
             if (split == null) {
                 leaders = null;
                 directMembers = pmMembers;
@@ -266,6 +464,10 @@ public class GmKpiDiagnosticsHierarchyService {
                 ? (pmMembers.size() == 1 ? "1 người nhận KPI" : pmMembers.size() + " người nhận KPI")
                 : pmMembers.size() + " thành viên";
 
+        BigDecimal sectionAllocated = sumSectionChildTargets(membersForResponse, leaders, sf.getSectionManagerId());
+        String pmTargetBalance = classifyDisplayAgainstAllocated(sectionTargetLabel, sectionAllocated, suppressSupervisorMetrics);
+        applyPmSelfTargetBalance(membersForResponse, leaders, sf.getSectionManagerId(), suppressSupervisorMetrics);
+
         return GmDiagPmNode.builder()
                 .id(pmRowId)
                 .name(pmDisplayName)
@@ -273,13 +475,44 @@ public class GmKpiDiagnosticsHierarchyService {
                 .ownerRoleCode(ownerRoleCode)
                 .ownerRoleLabel(ownerRoleLabel)
                 .unitLine(unitLine)
+                .weight(kpiWeightDisplay)
                 .target(sectionTargetLabel)
+                .targetBalance(pmTargetBalance)
                 .actual(pmActualLabel)
                 .status(pmStatus)
                 .blockerSummary(blockerSummary)
                 .members(membersForResponse)
                 .leaders(leaders)
                 .build();
+    }
+
+    private static void applyPmSelfTargetBalance(
+            List<GmDiagMemberNode> membersForResponse,
+            List<GmDiagLeaderNode> leaders,
+            UUID sectionManagerId,
+            boolean suppressSupervisorMetrics) {
+        if (membersForResponse == null || membersForResponse.isEmpty() || sectionManagerId == null || suppressSupervisorMetrics) {
+            return;
+        }
+        GmDiagMemberNode self = null;
+        for (GmDiagMemberNode member : membersForResponse) {
+            UUID memberId = memberNodeUuidOrNull(member);
+            if (sectionManagerId.equals(memberId)) {
+                self = member;
+                break;
+            }
+        }
+        if (self == null) {
+            return;
+        }
+        List<GmDiagMemberNode> childMembers = membersForResponse.stream()
+                .filter(member -> !sectionManagerId.equals(memberNodeUuidOrNull(member)))
+                .collect(Collectors.toList());
+        BigDecimal allocated = sumImmediateChildTargets(childMembers, leaders);
+        if (allocated.compareTo(BigDecimal.ZERO) == 0) {
+            return;
+        }
+        self.setTargetBalance(classifyDisplayAgainstAllocated(self.getTarget(), allocated, false));
     }
 
     /** Tên hiển thị trên node PM cho KPI team: đúng danh sách assignee từ flat rows. */
@@ -323,12 +556,30 @@ public class GmKpiDiagnosticsHierarchyService {
         return t.isEmpty() ? null : t;
     }
 
-    private static GmDiagMemberNode toMemberNode(GmDiagnosticsFlatRow r, GmDiagnosticsFlatRow kpiFirst) {
+    private static SubmissionSnapshot computeSubmissionSnapshot(GmDiagnosticsFlatRow r) {
+        if (!isMidPhaseAssignment(r) && !isEndPhaseAssignment(r)) {
+            return new SubmissionSnapshot(null, null);
+        }
+        BigDecimal target = annualTargetForRatio(r);
+        BigDecimal actual = null;
+        if (isEndPhaseAssignment(r)) {
+            actual = endPhaseDisplayScore(r);
+        } else {
+            actual = r.getMidSelfScore();
+        }
+        return new SubmissionSnapshot(target, actual);
+    }
+
+    private static GmDiagMemberNode toMemberNode(
+            GmDiagnosticsFlatRow r, GmDiagnosticsFlatRow kpiFirst, String kpiWeightDisplay) {
+        SubmissionSnapshot ss = computeSubmissionSnapshot(r);
         if (r.getMemberId() == null) {
             String fallbackId = r.getAssignmentId() != null ? r.getAssignmentId().toString() : "unknown";
             return GmDiagMemberNode.builder()
                     .id("diag-member-" + fallbackId)
+                    .assignmentId(r.getAssignmentId() != null ? r.getAssignmentId().toString() : null)
                     .name("(Không tải được user giao)")
+                    .weight(kpiWeightDisplay)
                     .statusCode(r.getStatusCode())
                     .target(formatKpiTarget(kpiFirst))
                     .actual("—")
@@ -341,12 +592,17 @@ public class GmKpiDiagnosticsHierarchyService {
                     .ownerRoleLabel(null)
                     .leaderRoleCode(r.getLeaderRoleCode())
                     .leaderRoleName(trimOrNull(r.getLeaderRoleName()))
+                    .submissionTarget(ss.target())
+                    .submissionActual(ss.actual())
+                    .feedbackNote(trimOrNull(r.getFeedbackNote()))
                     .build();
         }
         PerfStatus perf = computeMemberPerformance(r);
         return GmDiagMemberNode.builder()
                 .id(r.getMemberId().toString())
+                .assignmentId(r.getAssignmentId() != null ? r.getAssignmentId().toString() : null)
                 .name(r.getMemberName())
+                .weight(kpiWeightDisplay)
                 .statusCode(r.getStatusCode())
                 .target(formatMemberTarget(r.getMemberTargetValue(), kpiFirst))
                 .actual(formatMemberActual(r))
@@ -359,6 +615,9 @@ public class GmKpiDiagnosticsHierarchyService {
                 .ownerRoleLabel(trimOrNull(r.getMemberRoleName()))
                 .leaderRoleCode(r.getLeaderRoleCode())
                 .leaderRoleName(trimOrNull(r.getLeaderRoleName()))
+                .submissionTarget(ss.target())
+                .submissionActual(ss.actual())
+                .feedbackNote(trimOrNull(r.getFeedbackNote()))
                 .build();
     }
 
@@ -462,7 +721,8 @@ public class GmKpiDiagnosticsHierarchyService {
             String kpiTarget,
             String sectionManagerName,
             UUID sectionManagerId,
-            boolean suppressSupervisorMetrics) {
+            boolean suppressSupervisorMetrics,
+            String kpiWeightDisplay) {
         Map<String, List<GmDiagMemberNode>> groups = new LinkedHashMap<>();
         for (GmDiagMemberNode mem : pmMembers) {
             String key = leaderGroupKey(
@@ -494,12 +754,17 @@ public class GmKpiDiagnosticsHierarchyService {
             String leaderTargetLabel = suppressSupervisorMetrics ? "—" : leaderTarget;
             String leaderActualLabel = suppressSupervisorMetrics ? "—" : rollup.actual();
             String leaderStatus = rollup.status();
+            BigDecimal leaderAllocated = sumParsedMemberTargets(members);
+            String leaderTargetBalance =
+                    classifyDisplayAgainstAllocated(leaderTarget, leaderAllocated, suppressSupervisorMetrics);
             out.add(GmDiagLeaderNode.builder()
                     .id(pmRowId + "-ldr-" + idx + "-" + slug)
                     .name(key)
                     .ownerRoleCode(firstMemberLeaderRoleCode(members))
                     .ownerRoleLabel(firstMemberLeaderRoleName(members))
+                    .weight(kpiWeightDisplay)
                     .target(leaderTargetLabel)
+                    .targetBalance(leaderTargetBalance)
                     .actual(leaderActualLabel)
                     .status(leaderStatus)
                     .blockerSummary("")
@@ -687,7 +952,7 @@ public class GmKpiDiagnosticsHierarchyService {
                 continue;
             }
             String t = raw.trim();
-            if (t.isEmpty() || "—".equals(t)) {
+            if (t.isEmpty() || "—".equals(t) || "-".equals(t)) {
                 continue;
             }
             try {
@@ -711,17 +976,14 @@ public class GmKpiDiagnosticsHierarchyService {
     }
 
     /**
-     * Target (KPI / PM / Leader): {@code kpis_information.target_value} nếu có,
-     * không thì {@code kpis_information.target_description}.
+     * Target (KPI / PM / Leader) hiển thị: chỉ {@code kpis_information.target_value} (catalog).
+     * Không có số mục tiêu → «-» (không hiển thị {@code target_description} — thường là JSON quy tắc chấm điểm).
      */
     private static String formatKpiTarget(GmDiagnosticsFlatRow r) {
         if (r.getCatalogTargetValue() != null) {
             return r.getCatalogTargetValue().stripTrailingZeros().toPlainString();
         }
-        if (r.getKpiTargetDescription() != null && !r.getKpiTargetDescription().isBlank()) {
-            return r.getKpiTargetDescription();
-        }
-        return "—";
+        return "-";
     }
 
     private static boolean shouldSuppressSupervisorMetrics(Integer typeCode) {
@@ -730,7 +992,7 @@ public class GmKpiDiagnosticsHierarchyService {
 
     /**
      * Target member: {@code kpi_assignments.target_value} nếu có,
-     * không thì cùng thứ tự value → description trên dòng KPI ({@code kpis_information}).
+     * không thì fallback nhãn catalog KPI ({@link #formatKpiTarget} — «-» nếu không có target số).
      */
     private static String formatMemberTarget(BigDecimal memberTarget, GmDiagnosticsFlatRow kpiFirst) {
         if (memberTarget != null) {

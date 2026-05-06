@@ -1,5 +1,6 @@
 package com.company.kpi.response.kpi;
 
+import com.company.kpi.dto.kpi.KpiScoringRulesPayload;
 import lombok.Builder;
 import lombok.Data;
 
@@ -19,7 +20,7 @@ public class StrategicKpiEditResponse {
     private Integer typeCode;
     private UUID perspective;
     private String kpiName;
-    private String targetDescription;
+    private KpiScoringRulesPayload targetDescription;
     private BigDecimal targetValue;
     private Integer unitCode;
     private BigDecimal weightPct;

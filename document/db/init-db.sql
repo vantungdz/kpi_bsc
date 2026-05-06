@@ -46,6 +46,7 @@ INSERT INTO sys_status_codes (code, category, name, description) VALUES
 (404, 'ASM_STATUS', 'PENDING_ACCEPTANCE', 'Chờ Member bấm Accept'),
 (405, 'ASM_STATUS', 'ACCEPTED', 'Đã chốt mục tiêu (Đang chạy)'),
 (406, 'ASM_STATUS', 'REJECTED', 'Bị từ chối'),
+(407, 'ASM_STATUS', 'FEEDBACK_IN_PROGRESS', 'Kiểm tra feedback'),
 
 -- 5xx: Phase 2 (Đánh giá 1st Half)
 (501, 'ASM_STATUS', '1ST_WAITING_PM_APPROVAL', 'Member đã nộp bằng chứng 1st Half, chờ PM duyệt'),
@@ -312,6 +313,75 @@ CREATE TABLE kpi_assignments (
     )
 ) PARTITION BY LIST (cycle_id);
 
+CREATE TABLE IF NOT EXISTS kpi_assignment_feedbacks (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    -- Nếu dùng uuid-ossp thì đổi:
+    -- DEFAULT uuid_generate_v4(),
+
+    -- FK tới assignment (composite key)
+    assignment_id UUID NOT NULL,
+    cycle_id UUID NOT NULL,
+
+    -- Nội dung feedback
+    feedback_note TEXT NOT NULL,
+
+    -- Role cần xử lý
+    target_role_id UUID NOT NULL REFERENCES roles(id),
+
+    -- Người tạo
+    created_by UUID NOT NULL REFERENCES users(id),
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    -- Người xử lý
+    resolved_by UUID REFERENCES users(id),
+    resolved_at TIMESTAMP WITH TIME ZONE,
+
+    -- Trạng thái
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+
+    -- Soft delete
+    deleted_at TIMESTAMP WITH TIME ZONE,
+
+    -- FK assignment
+    CONSTRAINT fk_feedback_assignment
+        FOREIGN KEY (assignment_id, cycle_id)
+        REFERENCES kpi_assignments(id, cycle_id)
+        ON DELETE CASCADE,
+
+    -- 1. resolved_by và resolved_at phải đi cùng nhau
+    CONSTRAINT chk_feedback_resolve_fields
+        CHECK (
+            (resolved_by IS NULL AND resolved_at IS NULL)
+            OR
+            (resolved_by IS NOT NULL AND resolved_at IS NOT NULL)
+        ),
+
+    -- 2. Ràng buộc chặt trạng thái active vs resolved
+    CONSTRAINT chk_feedback_active_vs_resolve
+        CHECK (
+            (is_active = TRUE AND resolved_by IS NULL AND resolved_at IS NULL)
+            OR
+            (is_active = FALSE AND resolved_by IS NOT NULL AND resolved_at IS NOT NULL)
+        )
+);
+
+-- 3. Unique: mỗi assignment chỉ có 1 feedback active
+CREATE UNIQUE INDEX IF NOT EXISTS uq_feedback_one_active_per_assignment
+ON kpi_assignment_feedbacks (assignment_id, cycle_id)
+WHERE is_active = TRUE AND deleted_at IS NULL;
+
+-- 4. Index query phổ biến
+CREATE INDEX IF NOT EXISTS idx_feedback_assignment
+ON kpi_assignment_feedbacks (assignment_id, cycle_id)
+WHERE deleted_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS idx_feedback_target_active
+ON kpi_assignment_feedbacks (target_role_id, is_active)
+WHERE deleted_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS idx_feedback_created_at
+ON kpi_assignment_feedbacks (created_at DESC)
+WHERE deleted_at IS NULL;
 
 -- ============================================================================
 -- MODULE 5: CHỐT SỔ (SNAPSHOT LƯU TRỮ LỊCH SỬ REPORT)

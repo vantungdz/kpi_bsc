@@ -69,3 +69,46 @@ export function fallbackKpiUnitSelectOptions(): { unitCode: number; value: strin
     { unitCode: KPI_UNIT_CODE.PERSON, value: 'PERSON', label: 'Person' },
   ]
 }
+
+/** Hậu tố ngắn sau giá trị Target trên bảng (đồng bộ `KPI_UNIT` / `kpi_master.unit_code`). */
+function kpiUnitSuffixForTable(unitCode: unknown): string {
+  const n = typeof unitCode === 'number' ? unitCode : Number.parseInt(String(unitCode ?? ''), 10)
+  if (!Number.isFinite(n)) return ''
+  switch (n) {
+    case KPI_UNIT_CODE.PERCENT:
+      return '%'
+    case KPI_UNIT_CODE.MM:
+      return ' MM'
+    case KPI_UNIT_CODE.POINT:
+      return ' điểm'
+    case KPI_UNIT_CODE.PRODUCT:
+      return ' SP'
+    case KPI_UNIT_CODE.PROJECT:
+      return ' DA'
+    case KPI_UNIT_CODE.CERTIFICATION:
+      return ' cert'
+    case KPI_UNIT_CODE.ARTICLE:
+      return ' bài'
+    case KPI_UNIT_CODE.PERSON:
+      return ' người'
+    default:
+      return ` ${kpiUnitCodeToFormUnit(n)}`
+  }
+}
+
+/**
+ * Ghép chỉ tiêu đã format (vd «-», «95») với đơn vị — vd `95%`, `100 MM`.
+ * Chuỗi đã kết thúc bằng `%` thì không thêm `%` lần nữa.
+ */
+export function formatKpiTargetWithUnit(
+  targetDisplay: string | number | null | undefined,
+  unitCode?: number | null,
+): string {
+  const s = String(targetDisplay ?? '').trim()
+  if (!s || s === '-' || s === '—' || s === '–') return '-'
+  const suf = kpiUnitSuffixForTable(unitCode)
+  if (!suf) return s
+  if (suf === '%' && /%$/.test(s)) return s
+  if (suf === ' MM' && /\bMM$/i.test(s)) return s
+  return `${s}${suf}`
+}

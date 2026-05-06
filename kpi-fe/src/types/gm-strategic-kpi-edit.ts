@@ -1,5 +1,10 @@
 /** GET/PUT `/kpi/strategic-kpis/:id` — payload chỉnh sửa KPI chiến lược. */
 
+export interface KpiScoringRulesPayload {
+  rawInput?: string | null
+  rules?: Array<Record<string, unknown>>
+}
+
 export interface GmStrategicKpiEditData {
   kpiInformationId: string
   cycleId: string
@@ -7,7 +12,7 @@ export interface GmStrategicKpiEditData {
   typeCode: number
   perspective: string
   kpiName: string
-  targetDescription: string | null
+  targetDescription: KpiScoringRulesPayload | null
   targetValue: number | string | null
   unitCode: number
   weightPct: number | string

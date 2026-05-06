@@ -15,6 +15,10 @@ public class UserTeamHierarchyAggregate extends User {
     private JobTitle jobTitle;
     
     private UUID supervisorId;
-    private BigDecimal totalScore;
+    private BigDecimal selfScore;
+    private BigDecimal pmScore;
+    private String pmComment;
     private Integer minStatusCode;
+    /** Có assignment trong kỳ đang chờ PM đánh giá (501 giữa kỳ / 601 cuối kỳ). */
+    private Boolean requiresPmEvaluation;
 }

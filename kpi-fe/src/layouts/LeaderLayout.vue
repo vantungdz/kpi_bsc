@@ -1,10 +1,26 @@
 <script setup lang="ts">
-import { useRoute } from "vue-router";
-import { useAuth } from "@/composables/useAuth";
-import { countPendingScoring } from "@/mocks/leaderManager.mock";
+import { computed, onMounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
+import { useAuth } from '@/composables/useAuth'
+import { leaderKpiService } from '@/services/modules/kpi-leader.service'
+import type { LeaderKpiInformationResponse } from '@/types/kpi'
 
-const route = useRoute();
-const { user, logout } = useAuth();
+const route = useRoute()
+const { user, logout } = useAuth()
+
+// ── KPI summary stats (sidebar) ───────────────────────────────────────────────
+const kpiSummaryData = ref<LeaderKpiInformationResponse | null>(null)
+
+async function fetchKpiSummary() {
+  try {
+    kpiSummaryData.value = await leaderKpiService.getKpiInfo(new Date().getFullYear(), 'INDIVIDUAL')
+  } catch {
+    kpiSummaryData.value = null
+  }
+}
+
+onMounted(fetchKpiSummary)
+watch(() => user.value, (u) => { if (u) fetchKpiSummary() })
 
 const navItems = [
   { name: "Dashboard", icon: "fas fa-chart-pie", to: "/leader/dashboard" },
@@ -34,11 +50,6 @@ const isActive = (path: string) => route.path.startsWith(path);
           <span class="text-lg font-bold text-slate-900 tracking-tight"
             >KPI System</span
           >
-          <p
-            class="text-[10px] text-slate-400 font-medium uppercase tracking-wider"
-          >
-            Leader Portal
-          </p>
         </div>
       </div>
 
@@ -55,7 +66,7 @@ const isActive = (path: string) => route.path.startsWith(path);
           class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 group border"
           :class="
             isActive(item.to)
-              ? 'bg-emerald-50 text-emerald-700 border-emerald-100 shadow-sm'
+              ? 'bg-emerald-50 text-emerald-700'
               : 'text-slate-600 border-transparent hover:bg-slate-50 hover:text-slate-900 hover:border-slate-200'
           "
         >
@@ -110,11 +121,16 @@ const isActive = (path: string) => route.path.startsWith(path);
           </p>
           <h2 class="text-xl font-bold text-slate-800">KPI Management</h2>
         </div>
-        <div class="text-right pl-4 border-l border-slate-200">
-          <p class="text-sm font-bold text-slate-800">
-            {{ user?.name ?? "–" }}
-          </p>
-          <p class="text-xs text-slate-500">{{ user?.rank ?? "Leader" }}</p>
+        <div class="flex items-center gap-4">
+          <div class="flex items-center gap-3 pl-4 border-l border-slate-200 cursor-pointer">
+            <div class="w-8 h-8 rounded-full bg-slate-100 text-slate-700 font-bold flex items-center justify-center border border-slate-200 text-xs">
+              {{ (user?.name ?? '?').charAt(0).toUpperCase() }}
+            </div>
+            <div class="hidden md:block">
+              <p class="text-sm font-bold text-slate-700 leading-tight">{{ user?.name ?? '–' }}</p>
+              <p class="text-xs text-slate-400 font-medium">Rank: {{ user?.rank ?? user?.role }}</p>
+            </div>
+          </div>
         </div>
       </header>
 

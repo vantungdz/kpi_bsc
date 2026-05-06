@@ -4,8 +4,36 @@
  * Teams contain only members the GM scores (direct PM line — no “via another member” rows in this dataset).
  */
 
-import { gmLayoutMockDepartments } from './gm-kpi.mock'
 import type { GmDepartmentMock } from '@/types/gm-workspace'
+
+/** Section tối thiểu cho mock hub `/gm/employee-evaluation` (không phụ thuộc DB giả). */
+const GM_EVAL_SECTION_DEPARTMENTS: GmDepartmentMock[] = Array.from({ length: 10 }, (_, i) => {
+  const n = i + 1
+  const managers = [
+    'Thai Van Liem',
+    'Nguyen Van A',
+    'Tran Thi B',
+    'Le Van C',
+    'Pham Ba Quoc Tai',
+    'Dinh Thi E',
+    'Vu Hoang F',
+    'Hoang Van G',
+    'Bui Thi H',
+    'Le Van K',
+  ] as const
+  return {
+    id: `S${n}`,
+    name: `Section ${n}`,
+    manager: managers[i] ?? `Manager ${n}`,
+    health: 0,
+    progress: 0,
+    risks: { critical: 0, medium: 0 },
+    responsibility: '-',
+    breakdown: '—',
+    impact: null,
+    kpis: [],
+  }
+})
 
 export type GmEmployeeSheetStatus = 'pending_pm' | 'self_scoring' | 'approved'
 
@@ -90,7 +118,7 @@ export interface GmEvalPmBranch {
   pm: GmEvalMember
   leaders: GmEvalLeaderBranch[]
   directMembers: GmEvalMember[]
-  /** Đồng bộ `gmLayoutMockDepartments` (Strategic KPIs / diagnostics). */
+  /** Id section — khớp {@link GM_EVAL_SECTION_DEPARTMENTS}. */
   sectionId?: string
   sectionName?: string
 }
@@ -772,10 +800,10 @@ function buildLeaderBranchFromDef(
 
 /**
  * Cây Section → PM → Leader → Member (mock).
- * Mỗi phần tử = một `gmLayoutMockDepartments` (đồng bộ tab Strategic KPIs Tracking & Diagnostics).
+ * Mỗi phần tử = một section trong {@link GM_EVAL_SECTION_DEPARTMENTS}.
  */
 export function getGmEvalPmHubTree(): GmEvalPmBranch[] {
-  return gmLayoutMockDepartments.map((dept, idx) => {
+  return GM_EVAL_SECTION_DEPARTMENTS.map((dept, idx) => {
     const brokerId = resolveGmEvalBrokerIdForManager(dept.manager, idx)
     const broker = GM_EVAL_PM_BROKERS.find((x) => x.id === brokerId)!
     const pm = buildGmEvalPmHubMemberForBrokerScoped(broker, dept)

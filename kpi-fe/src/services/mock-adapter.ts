@@ -12,13 +12,7 @@ import type { LoginResponse, AuthTokens, ApiResponse } from "@/types/api";
 import { mockResponse } from "@/utils/mock";
 import { generateMockToken, generateMockRefreshToken } from "@/utils/mock";
 import { MOCK_USERS_DB } from "@/mocks/auth.mock";
-import {
-  getMockGmKpiDashboard,
-  getMockSectionMembers,
-  gmKpiHierarchyMockRows,
-  gmLayoutMockDepartments,
-} from "@/mocks/gm-kpi.mock";
-import { appendDeptKpisAsHierarchyRows } from "@/utils/gm-strategic-create-preview";
+import type { GmKpiDashboard, KpiSectionMember } from "@/types/kpi";
 import type { GmDiagnosticsHierarchyApiData } from "@/types/gm-diagnostics-api";
 import type { GmCreateStrategicKpiResponseData } from "@/types/gm-strategic-kpi-create";
 import type { GmStrategicKpiEditData } from "@/types/gm-strategic-kpi-edit";
@@ -208,12 +202,89 @@ function mockGmTemplateIdFromPath(path: string): string | null {
   return m ? decodeURIComponent(m[1]) : null;
 }
 
+/** GM dashboard tối thiểu khi `VITE_USE_MOCK=true`. */
+function mockGmMinimalDashboard(year: number): GmKpiDashboard {
+  return {
+    year,
+    currentPhase: "year_end",
+    phaseProgressPct: 0,
+    coreTargets: [],
+    sections: [],
+    summary: {
+      totalMembers: 0,
+      byRank: [],
+      yearEndCompleted: 0,
+      highPerformers: 0,
+      meetsTarget: 0,
+      underperforming: 0,
+      pendingEvaluation: 0,
+      missingEvidence: 0,
+      pendingApproval: 0,
+      overdue: 0,
+    },
+  };
+}
+
+/** Section members tối thiểu cho mock `GET /kpi/gm/sections/:id/members`. */
+function mockGmSectionMembers(sectionId: string): KpiSectionMember[] {
+  const base: KpiSectionMember[] = [
+    {
+      id: "E1",
+      name: "Tran Van Phuoc",
+      rank: "R3",
+      targetStatus: "Approved",
+      midYearStatus: "Approved",
+      finalStatus: "Evaluating",
+      score: null,
+    },
+    {
+      id: "E2",
+      name: "Le Thi D",
+      rank: "R2",
+      targetStatus: "Approved",
+      midYearStatus: "Approved",
+      finalStatus: "Completed",
+      score: 4.2,
+    },
+    {
+      id: "E3",
+      name: "Nguyen Hoang E",
+      rank: "R4",
+      targetStatus: "Approved",
+      midYearStatus: "Approved",
+      finalStatus: "Evaluating",
+      score: null,
+    },
+    {
+      id: "E4",
+      name: "Pham Van F",
+      rank: "R2",
+      targetStatus: "Approved",
+      midYearStatus: "Approved",
+      finalStatus: "Completed",
+      score: 3.8,
+    },
+    {
+      id: "E5",
+      name: "Vo Thi G",
+      rank: "R1",
+      targetStatus: "Approved",
+      midYearStatus: "Approved",
+      finalStatus: "Not Started",
+      score: null,
+    },
+  ];
+  return base.map((m) => ({ ...m, id: `${sectionId}-${m.id}` }));
+}
+
 /** In-memory phòng ban — `GET/POST/PUT/DELETE /kpi/gm/departments` (mock). */
 function buildInitialMockGmDepartments(): GmDepartmentApiRow[] {
   const now = new Date().toISOString();
   const y = new Date().getFullYear();
   const roles = ["PM", "LEADER", "GM", "MEMBER", "PM"] as const;
-  return gmLayoutMockDepartments.slice(0, 5).map((d, i) => {
+  return Array.from({ length: 5 }, (_, i) => {
+    const name = `Mock Section ${i + 1}`;
+    const manager = `Manager ${i + 1}`;
     const id = `11111111-1111-4111-8111-${String(100_000 + i).padStart(12, "0")}`;
     const members: GmDepartmentMemberApiRow[] = [
       {
@@ -248,10 +319,10 @@ function buildInitialMockGmDepartments(): GmDepartmentApiRow[] {
     ];
     return {
       id,
-      name: d.name,
+      name,
       parentId: null,
       managerId: null,
-      managerFullName: d.manager,
+      managerFullName: manager,
       managerRoleCode: roles[i % roles.length]!,
       createdAt: now,
       updatedAt: now,
@@ -899,6 +970,16 @@ const routes: Route[] = [
     },
   },
 
+  // ── POST /kpi/gm/personal-evaluation/submit — GM nộp đợt KPI cá nhân (mock) ─
+  {
+    method: "post",
+    test: (p) => p === "/kpi/gm/personal-evaluation/submit",
+    handler: async (cfg) => {
+      await sleep(150);
+      return ok(cfg, null);
+    },
+  },
+
   // ── GET /kpi/gm/approved-kpi-queue?cycleId= — mock: rỗng (tab mock dùng snapshot GmLayout) ─
   {
     method: "get",
@@ -927,7 +1008,10 @@ const routes: Route[] = [
     handler: async (cfg) => {
       await sleep(400);
       const { year } = getQueryParams(cfg);
-      return ok(cfg, getMockGmKpiDashboard(year ? parseInt(year) : 2025));
+      return ok(
+        cfg,
+        mockGmMinimalDashboard(year ? parseInt(year, 10) : new Date().getFullYear()),
+      );
     },
   },
 
@@ -939,17 +1023,13 @@ const routes: Route[] = [
       await sleep(400);
       const { year } = getQueryParams(cfg);
       const y = year ? parseInt(year, 10) : 2026;
-      const kpis = appendDeptKpisAsHierarchyRows(
-        [...gmKpiHierarchyMockRows],
-        gmLayoutMockDepartments,
-      );
       const payload: GmDiagnosticsHierarchyApiData = {
         year: Number.isFinite(y) ? y : 2026,
         cycleId: "c2000000-0000-0000-0000-000000000001",
         cycleName: `Năm ${Number.isFinite(y) ? y : 2026}`,
         cycleStatusCode: 201,
         catalogItems: [],
-        kpis: kpis as GmDiagnosticsHierarchyApiData["kpis"],
+        kpis: [],
       };
       return ok(cfg, payload);
     },
@@ -1012,7 +1092,11 @@ const routes: Route[] = [
             : Number.parseInt(String(b.unitCode ?? "902"), 10) || 902,
         isGlobal: true,
         targetDescription:
-          b.targetDescription != null ? String(b.targetDescription) : null,
+          b.targetDescription != null &&
+          typeof b.targetDescription === "object" &&
+          !Array.isArray(b.targetDescription)
+            ? (b.targetDescription as import("@/types/gm-strategic-kpi-edit").KpiScoringRulesPayload)
+            : null,
         targetValue: targetNum,
         weight,
         isImportant: b.isImportant === true,
@@ -1083,7 +1167,11 @@ const routes: Route[] = [
             : Number.parseInt(String(b.unitCode ?? "902"), 10) || 902,
         isGlobal: true,
         targetDescription:
-          b.targetDescription != null ? String(b.targetDescription) : null,
+          b.targetDescription != null &&
+          typeof b.targetDescription === "object" &&
+          !Array.isArray(b.targetDescription)
+            ? (b.targetDescription as import("@/types/gm-strategic-kpi-edit").KpiScoringRulesPayload)
+            : null,
         targetValue:
           typeof b.targetValue === "number" && Number.isFinite(b.targetValue)
             ? b.targetValue
@@ -1366,7 +1454,7 @@ const routes: Route[] = [
     handler: async (cfg, path) => {
       await sleep(300);
       const sectionId = path.split("/")[4];
-      return ok(cfg, getMockSectionMembers(sectionId));
+      return ok(cfg, mockGmSectionMembers(sectionId));
     },
   },
 
@@ -1391,9 +1479,14 @@ const routes: Route[] = [
                   assignmentId: `mock-promo-${y}-1`,
                   kpiName: "Promotion readiness (mock)",
                   kpiCode: "P-MOCK-1",
+                  targetValue: 1,
                   targetDescription: "Hoàn thành checklist thăng tiến",
                   weight: 12,
-                  type: "PROMOTION",
+                  typeCode: 103,
+                  typeName: "PROMOTION",
+                  statusCode: 405,
+                  statusName: "ACCEPTED",
+                  statusDesc: "Mock",
                   midSelfScore: 3.8,
                   endSelfScore: null,
                   endPmScore: null,
@@ -1420,9 +1513,14 @@ const routes: Route[] = [
                 assignmentId: `mock-ind-${y}-1`,
                 kpiName: "Individual cost discipline (mock)",
                 kpiCode: "I-MOCK-1",
+                targetValue: 102,
                 targetDescription: "≤ 102% ngân sách được giao",
                 weight: 10,
-                type: "INDIVIDUAL",
+                typeCode: 101,
+                typeName: "INDIVIDUAL",
+                statusCode: 405,
+                statusName: "ACCEPTED",
+                statusDesc: "Mock",
                 midSelfScore: 4.2,
                 endSelfScore: null,
                 endPmScore: null,
@@ -1438,9 +1536,14 @@ const routes: Route[] = [
                 assignmentId: `mock-ind-${y}-2`,
                 kpiName: "Delivery reliability (mock)",
                 kpiCode: "I-MOCK-2",
+                targetValue: 95,
                 targetDescription: "≥ 95% đúng hạn",
                 weight: 11,
-                type: "INDIVIDUAL",
+                typeCode: 102,
+                typeName: "TEAM",
+                statusCode: 405,
+                statusName: "ACCEPTED",
+                statusDesc: "Mock",
                 midSelfScore: 3.5,
                 endSelfScore: null,
                 endPmScore: null,

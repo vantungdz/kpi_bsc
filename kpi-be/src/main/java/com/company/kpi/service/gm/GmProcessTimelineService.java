@@ -1,68 +1,83 @@
 package com.company.kpi.service.gm;
 
 import com.company.kpi.aggregate.GmTimelineIssueRow;
+import com.company.kpi.aggregate.GmUnassignedMemberRow;
 import com.company.kpi.common.exception.AppException;
 import com.company.kpi.mapper.KpiAssignmentMapper;
 import com.company.kpi.mapper.KpiCycleMapper;
 import com.company.kpi.response.gm.GmProcessTimelineResponse;
-import com.company.kpi.response.gm.GmTimelineIssueBucketDto;
+import com.company.kpi.response.gm.GmTimelineDepartmentGroupDto;
 import com.company.kpi.response.gm.GmTimelineIssueDetailDto;
+import com.company.kpi.response.gm.GmTimelineIssueGroupDto;
+import com.company.kpi.response.gm.GmTimelineKpiGroupDto;
 import com.company.kpi.response.gm.GmTimelinePhaseData;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
-
+import java.util.function.Function;
 /**
- * Xây dựng dữ liệu Process Timeline cho GM dashboard.
- *
- * <p>Logic phân loại:
- * <ul>
- *   <li>Phase SETTING  (401-406): lấy từ {@code listTimelineAssignments}</li>
- *   <li>Phase MID-YEAR (501-502): lấy từ {@code listTimelineAssignments};
- *       "not_submitted" thêm từ {@code listInProgressWithinPhaseWindow} với statuses=[405], phase="mid"</li>
- *   <li>Phase YEAR-END (601-602): lấy từ {@code listTimelineAssignments};
- *       "not_submitted" thêm từ {@code listInProgressWithinPhaseWindow} với statuses=[405,503], phase="yearEnd"</li>
- * </ul>
- *
- * <p>Bottleneck mapping:
- * <pre>
- *   401 → Member   | 402 → PM     | 403 → GM | 404 → Member | 406 → PM
- *   501 → PM       | 502 → GM
- *   601 → PM       | 602 → GM
- *   not_submitted  → Member
- * </pre>
+ * Xây dựng dữ liệu Process Timeline cho GM dashboard — gom theo vấn đề vận hành (business issue),
+ * không coi mỗi assignment là một issue độc lập trong tổng hợp.
  */
 @Service
 @RequiredArgsConstructor
 public class GmProcessTimelineService {
 
     // ── Setting phase ──────────────────────────────────────────────────────────
-    private static final int STATUS_DRAFT            = 401;
-    private static final int STATUS_WAITING_PM       = 402;
-    private static final int STATUS_WAITING_GM       = 403;
-    private static final int STATUS_PENDING_ACCEPT   = 404;
-    private static final int STATUS_ACCEPTED         = 405;
-    private static final int STATUS_REJECTED         = 406;
+    private static final int STATUS_DRAFT = 401;
+    private static final int STATUS_WAITING_PM = 402;
+    private static final int STATUS_WAITING_GM = 403;
+    private static final int STATUS_PENDING_ACCEPT = 404;
+    private static final int STATUS_ACCEPTED = 405;
+    private static final int STATUS_REJECTED = 406;
 
     // ── Mid-year phase ─────────────────────────────────────────────────────────
-    private static final int STATUS_MID_WAITING_PM   = 501;
-    private static final int STATUS_MID_WAITING_GM   = 502;
-    private static final int STATUS_MID_COMPLETED    = 503;
+    private static final int STATUS_MID_WAITING_PM = 501;
+    private static final int STATUS_MID_WAITING_GM = 502;
+    private static final int STATUS_MID_COMPLETED = 503;
 
     // ── Year-end phase ─────────────────────────────────────────────────────────
-    private static final int STATUS_END_WAITING_PM   = 601;
-    private static final int STATUS_END_WAITING_GM   = 602;
+    private static final int STATUS_END_WAITING_PM = 601;
+    private static final int STATUS_END_WAITING_GM = 602;
 
-    // ── Issue type IDs (khớp với FE GmIssueTypeId) ────────────────────────────
-    private static final String ISSUE_PENDING       = "pending_approval";
-    private static final String ISSUE_PENDING_ACCEPT = "pending_acceptance";
-    private static final String ISSUE_NOT_SUBMITTED = "not_submitted";
-    private static final String ISSUE_MISSING_EV    = "missing_evidence";
+    // ── Stable group ids (khớp naming FE / tài liệu nghiệp vụ) ─────────────────
+    private static final String ID_UNASSIGNED = "unassigned_members";
+    private static final String ID_KPI_NOT_SUBMITTED = "kpi_not_submitted";
+    private static final String ID_PENDING_PM = "pending_pm_review";
+    private static final String ID_PENDING_GM = "pending_gm_approval";
+    private static final String ID_PENDING_ACCEPT = "pending_acceptance";
+    private static final String ID_MISSING_EVIDENCE = "missing_evidence";
+
+    private static final List<String> SETTING_GROUP_ORDER = List.of(
+            ID_UNASSIGNED,
+            ID_KPI_NOT_SUBMITTED,
+            ID_PENDING_PM,
+            ID_PENDING_GM,
+            ID_PENDING_ACCEPT
+    );
+
+    private static final List<String> MID_GROUP_ORDER = List.of(
+            ID_MISSING_EVIDENCE,
+            ID_KPI_NOT_SUBMITTED,
+            ID_PENDING_PM,
+            ID_PENDING_GM
+    );
+
+    private static final List<String> YEAR_END_GROUP_ORDER = List.of(
+            ID_KPI_NOT_SUBMITTED,
+            ID_PENDING_PM,
+            ID_PENDING_GM
+    );
 
     private final KpiAssignmentMapper kpiAssignmentMapper;
     private final KpiCycleMapper kpiCycleMapper;
@@ -73,18 +88,43 @@ public class GmProcessTimelineService {
 
         List<GmTimelineIssueRow> allRows = kpiAssignmentMapper.listTimelineAssignments(cycleId);
 
-        // not_submitted: ASM đang ở 405 trong window mid-year
-        List<GmTimelineIssueRow> midNotSubmitted =
-                kpiAssignmentMapper.listInProgressWithinPhaseWindow(
-                        cycleId, List.of(STATUS_ACCEPTED), "mid");
+        List<GmTimelineIssueRow> midNotSubmitted = kpiAssignmentMapper.listInProgressWithinPhaseWindow(
+                cycleId, List.of(STATUS_ACCEPTED), "mid");
 
-        // not_submitted: ASM đang ở 405 hoặc 503 trong window year-end
-        List<GmTimelineIssueRow> yearEndNotSubmitted =
-                kpiAssignmentMapper.listInProgressWithinPhaseWindow(
-                        cycleId, List.of(STATUS_ACCEPTED, STATUS_MID_COMPLETED), "yearEnd");
+        List<GmTimelineIssueRow> yearEndNotSubmitted = kpiAssignmentMapper.listInProgressWithinPhaseWindow(
+                cycleId, List.of(STATUS_ACCEPTED, STATUS_MID_COMPLETED), "yearEnd");
+
+        List<GmUnassignedMemberRow> unassignedMembers =
+                kpiAssignmentMapper.listMembersWithoutKpiAssignment(cycleId);
 
         GmProcessTimelineResponse response = new GmProcessTimelineResponse();
-        response.setSetting(buildSettingPhase(allRows));
+        response.setSetting(buildSettingPhase(allRows, unassignedMembers));
+        response.setMidYear(buildMidYearPhase(allRows, midNotSubmitted));
+        response.setYearEnd(buildYearEndPhase(allRows, yearEndNotSubmitted));
+        return response;
+    }
+
+    /**
+     * Timeline giống {@link #getTimeline(UUID)} nhưng chỉ phòng/kpi có resolved department do {@code pmId} quản lý
+     * ({@code departments.manager_id = pmId}).
+     */
+    public GmProcessTimelineResponse getTimelineForPm(UUID cycleId, UUID pmId) {
+        kpiCycleMapper.findById(cycleId)
+                .orElseThrow(() -> AppException.notFound("KPI cycle not found: " + cycleId));
+
+        List<GmTimelineIssueRow> allRows = kpiAssignmentMapper.listTimelineAssignmentsForPm(cycleId, pmId);
+
+        List<GmTimelineIssueRow> midNotSubmitted = kpiAssignmentMapper.listInProgressWithinPhaseWindowForPm(
+                cycleId, List.of(STATUS_ACCEPTED), "mid", pmId);
+
+        List<GmTimelineIssueRow> yearEndNotSubmitted = kpiAssignmentMapper.listInProgressWithinPhaseWindowForPm(
+                cycleId, List.of(STATUS_ACCEPTED, STATUS_MID_COMPLETED), "yearEnd", pmId);
+
+        List<GmUnassignedMemberRow> unassignedMembers =
+                kpiAssignmentMapper.listMembersWithoutKpiAssignmentForPm(cycleId, pmId);
+
+        GmProcessTimelineResponse response = new GmProcessTimelineResponse();
+        response.setSetting(buildSettingPhase(allRows, unassignedMembers));
         response.setMidYear(buildMidYearPhase(allRows, midNotSubmitted));
         response.setYearEnd(buildYearEndPhase(allRows, yearEndNotSubmitted));
         return response;
@@ -92,169 +132,466 @@ public class GmProcessTimelineService {
 
     // ── Phase builders ─────────────────────────────────────────────────────────
 
-    private GmTimelinePhaseData buildSettingPhase(List<GmTimelineIssueRow> allRows) {
-        Map<String, GmTimelineIssueBucketDto> buckets = new LinkedHashMap<>();
+    private GmTimelinePhaseData buildSettingPhase(
+            List<GmTimelineIssueRow> allRows,
+            List<GmUnassignedMemberRow> unassignedMembers) {
+
+        Map<String, MutableGroup> groups = new LinkedHashMap<>();
+
+        for (GmUnassignedMemberRow row : unassignedMembers) {
+            getOrCreateGroup(groups, ID_UNASSIGNED).putBySubjectKey(
+                    row.getUserId(),
+                    buildUnassignedMemberDetail(row));
+        }
 
         for (GmTimelineIssueRow row : allRows) {
             int code = row.getStatusCode();
-            // 405 (Đã chốt) không phải là issue của quá trình Setting
-            if (code < 401 || code > 406 || code == STATUS_ACCEPTED) continue;
-
-            GmTimelineIssueDetailDto detail = buildDetail(row,
-                    bottleneckForSetting(code),
-                    reasonForSetting(code));
-            switch (code) {
-                // 401 INACTIVE: KPI mới tạo/chưa kích hoạt -> chưa hoàn tất luồng submit.
-                case STATUS_DRAFT:
-                // 406 REJECTED: đã bị từ chối -> cần chỉnh sửa và submit lại.
-                case STATUS_REJECTED:
-                    addToBucket(buckets, ISSUE_NOT_SUBMITTED, "KPIs Chưa Submit",
-                            "bg-orange-100 text-orange-600", detail);
-                    break;
-                // 402/403: chờ PM/GM duyệt. 404: chờ Member Accept -> vẫn là trạng thái pending.
-                case STATUS_WAITING_PM:
-                case STATUS_WAITING_GM:
-                    addToBucket(buckets, ISSUE_PENDING, "KPIs Pending Approval",
-                            "bg-orange-100 text-orange-600", detail);
-                    break;
-                case STATUS_PENDING_ACCEPT:
-                    addToBucket(buckets, ISSUE_PENDING_ACCEPT, "KPIs Chờ Member Accept",
-                            "bg-orange-100 text-orange-600", detail);
-                    break;
-                default:
-                    break;
+            if (code < 401 || code > 406 || code == STATUS_ACCEPTED) {
+                continue;
             }
+            String gid = detectIssueCategorySetting(code);
+            if (gid == null) {
+                continue;
+            }
+            getOrCreateGroup(groups, gid).putBySubjectKey(
+                    row.getAssignmentId(),
+                    buildAssignmentDetail(row, bottleneckForSetting(code), reasonForSetting(code)));
         }
 
-        return buildPhaseData(buckets, "KPI Setting");
+        return finalizePhase(orderedGroups(groups, SETTING_GROUP_ORDER), "KPI Setting");
     }
 
     private GmTimelinePhaseData buildMidYearPhase(
             List<GmTimelineIssueRow> allRows,
             List<GmTimelineIssueRow> notSubmitted) {
 
-        Map<String, GmTimelineIssueBucketDto> buckets = new LinkedHashMap<>();
+        Map<String, MutableGroup> groups = new LinkedHashMap<>();
 
-        // not_submitted từ window query
         for (GmTimelineIssueRow row : notSubmitted) {
-            addToBucket(buckets, ISSUE_NOT_SUBMITTED, "KPIs Chưa Submit",
-                    "bg-orange-100 text-orange-600",
-                    buildDetail(row, "Member", "Đang trong kỳ Mid-Year nhưng chưa nộp evidence"));
+            getOrCreateGroup(groups, ID_KPI_NOT_SUBMITTED).putBySubjectKey(
+                    row.getAssignmentId(),
+                    buildAssignmentDetail(row, "Member",
+                            "Đang trong kỳ Mid-Year nhưng chưa nộp evidence"));
         }
 
         for (GmTimelineIssueRow row : allRows) {
             int code = row.getStatusCode();
-            if (code != STATUS_MID_WAITING_PM && code != STATUS_MID_WAITING_GM) continue;
-
-            // 501 + evidences=null → missing_evidence
-            if (code == STATUS_MID_WAITING_PM && row.getEvidences() == null) {
-                addToBucket(buckets, ISSUE_MISSING_EV, "KPIs Thiếu Evidence",
-                        "bg-rose-100 text-rose-600",
-                        buildDetail(row, "Member", "Đã nộp nhưng thiếu file đính kèm"));
+            if (code != STATUS_MID_WAITING_PM && code != STATUS_MID_WAITING_GM) {
+                continue;
             }
-
-            // pending: 501 → PM, 502 → GM
-            String bottleneck = (code == STATUS_MID_WAITING_PM) ? "PM" : "GM";
-            String reason     = (code == STATUS_MID_WAITING_PM)
-                    ? "PM chưa review evidence giữa kỳ"
-                    : "GM chưa chốt điểm giữa kỳ";
-            addToBucket(buckets, ISSUE_PENDING, "KPIs Pending Approval",
-                    "bg-orange-100 text-orange-600",
-                    buildDetail(row, bottleneck, reason));
+            // 501 + thiếu evidence → chỉ nhóm missing_evidence (tránh double-count với pending PM).
+            if (code == STATUS_MID_WAITING_PM && row.getEvidences() == null) {
+                getOrCreateGroup(groups, ID_MISSING_EVIDENCE).putBySubjectKey(
+                        row.getAssignmentId(),
+                        buildAssignmentDetail(row, "Member",
+                                "Đã nộp nhưng thiếu file đính kèm / evidence"));
+                continue;
+            }
+            if (code == STATUS_MID_WAITING_PM) {
+                getOrCreateGroup(groups, ID_PENDING_PM).putBySubjectKey(
+                        row.getAssignmentId(),
+                        buildAssignmentDetail(row, "PM", "PM chưa review evidence giữa kỳ"));
+            } else {
+                getOrCreateGroup(groups, ID_PENDING_GM).putBySubjectKey(
+                        row.getAssignmentId(),
+                        buildAssignmentDetail(row, "GM", "GM chưa chốt điểm giữa kỳ"));
+            }
         }
 
-        return buildPhaseData(buckets, "Mid-Year Review");
+        return finalizePhase(orderedGroups(groups, MID_GROUP_ORDER), "Mid-Year Review");
     }
 
     private GmTimelinePhaseData buildYearEndPhase(
             List<GmTimelineIssueRow> allRows,
             List<GmTimelineIssueRow> notSubmitted) {
 
-        Map<String, GmTimelineIssueBucketDto> buckets = new LinkedHashMap<>();
+        Map<String, MutableGroup> groups = new LinkedHashMap<>();
 
         for (GmTimelineIssueRow row : notSubmitted) {
-            addToBucket(buckets, ISSUE_NOT_SUBMITTED, "KPIs Chưa Submit",
-                    "bg-orange-100 text-orange-600",
-                    buildDetail(row, "Member", "Đang trong kỳ Year-End nhưng chưa nộp evidence"));
+            getOrCreateGroup(groups, ID_KPI_NOT_SUBMITTED).putBySubjectKey(
+                    row.getAssignmentId(),
+                    buildAssignmentDetail(row, "Member",
+                            "Đang trong kỳ Year-End nhưng chưa nộp evidence"));
         }
 
         for (GmTimelineIssueRow row : allRows) {
             int code = row.getStatusCode();
-            if (code != STATUS_END_WAITING_PM && code != STATUS_END_WAITING_GM) continue;
-
-            String bottleneck = (code == STATUS_END_WAITING_PM) ? "PM" : "GM";
-            String reason     = (code == STATUS_END_WAITING_PM)
-                    ? "PM chưa chấm điểm Final"
-                    : "GM chưa chốt điểm Final";
-            addToBucket(buckets, ISSUE_PENDING, "KPIs Pending Approval",
-                    "bg-orange-100 text-orange-600",
-                    buildDetail(row, bottleneck, reason));
+            if (code != STATUS_END_WAITING_PM && code != STATUS_END_WAITING_GM) {
+                continue;
+            }
+            if (code == STATUS_END_WAITING_PM) {
+                getOrCreateGroup(groups, ID_PENDING_PM).putBySubjectKey(
+                        row.getAssignmentId(),
+                        buildAssignmentDetail(row, "PM", "PM chưa chấm điểm Final"));
+            } else {
+                getOrCreateGroup(groups, ID_PENDING_GM).putBySubjectKey(
+                        row.getAssignmentId(),
+                        buildAssignmentDetail(row, "GM", "GM chưa chốt điểm Final"));
+            }
         }
 
-        return buildPhaseData(buckets, "Year-End Review");
+        return finalizePhase(orderedGroups(groups, YEAR_END_GROUP_ORDER), "Year-End Review");
     }
 
-    // ── Helpers ────────────────────────────────────────────────────────────────
+    /** Trả về id nhóm Setting; null nếu không xử lý. */
+    private String detectIssueCategorySetting(int code) {
+        return switch (code) {
+            case STATUS_DRAFT, STATUS_REJECTED -> ID_KPI_NOT_SUBMITTED;
+            case STATUS_WAITING_PM -> ID_PENDING_PM;
+            case STATUS_WAITING_GM -> ID_PENDING_GM;
+            case STATUS_PENDING_ACCEPT -> ID_PENDING_ACCEPT;
+            default -> null;
+        };
+    }
 
-    private GmTimelineIssueDetailDto buildDetail(
+    private MutableGroup getOrCreateGroup(Map<String, MutableGroup> map, String groupId) {
+        return map.computeIfAbsent(groupId, MutableGroup::new);
+    }
+
+    private List<GmTimelineIssueGroupDto> orderedGroups(Map<String, MutableGroup> map, List<String> order) {
+        List<GmTimelineIssueGroupDto> out = new ArrayList<>();
+        for (String id : order) {
+            MutableGroup g = map.get(id);
+            if (g != null && !g.isEmpty()) {
+                out.add(g.toDto());
+            }
+        }
+        return out;
+    }
+
+    /** Nhãn nút timeline: «0 issues», «1 issue», «N issues» — không kèm số nhân sự. */
+    private static String formatIssueCountLabel(int opCount) {
+        if (opCount <= 0) {
+            return "0 issues";
+        }
+        if (opCount == 1) {
+            return "1 issue";
+        }
+        return opCount + " issues";
+    }
+
+    private GmTimelinePhaseData finalizePhase(List<GmTimelineIssueGroupDto> groups, String phaseLabelShort) {
+        GmTimelinePhaseData phase = new GmTimelinePhaseData();
+        phase.setIssueGroups(groups);
+
+        int opCount = groups.size();
+        phase.setOperationalIssueCount(opCount);
+
+        Set<UUID> distinctSubjects = new LinkedHashSet<>();
+        for (GmTimelineIssueGroupDto g : groups) {
+            for (GmTimelineIssueDetailDto e : g.getEmployees()) {
+                if (e.getSubjectUserId() != null) {
+                    distinctSubjects.add(e.getSubjectUserId());
+                }
+            }
+        }
+        int distinctCount = distinctSubjects.size();
+        phase.setTotalDistinctEmployeesAffected(distinctCount);
+        phase.setHasOpenIssues(opCount > 0);
+
+        String issuesLabel = formatIssueCountLabel(opCount);
+        phase.setPendingKpisLine(issuesLabel);
+        phase.setPopoverTitle(issuesLabel + " — " + phaseLabelShort);
+        return phase;
+    }
+
+    private GmTimelineIssueDetailDto buildAssignmentDetail(
             GmTimelineIssueRow row, String bottleneck, String reason) {
         GmTimelineIssueDetailDto d = new GmTimelineIssueDetailDto();
+        d.setAssignmentId(row.getAssignmentId());
+        d.setParentAssignmentId(row.getParentAssignmentId());
+        d.setSubjectUserId(row.getUserId());
+        d.setMasterKpiId(row.getMasterKpiId());
         d.setKpi(row.getKpiName());
         d.setMember(row.getMemberName());
-        d.setPm(row.getPmName());
-        d.setLeader(null); // V1: chưa join cấp leader
+        d.setRoleCode(row.getRoleCode());
+        d.setPm(row.getPmName() != null ? row.getPmName() : "—");
+        d.setLeader(row.getLeaderName());
+        d.setDepartmentName(row.getDepartmentName());
         d.setBottleneck(bottleneck);
         d.setReason(reason);
         return d;
     }
 
-    private void addToBucket(
-            Map<String, GmTimelineIssueBucketDto> buckets,
-            String id, String title, String iconClass,
-            GmTimelineIssueDetailDto detail) {
-        GmTimelineIssueBucketDto bucket = buckets.computeIfAbsent(id, k -> {
-            GmTimelineIssueBucketDto b = new GmTimelineIssueBucketDto();
-            b.setId(id);
-            b.setTitle(title);
-            b.setIconClass(iconClass);
-            return b;
-        });
-        bucket.getItems().add(detail);
+    private GmTimelineIssueDetailDto buildUnassignedMemberDetail(GmUnassignedMemberRow row) {
+        GmTimelineIssueDetailDto d = new GmTimelineIssueDetailDto();
+        d.setSubjectUserId(row.getUserId());
+        d.setKpi("—");
+        d.setMember(row.getFullName());
+        d.setRoleCode(row.getRoleCode());
+        d.setPm(row.getPmName() != null ? row.getPmName() : "—");
+        d.setLeader(row.getLeaderName());
+        d.setDepartmentName(row.getDepartmentName());
+        d.setBottleneck("Member");
+        d.setReason("Thành viên chưa có KPI cá nhân được gán trong chu kỳ này.");
+        return d;
     }
-
-    private GmTimelinePhaseData buildPhaseData(
-            Map<String, GmTimelineIssueBucketDto> buckets, String phaseLabel) {
-        GmTimelinePhaseData phase = new GmTimelinePhaseData();
-        List<GmTimelineIssueBucketDto> list = new ArrayList<>(buckets.values());
-        phase.setIssueDetails(list);
-
-        int totalIssues = list.stream()
-                .mapToInt(b -> b.getItems().size())
-                .sum();
-        phase.setHasOpenIssues(totalIssues > 0);
-        phase.setPendingKpisLine(totalIssues + " KPI chưa hoàn thành");
-        phase.setPopoverTitle(totalIssues + " issues — " + phaseLabel);
-        return phase;
-    }
-
-    // ── Setting bottleneck/reason helpers ──────────────────────────────────────
 
     private String bottleneckForSetting(int code) {
         return switch (code) {
             case STATUS_DRAFT, STATUS_PENDING_ACCEPT -> "Member";
-            case STATUS_WAITING_GM                   -> "GM";
-            default                                   -> "PM"; // 402, 406
+            case STATUS_WAITING_GM -> "GM";
+            default -> "PM"; // 402, 406
         };
     }
 
     private String reasonForSetting(int code) {
         return switch (code) {
-            case STATUS_DRAFT          -> "Draft chưa được submit lên PM";
-            case STATUS_WAITING_PM     -> "PM chưa duyệt đề xuất";
-            case STATUS_WAITING_GM     -> "Chờ GM duyệt tạo mới";
+            case STATUS_DRAFT -> "Draft chưa được submit lên PM";
+            case STATUS_WAITING_PM -> "PM chưa duyệt đề xuất";
+            case STATUS_WAITING_GM -> "Chờ GM duyệt tạo mới";
             case STATUS_PENDING_ACCEPT -> "Member chưa bấm Accept";
-            case STATUS_REJECTED       -> "KPI bị từ chối — cần xử lý lại";
-            default                    -> "Đang chờ duyệt";
+            case STATUS_REJECTED -> "KPI bị từ chối — cần xử lý lại";
+            default -> "Đang chờ duyệt";
         };
+    }
+
+    /**
+     * Drawer aggregation: KPI (master) → department → assignees.
+     * Không gán PM/Leader ở cấp KPI: một KPI có thể trải nhiều phòng — dominant PM vs dominant supervisor
+     * của toàn slice không còn là một cặp vận hành hợp lệ (gây hiểu nhầm).
+     */
+    private static List<GmTimelineKpiGroupDto> buildKpiGroups(
+            List<GmTimelineIssueDetailDto> employees, String issueGroupId) {
+        if (employees == null || employees.isEmpty()) {
+            return List.of();
+        }
+        Map<String, List<GmTimelineIssueDetailDto>> byKpi = new LinkedHashMap<>();
+        for (GmTimelineIssueDetailDto e : employees) {
+            byKpi.computeIfAbsent(kpiBucketKey(e), k -> new ArrayList<>()).add(e);
+        }
+        List<GmTimelineKpiGroupDto> out = new ArrayList<>();
+        for (List<GmTimelineIssueDetailDto> kpiItems : byKpi.values()) {
+            out.add(buildOneKpiGroup(kpiItems, issueGroupId));
+        }
+        out.sort(Comparator.comparingInt(GmTimelineKpiGroupDto::getAffectedEmployees).reversed());
+        return out;
+    }
+
+    private static String kpiBucketKey(GmTimelineIssueDetailDto e) {
+        if (e.getMasterKpiId() != null) {
+            return e.getMasterKpiId().toString();
+        }
+        String k = e.getKpi();
+        if (k == null || k.isBlank() || "—".equals(k)) {
+            return "kpi:_none_";
+        }
+        return "kpi:name:" + k.trim();
+    }
+
+    private static GmTimelineKpiGroupDto buildOneKpiGroup(
+            List<GmTimelineIssueDetailDto> kpiItems, String issueGroupId) {
+        Map<String, List<GmTimelineIssueDetailDto>> byDept = new LinkedHashMap<>();
+        for (GmTimelineIssueDetailDto e : kpiItems) {
+            byDept.computeIfAbsent(deptBucketKey(e), k -> new ArrayList<>()).add(e);
+        }
+        List<GmTimelineDepartmentGroupDto> deptDtos = new ArrayList<>();
+        for (Map.Entry<String, List<GmTimelineIssueDetailDto>> en : byDept.entrySet()) {
+            List<GmTimelineIssueDetailDto> slice = en.getValue();
+            GmTimelineDepartmentGroupDto d = new GmTimelineDepartmentGroupDto();
+            String dk = en.getKey();
+            d.setDepartmentName(dk.isEmpty() ? null : dk);
+            d.setAffectedEmployees(slice.size());
+            d.setEmployees(new ArrayList<>(nestCascadeInDeptSlice(slice)));
+            deptDtos.add(d);
+        }
+        deptDtos.sort(Comparator.comparingInt(GmTimelineDepartmentGroupDto::getAffectedEmployees).reversed());
+
+        Set<String> distinctDepts = new HashSet<>();
+        for (GmTimelineIssueDetailDto e : kpiItems) {
+            String dn = e.getDepartmentName();
+            if (dn != null && !dn.isBlank()) {
+                distinctDepts.add(dn.trim());
+            }
+        }
+
+        String kpiName = kpiItems.stream()
+                .map(GmTimelineIssueDetailDto::getKpi)
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(s -> !s.isEmpty() && !"—".equals(s))
+                .findFirst()
+                .orElse("—");
+        UUID masterId = kpiItems.stream()
+                .map(GmTimelineIssueDetailDto::getMasterKpiId)
+                .filter(Objects::nonNull)
+                .findFirst()
+                .orElse(null);
+
+        GmTimelineKpiGroupDto dto = new GmTimelineKpiGroupDto();
+        dto.setMasterKpiId(masterId);
+        dto.setKpiName(kpiName);
+        dto.setAffectedEmployees(kpiItems.size());
+        dto.setAffectedDepartments(distinctDepts.size());
+        dto.setBlockerSummary(blockerSummaryForIssue(issueGroupId));
+        dto.setPmName(null);
+        dto.setLeaderName(null);
+        dto.setDepartments(deptDtos);
+        return dto;
+    }
+
+    private static String deptBucketKey(GmTimelineIssueDetailDto e) {
+        String d = e.getDepartmentName();
+        if (d == null || d.isBlank()) {
+            return "";
+        }
+        return d.trim();
+    }
+
+    /**
+     * Gắn assignment con dưới parent trong cùng slice phòng (theo {@code parent_assignment_id}),
+     * để drawer hiện đủ chuỗi phân bổ (PM → member) thay vì chỉ hàng gốc.
+     */
+    private static List<GmTimelineIssueDetailDto> nestCascadeInDeptSlice(List<GmTimelineIssueDetailDto> slice) {
+        if (slice == null || slice.isEmpty()) {
+            return List.of();
+        }
+        Map<UUID, GmTimelineIssueDetailDto> byId = new LinkedHashMap<>();
+        for (GmTimelineIssueDetailDto d : slice) {
+            d.setCascadeChildren(new ArrayList<>());
+            if (d.getAssignmentId() != null) {
+                byId.put(d.getAssignmentId(), d);
+            }
+        }
+        List<GmTimelineIssueDetailDto> roots = new ArrayList<>();
+        for (GmTimelineIssueDetailDto d : slice) {
+            UUID pid = d.getParentAssignmentId();
+            if (pid != null && byId.containsKey(pid)) {
+                byId.get(pid).getCascadeChildren().add(d);
+            } else {
+                roots.add(d);
+            }
+        }
+        return roots;
+    }
+
+    private static String blockerSummaryForIssue(String issueGroupId) {
+        return switch (issueGroupId) {
+            case ID_PENDING_ACCEPT -> "Acceptance pending";
+            case ID_PENDING_PM -> "PM review pending";
+            case ID_PENDING_GM -> "GM approval pending";
+            case ID_KPI_NOT_SUBMITTED -> "Submission pending";
+            case ID_MISSING_EVIDENCE -> "Evidence incomplete";
+            case ID_UNASSIGNED -> "No KPI assigned";
+            default -> "Action pending";
+        };
+    }
+
+    /** Most frequent non-blank label (stable: LinkedHashMap iteration order on ties). */
+    private static String dominantNonBlank(
+            List<GmTimelineIssueDetailDto> items, Function<GmTimelineIssueDetailDto, String> getter) {
+        Map<String, Integer> counts = new LinkedHashMap<>();
+        for (GmTimelineIssueDetailDto e : items) {
+            String v = getter.apply(e);
+            if (v == null) {
+                continue;
+            }
+            String t = v.trim();
+            if (t.isEmpty() || "—".equals(t)) {
+                continue;
+            }
+            counts.merge(t, 1, Integer::sum);
+        }
+        return counts.entrySet().stream()
+                .max(Map.Entry.comparingByValue())
+                .map(Map.Entry::getKey)
+                .orElse(null);
+    }
+
+    // ── Mutable group accumulator ───────────────────────────────────────────────
+
+    private static final class MutableGroup {
+        private final String id;
+        private final LinkedHashMap<UUID, GmTimelineIssueDetailDto> bySubjectKey = new LinkedHashMap<>();
+
+        private MutableGroup(String id) {
+            this.id = id;
+        }
+
+        void putBySubjectKey(UUID key, GmTimelineIssueDetailDto detail) {
+            if (key == null) {
+                return;
+            }
+            bySubjectKey.put(key, detail);
+        }
+
+        boolean isEmpty() {
+            return bySubjectKey.isEmpty();
+        }
+
+        GmTimelineIssueGroupDto toDto() {
+            GroupMeta meta = GroupMeta.forId(id);
+            List<GmTimelineIssueDetailDto> employees = new ArrayList<>(bySubjectKey.values());
+
+            long distinctKpi = employees.stream()
+                    .map(GmTimelineIssueDetailDto::getKpi)
+                    .filter(Objects::nonNull)
+                    .filter(k -> !k.isBlank() && !"—".equals(k))
+                    .distinct()
+                    .count();
+
+            long distinctDept = employees.stream()
+                    .map(GmTimelineIssueDetailDto::getDepartmentName)
+                    .filter(Objects::nonNull)
+                    .filter(s -> !s.isBlank())
+                    .distinct()
+                    .count();
+
+            GmTimelineIssueGroupDto dto = new GmTimelineIssueGroupDto();
+            dto.setId(id);
+            dto.setTitle(meta.title());
+            dto.setSeverity(meta.severity());
+            dto.setBlockedRole(meta.blockedRole());
+            dto.setIconClass(meta.iconClass());
+            dto.setAffectedEmployees(employees.size());
+            dto.setAffectedKpis((int) distinctKpi);
+            dto.setAffectedDepartments((int) distinctDept);
+            dto.setEmployees(employees);
+            dto.setKpiGroups(buildKpiGroups(employees, id));
+            dto.setBreakdownGroups(new ArrayList<>());
+            return dto;
+        }
+    }
+
+    private record GroupMeta(String title, String severity, String blockedRole, String iconClass) {
+        static GroupMeta forId(String id) {
+            return switch (id) {
+                case ID_UNASSIGNED -> new GroupMeta(
+                        "Members Without KPI Assignment",
+                        "critical",
+                        "Organization",
+                        "bg-rose-100 text-rose-600");
+                case ID_KPI_NOT_SUBMITTED -> new GroupMeta(
+                        "KPI Not Submitted",
+                        "warning",
+                        "Member",
+                        "bg-orange-100 text-orange-600");
+                case ID_PENDING_PM -> new GroupMeta(
+                        "Pending PM Review",
+                        "warning",
+                        "PM",
+                        "bg-orange-100 text-orange-600");
+                case ID_PENDING_GM -> new GroupMeta(
+                        "Pending GM Approval",
+                        "warning",
+                        "GM",
+                        "bg-amber-100 text-amber-700");
+                case ID_PENDING_ACCEPT -> new GroupMeta(
+                        "Awaiting Member Acceptance",
+                        "info",
+                        "Member",
+                        "bg-slate-100 text-slate-700");
+                case ID_MISSING_EVIDENCE -> new GroupMeta(
+                        "Missing Evidence",
+                        "warning",
+                        "Member",
+                        "bg-rose-100 text-rose-600");
+                default -> new GroupMeta(
+                        "Operational issue",
+                        "info",
+                        "Member",
+                        "bg-slate-100 text-slate-600");
+            };
+        }
     }
 }

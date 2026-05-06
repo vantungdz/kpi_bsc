@@ -740,35 +740,6 @@ async function confirmDone(emp: GmEvalMember) {
               class="w-full rounded-lg border border-slate-200 bg-white py-2 pl-8 pr-3 text-xs font-medium text-slate-700 shadow-sm outline-none transition-all placeholder:text-slate-400 focus:border-indigo-400 focus:ring-1 focus:ring-indigo-100 sm:pl-9 sm:text-sm"
             />
           </div>
-          <div class="flex shrink-0 gap-2 overflow-x-auto pb-0.5 sm:pb-0">
-            <button
-              type="button"
-              class="rounded-lg border px-2.5 py-1.5 text-xs font-bold shadow-sm transition-colors sm:px-3 sm:py-2"
-              :class="
-                listFilter === 'all'
-                  ? 'border-indigo-600 bg-indigo-600 text-white'
-                  : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
-              "
-              @click="listFilter = 'all'"
-            >
-              Tất cả ({{ totalCount }})
-            </button>
-            <button
-              type="button"
-              class="flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-bold shadow-sm transition-colors sm:px-3 sm:py-2"
-              :class="
-                listFilter === 'pending'
-                  ? 'border-rose-600 bg-rose-600 text-white'
-                  : 'border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100'
-              "
-              @click="listFilter = 'pending'"
-            >
-              <span
-                class="h-1.5 w-1.5 shrink-0 rounded-full bg-current opacity-80"
-              />
-              Chờ chấm điểm ({{ pendingCount }})
-            </button>
-          </div>
         </div>
 
         <div class="overflow-x-auto">
@@ -1247,12 +1218,6 @@ async function confirmDone(emp: GmEvalMember) {
                                                           ld.sheet.name
                                                         }}</span>
                                                         <span
-                                                          class="font-semibold text-slate-400"
-                                                          >({{
-                                                            ld.sheet.code
-                                                          }})</span
-                                                        >
-                                                        <span
                                                           :class="
                                                             roleTagClass(
                                                               'leader',
@@ -1472,12 +1437,6 @@ async function confirmDone(emp: GmEvalMember) {
                                                                           emp.name
                                                                         }}</span>
                                                                         <span
-                                                                          class="font-semibold text-slate-400"
-                                                                          >({{
-                                                                            emp.code
-                                                                          }})</span
-                                                                        >
-                                                                        <span
                                                                           :class="
                                                                             roleTagClass(
                                                                               'member',
@@ -1657,10 +1616,6 @@ async function confirmDone(emp: GmEvalMember) {
                                                         emp.name
                                                       }}</span>
                                                       <span
-                                                        class="font-semibold text-slate-400"
-                                                        >({{ emp.code }})</span
-                                                      >
-                                                      <span
                                                         :class="
                                                           roleTagClass('member')
                                                         "
@@ -1819,13 +1774,6 @@ async function confirmDone(emp: GmEvalMember) {
               >
                 <div class="min-w-0">
                   <p
-                    v-if="!isPmList"
-                    class="text-[10px] font-bold uppercase tracking-wider text-slate-500"
-                  >
-                    {{ codeColumnLabel }} · {{ drawerEmployee.code }}
-                  </p>
-                  <p
-                    v-else
                     class="text-[10px] font-bold uppercase tracking-wider text-slate-500"
                   >
                     Đánh giá KPI
@@ -1833,15 +1781,7 @@ async function confirmDone(emp: GmEvalMember) {
                   <h2
                     class="truncate text-base font-bold text-slate-900 sm:text-lg"
                   >
-                    <template v-if="isPmList">
-                      {{ drawerEmployee.name }}
-                      <span class="font-semibold text-slate-500"
-                        >({{ drawerEmployee.code }})</span
-                      >
-                    </template>
-                    <template v-else>
-                      {{ drawerEmployee.name }}
-                    </template>
+                    {{ drawerEmployee.name }}
                   </h2>
                 </div>
                 <button
@@ -2018,11 +1958,6 @@ async function confirmDone(emp: GmEvalMember) {
                                   <td class="px-4 py-4">
                                     <p class="font-bold text-slate-900">
                                       {{ item.title }}
-                                    </p>
-                                    <p
-                                      class="mt-0.5 text-[11px] text-slate-500"
-                                    >
-                                      {{ item.target }}
                                     </p>
                                   </td>
                                   <td

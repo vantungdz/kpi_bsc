@@ -17,7 +17,7 @@ export function getFallbackCalculationReference(): KpiCalculationReferenceData {
         code: 803,
         value: 'COMMENT',
         label: 'Nhập điểm thủ công dựa trên nhận xét đánh giá',
-        calcTypes: [{ code: 703, value: 'MANUAL_RATING', label: 'Manual Rating' }],
+        calcTypes: [],
       },
       {
         code: 801,

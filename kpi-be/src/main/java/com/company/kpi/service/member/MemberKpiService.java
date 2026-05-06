@@ -20,6 +20,7 @@
     import com.company.kpi.response.member.MemberKpiDashboardResponse.MemberKpiItemPayload;
     import com.company.kpi.response.member.MemberKpiDashboardResponse.MemberKpiSheetPayload;
     import com.company.kpi.response.pm.KpiSheetResponse;
+    import com.company.kpi.service.kpi.KpiScoringRulesService;
     import com.fasterxml.jackson.databind.JsonNode;
     import com.fasterxml.jackson.databind.ObjectMapper;
     import lombok.RequiredArgsConstructor;
@@ -31,6 +32,7 @@
     import org.springframework.web.server.ResponseStatusException;
 
     import java.math.BigDecimal;
+    import java.math.RoundingMode;
     import java.time.OffsetDateTime;
     import java.time.Year;
     import java.util.ArrayList;
@@ -39,6 +41,8 @@
     import java.util.Objects;
     import java.util.Optional;
     import java.util.UUID;
+    import java.util.regex.Matcher;
+    import java.util.regex.Pattern;
 
     /**
      * Member KPI — đồng bộ luồng trong {@code document/db/README.md} và schema {@code document/db/init-db.sql}:
@@ -56,28 +60,41 @@
 
         private static final int KPI_TYPE_PROMOTION = 103;
         private static final int KPI_TYPE_INDIVIDUAL = 101;
+        private static final int KPI_TYPE_TEAM = 102;
+        /** GM nộp KPI cá nhân — giữa kỳ (đã chốt 1st half). */
+        private static final int ASM_GM_FIRST_HALF_DONE = 503;
+        /** GM nộp KPI cá nhân — kết thúc vòng đời assignment. */
+        private static final int ASM_CYCLE_COMPLETED = 603;
         private static final int KPI_UNIT_POINT = 903;
         /** README Flow 3 — member tạo KPI chờ PM */
         private static final int ASM_MEMBER_CREATED_PENDING_PM = 402;
         private static final int ASM_MEMBER_CREATED_PENDING_GM = 403;
         private static final int ASM_PENDING_ACCEPTANCE = 404;
-    private static final int ASM_ACCEPTED = 405;
+        private static final int ASM_FEEDBACK_IN_PROGRESS = 407;
+        private static final int ASM_ACCEPTED = 405;
+        private static final int CALC_RULE_AVERAGE = 802;
+        private static final int CALC_RULE_COMMENT = 803;
+        private static final int CALC_TYPE_PLAN_OVER_ACTUAL = 702;
+        private static final Pattern FIRST_NUMERIC_TOKEN = Pattern.compile("-?\\d+(?:\\.\\d+)?");
+        private static final BigDecimal BD_ZERO = BigDecimal.ZERO;
+        private static final BigDecimal BD_HUNDRED = new BigDecimal("100");
         private static final Logger log = LoggerFactory.getLogger(MemberKpiService.class);
 
         /** ASM_STATUS labels — đồng bộ document/db/init-db.sql */
         private static final Map<Integer, String> ASM_STATUS_LABEL = Map.ofEntries(
-                Map.entry(401, "Chưa kích hoạt"),
-                Map.entry(402, "Chờ PM duyệt (tạo mới)"),
-                Map.entry(403, "Chờ GM duyệt (tạo mới)"),
-                Map.entry(404, "Chờ Member Accept"),
-                Map.entry(405, "Đang chạy"),
-                Map.entry(406, "Từ chối"),
-                Map.entry(501, "Đã nộp 1st Half · Chờ PM"),
-                Map.entry(502, "1st Half · Chờ GM"),
-                Map.entry(503, "Đã chốt 1st Half"),
-                Map.entry(601, "Final · Chờ PM"),
-                Map.entry(602, "Final · Chờ GM"),
-                Map.entry(603, "Đã chốt sổ"));
+                Map.entry(401, "KPI mới tạo (Chưa kích hoạt)"),
+                Map.entry(402, "Member tạo, chờ PM duyệt"),
+                Map.entry(403, "Chờ GM duyệt tạo mới"),
+                Map.entry(404, "Chờ Member bấm Accept"),
+                Map.entry(407, "Chờ PM kiểm tra feedback"),
+                Map.entry(405, "Đã chốt mục tiêu (Đang chạy)"),
+                Map.entry(406, "Bị từ chối"),
+                Map.entry(501, "Member đã nộp bằng chứng 1st Half, chờ PM duyệt"),
+                Map.entry(502, "PM đã duyệt 1st Half, chờ GM chốt điểm"),
+                Map.entry(503, "GM đã chốt điểm 1st Half"),
+                Map.entry(601, "Chờ PM chấm điểm Final"),
+                Map.entry(602, "Chờ GM chốt điểm Final"),
+                Map.entry(603, "Đã chốt sổ hoàn toàn (Kết thúc vòng đời)"));
 
         private final KpiCycleMapper kpiCycleMapper;
         private final UserMapper userMapper;
@@ -85,6 +102,7 @@
         private final KpiLibraryMapper kpiLibraryMapper;
         // private final ReferenceDataMapper referenceDataMapper;
         private final ObjectMapper objectMapper;
+        private final KpiScoringRulesService kpiScoringRulesService;
 
         // /** Form tạo KPI: {@code kpi_categories} + CALC_RULE 801–804 từ {@code sys_status_codes}. */
         // public MemberKpiFormMetaResponse getFormMeta() {
@@ -113,6 +131,7 @@
             List<String> pending = computePendingAssignmentIds(phase, rows);
             OffsetDateTime now = OffsetDateTime.now();
             boolean canSubmit = computeCanSubmit(cycle, phase, rows, pending, now);
+            log.info("Dashboard for user {} in year {}: phase={}, pendingCount={}, canSubmit={}", userId, y, phase, pending.size(), canSubmit);
 
             return MemberKpiDashboardResponse.builder()
                     .year(y)
@@ -141,7 +160,18 @@
                     .orElse(Constant.END_YEAR_PHASE);
             Double mid = null;
             Double end = null;
-            if (request.getSelfScore() != null) {
+            Integer autoScore = computeAutoSelfScoreFromEvidences(row, request.getEvidences());
+            if (autoScore != null) {
+                double v = autoScore.doubleValue();
+                if (Constant.MID_YEAR_PHASE.equals(phase)) {
+                    mid = v;
+                } else if (Constant.END_YEAR_PHASE.equals(phase)) {
+                    end = v;
+                } else if (Constant.TARGET_SETUP_PHASE.equals(phase)) {
+                    /* Giai đoạn thiết lập: vẫn lưu điểm nháp vào end_self_score để UI/leader API hiển thị. */
+                    end = v;
+                }
+            } else if (request.getSelfScore() != null) {
                 double v = request.getSelfScore().doubleValue();
                 if (Constant.MID_YEAR_PHASE.equals(phase)) {
                     mid = v;
@@ -150,18 +180,43 @@
                 }
                 // target_setup: không ghi điểm vào cột — chỉ evidences
             }
-
             int n = kpiAssignmentMapper.patchMemberAssignment(
                     assignmentId,
                     cycleId,
                     userId,
                     mid,
                     end,
-                    request.getEvidences());
+                    request.getEvidences(),
+                    null);
             if (n == 0) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Could not update assignment");
             }
             return reloadSheetResponse(userId, row.getCycleId());
+        }
+
+        @Transactional
+        public void submitFeedback(UUID assignmentId, UUID userId, String feedbackComment) {
+            MemberKpiAssignmentDTO row = kpiAssignmentMapper.findByIdAndUser(assignmentId, userId);
+            if (row == null) {
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Assignment not found");
+            }
+            Integer status = row.getStatusCode();
+            if (!Objects.equals(status, ASM_PENDING_ACCEPTANCE) && !Objects.equals(status, ASM_FEEDBACK_IN_PROGRESS)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "KPI không ở trạng thái cho phép gửi feedback");
+            }
+            String normalized = StringUtils.trimToEmpty(feedbackComment);
+            if (StringUtils.isBlank(normalized)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Feedback không được để trống");
+            }
+            int n = kpiAssignmentMapper.submitAssignmentFeedback(
+                    assignmentId,
+                    row.getCycleId(),
+                    userId,
+                    normalized,
+                    ASM_FEEDBACK_IN_PROGRESS);
+            if (n == 0) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Không thể gửi feedback cho KPI này");
+            }
         }
 
         /** Cập nhật evidences — có kiểm tra assignment thuộc member. */
@@ -181,7 +236,8 @@
                     userId,
                     null,
                     null,
-                    request.getEvidence());
+                    request.getEvidence(),
+                    null);
         }
 
         public KpiSheetResponse saveDraft(SaveDraftRequest request, UUID userId) {
@@ -203,6 +259,7 @@
         @Transactional
         public void submitMemberSheet(SubmitMemberSheetRequest request, UUID userId) {
             int y = request.getYear();
+            boolean promotionSubmit = isPromotionSubmit(request);
             Optional<KpiCycle> opt = kpiCycleMapper.findByYear(y);
             if (opt.isEmpty()) {
                 throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Cycle not found");
@@ -214,45 +271,221 @@
             String phase = getCurrentPhase(cycle);
             OffsetDateTime now = OffsetDateTime.now();
             List<MemberKpiAssignmentDTO> rowsSnapshot = kpiAssignmentMapper.findDetailsByUserAndCycle(userId, cycle.getId());
-            String submitPhase = resolveSubmitPhaseForSubmission(cycle, phase, now, rowsSnapshot);
+            List<MemberKpiAssignmentDTO> scopedRowsSnapshot = filterRowsBySubmitType(rowsSnapshot, promotionSubmit);
+            if (scopedRowsSnapshot.isEmpty()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No KPI rows available for submit scope");
+            }
+            String submitPhase = resolveSubmitPhaseForSubmission(cycle, phase, now, scopedRowsSnapshot);
             if (submitPhase == null) {
                     throw new ResponseStatusException(
                             HttpStatus.BAD_REQUEST, "Submissions are not open for the current phase (outside time window)");
                 }
-            if (assignmentsIndicatePhaseAlreadyDone(submitPhase, rowsSnapshot)) {
+            if (assignmentsIndicatePhaseAlreadyDone(submitPhase, scopedRowsSnapshot)) {
                     throw new ResponseStatusException(HttpStatus.CONFLICT, "Already submitted for this phase in this cycle");
                 }
 
             if (Constant.TARGET_SETUP_PHASE.equals(submitPhase)) {
-                List<String> pendingTs = computePendingAssignmentIds(submitPhase, rowsSnapshot);
+                List<String> pendingTs = computePendingAssignmentIds(submitPhase, scopedRowsSnapshot);
                 if (!pendingTs.isEmpty()) {
                     throw new ResponseStatusException(
                             HttpStatus.BAD_REQUEST, "Incomplete KPI rows: " + pendingTs.size());
                 }
-                kpiAssignmentMapper.bulkAcceptPendingForSubmit(userId, cycle.getId());
+                int updated = 0;
+                for (MemberKpiAssignmentDTO row : scopedRowsSnapshot) {
+                    Integer currentStatus = row.getStatusCode();
+                    if (!Objects.equals(currentStatus, ASM_PENDING_ACCEPTANCE)
+                            && !Objects.equals(currentStatus, ASM_FEEDBACK_IN_PROGRESS)) {
+                        continue;
+                    }
+                    boolean hasFeedback = StringUtils.isNotBlank(row.getFeedbackComment());
+                    int nextStatus = hasFeedback ? ASM_FEEDBACK_IN_PROGRESS : ASM_ACCEPTED;
+                    if (Objects.equals(currentStatus, nextStatus)) {
+                        updated++;
+                        continue;
+                    }
+                    updated += kpiAssignmentMapper.patchMemberAssignment(
+                            row.getAssignmentId(),
+                            cycle.getId(),
+                            userId,
+                            null,
+                            null,
+                            row.getEvidences(),
+                            nextStatus);
+                }
+                if (updated == 0) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No target-setup assignments eligible to accept");
+                }
                 return;
             }
 
-            kpiAssignmentMapper.bulkAcceptPendingForSubmit(userId, cycle.getId());
+            kpiAssignmentMapper.updateKpiStatuses(userId, cycle.getId(), ASM_ACCEPTED, promotionSubmit, ASM_PENDING_ACCEPTANCE);
             List<MemberKpiAssignmentDTO> rows = kpiAssignmentMapper.findDetailsByUserAndCycle(userId, cycle.getId());
-            List<String> pending = computePendingAssignmentIds(submitPhase, rows);
+            List<MemberKpiAssignmentDTO> scopedRows = filterRowsBySubmitType(rows, promotionSubmit);
+            List<String> pending = computePendingAssignmentIds(submitPhase, scopedRows);
                 if (!pending.isEmpty()) {
                     throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Incomplete KPI rows: " + pending.size());
                 }
             if (Constant.MID_YEAR_PHASE.equals(submitPhase)) {
-                    int n = kpiAssignmentMapper.submitAssignmentsForMidYear(userId, cycle.getId());
+                    int n = kpiAssignmentMapper.updateKpiStatuses(userId, cycle.getId(), 501, promotionSubmit, ASM_ACCEPTED);
                     if (n == 0) {
                         throw new ResponseStatusException(
                                 HttpStatus.BAD_REQUEST, "No mid-year assignments eligible to submit");
                     }
             } else if (Constant.END_YEAR_PHASE.equals(submitPhase)) {
-                    int n = kpiAssignmentMapper.submitAssignmentsForYearEnd(userId, cycle.getId());
+                    int n405 = kpiAssignmentMapper.updateKpiStatuses(userId, cycle.getId(), 601, promotionSubmit, ASM_ACCEPTED);
+                    int n503 = kpiAssignmentMapper.updateKpiStatuses(userId, cycle.getId(), 601, promotionSubmit, 503);
+                    int n = n405 + n503;
                     if (n == 0) {
                         throw new ResponseStatusException(
                                 HttpStatus.BAD_REQUEST, "No end-year assignments eligible to submit");
                     }
                 }
             }
+
+        /**
+         * Tab KPI cá nhân (GM): sau khi lưu Actual / điểm tự đánh giá từng dòng, GM bấm «Gửi» để khóa đợt.
+         * Giữa kỳ: {@code 405→503}; cuối kỳ: {@code 503→603}. Khác {@link #submitMemberSheet} (member: 405→501 / →601).
+         */
+        @Transactional
+        public void submitGmPersonalEvaluation(UUID userId, UUID cycleId) {
+            Optional<KpiCycle> opt = kpiCycleMapper.findById(cycleId);
+            if (opt.isEmpty()) {
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Cycle not found");
+            }
+            KpiCycle cycle = opt.get();
+            if (!Objects.equals(cycle.getStatusCode(), Constants.CycleStatus.OPEN)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "KPI cycle is not open for submissions");
+            }
+            List<MemberKpiAssignmentDTO> rows = kpiAssignmentMapper.findDetailsByUserAndCycle(userId, cycleId);
+            if (rows == null || rows.isEmpty()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No KPI assignments in this cycle");
+            }
+            String phase = getCurrentPhase(cycle);
+            OffsetDateTime now = OffsetDateTime.now();
+            String submitPhase = resolveSubmitPhaseForSubmission(cycle, phase, now, rows);
+            if (submitPhase == null) {
+                throw new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST, "Submissions are not open for the current phase (outside time window)");
+            }
+            if (Constant.TARGET_SETUP_PHASE.equals(submitPhase)) {
+                throw new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST, "Chưa trong cửa sổ đánh giá giữa kỳ hoặc cuối kỳ");
+            }
+
+            List<MemberKpiAssignmentDTO> personal = filterGmPersonalSheetRows(rows);
+
+            if (Constant.MID_YEAR_PHASE.equals(submitPhase)) {
+                if (assignmentsIndicatePhaseAlreadyDone(submitPhase, rows)) {
+                    throw new ResponseStatusException(HttpStatus.CONFLICT, "Đã nộp đánh giá giữa kỳ cho chu kỳ này");
+                }
+                List<MemberKpiAssignmentDTO> targets =
+                        personal.stream().filter(r -> Objects.equals(r.getStatusCode(), ASM_ACCEPTED)).toList();
+                if (targets.isEmpty()) {
+                    throw new ResponseStatusException(
+                            HttpStatus.BAD_REQUEST, "Không có KPI cá nhân ở trạng thái 405 để nộp giữa kỳ");
+                }
+                validateGmPersonalMidYearReady(targets);
+                int nIndiv = kpiAssignmentMapper.updateKpiStatuses(userId, cycleId, ASM_GM_FIRST_HALF_DONE, false, ASM_ACCEPTED);
+                int nPromo = kpiAssignmentMapper.updateKpiStatuses(userId, cycleId, ASM_GM_FIRST_HALF_DONE, true, ASM_ACCEPTED);
+                if (nIndiv + nPromo == 0) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Không cập nhật được trạng thái giữa kỳ");
+                }
+                return;
+            }
+
+            if (Constant.END_YEAR_PHASE.equals(submitPhase)) {
+                boolean has405 = personal.stream().anyMatch(r -> Objects.equals(r.getStatusCode(), ASM_ACCEPTED));
+                if (has405) {
+                    throw new ResponseStatusException(
+                            HttpStatus.BAD_REQUEST, "Vui lòng nộp đánh giá giữa kỳ trước (còn KPI ở trạng thái 405)");
+                }
+                if (assignmentsIndicatePhaseAlreadyDone(submitPhase, rows)) {
+                    throw new ResponseStatusException(HttpStatus.CONFLICT, "Đã nộp đánh giá cuối kỳ cho chu kỳ này");
+                }
+                List<MemberKpiAssignmentDTO> targets = personal.stream()
+                        .filter(r -> Objects.equals(r.getStatusCode(), ASM_GM_FIRST_HALF_DONE))
+                        .toList();
+                if (targets.isEmpty()) {
+                    throw new ResponseStatusException(
+                            HttpStatus.BAD_REQUEST, "Không có KPI ở trạng thái 503 để nộp cuối kỳ");
+                }
+                validateGmPersonalEndYearReady(targets);
+                int nIndiv =
+                        kpiAssignmentMapper.updateKpiStatuses(userId, cycleId, ASM_CYCLE_COMPLETED, false, ASM_GM_FIRST_HALF_DONE);
+                int nPromo =
+                        kpiAssignmentMapper.updateKpiStatuses(userId, cycleId, ASM_CYCLE_COMPLETED, true, ASM_GM_FIRST_HALF_DONE);
+                if (nIndiv + nPromo == 0) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Không cập nhật được trạng thái cuối kỳ");
+                }
+                return;
+            }
+
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Phase submit không hợp lệ");
+        }
+
+        private static List<MemberKpiAssignmentDTO> filterGmPersonalSheetRows(List<MemberKpiAssignmentDTO> rows) {
+            return rows.stream().filter(MemberKpiService::isGmPersonalKpiType).toList();
+        }
+
+        private static boolean isGmPersonalKpiType(MemberKpiAssignmentDTO r) {
+            Integer tc = r.getTypeCode();
+            return Objects.equals(tc, KPI_TYPE_INDIVIDUAL)
+                    || Objects.equals(tc, KPI_TYPE_TEAM)
+                    || Objects.equals(tc, KPI_TYPE_PROMOTION);
+        }
+
+        private static boolean hasGmPersonalMeaningfulEvidences(String evidences) {
+            if (StringUtils.isBlank(evidences)) {
+                return false;
+            }
+            String t = evidences.trim();
+            return !"{}".equals(t) && !"null".equalsIgnoreCase(t);
+        }
+
+        /** Điểm giữa kỳ: ưu tiên {@code mid_self_score}; có thể tạm nằm ở {@code end_self_score} khi lưu trong giai đoạn thiết lập. */
+        private static boolean hasGmPersonalMidYearScore(MemberKpiAssignmentDTO r) {
+            return r.getMidSelfScore() != null || r.getEndSelfScore() != null;
+        }
+
+        private static void validateGmPersonalMidYearReady(List<MemberKpiAssignmentDTO> targets) {
+            boolean incomplete = targets.stream()
+                    .anyMatch(r -> !hasGmPersonalMidYearScore(r) || !hasGmPersonalMeaningfulEvidences(r.getEvidences()));
+            if (incomplete) {
+                throw new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST,
+                        "Cần nhập đủ Actual và điểm tự đánh giá (giữa kỳ) cho tất cả KPI cá nhân trước khi gửi");
+            }
+        }
+
+        private static void validateGmPersonalEndYearReady(List<MemberKpiAssignmentDTO> targets) {
+            boolean incomplete = targets.stream()
+                    .anyMatch(r -> r.getEndSelfScore() == null || !hasGmPersonalMeaningfulEvidences(r.getEvidences()));
+            if (incomplete) {
+                throw new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST,
+                        "Cần nhập đủ Actual và điểm tự đánh giá (cuối kỳ) cho tất cả KPI đang ở 503 trước khi gửi");
+            }
+        }
+
+        private static boolean isPromotionSubmit(SubmitMemberSheetRequest request) {
+            return "PROMOTION".equalsIgnoreCase(request.getKpiType());
+        }
+
+        private static List<MemberKpiAssignmentDTO> filterRowsBySubmitType(
+                List<MemberKpiAssignmentDTO> rows,
+                boolean promotionSubmit) {
+            if (rows == null || rows.isEmpty()) {
+                return List.of();
+            }
+            if (promotionSubmit) {
+                return rows.stream()
+                        .filter(r -> Objects.equals(r.getTypeCode(), KPI_TYPE_PROMOTION))
+                        .toList();
+            }
+            return rows.stream()
+                    .filter(r -> !Objects.equals(r.getTypeCode(), KPI_TYPE_PROMOTION))
+                    .toList();
+        }
 
         /**
          * README Flow 3: Member đề xuất KPI — {@code kpi_master} (is_global=false), {@code kpis_information},
@@ -407,7 +640,10 @@
             EvidencesParsed ev = parseEvidences(row.getEvidences());
 
             String evidenceStatus = deriveEvidenceStatus(row.getEvidences(), ev);
-            String evaluationStatus = deriveEvaluationStatus(row, selfScore, pmScore, evidenceStatus);
+            boolean hasFeedback = StringUtils.isNotBlank(row.getFeedbackComment())
+                    || StringUtils.isNotBlank(ev.memberFeedback)
+                    || StringUtils.isNotBlank(ev.leaderFeedback);
+            String evaluationStatus = deriveEvaluationStatus(row, selfScore, pmScore, evidenceStatus, hasFeedback);
 
             String target = buildTargetDisplay(row);
             Integer sc = row.getStatusCode();
@@ -420,6 +656,7 @@
                     .name(Optional.ofNullable(row.getMasterName()).orElse(""))
                     .description(Optional.ofNullable(row.getObjective()).orElse(""))
                     .target(target)
+                    .targetDescription(Optional.ofNullable(row.getTargetDescription()).orElse(""))
                     .assignmentTargetValue(row.getAssignmentTargetValue())
                     .kpiTemplateTargetValue(row.getKpiInfoTargetValue())
                     .statusCode(sc)
@@ -430,11 +667,17 @@
                     .categoryName(row.getCategoryName())
                     .calculationRuleCode(row.getCalculationRuleCode())
                     .calculationTypeCode(row.getCalculationTypeCode())
+                    .unitCode(row.getUnitCode())
+                    .unitName(row.getUnitName())
                     .evidencesJson(row.getEvidences())
                     .evaluationStatus(evaluationStatus)
                     .evidenceStatus(evidenceStatus)
                     .evidenceFormCase(evidenceFormCase)
                     .evidenceNote(ev.textNote)
+                    .memberFeedback(ev.memberFeedback)
+                    .leaderFeedback(ev.leaderFeedback)
+                    .feedbackComment(Optional.ofNullable(row.getFeedbackComment()).orElse(""))
+                    .gmComment(ev.gmComment)
                     .certificateOutcomeNote(ev.certificateOutcomeNote)
                     .selfScore(selfScore)
                     .pmScore(pmScore)
@@ -471,14 +714,16 @@
          * nếu trống mới ghép số target + objective ngắn.
          */
         private String buildTargetDisplay(MemberKpiAssignmentDTO row) {
+            Double tv = row.getAssignmentTargetValue() != null ? row.getAssignmentTargetValue() : row.getKpiInfoTargetValue();
+            String unitName = StringUtils.trimToEmpty(row.getUnitName());
+            if (tv != null) {
+                String numeric = BigDecimal.valueOf(tv).stripTrailingZeros().toPlainString();
+                return StringUtils.isNotBlank(unitName) ? numeric + " " + unitName : numeric;
+            }
             if (StringUtils.isNotBlank(row.getTargetDescription())) {
                 return row.getTargetDescription();
             }
-            Double tv = row.getAssignmentTargetValue() != null ? row.getAssignmentTargetValue() : row.getKpiInfoTargetValue();
             StringBuilder sb = new StringBuilder();
-            if (tv != null) {
-                sb.append(tv);
-            }
             if (StringUtils.isNotBlank(row.getObjective())) {
                 if (!sb.isEmpty()) {
                     sb.append(" — ");
@@ -530,9 +775,13 @@
                 MemberKpiAssignmentDTO row,
                 Double selfScore,
                 Double pmScore,
-                String evidenceStatus) {
+                String evidenceStatus,
+                boolean hasFeedback) {
             if (pmScore != null) {
                 return "approved";
+            }
+            if (hasFeedback && Objects.equals(row.getStatusCode(), ASM_FEEDBACK_IN_PROGRESS)) {
+                return "feedback";
             }
             if (selfScore != null && "submitted".equals(evidenceStatus)) {
                 return "pending_approval";
@@ -561,8 +810,8 @@
                                 || statusCode == 602
                                 || statusCode == 603);
                 boolean approvedEval = "approved".equals(evaluationStatus);
-                boolean canViewEvidence = !pendingProposal && !pendingAccept && !approvedEval;
-                boolean canEditEvidence = canViewEvidence && !submittedRound;
+                boolean canViewEvidence = !pendingProposal && !approvedEval;
+                boolean canEditEvidence = canViewEvidence && !submittedRound && !pendingAccept;
                 boolean canEditScore = canEditEvidence;
                 String tooltip = buildEvidenceTooltip(
                         canViewEvidence, canEditEvidence, approvedEval, pendingProposal, pendingAccept, submittedRound);
@@ -585,7 +834,7 @@
                         return "Chờ PM/GM duyệt KPI đề xuất";
                     }
                     if (pendingAccept) {
-                        return "Chờ xác nhận mục tiêu từ PM";
+                        return "Có thể xem & gửi feedback";
                     }
                     return "Không thể mở minh chứng";
                 }
@@ -605,6 +854,7 @@
                     case "approved" -> "Đã duyệt";
                     case "revision" -> "Cần làm lại";
                     case "overdue" -> "Quá hạn";
+                    case "feedback" -> "Chờ PM kiểm tra feedback";
                     default -> null;
                 };
             }
@@ -613,8 +863,8 @@
         /**
          * Pending = chưa thể hoàn tất submit.
          * <ul>
-         *   <li>Mọi phase: {@code 402}/{@code 403} luôn chặn.</li>
-         *   <li>{@code target_setup}: không bắt điểm self — dùng cho xác nhận KPI PM ({@code 404→405}).</li>
+         *   <li>{@code target_setup}: bỏ qua validation điểm self để xác nhận KPI PM ({@code 404→405}).</li>
+         *   <li>{@code mid_year}/{@code year_end}: {@code 402}/{@code 403} luôn chặn.</li>
          *   <li>{@code mid_year}: không bắt buộc điểm self trước nộp.</li>
          *   <li>{@code year_end}: thiếu {@code end_self_score}.</li>
          * </ul>
@@ -622,13 +872,13 @@
         private List<String> computePendingAssignmentIds(String phase, List<MemberKpiAssignmentDTO> rows) {
             List<String> pending = new ArrayList<>();
             for (MemberKpiAssignmentDTO row : rows) {
+                if (Constant.TARGET_SETUP_PHASE.equals(phase)) {
+                    continue;
+                }
                 /* Flow 3: chờ duyệt đề xuất */
                 if (Objects.equals(row.getStatusCode(), ASM_MEMBER_CREATED_PENDING_PM)
                     || Objects.equals(row.getStatusCode(), ASM_MEMBER_CREATED_PENDING_GM)) {
                     pending.add(row.getAssignmentId().toString());
-                    continue;
-                }
-                if (Constant.TARGET_SETUP_PHASE.equals(phase)) {
                     continue;
                 }
                 if (Constant.MID_YEAR_PHASE.equals(phase)) {
@@ -652,7 +902,9 @@
                 return false;
             }
             if (Constant.TARGET_SETUP_PHASE.equals(phase)) {
-                return rows.stream().noneMatch(r -> Objects.equals(r.getStatusCode(), 404));
+                return rows.stream().noneMatch(r ->
+                        Objects.equals(r.getStatusCode(), ASM_PENDING_ACCEPTANCE)
+                                || Objects.equals(r.getStatusCode(), ASM_FEEDBACK_IN_PROGRESS));
             }
             if (Constant.MID_YEAR_PHASE.equals(phase)) {
                 return rows.stream()
@@ -688,7 +940,8 @@
             if (assignmentsIndicatePhaseAlreadyDone(submitPhase, rows)) {
                     return false;
                 }
-                return pending.isEmpty();
+                List<String> submitPhasePending = computePendingAssignmentIds(submitPhase, rows);
+                return submitPhasePending.isEmpty();
             }
 
         /**
@@ -790,6 +1043,9 @@
                 if (hasMidYearSubmission) {
                     return Constant.MID_YEAR_PHASE;
                 }
+                if (hasLateMidYearSubmitCandidate(cycle, OffsetDateTime.now(), rows)) {
+                    return Constant.MID_YEAR_PHASE;
+                }
             }
             return getCurrentPhase(cycle);
         }
@@ -816,6 +1072,125 @@
         }
 
         /**
+         * Điểm tự đánh giá tự tính khi lưu minh chứng (CALC_RULE 802/803 + DSL trong {@code target_description}),
+         * đồng bộ JSON evidences với FE {@code EvaluationEvidenceDrawer} / {@code memberKpiHelpers}.
+         */
+        private Integer computeAutoSelfScoreFromEvidences(MemberKpiAssignmentDTO row, String evidencesJson) {
+            Integer rule = row.getCalculationRuleCode();
+            if (rule == null || StringUtils.isBlank(evidencesJson)) {
+                return null;
+            }
+            String trimmed = evidencesJson.trim();
+            if (!trimmed.startsWith("{")) {
+                return null;
+            }
+            try {
+                JsonNode root = objectMapper.readTree(trimmed);
+                BigDecimal metric = null;
+                if (Objects.equals(rule, CALC_RULE_COMMENT)) {
+                    metric = metricForCommentRule803(root);
+                } else if (Objects.equals(rule, CALC_RULE_AVERAGE)) {
+                    metric = metricForAverageRule802(root, row.getCalculationTypeCode());
+                }
+                if (metric == null) {
+                    return null;
+                }
+                return kpiScoringRulesService.resolveScore(metric, row.getTargetDescription());
+            } catch (Exception ex) {
+                log.debug("computeAutoSelfScoreFromEvidences skipped: {}", ex.toString());
+                return null;
+            }
+        }
+
+        private static BigDecimal metricForCommentRule803(JsonNode root) {
+            JsonNode a = root.get("actual");
+            if (a == null || a.isNull()) {
+                return null;
+            }
+            String s = a.isNumber() ? a.numberValue().toString() : a.asText("");
+            return parseFirstBigDecimal(s);
+        }
+
+        /**
+         * Trung bình tỉ lệ % theo từng dòng plan/actual; 701 = Actual/Plan×100, 702 = Plan/Actual×100 (giống FE).
+         */
+        private static BigDecimal metricForAverageRule802(JsonNode root, Integer calculationTypeCode) {
+            if (!root.has("planActualRecords") || !root.get("planActualRecords").isArray()) {
+                return null;
+            }
+            boolean planOverActual = Objects.equals(calculationTypeCode, CALC_TYPE_PLAN_OVER_ACTUAL);
+            List<BigDecimal> ratios = new ArrayList<>();
+            for (JsonNode x : root.get("planActualRecords")) {
+                String planStr = planCellFromRecord(x);
+                String actualStr = actualCellFromRecord(x);
+                BigDecimal plan = parseFirstBigDecimal(planStr);
+                BigDecimal actual = parseFirstBigDecimal(actualStr);
+                if (plan == null || actual == null) {
+                    continue;
+                }
+                if (planOverActual) {
+                    if (actual.compareTo(BD_ZERO) == 0) {
+                        continue;
+                    }
+                    ratios.add(
+                            plan.divide(actual, 8, RoundingMode.HALF_UP).multiply(BD_HUNDRED));
+                } else {
+                    if (plan.compareTo(BD_ZERO) == 0) {
+                        continue;
+                    }
+                    ratios.add(
+                            actual.divide(plan, 8, RoundingMode.HALF_UP).multiply(BD_HUNDRED));
+                }
+            }
+            if (ratios.isEmpty()) {
+                return null;
+            }
+            BigDecimal sum = BD_ZERO;
+            for (BigDecimal r : ratios) {
+                sum = sum.add(r);
+            }
+            return sum.divide(BigDecimal.valueOf(ratios.size()), 8, RoundingMode.HALF_UP);
+        }
+
+        private static String planCellFromRecord(JsonNode x) {
+            if (x != null && x.hasNonNull("total")) {
+                return textNodeOrEmpty(x.get("total"));
+            }
+            return x != null && x.hasNonNull("plan") ? x.get("plan").asText() : "";
+        }
+
+        private static String actualCellFromRecord(JsonNode x) {
+            if (x != null && x.hasNonNull("completed")) {
+                return textNodeOrEmpty(x.get("completed"));
+            }
+            return x != null && x.hasNonNull("actual") ? x.get("actual").asText() : "";
+        }
+
+        private static String textNodeOrEmpty(JsonNode n) {
+            if (n == null || n.isNull()) {
+                return "";
+            }
+            return n.isNumber() ? n.numberValue().toString() : n.asText("");
+        }
+
+        /** Số đầu tiên trong chuỗi (hỗ trợ "90%", "3,2") — cùng ý tưởng FE {@code parseNumericFromField}. */
+        private static BigDecimal parseFirstBigDecimal(String s) {
+            if (StringUtils.isBlank(s)) {
+                return null;
+            }
+            String norm = s.trim().replace(',', '.').replace('\u00a0', ' ');
+            Matcher m = FIRST_NUMERIC_TOKEN.matcher(norm);
+            if (!m.find()) {
+                return null;
+            }
+            try {
+                return new BigDecimal(m.group());
+            } catch (NumberFormatException e) {
+                return null;
+            }
+        }
+
+        /**
          * Parse JSON {@code kpi_assignments.evidences} — hỗ trợ {@code note}, {@code planActualRecords}
          * (ưu tiên {@code total}/{@code completed}, fallback {@code plan}/{@code actual}), URL/file đính kèm.
          */
@@ -832,6 +1207,15 @@
                 }
                 if (n.hasNonNull("note")) {
                     e.textNote = n.get("note").asText();
+                }
+                if (n.hasNonNull("memberFeedback")) {
+                    e.memberFeedback = n.get("memberFeedback").asText();
+                }
+                if (n.hasNonNull("leaderFeedback")) {
+                    e.leaderFeedback = n.get("leaderFeedback").asText();
+                }
+                if (n.hasNonNull("gmComment")) {
+                    e.gmComment = n.get("gmComment").asText();
                 }
                 if (StringUtils.isBlank(e.textNote) && n.hasNonNull("text")) {
                     e.textNote = n.get("text").asText();
@@ -934,6 +1318,9 @@
 
         private static final class EvidencesParsed {
             String textNote;
+            String memberFeedback;
+            String leaderFeedback;
+            String gmComment;
             String certificateOutcomeNote;
             String result;
             String actual;

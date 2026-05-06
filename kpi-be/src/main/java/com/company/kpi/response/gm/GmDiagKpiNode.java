@@ -15,11 +15,18 @@ public class GmDiagKpiNode {
     private String name;
     private String weight;
     private String target;
+    /**
+     * So khớp target KPI (catalog) với tổng target hiển thị trên các dòng khối (department),
+     * không cộng lặp từng assignment con: {@code short} | {@code ok} | {@code excess}.
+     */
+    private String targetBalance;
     private String actual;
     private String status;
     private String blockerSummary;
     /** {@code cascading} | {@code individual} | {@code promotion} */
     private String kpiType;
+    /** {@code kpi_master.is_global} — phân biệt KPI GM (công ty) vs member đề xuất. */
+    private Boolean isGlobal;
     /** {@code kpi_master.unit_code} — đồng bộ form Unit (FE). */
     private Integer unitCode;
     /** {@code kpi_master.category_id} — FE dùng thay cho BSC khi gắn KPI với thư viện. */

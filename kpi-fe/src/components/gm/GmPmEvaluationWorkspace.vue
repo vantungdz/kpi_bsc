@@ -18,6 +18,10 @@ import { gmKpiService } from '@/services/modules/kpi-gm.service'
 import { mapGmEvaluationHubApiToPmBranches } from '@/utils/mapGmEvaluationHubApiToPmBranches'
 import { pushGmNotification } from '@/composables/useGmNotifications'
 
+const emit = defineEmits<{
+  (e: 'pending-count', count: number): void
+}>()
+
 const route = useRoute()
 const useMock = import.meta.env.VITE_USE_MOCK === 'true'
 const selectedCycleId = inject<Ref<string>>('gmSelectedCycleId', ref(''))
@@ -75,6 +79,18 @@ const employees = computed<GmEvalMember[]>(() => {
   if (!id) return all
   return all.filter((e) => e.projectIds.includes(id))
 })
+
+const pendingEvaluationCount = computed(() => {
+  return employees.value.filter((e) => e.gmApprovalActionEnabled === true).length
+})
+
+watch(
+  pendingEvaluationCount,
+  (count) => {
+    emit('pending-count', count)
+  },
+  { immediate: true },
+)
 
 const pmBranches = computed<GmEvalPmBranch[]>(() => {
   const tree = basePmBranches.value

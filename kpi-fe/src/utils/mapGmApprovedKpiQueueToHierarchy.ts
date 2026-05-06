@@ -1,5 +1,6 @@
 import type { GmApprovedKpiQueueItemApi } from '@/types/gm-approved-kpi-api'
 import type { GmBscPerspective, GmHierarchyKpi, GmHierarchyStatus, GmStrategicKpiKind } from '@/types/gm-workspace'
+import { formatKpiTargetWithUnit } from '@/utils/kpiUnitCodes'
 
 function categoryNameToPerspective(name: string | null | undefined): GmBscPerspective {
   const n = String(name ?? '')
@@ -26,6 +27,14 @@ function formatWeight(w: unknown): string {
   return `${n}%`
 }
 
+function formatTargetValue(v: unknown): string {
+  const s = String(v ?? '').trim()
+  if (!s) return '—'
+  const n = Number.parseFloat(s)
+  if (!Number.isFinite(n)) return '—'
+  return Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/\.?0+$/, '')
+}
+
 function rowStatusVisual(code: number | null | undefined): GmHierarchyStatus {
   const c = Number(code)
   if (c === 403) return 'danger'
@@ -47,6 +56,7 @@ export function mapGmApprovedKpiQueueItemsToHierarchyRows(items: GmApprovedKpiQu
       String(row.statusDescription ?? '').trim() ||
       String(row.statusName ?? '').trim() ||
       String(row.statusCode ?? '—')
+    const feedbackNote = String(row.feedbackNote ?? '').trim()
     const asmName = String(row.statusName ?? '').trim() || null
     return {
       id: String(row.assignmentId),
@@ -57,15 +67,20 @@ export function mapGmApprovedKpiQueueItemsToHierarchyRows(items: GmApprovedKpiQu
       assignmentStatusName: asmName,
       name: title,
       weight: formatWeight(row.weight),
-      target: row.targetDescription?.trim() ? String(row.targetDescription) : '—',
+      target: formatKpiTargetWithUnit(
+        formatTargetValue(row.targetValue),
+        row.unitCode != null ? Number(row.unitCode) : undefined,
+      ),
       actual: '—',
       status: rowStatusVisual(row.statusCode),
-      blockerSummary: `${assignee} · ${asmDesc}`,
+      blockerSummary: feedbackNote ? `${assignee} · ${asmDesc} · ${feedbackNote}` : `${assignee} · ${asmDesc}`,
       kpiType: typeCodeToKpiType(row.typeCode),
+      unitCode: row.unitCode != null ? Number(row.unitCode) : undefined,
       diagnosticsFallbackGroup: categoryNameToPerspective(row.categoryName),
       categoryName: row.categoryName ?? undefined,
       lifecycleStatus: 'inactive',
       isImportant: Boolean(row.important),
+      isGlobal: false,
       pmOwners: [],
     }
   })

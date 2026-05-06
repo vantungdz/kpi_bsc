@@ -33,6 +33,13 @@ import type { GmKpiTemplateItemRow, GmKpiTemplatePackageRow } from '@/types/gm-k
 import type { DepartmentManagerOption } from '@/types/department-manager'
 import GmStrategicKpiTypeTag from '@/components/gm/GmStrategicKpiTypeTag.vue'
 import { GM_BSC_LABELS, GM_BSC_ORDER, normalizeGmBscPerspective } from '@/utils/gm-bsc-diagnostics'
+import {
+  buildScoringRulesPayload,
+  emptyScoringRulesPayload,
+  extractRawInputFromApiTargetDescription,
+  SCORING_RULES_EXAMPLE_TOOLTIP,
+  validateScoringRulesDsl,
+} from '@/utils/kpiScoringRulesDsl'
 
 interface DirectMemberOption {
   val: string
@@ -177,6 +184,14 @@ const kpiType = computed<StrategicKpiType>({
   },
 })
 
+/** Cascading + Individual + Promotion đều có ô Target tổng (catalog); chỉ Team có thêm phân bổ PM. */
+const needsStrategicTargetInput = computed(
+  () =>
+    kpiType.value === 'cascading' ||
+    kpiType.value === 'individual' ||
+    kpiType.value === 'promotion',
+)
+
 const kpiTypeRows = ref<KpiTypeOption[]>([])
 const kpiTypesLoading = ref(false)
 const kpiTypesError = ref<string | null>(null)
@@ -316,6 +331,43 @@ async function ensureMembersLoadedForRank(rankCode: string) {
     membersByRankLoading.value = { ...membersByRankLoading.value, [code]: false }
   }
 }
+
+function isRankMemberListLoaded(rankCode: string): boolean {
+  const code = String(rankCode ?? '').trim()
+  return code !== '' && Object.prototype.hasOwnProperty.call(membersByRankCache.value, code)
+}
+
+/** Rank có ít nhất một member (sau khi đã tải xong); rank chưa tải hoặc đang tải → coi như không chọn được. */
+function rankHasMembers(rankCode: string): boolean {
+  const code = String(rankCode ?? '').trim()
+  if (!code) return false
+  if (membersByRankLoading.value[code]) return false
+  if (!isRankMemberListLoaded(code)) return false
+  return (membersByRankCache.value[code] ?? []).length > 0
+}
+
+function rankAssignCheckboxTitle(rankCode: string, rankLabel: string): string {
+  const code = String(rankCode ?? '').trim()
+  if (!code) return ''
+  if (membersByRankLoading.value[code] || !isRankMemberListLoaded(code)) {
+    return 'Đang tải danh sách member cho rank này…'
+  }
+  if (!rankHasMembers(code)) return 'Không có member nào thuộc rank này'
+  const lab = String(rankLabel ?? '').trim()
+  return lab || code
+}
+
+function pruneIndividualRanksWithoutMembers() {
+  selectedRanks.value = selectedRanks.value.filter((r) => rankHasMembers(r))
+  const next: Record<string, string[]> = { ...selectedRankMembers.value }
+  for (const k of Object.keys(next)) {
+    if (!rankHasMembers(k)) delete next[k]
+  }
+  selectedRankMembers.value = next
+  expandedRankSections.value = expandedRankSections.value.filter((r) => rankHasMembers(r))
+}
+
+const prefetchIndividualRankMembersInFlight = ref(false)
 
 const kpiName = ref('')
 const description = ref('')
@@ -546,7 +598,7 @@ function buildPayloadFromTemplateApiItem(it: GmKpiTemplateItemRow): Record<strin
     typeCode,
     perspective: cid,
     kpiName: String(it.masterName ?? '').trim() || 'KPI',
-    targetDescription: '',
+    targetDescription: emptyScoringRulesPayload(),
     targetValue: it.defaultTargetValue != null ? Number(it.defaultTargetValue) : null,
     unitCode,
     weightPct: it.defaultWeight != null ? String(it.defaultWeight) : '0',
@@ -717,11 +769,11 @@ function applyCopyFromKpi(id: string) {
     .getStrategicKpiForEdit(apiIdForCopy)
     .then((data) => {
       const cm = String(data.calculationMethod ?? '').trim()
-      if (!cm) return
-      hydrateCalculationFromPersisted(cm)
+      if (cm) hydrateCalculationFromPersisted(cm)
+      description.value = extractRawInputFromApiTargetDescription(data.targetDescription)
     })
     .catch(() => {
-      // Giữ giá trị công thức hiện tại nếu không tải được dữ liệu chi tiết KPI nguồn.
+      // Giữ giá trị công thức / quy tắc chấm điểm hiện tại nếu không tải được dữ liệu chi tiết KPI nguồn.
     })
 }
 
@@ -743,13 +795,12 @@ const selectedFormulaExpression = computed(() => {
   return parts.join(' — ')
 })
 
-/** Rule COMMENT (803) luôn gắn MANUAL_RATING (703), kể cả khi API chưa trả đủ `calcTypes`. */
+/** Rule COMMENT (803) — không dùng CALC_TYPE (703 đã bỏ). */
 const COMMENT_RULE_CODE = 803
-const MANUAL_RATING_TYPE_CODE = 703
 
 function clampCalculationTypeToRule() {
   if (calculationRuleCode.value === COMMENT_RULE_CODE) {
-    calculationTypeCode.value = MANUAL_RATING_TYPE_CODE
+    calculationTypeCode.value = null
     return
   }
   const types = typesForSelectedRule.value
@@ -914,6 +965,7 @@ function pmChipLabel(id: string): string {
 async function toggleRank(val: string) {
   const i = selectedRanks.value.indexOf(val)
   if (i === -1) {
+    if (!rankHasMembers(val)) return
     selectedRanks.value = [...selectedRanks.value, val]
     await ensureMembersLoadedForRank(val)
     const members = membersByRank(val)
@@ -1025,7 +1077,8 @@ function fillCreateFormFieldsFromHierarchyKpi(kpi: GmHierarchyKpi) {
     }
     pmTargets.value = nextPm
   } else {
-    targetValue.value = ''
+    const raw = extractLeadingNumberFromText(kpi.target ?? '')
+    targetValue.value = raw
     unit.value = kpiUnitCodeToFormUnit(kpi.unitCode)
     selectedPMs.value = []
     pmTargets.value = {}
@@ -1107,13 +1160,10 @@ async function hydrateFormFromStrategicKpiEditData(data: GmStrategicKpiEditData,
       ? String(data.perspective).trim()
       : kpiCategories.value[0]?.id ?? ''
   kpiName.value = String(data.kpiName ?? '').trim()
-  description.value =
-    data.targetDescription != null && String(data.targetDescription).trim() !== ''
-      ? String(data.targetDescription).trim()
-      : ''
+  description.value = extractRawInputFromApiTargetDescription(data.targetDescription)
   weightPct.value = weightPctStringFromApi(data.weightPct)
 
-  if (kpiTypeCode.value === 102) {
+  if (kpiTypeCode.value === 102 || kpiTypeCode.value === 101 || kpiTypeCode.value === 103) {
     const tv = data.targetValue
     if (tv != null && tv !== '' && Number.isFinite(Number(tv))) {
       targetValue.value = String(tv)
@@ -1167,7 +1217,6 @@ async function hydrateFormFromStrategicKpiEditData(data: GmStrategicKpiEditData,
 
 watch(kpiType, () => {
   if (isApplyingCopyTemplate.value || isHydratingFromEdit.value) return
-  if (kpiType.value !== 'cascading') targetValue.value = ''
   assignDropdown.value = null
   selectedPMs.value = []
   pmTargets.value = {}
@@ -1190,6 +1239,24 @@ watch(kpiType, () => {
     void loadPromotionAssignees()
   }
 })
+
+/** Tải member từng rank để biết rank nào rỗng → disable checkbox (chỉ KPI individual). */
+watch(
+  () => [open.value, kpiType.value, ranksLoading.value, rankRows.value] as const,
+  async ([isOpen, kind, rLoading, rows]) => {
+    if (!isOpen || kind !== 'individual' || rLoading || !rows.length) return
+    if (prefetchIndividualRankMembersInFlight.value) return
+    prefetchIndividualRankMembersInFlight.value = true
+    try {
+      const opts = rankOptionsForUi.value
+      await Promise.all(opts.map((o) => ensureMembersLoadedForRank(String(o.val ?? '').trim())))
+      if (!open.value || kpiType.value !== 'individual') return
+      pruneIndividualRanksWithoutMembers()
+    } finally {
+      prefetchIndividualRankMembersInFlight.value = false
+    }
+  },
+)
 
 watch(calculationRuleCode, () => {
   clampCalculationTypeToRule()
@@ -1379,7 +1446,7 @@ function validateForm(): boolean {
     err.formCycleId = 'Chọn chu kỳ đánh giá (năm KPI).'
   }
 
-  if (kpiType.value === 'cascading') {
+  if (needsStrategicTargetInput.value) {
     const tvRaw = targetValue.value
     const tvStr = String(tvRaw ?? '').trim()
     if (tvStr === '' || Number.isNaN(Number(tvRaw))) {
@@ -1410,6 +1477,16 @@ function validateForm(): boolean {
     }
   }
 
+  const descTrim = description.value.trim()
+  if (!descTrim) {
+    err.scoringRules = 'Vui lòng nhập quy tắc chấm điểm (đủ các mức 1–5 theo cú pháp).'
+  } else {
+    const vr = validateScoringRulesDsl(description.value)
+    if (!vr.ok) {
+      err.scoringRules = vr.errors.join(' ')
+    }
+  }
+
   formErrors.value = err
   return Object.keys(err).length === 0
 }
@@ -1427,11 +1504,12 @@ async function save() {
     /** UUID `kpi_categories.id` — nhóm KPI trên DB (tên field legacy `perspective`). */
     perspective: perspective.value,
     kpiName: kpiName.value,
-    targetDescription: description.value,
-    targetValue:
-      kpiType.value === 'cascading'
-        ? Number.parseFloat(String(targetValue.value).trim())
-        : null,
+    targetDescription: description.value.trim()
+      ? buildScoringRulesPayload(description.value)
+      : null,
+    targetValue: needsStrategicTargetInput.value
+      ? Number.parseFloat(String(targetValue.value).trim())
+      : null,
     unit: unit.value,
     unitCode: kpiFormUnitToUnitCode(unit.value),
     weightPct: weightPct.value,
@@ -1818,9 +1896,9 @@ async function save() {
 
                 <div
                   class="grid grid-cols-1 gap-4"
-                  :class="kpiType === 'cascading' ? 'sm:grid-cols-2 sm:gap-x-6' : ''"
+                  :class="needsStrategicTargetInput ? 'sm:grid-cols-2 sm:gap-x-6' : ''"
                 >
-                  <div v-if="kpiType === 'cascading'" class="min-w-0">
+                  <div v-if="needsStrategicTargetInput" class="min-w-0">
                     <label class="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500">
                       Target <span class="text-rose-500">*</span>
                     </label>
@@ -1989,16 +2067,38 @@ async function save() {
                 </div>
 
                 <div>
-                  <label class="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                    Mô tả mục tiêu
-                    <span class="text-[9px] font-normal normal-case text-slate-400">(Optional)</span>
-                  </label>
+                  <div class="mb-1.5 flex items-center gap-1.5">
+                    <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                      Quy tắc chấm điểm <span class="text-rose-500">*</span>
+                    </label>
+                    <span class="group relative inline-flex shrink-0">
+                      <button
+                        type="button"
+                        class="cursor-help rounded p-0.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-blue-600 focus-visible:outline focus-visible:ring-2 focus-visible:ring-slate-300"
+                        aria-label="Ví dụ cú pháp quy tắc chấm điểm"
+                      >
+                        <i class="fas fa-circle-question text-[12px]" aria-hidden="true" />
+                      </button>
+                      <span
+                        role="tooltip"
+                        class="pointer-events-none absolute right-0 top-full z-[110] mt-1 hidden min-w-[11rem] max-w-[20rem] whitespace-pre-line rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-left text-[10px] font-medium leading-snug text-slate-700 shadow-lg group-hover:block group-focus-within:block"
+                      >{{ SCORING_RULES_EXAMPLE_TOOLTIP }}</span>
+                    </span>
+                  </div>
                   <textarea
                     v-model="description"
-                    rows="2"
-                    placeholder="Mô tả mục tiêu / cách đo — map sang target_description khi lưu..."
-                    class="custom-scrollbar w-full resize-none rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-800 outline-none transition-all focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
+                    rows="5"
+                    placeholder="1: &lt;50&#10;2: 50-70&#10;3: 71-85&#10;4: 86-99&#10;5: &gt;=100"
+                    class="custom-scrollbar min-h-[7.5rem] w-full resize-y rounded-md px-2.5 py-1.5 text-xs font-medium text-slate-800 outline-none transition-all focus:ring-2"
+                    :class="
+                      formErrors.scoringRules
+                        ? '!border-rose-400 !bg-rose-50/70 focus:border-rose-400 focus:ring-rose-100'
+                        : 'input-required focus:border-blue-400 focus:ring-blue-100'
+                    "
                   />
+                  <p v-if="formErrors.scoringRules" class="mt-1 text-[10px] font-semibold text-rose-600">
+                    {{ formErrors.scoringRules }}
+                  </p>
                 </div>
               </div>
             </div>
@@ -2031,23 +2131,12 @@ async function save() {
                     class="input-optional relative flex min-h-[38px] w-full flex-wrap items-center gap-1.5 rounded-md py-1.5 pl-8 pr-7 text-left text-xs font-bold text-slate-700 transition-all"
                     @click.stop="toggleAssignPmDropdown"
                   >
-                    <span v-if="selectedPMs.length === 0" class="w-full font-medium text-slate-400">
-                      Chọn một hoặc nhiều quản lý department…
-                    </span>
-                    <span
-                      v-for="pm in selectedPMs"
-                      :key="pm"
-                      class="inline-flex items-center gap-1 whitespace-nowrap rounded-md border border-blue-200 bg-blue-100 px-2 py-0.5 text-[10px] font-bold text-blue-700 shadow-sm"
-                    >
-                      {{ pmChipLabel(pm) }}
-                      <button
-                        type="button"
-                        class="rounded p-0.5 text-blue-600 transition hover:bg-blue-200/60"
-                        aria-label="Bỏ chọn quản lý department"
-                        @click.stop="togglePm(pm)"
-                      >
-                        <i class="fas fa-times text-[9px]" />
-                      </button>
+                    <span class="w-full font-medium text-slate-400">
+                      {{
+                        selectedPMs.length === 0
+                          ? 'Chọn một hoặc nhiều quản lý department…'
+                          : `Đã chọn ${selectedPMs.length} quản lý — bấm để thêm; xóa từng người ở danh sách bên dưới`
+                      }}
                     </span>
                   </button>
                   <i class="fas fa-users pointer-events-none absolute left-2.5 top-2.5 text-[10px] text-slate-400" />
@@ -2101,20 +2190,27 @@ async function save() {
                   <div
                     v-for="pm in selectedPMs"
                     :key="pm"
-                    class="flex flex-col justify-between gap-2 rounded-lg border border-slate-200 bg-white p-2.5 shadow-sm sm:flex-row sm:items-center sm:gap-4"
+                    class="flex flex-col justify-between gap-2 rounded-lg border border-slate-200 bg-white p-2.5 shadow-sm sm:flex-row sm:items-center sm:gap-3"
                   >
-                    <span class="flex items-center gap-1.5 truncate text-[11px] font-bold text-slate-700 sm:w-1/2">
-                      <i class="fas fa-user text-[10px] text-slate-400" />
-                      {{ pmChipLabel(pm) }}
+                    <span class="flex min-w-0 items-center gap-1.5 text-[11px] font-bold text-slate-700 sm:w-[38%]">
+                      <i class="fas fa-user shrink-0 text-[10px] text-slate-400" />
+                      <span class="truncate">{{ pmChipLabel(pm) }}</span>
                     </span>
-                    <div class="flex items-center gap-2 sm:w-1/2">
+                    <div class="flex min-w-0 flex-1 items-center gap-2">
                       <input
                         v-model="pmTargets[pm]"
                         type="number"
                         placeholder="Target..."
-                        class="w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-bold text-slate-800 outline-none transition-all focus:border-blue-400 focus:ring-1 focus:ring-blue-100"
+                        class="min-w-0 flex-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-bold text-slate-800 outline-none transition-all focus:border-blue-400 focus:ring-1 focus:ring-blue-100"
                       />
                       <span class="shrink-0 text-[10px] font-bold text-slate-400">{{ unit }}</span>
+                      <button
+                        type="button"
+                        class="shrink-0 rounded-md border border-rose-200 bg-rose-50 px-2.5 py-1 text-[10px] font-bold text-rose-700 transition-colors hover:bg-rose-100"
+                        @click="togglePm(pm)"
+                      >
+                        Xóa
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -2128,26 +2224,38 @@ async function save() {
                   <label
                     v-for="rk in rankOptionsForUi"
                     :key="rk.val"
-                    class="flex cursor-pointer items-center gap-2 rounded-lg border bg-white p-2 shadow-sm transition-colors hover:bg-blue-50/50"
-                    :class="
+                    :title="rankAssignCheckboxTitle(rk.val, rk.label)"
+                    class="flex items-center gap-2 rounded-lg border bg-white p-2 shadow-sm transition-colors"
+                    :class="[
+                      rankHasMembers(rk.val) ? 'cursor-pointer hover:bg-blue-50/50' : 'cursor-not-allowed bg-slate-50/80',
                       selectedRanks.includes(rk.val)
                         ? 'border-blue-500 bg-blue-50'
-                        : 'border-slate-200'
-                    "
+                        : rankHasMembers(rk.val)
+                          ? 'border-slate-200'
+                          : 'border-slate-200/60',
+                    ]"
                   >
                     <input
                       type="checkbox"
-                      class="h-3.5 w-3.5 shrink-0 cursor-pointer rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                      class="h-3.5 w-3.5 shrink-0 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                      :class="rankHasMembers(rk.val) ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'"
                       :checked="isRankFullySelected(rk.val)"
                       :indeterminate="isRankPartiallySelected(rk.val)"
-                      @change="toggleRank(rk.val)"
+                      :disabled="!rankHasMembers(rk.val)"
+                      @change="rankHasMembers(rk.val) && toggleRank(rk.val)"
                     />
                     <div class="flex min-w-0 flex-col leading-none">
                       <span
                         class="text-xs font-bold"
-                        :class="selectedRanks.includes(rk.val) ? 'text-blue-700' : 'text-slate-700'"
+                        :class="[
+                          selectedRanks.includes(rk.val) ? 'text-blue-700' : rankHasMembers(rk.val) ? 'text-slate-700' : 'text-slate-400',
+                        ]"
                       >{{ rk.val }}</span>
-                      <span class="mt-1 block truncate text-[9px] text-slate-500" :title="rk.label">{{ rk.label }}</span>
+                      <span
+                        class="mt-1 block truncate text-[9px]"
+                        :class="rankHasMembers(rk.val) ? 'text-slate-500' : 'text-slate-400'"
+                        :title="rk.label"
+                      >{{ rk.label }}</span>
                     </div>
                   </label>
                 </div>
@@ -2255,23 +2363,12 @@ async function save() {
                   class="input-optional relative flex min-h-[38px] w-full flex-wrap items-center gap-1.5 rounded-md py-1.5 pl-8 pr-7 text-left text-xs font-bold text-slate-700 transition-all"
                   @click.stop="assignDropdown = assignDropdown === 'member' ? null : 'member'"
                 >
-                  <span v-if="selectedMembers.length === 0" class="w-full font-medium text-slate-400">
-                    Tìm và chọn nhiều thành viên...
-                  </span>
-                  <span
-                    v-for="id in selectedMembers"
-                    :key="id"
-                    class="inline-flex items-center gap-1 whitespace-nowrap rounded-md border border-blue-200 bg-blue-100 px-2 py-0.5 text-[10px] font-bold text-blue-700 shadow-sm"
-                  >
-                    {{ memberByVal(id)?.short ?? id }}
-                    <button
-                      type="button"
-                      class="rounded p-0.5 text-blue-600 transition hover:bg-blue-200/60"
-                      aria-label="Bỏ chọn thành viên"
-                      @click.stop="toggleMember(id)"
-                    >
-                      <i class="fas fa-times text-[9px]" />
-                    </button>
+                  <span class="w-full font-medium text-slate-400">
+                    {{
+                      selectedMembers.length === 0
+                        ? 'Tìm và chọn nhiều thành viên...'
+                        : `Đã chọn ${selectedMembers.length} thành viên — bấm để thêm; xóa từng người ở danh sách bên dưới`
+                    }}
                   </span>
                 </button>
                 <i class="fas fa-user-plus pointer-events-none absolute left-2.5 top-2.5 text-[10px] text-slate-400" />
@@ -2355,6 +2452,29 @@ async function save() {
                           : 'Không có thành viên khớp bộ lọc.'
                       }}
                     </p>
+                  </div>
+                </div>
+
+                <div
+                  v-if="selectedMembers.length > 0"
+                  class="mt-2 space-y-1.5 rounded-lg border border-blue-100 bg-blue-50/50 p-3"
+                >
+                  <p class="mb-1 text-[10px] font-bold uppercase tracking-wide text-blue-800">Thành viên đã chọn</p>
+                  <div
+                    v-for="id in selectedMembers"
+                    :key="id"
+                    class="flex items-center justify-between gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 shadow-sm"
+                  >
+                    <span class="min-w-0 truncate text-[11px] font-bold text-slate-700">
+                      {{ memberByVal(id)?.short ?? id }}
+                    </span>
+                    <button
+                      type="button"
+                      class="shrink-0 rounded-md border border-rose-200 bg-rose-50 px-2.5 py-1 text-[10px] font-bold text-rose-700 transition-colors hover:bg-rose-100"
+                      @click="toggleMember(id)"
+                    >
+                      Xóa
+                    </button>
                   </div>
                 </div>
               </div>

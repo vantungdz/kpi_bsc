@@ -55,7 +55,7 @@
             created_by, updated_by
         ) VALUES (
             #{id}, #{cycleId}, #{masterKpiId},
-            #{targetDescription}, #{targetValue}, #{weight}, #{isImportant},
+            CAST(#{targetDescription} AS jsonb), #{targetValue}, #{weight}, #{isImportant},
             #{createdBy}, #{createdBy}
         )
     </insert>
@@ -115,7 +115,7 @@
     <update id="updateKpisInformationStrategic">
         UPDATE kpis_information
         SET
-            target_description = #{targetDescription},
+            target_description = CAST(#{targetDescription} AS jsonb),
             target_value = #{targetValue},
             weight = #{weight},
             is_important = #{isImportant},
@@ -134,6 +134,7 @@
             km.category_id,
             kc.name AS category_name,
             km.type_code,
+            km.is_global,
             km.unit_code,
             ki.weight AS kpi_weight,
             ki.target_value AS catalog_target_value,
@@ -250,7 +251,8 @@
             ka.end_self_score,
             ka.end_pm_score,
             ka.end_gm_score,
-            ka.target_value AS member_target_value
+            ka.target_value AS member_target_value,
+            kf.feedback_note
         FROM
             kpis_information ki
             INNER JOIN kpi_master km ON ki.master_kpi_id = km.id
@@ -261,6 +263,17 @@
                 AND ka.kpi_info_id = ki.id
                 AND ka.user_id IS NOT NULL
                 AND ka.deleted_at IS NULL
+            LEFT JOIN kpi_assignment_feedbacks kf ON kf.assignment_id = ka.id
+                AND kf.cycle_id = ka.cycle_id
+                AND kf.target_role_id = (
+                    SELECT r.id
+                    FROM roles r
+                    WHERE UPPER(TRIM(BOTH FROM r.code)) = 'GM'
+                        AND r.deleted_at IS NULL
+                    LIMIT 1
+                )
+                AND kf.is_active = TRUE
+                AND kf.deleted_at IS NULL
             LEFT JOIN users u ON u.id = ka.user_id
                 AND u.deleted_at IS NULL
             LEFT JOIN user_departments ud ON ud.user_id = u.id

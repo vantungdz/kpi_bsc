@@ -13,7 +13,14 @@ public final class Constants {
     public static final class AssignStatus {
         private AssignStatus() {}
         public static final int WAITING_PM_APPROVAL = 402;
+        /** Member đề xuất đã được PM duyệt — chờ GM. */
+        public static final int WAITING_GM_APPROVAL = 403;
         public static final int PENDING_ACCEPTANCE = 404;
+        /** Đã chốt mục tiêu (đang chạy) — ví dụ sau GM duyệt đề xuất KPI (403). */
+        public static final int ACCEPTED = 405;
+        public static final int REJECTED = 406;
+        /** Đang chờ xử lý feedback giữa các cấp (PM↔GM / Member↔PM). */
+        public static final int FEEDBACK_IN_PROGRESS = 407;
     }
 
     public static final class Category {

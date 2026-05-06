@@ -1,0 +1,355 @@
+<script setup lang="ts">
+import { computed } from 'vue'
+import type { KpiItem } from '@/types/kpi'
+import {
+  memberItemEvalStatus,
+} from '@/utils/memberKpiHelpers'
+import { useMemberKpiFormatters } from '@/composables/useMemberKpiFormatters'
+import { extractRawInputFromApiTargetDescription } from '@/utils/kpiScoringRulesDsl'
+
+type KpiCategorySection = { key: string; headerLabel: string; items: KpiItem[] }
+
+const props = defineProps<{
+  sections: KpiCategorySection[]
+  personalSelfWeightedAvg: number | null
+  isCurrentYear: boolean
+  submitting: boolean
+  canSubmit: boolean
+  isSubmitDisabled: boolean
+  submitLabel: string
+}>()
+
+const emit = defineEmits<{
+  (e: 'open-evidence', item: KpiItem): void
+  (e: 'open-feedback', item: KpiItem): void
+  (e: 'submit'): void
+}>()
+
+const { formatKpiActualResult } = useMemberKpiFormatters()
+
+function rowAlertClass(item: KpiItem): string {
+  if (Number(item.statusCode ?? 0) === 407) return 'bg-violet-100/70 ring-1 ring-inset ring-violet-200'
+  const s = memberItemEvalStatus(item)
+  if (s === 'overdue') return 'bg-rose-50/55'
+  if (s === 'revision') return 'bg-orange-50/50'
+  if (s === 'pending_approval') return 'bg-sky-50/45'
+  if (s === 'approved') return 'bg-emerald-50/40'
+  if (s === 'feedback') return 'bg-violet-100/70 ring-1 ring-inset ring-violet-200'
+  return ''
+}
+
+function statusPhaseClass(code: number | null | undefined): string {
+  if ([501, 502, 601, 602].includes(Number(code))) return 'text-sky-700'
+  if (Number(code) === 407) return 'text-violet-700'
+  if (Number(code) === 406) return 'text-orange-700'
+  if ([503, 603].includes(Number(code))) return 'text-emerald-700'
+  if ([402, 403, 404, 405].includes(Number(code))) return 'text-slate-700'
+  return 'text-slate-600'
+}
+
+function statusBadgeClass(code: number | null | undefined): string {
+  if ([501, 502, 601, 602].includes(Number(code))) return 'border-sky-200 bg-sky-50'
+  if (Number(code) === 407) return 'border-violet-200 bg-violet-50'
+  if (Number(code) === 406) return 'border-orange-200 bg-orange-50'
+  if ([503, 603].includes(Number(code))) return 'border-emerald-200 bg-emerald-50'
+  if ([402, 403, 404, 405].includes(Number(code))) return 'border-slate-200 bg-slate-50'
+  return 'border-slate-200 bg-slate-50'
+}
+
+function canOpenEvidence(item: KpiItem): boolean {
+  const status = Number(item.statusCode ?? 0)
+  return item.canViewEvidence === true || status >= 404
+}
+
+function canSendFeedback(item: KpiItem): boolean {
+  const status = Number(item.statusCode ?? 0)
+  return status === 404 || status === 407
+}
+
+function formatTargetDisplay(item: KpiItem): string {
+  const raw = item.assignmentTargetValue ?? item.kpiTemplateTargetValue
+  if (raw == null) return '-'
+  const unit = String(item.unitName ?? '').trim()
+  return unit ? `${raw} ${unit}` : String(raw)
+}
+
+function targetDataTooltip(item: KpiItem): string {
+  const rawRules =
+    extractRawInputFromApiTargetDescription(item.targetDescription ?? '')
+    || extractRawInputFromApiTargetDescription(item.target ?? '')
+  if (rawRules) return `Quy tắc chấm điểm:\n${rawRules}`
+  const fallback = String(item.target ?? '').trim()
+  return fallback || formatTargetDisplay(item)
+}
+
+// ── Tfoot computed values ─────────────────────────────────────────────────────
+const allItems = computed(() => props.sections.flatMap(s => s.items))
+const hasPersonalAssignments = computed(() => allItems.value.length > 0)
+
+/** Tổng trọng số của tất cả KPI */
+const totalWeight = computed(() =>
+  allItems.value.reduce((sum, i) => sum + i.weight, 0),
+)
+
+/** Tổng (selfScore × weight) cho các KPI đã có điểm tự đánh giá */
+const totalSelfWeightedScore = computed(() =>
+  allItems.value.reduce(
+    (sum, i) => (i.selfScore !== null ? sum + (i.selfScore ?? 0) * i.weight : sum),
+    0,
+  ),
+)
+
+/** Tổng (pmScore × weight) cho các KPI đã có điểm PM */
+const totalPmWeightedScore = computed(() =>
+  allItems.value.reduce(
+    (sum, i) => (i.pmScore !== null ? sum + (i.pmScore ?? 0) * i.weight : sum),
+    0,
+  ),
+)
+
+/** Điểm trung bình cuối cùng (PM) có trọng số */
+const pmWeightedAvg = computed((): number | null => {
+  const rows = allItems.value.filter(i => i.pmScore !== null)
+  if (!rows.length) return null
+  let num = 0
+  let den = 0
+  for (const i of rows) {
+    num += (i.pmScore ?? 0) * i.weight
+    den += i.weight
+  }
+  return den ? num / den : null
+})
+</script>
+
+<template>
+  <div class="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-5 py-4">
+    <h3 class="flex items-center gap-2 text-lg font-bold text-slate-800">
+      <i class="fas fa-list-alt text-slate-400" />
+      Chi Tiết Bảng KPI Cá Nhân
+    </h3>
+  </div>
+
+  <div v-if="!hasPersonalAssignments" class="px-5 py-16 text-center text-sm text-slate-500">
+    <i class="fas fa-bullseye mb-3 text-3xl text-slate-200" />
+    <p class="font-medium text-slate-600">Chưa có KPI Personal</p>
+    <p class="mt-1 mx-auto max-w-md text-xs text-slate-400">
+      Khi PM/Leader giao mục tiêu cá nhân hoặc bạn tạo KPI mới, các dòng sẽ hiển thị tại đây.
+    </p>
+  </div>
+
+  <div v-else class="overflow-x-auto">
+    <table class="w-full text-left">
+      <thead class="border-b border-slate-200 bg-white">
+        <tr class="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+          <th class="w-12 px-5 py-4 text-center">STT</th>
+          <th class="min-w-[200px] px-5 py-4">Hạng Mục (Objectives)</th>
+          <th class="min-w-[10rem] px-5 py-4 text-center">Trạng thái KPI</th>
+          <th class="px-5 py-4">Chỉ Tiêu (Target)</th>
+          <th class="w-24 px-5 py-4 text-center">Trọng số (W)</th>
+          <th class="min-w-[8rem] px-5 py-4 text-center">
+            <span class="inline-flex items-center gap-1">
+              Actual Result
+            </span>
+          </th>
+          <th class="w-28 bg-sky-50/90 px-5 py-4 text-center text-slate-600">Self Score</th>
+          <th class="w-28 px-5 py-4 text-center">Final Score</th>
+          <th class="w-28 px-5 py-4 text-right">Thao tác</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-100">
+        <template v-for="section in sections" :key="section.key">
+          <tr class="bg-amber-50/80 border-y border-amber-100">
+            <td colspan="9" class="py-2 px-5 text-xs font-bold text-amber-800 uppercase tracking-wider">
+              {{ section.headerLabel }}
+            </td>
+          </tr>
+          <tr
+            v-for="(item, idx) in section.items"
+            :key="item.id"
+            class="group transition-colors hover:bg-slate-50"
+            :class="rowAlertClass(item)"
+          >
+            <td class="py-4 px-5 text-center text-sm font-semibold text-slate-400">{{ idx + 1 }}</td>
+
+            <td class="py-4 px-5">
+              <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <p class="text-sm font-bold text-slate-900">{{ item.code }} {{ item.name }}</p>
+              </div>
+            </td>
+
+            <td class="max-w-[11rem] px-3 py-4 text-center align-top">
+              <span
+                class="inline-flex max-w-full flex-col items-center gap-0.5 rounded-lg border px-2 py-1.5 text-[10px] font-semibold leading-tight"
+                :class="statusBadgeClass(item.statusCode)"
+                :title="item.assignmentStatusName ?? ''"
+              >
+                <span class="line-clamp-3 text-center" :class="statusPhaseClass(item.statusCode)">{{ item.assignmentStatusName ?? '—' }}</span>
+              </span>
+            </td>
+
+            <td class="max-w-xs py-4 px-5 align-middle">
+              <div class="inline-flex items-center gap-1">
+                <p class="text-sm font-medium text-slate-700 text-center">
+                  {{ formatTargetDisplay(item) }}
+                </p>
+                <span
+                  class="inline-flex h-4 w-4 items-center justify-center rounded-full border border-slate-300 text-[10px] font-bold text-slate-500 cursor-help cursor-pointer"
+                  :title="targetDataTooltip(item)"
+                >
+                  ?
+                </span>
+              </div>
+            </td>
+
+            <td class="py-4 px-5 text-center">
+              <span
+                class="inline-block px-2.5 py-1 bg-slate-100 text-slate-700 font-bold text-sm rounded-md border border-slate-200"
+              >
+                {{ item.weight }}
+              </span>
+            </td>
+
+            <td class="py-4 px-5 text-center align-middle">
+              <span
+                class="text-sm font-semibold leading-snug text-slate-700 inline-block"
+              >
+                {{ formatKpiActualResult(item) }}
+              </span>
+            </td>
+
+            <td class="bg-sky-50/50 py-4 px-5 text-center align-middle">
+              <span class="text-sm font-bold text-slate-800">{{ item.selfScore ?? '-' }}</span>
+            </td>
+
+            <td class="py-4 px-5 text-center align-middle">
+              <span class="text-slate-400 font-medium text-sm">
+                {{ item.pmScore !== null ? item.pmScore : '-' }}
+              </span>
+            </td>
+
+            <td class="py-4 px-5 text-right align-middle">
+              <div class="flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  class="flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-[10px] font-bold text-slate-600 shadow-sm transition-colors hover:bg-slate-50 hover:text-indigo-600 cursor-pointer"
+                  :class="!canOpenEvidence(item) ? 'pointer-events-none opacity-50' : ''"
+                  :title="item.evidenceTooltip ?? ''"
+                  :disabled="!canOpenEvidence(item)"
+                  @click="emit('open-evidence', item)"
+                >
+                  <i class="fas fa-pen text-[10px]" />
+                </button>
+                <button
+                  type="button"
+                  class="flex h-8 items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-3 text-[10px] font-bold text-violet-700 shadow-sm transition-colors hover:bg-violet-100 disabled:cursor-not-allowed disabled:opacity-45 cursor-pointer"
+                  :disabled="!canSendFeedback(item)"
+                  title="Mở KPI này để nhập và gửi feedback riêng"
+                  @click="emit('open-feedback', item)"
+                >
+                  <i class="fas fa-message text-[10px]" />
+                </button>
+              </div>
+            </td>
+          </tr>
+        </template>
+      </tbody>
+
+      <tfoot class="bg-slate-100/80 border-t-2 border-slate-200 font-bold">
+        <!-- Tổng cộng -->
+        <tr>
+          <td colspan="4" class="py-4 px-5 text-right text-slate-700 uppercase text-xs tracking-wider">
+            Tổng cộng (Total score):
+          </td>
+          <td class="py-4 px-5 text-center">
+            <span class="text-sm text-slate-800">{{ totalWeight }}</span>
+            <span class="text-xs text-slate-500 font-medium ml-1">pts</span>
+          </td>
+          <td class="py-4 px-5 text-center text-xs font-medium text-slate-400">-</td>
+          <td class="bg-sky-50/50 py-4 px-5 text-center text-sm text-slate-500">
+            {{ totalSelfWeightedScore > 0 ? totalSelfWeightedScore : '-' }}
+          </td>
+          <td class="py-4 px-5 text-center">
+            <span class="text-sm text-slate-800">
+              {{ totalPmWeightedScore > 0 ? totalPmWeightedScore.toFixed(2) : '-' }}
+            </span>
+          </td>
+          <td class="py-4 px-5 text-center text-slate-500 text-sm"></td>
+        </tr>
+        <!-- Điểm trung bình -->
+        <tr class="bg-violet-50/50 border-t border-slate-200">
+          <td colspan="4" class="py-4 px-5 text-right text-violet-800 uppercase text-xs tracking-wider">
+            Điểm trung bình (Average score):
+          </td>
+          <td class="py-4 px-5"></td>
+          <td class="py-4 px-5 text-center text-xs font-medium text-slate-400">-</td>
+          <td class="bg-sky-50/50 py-4 px-5 text-center text-sm text-slate-500">
+            <span class="text-sm text-slate-500">
+              {{ personalSelfWeightedAvg !== null ? personalSelfWeightedAvg.toFixed(2) : '-' }}
+            </span>
+          </td>
+          <td class="py-4 px-5 text-center bg-violet-100/80">
+            <span class="text-lg text-violet-700 font-extrabold">
+              {{ pmWeightedAvg !== null ? pmWeightedAvg.toFixed(2) : '-' }}
+            </span>
+          </td>
+          <td class="py-4 px-5 text-center text-slate-500 text-sm"></td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+
+  <!-- Comments section -->
+  <div v-if="hasPersonalAssignments" class="p-6 border-t border-slate-200 bg-slate-50/30">
+    <h4 class="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
+      <i class="fas fa-comments text-blue-600" />
+      Comment of employee and supervisor
+    </h4>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div class="space-y-3">
+        <div>
+          <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
+            Employee's Comment
+          </label>
+          <textarea
+            class="w-full h-24 p-3 bg-white border border-slate-200 rounded-lg text-sm text-slate-700 focus:ring-2 focus:ring-blue-100 outline-none resize-none shadow-sm"
+            :class="{ 'bg-slate-100 text-slate-500': !isCurrentYear }"
+            placeholder="Nhập ý kiến của bạn..."
+            :readonly="!isCurrentYear"
+          />
+        </div>
+      </div>
+      <div class="space-y-3">
+        <div>
+          <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
+            Supervisor Comment
+          </label>
+          <textarea
+            class="w-full h-24 p-3 bg-slate-100 border border-slate-200 rounded-lg text-sm text-slate-500 outline-none resize-none"
+            placeholder="Supervisor sẽ nhập ý kiến tại đây..."
+            readonly
+          />
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer / Submit -->
+  <div v-if="hasPersonalAssignments" class="bg-slate-50 p-4 border-t border-slate-200 flex justify-center gap-3">
+    <template v-if="isCurrentYear">
+      <button
+        v-if="canSubmit"
+        type="button"
+        :disabled="isSubmitDisabled"
+        class="px-4 py-2 bg-slate-900 border border-transparent rounded-lg text-sm font-semibold text-white shadow-sm hover:bg-slate-800 flex items-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        @click="emit('submit')"
+      >
+        <i v-if="submitting" class="fas fa-spinner fa-spin text-xs" />
+        <i v-else class="fas fa-paper-plane text-xs" />
+        {{ submitting ? 'Đang xử lý...' : submitLabel }}
+      </button>
+    </template>
+    <div v-else class="text-sm text-slate-500 font-medium">
+      Dữ liệu năm này chỉ để xem
+    </div>
+  </div>
+</template>

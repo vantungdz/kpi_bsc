@@ -28,6 +28,7 @@ export type MemberKpiEvaluationStatus =
   | 'approved'          // 🟢 Đã duyệt
   | 'revision'          // 🟠 Cần làm lại
   | 'overdue'           // 🔴 Quá hạn
+  | 'feedback'          // 🟣 Chờ PM kiểm tra feedback
 
 /** KPI Item (individual KPI row in the KPI sheet) */
 export interface KpiItem {
@@ -37,6 +38,8 @@ export interface KpiItem {
   description?: string
   /** Cột Chỉ tiêu — ưu tiên target_description từ API (có thể HTML) */
   target: string
+  /** Raw target_description từ API (DSL rules / plain text) */
+  targetDescription?: string | null
   /** ka.target_value — mục tiêu giao cho cá nhân */
   assignmentTargetValue?: number | null
   /** ki.target_value — chỉ tiêu chuẩn thư viện KPI */
@@ -54,6 +57,8 @@ export interface KpiItem {
   calculationRuleCode?: number | null
   /** kpi_master.calculation_type_code — 701 (Actual/Plan) | 702 (Plan/Actual) */
   calculationTypeCode?: number | null
+  unitCode?: number | null
+  unitName?: string | null
   /** JSON string kpi_assignments.evidences — dùng trang chi tiết */
   evidencesJson?: string | null
   /** Trạng thái đánh giá KPI — chuỗi từ API (member sheet) */
@@ -69,6 +74,14 @@ export interface KpiItem {
   /** Nếu backend không gửi, FE có thể suy luận theo mã KPI */
   evidenceFormCase?: EvidenceFormCase
   evidenceNote?: string
+  /** Feedback target_setup từ member */
+  memberFeedback?: string
+  /** Feedback target_setup từ leader */
+  leaderFeedback?: string
+  /** Feedback comment lưu cột riêng trên DB */
+  feedbackComment?: string
+  /** Ghi chú từ GM cho KPI */
+  gmComment?: string
   /**
    * KPI chứng chỉ (upload_only): mô tả chứng chỉ / trình độ thực tế nếu khác mục tiêu trên sheet
    * (vd đăng ký TOEIC 700 nhưng nộp JLPT N2).
@@ -319,6 +332,10 @@ export interface LeaderKpiAssignment {
   assignmentId: string;
   kpiName: string;
   kpiCode: string;
+  /** Mục tiêu số; không có → tab KPI cá nhân GM hiển thị «-» (không dùng targetDescription). */
+  targetValue?: number | string | null;
+  unitCode?: number | null;
+  unitName?: string | null;
   targetDescription: string;
   weight: number;
   statusCode: number;
@@ -328,6 +345,19 @@ export interface LeaderKpiAssignment {
   endSelfScore: number | null;
   endPmScore: number | null;
   evidences: string | null;
+  feedbackComment?: string | null;
+  evaluationStatus?: MemberKpiEvaluationStatus | string | null;
+  evaluationState?: string | null;
+  /** kpi_master.calculation_rule_code — 802 = ratio/average, 803 = comment/text */
+  calculationRuleCode: number | null;
+  /** kpi_master.calculation_type_code — 701 = Actual/Plan×100%, 702 = Plan/Actual×100% */
+  calculationTypeCode: number | null;
+  /** kpi_master.type_code (101 INDIVIDUAL, 102 TEAM/CASCADE, 103 PROMOTION, …) */
+  typeCode?: number | null;
+  /** sys_status_codes.name — loại KPI */
+  typeName?: string | null;
+  /** kpi_master.unit_code — KPI_UNIT */
+  unitCode?: number | null;
 }
 
 export interface LeaderKpiSummary {

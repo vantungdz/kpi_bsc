@@ -7,6 +7,7 @@ import {useKpiCalculationReference} from '@/composables/useKpiCalculationReferen
 import {useKpiUnitOptions} from '@/composables/useKpiUnitOptions'
 import {persistedCalculationMethodFromTypeAndRule} from '@/utils/kpiCalculationCodes'
 import {kpiFormUnitToUnitCode} from '@/utils/kpiUnitCodes'
+import {buildScoringRulesPayload, SCORING_RULES_EXAMPLE_TOOLTIP, validateScoringRulesDsl} from '@/utils/kpiScoringRulesDsl'
 
 const open = defineModel<boolean>({default: false})
 
@@ -183,6 +184,14 @@ function validateForm(): boolean {
     }
   }
 
+  const scoringTrim = description.value.trim()
+  if (!scoringTrim) {
+    err.scoringRules = 'Vui lòng nhập quy tắc chấm điểm (đủ các mức 1–5 theo cú pháp).'
+  } else {
+    const vr = validateScoringRulesDsl(description.value)
+    if (!vr.ok) err.scoringRules = vr.errors.join(' ')
+  }
+
   formErrors.value = err
   return Object.keys(err).length === 0
 }
@@ -203,7 +212,7 @@ async function save() {
       typeCode: 101,
       perspective: categoryId.value.trim(),
       kpiName: kpiName.value.trim(),
-      targetDescription: description.value.trim(),
+      targetDescription: buildScoringRulesPayload(description.value),
       targetValue: null,
       unit: unit.value,
       unitCode: kpiFormUnitToUnitCode(unit.value),
@@ -289,7 +298,7 @@ async function save() {
                       <select v-model="categoryId"
                               class="input-required w-full cursor-pointer appearance-none rounded-md py-2 pl-3 pr-8 text-xs font-bold text-slate-800 outline-none transition-all disabled:opacity-60"
                               :disabled="isLoadingMeta || !kpiCategories.length">
-                        <option value="" disabled>— Chọn nhóm —</option>
+                        <option value="" disabled>- Chọn nhóm -</option>
                         <option v-for="c in kpiCategories" :key="c.id" :value="c.id">{{ c.name }}</option>
                       </select>
                       <i class="fas fa-chevron-down pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400"
@@ -383,10 +392,34 @@ async function save() {
                 </p>
 
                 <div>
-                  <label class="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500">Description
-                    <span class="text-[9px] font-normal normal-case text-slate-400">(Optional)</span></label>
-                  <textarea v-model="description" rows="2" placeholder="Giải thích ngắn gọn về cách đo lường..."
-                            class="custom-scrollbar w-full resize-none rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-800 outline-none transition-all focus:border-slate-400 focus:ring-2 focus:ring-slate-100"/>
+                  <div class="mb-1.5 flex items-center gap-1.5">
+                    <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                      Quy tắc chấm điểm <span class="text-rose-500">*</span>
+                    </label>
+                    <span class="group relative inline-flex shrink-0">
+                      <button
+                        type="button"
+                        class="cursor-help rounded p-0.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-blue-600 focus-visible:outline focus-visible:ring-2 focus-visible:ring-slate-300"
+                        aria-label="Ví dụ cú pháp quy tắc chấm điểm"
+                      >
+                        <i class="fas fa-circle-question text-[12px]" aria-hidden="true" />
+                      </button>
+                      <span
+                        role="tooltip"
+                        class="pointer-events-none absolute right-0 top-full z-[110] mt-1 hidden min-w-[11rem] max-w-[20rem] whitespace-pre-line rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-left text-[10px] font-medium leading-snug text-slate-700 shadow-lg group-hover:block group-focus-within:block"
+                      >{{ SCORING_RULES_EXAMPLE_TOOLTIP }}</span>
+                    </span>
+                  </div>
+                  <textarea
+                    v-model="description"
+                    rows="6"
+                    placeholder="1: <50&#10;2: 50-70&#10;3: 71-85&#10;4: 86-99&#10;5: >=100"
+                    class="custom-scrollbar min-h-[7.5rem] w-full resize-y rounded-md px-2.5 py-1.5 text-xs font-medium text-slate-800 outline-none transition-all focus:ring-2"
+                    :class="formErrors.scoringRules ? '!border-rose-400 !bg-rose-50/70 focus:border-rose-400 focus:ring-rose-100' : 'input-required focus:border-blue-400 focus:ring-blue-100'"
+                  />
+                  <p v-if="formErrors.scoringRules" class="mt-1 text-[10px] font-semibold text-rose-600">
+                    {{ formErrors.scoringRules }}
+                  </p>
                 </div>
               </div>
             </div>

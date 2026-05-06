@@ -21,6 +21,8 @@ public class GmDiagnosticsFlatRow {
     private UUID categoryId;
     private String categoryName;
     private Integer typeCode;
+    /** {@code kpi_master.is_global} — {@code true}: KPI GM giao công ty; {@code false}: member đề xuất / mẫu. */
+    private Boolean isGlobal;
     /** {@code kpi_master.unit_code} — KPI_UNIT (sys_status_codes). */
     private Integer unitCode;
     private BigDecimal kpiWeight;
@@ -61,4 +63,5 @@ public class GmDiagnosticsFlatRow {
     private BigDecimal endPmScore;
     private BigDecimal endGmScore;
     private BigDecimal memberTargetValue;
+    private String feedbackNote;
 }

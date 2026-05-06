@@ -17,7 +17,9 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * Strategic KPI CRUD — dùng chung cho GM và PM.
@@ -40,23 +42,22 @@ public class StrategicKpiController extends BaseController {
             @Valid @RequestBody CreateStrategicKpiRequest request,
             Authentication authentication) {
         UUID actorId = UUID.fromString((String) authentication.getPrincipal());
-
-        String role = authentication.getAuthorities().stream()
-                .map(GrantedAuthority::getAuthority)
-                .map(r -> r.replace("ROLE_", ""))
-                .filter(r -> r.equals(Constant.ROLE_MEMBER) || r.equals(Constant.ROLE_LEADER))
-                .findFirst()
-                .orElse("");
-
-        return created(strategicKpiService.create(request, actorId, role));
+        return created(strategicKpiService.create(request, actorId, resolveStrategicActorRole(authentication)));
     }
 
-    /** Dữ liệu form sửa KPI chiến lược. */
+    /**
+     * Dữ liệu form sửa KPI chiến lược.
+     *
+     * @param parentAssignmentId optional — khi PM tải form phân bổ: chỉ trả member/target thuộc cascade dưới
+     *                           đúng {@code kpi_assignments.id} của PM (tránh lẫn danh sách PM do GM giao).
+     */
     @GetMapping("/{kpiInformationId}")
     public ResponseEntity<BaseResponse<StrategicKpiEditResponse>> getStrategicKpiForEdit(
-            @PathVariable UUID kpiInformationId, Authentication authentication) {
+            @PathVariable UUID kpiInformationId,
+            @RequestParam(required = false) UUID parentAssignmentId,
+            Authentication authentication) {
         UUID actorId = UUID.fromString((String) authentication.getPrincipal());
-        return success(strategicKpiService.getForEdit(kpiInformationId, actorId));
+        return success(strategicKpiService.getForEdit(kpiInformationId, actorId, parentAssignmentId));
     }
 
     /** Cập nhật KPI chiến lược + đồng bộ danh sách giao. */
@@ -66,7 +67,31 @@ public class StrategicKpiController extends BaseController {
             @Valid @RequestBody CreateStrategicKpiRequest request,
             Authentication authentication) {
         UUID actorId = UUID.fromString((String) authentication.getPrincipal());
-        return success(strategicKpiService.update(kpiInformationId, request, actorId));
+        return success(
+                strategicKpiService.update(kpiInformationId, request, actorId, resolveStrategicActorRole(authentication)));
+    }
+
+    /**
+     * Member/Leader (KPI individual): 402.
+     * PM: 403.
+     * GM và các role khác: 404 (logic trong {@link com.company.kpi.service.kpi.StrategicKpiService}).
+     */
+    private static String resolveStrategicActorRole(Authentication authentication) {
+        Set<String> authorities =
+                authentication.getAuthorities().stream()
+                        .map(GrantedAuthority::getAuthority)
+                        .map(r -> r.replace("ROLE_", ""))
+                        .collect(Collectors.toSet());
+        if (authorities.contains(Constant.ROLE_MEMBER)) {
+            return Constant.ROLE_MEMBER;
+        }
+        if (authorities.contains(Constant.ROLE_LEADER)) {
+            return Constant.ROLE_LEADER;
+        }
+        if (authorities.contains(Constant.ROLE_PM)) {
+            return Constant.ROLE_PM;
+        }
+        return "";
     }
 
     /**

@@ -283,7 +283,7 @@ public class GmKpiTemplateService {
         static CalcCodes fromPersisted(String persisted) {
             String k = String.valueOf(persisted == null ? "" : persisted).trim();
             return switch (k) {
-                case "manual_member_input" -> new CalcCodes(803, 703);
+                case "manual_member_input" -> new CalcCodes(803, null);
                 case "mean_actual_plan" -> new CalcCodes(802, 701);
                 case "mean_plan_actual" -> new CalcCodes(802, 702);
                 case "mean_plan_actual_pct" -> new CalcCodes(802, 701);

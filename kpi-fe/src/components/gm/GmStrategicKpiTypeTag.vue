@@ -23,7 +23,7 @@ const MAP: Record<
   individual: {
     label: 'Individual',
     icon: 'fas fa-crosshairs',
-    pill: 'inline-flex w-max items-center gap-1 rounded-md border border-slate-200 bg-slate-100 px-1.5 py-0.5 font-bold text-slate-700',
+    pill: 'inline-flex w-max items-center gap-1 rounded-md border border-indigo-100 bg-indigo-50 px-2 py-0.5 font-semibold text-indigo-600',
   },
   promotion: {
     label: 'Promotion',
@@ -33,8 +33,10 @@ const MAP: Record<
 }
 
 const ui = computed(() => MAP[props.type])
-const textClass = computed(() => (props.size === 'sm' ? 'text-[8px]' : 'text-[9px]'))
-const iconClass = computed(() => (props.size === 'sm' ? 'text-[8px]' : 'text-[9px]'))
+const textClass = computed(() =>
+  props.size === 'sm' ? 'text-[10px] uppercase tracking-wide' : 'text-[9px]',
+)
+const iconClass = computed(() => (props.size === 'sm' ? 'text-[10px]' : 'text-[9px]'))
 </script>
 
 <template>

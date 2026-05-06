@@ -2,7 +2,7 @@
  * kpi-gm.service.ts
  * API calls cho GM KPI Dashboard
  *
- * Khi VITE_USE_MOCK=true: intercepted bởi mock-adapter.ts → dùng gm-kpi.mock.ts
+ * Khi VITE_USE_MOCK=true: intercepted bởi mock-adapter.ts (payload tối thiểu, không file mock lớn).
  * Khi VITE_USE_MOCK=false: gọi thẳng backend Java
  */
 import http from "@/services/api";
@@ -22,7 +22,7 @@ import type {
 import type { GmKpiCycleOption } from "@/types/gm-kpi-cycle";
 import type { GmCreateStrategicKpiResponseData } from "@/types/gm-strategic-kpi-create";
 import type { GmStrategicKpiEditData } from "@/types/gm-strategic-kpi-edit";
-import type { GmTimelineIssueBucket } from "@/types/gm-workspace";
+import type { GmTimelineIssueGroup } from "@/types/gm-workspace";
 import type {
   GmCreateKpiTemplateBody,
   GmCreateKpiTemplateItemBody,
@@ -220,7 +220,7 @@ export async function apiPostGmEvaluationHubConfirm(
     .then((r) => r.data.data);
 }
 
-/** GET /kpi/gm/approved-kpi-queue?cycleId= — ASM 401/402/403 (tab Approved KPI). */
+/** GET /kpi/gm/approved-kpi-queue?cycleId= — ASM 401/402/403. */
 export async function apiGetGmApprovedKpiQueue(
   cycleId: string,
 ): Promise<GmApprovedKpiQueueItemApi[]> {
@@ -231,7 +231,7 @@ export async function apiGetGmApprovedKpiQueue(
     .then((r) => r.data.data);
 }
 
-/** POST /kpi/gm/approved-kpi-queue/decision — 403→404 hoặc 403→406. */
+/** POST /kpi/gm/approved-kpi-queue/decision — 403→405/406 hoặc 407→404. */
 export async function apiPostGmApprovedKpiDecision(
   body: GmApprovedKpiDecisionBody,
 ): Promise<GmApprovedKpiDecisionResultApi> {
@@ -387,11 +387,13 @@ export async function apiDeleteGmKpiTemplateItem(
  * Structural subtype của {@link GmMidYearIssuesData} — tương thích trực tiếp với prop GmProcessTimeline. */
 export interface GmProcessTimelineApiPhase {
   hasOpenIssues?: boolean;
+  operationalIssueCount?: number;
+  totalDistinctEmployeesAffected?: number;
   pendingKpisLine: string;
   popoverTitle: string;
   /** Không dùng từ API — mock có thể có, API bỏ qua. */
   bullets?: { text: string; dotClass: string }[];
-  issueDetails: GmTimelineIssueBucket[];
+  issueGroups: GmTimelineIssueGroup[];
 }
 
 /** Response toàn bộ API GET /kpi/gm/process-timeline */
@@ -413,6 +415,15 @@ export async function apiGetGmProcessTimeline(
       },
     )
     .then((r) => r.data.data);
+}
+
+/** POST /kpi/gm/personal-evaluation/submit — GM khóa đợt KPI cá nhân: 405→503 (giữa kỳ) / 503→603 (cuối kỳ). */
+export async function apiPostGmPersonalEvaluationSubmit(
+  cycleId: string,
+): Promise<void> {
+  await http.post<ApiResponse<unknown>>("/kpi/gm/personal-evaluation/submit", {
+    cycleId: cycleId.trim(),
+  });
 }
 
 export const gmKpiService = {
@@ -478,4 +489,6 @@ export const gmKpiService = {
   decideApprovedKpiQueue: (body: GmApprovedKpiDecisionBody) =>
     apiPostGmApprovedKpiDecision(body),
   getProcessTimeline: (cycleId: string) => apiGetGmProcessTimeline(cycleId),
+  submitPersonalEvaluation: (cycleId: string) =>
+    apiPostGmPersonalEvaluationSubmit(cycleId),
 };

@@ -39,5 +39,28 @@ export const useMemberKpiDraftStore = defineStore('memberKpiDrafts', () => {
     clearAll()
   }
 
-  return { drafts, setDraft, getDraft, clearAll, flushAll }
+  async function flushByAssignmentIds(
+    assignmentIds: string[],
+    updateFn: (assignmentId: string, body: UpdateMemberSheetItemBody) => Promise<unknown>,
+  ) {
+    if (!assignmentIds.length) return
+    const wanted = new Set(assignmentIds)
+    const entries = Object.entries(drafts.value).filter(([id]) => wanted.has(id))
+    for (const [id, d] of entries) {
+      const body: UpdateMemberSheetItemBody = { evidences: d.evidencesJson }
+      if (d.selfScore != null && Number.isFinite(d.selfScore)) {
+        const s = Math.round(Number(d.selfScore))
+        if (s >= 1 && s <= 5) body.selfScore = s
+      }
+      await updateFn(id, body)
+    }
+    for (const id of wanted) {
+      if (!drafts.value[id]) continue
+      const next = { ...drafts.value }
+      delete next[id]
+      drafts.value = next
+    }
+  }
+
+  return { drafts, setDraft, getDraft, clearAll, flushAll, flushByAssignmentIds }
 })

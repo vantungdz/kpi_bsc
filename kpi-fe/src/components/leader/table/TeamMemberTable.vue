@@ -84,14 +84,24 @@ function getTeamMemberInitials(name?: string) {
 </script>
 
 <template>
-  <div class="overflow-x-auto relative min-h-[250px]">
+  <div class="relative min-h-[250px] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
     <div v-if="loading" class="absolute inset-0 bg-white/80 z-10 flex items-center justify-center backdrop-blur-sm">
       <i class="fas fa-spinner fa-spin text-emerald-500 text-3xl"></i>
     </div>
 
-    <table class="w-full text-sm text-left border-collapse">
+    <div class="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-5 py-4">
+      <h3 class="flex items-center gap-2 text-lg font-bold text-slate-800">
+        <i class="fas fa-users text-slate-400" />
+        Danh sách Team Members
+      </h3>
+      <span class="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-bold text-slate-600">
+        {{ members.length }} members
+      </span>
+    </div>
+
+    <table class="w-full border-collapse text-left text-sm">
       <thead>
-      <tr class="bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-500 uppercase tracking-wider">
+      <tr class="border-b border-slate-200 bg-white text-xs font-bold uppercase tracking-wider text-slate-500">
         <th class="px-5 py-3">Thành viên</th>
         <th class="px-5 py-3">Vai trò</th>
         <th class="px-5 py-3">Cấp bậc</th>
@@ -104,7 +114,7 @@ function getTeamMemberInitials(name?: string) {
       </tr>
 
       <tr v-for="member in members" :key="member.memberId"
-          class="cursor-pointer transition-colors hover:bg-slate-50/70"
+          class="group cursor-pointer transition-colors hover:bg-slate-50/80"
           @click="handleMemberClick(member)">
         <td class="px-5 py-4">
           <div class="flex items-center gap-3">
@@ -113,17 +123,17 @@ function getTeamMemberInitials(name?: string) {
               {{ getTeamMemberInitials(member.fullName) }}
             </div>
             <div>
-              <p class="font-semibold text-slate-800 text-sm">{{ member.fullName }}</p>
+              <p class="text-sm font-semibold text-slate-800 group-hover:text-indigo-700">{{ member.fullName }}</p>
               <p class="text-xs text-slate-500">{{ member.email }}</p>
             </div>
           </div>
         </td>
-        <td class="px-5 py-4 text-sm text-slate-600">{{ member.jobTitle || "—" }}</td>
+        <td class="px-5 py-4 text-sm text-slate-600">{{ member.jobTitle || '-' }}</td>
         <td class="px-5 py-4">
-          <p class="text-sm text-slate-700 font-medium">{{ member.jobLevel || member.rank || "—" }}</p>
+          <p class="text-sm font-medium text-slate-700">{{ member.jobLevel || member.rank || '-' }}</p>
         </td>
         <td class="px-5 py-4 text-center font-bold text-slate-800">
-          {{ member.score != null ? member.score.toFixed(2) : "—" }}
+          {{ member.score != null ? member.score.toFixed(2) : '-' }}
         </td>
       </tr>
       </tbody>
@@ -136,9 +146,9 @@ function getTeamMemberInitials(name?: string) {
       </Transition>
       <Transition name="slide">
         <aside v-if="drawerOpen && selectedMember"
-               class="fixed top-0 right-0 z-[72] flex h-full w-full max-w-3xl flex-col border-l border-slate-200 bg-slate-50 shadow-2xl">
+               class="fixed right-0 top-0 z-[72] flex h-full w-full max-w-full flex-col border-l border-slate-200 bg-slate-50 shadow-2xl lg:w-[1100px] xl:w-[1280px]">
           <div
-              class="flex shrink-0 items-start justify-between gap-3 border-b border-slate-200 bg-white px-5 py-4 shadow-sm relative z-20">
+              class="relative z-20 flex shrink-0 items-start justify-between gap-3 border-b border-slate-200 bg-white px-5 py-4 shadow-sm">
             <div class="flex items-center gap-3 min-w-0">
               <div
                   class="w-10 h-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-base shrink-0">
@@ -157,10 +167,6 @@ function getTeamMemberInitials(name?: string) {
               </div>
             </div>
             <div class="flex shrink-0 items-center gap-2">
-              <span
-                  class="inline-block rounded border border-slate-200 bg-slate-100 px-2 py-0.5 text-[10px] font-bold uppercase text-slate-600">
-                <i class="fas fa-eye mr-1"/>Chỉ xem
-              </span>
               <button type="button"
                       class="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-full transition-colors"
                       @click="closeDrawer">
@@ -169,7 +175,7 @@ function getTeamMemberInitials(name?: string) {
             </div>
           </div>
 
-          <div class="flex shrink-0 border-b border-slate-200 bg-slate-50/80 px-5 pt-3 gap-6 relative z-10 shadow-sm">
+          <div class="relative z-10 flex shrink-0 gap-6 border-b border-slate-200 bg-slate-50/80 px-5 pt-3 shadow-sm">
             <button type="button"
                     class="pb-3 text-sm font-bold border-b-2 transition-colors flex items-center gap-2 outline-none"
                     :class="activeTab === 'performance' ? 'border-emerald-600 text-emerald-700' : 'border-transparent text-slate-500 hover:text-slate-800'"

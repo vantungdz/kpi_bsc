@@ -1,5 +1,7 @@
 package com.company.kpi.request.kpi;
 
+import com.company.kpi.dto.kpi.KpiScoringRulesPayload;
+
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -31,7 +33,8 @@ public class CreateStrategicKpiRequest {
     @Size(max = 255)
     private String kpiName;
 
-    private String targetDescription;
+    /** Quy tắc chấm điểm (JSON) — lưu vào {@code kpis_information.target_description} (JSONB). */
+    private KpiScoringRulesPayload targetDescription;
 
     /**
      * Giá trị mục tiêu số — lưu vào {@code kpis_information.target_value} / assignment.

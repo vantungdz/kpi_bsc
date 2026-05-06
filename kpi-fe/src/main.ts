@@ -9,8 +9,12 @@ import "vue-toastification/dist/index.css";
 const app = createApp(App)
 
 const option: PluginOptions = {
-  position: POSITION.BOTTOM_RIGHT,
-  timeout: 3000,
+  position: POSITION.TOP_RIGHT,
+  timeout: 4000,
+  newestOnTop: true,
+  maxToasts: 6,
+  hideProgressBar: false,
+  toastClassName: 'kpi-toast',
 }
 
 app.use(createPinia())

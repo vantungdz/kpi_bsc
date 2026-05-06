@@ -1,12 +1,21 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch, type PropType } from 'vue'
 import { pmKpiService } from '@/services/modules/kpi-pm.service'
 
 import { generateInitials } from '@/utils/common'
 import { KPI_STATUS } from '@/config/constants'
+import { isPmEvaluationSubject } from '@/utils/pmEvaluationSubject'
 
+const props = defineProps({
+  year: { type: [Number, String], required: true },
+  /** Tăng sau khi gửi bulk đánh giá / cần refetch cây team (không reload trang). */
+  reloadNonce: { type: Number, default: 0 },
+  invalidMembers: { type: Array as PropType<string[]>, default: () => [] },
+  kpisCache: { type: Object as PropType<Record<string, any[]>>, default: () => ({}) },
+  commentsCache: { type: Object as PropType<Record<string, string>>, default: () => ({}) }
+})
 
-const emit = defineEmits(['open-member'])
+const emit = defineEmits(['open-member', 'submit-evaluations'])
 
 
 const teamTreeRaw = ref<any[]>([])
@@ -19,24 +28,44 @@ const EVALUATION_STATUS_UI: Record<number, any> = {
   [KPI_STATUS.PENDING_ACCEPTANCE]: { dot: 'bg-blue-400 ring-2 ring-blue-100', chip: 'border-blue-200 bg-blue-50 text-blue-950', label: 'Pending acceptance' },
   [KPI_STATUS.ACCEPTED]: { dot: 'bg-emerald-500 ring-2 ring-emerald-100', chip: 'border-emerald-200 bg-emerald-50 text-emerald-950', label: 'Accepted' },
   [KPI_STATUS.REJECTED]: { dot: 'bg-rose-500 ring-2 ring-rose-100', chip: 'border-rose-200 bg-rose-50 text-rose-950', label: 'Rejected' },
-  
+
   [KPI_STATUS.FIRST_WAITING_PM_APPROVAL]: { dot: 'bg-amber-400 ring-2 ring-amber-100', chip: 'border-amber-200 bg-amber-50 text-amber-950', label: 'Waiting PM approve 1st Half' },
   [KPI_STATUS.FIRST_WAITING_GM_APPROVAL]: { dot: 'bg-amber-400 ring-2 ring-amber-100', chip: 'border-amber-200 bg-amber-50 text-amber-950', label: 'Waiting GM approve 1st Half' },
   [KPI_STATUS.FIRST_COMPLETED]: { dot: 'bg-emerald-500 ring-2 ring-emerald-100', chip: 'border-emerald-200 bg-emerald-50 text-emerald-950', label: 'Completed 1st Half' },
-  
+
   [KPI_STATUS.SECOND_WAITING_PM_APPROVAL]: { dot: 'bg-amber-400 ring-2 ring-amber-100', chip: 'border-amber-200 bg-amber-50 text-amber-950', label: 'Waiting PM approve Final' },
   [KPI_STATUS.SECOND_WAITING_GM_APPROVAL]: { dot: 'bg-amber-400 ring-2 ring-amber-100', chip: 'border-amber-200 bg-amber-50 text-amber-950', label: 'Waiting GM approve Final' },
   [KPI_STATUS.COMPLETED]: { dot: 'bg-purple-500 ring-2 ring-purple-100', chip: 'border-purple-200 bg-purple-50 text-purple-950', label: 'Completed' },
 }
 
-const defaultStatusUi = { dot: 'bg-slate-300 ring-2 ring-slate-100', chip: 'border-slate-200 bg-slate-50 text-slate-800', label: 'Unknown' }
+/** Chip status chỉ khi có mã đã map; không có / chưa map → null (ô Status để trống). */
+function getEvalStatusChip(statusCode: number | null | undefined) {
+  if (statusCode == null || statusCode === 0) return null
+  const n = Number(statusCode)
+  return EVALUATION_STATUS_UI[n] ?? null
+}
+
+/** Chỉ ghi đè PM comment từ cache khi đã vào đợt đánh giá (≥501); tránh nhầm draft/localStorage khi KPI còn 404… */
+const PM_COMMENT_CACHE_OVERLAY_MIN_STATUS = KPI_STATUS.FIRST_WAITING_PM_APPROVAL
 
 // Gọi API lấy danh sách Team
 const fetchTeamHierarchy = async () => {
   isLoading.value = true
   try {
-    const response = await pmKpiService.getTeamHierarchy(String(new Date().getFullYear()))
-    teamTreeRaw.value = response
+    const response = await pmKpiService.getTeamHierarchy(String(props.year || new Date().getFullYear()))
+
+    const filterTree = (nodes: any[]): any[] => {
+      return nodes.map(node => {
+        const filteredChildren = node.children ? filterTree(node.children) : []
+        const hasKpi = node.statusCode != null && node.statusCode !== 0
+        if (hasKpi || filteredChildren.length > 0) {
+          return { ...node, children: filteredChildren }
+        }
+        return null
+      }).filter(Boolean)
+    }
+
+    teamTreeRaw.value = filterTree(response)
   } catch (error) {
     console.error('Failed to fetch team hierarchy:', error)
   } finally {
@@ -44,14 +73,43 @@ const fetchTeamHierarchy = async () => {
   }
 }
 
-// Call API to get team hierarchy when component mounts
-fetchTeamHierarchy()
+watch(
+  () => [props.year, props.reloadNonce] as const,
+  () => {
+    fetchTeamHierarchy()
+  },
+  { immediate: true },
+)
 
 // Convert tree structure to a flat list for table rendering, while keeping track of depth for indentation
 const visibleTeamMembers = computed(() => {
   let result: any[] = [];
-  const traverse = (node: any) => {
-    result.push(node);
+    const traverse = (node: any) => {
+    // Clone to override pmScore with real-time cache if available
+    const displayNode = { ...node }
+    /** Giữ pm_comment từ BE trước khi ghi đè bằng draft localStorage — drawer cần để tránh nhầm sau khi đổi KPI. */
+    displayNode.apiPmComment = node.pmComment ?? ''
+
+    if (props.kpisCache && props.kpisCache[node.id]) {
+      const kpis = props.kpisCache[node.id];
+      const scoredKpis = kpis.filter((k: any) => k.pmScore != null);
+      if (scoredKpis.length > 0) {
+        displayNode.pmScore = scoredKpis.reduce((sum: number, k: any) => sum + k.pmScore, 0) / scoredKpis.length;
+      }
+    }
+
+    const statusNum = node.statusCode != null ? Number(node.statusCode) : 0
+    if (
+      props.commentsCache &&
+      props.commentsCache[node.id] !== undefined &&
+      statusNum >= PM_COMMENT_CACHE_OVERLAY_MIN_STATUS
+    ) {
+      displayNode.pmComment = props.commentsCache[node.id]
+    }
+
+    displayNode.statusChipUi = getEvalStatusChip(displayNode.statusCode)
+
+    result.push(displayNode);
     if (node.expanded && node.children && node.children.length > 0) {
       node.children.forEach((child: any) => traverse(child));
     }
@@ -60,11 +118,6 @@ const visibleTeamMembers = computed(() => {
   teamTreeRaw.value.forEach(root => traverse(root));
   return result;
 })
-
-const getEvalStatusUi = (statusCode: number | null) => {
-  if (!statusCode) return defaultStatusUi
-  return EVALUATION_STATUS_UI[statusCode] || defaultStatusUi
-}
 
 // Calculate progress % based on raw statusCode milestones
 const labelcalculateProgress = (statusCode: number | null): number => {
@@ -80,16 +133,16 @@ const getProgressColor = (progress: number) => {
 }
 
 // ACTIONS
-const toggleMember = (member: any) => { 
-  member.expanded = !member.expanded 
+const toggleMember = (member: any) => {
+  member.expanded = !member.expanded
 }
 
-const openMemberDetail = (member: any) => { 
-  emit('open-member', { 
-    memberId: member.id, 
-    year: String(new Date().getFullYear()), 
-    ...member 
-  }) 
+const openMemberDetail = (member: any) => {
+  emit('open-member', {
+    memberId: member.id,
+    year: String(props.year ?? new Date().getFullYear()),
+    ...member
+  })
 }
 </script>
 
@@ -100,80 +153,129 @@ const openMemberDetail = (member: any) => {
         <h3 class="font-bold text-slate-800 text-lg flex items-center gap-2">
           <i class="fas fa-users text-slate-400"></i> Team Hierarchy & Performance
         </h3>
-        <p class="text-xs text-slate-500 mt-1">Click on a member to view detailed KPI assessment.</p>
       </div>
     </div>
 
     <div v-if="isLoading" class="p-10 text-center text-slate-500">
-      <i class="fas fa-circle-notch fa-spin text-2xl text-purple-600 mb-3 block"></i> 
+      <i class="fas fa-circle-notch fa-spin text-2xl text-purple-600 mb-3 block"></i>
       Loading...
     </div>
 
     <table v-else class="w-full text-left">
       <thead class="bg-white border-b border-slate-200 text-[10px] font-bold uppercase tracking-wider text-slate-500">
         <tr>
-          <th class="py-4 px-5 w-1/2">Employee Name & Role</th>
-          <th class="py-4 px-5">Overall Progress</th>
-          <th class="py-4 px-5 text-center">Total Score</th>
-          <th class="py-4 px-5 text-right">Status</th>
+          <th class="py-4 px-5 w-1/4">Employee Name & Role</th>
+          <th class="py-4 px-5 text-center w-32">Self Score</th>
+          <th class="py-4 px-5 text-center w-32">PM Score</th>
+          <th class="py-4 px-5 min-w-[150px]">PM Comment</th>
+          <th class="py-4 px-5 text-left w-48">Status</th>
         </tr>
       </thead>
-      <tbody class="divide-y divide-slate-100">
-        <tr v-for="member in visibleTeamMembers" :key="member.id" 
-            class="hover:bg-slate-50 transition-colors cursor-pointer group"
-            @click="openMemberDetail(member)">
-          
-          <td class="py-4 px-5 flex items-center gap-3 relative" :style="{ paddingLeft: (member.depth * 2.5 + 1.25) + 'rem' }">
-            <div v-if="member.depth > 0" class="absolute top-0 bottom-0 w-px bg-slate-200" :style="{ left: ((member.depth - 1) * 2.5 + 2) + 'rem' }"></div>
-            <div v-if="member.depth > 0" class="absolute top-1/2 h-px bg-slate-200" :style="{ left: ((member.depth - 1) * 2.5 + 2) + 'rem', width: '1.25rem' }"></div>
+      <TransitionGroup name="list" tag="tbody" class="divide-y divide-slate-100 relative">
+        <tr v-for="member in visibleTeamMembers" :key="member.id"
+          class="hover:bg-slate-50 transition-colors cursor-pointer group"
+          :class="[
+            invalidMembers.includes(member.id) && isPmEvaluationSubject(member)
+              ? '!bg-red-50 !border-red-200 shadow-[inset_4px_0_0_0_#ef4444]'
+              : 'bg-white',
+            !isPmEvaluationSubject(member) ? 'text-slate-500' : '',
+          ]"
+          :title="
+            !isPmEvaluationSubject(member)
+              ? 'Chỉ hiển thị org — không có KPI đang chờ PM đánh giá (501/601) trong kỳ này.'
+              : ''
+          "
+          @click="openMemberDetail(member)">
 
-            <button @click.stop="toggleMember(member)" class="w-5 h-5 flex items-center justify-center rounded bg-slate-100 text-slate-400 hover:bg-purple-100 hover:text-purple-600 transition-colors z-10" :class="{'invisible': !member.children || member.children.length === 0}">
+          <td class="py-4 px-5 flex items-center gap-3 relative"
+            :style="{ paddingLeft: (member.depth * 2.5 + 1.25) + 'rem' }">
+            <div v-if="member.depth > 0" class="absolute top-0 bottom-0 w-px bg-slate-200"
+              :style="{ left: ((member.depth - 1) * 2.5 + 2) + 'rem' }"></div>
+            <div v-if="member.depth > 0" class="absolute top-1/2 h-px bg-slate-200"
+              :style="{ left: ((member.depth - 1) * 2.5 + 2) + 'rem', width: '1.25rem' }"></div>
+
+            <button @click.stop="toggleMember(member)"
+              class="w-5 h-5 flex items-center justify-center rounded bg-slate-100 text-slate-400 hover:bg-purple-100 hover:text-purple-600 transition-colors z-10"
+              :class="{ 'invisible': !member.children || member.children.length === 0 }">
               <i class="fas text-[10px]" :class="member.expanded ? 'fa-minus' : 'fa-plus'"></i>
             </button>
 
-            <div class="w-9 h-9 rounded-full border-2 border-white bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-600 shadow-sm z-10 group-hover:border-purple-100 transition-all">
+            <div
+              class="w-9 h-9 rounded-full border-2 border-white bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-600 shadow-sm z-10 group-hover:border-purple-100 transition-all">
               {{ generateInitials(member.name) }}
             </div>
-            
+
             <div class="z-10">
               <p class="text-sm font-bold text-slate-800">{{ member.name }}</p>
               <p class="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mt-0.5">{{ member.role }}</p>
             </div>
           </td>
-          
-          <td class="py-4 px-5 align-middle">
-            <div class="flex items-center gap-3">
-              <div class="w-32 h-2 bg-slate-100 rounded-full overflow-hidden">
-                <div class="h-full rounded-full transition-all" 
-                     :class="getProgressColor(labelcalculateProgress(member.statusCode))" 
-                     :style="{ width: labelcalculateProgress(member.statusCode) + '%' }"></div>
-              </div>
-              <span class="text-xs font-bold text-slate-600">{{ labelcalculateProgress(member.statusCode) }}%</span>
-            </div>
-          </td>
-          
+
           <td class="py-4 px-5 text-center align-middle">
-            <span class="text-sm font-bold text-purple-700 bg-purple-50 px-3 py-1 rounded-lg">
-              {{ member.score ? member.score.toFixed(1) : '-' }}
+            <span class="text-sm font-bold text-blue-700 bg-blue-50 px-3 py-1 rounded-lg">
+              {{ member.selfScore != null ? Number(member.selfScore).toFixed(1) : '-' }}
             </span>
           </td>
-          
-          <td class="py-4 px-5 text-right align-middle">
-            <div class="mx-auto inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-center shadow-sm" 
-                 :class="getEvalStatusUi(member.statusCode).chip">
-              <span class="h-2 w-2 shrink-0 rounded-full" :class="getEvalStatusUi(member.statusCode).dot"></span>
-              <span class="text-[10px] font-bold">{{ getEvalStatusUi(member.statusCode).label }}</span>
+          <td class="py-4 px-5 text-center align-middle">
+            <span class="text-sm font-bold text-purple-700 bg-purple-50 px-3 py-1 rounded-lg">
+              {{ member.pmScore != null ? Number(member.pmScore).toFixed(1) : '-' }}
+            </span>
+          </td>
+          <td class="py-4 px-5 align-middle">
+            <div class="text-xs text-slate-600 line-clamp-2" :title="member.pmComment">
+              {{ member.pmComment || '-' }}
             </div>
           </td>
-          
+
+          <td class="py-4 px-5 text-right align-middle">
+            <div
+              v-if="member.statusChipUi"
+              class="ml-auto inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-center shadow-sm"
+              :class="member.statusChipUi.chip">
+              <span class="h-2 w-2 shrink-0 rounded-full" :class="member.statusChipUi.dot" />
+              <span class="text-[10px] font-bold">{{ member.statusChipUi.label }}</span>
+            </div>
+          </td>
+
         </tr>
-        
-        <tr v-if="visibleTeamMembers.length === 0 && !isLoading">
+
+        <tr v-if="visibleTeamMembers.length === 0 && !isLoading" key="empty-state">
           <td colspan="4" class="py-8 text-center text-slate-500 text-sm">
-             Don't have any team members in the list.
+            Don't have any team members in the list.
           </td>
         </tr>
-      </tbody>
+      </TransitionGroup>
     </table>
+    <div class="px-6 py-4 border-t border-slate-200 bg-slate-50 flex justify-end">
+      <button
+        @click="
+          $emit(
+            'submit-evaluations',
+            visibleTeamMembers.filter((m) => isPmEvaluationSubject(m)),
+          )
+        "
+        class="px-6 py-2.5 bg-indigo-600 text-white font-bold text-sm rounded-lg shadow-sm hover:bg-indigo-700 hover:shadow transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+        Gửi toàn bộ đánh giá
+      </button>
+    </div>
   </div>
 </template>
+
+<style scoped>
+/* Row expansion animation */
+.list-enter-active,
+.list-leave-active {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.list-enter-from,
+.list-leave-to {
+  opacity: 0;
+  transform: translateY(-10px);
+}
+
+.list-leave-active {
+  position: absolute;
+  width: 100%;
+}
+</style>

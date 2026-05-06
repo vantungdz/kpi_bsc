@@ -11,6 +11,7 @@ import type {
   GmHierarchyMember,
   GmHierarchyPm,
   GmHierarchyStatus,
+  GmHierarchyTargetBalance,
   GmKpiLifecycleStatus,
   GmStrategicKpiKind,
 } from '@/types/gm-workspace'
@@ -22,10 +23,24 @@ function asStatus(s: string | undefined | null): GmHierarchyStatus {
   return 'warning'
 }
 
+function mapTargetBalance(v: string | null | undefined): GmHierarchyTargetBalance | undefined {
+  if (v === 'short' || v === 'ok' || v === 'excess') return v
+  return undefined
+}
+
+function parseOptionalSubmissionNum(v: number | string | null | undefined): number | undefined {
+  if (v == null) return undefined
+  if (typeof v === 'number' && Number.isFinite(v)) return v
+  const n = Number(String(v).trim())
+  return Number.isFinite(n) ? n : undefined
+}
+
 function mapMember(m: GmDiagMemberApi): GmHierarchyMember {
   return {
     id: m.id,
+    assignmentId: m.assignmentId ?? undefined,
     name: m.name,
+    weight: m.weight ?? undefined,
     assignmentStatusCode:
       typeof m.statusCode === 'number' && Number.isFinite(m.statusCode) ? m.statusCode : undefined,
     ownerRoleCode: m.ownerRoleCode ?? undefined,
@@ -33,9 +48,13 @@ function mapMember(m: GmDiagMemberApi): GmHierarchyMember {
     leaderRoleCode: m.leaderRoleCode ?? undefined,
     leaderRoleName: m.leaderRoleName ?? undefined,
     target: m.target,
+    targetBalance: mapTargetBalance(m.targetBalance),
     actual: m.actual,
     status: asStatus(m.status),
     performanceLabel: m.performanceLabel ?? undefined,
+    submissionTarget: parseOptionalSubmissionNum(m.submissionTarget),
+    submissionActual: parseOptionalSubmissionNum(m.submissionActual),
+    feedbackNote: m.feedbackNote ?? undefined,
     blocker: m.blocker ?? '—',
     rank: m.rank ?? undefined,
     leader: m.leader ?? undefined,
@@ -48,7 +67,9 @@ function mapLeader(l: GmDiagLeaderApi): GmHierarchyLeader {
     name: l.name,
     ownerRoleCode: l.ownerRoleCode ?? undefined,
     ownerRoleLabel: l.ownerRoleLabel ?? undefined,
+    weight: l.weight ?? undefined,
     target: l.target,
+    targetBalance: mapTargetBalance(l.targetBalance),
     actual: l.actual,
     status: asStatus(l.status),
     blockerSummary: l.blockerSummary ?? '',
@@ -69,7 +90,9 @@ function mapPm(p: GmDiagPmApi): GmHierarchyPm {
     ownerRoleCode: p.ownerRoleCode ?? undefined,
     ownerRoleLabel: p.ownerRoleLabel ?? undefined,
     unitLine: p.unitLine,
+    weight: p.weight ?? undefined,
     target: p.target,
+    targetBalance: mapTargetBalance(p.targetBalance),
     actual: p.actual,
     status: asStatus(p.status),
     blockerSummary: p.blockerSummary,
@@ -92,6 +115,7 @@ export function mapGmDiagnosticsApiKpisToHierarchyRows(kpis: GmDiagKpiApi[] | nu
       name: k.name,
       weight: k.weight,
       target: k.target,
+      targetBalance: mapTargetBalance(k.targetBalance),
       actual: k.actual,
       status: asStatus(k.status),
       blockerSummary: k.blockerSummary,
@@ -102,6 +126,7 @@ export function mapGmDiagnosticsApiKpisToHierarchyRows(kpis: GmDiagKpiApi[] | nu
       categoryName: cname,
       lifecycleStatus: lifecycle,
       isImportant: k.isImportant === true,
+      isGlobal: k.isGlobal ?? undefined,
       pmOwners: (k.pmOwners ?? []).map(mapPm),
       investigateDeptId: k.investigateDeptId ?? undefined,
       investigateKpiName: k.investigateKpiName ?? undefined,

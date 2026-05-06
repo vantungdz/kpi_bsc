@@ -4,6 +4,7 @@
  */
 import http from '@/services/api'
 import type { ApiResponse } from '@/types/api'
+import type { GmProcessTimelineApiResponse } from '@/services/modules/kpi-gm.service'
 import type { 
   PmKpiDashboard, 
   KpiItem,
@@ -19,6 +20,15 @@ export async function apiGetPmKpiDashboard(year?: number): Promise<ApiResponse<P
 /** GET /api/pm/dashboard/init?year=... */
 export async function apiGetPmDashboardInit(year?: string): Promise<ApiResponse<PmKpiDashboard>> {
   return http.get('/pm/dashboard/init', { params: year ? { year } : {} }).then(r => r.data)
+}
+
+/** GET /v1/pm/dashboard/process-timeline?year= — timeline vấn đề chỉ trong section của PM đăng nhập. */
+export async function apiGetPmProcessTimeline(year: number): Promise<GmProcessTimelineApiResponse> {
+  return http
+    .get<ApiResponse<GmProcessTimelineApiResponse>>('/pm/dashboard/process-timeline', {
+      params: { year },
+    })
+    .then((r) => r.data.data)
 }
 
 /** PUT /api/kpi/pm/sheet/:memberId/:itemId — PM scores a member's KPI item */
@@ -45,9 +55,19 @@ export async function apiRegisterKpi(payload: KpiRegistrationRequest): Promise<A
   return http.post('/kpi/pm/registration', payload).then(r => r.data)
 }
 
-/** GET /kpi/strategic-kpis/{id} — Lấy chi tiết KPI để fill vào Form */
-export async function apiGetKpiDetail(kpiId: string): Promise<any> {
-  return http.get(`/kpi/strategic-kpis/${kpiId}`).then(r => r.data)
+/**
+ * GET /kpi/strategic-kpis/{id} — Chi tiết KPI (form GM/PM).
+ * @param parentAssignmentId — ID assignment của PM trên portfolio; BE chỉ trả member cascade dưới dòng đó.
+ */
+export async function apiGetKpiDetail(
+  kpiId: string,
+  parentAssignmentId?: string,
+): Promise<any> {
+  return http
+    .get(`/kpi/strategic-kpis/${kpiId}`, {
+      params: parentAssignmentId ? { parentAssignmentId } : undefined,
+    })
+    .then((r) => r.data)
 }
 
 /** POST /kpi/strategic-kpis/cascade — PM giao việc / phân rã KPI cho Members */
@@ -70,6 +90,58 @@ export async function apiGetMemberKpi(year?: string): Promise<ApiResponse<any>> 
   return http.get('/pm/dashboard/member-kpis', { params: year ? { year } : {} }).then(r => r.data)
 }
 
+/** GET /api/pm/dashboard/team-members/{memberId}/kpis?year=... — Get KPI details for a specific member */
+export async function apiGetMemberKpiDetails(memberId: string, year: number): Promise<ApiResponse<any[]>> {
+  return http.get(`/pm/dashboard/team-members/${memberId}/kpis`, { params: { year } }).then(r => r.data)
+}
+
+/** Đề xuất KPI cá nhân (402) — member có supervisor = PM */
+export interface PmMemberKpiApprovalItem {
+  assignmentId: string
+  cycleId: string
+  userId: string
+  userFullName: string
+  kpiName: string
+  targetDescription: string | null
+  weight: number | null
+  categoryName: string | null
+  typeCode: number | null
+  requestedAt: string | null
+  justification: string | null
+}
+
+export async function apiListPmMemberKpiApprovals(
+  year: number,
+): Promise<ApiResponse<PmMemberKpiApprovalItem[]>> {
+  return http
+    .get('/pm/dashboard/member-kpi-approvals', { params: { year } })
+    .then((r) => r.data)
+}
+
+export async function apiPmMemberKpiApprovalDecision(body: {
+  year: number
+  assignmentId: string
+  approve: boolean
+}): Promise<ApiResponse<null>> {
+  return http.post('/pm/dashboard/member-kpi-approvals/decision', body).then((r) => r.data)
+}
+
+export async function apiPmSubmitFeedbackToGm(body: {
+  year: number
+  assignmentId: string
+  feedbackNote: string
+}): Promise<ApiResponse<null>> {
+  return http.post('/pm/dashboard/gm-feedback', body).then((r) => r.data)
+}
+
+export async function apiPmMemberFeedbackDecision(body: {
+  year: number
+  assignmentId: string
+  approve: boolean
+}): Promise<ApiResponse<null>> {
+  return http.post('/pm/dashboard/member-feedbacks/decision', body).then((r) => r.data)
+}
+
 
 // ==========================================
 // SERVICE EXPORT
@@ -78,17 +150,28 @@ export async function apiGetMemberKpi(year?: string): Promise<ApiResponse<any>> 
 export const pmKpiService = {
   getDashboard: (year?: number) => apiGetPmKpiDashboard(year).then(r => r.data),
   getInitialization: (year?: string) => apiGetPmDashboardInit(year).then(r => r.data),
+  getProcessTimeline: (year: number) => apiGetPmProcessTimeline(year),
   scoreItem: (memberId: string, itemId: string, score: number) => apiPmScore(memberId, itemId, score).then(r => r.data),
   approveSheet: (memberId: string, year: number) => apiPmApproveSheet(memberId, year).then(r => r.data),
   
   // Tích hợp API mới
   getRegistrationInitData: () => apiGetRegistrationInitData().then(r => r.data),
   registerKpi: (payload: KpiRegistrationRequest) => apiRegisterKpi(payload).then(r => r.data),
-  getKpiDetail: (kpiId: string) => apiGetKpiDetail(kpiId).then(r => r.data),
+  getKpiDetail: (kpiId: string, parentAssignmentId?: string) =>
+    apiGetKpiDetail(kpiId, parentAssignmentId).then((r) => r.data),
   cascadeKpi: (payload: any) => apiCascadeKpi(payload).then(r => r.data),
   bulkUpdateKpiStatus: (payload: any) => apiBulkUpdateKpiStatus(payload).then(r => r.data),
   getTeamHierarchy: (year?: string) => apiGetTeamHierarchy(year).then(r => r.data),
   getMemberKpi: (year?: string) => apiGetMemberKpi(year).then(r => r.data),
+  getMemberKpiDetails: (memberId: string, year: number) => apiGetMemberKpiDetails(memberId, year).then(r => r.data),
+  listMemberKpiApprovals: (year: number) =>
+    apiListPmMemberKpiApprovals(year).then((r) => r.data),
+  decideMemberKpiApproval: (body: { year: number; assignmentId: string; approve: boolean }) =>
+    apiPmMemberKpiApprovalDecision(body).then((r) => r.data),
+  submitFeedbackToGm: (body: { year: number; assignmentId: string; feedbackNote: string }) =>
+    apiPmSubmitFeedbackToGm(body).then((r) => r.data),
+  decideMemberFeedback: (body: { year: number; assignmentId: string; approve: boolean }) =>
+    apiPmMemberFeedbackDecision(body).then((r) => r.data),
 }
 
 // Thêm alias để tương thích với file PmAssignKpiDrawer.vue ở bước trước (vì component đang import tên này)

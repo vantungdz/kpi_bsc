@@ -17,7 +17,7 @@ export function codesFromPersistedCalculationMethod(
   const k = String(persisted ?? '').trim()
   switch (k) {
     case 'manual_member_input':
-      return { calculationTypeCode: 703, calculationRuleCode: 803 }
+      return { calculationTypeCode: null, calculationRuleCode: 803 }
     case 'mean_actual_plan':
       return { calculationTypeCode: 701, calculationRuleCode: 802 }
     case 'mean_plan_actual':
@@ -46,11 +46,13 @@ export function persistedCalculationMethodFromCodes(
   if (tMissing) {
     if (r === 801) return 'mean_plan_actual_sum'
     if (r === 802) return 'mean_plan_actual_pct'
+    if (r === 803) return 'manual_member_input'
     return null
   }
 
   if (!Number.isFinite(t)) return null
-  if (t === 703 && r === 803) return 'manual_member_input'
+  // Dòng cũ lưu CALC_TYPE 703 — vẫn hydrate đúng form COMMENT.
+  if (r === 803 && t === 703) return 'manual_member_input'
   if (t === 701 && r === 802) return 'mean_actual_plan'
   if (t === 702 && r === 802) return 'mean_plan_actual'
   return null

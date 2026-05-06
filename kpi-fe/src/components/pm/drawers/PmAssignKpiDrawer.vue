@@ -6,6 +6,14 @@ import type { PmMemberOption, SysStatusCode, KpiCycle } from '@/types/kpi'
 import { generateInitials } from '@/utils/common'
 import { KPI_TYPE, CALC_RULE, CALC_TYPE } from '@/config/constants'
 import { persistedCalculationMethodFromTypeAndRule } from '@/utils/kpiCalculationCodes'
+import {
+  buildScoringRulesPayload,
+  extractRawInputFromApiTargetDescription,
+  SCORING_RULES_EXAMPLE_TOOLTIP,
+  validateScoringRulesDsl,
+} from '@/utils/kpiScoringRulesDsl'
+import { getApiErrorMessage } from '@/utils/apiErrorMessage'
+import { useAuthStore } from '@/stores/auth.store'
 
 // --- INTERFACES ---
 interface KpiCategory {
@@ -21,6 +29,7 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['close', 'save', 'refresh'])
+const authStore = useAuthStore()
 
 // --- COMPUTED STATES ---
 const isCreate = computed(() => props.mode === 'create')
@@ -57,25 +66,92 @@ const selectedMembers = ref<string[]>([])
 const memberTargets = ref<Record<string, string>>({})
 
 // --- COMPUTEDS FOR UI & PERFORMANCE ---
+/** Thành viên thuộc phòng ban của PM (registration init → BE findMembersByPmDepartment). */
+const allocationMemberPool = computed<PmMemberOption[]>(() => memberOptions.value)
+
+const showTeamAssignPoolEmpty = computed(
+  () =>
+    !isCreate.value &&
+    typeCode.value === KPI_TYPE.TEAM &&
+    memberOptions.value.length === 0,
+)
+
 // Use Map for O(1) lookups instead of repeated Array.find()
 const memberMap = computed(() => {
-  return memberOptions.value.reduce((map, member) => {
+  return allocationMemberPool.value.reduce((map, member) => {
     map.set(member.id, member)
     return map
   }, new Map<string, PmMemberOption>())
 })
 
 const filteredMemberOptions = computed(() => {
+  const pool = allocationMemberPool.value
   const query = memberAssignSearch.value.trim().toLowerCase()
-  if (!query) return memberOptions.value
-  
-  return memberOptions.value.filter((m) => 
-    `${m.shortName} ${m.departmentName} ${m.rankCode} ${m.fullName}`.toLowerCase().includes(query)
+  if (!query) return pool
+
+  return pool.filter((m) =>
+    `${m.shortName} ${m.departmentName} ${m.rankCode} ${m.fullName}`.toLowerCase().includes(query),
   )
 })
 
-const getMemberShort = (id: string) => memberMap.value.get(id)?.shortName ?? id
-const getMemberLabel = (id: string) => memberMap.value.get(id)?.fullName ?? id
+const getMemberShort = (id: string) => {
+  if (id === pmUserId.value) return 'Me'
+  return memberMap.value.get(id)?.shortName ?? id
+}
+const getMemberLabel = (id: string) => {
+  if (id === pmUserId.value) {
+    return authStore.user?.fullName?.trim() || authStore.user?.name || 'Me'
+  }
+  return memberMap.value.get(id)?.fullName ?? id
+}
+
+function parseTargetInput(raw: string | null | undefined): number {
+  const n = Number(String(raw ?? '').trim())
+  return Number.isFinite(n) ? n : 0
+}
+
+const pmUserId = computed(() => String(authStore.user?.id ?? '').trim())
+
+const canShowAssignToMe = computed(
+  () => !isCreate.value && typeCode.value === KPI_TYPE.TEAM && pmUserId.value !== '',
+)
+
+const showsPmTargetField = computed(
+  () =>
+    typeCode.value === KPI_TYPE.TEAM ||
+    typeCode.value === KPI_TYPE.INDIVIDUAL ||
+    (!isCreate.value && typeCode.value === KPI_TYPE.PROMOTION),
+)
+
+const pmTargetFieldLabel = computed(() => {
+  if (typeCode.value === KPI_TYPE.TEAM) return 'Target (Team)'
+  if (typeCode.value === KPI_TYPE.PROMOTION) return 'Target (Promotion)'
+  return 'Target (Individual)'
+})
+
+/** KPI Team & Individual: ô chỉ placeholder + dropdown; danh sách đã chọn & Xóa ở khối dưới (không chip trong ô). Promotion: chip trong ô. */
+const useMemberAssignListBelow = computed(
+  () => typeCode.value === KPI_TYPE.TEAM || typeCode.value === KPI_TYPE.INDIVIDUAL,
+)
+
+const teamTargetValueNum = computed(() => {
+  const n = Number(targetValue.value)
+  return Number.isFinite(n) ? n : 0
+})
+
+const selectedTargetsTotal = computed(() =>
+  selectedMembers.value.reduce((sum, id) => sum + parseTargetInput(memberTargets.value[id]), 0),
+)
+
+const remainingTargetForPm = computed(() => {
+  const remaining = teamTargetValueNum.value - selectedTargetsTotal.value
+  return remaining > 0 ? remaining : 0
+})
+
+const overAssignedTarget = computed(() => {
+  const over = selectedTargetsTotal.value - teamTargetValueNum.value
+  return over > 0 ? over : 0
+})
 
 // --- CSS CLASS COMPUTEDS ---
 const inputBaseClasses = 'w-full rounded-md outline-none transition-all text-xs font-bold'
@@ -101,15 +177,75 @@ const typeCardClass = (code: number) => {
 }
 
 // --- METHODS ---
+/** Target hiển thị trên portfolio (đã ưu tiên assignment PM) — dùng cho KPI Team thay cho target catalog từ GET strategic. */
+function portfolioPmTargetForDisplay(kpi: Record<string, unknown> | null | undefined): string {
+  if (!kpi) return ''
+  const s = String(kpi.target ?? '').trim()
+  if (!s || s === '-') return ''
+  return s
+}
+
+function isPortfolioTeamKpi(kpi: Record<string, unknown> | null | undefined): boolean {
+  if (!kpi) return false
+  if (Number(kpi.typeCode) === KPI_TYPE.TEAM) return true
+  return kpi.kpiType === 'cascading'
+}
+
+function applyTeamTargetFromPortfolioRow() {
+  if (!isPortfolioTeamKpi(props.kpi as Record<string, unknown>)) return
+  const t = portfolioPmTargetForDisplay(props.kpi as Record<string, unknown>)
+  if (t) targetValue.value = t
+}
+
+/**
+ * Nếu portfolio có bản ghi cascade (children): đồng bộ chọn & target từ đó.
+ * Nếu chưa có children: giữ nguyên selection đã load từ getKpiDetail (không xóa pool department).
+ */
+function applyPortfolioChildrenToAssignSelection() {
+  if (!isPortfolioTeamKpi(props.kpi as Record<string, unknown>)) return
+  const kpi = props.kpi as { children?: Array<Record<string, unknown>> }
+  const ch = kpi?.children
+  if (!Array.isArray(ch) || ch.length === 0) {
+    return
+  }
+  const rows = ch.filter((c) => c.userId != null && String(c.userId).trim() !== '')
+  selectedMembers.value = rows.map((c) => String(c.userId).trim())
+  const mt: Record<string, string> = {}
+  for (const c of rows) {
+    const uid = String(c.userId).trim()
+    const tv =
+      c.targetValue != null && c.targetValue !== ''
+        ? String(c.targetValue)
+        : String(c.target ?? '').trim()
+    mt[uid] = tv
+  }
+  memberTargets.value = mt
+}
+
 const toggleMember = (id: string) => {
   const index = selectedMembers.value.indexOf(id)
   if (index === -1) {
     selectedMembers.value.push(id)
-    if (!(id in memberTargets.value)) memberTargets.value[id] = ''
+    if (
+      (typeCode.value === KPI_TYPE.TEAM || typeCode.value === KPI_TYPE.PROMOTION) &&
+      !(id in memberTargets.value)
+    ) {
+      memberTargets.value[id] = ''
+    }
   } else {
     selectedMembers.value.splice(index, 1)
     delete memberTargets.value[id]
   }
+}
+
+const assignRemainingToMe = () => {
+  if (!canShowAssignToMe.value || remainingTargetForPm.value <= 0) return
+  const me = pmUserId.value
+  if (!selectedMembers.value.includes(me)) {
+    selectedMembers.value.push(me)
+  }
+  const cur = parseTargetInput(memberTargets.value[me])
+  memberTargets.value[me] = String(cur + remainingTargetForPm.value)
 }
 
 const fetchInitData = async () => {
@@ -156,7 +292,9 @@ const resetFormFields = () => {
     typeCode.value = props.kpi.typeCode || KPI_TYPE.INDIVIDUAL
     kpiName.value = props.kpi.name || ''
     weightPct.value = props.kpi.weight || ''
-    targetValue.value = props.kpi.targetValue || ''
+    targetValue.value = isPortfolioTeamKpi(props.kpi as Record<string, unknown>)
+      ? portfolioPmTargetForDisplay(props.kpi as Record<string, unknown>)
+      : String(props.kpi.targetValue ?? '').trim()
     description.value = props.kpi.description || ''
     isImportantKpi.value = props.kpi.isImportant || false
     unitCode.value = props.kpi.unitCode || null
@@ -178,13 +316,16 @@ const onDocClick = (e: MouseEvent) => {
 const fetchKpiDetail = async (kpiId: string) => {
   try {
     isLoadingInit.value = true
-    const detailData = await KpiPmService.getKpiDetail(kpiId)
+    /** Portfolio row `kpi.id` = assignment của PM — BE lọc memberIds chỉ còn cascade con, không lẫn PM do GM giao. */
+    const parentAssignmentId =
+      !isCreate.value && props.kpi?.id ? String(props.kpi.id) : undefined
+    const detailData = await KpiPmService.getKpiDetail(kpiId, parentAssignmentId)
     
     // Fill vào các Form States
     categoryId.value = detailData.perspective || ''
     typeCode.value = detailData.typeCode || KPI_TYPE.INDIVIDUAL
     kpiName.value = detailData.kpiName || ''
-    description.value = detailData.targetDescription || ''
+    description.value = extractRawInputFromApiTargetDescription(detailData.targetDescription)
     
     targetValue.value = detailData.targetValue != null ? String(detailData.targetValue) : ''
     weightPct.value = detailData.weightPct != null ? String(detailData.weightPct) : ''
@@ -195,7 +336,7 @@ const fetchKpiDetail = async (kpiId: string) => {
     // Phân giải calculationMethod ra Code
     if (detailData.calculationMethod) {
       switch (detailData.calculationMethod) {
-        case "manual_member_input": calculationRuleCode.value = 803; calculationTypeCode.value = 703; break;
+        case "manual_member_input": calculationRuleCode.value = 803; calculationTypeCode.value = null; break;
         case "mean_actual_plan": calculationRuleCode.value = 802; calculationTypeCode.value = 701; break;
         case "mean_plan_actual": calculationRuleCode.value = 802; calculationTypeCode.value = 702; break;
         case "mean_plan_actual_sum": calculationRuleCode.value = 801; calculationTypeCode.value = null; break;
@@ -203,12 +344,25 @@ const fetchKpiDetail = async (kpiId: string) => {
       }
     }
 
-    selectedMembers.value = detailData.memberIds || []
-    memberTargets.value = detailData.memberTargets || {}
+    const rawIds = detailData.memberIds || []
+    selectedMembers.value = rawIds.map((x: unknown) => String(x))
+    const mt = (detailData.memberTargets ?? {}) as Record<string, unknown>
+    // Individual: một Target chung — không giữ map target từng member trên form.
+    if (Number(detailData.typeCode) === KPI_TYPE.INDIVIDUAL) {
+      memberTargets.value = {}
+    } else {
+      memberTargets.value = Object.fromEntries(
+        Object.entries(mt).map(([k, v]) => [String(k), v == null ? '' : String(v)]),
+      )
+    }
     formErrors.value = {}
   } catch (error) {
     console.error('Error when getting KPI detail:', error)
     resetFormFields()
+    if (!isCreate.value && isPortfolioTeamKpi(props.kpi as Record<string, unknown>)) {
+      applyTeamTargetFromPortfolioRow()
+      applyPortfolioChildrenToAssignSelection()
+    }
   } finally {
     isLoadingInit.value = false
   }
@@ -229,6 +383,11 @@ watch(() => props.open, async (isOpen) => {
       resetFormFields()
     }
 
+    if (!isCreate.value && isPortfolioTeamKpi(props.kpi as Record<string, unknown>)) {
+      applyTeamTargetFromPortfolioRow()
+      applyPortfolioChildrenToAssignSelection()
+    }
+
     window.addEventListener('click', onDocClick)
   } else {
     window.removeEventListener('click', onDocClick)
@@ -236,8 +395,26 @@ watch(() => props.open, async (isOpen) => {
   document.body.style.overflow = isOpen ? 'hidden' : ''
 }, { immediate: true })
 
-watch(typeCode, (newVal) => {
-  if (newVal !== KPI_TYPE.TEAM) targetValue.value = ''
+/** Đổi giữa KPI Team ↔ Individual: reset target; đồng bộ memberTargets (Individual không có target từng người). */
+watch(typeCode, (newVal, oldVal) => {
+  if (oldVal === undefined) return
+  const wasTeam = oldVal === KPI_TYPE.TEAM
+  const isTeam = newVal === KPI_TYPE.TEAM
+  if (wasTeam !== isTeam) targetValue.value = ''
+
+  if (newVal === KPI_TYPE.INDIVIDUAL && (wasTeam || oldVal === KPI_TYPE.PROMOTION)) {
+    memberTargets.value = {}
+  }
+  if (newVal === KPI_TYPE.TEAM && oldVal === KPI_TYPE.INDIVIDUAL) {
+    const next: Record<string, string> = { ...memberTargets.value }
+    for (const id of selectedMembers.value) {
+      if (!(id in next)) next[id] = ''
+    }
+    memberTargets.value = next
+  }
+  if (newVal === KPI_TYPE.PROMOTION && oldVal === KPI_TYPE.INDIVIDUAL) {
+    memberTargets.value = Object.fromEntries(selectedMembers.value.map((id) => [id, '']))
+  }
 })
 
 watch(calculationRuleCode, (newVal) => {
@@ -265,12 +442,31 @@ const validateForm = (): boolean => {
   if (isCreate.value) {
     if (!kpiName.value.trim()) formErrors.value.kpiName = 'Vui lòng nhập tên KPI.'
     if (!weightPct.value) formErrors.value.weightPct = 'Vui lòng nhập trọng số.'
-    if (typeCode.value === KPI_TYPE.TEAM && !targetValue.value) formErrors.value.targetValue = 'Vui lòng nhập chỉ tiêu tổng (Team Target).'
+    if (
+      showsPmTargetField.value &&
+      !String(targetValue.value ?? '').trim()
+    ) {
+      formErrors.value.targetValue =
+        typeCode.value === KPI_TYPE.TEAM
+          ? 'Vui lòng nhập chỉ tiêu tổng (Team Target).'
+          : 'Vui lòng nhập chỉ tiêu (Target).'
+    }
     if (!unitCode.value) formErrors.value.unitCode = 'Vui lòng chọn đơn vị tính.'
     if (!calculationRuleCode.value) formErrors.value.calculationRuleCode = 'Vui lòng chọn quy tắc tính toán.'
     
     if (calculationRuleCode.value === CALC_RULE.AVERAGE && !calculationTypeCode.value) {
       formErrors.value.calculationTypeCode = 'Vui lòng chọn chiều hướng tính toán (Actual/Plan hay Plan/Actual).'
+    }
+
+    const dv = description.value.trim()
+    if (!dv) {
+      formErrors.value.scoringRules =
+        'Vui lòng nhập quy tắc chấm điểm (đủ các mức 1–5 theo cú pháp).'
+    } else {
+      const vr = validateScoringRulesDsl(description.value)
+      if (!vr.ok) {
+        formErrors.value.scoringRules = vr.errors.join(' ')
+      }
     }
   }
 
@@ -284,13 +480,18 @@ const registerKPI = async () => {
     typeCode: typeCode.value,
     perspective: categoryId.value,
     kpiName: isCreate.value ? kpiName.value : (props.kpi?.name || ''),
-    targetDescription: description.value,
+    targetDescription: description.value.trim()
+      ? buildScoringRulesPayload(description.value)
+      : null,
     targetValue: targetValue.value ? Number(targetValue.value) : null,
     unit: unitName,
     unitCode: unitCode.value,
     weightPct: String(weightPct.value),
     cycleId: formCycleId.value,
-    calculationMethod: persistedCalculationMethodFromTypeAndRule(calculationTypeCode.value, calculationRuleCode.value),
+    calculationMethod: persistedCalculationMethodFromTypeAndRule(
+      calculationTypeCode.value,
+      calculationRuleCode.value ?? CALC_RULE.AVERAGE,
+    ),
     isImportant: isImportantKpi.value,
   }
 
@@ -323,9 +524,9 @@ const handleAssignMember = async () => {
   }
 
   if (typeCode.value === KPI_TYPE.TEAM) {
-    // Đối với KPI Team phân rã, mỗi người có 1 số target riêng
+    // KPI Team: chỉ gửi đúng các member đang chọn + target; phần còn lại cho PM chỉ khi PM bấm «Assign to me» (có user PM trong map).
     cascadePayload.memberTargets = Object.fromEntries(
-      Object.entries(memberTargets.value).map(([memberId, val]) => [memberId, Number(val)])
+      selectedMembers.value.map((memberId) => [memberId, parseTargetInput(memberTargets.value[memberId])]),
     )
   } else {
     const targetNum = null
@@ -358,7 +559,7 @@ const handleSave = async () => {
     emit('close')
   } catch (error) {
     console.error('Lỗi khi lưu KPI:', error)
-    formErrors.value.api = 'Có lỗi xảy ra khi lưu KPI. Vui lòng thử lại.'
+    formErrors.value.api = getApiErrorMessage(error, 'Có lỗi xảy ra khi lưu KPI. Vui lòng thử lại.')
   } finally {
     saving.value = false
   }
@@ -376,19 +577,19 @@ const handleSave = async () => {
         />
 
         <!-- Drawer Panel -->
-        <aside class="gm-kpi-drawer-panel absolute top-0 right-0 bottom-0 flex flex-col w-full max-w-full md:max-w-[700px] lg:max-w-[800px] bg-slate-50 border-l border-slate-200 shadow-2xl">
+        <aside class="gm-kpi-drawer-panel will-change-transform absolute top-0 right-0 bottom-0 flex flex-col w-full max-w-full md:max-w-[700px] lg:max-w-[800px] bg-slate-50 border-l border-slate-200 shadow-2xl">
           
           <!-- Header -->
           <div class="z-10 flex shrink-0 items-center justify-between p-5 bg-white border-b border-slate-200 shadow-sm">
             <div>
               <h2 class="flex items-center gap-2 text-lg font-bold text-slate-800">
                 <span class="p-1.5 rounded-lg bg-blue-100 text-blue-700 shadow-sm">
-                  <i class="fas" :class="isCreate ? 'fa-plus' : 'fa-bullseye'" />
+                  <i class="fas" :class="isCreate ? 'fa-plus' : 'fa-sliders-h'" />
                 </span>
-                {{ isCreate ? 'Create Team KPI' : 'Assign KPI Target' }}
+                {{ isCreate ? 'Create KPI' : 'Phân bổ KPI ' }}
               </h2>
               <p class="mt-1 text-[10px] font-bold tracking-wider text-slate-500 uppercase">
-                {{ isCreate ? 'Define a new KPI for your team' : 'Delegate to team members' }}
+                {{ isCreate ? 'Define a new KPI for your team' : 'Chỉnh sửa hoặc bổ sung người nhận và target' }}
               </p>
             </div>
             <button 
@@ -474,7 +675,7 @@ const handleSave = async () => {
                   <label class="mb-2 block text-[10px] font-bold tracking-wider text-slate-500 uppercase">
                     Loại hình KPI (cách thức giao) <span v-if="isCreate" class="text-rose-500">*</span>
                   </label>
-                  <div class="grid grid-cols-1 gap-3 md:grid-cols-3">
+                  <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
                     <!-- Team -->
                     <button type="button" :class="typeCardClass(KPI_TYPE.TEAM)" @click="isCreate ? typeCode = KPI_TYPE.TEAM : null">
                       <span class="absolute top-2.5 right-2.5 text-blue-600 transition-all" :class="typeCode === KPI_TYPE.TEAM ? 'scale-100 opacity-100' : 'scale-50 opacity-0'">
@@ -497,18 +698,13 @@ const handleSave = async () => {
                       </div>
                       <p class="text-[11px] font-medium leading-tight text-slate-500">Giao hàng loạt cho Rank.</p>
                     </button>
-                    <!-- Promotion -->
-                    <button type="button" :class="typeCardClass(KPI_TYPE.PROMOTION)" @click="isCreate ? typeCode = KPI_TYPE.PROMOTION : null">
-                      <span class="absolute top-2.5 right-2.5 text-purple-600 transition-all" :class="typeCode === KPI_TYPE.PROMOTION ? 'scale-100 opacity-100' : 'scale-50 opacity-0'">
-                        <i class="fas fa-check-circle text-base" />
-                      </span>
-                      <div class="mb-1.5 flex items-center gap-2">
-                        <span class="p-1 rounded bg-slate-50 border border-slate-100 shadow-sm"><i class="fas fa-user-plus text-xs text-purple-600" /></span>
-                        <span class="text-xs font-bold text-slate-800">Promotion KPI</span>
-                      </div>
-                      <p class="text-[11px] font-medium leading-tight text-slate-500">Giao đích danh cá nhân.</p>
-                    </button>
                   </div>
+                  <p
+                    v-if="!isCreate && typeCode === KPI_TYPE.PROMOTION"
+                    class="mt-2 rounded-lg border border-purple-200 bg-purple-50/80 px-3 py-2 text-[11px] font-semibold text-purple-900"
+                  >
+                    Loại KPI: Promotion — chỉ chỉnh sửa phân bổ; PM không tạo KPI Promotion từ drawer này.
+                  </p>
                 </div>
 
                 <!-- Important KPI Checkbox -->
@@ -526,10 +722,10 @@ const handleSave = async () => {
                 </div>
 
                 <!-- Target & Weight -->
-                <div class="grid grid-cols-1 gap-4" :class="typeCode === KPI_TYPE.TEAM ? 'sm:grid-cols-2 sm:gap-x-6' : ''">
-                  <div v-if="typeCode === KPI_TYPE.TEAM" class="min-w-0">
+                <div class="grid grid-cols-1 gap-4" :class="showsPmTargetField ? 'sm:grid-cols-2 sm:gap-x-6' : ''">
+                  <div v-if="showsPmTargetField" class="min-w-0">
                     <label class="mb-1.5 block text-[10px] font-bold tracking-wider text-slate-500 uppercase">
-                      Target (Team) <span v-if="isCreate" class="text-rose-500">*</span>
+                      {{ pmTargetFieldLabel }} <span v-if="isCreate" class="text-rose-500">*</span>
                     </label>
                     <input 
                       v-model="targetValue" 
@@ -597,7 +793,7 @@ const handleSave = async () => {
                 <div>
                   <div class="mb-1.5 flex items-center gap-1.5">
                     <label class="block flex-1 text-[10px] font-bold tracking-wider text-slate-500 uppercase">
-                      Quy tắc tổng hợp điểm <span v-if="isCreate" class="text-rose-500">*</span>
+                      Phân loại cách tính <span v-if="isCreate" class="text-rose-500">*</span>
                     </label>
                   </div>
 
@@ -653,17 +849,43 @@ const handleSave = async () => {
                   </div>
                 </div>
 
-                <!-- Description -->
+                <!-- Quy tắc chấm điểm -->
                 <div>
-                  <label class="mb-1.5 block text-[10px] font-bold tracking-wider text-slate-500 uppercase">Description</label>
+                  <div class="mb-1.5 flex items-center gap-1.5">
+                    <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                      Quy tắc chấm điểm <span v-if="isCreate" class="text-rose-500">*</span>
+                    </label>
+                    <span v-if="isCreate" class="group relative inline-flex shrink-0">
+                      <button
+                        type="button"
+                        class="cursor-help rounded p-0.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-blue-600 focus-visible:outline focus-visible:ring-2 focus-visible:ring-slate-300"
+                        aria-label="Ví dụ cú pháp quy tắc chấm điểm"
+                      >
+                        <i class="fas fa-circle-question text-[12px]" aria-hidden="true" />
+                      </button>
+                      <span
+                        role="tooltip"
+                        class="pointer-events-none absolute right-0 top-full z-[110] mt-1 hidden min-w-[11rem] max-w-[20rem] whitespace-pre-line rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-left text-[10px] font-medium leading-snug text-slate-700 shadow-lg group-hover:block group-focus-within:block"
+                      >{{ SCORING_RULES_EXAMPLE_TOOLTIP }}</span>
+                    </span>
+                  </div>
                   <textarea 
                     v-model="description" 
                     :disabled="!isCreate" 
-                    rows="2" 
-                    placeholder="Ghi chú chi tiết mục tiêu..." 
-                    class="custom-scrollbar w-full px-3 py-2 rounded-md border text-xs font-medium resize-none outline-none transition-all focus:ring-1" 
-                    :class="isCreate ? 'bg-white border-slate-200 text-slate-800 focus:border-blue-400 focus:ring-blue-100' : 'bg-slate-100 border-slate-200 text-slate-600 cursor-not-allowed'"
+                    rows="5" 
+                    placeholder="1: &lt;50&#10;2: 50-70&#10;3: 71-85&#10;4: 86-99&#10;5: &gt;=100" 
+                    class="custom-scrollbar min-h-[7.5rem] w-full px-3 py-2 rounded-md text-xs font-medium resize-y outline-none transition-all focus:ring-1" 
+                    :class="[
+                      !isCreate
+                        ? 'border border-slate-200 bg-slate-100 text-slate-600 cursor-not-allowed'
+                        : formErrors.scoringRules
+                          ? 'border !border-rose-400 !bg-rose-50/70 text-slate-800 focus:border-rose-400 focus:ring-rose-100'
+                          : 'input-required text-slate-800 focus:border-blue-400 focus:ring-blue-100',
+                    ]"
                   />
+                  <p v-if="formErrors.scoringRules" class="mt-1 text-[10px] font-semibold text-rose-600">
+                    {{ formErrors.scoringRules }}
+                  </p>
                 </div>
               </div>
             </div>
@@ -678,106 +900,165 @@ const handleSave = async () => {
               </label>
 
               <div>
-                <label class="mb-2 block text-[11px] font-bold tracking-wider text-slate-500 uppercase">
-                  Assign To Team Members <span class="text-rose-500">*</span>
-                </label>
+                <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+                  <label class="block min-w-0 flex-1 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                    Assign To Team Members <span class="text-rose-500">*</span>
+                  </label>
+                  <button
+                    v-if="canShowAssignToMe"
+                    type="button"
+                    class="inline-flex shrink-0 items-center gap-1 rounded-md border border-indigo-200 bg-white px-2.5 py-1 text-[10px] font-bold text-indigo-700 shadow-sm transition-colors hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    :disabled="remainingTargetForPm <= 0"
+                    @click="assignRemainingToMe"
+                  >
+                    <i class="fas fa-user-check text-[10px]" />
+                    Assign to me
+                  </button>
+                </div>
+                <p
+                  v-if="canShowAssignToMe"
+                  class="mb-2 text-[10px] font-semibold tabular-nums leading-snug text-slate-600"
+                  title="Target team · Đã phân cho thành viên · Phần còn lại giao PM"
+                >
+                  <span class="font-bold text-slate-800">{{ teamTargetValueNum }}</span>
+                  <span class="mx-1 text-slate-300">/</span>
+                  <span>{{ selectedTargetsTotal }} đã giao</span>
+                  <span class="mx-1 text-slate-300">·</span>
+                  <span :class="remainingTargetForPm > 0 ? 'text-emerald-700' : 'text-slate-500'">
+                    PM +{{ remainingTargetForPm }}
+                  </span>
+                </p>
 
-                <!-- Custom Select Dropdown -->
+                <!-- Team & Individual: placeholder trong ô; Promotion: chip trong ô. -->
                 <div ref="assignMemberSurfaceRef" class="relative">
                   <button 
                     type="button" 
-                    class="input-optional relative flex flex-wrap items-center gap-1.5 w-full min-h-[38px] py-1.5 pl-8 pr-7 rounded-md text-left text-xs font-bold text-slate-700 transition-all" 
+                    class="input-optional relative flex w-full min-h-[38px] flex-wrap items-center gap-1.5 rounded-md py-1.5 pl-8 pr-7 text-left text-xs font-bold text-slate-700 transition-all" 
                     @click.stop="assignDropdown = assignDropdown === 'member' ? null : 'member'"
                   >
-                    <span v-if="selectedMembers.length === 0" class="w-full font-medium text-slate-400">Tìm và chọn thành viên trong Team...</span>
-                    <span 
-                      v-for="id in selectedMembers" 
-                      :key="id" 
-                      class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-100 border border-blue-200 whitespace-nowrap text-[10px] font-bold text-blue-700 shadow-sm"
-                    >
-                      {{ getMemberShort(id) }}
-                      <button 
-                        type="button" 
-                        class="p-0.5 rounded text-blue-600 hover:bg-blue-200/60 transition" 
-                        @click.stop="toggleMember(id)"
+                    <template v-if="useMemberAssignListBelow">
+                      <span class="w-full font-medium text-slate-400">{{
+                        showTeamAssignPoolEmpty
+                          ? 'Không có nhân sự trong phòng ban bạn quản lý — kiểm tra gán phòng ban cho tài khoản PM.'
+                          : selectedMembers.length === 0
+                            ? 'Chọn thành viên…'
+                            : `Đã chọn ${selectedMembers.length} thành viên — bấm để thêm hoặc bỏ trong danh sách bên dưới`
+                      }}</span>
+                    </template>
+                    <template v-else>
+                      <span v-if="selectedMembers.length === 0" class="w-full font-medium text-slate-400">{{
+                        showTeamAssignPoolEmpty
+                          ? 'Không có nhân sự trong phòng ban bạn quản lý — kiểm tra gán phòng ban cho tài khoản PM.'
+                          : 'Tìm và chọn thành viên trong Team...'
+                      }}</span>
+                      <span 
+                        v-for="id in selectedMembers" 
+                        :key="id" 
+                        class="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-blue-100 px-2 py-0.5 text-[10px] font-bold whitespace-nowrap text-blue-700 shadow-sm"
                       >
-                        <i class="fas fa-times text-[9px]" />
-                      </button>
-                    </span>
+                        {{ getMemberShort(id) }}
+                        <button 
+                          type="button" 
+                          class="rounded p-0.5 text-blue-600 transition hover:bg-blue-200/60" 
+                          @click.stop="toggleMember(id)"
+                        >
+                          <i class="fas fa-times text-[9px]" />
+                        </button>
+                      </span>
+                    </template>
                   </button>
-                  <i class="fas fa-user-plus absolute top-2.5 left-2.5 text-[10px] text-slate-400 pointer-events-none" />
-                  <i class="fas fa-chevron-down absolute top-2.5 right-2.5 text-[10px] text-slate-400 pointer-events-none" />
+                  <i class="fas fa-user-plus pointer-events-none absolute left-2.5 top-2.5 text-[10px] text-slate-400" />
+                  <i class="fas fa-chevron-down pointer-events-none absolute right-2.5 top-2.5 text-[10px] text-slate-400" />
 
                   <!-- Dropdown List -->
                   <div 
                     v-show="assignDropdown === 'member'" 
-                    class="absolute left-0 z-50 mt-1 flex flex-col w-full max-h-72 rounded-lg bg-white border border-slate-200 shadow-xl overflow-hidden" 
+                    class="absolute left-0 z-50 mt-1 flex max-h-72 w-full flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl" 
                     @click.stop
                   >
-                    <div class="sticky top-0 z-10 shrink-0 p-2 bg-slate-50 border-b border-slate-100" @click.stop>
+                    <div class="sticky top-0 z-10 shrink-0 border-b border-slate-100 bg-slate-50 p-2" @click.stop>
                       <div class="relative">
-                        <i class="fas fa-search absolute top-1/2 left-2.5 -translate-y-1/2 text-[10px] text-slate-400 pointer-events-none" />
+                        <i class="fas fa-search pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] text-slate-400" />
                         <input 
                           v-model="memberAssignSearch" 
                           type="text" 
                           placeholder="Search by name, dept or rank..." 
-                          class="w-full py-1.5 pl-8 pr-2 rounded-md bg-white border border-slate-200 text-xs font-medium text-slate-800 outline-none transition-all focus:border-blue-500 focus:ring-1 focus:ring-blue-500" 
+                          class="w-full rounded-md border border-slate-200 bg-white py-1.5 pl-8 pr-2 text-xs font-medium text-slate-800 outline-none transition-all focus:border-blue-500 focus:ring-1 focus:ring-blue-500" 
                           @click.stop 
                         />
                       </div>
                     </div>
-                    <div class="custom-scrollbar flex-1 p-1 overflow-y-auto">
+                    <div class="custom-scrollbar max-h-60 flex-1 overflow-y-auto p-1">
                       <template v-if="filteredMemberOptions.length > 0">
                         <label 
                           v-for="m in filteredMemberOptions" 
                           :key="m.id" 
-                          class="group flex items-center px-3 py-2 rounded-md border-b border-slate-50 last:border-0 hover:bg-slate-50 cursor-pointer transition-colors"
+                          class="group flex cursor-pointer items-center rounded-md border-b border-slate-50 px-3 py-2 transition-colors last:border-0 hover:bg-slate-50"
                         >
                           <input 
                             type="checkbox" 
-                            class="w-4 h-4 mt-0.5 mr-3 shrink-0 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer" 
+                            class="mt-0.5 mr-3 h-4 w-4 shrink-0 cursor-pointer rounded border-slate-300 text-blue-600 focus:ring-blue-500" 
                             :checked="selectedMembers.includes(m.id)" 
                             @change="toggleMember(m.id)" 
                           />
-                          <div class="flex flex-1 items-center gap-3 min-w-0">
-                            <div class="flex items-center justify-center w-8 h-8 shrink-0 rounded-full bg-slate-100 border border-slate-200 text-[10px] font-bold text-slate-500 uppercase">
+                          <div class="flex min-w-0 flex-1 items-center gap-3">
+                            <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-slate-100 text-[10px] font-bold uppercase text-slate-500">
                               {{ generateInitials(m.fullName) }}
                             </div>
-                            <div class="flex flex-col flex-1 min-w-0">
+                            <div class="flex min-w-0 flex-1 flex-col">
                               <span class="block text-sm font-bold leading-tight text-slate-700 group-hover:text-blue-600">{{ m.fullName }}</span>
-                              <span class="mt-0.5 block text-[10px] font-bold tracking-wider text-slate-500 uppercase">
+                              <span class="mt-0.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500">
                                 {{ m.departmentName }} <span class="text-slate-400">•</span> <span class="text-indigo-500">{{ m.rankCode }}</span>
                               </span>
                             </div>
                           </div>
                         </label>
                       </template>
+                      <p v-else-if="showTeamAssignPoolEmpty" class="px-3 py-4 text-center text-xs font-medium text-slate-500">
+                        API khởi tạo không trả nhân sự phòng ban — đảm bảo PM được gán department và còn user active trong cùng phòng ban.
+                      </p>
                       <p v-else class="px-3 py-4 text-center text-xs font-medium text-slate-500">Không có thành viên khớp bộ lọc.</p>
                     </div>
                   </div>
                 </div>
 
-                <!-- Specific Targets per Member -->
-                <div v-if="selectedMembers.length > 0" class="mt-4 p-4 space-y-2 rounded-xl bg-blue-50/50 border border-blue-100 shadow-inner">
-                  <p class="mb-2 flex items-center gap-1.5 text-[10px] font-bold text-blue-800 uppercase">
-                    <i class="fas fa-crosshairs text-[10px]" /> Set Specific Targets for Members
+                <!-- Team: target từng thành viên + Xóa; Individual: chỉ danh sách + Xóa (target chung ở ô Target phía trên); Promotion: ô target từng dòng + chip trong trigger -->
+                <div v-if="selectedMembers.length > 0" class="mt-4 space-y-2 rounded-xl border border-blue-100 bg-blue-50/50 p-4 shadow-inner">
+                  <p class="mb-2 flex items-center gap-1.5 text-[10px] font-bold uppercase text-blue-800">
+                    <i class="fas fa-crosshairs text-[10px]" />
+                    {{
+                      typeCode === KPI_TYPE.TEAM
+                        ? 'Danh sách đã chọn & target từng thành viên'
+                        : typeCode === KPI_TYPE.INDIVIDUAL
+                          ? 'Thành viên đã chọn'
+                          : 'Set Specific Targets for Members'
+                    }}
                   </p>
                   <div 
                     v-for="mem in selectedMembers" 
                     :key="mem" 
-                    class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-4 p-2.5 rounded-lg bg-white border border-slate-200 shadow-sm"
+                    class="flex flex-col justify-between gap-2 rounded-lg border border-slate-200 bg-white p-2.5 shadow-sm sm:flex-row sm:items-center sm:gap-3"
                   >
-                    <span class="flex items-center gap-1.5 sm:w-1/2 text-[11px] font-bold text-slate-700 truncate">
-                      <i class="fas fa-user text-[10px] text-slate-400" />
-                      {{ getMemberLabel(mem) }}
+                    <span class="flex min-w-0 items-center gap-1.5 text-[11px] font-bold text-slate-700 sm:min-w-[40%] sm:flex-1">
+                      <i class="fas fa-user shrink-0 text-[10px] text-slate-400" />
+                      <span class="truncate">{{ getMemberLabel(mem) }}</span>
                     </span>
-                    <div class="flex items-center gap-2 sm:w-1/2">
+                    <div class="flex min-w-0 flex-1 items-center justify-end gap-2 sm:justify-end">
                       <input 
+                        v-if="typeCode === KPI_TYPE.TEAM || typeCode === KPI_TYPE.PROMOTION"
                         v-model="memberTargets[mem]" 
                         type="number" 
                         placeholder="Nhập target giao cho user..." 
-                        class="w-full px-2 py-1.5 rounded-md bg-white border border-slate-200 text-xs font-bold text-slate-800 outline-none transition-all focus:border-blue-400 focus:ring-1 focus:ring-blue-100" 
+                        class="min-w-0 flex-1 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs font-bold text-slate-800 outline-none transition-all focus:border-blue-400 focus:ring-1 focus:ring-blue-100 sm:max-w-[14rem]" 
                       />
+                      <button
+                        v-if="useMemberAssignListBelow"
+                        type="button"
+                        class="shrink-0 rounded-md border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-[10px] font-bold text-rose-700 transition-colors hover:bg-rose-100"
+                        @click="toggleMember(mem)"
+                      >
+                        Xóa
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -802,7 +1083,7 @@ const handleSave = async () => {
             >
               <i v-if="saving" class="fas fa-spinner fa-spin text-sm" />
               <i v-else class="fas" :class="isCreate ? 'fa-check' : 'fa-save'" />
-              {{ saving ? 'Saving...' : (isCreate ? 'Create & Assign' : 'Assign KPI') }}
+              {{ saving ? 'Saving...' : (isCreate ? 'Create & Assign' : 'Lưu phân bổ') }}
             </button>
           </div>
         </aside>
@@ -812,12 +1093,50 @@ const handleSave = async () => {
 </template>
 
 <style scoped>
-/* (Giữ nguyên các style cũ của bạn) */
-.gm-kpi-drawer-enter-active, .gm-kpi-drawer-leave-active { transition-duration: 0.28s; }
-.gm-kpi-drawer-enter-active .gm-kpi-drawer-backdrop, .gm-kpi-drawer-leave-active .gm-kpi-drawer-backdrop { transition: opacity 0.28s ease; }
-.gm-kpi-drawer-enter-active .gm-kpi-drawer-panel, .gm-kpi-drawer-leave-active .gm-kpi-drawer-panel { transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1); }
-.gm-kpi-drawer-enter-from .gm-kpi-drawer-backdrop, .gm-kpi-drawer-leave-to .gm-kpi-drawer-backdrop { opacity: 0; }
-.gm-kpi-drawer-enter-from .gm-kpi-drawer-panel, .gm-kpi-drawer-leave-to .gm-kpi-drawer-panel { transform: translateX(100%); }
+/* Drawer: backdrop fade + panel trượt từ phải (GPU-friendly) */
+.gm-kpi-drawer-enter-active,
+.gm-kpi-drawer-leave-active {
+  transition-duration: 0.36s;
+}
+.gm-kpi-drawer-enter-active .gm-kpi-drawer-backdrop,
+.gm-kpi-drawer-leave-active .gm-kpi-drawer-backdrop {
+  transition: opacity 0.36s ease;
+}
+.gm-kpi-drawer-enter-active .gm-kpi-drawer-panel,
+.gm-kpi-drawer-leave-active .gm-kpi-drawer-panel {
+  transition: transform 0.36s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.gm-kpi-drawer-enter-from .gm-kpi-drawer-backdrop,
+.gm-kpi-drawer-leave-to .gm-kpi-drawer-backdrop {
+  opacity: 0;
+}
+.gm-kpi-drawer-enter-to .gm-kpi-drawer-backdrop,
+.gm-kpi-drawer-leave-from .gm-kpi-drawer-backdrop {
+  opacity: 1;
+}
+.gm-kpi-drawer-enter-from .gm-kpi-drawer-panel,
+.gm-kpi-drawer-leave-to .gm-kpi-drawer-panel {
+  transform: translate3d(100%, 0, 0);
+}
+.gm-kpi-drawer-enter-to .gm-kpi-drawer-panel,
+.gm-kpi-drawer-leave-from .gm-kpi-drawer-panel {
+  transform: translate3d(0, 0, 0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gm-kpi-drawer-enter-active,
+  .gm-kpi-drawer-leave-active,
+  .gm-kpi-drawer-enter-active .gm-kpi-drawer-backdrop,
+  .gm-kpi-drawer-leave-active .gm-kpi-drawer-backdrop,
+  .gm-kpi-drawer-enter-active .gm-kpi-drawer-panel,
+  .gm-kpi-drawer-leave-active .gm-kpi-drawer-panel {
+    transition-duration: 0.01ms !important;
+  }
+  .gm-kpi-drawer-enter-from .gm-kpi-drawer-panel,
+  .gm-kpi-drawer-leave-to .gm-kpi-drawer-panel {
+    transform: none;
+  }
+}
 .input-required { background-color: rgba(239, 246, 255, 0.6); border: 1px solid #bfdbfe; }
 .input-required:focus, .input-required:focus-within { background-color: #ffffff; border-color: #3b82f6; }
 .input-optional { border: 1px solid #e2e8f0; background-color: #f8fafc; }

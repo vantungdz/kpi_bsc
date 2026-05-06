@@ -11,7 +11,6 @@ public class MemberKpiDetailResponse {
     private String code;
     private String name;
     private String target;
-    private String description;
     private BigDecimal weight;
     private BigDecimal selfScore;
     private BigDecimal pmScore;

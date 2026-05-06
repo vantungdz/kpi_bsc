@@ -109,7 +109,7 @@ const handleKpiCreated = (payload: any) => {
         </div>
         <div class="flex items-center gap-4">
           <button @click="showCreateDrawer = true" class="flex shrink-0 items-center gap-1.5 rounded-lg bg-purple-600 px-3 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:bg-purple-700">
-            <i class="fas fa-plus text-xs" /> Create Team KPI
+            <i class="fas fa-plus text-xs" /> Create KPI
           </button>
 
           <div class="text-right pl-4 border-l border-slate-200">
