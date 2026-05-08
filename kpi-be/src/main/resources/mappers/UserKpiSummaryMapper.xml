@@ -29,7 +29,7 @@
     <update id="updateEvaluationSupervisorComments">
         UPDATE USER_KPI_SUMMARIES
         SET
-            EVALUATION_SUPERVISOR_COMMENTS = #{comments},
+            EVALUATION_SUPERVISOR_COMMENTS = #{supervisorCommentValue},
             EVALUATOR_ID = #{evaluatorId, jdbcType=OTHER},
             UPDATED_AT = CURRENT_TIMESTAMP,
             UPDATED_BY = #{updatedBy, jdbcType=OTHER}
@@ -53,8 +53,41 @@
             #{id, jdbcType=OTHER},
             #{userId, jdbcType=OTHER},
             #{cycleId, jdbcType=OTHER},
-            #{comments},
+            #{supervisorCommentValue},
             #{evaluatorId, jdbcType=OTHER},
+            CURRENT_TIMESTAMP,
+            CURRENT_TIMESTAMP,
+            #{createdBy, jdbcType=OTHER},
+            #{updatedBy, jdbcType=OTHER}
+        )
+    </insert>
+
+    <update id="updateEvaluationComments">
+        UPDATE USER_KPI_SUMMARIES
+        SET
+            EVALUATION_COMMENTS = #{evaluationCommentValue},
+            UPDATED_AT = CURRENT_TIMESTAMP,
+            UPDATED_BY = #{updatedBy, jdbcType=OTHER}
+        WHERE USER_ID = #{userId, jdbcType=OTHER}
+          AND CYCLE_ID = #{cycleId, jdbcType=OTHER}
+          AND DELETED_AT IS NULL
+    </update>
+
+    <insert id="insertEvaluationComments">
+        INSERT INTO USER_KPI_SUMMARIES (
+            ID,
+            USER_ID,
+            CYCLE_ID,
+            EVALUATION_COMMENTS,
+            CREATED_AT,
+            UPDATED_AT,
+            CREATED_BY,
+            UPDATED_BY
+        ) VALUES (
+            #{id, jdbcType=OTHER},
+            #{userId, jdbcType=OTHER},
+            #{cycleId, jdbcType=OTHER},
+            #{evaluationCommentValue},
             CURRENT_TIMESTAMP,
             CURRENT_TIMESTAMP,
             #{createdBy, jdbcType=OTHER},

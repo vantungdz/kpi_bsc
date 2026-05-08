@@ -44,6 +44,30 @@ function formatTargetCellWithUnit(target: unknown, unitCode?: number | null): st
   return formatKpiTargetWithUnit(formatTargetCell(target), unitCode)
 }
 
+/** Cột Thực tế: ghép đơn vị KPI (cùng rule cột Chỉ tiêu); hỗ trợ nhiều mục «a · b». */
+function formatPmActualCellWithUnit(display: string, unitCode: unknown): string {
+  const u = coercePortfolioUnitCode(unitCode)
+  const s = String(display ?? '').trim()
+  if (!s) return ''
+  if (s.includes(' · ')) {
+    const parts = s
+      .split(' · ')
+      .map((p) => p.trim())
+      .filter(Boolean)
+    if (parts.length === 0) return ''
+    return parts.map((part) => formatKpiTargetWithUnit(part, u)).join(' · ')
+  }
+  const withUnit = formatKpiTargetWithUnit(s, u)
+  return withUnit === '-' ? '' : withUnit
+}
+
+function formatCompactNumericDisplay(n: number): string {
+  if (!Number.isFinite(n)) return '0'
+  const rounded = Math.round(n * 100) / 100
+  if (Number.isInteger(rounded)) return String(rounded)
+  return rounded.toFixed(2).replace(/\.?0+$/, '')
+}
+
 function coercePortfolioUnitCode(raw: unknown): number | undefined {
   if (raw == null || raw === '') return undefined
   const n = Number(raw)
@@ -114,8 +138,8 @@ function extractPercentsFromFormattedActual(s: string): number[] {
   return out
 }
 
-/** Giá trị % của một node con để gộp lên cha; thiếu / không đọc được → 0. */
-function numericActualPercentForTeamChild(child: any, parentItem: any): number {
+/** Giá trị số (từ ô Actual đã format) để gộp lên cha; thiếu / không đọc được → 0. */
+function numericActualValueForTeamChild(child: any, parentItem: any): number {
   const calc = parentItem.calculationTypeCode
   const mode = pmPortfolioActualDisplayMode(parentItem.calculationRuleCode)
   const formatted = formatPmPortfolioActualCell(child.actualResult, calc, mode).trim()
@@ -134,25 +158,34 @@ function numericActualPercentForTeamChild(child: any, parentItem: any): number {
 }
 
 /**
- * KPI Team (cascading): cha không nhập Actual — luôn trung bình cộng % của các con.
- * Con chưa có Actual → 0%; có bao nhiêu con chia cho đúng bấy nhiêu (theo reactive).
+ * KPI Team (cascading): cha không nhập Actual — lấy tổng giá trị số từ Actual của các node con trực tiếp,
+ * rồi hiển thị cùng đơn vị KPI (`unitCode`). Con chưa có Actual → 0 trong phép cộng.
  */
 function formatPmTeamParentActualCell(item: any): string {
   const calc = item.calculationTypeCode
   const mode = pmPortfolioActualDisplayMode(item.calculationRuleCode)
 
   if (!item?.isTree || !Array.isArray(item.children) || item.children.length === 0) {
-    return formatPmPortfolioActualCell(item.actualResult, calc, mode).trim()
+    return formatPmActualCellWithUnit(
+      formatPmPortfolioActualCell(item.actualResult, calc, mode).trim(),
+      item.unitCode,
+    )
   }
 
   const children = item.children as any[]
-  const scores = children.map((c) => numericActualPercentForTeamChild(c, item))
-  const avg = scores.reduce((a, b) => a + b, 0) / children.length
-  const safe = Number.isFinite(avg) ? Math.max(0, avg) : 0
-  return `${safe.toFixed(1)}%`
+  const scores = children.map((c) => numericActualValueForTeamChild(c, item))
+  const total = scores.reduce((a, b) => a + b, 0)
+  const safe = Number.isFinite(total) ? Math.max(0, total) : 0
+  return formatPmActualCellWithUnit(formatCompactNumericDisplay(safe), item.unitCode)
 }
 
-const emit = defineEmits(['open-assign', 'open-member-detail', 'feedback-pending-count'])
+const emit = defineEmits([
+  'open-assign',
+  'open-assign-after-member-feedback',
+  'open-member-detail',
+  'feedback-pending-count',
+  'timeline-refresh',
+])
 
 /**
  * Dòng KPI không phải cây Team: Individual (tab Portfolio) hoặc Promotion (tab KPI Promotion).
@@ -263,6 +296,10 @@ async function loadPmPortfolio(cycleId?: string) {
         target: c.targetValue != null ? String(c.targetValue) : '',
         actualResult: c.actualResult || '',
         feedbackNote: c.feedbackNote ?? '',
+        feedbackTargetRoleCode:
+          c.feedbackTargetRoleCode != null && String(c.feedbackTargetRoleCode).trim() !== ''
+            ? String(c.feedbackTargetRoleCode).trim().toUpperCase()
+            : undefined,
         selfScore: c.selfScore != null ? Number(c.selfScore) : null,
         pmScore: c.pmScore != null ? Number(c.pmScore) : null,
         statusCode: c.statusCode,
@@ -609,10 +646,12 @@ function isChildOwnedByCurrentPm(child: any): boolean {
 }
 
 function isMemberFeedbackPendingForPm(child: any): boolean {
+  const role = String(child?.feedbackTargetRoleCode ?? '').trim().toUpperCase()
   return (
     !isChildOwnedByCurrentPm(child) &&
     Number(child?.statusCode) === KPI_STATUS.FEEDBACK_IN_PROGRESS &&
-    String(child?.id ?? '').trim() !== ''
+    String(child?.id ?? '').trim() !== '' &&
+    role === 'PM'
   )
 }
 
@@ -624,6 +663,7 @@ function openMemberFeedbackReviewDrawer(child: any, parent: any) {
   if (!assignmentId) return
   memberFeedbackReviewTarget.value = {
     assignmentId,
+    parentItem: parent,
     memberName: String(child?.name ?? '').trim() || 'Member',
     role: String(child?.role ?? '').trim() || 'Member',
     note: String(child?.feedbackNote ?? '').trim() || 'Không có nội dung feedback.',
@@ -634,6 +674,20 @@ function openMemberFeedbackReviewDrawer(child: any, parent: any) {
     parentKpiType: parent?.kpiType,
   }
   memberFeedbackReviewDrawerOpen.value = true
+}
+
+/** KPI Team: chấp nhận → drawer phân bổ + API accept-with-cascade khi xác nhận. Không phải Team: duyệt feedback ngay (407→404). */
+function acceptMemberFeedbackFromDrawer() {
+  const target = memberFeedbackReviewTarget.value
+  const assignmentId = String(target?.assignmentId ?? '').trim()
+  const parent = target?.parentItem
+  if (!assignmentId || !target || !parent) return
+  if (!isTeamTreeKpi(parent)) {
+    void decideMemberFeedbackFromDrawer(true)
+    return
+  }
+  emit('open-assign-after-member-feedback', { parentKpi: parent, feedbackAssignmentId: assignmentId })
+  closeMemberFeedbackReviewDrawer()
 }
 
 function closeMemberFeedbackReviewDrawer() {
@@ -660,6 +714,7 @@ async function decideMemberFeedbackFromDrawer(approve: boolean) {
     toast.success(approve ? 'Đã duyệt feedback của member.' : 'Đã từ chối feedback của member.')
     closeMemberFeedbackReviewDrawer()
     await loadPmPortfolio(currentPortfolioYearParam())
+    emit('timeline-refresh')
   } catch (err: unknown) {
     toast.error(sheetUpdateErrorMessage(err))
   } finally {
@@ -733,6 +788,7 @@ async function sendFeedbackToGmForAssignment(item: any) {
     toast.success('Đã gửi feedback cho GM.')
     closeFeedbackDrawer()
     await loadPmPortfolio(currentPortfolioYearParam())
+    emit('timeline-refresh')
   } catch (err: unknown) {
     toast.error(sheetUpdateErrorMessage(err))
   } finally {
@@ -785,6 +841,7 @@ async function removeAssignedMemberFromTeamKpi(parent: any, child: any) {
     })
     toast.success('Đã xóa phân bổ thành viên.')
     await loadPmPortfolio(currentPortfolioYearParam())
+    emit('timeline-refresh')
   } catch (err) {
     console.error('Failed to remove assigned member from team KPI', err)
     toast.error('Không thể xóa phân bổ. Vui lòng thử lại.')
@@ -1002,6 +1059,7 @@ const handleSubmitClick = async () => {
       clearSendReviewFieldHighlights()
       toast.success(toastOk)
       loadPmPortfolio(String(new Date().getFullYear()))
+      emit('timeline-refresh')
     })
     .catch(err => {
       console.error('Failed to update KPI statuses', err)
@@ -1169,7 +1227,7 @@ const handleSubmitClick = async () => {
                 <td class="py-4 px-5 text-center align-top pt-4"><span class="text-slate-400 font-medium text-sm">{{ item.pmScore ?? '-' }}</span></td>
                 <td class="py-4 px-5 text-right align-top pt-4">
                     <div class="flex items-center justify-end gap-2">
-                      <!-- KPI Team (GM assign / cascading): chỉnh sửa & bổ sung phân bổ — không dùng Assign riêng, không mở drawer minh chứng ở dòng cha -->
+                      <!-- Team KPI: phân bổ + Feedback GM (404/407); trước đây Feedback chỉ nằm trong nhánh !isTree nên PM team không thấy nút. -->
                       <button
                         v-if="item.isTree"
                         type="button"
@@ -1183,7 +1241,7 @@ const handleSubmitClick = async () => {
                         Chỉnh sửa phân bổ
                       </button>
                       <button
-                        v-else-if="
+                        v-if="
                           Number(item.statusCode) === KPI_STATUS.PENDING_ACCEPTANCE ||
                           isPmGmFeedbackPending(item)
                         "
@@ -1244,10 +1302,13 @@ const handleSubmitClick = async () => {
                   <td class="py-3 px-5 align-top">
                     <p class="text-xs font-semibold text-emerald-600">
                       {{
-                        formatPmPortfolioActualCell(
-                          child.actualResult,
-                          item.calculationTypeCode,
-                          pmPortfolioActualDisplayMode(item.calculationRuleCode),
+                        formatPmActualCellWithUnit(
+                          formatPmPortfolioActualCell(
+                            child.actualResult,
+                            item.calculationTypeCode,
+                            pmPortfolioActualDisplayMode(item.calculationRuleCode),
+                          ),
+                          item.unitCode,
                         ) || 'Chưa cập nhật'
                       }}
                     </p>
@@ -1542,7 +1603,10 @@ const handleSubmitClick = async () => {
                     {{ memberFeedbackReviewTarget.note }}
                   </div>
                 </div>
-                <div class="flex justify-end gap-2 pt-3">
+                <p class="mb-2 text-[11px] font-medium text-slate-600">
+                  KPI Team: «Chấp nhận và phân bổ» mở drawer phân bổ; sau khi bấm «Xác nhận phân bổ và đóng feedback» thì hệ thống mới ghi nhận (một giao dịch duyệt + lưu phân bổ).
+                </p>
+                <div class="flex justify-end gap-2 pt-1">
                   <button
                     type="button"
                     :disabled="isDecidingMemberFeedback(memberFeedbackReviewTarget.assignmentId)"
@@ -1555,16 +1619,10 @@ const handleSubmitClick = async () => {
                     type="button"
                     :disabled="isDecidingMemberFeedback(memberFeedbackReviewTarget.assignmentId)"
                     class="inline-flex items-center gap-2 rounded-md bg-violet-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-60"
-                    @click="decideMemberFeedbackFromDrawer(true)"
+                    @click="acceptMemberFeedbackFromDrawer()"
                   >
-                    <i
-                      :class="
-                        isDecidingMemberFeedback(memberFeedbackReviewTarget.assignmentId)
-                          ? 'fas fa-spinner fa-spin text-xs'
-                          : 'fas fa-check text-xs'
-                      "
-                    />
-                    Duyệt feedback
+                    <i class="fas fa-sliders-h text-xs" />
+                    Chấp nhận và phân bổ
                   </button>
                 </div>
               </section>

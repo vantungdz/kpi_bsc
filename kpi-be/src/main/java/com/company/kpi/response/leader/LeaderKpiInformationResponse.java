@@ -56,6 +56,9 @@ public class LeaderKpiInformationResponse {
     @AllArgsConstructor
     public static class LeaderKpiAssignmentResponse {
         private UUID assignmentId;
+        private UUID kpiInformationId;
+        private UUID categoryId;
+        private String categoryName;
         private String kpiName;
         private String kpiCode;
         /** Mục tiêu số (assignment hoặc catalog) — cột Target tab KPI cá nhân GM. */
@@ -72,8 +75,11 @@ public class LeaderKpiInformationResponse {
         // Final: self + PM + GM
         private Double endSelfScore;
         private Double endPmScore;
+        private Double endGmScore;
         private String evidences;
         private String feedbackComment;
+        private String updateReason;
+        private Boolean createdByCurrentUser;
         private String evaluationStatus;
         private String evaluationState;
         /** kpi_master.calculation_rule_code — 801 (none) | 802 (average/ratio) | 803 (comment/text) */

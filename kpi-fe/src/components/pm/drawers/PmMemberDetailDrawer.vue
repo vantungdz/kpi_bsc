@@ -2,6 +2,7 @@
 import { computed, ref, watch, onUnmounted } from 'vue'
 import EvaluationCommentBlock from '@/components/evaluation/EvaluationCommentBlock.vue'
 import { pmKpiService } from '@/services/modules/kpi-pm.service'
+import { useToast } from 'vue-toastification'
 import { KPI_TYPE } from '@/config/constants'
 import {
   formatPmPortfolioActualCell,
@@ -22,6 +23,7 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['close', 'save', 'discard-draft'])
+const toast = useToast()
 
 const activeTab = ref<'main' | 'promotion'>('main')
 const memberKpis = ref<any[]>([])
@@ -69,8 +71,13 @@ watch(
       if (cacheCompatible && cached && cached.length > 0) {
         memberKpis.value.forEach((kpi) => {
           const hit = cached.find((c: any) => String(c.id) === String(kpi.id))
-          if (hit && hit.pmScore != null) {
-            kpi.pmScore = hit.pmScore
+          if (hit) {
+            if (hit.pmScore != null) {
+              kpi.pmScore = hit.pmScore
+            }
+            if (hit.pmComment) {
+              kpi.pmComment = hit.pmComment
+            }
           }
         })
       }
@@ -107,7 +114,8 @@ async function fetchMemberKpis() {
         weight: item.weight != null ? Number(item.weight) : 0,
         selfScore: item.selfScore != null ? Number(item.selfScore) : null,
         pmScore: item.pmScore != null ? Number(item.pmScore) : null,
-  
+        pmComment: item.pmComment || '',
+
         statusCode: item.statusCode,
         calcRuleCode: item.calcRuleCode,
         evidences: item.evidences || '',
@@ -229,13 +237,54 @@ function toggleEvidence(id: string) {
   expandedEvidenceRows.value = s
 }
 
+const expandedCommentRows = ref(new Set<string>())
+function toggleComment(id: string) {
+  const s = new Set(expandedCommentRows.value)
+  if (s.has(id)) s.delete(id)
+  else s.add(id)
+  expandedCommentRows.value = s
+}
+
 const saving = ref(false)
 const saveEvaluation = async () => {
+  if (!props.member?.id) return
   saving.value = true
-  await new Promise((r) => setTimeout(r, 600))
-  saving.value = false
-  emit('save', { kpis: memberKpis.value, comments: reviewComments.value, memberId: props.member.id })
-  emit('close')
+  try {
+    const year = props.member.year ? Number(props.member.year) : new Date().getFullYear()
+    const memberId = String(props.member.id)
+    const requests: Promise<unknown>[] = memberKpis.value.map((item) =>
+      pmKpiService.saveMemberKpiComment({
+        year,
+        assignmentId: String(item.id),
+        pmComment: String(item.pmComment ?? ''),
+      }),
+    )
+    requests.push(
+      pmKpiService.saveMemberSupervisorComment({
+        year,
+        memberId,
+        pmComment: String(reviewComments.value.pmComment ?? ''),
+      }),
+    )
+    const sc = (code: unknown) => Number(code)
+    for (const item of memberKpis.value) {
+      const st = sc(item.statusCode)
+      if (item.pmScore != null && st === 601) {
+        const score = Number(item.pmScore)
+        if (Number.isFinite(score) && score >= 1 && score <= 5) {
+          requests.push(pmKpiService.scoreItem(memberId, String(item.id), score))
+        }
+      }
+    }
+    await Promise.all(requests)
+    emit('save', { kpis: memberKpis.value, comments: reviewComments.value, memberId: props.member.id })
+    emit('close')
+  } catch (err) {
+    console.error('Failed to save PM evaluation:', err)
+    toast.error('Lưu đánh giá PM thất bại (điểm hoặc nhận xét).')
+  } finally {
+    saving.value = false
+  }
 }
 </script>
 
@@ -330,8 +379,13 @@ const saveEvaluation = async () => {
                             :class="item.kpiType === 'promotion' ? 'bg-purple-50 text-purple-700 border-purple-200' : ''">
                             {{ item.kpiType }}
                           </span>
-                          <div @click="toggleEvidence(item.id)" class="mt-2 text-xs text-indigo-600 font-medium cursor-pointer hover:underline flex items-center gap-1">
-                            Evidences <i class="fas" :class="expandedEvidenceRows.has(item.id) ? 'fa-chevron-up' : 'fa-chevron-down'" />
+                          <div class="mt-2 flex items-center gap-4">
+                            <div @click="toggleEvidence(item.id)" class="text-xs text-indigo-600 font-medium cursor-pointer hover:underline flex items-center gap-1">
+                              Evidences <i class="fas" :class="expandedEvidenceRows.has(item.id) ? 'fa-chevron-up' : 'fa-chevron-down'" />
+                            </div>
+                            <div @click="toggleComment(item.id)" class="text-xs text-emerald-600 font-medium cursor-pointer hover:underline flex items-center gap-1">
+                              Comment <i class="fas" :class="expandedCommentRows.has(item.id) ? 'fa-chevron-up' : 'fa-chevron-down'" />
+                            </div>
                           </div>
                         </td>
 
@@ -346,7 +400,7 @@ const saveEvaluation = async () => {
 
                         <td class="px-4 py-4 text-center">
                           <select v-model="item.pmScore" @click.stop
-                            :disabled="item.statusCode !== 601"
+                            :disabled="Number(item.statusCode) !== 601"
                             class="w-14 rounded border border-slate-300 bg-white px-1 py-1 text-xs font-bold text-slate-800 outline-none focus:border-blue-500 shadow-sm cursor-pointer text-center disabled:opacity-50 disabled:bg-slate-50 disabled:cursor-not-allowed">
                             <option :value="null">-</option>
                             <option v-for="n in 5" :key="n" :value="n">{{ n }}</option>
@@ -429,6 +483,22 @@ const saveEvaluation = async () => {
                                 </li>
                               </ul>
                             </div>
+                          </div>
+                        </td>
+                      </tr>
+
+                      <tr v-if="expandedCommentRows.has(item.id)" class="bg-emerald-50/50">
+                        <td colspan="7" class="p-0 border-b border-slate-200">
+                          <div
+                            class="px-8 py-4 bg-gradient-to-r from-emerald-50/30 to-transparent border-l-2 border-emerald-300">
+                            <p class="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-3">PM's Comment</p>
+                            <textarea
+                              v-model="item.pmComment"
+                              :disabled="!canEvaluate"
+                              class="w-full px-3 py-2.5 text-sm font-normal text-slate-700 bg-white border border-slate-300 rounded-lg shadow-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 disabled:opacity-50 disabled:bg-slate-50 disabled:cursor-not-allowed resize-vertical"
+                              rows="4"
+                              placeholder="Nhập nhận xét / đánh giá cho KPI này..."
+                            />
                           </div>
                         </td>
                       </tr>

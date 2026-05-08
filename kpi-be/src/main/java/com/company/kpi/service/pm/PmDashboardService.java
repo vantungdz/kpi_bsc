@@ -7,7 +7,10 @@ import com.company.kpi.common.Constants;
 import com.company.kpi.common.exception.AppException;
 import com.company.kpi.mapper.KpiAssignmentMapper;
 import com.company.kpi.mapper.KpiCycleMapper;
+import com.company.kpi.mapper.UserKpiSummaryMapper;
 import com.company.kpi.mapper.UserMapper;
+import com.company.kpi.request.kpi.AssignMemberRequest;
+import com.company.kpi.request.pm.PmAcceptMemberFeedbackWithCascadeRequest;
 import com.company.kpi.request.pm.PmMemberKpiApprovalDecisionRequest;
 import com.company.kpi.request.pm.PmMemberFeedbackDecisionRequest;
 import com.company.kpi.request.pm.PmGmFeedbackRequest;
@@ -18,6 +21,7 @@ import com.company.kpi.response.pm.PmDashboardResponse;
 import com.company.kpi.response.pm.PmMemberKpiApprovalItemResponse;
 import com.company.kpi.response.pm.TeamMemberResponse;
 import com.company.kpi.service.gm.GmProcessTimelineService;
+import com.company.kpi.service.kpi.StrategicKpiService;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -42,7 +46,9 @@ public class PmDashboardService {
     private final KpiCycleMapper kpiCycleMapper;
     private final KpiAssignmentMapper kpiAssignmentMapper;
     private final UserMapper userMapper;
+    private final UserKpiSummaryMapper userKpiSummaryMapper;
     private final GmProcessTimelineService gmProcessTimelineService;
+    private final StrategicKpiService strategicKpiService;
 
     public GmProcessTimelineResponse getProcessTimelineForPm(UUID pmId, Integer year) {
         var cycleOpt = kpiCycleMapper.findByYear(year);
@@ -114,6 +120,7 @@ public class PmDashboardService {
                         .targetValue(agg.getChildAssignment().getTargetValue())
                         .actualResult(agg.getChildAssignment().getEvidences())
                         .feedbackNote(agg.getChildFeedbackNote())
+                        .feedbackTargetRoleCode(agg.getChildFeedbackTargetRoleCode())
                         .selfScore(childSelfScore)
                         .pmScore(agg.getChildAssignment().getEndPmScore())
                         .statusCode(agg.getChildAssignment().getStatusCode())
@@ -216,6 +223,7 @@ public class PmDashboardService {
             res.setWeight(agg.getKpisInformation().getWeight());
             res.setSelfScore(agg.getEndSelfScore() != null ? agg.getEndSelfScore() : agg.getMidSelfScore());
             res.setPmScore(agg.getEndPmScore());
+            res.setPmComment(agg.getPmComment());
             res.setStatusCode(agg.getStatusCode());
             res.setKpiTypeCode(agg.getKpiMaster().getTypeCode());
             res.setCalcRuleCode(agg.getKpiMaster().getCalculationRuleCode());
@@ -247,11 +255,19 @@ public class PmDashboardService {
             throw AppException.badRequest("Can't find KPI cycle for year: " + req.getYear());
         }
         UUID cycleId = cycleOpt.get().getId();
-        int newStatus = Boolean.TRUE.equals(req.getApprove())
+        boolean approve = Boolean.TRUE.equals(req.getApprove());
+        int newStatus = approve
                 ? Constants.AssignStatus.WAITING_GM_APPROVAL
                 : Constants.AssignStatus.REJECTED;
+        String rejectReason = null;
+        if (!approve) {
+            rejectReason = req.getRejectReason() == null ? "" : req.getRejectReason().trim();
+            if (rejectReason.isEmpty()) {
+                throw AppException.badRequest("Vui lòng nhập lý do từ chối.");
+            }
+        }
         int n = kpiAssignmentMapper.updateMemberKpiApprovalStatusByPm(
-                req.getAssignmentId(), cycleId, pmId, newStatus, pmId);
+                req.getAssignmentId(), cycleId, pmId, newStatus, pmId, rejectReason);
         if (n == 0) {
             throw AppException.badRequest(
                     "Không cập nhật được: không thấy KPI chờ duyệt (402) hoặc không thuộc quyền PM.");
@@ -269,8 +285,52 @@ public class PmDashboardService {
                 req.getAssignmentId(), cycleId, pmId, pmId);
         if (n == 0) {
             throw AppException.badRequest(
-                    "Không cập nhật được feedback: assignment không ở trạng thái 407 hoặc không thuộc quyền PM.");
+                    "Không cập nhật được feedback: assignment không ở 407, không thuộc quyền PM, hoặc feedback đang chờ GM xử lý.");
         }
+    }
+
+    /**
+     * Chấp nhận feedback member và lưu phân bổ KPI Team trong một transaction.
+     * Tránh gọi tách hai API (duyệt rồi cascade): cascade soft-delete assignment con làm mất UUID 407 trước khi duyệt.
+     */
+    @Transactional
+    public void acceptMemberFeedbackWithCascade(UUID pmId, PmAcceptMemberFeedbackWithCascadeRequest req) {
+        var cycleOpt = kpiCycleMapper.findByYear(req.getYear());
+        if (cycleOpt.isEmpty()) {
+            throw AppException.badRequest("Can't find KPI cycle for year: " + req.getYear());
+        }
+        UUID cycleId = cycleOpt.get().getId();
+        if (!cycleId.equals(req.getCycleId())) {
+            throw AppException.badRequest("cycleId không khớp với năm chu kỳ.");
+        }
+        int n = kpiAssignmentMapper.updateMemberFeedbackStatusByPm(
+                req.getMemberFeedbackAssignmentId(), cycleId, pmId, pmId);
+        if (n == 0) {
+            throw AppException.badRequest(
+                    "Không cập nhật được feedback: assignment không ở 407, không thuộc quyền PM, hoặc feedback đang chờ GM xử lý.");
+        }
+        Map<UUID, BigDecimal> targets = new LinkedHashMap<>();
+        for (Map.Entry<String, BigDecimal> e : req.getMemberTargets().entrySet()) {
+            String key = e.getKey() == null ? "" : e.getKey().trim();
+            if (key.isEmpty()) {
+                continue;
+            }
+            BigDecimal target = e.getValue();
+            if (target == null) {
+                throw AppException.badRequest("Thiếu target cho member: " + key);
+            }
+            try {
+                targets.put(UUID.fromString(key), target);
+            } catch (IllegalArgumentException ex) {
+                throw AppException.badRequest("memberTargets có khóa không phải UUID hợp lệ: " + key);
+            }
+        }
+        AssignMemberRequest cascade = new AssignMemberRequest();
+        cascade.setKpiInformationId(req.getKpiInformationId());
+        cascade.setCycleId(req.getCycleId());
+        cascade.setParentAssignmentId(req.getParentAssignmentId());
+        cascade.setMemberTargets(targets);
+        strategicKpiService.assignToMembers(cascade, pmId);
     }
 
     @Transactional
@@ -333,5 +393,61 @@ public class PmDashboardService {
             return kpiInfo.getTargetValue().stripTrailingZeros().toPlainString();
         }
         return null;
+    }
+
+    /** PM saves comment for individual KPI during Team Review evaluation. */
+    @Transactional
+    public void savePmKpiComment(UUID pmId, Integer year, UUID assignmentId, String pmComment) {
+        var cycleOpt = kpiCycleMapper.findByYear(year);
+        if (cycleOpt.isEmpty()) {
+            throw new IllegalArgumentException("Can't find KPI cycle for year: " + year);
+        }
+        UUID cycleId = cycleOpt.get().getId();
+
+        int updated = kpiAssignmentMapper.updatePmComment(assignmentId, cycleId, pmId, pmComment);
+        if (updated == 0) {
+            throw AppException.badRequest(
+                    "Không lưu được nhận xét PM: KPI không thuộc member dưới quyền PM hoặc không thuộc chu kỳ.");
+        }
+    }
+
+    /** PM lưu nhận xét tổng cho member trong user_kpi_summaries để hiển thị ở Team Review / GM Evaluation Hub. */
+    @Transactional
+    public void savePmSupervisorComment(UUID pmId, Integer year, UUID memberId, String pmComment) {
+        var cycleOpt = kpiCycleMapper.findByYear(year);
+        if (cycleOpt.isEmpty()) {
+            throw new IllegalArgumentException("Can't find KPI cycle for year: " + year);
+        }
+        UUID cycleId = cycleOpt.get().getId();
+        boolean managed = userMapper.findTeamHierarchyBySupervisor(pmId, cycleId).stream()
+                .anyMatch(row -> memberId.equals(row.getId()));
+        if (!managed) {
+            throw AppException.badRequest("Member không thuộc team do PM quản lý trong chu kỳ này.");
+        }
+        String comment = Objects.toString(pmComment, "").trim();
+        var existing = userKpiSummaryMapper.findByUserIdAndCycleId(memberId, cycleId);
+        if (existing.isPresent()) {
+            userKpiSummaryMapper.updateEvaluationSupervisorComments(
+                    memberId, cycleId, comment, pmId, pmId);
+        } else {
+            userKpiSummaryMapper.insertEvaluationSupervisorComments(
+                    UUID.randomUUID(), memberId, cycleId, comment, pmId, pmId, pmId);
+        }
+    }
+
+    /**
+     * PUT {@code /v1/kpi/pm/sheet/{memberId}/{assignmentId}} — lưu điểm PM ({@code end_pm_score}) chỉ khi ASM 601 (cuối kỳ).
+     */
+    @Transactional
+    public void savePmEndPmScoreForManagedMember(UUID pmId, UUID memberUserId, UUID assignmentId, Integer pmScore) {
+        if (pmScore == null || pmScore < 1 || pmScore > 5) {
+            throw AppException.badRequest("Điểm PM phải từ 1 đến 5.");
+        }
+        int n = kpiAssignmentMapper.updateEndPmScoreForPmManagedMember(
+                assignmentId, memberUserId, pmId, java.math.BigDecimal.valueOf(pmScore));
+        if (n != 1) {
+            throw AppException.badRequest(
+                    "Không lưu được điểm PM: assignment không thuộc member dưới quyền PM, không ở trạng thái chờ đánh giá PM cuối kỳ (601), hoặc không tồn tại.");
+        }
     }
 }

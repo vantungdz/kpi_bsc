@@ -19,6 +19,7 @@ import MemberKpiPromotionTab from '@/components/member/MemberKpiPromotionTab.vue
 import MemberEvidenceDrawer from '@/components/member/MemberEvidenceDrawer.vue'
 import { memberItemEvalStatus } from '@/utils/memberKpiHelpers'
 import { buildKpiDeadlineBanner, type KpiDeadlineBannerVm } from '@/utils/kpiDeadlineBanner'
+import { getSubmitButtonState } from '@/utils/common'
 
 // ── Evidence drawer — provide to child components ───────────────────────────
 const evidenceCtx = useMemberEvidenceDrawer()
@@ -37,6 +38,7 @@ const cycleData = ref<KpiCycleResponse | null>(null)
 const selectedYear = ref(new Date().getFullYear())
 const memberExtraSheetItems = ref<KpiItem[]>([])
 const showCreateIndividualKpiDrawer = ref(false)
+const editingRejectedSelfCreatedItem = ref<KpiItem | null>(null)
 
 // ── Data loading ─────────────────────────────────────────────────────────────
 async function loadDashboard() {
@@ -49,8 +51,12 @@ async function loadDashboard() {
     ])
     if (dashboardRs.status === 'fulfilled') {
       dashboardData.value = dashboardRs.value
+      employeeComment.value = String(dashboardRs.value?.evaluationComments ?? '')
+      supervisorComment.value = String(dashboardRs.value?.evaluationSupervisorComments ?? '')
     } else {
       dashboardData.value = null
+      employeeComment.value = ''
+      supervisorComment.value = ''
     }
     cycleData.value = cycleRs.status === 'fulfilled' ? cycleRs.value : null
   } finally {
@@ -79,63 +85,104 @@ const sheet = computed(() => {
 
 const isCurrentYear = computed(() => selectedYear.value === new Date().getFullYear())
 
-const memberSheetSubmitLabel = computed(() => {
-  const p = dashboardData.value?.phase
-  if (p === 'target_setup') return 'Nộp mục tiêu KPI (Goal Setting)'
-  if (p === 'mid_year') return 'Nộp KPI giữa năm (Mid-Year)'
-  if (p === 'year_end') return 'Nộp KPI cuối năm (End-Year)'
+function labelFromActionType(actionType: 'GOAL_SETTING' | 'MID_YEAR' | 'END_YEAR' | 'COMPLETED'): string {
+  if (actionType === 'GOAL_SETTING') return 'Nộp mục tiêu KPI (Goal Setting)'
+  if (actionType === 'MID_YEAR') return 'Nộp KPI giữa năm (Mid-Year)'
+  if (actionType === 'END_YEAR') return 'Nộp KPI cuối năm (End-Year)'
   return 'Nộp đánh giá KPI'
-})
+}
 
-const promotionSubmitLabel = computed(() => {
-  const p = dashboardData.value?.phase
-  if (p === 'target_setup') return 'Nộp KPI Đề Xuất Thăng Tiến'
-  if (p === 'mid_year') return 'Nộp KPI Thăng Tiến Giữa Năm'
-  if (p === 'year_end') return 'Nộp KPI Thăng Tiến Cuối Năm'
+function promotionLabelFromActionType(actionType: 'GOAL_SETTING' | 'MID_YEAR' | 'END_YEAR' | 'COMPLETED'): string {
+  if (actionType === 'GOAL_SETTING') return 'Nộp KPI Đề Xuất Thăng Tiến'
+  if (actionType === 'MID_YEAR') return 'Nộp KPI Thăng Tiến Giữa Năm'
+  if (actionType === 'END_YEAR') return 'Nộp KPI Thăng Tiến Cuối Năm'
   return 'Nộp KPI Thăng Tiến'
-})
+}
 
 // Tách state submit riêng cho từng loại KPI
 const submittingPersonal = ref(false)
 const submittingPromotion = ref(false)
+const employeeComment = ref('')
+const supervisorComment = ref('')
+const showDeleteConfirmModal = ref(false)
+const pendingDeleteItem = ref<KpiItem | null>(null)
 
 const personalItemsFlat = computed(() => sheet.value?.items.filter(i => i.group !== 'P') ?? [])
 const promotionItemsFlat = computed(() => sheet.value?.items.filter(i => i.group === 'P') ?? [])
 const personalAssignmentIds = computed(() => personalItemsFlat.value.map(i => i.id))
 const promotionAssignmentIds = computed(() => promotionItemsFlat.value.map(i => i.id))
+const hasAnyKpiItems = computed(() => (sheet.value?.items?.length ?? 0) > 0)
+
+function minStatusCode(items: KpiItem[]): number {
+  const statusCodes = items
+    .map(i => Number(i.statusCode))
+    .filter(n => Number.isFinite(n))
+  if (!statusCodes.length) return 0
+  return Math.min(...statusCodes)
+}
+
+const personalButtonState = computed(() => {
+  if (!cycleData.value || !personalItemsFlat.value.length) {
+    return { show: false, disabled: true, text: '', actionType: 'COMPLETED' as const }
+  }
+  const hasRejected = personalItemsFlat.value.some(i => Number(i.statusCode ?? 0) === 406)
+  if (hasRejected) {
+    return { show: true, disabled: false, text: 'Resubmit KPI', actionType: 'GOAL_SETTING' as const }
+  }
+  return getSubmitButtonState(cycleData.value, minStatusCode(personalItemsFlat.value))
+})
+const hasRejectedPersonal = computed(() =>
+  personalItemsFlat.value.some(i => Number(i.statusCode ?? 0) === 406),
+)
+
+const promotionButtonState = computed(() => {
+  if (!cycleData.value || !promotionItemsFlat.value.length) {
+    return { show: false, disabled: true, text: '', actionType: 'COMPLETED' as const }
+  }
+  const hasRejected = promotionItemsFlat.value.some(i => Number(i.statusCode ?? 0) === 406)
+  if (hasRejected) {
+    return { show: true, disabled: false, text: 'Resubmit KPI', actionType: 'GOAL_SETTING' as const }
+  }
+  return getSubmitButtonState(cycleData.value, minStatusCode(promotionItemsFlat.value))
+})
+const hasRejectedPromotion = computed(() =>
+  promotionItemsFlat.value.some(i => Number(i.statusCode ?? 0) === 406),
+)
+
+const memberSheetSubmitLabel = computed(() => labelFromActionType(personalButtonState.value.actionType))
+const promotionSubmitLabel = computed(() => promotionLabelFromActionType(promotionButtonState.value.actionType))
+const hasSubmittedPersonalTargetSetup = computed(() => {
+  const submittedStatuses = new Set([402, 403, 405, 501, 502, 503, 601, 602, 603])
+  return personalItemsFlat.value.some(i => submittedStatuses.has(Number(i.statusCode ?? 0)))
+})
+const canCreatePersonalKpi = computed(
+  () =>
+    isCurrentYear.value
+    && memberKpiMainTab.value === 'personal'
+    && !hasSubmittedPersonalTargetSetup.value,
+)
 
 const hasMissingPersonalMidYearSelfScore = computed(() => {
-  if (dashboardData.value?.phase !== 'mid_year') return false
+  if (personalButtonState.value.actionType !== 'MID_YEAR') return false
   return personalItemsFlat.value.some(it => it.selfScore == null)
 })
 
 const hasMissingPromotionMidYearSelfScore = computed(() => {
-  if (dashboardData.value?.phase !== 'mid_year') return false
+  if (promotionButtonState.value.actionType !== 'MID_YEAR') return false
   return promotionItemsFlat.value.some(it => it.selfScore == null)
 })
 
-function canSubmitByType(items: KpiItem[]): boolean {
-  if (!isCurrentYear.value || !items.length || !dashboardData.value?.canSubmit) return false
-  const p = dashboardData.value?.phase
-  const statusCodes = items
-    .map(i => Number(i.statusCode))
-    .filter(n => Number.isFinite(n))
-  if (!statusCodes.length) return false
-  if (p === 'target_setup') {
-    return statusCodes.some(sc => sc === 404)
-  }
-  if (p === 'mid_year') {
-    return statusCodes.some(sc => sc === 405)
-  }
-  if (p === 'year_end') {
-    return statusCodes.some(sc => sc === 405 || sc === 503)
-  }
-  return false
+type SubmitActionType = 'GOAL_SETTING' | 'MID_YEAR' | 'END_YEAR' | 'COMPLETED'
+function phaseFromActionType(actionType: SubmitActionType): 'target_setup' | 'mid_year' | 'year_end' | null {
+  if (actionType === 'GOAL_SETTING') return 'target_setup'
+  if (actionType === 'MID_YEAR') return 'mid_year'
+  if (actionType === 'END_YEAR') return 'year_end'
+  return null
 }
 
-function hasPendingActionByType(items: KpiItem[]): boolean {
+function hasPendingActionByType(items: KpiItem[], actionType: SubmitActionType): boolean {
   if (!items.length) return false
-  const p = dashboardData.value?.phase
+  const p = phaseFromActionType(actionType)
   const statusCodes = items
     .map(i => Number(i.statusCode))
     .filter(n => Number.isFinite(n))
@@ -156,24 +203,36 @@ function hasSubmitBlockingStatus(items: KpiItem[]): boolean {
   })
 }
 
+function hasSubmittedEvaluation(items: KpiItem[]): boolean {
+  if (!items.length) return false
+  return items.some(i => {
+    const status = Number(i.statusCode)
+    return Number.isFinite(status) && status >= 501
+  })
+}
+
 const canSubmitPersonal = computed(
-  () => canSubmitByType(personalItemsFlat.value),
+  () => isCurrentYear.value && personalItemsFlat.value.length > 0 && personalButtonState.value.show,
 )
 const canSubmitPromotion = computed(
-  () => canSubmitByType(promotionItemsFlat.value),
+  () => isCurrentYear.value && promotionItemsFlat.value.length > 0 && promotionButtonState.value.show,
 )
 
 const isPersonalSubmitDisabled = computed(
   () =>
     submittingPersonal.value
-    || hasMissingPersonalMidYearSelfScore.value
-    || hasSubmitBlockingStatus(personalItemsFlat.value),
+    || (!hasRejectedPersonal.value && hasMissingPersonalMidYearSelfScore.value)
+    || (!hasRejectedPersonal.value && hasSubmitBlockingStatus(personalItemsFlat.value)),
 )
 const isPromotionSubmitDisabled = computed(
   () =>
     submittingPromotion.value
-    || hasMissingPromotionMidYearSelfScore.value
-    || hasSubmitBlockingStatus(promotionItemsFlat.value),
+    || (!hasRejectedPromotion.value && hasMissingPromotionMidYearSelfScore.value)
+    || (!hasRejectedPromotion.value && hasSubmitBlockingStatus(promotionItemsFlat.value)),
+)
+
+const isEmployeeCommentReadonly = computed(
+  () => !isCurrentYear.value || hasSubmittedEvaluation(personalItemsFlat.value),
 )
 
 // ── KPI grouping ──────────────────────────────────────────────────────────────
@@ -293,11 +352,14 @@ function memberKpiTabIconClass(tab: MemberKpiMainTab) {
 
 // ── Deadline banner (from cycle in DB) ────────────────────────────────────────
 const kpiDeadlineBanner = computed((): KpiDeadlineBannerVm | null => {
-  const phase = dashboardData.value?.phase ?? null
+  const activeActionType = memberKpiMainTab.value === 'promotion'
+    ? promotionButtonState.value.actionType
+    : personalButtonState.value.actionType
+  const phase = phaseFromActionType(activeActionType)
   const activeItems = memberKpiMainTab.value === 'promotion'
     ? promotionItemsFlat.value
     : personalItemsFlat.value
-  const hasPendingAction = hasPendingActionByType(activeItems)
+  const hasPendingAction = hasPendingActionByType(activeItems, activeActionType)
   const subject = memberKpiMainTab.value === 'promotion' ? 'KPI thăng tiến' : 'KPI'
   return buildKpiDeadlineBanner({
     cycle: cycleData.value,
@@ -318,7 +380,18 @@ function scrollToKpiSelfEvalSection() {
 // ── Actions ───────────────────────────────────────────────────────────────────
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function onMemberIndividualKpiSaved(_response: unknown) {
+  editingRejectedSelfCreatedItem.value = null
   await loadDashboard()
+}
+
+function openRejectedSelfCreatedEditor(item: KpiItem) {
+  editingRejectedSelfCreatedItem.value = item
+  showCreateIndividualKpiDrawer.value = true
+}
+
+function openCreateIndividualDrawer() {
+  editingRejectedSelfCreatedItem.value = null
+  showCreateIndividualKpiDrawer.value = true
 }
 
 function apiSubmitErrorMessage(err: unknown): string {
@@ -347,7 +420,7 @@ async function handlePersonalSubmit() {
   submittingPersonal.value = true
   try {
     await submitByType('INDIVIDUAL', personalAssignmentIds.value)
-    await memberKpiService.submit(selectedYear.value, 'INDIVIDUAL')
+    await memberKpiService.submit(selectedYear.value, 'INDIVIDUAL', employeeComment.value)
     await loadDashboard()
     toast.success('Personal KPI đã được nộp thành công')
   } catch (e: unknown) {
@@ -364,13 +437,38 @@ async function handlePromotionSubmit() {
   submittingPromotion.value = true
   try {
     await submitByType('PROMOTION', promotionAssignmentIds.value)
-    await memberKpiService.submit(selectedYear.value, 'PROMOTION')
+    await memberKpiService.submit(selectedYear.value, 'PROMOTION', employeeComment.value)
     await loadDashboard()
     toast.success('Promotion KPI đã được nộp thành công')
   } catch (e: unknown) {
     toast.error(apiSubmitErrorMessage(e))
   } finally {
     submittingPromotion.value = false
+  }
+}
+
+async function handleDeleteSelfCreatedKpi(item: KpiItem) {
+  if (!item?.id) return
+  pendingDeleteItem.value = item
+  showDeleteConfirmModal.value = true
+}
+
+function cancelDeleteSelfCreatedKpi() {
+  showDeleteConfirmModal.value = false
+  pendingDeleteItem.value = null
+}
+
+async function confirmDeleteSelfCreatedKpi() {
+  const item = pendingDeleteItem.value
+  if (!item?.id) return
+  try {
+    await memberKpiService.deleteSelfCreatedKpi(item.id)
+    await loadDashboard()
+    toast.success('Đã xóa KPI tự tạo')
+  } catch (e: unknown) {
+    toast.error(apiSubmitErrorMessage(e))
+  } finally {
+    cancelDeleteSelfCreatedKpi()
   }
 }
 </script>
@@ -414,7 +512,11 @@ async function handlePromotionSubmit() {
         </div>
       </div>
 
-      <MemberProcessTimeline :year="selectedYear" :active-phase="dashboardData.phase" />
+      <MemberProcessTimeline
+        v-if="hasAnyKpiItems"
+        :year="selectedYear"
+        :active-phase="dashboardData.phase"
+      />
 
       <!-- Summary cards -->
       <MemberKpiSummaryCards
@@ -451,10 +553,10 @@ async function handlePromotionSubmit() {
             </button>
           </nav>
           <button
-            v-if="memberKpiMainTab === 'personal' && isCurrentYear"
+            v-if="canCreatePersonalKpi"
             type="button"
             class="mb-1.5 mr-1 flex shrink-0 items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:bg-blue-700"
-            @click="showCreateIndividualKpiDrawer = true"
+            @click="openCreateIndividualDrawer"
           >
             <i class="fas fa-plus text-xs" aria-hidden="true" />
             Tạo KPI
@@ -464,6 +566,7 @@ async function handlePromotionSubmit() {
         <MemberCreateIndividualKpiDrawer
           v-model="showCreateIndividualKpiDrawer"
           :cycle-id="String(selectedYear)"
+          :edit-item="editingRejectedSelfCreatedItem"
           @saved="onMemberIndividualKpiSaved"
         />
 
@@ -474,12 +577,18 @@ async function handlePromotionSubmit() {
               :sections="personalGroupedSections"
               :personal-self-weighted-avg="personalSelfWeightedAvg"
               :is-current-year="isCurrentYear"
+              :employee-comment="employeeComment"
+              :supervisor-comment="supervisorComment"
+              :employee-comment-readonly="isEmployeeCommentReadonly"
               :submitting="submittingPersonal"
               :can-submit="canSubmitPersonal"
               :is-submit-disabled="isPersonalSubmitDisabled"
               :submit-label="memberSheetSubmitLabel"
               @open-evidence="evidenceCtx.openEvidencePanel"
+              @open-edit-self-created="openRejectedSelfCreatedEditor"
               @open-feedback="evidenceCtx.openFeedbackPanel"
+              @delete-self-created="handleDeleteSelfCreatedKpi"
+              @update-employee-comment="employeeComment = $event"
               @submit="handlePersonalSubmit"
             />
           </template>
@@ -498,7 +607,9 @@ async function handlePromotionSubmit() {
               :is-submit-disabled="isPromotionSubmitDisabled"
               :submit-label="promotionSubmitLabel"
               @open-evidence="evidenceCtx.openEvidencePanel"
+              @open-edit-self-created="openRejectedSelfCreatedEditor"
               @open-feedback="evidenceCtx.openFeedbackPanel"
+              @delete-self-created="handleDeleteSelfCreatedKpi"
               @submit="handlePromotionSubmit"
             />
           </template>
@@ -509,6 +620,49 @@ async function handlePromotionSubmit() {
 
     <!-- Evidence drawer -->
     <MemberEvidenceDrawer />
+
+    <Teleport to="body">
+      <div
+        v-if="showDeleteConfirmModal"
+        class="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/50 p-4"
+        role="dialog"
+        aria-modal="true"
+      >
+        <div class="w-full max-w-md rounded-xl border border-slate-200 bg-white shadow-2xl">
+          <div class="border-b border-slate-100 px-5 py-4">
+            <h3 class="text-base font-bold text-slate-800">Xác nhận xóa KPI</h3>
+            <p class="mt-1 text-xs text-slate-500">
+              KPI tự tạo sẽ bị xóa khỏi danh sách hiện tại.
+            </p>
+          </div>
+          <div class="px-5 py-4 text-sm text-slate-700">
+            <p>
+              Bạn có chắc muốn xóa KPI:
+              <span class="font-semibold text-slate-900">
+                {{ pendingDeleteItem?.code }} {{ pendingDeleteItem?.name }}
+              </span>
+              ?
+            </p>
+          </div>
+          <div class="flex items-center justify-end gap-2 border-t border-slate-100 px-5 py-4">
+            <button
+              type="button"
+              class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+              @click="cancelDeleteSelfCreatedKpi"
+            >
+              Hủy
+            </button>
+            <button
+              type="button"
+              class="rounded-lg bg-rose-600 px-3 py-2 text-xs font-semibold text-white hover:bg-rose-700"
+              @click="confirmDeleteSelfCreatedKpi"
+            >
+              Xóa KPI
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
 
   </div>
 </template>

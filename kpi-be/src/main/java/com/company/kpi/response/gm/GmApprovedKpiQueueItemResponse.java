@@ -3,9 +3,10 @@ package com.company.kpi.response.gm;
 import lombok.Data;
 
 import java.math.BigDecimal;
+import java.time.OffsetDateTime;
 import java.util.UUID;
 
-/** Một dòng KPI cá nhân trong chu kỳ — ASM 401/402/403 (tab Approved KPI GM). */
+/** Một dòng KPI cá nhân trong chu kỳ — ASM 401/402/403 trên tab Approved KPI GM. */
 @Data
 public class GmApprovedKpiQueueItemResponse {
 
@@ -17,6 +18,12 @@ public class GmApprovedKpiQueueItemResponse {
     private UUID userId;
     private String userFullName;
     private String userUsername;
+    /**
+     * {@code roles.code} của assignee (user_roles), nối {@code |||} — thứ tự GM → PM → LEADER → MEMBER.
+     */
+    private String userRoleCodes;
+    /** Thời điểm tạo bản ghi assignment được chọn (DISTINCT ON). */
+    private OffsetDateTime requestedAt;
     private String masterCode;
     private String masterName;
     /** Target value số ưu tiên từ assignment, fallback về target chu kỳ. */
@@ -29,6 +36,6 @@ public class GmApprovedKpiQueueItemResponse {
     private Integer typeCode;
     /** {@code kpi_master.unit_code} của KPI. */
     private Integer unitCode;
-    /** Nội dung feedback đang chờ GM xử lý (nếu {@code statusCode = 407}). */
+    /** Legacy field: queue không còn hiển thị 407; giữ để tương thích response cũ. */
     private String feedbackNote;
 }

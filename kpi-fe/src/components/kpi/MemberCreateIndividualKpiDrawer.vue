@@ -1,10 +1,16 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick } from 'vue'
+import type { KpiItem } from '@/types/kpi'
 import { gmKpiService } from '@/services/modules/kpi-gm.service'
 import { useGmKpiCategoryOptions } from '@/composables/useGmKpiCategoryOptions'
 import { useKpiCalculationReference } from '@/composables/useKpiCalculationReference'
 import { persistedCalculationMethodFromTypeAndRule } from '@/utils/kpiCalculationCodes'
-import { validateScoringRulesDsl, buildScoringRulesPayload, SCORING_RULES_EXAMPLE_TOOLTIP } from '@/utils/kpiScoringRulesDsl'
+import {
+  validateScoringRulesDsl,
+  buildScoringRulesPayload,
+  extractRawInputFromApiTargetDescription,
+  SCORING_RULES_EXAMPLE_TOOLTIP,
+} from '@/utils/kpiScoringRulesDsl'
 import { useKpiUnitOptions } from '@/composables/useKpiUnitOptions'
 import { kpiCycleService } from '@/services/shared/kpi-cycle.service'
 import { kpiFormUnitToUnitCode } from '@/utils/kpiUnitCodes'
@@ -15,8 +21,10 @@ const props = withDefaults(
   defineProps<{
     /** Year string hoặc cycle UUID — khớp với selectedYear trên MemberDashboard. */
     cycleId: string
+    /** Khi có giá trị: mở drawer ở chế độ sửa KPI tự tạo bị reject. */
+    editItem?: KpiItem | null
   }>(),
-  { cycleId: '' },
+  { cycleId: '', editItem: null },
 )
 
 const emit = defineEmits<{
@@ -93,6 +101,7 @@ const DEFAULT_CALCULATION_TYPE_CODE = 701
 const perspective = ref('')
 const kpiName = ref('')
 const description = ref('')
+const targetValue = ref<string>('')
 const weightPct = ref<string>('')
 const calculationRuleCode = ref(DEFAULT_CALCULATION_RULE_CODE)
 const calculationTypeCode = ref<number | null>(DEFAULT_CALCULATION_TYPE_CODE)
@@ -113,11 +122,21 @@ const selectedFormulaExpression = computed(() => {
   return rule.label ?? ''
 })
 
+const isEditMode = computed(() => {
+  const id = String(props.editItem?.kpiInformationId ?? '').trim()
+  return id.length > 0
+})
+
+const editingKpiInformationId = computed(() =>
+  String(props.editItem?.kpiInformationId ?? '').trim(),
+)
+
 // ── Lifecycle ───────────────────────────────────────────────────────────────────
 watch(open, async (v) => {
   if (v) {
     resetForm()
     await loadFormMeta()
+    hydrateFormForEdit()
   }
 })
 
@@ -136,12 +155,54 @@ function resetForm() {
   perspective.value = ''
   kpiName.value = ''
   description.value = ''
+  targetValue.value = ''
   weightPct.value = ''
   unit.value = 'MM'
   calculationRuleCode.value = DEFAULT_CALCULATION_RULE_CODE
   calculationTypeCode.value = DEFAULT_CALCULATION_TYPE_CODE
   realCycleId.value = ''
   clearFormErrors()
+}
+
+function findUnitOptionByAnyLabel(raw: string): string | null {
+  const norm = raw.trim().toLowerCase()
+  if (!norm) return null
+  const hit = kpiUnitOptions.value.find((opt) => {
+    const label = String(opt.label ?? '').trim().toLowerCase()
+    const value = String(opt.value ?? '').trim().toLowerCase()
+    return label === norm || value === norm
+  })
+  return hit?.value ?? null
+}
+
+function findPerspectiveOptionByName(raw: string): string | null {
+  const norm = raw.trim().toLowerCase()
+  if (!norm) return null
+  const hit = perspectiveOptions.value.find((opt) => {
+    const label = String(opt.label ?? '').trim().toLowerCase()
+    const value = String(opt.value ?? '').trim().toLowerCase()
+    return label === norm || value === norm
+  })
+  return hit?.value ?? null
+}
+
+function hydrateFormForEdit() {
+  const item = props.editItem
+  if (!item || !isEditMode.value) return
+  const mappedPerspectiveByName = findPerspectiveOptionByName(String(item.categoryName ?? ''))
+  const categoryIdRaw = String(item.categoryId ?? '').trim()
+  perspective.value = categoryIdRaw || mappedPerspectiveByName || (perspectiveOptions.value[0]?.value ?? '')
+  kpiName.value = String(item.name ?? '').trim()
+  targetValue.value = String(item.assignmentTargetValue ?? item.kpiTemplateTargetValue ?? '')
+  weightPct.value = String(item.weight ?? '')
+  calculationRuleCode.value = Number(item.calculationRuleCode ?? DEFAULT_CALCULATION_RULE_CODE)
+  calculationTypeCode.value = Number(item.calculationTypeCode ?? DEFAULT_CALCULATION_TYPE_CODE)
+  const rawRules =
+    extractRawInputFromApiTargetDescription(item.targetDescription ?? '')
+    || extractRawInputFromApiTargetDescription(item.target ?? '')
+  description.value = rawRules
+  const mappedUnit = findUnitOptionByAnyLabel(String(item.unitName ?? ''))
+  unit.value = mappedUnit ?? 'MM'
 }
 
 function close() {
@@ -166,6 +227,14 @@ function validateForm(): boolean {
   }
   if (!kpiName.value.trim()) {
     err.kpiName = 'Vui lòng nhập tên KPI.'
+  }
+
+  const tvRaw = targetValue.value
+  const tvStr = String(tvRaw ?? '').trim()
+  if (tvStr === '' || Number.isNaN(Number(tvRaw))) {
+    err.targetValue = 'Nhập mục tiêu (số).'
+  } else if (Number(tvRaw) < 0) {
+    err.targetValue = 'Mục tiêu phải >= 0.'
   }
 
   const wStr = String(weightPct.value).trim()
@@ -214,13 +283,20 @@ async function save() {
 
   saving.value = true
   try {
-    const response = await gmKpiService.createStrategicKpi({
+    let existingMemberIds: string[] = []
+    if (isEditMode.value) {
+      const existing = await gmKpiService.getStrategicKpiForEdit(editingKpiInformationId.value)
+      existingMemberIds = Array.isArray(existing.memberIds)
+        ? existing.memberIds.map((x) => String(x))
+        : []
+    }
+    const payload = {
       cycleId: realCycleId.value,
-      typeCode: 101,
+      typeCode: Number(props.editItem?.group === 'P' ? 103 : 101),
       perspective: perspective.value,
       kpiName: kpiName.value.trim(),
       targetDescription: buildScoringRulesPayload(description.value),
-      targetValue: null,
+      targetValue: Number.parseFloat(String(targetValue.value).trim()),
       unit: unit.value,
       unitCode: kpiFormUnitToUnitCode(unit.value),
       weightPct: Number.parseFloat(String(weightPct.value).trim()),
@@ -229,9 +305,12 @@ async function save() {
         calculationRuleCode.value,
       ),
       isImportant: false,
-      memberIds: [],
-      editingKpiInformationId: null,
-    })
+      memberIds: isEditMode.value ? existingMemberIds : [],
+      editingKpiInformationId: editingKpiInformationId.value || null,
+    }
+    const response = isEditMode.value
+      ? await gmKpiService.updateStrategicKpi(editingKpiInformationId.value, payload)
+      : await gmKpiService.createStrategicKpi(payload)
     emit('saved', response)
     open.value = false
   } catch (e: unknown) {
@@ -277,10 +356,10 @@ async function save() {
                 <span class="rounded-lg bg-blue-100 p-1.5 text-blue-700 shadow-sm">
                   <i class="fas fa-bullseye text-sm" aria-hidden="true" />
                 </span>
-                Tạo KPI cá nhân
+                {{ isEditMode ? 'Chỉnh sửa KPI cá nhân' : 'Tạo KPI cá nhân' }}
               </h2>
               <p class="mt-1 text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                Đề xuất mục tiêu cá nhân — chờ PM / quản lý xác nhận
+                {{ isEditMode ? 'Cập nhật KPI tự tạo bị từ chối để submit lại' : 'Đề xuất mục tiêu cá nhân — chờ PM / quản lý xác nhận' }}
               </p>
             </div>
             <button
@@ -313,7 +392,7 @@ async function save() {
             >
               <p class="mb-2 flex items-center gap-2 font-bold">
                 <i class="fas fa-circle-exclamation text-rose-600" aria-hidden="true" />
-                Vui lòng sửa các lỗi sau trước khi tạo KPI.
+                Vui lòng sửa các lỗi sau trước khi {{ isEditMode ? 'cập nhật KPI' : 'tạo KPI' }}.
               </p>
               <ul class="list-inside list-disc space-y-0.5 text-[11px] font-semibold text-rose-800">
                 <li v-for="(msg, key) in formErrors" :key="key">{{ msg }}</li>
@@ -399,8 +478,30 @@ async function save() {
                   </div>
                 </div>
 
-                <!-- Row 2: Trọng số + Unit -->
-                <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-x-6">
+                <!-- Row 2: Target + Trọng số + Unit -->
+                <div class="grid grid-cols-1 gap-4 sm:grid-cols-3 sm:gap-x-6">
+                  <div class="min-w-0">
+                    <label
+                      class="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500"
+                    >
+                      Target <span class="text-rose-500">*</span>
+                    </label>
+                    <input
+                      v-model="targetValue"
+                      type="number"
+                      placeholder="95"
+                      min="0"
+                      class="input-required min-h-[38px] w-full rounded-md px-2.5 py-2 text-xs font-bold text-slate-800 outline-none transition-all"
+                      :class="formErrors.targetValue ? '!border-rose-400 !bg-rose-50/50' : ''"
+                    />
+                    <p
+                      v-if="formErrors.targetValue"
+                      class="mt-1 text-[10px] font-semibold text-rose-600"
+                    >
+                      {{ formErrors.targetValue }}
+                    </p>
+                  </div>
+
                   <div class="min-w-0">
                     <label
                       class="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500"
@@ -612,7 +713,7 @@ async function save() {
                 aria-hidden="true"
               />
               <i v-else class="fas fa-save text-sm" aria-hidden="true" />
-              {{ saving ? 'Đang lưu...' : 'Tạo KPI' }}
+              {{ saving ? 'Đang lưu...' : (isEditMode ? 'Cập nhật KPI' : 'Tạo KPI') }}
             </button>
           </div>
         </div>

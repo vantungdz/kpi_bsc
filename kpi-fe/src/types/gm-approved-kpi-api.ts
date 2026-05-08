@@ -9,6 +9,10 @@ export interface GmApprovedKpiQueueItemApi {
   userId: string
   userFullName: string | null
   userUsername: string | null
+  /** roles.code nối ||| */
+  userRoleCodes?: string | null
+  /** ISO — thời điểm assignment (created_at) */
+  requestedAt?: string | null
   masterCode: string | null
   masterName: string | null
   targetValue: number | string | null
@@ -25,6 +29,8 @@ export interface GmApprovedKpiDecisionBody {
   cycleId: string
   assignmentId: string
   approve: boolean
+  /** Bắt buộc khi `approve === false` và 403→406 (lưu update_reason). */
+  rejectReason?: string | null
 }
 
 export interface GmApprovedKpiDecisionResultApi {

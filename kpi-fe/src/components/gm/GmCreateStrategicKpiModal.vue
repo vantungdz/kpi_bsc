@@ -63,15 +63,57 @@ const props = withDefaults(
      * Chu kỳ đánh giá đã tải ở `GmLayout` — nếu có phần tử thì drawer không gọi lại `getKpiCyclesForEvaluation`.
      */
     prefetchedEvaluationCycles?: GmKpiCycleOption[] | null
+    /**
+     * `kpi_assignments.id` của feedback đang được duyệt (mở drawer từ luồng "Duyệt feedback").
+     * Khi có — highlight đúng dòng assign tương ứng để GM dễ nhận biết đang sửa target cho ai.
+     */
+    feedbackAssignmentId?: string | null
   }>(),
   {
     cycleId: '',
     editInitial: null,
     prefetchedEvaluationCycles: null,
+    feedbackAssignmentId: null,
   },
 )
 
 const isEditingFromDiagnostics = computed(() => props.editInitial != null)
+
+/**
+ * UUID `users.id` của người gửi feedback đang được duyệt — duyệt cây `pmOwners` của KPI để map
+ * `assignmentId` → user id, dùng làm khoá highlight cho các dòng assignee trong drawer.
+ */
+const feedbackAssigneeUserId = computed<string | null>(() => {
+  const aid = String(props.feedbackAssignmentId ?? '').trim()
+  if (!aid) return null
+  const kpi = props.editInitial
+  if (!kpi || !Array.isArray(kpi.pmOwners)) return null
+  for (const pm of kpi.pmOwners) {
+    for (const m of pm.members ?? []) {
+      if (String(m.assignmentId ?? '').trim() === aid) {
+        return String(m.id ?? '').trim() || null
+      }
+    }
+    for (const ld of pm.leaders ?? []) {
+      const own = ld.leaderOwnRow
+      if (own && String(own.assignmentId ?? '').trim() === aid) {
+        return String(own.id ?? '').trim() || null
+      }
+      for (const m of ld.members ?? []) {
+        if (String(m.assignmentId ?? '').trim() === aid) {
+          return String(m.id ?? '').trim() || null
+        }
+      }
+    }
+  }
+  return null
+})
+
+function isFeedbackAssignee(userId: string | null | undefined): boolean {
+  const target = feedbackAssigneeUserId.value
+  if (!target) return false
+  return String(userId ?? '').trim() === target
+}
 
 const strategicEditDetailLoading = ref(false)
 const strategicEditDetailError = ref<string | null>(null)
@@ -1487,8 +1529,40 @@ function validateForm(): boolean {
     }
   }
 
+  if (kpiType.value === 'cascading' && selectedPMs.value.length > 0) {
+    const missingLabels: string[] = []
+    const invalidLabels: string[] = []
+    for (const pmId of selectedPMs.value) {
+      const raw = String(pmTargets.value[pmId] ?? '').trim()
+      if (raw === '') {
+        missingLabels.push(pmChipLabel(pmId))
+      } else {
+        const n = Number(raw)
+        if (!Number.isFinite(n) || Number.isNaN(n) || n < 0) {
+          invalidLabels.push(pmChipLabel(pmId))
+        }
+      }
+    }
+    if (missingLabels.length > 0) {
+      err.pmTargets =
+        missingLabels.length === selectedPMs.value.length
+          ? 'Đã chọn PM — vui lòng nhập mục tiêu riêng cho từng PM'
+          : `Nhập mục tiêu cho: ${missingLabels.join(', ')}.`
+    } else if (invalidLabels.length > 0) {
+      err.pmTargets = `Mục tiêu PM phải là số ≥ 0: ${invalidLabels.join(', ')}.`
+    }
+  }
+
   formErrors.value = err
   return Object.keys(err).length === 0
+}
+
+function pmTargetRowHasValidationIssue(pmId: string): boolean {
+  if (!formErrors.value.pmTargets) return false
+  const raw = String(pmTargets.value[pmId] ?? '').trim()
+  if (raw === '') return true
+  const n = Number(raw)
+  return !Number.isFinite(n) || Number.isNaN(n) || n < 0
 }
 
 async function save() {
@@ -2187,21 +2261,44 @@ async function save() {
                     <i class="fas fa-crosshairs text-[10px]" />
                     Mục tiêu theo từng quản lý
                   </p>
+                  <p v-if="formErrors.pmTargets" class="mb-2 text-[11px] font-semibold leading-snug text-rose-600">
+                    {{ formErrors.pmTargets }}
+                  </p>
                   <div
                     v-for="pm in selectedPMs"
                     :key="pm"
-                    class="flex flex-col justify-between gap-2 rounded-lg border border-slate-200 bg-white p-2.5 shadow-sm sm:flex-row sm:items-center sm:gap-3"
+                    class="flex flex-col justify-between gap-2 rounded-lg border p-2.5 shadow-sm sm:flex-row sm:items-center sm:gap-3"
+                    :class="
+                      isFeedbackAssignee(pm)
+                        ? 'border-amber-300 bg-amber-50 ring-1 ring-amber-200'
+                        : 'border-slate-200 bg-white'
+                    "
                   >
                     <span class="flex min-w-0 items-center gap-1.5 text-[11px] font-bold text-slate-700 sm:w-[38%]">
                       <i class="fas fa-user shrink-0 text-[10px] text-slate-400" />
                       <span class="truncate">{{ pmChipLabel(pm) }}</span>
+                      <span
+                        v-if="isFeedbackAssignee(pm)"
+                        class="ml-1 inline-flex items-center gap-1 rounded-md border border-amber-300 bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-800"
+                        title="Đang xử lý feedback của người này"
+                      >
+                        <i class="fas fa-comment-dots text-[8px]" />
+                        Feedback
+                      </span>
                     </span>
                     <div class="flex min-w-0 flex-1 items-center gap-2">
                       <input
                         v-model="pmTargets[pm]"
                         type="number"
-                        placeholder="Target..."
-                        class="min-w-0 flex-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-bold text-slate-800 outline-none transition-all focus:border-blue-400 focus:ring-1 focus:ring-blue-100"
+                        min="0"
+                        step="any"
+                        placeholder="Nhập target..."
+                        class="min-w-0 flex-1 rounded-md border bg-white px-2 py-1 text-xs font-bold text-slate-800 outline-none transition-all focus:ring-1 focus:ring-blue-100"
+                        :class="
+                          pmTargetRowHasValidationIssue(pm)
+                            ? 'border-rose-400 focus:border-rose-500'
+                            : 'border-slate-200 focus:border-blue-400'
+                        "
                       />
                       <span class="shrink-0 text-[10px] font-bold text-slate-400">{{ unit }}</span>
                       <button
@@ -2324,7 +2421,12 @@ async function save() {
                           <label
                             v-for="member in rankCard.members"
                             :key="member.val"
-                            class="flex cursor-pointer items-center gap-3 rounded-lg border border-slate-200 px-3 py-2 transition-colors hover:bg-slate-50"
+                            class="flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-2 transition-colors"
+                            :class="
+                              isFeedbackAssignee(member.val)
+                                ? 'border-amber-300 bg-amber-50 ring-1 ring-amber-200 hover:bg-amber-100/60'
+                                : 'border-slate-200 hover:bg-slate-50'
+                            "
                           >
                             <input
                               type="checkbox"
@@ -2337,10 +2439,18 @@ async function save() {
                             >
                               {{ member.avatar }}
                             </div>
-                            <div class="min-w-0">
+                            <div class="min-w-0 flex-1">
                               <p class="truncate text-xs font-bold text-slate-700">{{ member.short }}</p>
                               <p class="truncate text-[10px] text-slate-500">{{ member.dept }}</p>
                             </div>
+                            <span
+                              v-if="isFeedbackAssignee(member.val)"
+                              class="ml-1 inline-flex shrink-0 items-center gap-1 rounded-md border border-amber-300 bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-800"
+                              title="Đang xử lý feedback của người này"
+                            >
+                              <i class="fas fa-comment-dots text-[8px]" />
+                              Feedback
+                            </span>
                           </label>
                         </div>
                       </div>
@@ -2463,10 +2573,25 @@ async function save() {
                   <div
                     v-for="id in selectedMembers"
                     :key="id"
-                    class="flex items-center justify-between gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 shadow-sm"
+                    class="flex items-center justify-between gap-2 rounded-md border px-3 py-2 shadow-sm"
+                    :class="
+                      isFeedbackAssignee(id)
+                        ? 'border-amber-300 bg-amber-50 ring-1 ring-amber-200'
+                        : 'border-slate-200 bg-white'
+                    "
                   >
-                    <span class="min-w-0 truncate text-[11px] font-bold text-slate-700">
-                      {{ memberByVal(id)?.short ?? id }}
+                    <span class="flex min-w-0 items-center gap-1.5">
+                      <span class="min-w-0 truncate text-[11px] font-bold text-slate-700">
+                        {{ memberByVal(id)?.short ?? id }}
+                      </span>
+                      <span
+                        v-if="isFeedbackAssignee(id)"
+                        class="ml-1 inline-flex shrink-0 items-center gap-1 rounded-md border border-amber-300 bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-800"
+                        title="Đang xử lý feedback của người này"
+                      >
+                        <i class="fas fa-comment-dots text-[8px]" />
+                        Feedback
+                      </span>
                     </span>
                     <button
                       type="button"

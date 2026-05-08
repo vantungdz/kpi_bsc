@@ -220,7 +220,7 @@ export async function apiPostGmEvaluationHubConfirm(
     .then((r) => r.data.data);
 }
 
-/** GET /kpi/gm/approved-kpi-queue?cycleId= — ASM 401/402/403. */
+/** GET /kpi/gm/approved-kpi-queue?cycleId= — ASM 401/402/403. Feedback 407 xử lý ở Strategic diagnostics. */
 export async function apiGetGmApprovedKpiQueue(
   cycleId: string,
 ): Promise<GmApprovedKpiQueueItemApi[]> {
@@ -426,6 +426,71 @@ export async function apiPostGmPersonalEvaluationSubmit(
   });
 }
 
+// ── GM Reports endpoints ─────────────────────────────────────────────────────
+import type {
+  GmReportLevelDistributionData,
+  GmReportSectionBellCurveData,
+  GmReportSectionAnalyticsData,
+  GmReportComplianceData,
+} from "@/types/gm-report";
+
+/** GET /kpi/gm/reports/score-distribution */
+export async function apiGetGmReportLevelDistribution(params: {
+  year: number;
+  compareYears?: number[];
+  sectionId?: string;
+}): Promise<GmReportLevelDistributionData> {
+  const query: Record<string, string | number | string[] | number[]> = {
+    year: params.year,
+  };
+  if (params.compareYears?.length) {
+    query.compareYears = params.compareYears;
+  }
+  if (params.sectionId) query.sectionId = params.sectionId;
+  return http
+    .get<ApiResponse<GmReportLevelDistributionData>>(
+      "/kpi/gm/reports/score-distribution",
+      { params: query },
+    )
+    .then((r) => r.data.data);
+}
+
+/** GET /kpi/gm/reports/section-bell-curve */
+export async function apiGetGmReportSectionBellCurve(
+  year: number,
+): Promise<GmReportSectionBellCurveData> {
+  return http
+    .get<ApiResponse<GmReportSectionBellCurveData>>(
+      "/kpi/gm/reports/section-bell-curve",
+      { params: { year } },
+    )
+    .then((r) => r.data.data);
+}
+
+/** GET /kpi/gm/reports/section-analytics */
+export async function apiGetGmReportSectionAnalytics(
+  year: number,
+): Promise<GmReportSectionAnalyticsData> {
+  return http
+    .get<ApiResponse<GmReportSectionAnalyticsData>>(
+      "/kpi/gm/reports/section-analytics",
+      { params: { year } },
+    )
+    .then((r) => r.data.data);
+}
+
+/** GET /kpi/gm/reports/compliance */
+export async function apiGetGmReportCompliance(
+  year: number,
+): Promise<GmReportComplianceData> {
+  return http
+    .get<ApiResponse<GmReportComplianceData>>(
+      "/kpi/gm/reports/compliance",
+      { params: { year } },
+    )
+    .then((r) => r.data.data);
+}
+
 export const gmKpiService = {
   getDashboard: (year?: number) =>
     apiGetGmKpiDashboard(year).then((r) => r.data),
@@ -491,4 +556,14 @@ export const gmKpiService = {
   getProcessTimeline: (cycleId: string) => apiGetGmProcessTimeline(cycleId),
   submitPersonalEvaluation: (cycleId: string) =>
     apiPostGmPersonalEvaluationSubmit(cycleId),
+  getReportLevelDistribution: (params: {
+    year: number;
+    compareYears?: number[];
+    sectionId?: string;
+  }) => apiGetGmReportLevelDistribution(params),
+  getReportSectionBellCurve: (year: number) =>
+    apiGetGmReportSectionBellCurve(year),
+  getReportSectionAnalytics: (year: number) =>
+    apiGetGmReportSectionAnalytics(year),
+  getReportCompliance: (year: number) => apiGetGmReportCompliance(year),
 };

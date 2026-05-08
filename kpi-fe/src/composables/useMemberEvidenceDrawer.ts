@@ -607,7 +607,7 @@ export function useMemberEvidenceDrawer() {
 
   // ── Panel open / close ───────────────────────────────────────────────────
   function openEvidencePanel(item: KpiItem, mode: 'detail' | 'feedback' = 'detail') {
-    if (item.canViewEvidence !== true && Number(item.statusCode) !== 404) return
+    if (item.canViewEvidence !== true && Number(item.statusCode ?? 0) < 404) return
     panelMode.value = mode
     selectedDrawerItem.value = item
 
@@ -692,10 +692,6 @@ export function useMemberEvidenceDrawer() {
       const out: Record<string, unknown> = {}
       const noteTrim = evidenceNoteDraft.value.trim()
       if (noteTrim) out.note = noteTrim
-    const memberFeedback = memberFeedbackDraft.value.trim()
-    if (memberFeedback) out.memberFeedback = memberFeedback
-    const leaderFeedback = leaderFeedbackDraft.value.trim()
-    if (leaderFeedback) out.leaderFeedback = leaderFeedback
     const gmComment = gmCommentDraft.value.trim()
     if (gmComment) out.gmComment = gmComment
       const filePairs = pendingEvidenceUrls.value
@@ -730,10 +726,6 @@ export function useMemberEvidenceDrawer() {
 
     const note = evidenceNoteDraft.value.trim()
     if (note) out.note = note
-    const memberFeedback = memberFeedbackDraft.value.trim()
-    if (memberFeedback) out.memberFeedback = memberFeedback
-    const leaderFeedback = leaderFeedbackDraft.value.trim()
-    if (leaderFeedback) out.leaderFeedback = leaderFeedback
     const gmComment = gmCommentDraft.value.trim()
     if (gmComment) out.gmComment = gmComment
 
@@ -769,9 +761,14 @@ export function useMemberEvidenceDrawer() {
       if (!feedbackComment) return
       saving.value = true
       try {
-        await memberKpiService.submitFeedback(item.id, feedbackComment)
+        const rs = await memberKpiService.submitFeedback(item.id, feedbackComment)
         item.statusCode = 407
-        item.assignmentStatusName = 'Chờ PM kiểm tra feedback'
+        item.feedbackTargetRoleCode = rs?.feedbackTargetRoleCode ?? null
+        item.assignmentStatusName =
+          rs?.assignmentStatusName ??
+          (String(rs?.feedbackTargetRoleCode ?? '').toUpperCase() === 'GM'
+            ? 'Chờ GM kiểm tra feedback'
+            : 'Chờ PM kiểm tra feedback')
         item.feedbackComment = feedbackComment
         item.memberFeedback = feedbackComment
         closeEvidencePanel()

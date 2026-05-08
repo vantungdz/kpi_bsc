@@ -557,7 +557,7 @@ public class GmProcessTimelineService {
         static GroupMeta forId(String id) {
             return switch (id) {
                 case ID_UNASSIGNED -> new GroupMeta(
-                        "Members Without KPI Assignment",
+                        "Members have not been assigned KPIs",
                         "critical",
                         "Organization",
                         "bg-rose-100 text-rose-600");

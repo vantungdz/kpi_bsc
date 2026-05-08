@@ -14,3 +14,18 @@ export function isPmEvaluationSubject(m: {
     sc === KPI_STATUS.FIRST_WAITING_PM_APPROVAL || sc === KPI_STATUS.SECOND_WAITING_PM_APPROVAL
   )
 }
+
+/** Đếm mọi node trong cây team (đệ quy) đang chờ PM đánh giá (501 / 601). */
+export function countPmEvaluationSubjectsInHierarchy(nodes: unknown[] | null | undefined): number {
+  if (!Array.isArray(nodes) || nodes.length === 0) return 0
+  let count = 0
+  for (const raw of nodes) {
+    const node = raw as { children?: unknown[] }
+    if (node && isPmEvaluationSubject(node)) count++
+    const children = node?.children
+    if (Array.isArray(children) && children.length > 0) {
+      count += countPmEvaluationSubjectsInHierarchy(children)
+    }
+  }
+  return count
+}

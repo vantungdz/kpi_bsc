@@ -100,7 +100,7 @@ function targetLine(item: GmModalKpiItemMock) {
   if (item.targetSummary?.trim()) return item.targetSummary
   const w = item.weight
   const wPart =
-    w != null && w !== '' && Number.isFinite(Number(w)) ? ` (W: ${Number(w)}%)` : ''
+    typeof w === 'number' && Number.isFinite(w) ? ` (W: ${w}%)` : ''
   return `Mục tiêu: ${item.target}${wPart}`
 }
 

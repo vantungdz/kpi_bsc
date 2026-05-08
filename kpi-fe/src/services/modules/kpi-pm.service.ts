@@ -101,10 +101,16 @@ export interface PmMemberKpiApprovalItem {
   cycleId: string
   userId: string
   userFullName: string
+  /** Các roles.code, nối bằng ||| — từ BE list PM approvals. */
+  userRoleCodes?: string | null
   kpiName: string
   targetDescription: string | null
+  targetValue: number | null
   weight: number | null
   categoryName: string | null
+  unitCode: number | null
+  calculationRuleCode: number | null
+  calculationTypeCode: number | null
   typeCode: number | null
   requestedAt: string | null
   justification: string | null
@@ -122,6 +128,7 @@ export async function apiPmMemberKpiApprovalDecision(body: {
   year: number
   assignmentId: string
   approve: boolean
+  rejectReason?: string
 }): Promise<ApiResponse<null>> {
   return http.post('/pm/dashboard/member-kpi-approvals/decision', body).then((r) => r.data)
 }
@@ -140,6 +147,34 @@ export async function apiPmMemberFeedbackDecision(body: {
   approve: boolean
 }): Promise<ApiResponse<null>> {
   return http.post('/pm/dashboard/member-feedbacks/decision', body).then((r) => r.data)
+}
+
+/** PM chấp nhận feedback (407→404) + lưu cascade trong một request — khớp transaction backend. */
+export async function apiPmAcceptMemberFeedbackWithCascade(body: {
+  year: number
+  memberFeedbackAssignmentId: string
+  kpiInformationId: string
+  cycleId: string
+  parentAssignmentId?: string | null
+  memberTargets: Record<string, number | null>
+}): Promise<ApiResponse<null>> {
+  return http.post('/pm/dashboard/member-feedbacks/accept-with-cascade', body).then((r) => r.data)
+}
+
+export async function apiPmSaveMemberKpiComment(body: {
+  year: number
+  assignmentId: string
+  pmComment: string
+}): Promise<ApiResponse<null>> {
+  return http.post('/pm/dashboard/member-kpi-comment', body).then((r) => r.data)
+}
+
+export async function apiPmSaveMemberSupervisorComment(body: {
+  year: number
+  memberId: string
+  pmComment: string
+}): Promise<ApiResponse<null>> {
+  return http.post('/pm/dashboard/member-supervisor-comment', body).then((r) => r.data)
 }
 
 
@@ -166,12 +201,18 @@ export const pmKpiService = {
   getMemberKpiDetails: (memberId: string, year: number) => apiGetMemberKpiDetails(memberId, year).then(r => r.data),
   listMemberKpiApprovals: (year: number) =>
     apiListPmMemberKpiApprovals(year).then((r) => r.data),
-  decideMemberKpiApproval: (body: { year: number; assignmentId: string; approve: boolean }) =>
+  decideMemberKpiApproval: (body: { year: number; assignmentId: string; approve: boolean; rejectReason?: string }) =>
     apiPmMemberKpiApprovalDecision(body).then((r) => r.data),
   submitFeedbackToGm: (body: { year: number; assignmentId: string; feedbackNote: string }) =>
     apiPmSubmitFeedbackToGm(body).then((r) => r.data),
   decideMemberFeedback: (body: { year: number; assignmentId: string; approve: boolean }) =>
     apiPmMemberFeedbackDecision(body).then((r) => r.data),
+  acceptMemberFeedbackWithCascade: (body: Parameters<typeof apiPmAcceptMemberFeedbackWithCascade>[0]) =>
+    apiPmAcceptMemberFeedbackWithCascade(body).then((r) => r.data),
+  saveMemberKpiComment: (body: Parameters<typeof apiPmSaveMemberKpiComment>[0]) =>
+    apiPmSaveMemberKpiComment(body).then((r) => r.data),
+  saveMemberSupervisorComment: (body: Parameters<typeof apiPmSaveMemberSupervisorComment>[0]) =>
+    apiPmSaveMemberSupervisorComment(body).then((r) => r.data),
 }
 
 // Thêm alias để tương thích với file PmAssignKpiDrawer.vue ở bước trước (vì component đang import tên này)

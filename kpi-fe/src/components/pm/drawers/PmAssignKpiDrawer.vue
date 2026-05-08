@@ -25,7 +25,9 @@ interface KpiCategory {
 const props = defineProps({
   open: { type: Boolean, default: false },
   kpi: { type: Object, default: null }, // Mapped từ kpiLibrary
-  mode: { type: String, default: 'assign' } // 'assign' | 'create'
+  mode: { type: String, default: 'assign' }, // 'assign' | 'create'
+  /** Assignment member đang 407 — khi lưu phân bổ gọi API accept-with-cascade (một transaction). */
+  pendingMemberFeedbackAssignmentId: { type: String, default: undefined },
 })
 
 const emit = defineEmits(['close', 'save', 'refresh'])
@@ -33,6 +35,11 @@ const authStore = useAuthStore()
 
 // --- COMPUTED STATES ---
 const isCreate = computed(() => props.mode === 'create')
+
+const completingMemberFeedbackAllocation = computed(() => {
+  const id = props.pendingMemberFeedbackAssignmentId
+  return typeof id === 'string' && id.trim() !== ''
+})
 
 // --- API DATA STATES ---
 const isLoadingInit = ref(false)
@@ -108,6 +115,13 @@ const getMemberLabel = (id: string) => {
 function parseTargetInput(raw: string | null | undefined): number {
   const n = Number(String(raw ?? '').trim())
   return Number.isFinite(n) ? n : 0
+}
+
+function parseOptionalMemberTarget(raw: string | null | undefined): number | null {
+  const s = String(raw ?? '').trim()
+  if (!s) return null
+  const n = Number(s)
+  return Number.isFinite(n) ? n : null
 }
 
 const pmUserId = computed(() => String(authStore.user?.id ?? '').trim())
@@ -470,6 +484,17 @@ const validateForm = (): boolean => {
     }
   }
 
+  if (!isCreate.value && (typeCode.value === KPI_TYPE.TEAM || typeCode.value === KPI_TYPE.PROMOTION)) {
+    const missingTargets = selectedMembers.value.filter((id) => {
+      const raw = memberTargets.value[id]
+      return String(raw ?? '').trim() === ''
+    })
+    if (missingTargets.length > 0) {
+      formErrors.value.memberTargets =
+        `Vui lòng nhập target cho tất cả thành viên đã chọn (${missingTargets.length} thiếu target).`
+    }
+  }
+
   return Object.keys(formErrors.value).length === 0
 }
 
@@ -515,27 +540,36 @@ const registerKPI = async () => {
   await gmKpiService.createStrategicKpi(payload as unknown as Record<string, unknown>)
 }
 
-const handleAssignMember = async () => {
+function buildCascadePayloadFromForm(): {
+  kpiInformationId: string
+  cycleId: string
+  parentAssignmentId: string | null
+  memberTargets: Record<string, number | null>
+} {
   const cascadePayload = {
-    kpiInformationId: props.kpi.infoId,
+    kpiInformationId: String(props.kpi?.infoId ?? '').trim(),
     cycleId: formCycleId.value,
-    parentAssignmentId: props.kpi.id || null, // ID assignment của phòng ban (nếu có truyền từ Dashboard)
-    memberTargets: {} as Record<string, number|null>
+    parentAssignmentId: (props.kpi?.id != null && String(props.kpi.id).trim() !== ''
+      ? String(props.kpi.id).trim()
+      : null) as string | null,
+    memberTargets: {} as Record<string, number | null>,
   }
 
   if (typeCode.value === KPI_TYPE.TEAM) {
-    // KPI Team: chỉ gửi đúng các member đang chọn + target; phần còn lại cho PM chỉ khi PM bấm «Assign to me» (có user PM trong map).
     cascadePayload.memberTargets = Object.fromEntries(
-      selectedMembers.value.map((memberId) => [memberId, parseTargetInput(memberTargets.value[memberId])]),
+      selectedMembers.value.map((memberId) => [memberId, parseOptionalMemberTarget(memberTargets.value[memberId])]),
     )
   } else {
     const targetNum = null
-    selectedMembers.value.forEach(mem => {
+    selectedMembers.value.forEach((mem) => {
       cascadePayload.memberTargets[mem] = targetNum
     })
   }
-  
-  await KpiPmService.cascadeKpi(cascadePayload)
+  return cascadePayload
+}
+
+const handleAssignMember = async () => {
+  await KpiPmService.cascadeKpi(buildCascadePayloadFromForm())
 }
 
 const handleSave = async () => {
@@ -548,9 +582,28 @@ const handleSave = async () => {
   saving.value = true
 
   try {
-    
     if (isCreate.value) {
       await registerKPI()
+    } else if (completingMemberFeedbackAllocation.value) {
+      const fid = String(props.pendingMemberFeedbackAssignmentId ?? '').trim()
+      const y = activeCycle.value?.year
+      if (!Number.isFinite(Number(y))) {
+        formErrors.value = {
+          api: 'Không xác định được năm chu kỳ để duyệt feedback và lưu phân bổ.',
+        }
+        await nextTick()
+        errorBannerRef.value?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+        return
+      }
+      const c = buildCascadePayloadFromForm()
+      await KpiPmService.acceptMemberFeedbackWithCascade({
+        year: Number(y),
+        memberFeedbackAssignmentId: fid,
+        kpiInformationId: c.kpiInformationId,
+        cycleId: c.cycleId,
+        parentAssignmentId: c.parentAssignmentId,
+        memberTargets: c.memberTargets,
+      })
     } else {
       await handleAssignMember()
     }
@@ -1066,6 +1119,13 @@ const handleSave = async () => {
             </div>
           </div>
 
+          <div
+            v-if="completingMemberFeedbackAllocation && !isCreate"
+            class="z-10 shrink-0 border-t border-violet-200 bg-violet-50 px-5 py-3 text-[11px] font-semibold leading-relaxed text-violet-900">
+            <i class="fas fa-info-circle mr-1 text-violet-600" />
+            Đang đóng feedback của member và lưu phân bổ trong một bước. Kiểm tra lại danh sách và target, rồi bấm xác nhận.
+          </div>
+
           <!-- Footer Actions -->
           <div class="z-10 flex shrink-0 justify-end gap-3 p-5 bg-white border-t border-slate-200 shadow-sm">
             <button 
@@ -1083,7 +1143,15 @@ const handleSave = async () => {
             >
               <i v-if="saving" class="fas fa-spinner fa-spin text-sm" />
               <i v-else class="fas" :class="isCreate ? 'fa-check' : 'fa-save'" />
-              {{ saving ? 'Saving...' : (isCreate ? 'Create & Assign' : 'Lưu phân bổ') }}
+              {{
+                saving
+                  ? 'Đang lưu…'
+                  : isCreate
+                    ? 'Create & Assign'
+                    : completingMemberFeedbackAllocation
+                      ? 'Xác nhận phân bổ và đóng feedback'
+                      : 'Lưu phân bổ'
+              }}
             </button>
           </div>
         </aside>

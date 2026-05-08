@@ -51,6 +51,11 @@ const router = createRouter({
           name: 'gm-kpi-template',
           component: () => import('@/pages/gm/GmKpiTemplateLibraryPage.vue'),
         },
+        {
+          path: 'reports',
+          name: 'gm-reports',
+          component: () => import('@/pages/gm/GmReportsPage.vue'),
+        },
       ],
     },
 

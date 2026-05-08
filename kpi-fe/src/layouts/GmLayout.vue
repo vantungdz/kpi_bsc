@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted, provide, reactive, TransitionGroup } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, provide, reactive, TransitionGroup, nextTick } from 'vue'
 import { useRoute, useRouter, RouterView } from 'vue-router'
 import { useAuth } from '@/composables/useAuth'
 import GmDepartmentInvestigation from '@/components/gm/GmDepartmentInvestigation.vue'
@@ -14,6 +14,7 @@ import { mapGmDepartmentApiRowToWorkspaceMock } from '@/utils/gm-department-from
 import { EMPTY_GM_WORKSPACE_CYCLE_SNAPSHOT } from '@/utils/gm-workspace-empty-snapshot'
 import type {
   GmHierarchyKpi,
+  GmHierarchyMember,
   GmInvestigationMember,
   GmMemberKpiDrawerProfile,
   GmModalKpiItemMock,
@@ -43,10 +44,18 @@ import {
 } from '@/composables/useGmNotifications'
 import { KPI_STATUS } from '@/config/constants'
 
+/** Gọi `openFeedbackDrawerByAssignmentId` từ `GmKpiDiagnosticsTable` (tab Strategic KPIs). */
+const gmDiagnosticsTableRef = ref<{
+  openFeedbackDrawerByAssignmentId?: (assignmentId: string) => boolean
+} | null>(null)
+
 const route = useRoute()
 const { user, logout } = useAuth()
 
-const navItems = [{ name: 'KPI Overview', icon: 'fas fa-chart-line', to: '/gm/dashboard' }]
+const navItems = [
+  { name: 'KPI Overview', icon: 'fas fa-chart-line', to: '/gm/dashboard' },
+  { name: 'Reports', icon: 'fas fa-chart-pie', to: '/gm/reports' },
+]
 
 const settingsNavItems = [
   { name: 'Create Department', icon: 'fas fa-folder-plus', to: '/gm/settings/create-department' },
@@ -70,7 +79,10 @@ function isNavItemActive(to: string): boolean {
 const isGmEvaluationRoute = computed(() => route.name === 'gm-employee-evaluation')
 const isGmCreateDepartmentRoute = computed(() => route.name === 'gm-create-department')
 const isGmKpiTemplateRoute = computed(() => route.name === 'gm-kpi-template')
-const isGmSettingsRoute = computed(() => isGmCreateDepartmentRoute.value || isGmKpiTemplateRoute.value)
+const isGmReportsRoute = computed(() => route.name === 'gm-reports')
+const isGmSettingsRoute = computed(() =>
+  isGmCreateDepartmentRoute.value || isGmKpiTemplateRoute.value || isGmReportsRoute.value,
+)
 const isGmDashboardRoute = computed(() => route.name === 'gm-dashboard')
 
 const router = useRouter()
@@ -118,6 +130,9 @@ const headerConfig = computed(() => {
   }
   if (route.name === 'gm-kpi-template') {
     return { category: 'GM Workspace', title: 'Template Library' }
+  }
+  if (route.name === 'gm-reports') {
+    return { category: 'GM Workspace', title: 'Reports' }
   }
   return { category: 'GM Workspace', title: 'KPI Management' }
 })
@@ -313,6 +328,7 @@ const showKpiModal = ref(false)
 const showCreateStrategicKpiModal = ref(false)
 /** Dòng diagnostics đang sửa — truyền vào drawer tạo/sửa KPI. */
 const strategicKpiEditTarget = ref<GmHierarchyKpi | null>(null)
+const pendingGmFeedbackEdit = ref<{ assignmentId: string; kpiName: string } | null>(null)
 const selectedMember = ref<GmMemberKpiDrawerProfile | null>(null)
 
 // Phòng ban / member — `GET /kpi/gm/departments`; đổi `selectedCycleId` tải lại theo năm chu kỳ.
@@ -341,12 +357,18 @@ async function loadGmWorkspaceDepartmentsFromApi() {
 /** Tab Approved KPI — nguồn API (401/402/403); mock vẫn dùng snapshot `inactivePendingKpis`. */
 const approvedKpiQueueApiRows = ref<GmHierarchyKpi[]>([])
 const approvedKpiQueueLoading = ref(false)
+/** Khóa nút drawer Approved KPI khi đang gọi API hàng loạt. */
+const approvedKpiPanelBusy = ref(false)
 
 /** KPI inactive chờ GM duyệt (tab Approved KPI) — mock hub; API dùng `approvedKpiQueueApiRows`. */
 const inactivePendingKpisByCycle = ref<Record<string, GmHierarchyKpi[]>>({})
 
 const inactivePendingRowsForSelectedCycle = computed(() => {
-  if (!useMockHub) return approvedKpiQueueApiRows.value
+  if (!useMockHub) {
+    return approvedKpiQueueApiRows.value.filter(
+      (row) => Number(row.assignmentStatusCode) !== KPI_STATUS.FEEDBACK_IN_PROGRESS,
+    )
+  }
   return inactivePendingKpisByCycle.value[selectedCycleId.value] ?? []
 })
 
@@ -421,14 +443,22 @@ const diagnosticsHierarchyRows = computed(() => {
   return [...extra, ...fromApi]
 })
 
+function memberRowAwaitingGmFeedback(m: GmHierarchyMember): boolean {
+  if (m.feedbackAwaitingGm === true) return true
+  if (m.feedbackAwaitingGm === false) return false
+  return Number(m.assignmentStatusCode) === 407 && String(m.feedbackNote ?? '').trim().length > 0
+}
+
 function hasPendingFeedbackInKpiRow(kpi: GmHierarchyKpi): boolean {
   for (const pm of kpi.pmOwners ?? []) {
     for (const m of pm.members ?? []) {
-      if (Number(m.assignmentStatusCode) === 407) return true
+      if (memberRowAwaitingGmFeedback(m)) return true
     }
     for (const leader of pm.leaders ?? []) {
+      const own = leader.leaderOwnRow
+      if (own && memberRowAwaitingGmFeedback(own)) return true
       for (const m of leader.members ?? []) {
-        if (Number(m.assignmentStatusCode) === 407) return true
+        if (memberRowAwaitingGmFeedback(m)) return true
       }
     }
   }
@@ -445,7 +475,17 @@ function onGmPmEvaluationPendingCount(count: number) {
   gmPmEvaluationPendingCount.value = safe
 }
 
-const gmApprovedKpiPendingCount = computed(() => inactivePendingRowsForSelectedCycle.value.length)
+function gmApprovedKpiMemberKey(k: GmHierarchyKpi): string {
+  const uid = String(k.assigneeUserId ?? '').trim()
+  if (uid) return `u:${uid}`
+  return `n:${String(k.assigneeDisplayName ?? '').trim() || k.id}`
+}
+
+/** Badge tab Approved KPI: số member có KPI chờ GM (giống logic nhóm PM Request Approval). */
+const gmApprovedKpiPendingCount = computed(() => {
+  const rows = inactivePendingRowsForSelectedCycle.value
+  return new Set(rows.map(gmApprovedKpiMemberKey)).size
+})
 
 const gmNotifications = useGmNotificationItems()
 
@@ -553,6 +593,7 @@ function applyOneStrategicKpiCreate(
 }
 
 async function onStrategicKpiSaved(payload: Record<string, unknown> | Record<string, unknown>[]) {
+  const feedbackEdit = pendingGmFeedbackEdit.value
   const items = Array.isArray(payload) ? payload : [payload]
   if (items.length === 0) return
 
@@ -612,6 +653,25 @@ async function onStrategicKpiSaved(payload: Record<string, unknown> | Record<str
     return
   }
 
+  if (feedbackEdit?.assignmentId && serverEdits.length > 0) {
+    try {
+      await gmKpiService.decideApprovedKpiQueue({
+        cycleId: selectedCycleId.value,
+        assignmentId: feedbackEdit.assignmentId,
+        approve: true,
+      })
+      pendingGmFeedbackEdit.value = null
+      await loadStrategicDiagnosticsFromApi()
+      await loadApprovedKpiQueueFromApi()
+      void loadProcessTimeline()
+      showGmToast(`Đã duyệt Feedback «${feedbackEdit.kpiName}».`, 5000)
+      return
+    } catch (e: unknown) {
+      showGmToast(getApiErrorMessage(e, 'Đã lưu KPI nhưng chưa đóng được feedback'), 8000, 'error')
+      return
+    }
+  }
+
   if (mockEdits.length > 1 && serverEdits.length === 0 && creates.length === 0) {
     showGmToast(`Đã cập nhật ${mockEdits.length} KPI (chỉ trên bản xem trước).`, 5000, 'info')
     return
@@ -633,15 +693,18 @@ async function onStrategicKpiSaved(payload: Record<string, unknown> | Record<str
   }
   if (okParts.length > 0) {
     showGmToast(okParts.join(' · '), 5000)
+    void loadProcessTimeline()
   }
 }
 
 function onDiagnosticsEditKpi(kpi: GmHierarchyKpi) {
+  pendingGmFeedbackEdit.value = null
   strategicKpiEditTarget.value = kpi
   showCreateStrategicKpiModal.value = true
 }
 
 function openCreateStrategicKpiDrawer() {
+  pendingGmFeedbackEdit.value = null
   strategicKpiEditTarget.value = null
   showCreateStrategicKpiModal.value = true
 }
@@ -739,7 +802,10 @@ async function confirmDeleteKpi() {
 }
 
 watch(showCreateStrategicKpiModal, (v) => {
-  if (!v) strategicKpiEditTarget.value = null
+  if (!v) {
+    strategicKpiEditTarget.value = null
+    pendingGmFeedbackEdit.value = null
+  }
 })
 
 onUnmounted(() => {
@@ -766,6 +832,12 @@ async function onApproveInactiveKpi(kpi: GmHierarchyKpi) {
   const cid = String(selectedCycleId.value ?? '').trim()
   const aid = String(kpi.assignmentId ?? '').trim()
   const isFeedbackRow = Number(kpi.assignmentStatusCode) === KPI_STATUS.FEEDBACK_IN_PROGRESS
+  if (!useMockHub && aid && isFeedbackRow && isGmDashboardRoute.value) {
+    setDashboardWorkspaceTab('diagnostics')
+    await nextTick()
+    const opened = gmDiagnosticsTableRef.value?.openFeedbackDrawerByAssignmentId?.(aid) === true
+    if (opened) return
+  }
   if (!useMockHub && aid) {
     try {
       await gmKpiService.decideApprovedKpiQueue({ cycleId: cid, assignmentId: aid, approve: true })
@@ -794,14 +866,100 @@ async function onApproveInactiveKpi(kpi: GmHierarchyKpi) {
   showGmToast(`Đã duyệt và kích hoạt KPI «${title}».`, 4500)
 }
 
-async function onRejectInactiveKpi(kpi: GmHierarchyKpi) {
+async function onApproveAllGmApprovedQueue(kpis: GmHierarchyKpi[]) {
+  const targets = kpis.filter((k) => Number(k.assignmentStatusCode) === 403)
+  if (!targets.length || approvedKpiPanelBusy.value) return
+  const cid = String(selectedCycleId.value ?? '').trim()
+  if (!cid || useMockHub) return
+  approvedKpiPanelBusy.value = true
+  let ok = 0
+  try {
+    for (const kpi of targets) {
+      const aid = String(kpi.assignmentId ?? '').trim()
+      if (!aid) continue
+      try {
+        await gmKpiService.decideApprovedKpiQueue({ cycleId: cid, assignmentId: aid, approve: true })
+        ok += 1
+      } catch (e) {
+        console.error(e)
+      }
+    }
+    if (ok > 0) {
+      await loadApprovedKpiQueueFromApi()
+      void loadProcessTimeline()
+      showGmToast(
+        ok === targets.length
+          ? `Đã duyệt ${ok} KPI`
+          : `Đã duyệt ${ok}/${targets.length} KPI. Một số dòng có thể đã thay đổi.`,
+        5000,
+      )
+    }
+  } finally {
+    approvedKpiPanelBusy.value = false
+  }
+}
+
+async function onRejectAllGmApprovedQueue(payload: { kpis: GmHierarchyKpi[]; reason: string }) {
+  const reason = String(payload.reason ?? '').trim()
+  const targets = payload.kpis.filter((k) => Number(k.assignmentStatusCode) === 403)
+  if (!targets.length || approvedKpiPanelBusy.value) return
+  const cid = String(selectedCycleId.value ?? '').trim()
+  if (!cid || useMockHub) return
+  approvedKpiPanelBusy.value = true
+  let ok = 0
+  try {
+    for (const kpi of targets) {
+      const aid = String(kpi.assignmentId ?? '').trim()
+      if (!aid) continue
+      try {
+        await gmKpiService.decideApprovedKpiQueue({
+          cycleId: cid,
+          assignmentId: aid,
+          approve: false,
+          rejectReason: reason,
+        })
+        ok += 1
+      } catch (e) {
+        console.error(e)
+      }
+    }
+    if (ok > 0) {
+      await loadApprovedKpiQueueFromApi()
+      void loadProcessTimeline()
+      showGmToast(
+        ok === targets.length
+          ? `Đã từ chối ${ok} KPI (406).`
+          : `Đã từ chối ${ok}/${targets.length} KPI.`,
+        5000,
+        'info',
+      )
+    }
+  } finally {
+    approvedKpiPanelBusy.value = false
+  }
+}
+
+async function onRejectInactiveKpi(payload: { kpi: GmHierarchyKpi; reason: string }) {
+  const kpi = payload.kpi
+  const rejectReason = String(payload.reason ?? '').trim()
   const title = String(kpi.name ?? '').trim() || 'KPI'
   const cid = String(selectedCycleId.value ?? '').trim()
   const aid = String(kpi.assignmentId ?? '').trim()
   const isFeedbackRow = Number(kpi.assignmentStatusCode) === KPI_STATUS.FEEDBACK_IN_PROGRESS
+  if (!useMockHub && aid && isFeedbackRow && isGmDashboardRoute.value) {
+    setDashboardWorkspaceTab('diagnostics')
+    await nextTick()
+    const opened = gmDiagnosticsTableRef.value?.openFeedbackDrawerByAssignmentId?.(aid) === true
+    if (opened) return
+  }
   if (!useMockHub && aid) {
     try {
-      await gmKpiService.decideApprovedKpiQueue({ cycleId: cid, assignmentId: aid, approve: false })
+      await gmKpiService.decideApprovedKpiQueue({
+        cycleId: cid,
+        assignmentId: aid,
+        approve: false,
+        rejectReason,
+      })
       await loadApprovedKpiQueueFromApi()
       void loadProcessTimeline()
       showGmToast(
@@ -824,11 +982,20 @@ async function onRejectInactiveKpi(kpi: GmHierarchyKpi) {
   showGmToast(`Đã từ chối đề xuất KPI «${title}».`, 4500, 'info')
 }
 
-async function onResolveDiagnosticsFeedback(payload: { assignmentId: string; approve: boolean }) {
+async function onResolveDiagnosticsFeedback(payload: { assignmentId: string; approve: boolean; kpi?: GmHierarchyKpi }) {
   const aid = String(payload.assignmentId ?? '').trim()
   const cid = String(selectedCycleId.value ?? '').trim()
   const approve = payload.approve === true
   if (!aid || !cid) return
+  if (approve && payload.kpi) {
+    pendingGmFeedbackEdit.value = {
+      assignmentId: aid,
+      kpiName: String(payload.kpi.name ?? '').trim() || 'KPI',
+    }
+    strategicKpiEditTarget.value = payload.kpi
+    showCreateStrategicKpiModal.value = true
+    return
+  }
   try {
     await gmKpiService.decideApprovedKpiQueue({ cycleId: cid, assignmentId: aid, approve })
     await loadStrategicDiagnosticsFromApi()
@@ -987,7 +1154,8 @@ function closeModal() { showKpiModal.value = false; selectedMember.value = null 
           <div v-else-if="!selectedDept" class="space-y-4 p-3 sm:p-4 lg:p-6">
             <GmProcessTimeline :mid-year-issues="processTimelineData?.midYear ?? activeSnapshot.midYearIssues"
               :setting-issues="processTimelineData?.setting ?? activeSnapshot.settingIssues"
-              :year-end-issues="processTimelineData?.yearEnd ?? activeSnapshot.yearEndIssues" />
+              :year-end-issues="processTimelineData?.yearEnd ?? activeSnapshot.yearEndIssues"
+              :year="gmEvaluationYear" />
 
             <template v-if="isGmDashboardRoute">
               <div class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -1068,25 +1236,45 @@ function closeModal() { showKpiModal.value = false; selectedMember.value = null 
                       role="alert">
                       {{ diagnosticsApiError }}
                     </p>
-                    <GmKpiDiagnosticsTable :rows="diagnosticsHierarchyRows" @edit-kpi="onDiagnosticsEditKpi"
-                      @delete-kpi="onDiagnosticsDeleteKpi" @resolve-feedback="onResolveDiagnosticsFeedback" />
+                    <GmKpiDiagnosticsTable
+                      ref="gmDiagnosticsTableRef"
+                      :rows="diagnosticsHierarchyRows"
+                      @edit-kpi="onDiagnosticsEditKpi"
+                      @delete-kpi="onDiagnosticsDeleteKpi"
+                      @resolve-feedback="onResolveDiagnosticsFeedback"
+                    />
                   </div>
                   <div v-show="dashboardWorkspaceTab === 'pm-eval'" class="p-3 sm:p-4 lg:p-5">
-                    <GmPmEvaluationWorkspace @pending-count="onGmPmEvaluationPendingCount" />
+                    <GmPmEvaluationWorkspace
+                      @pending-count="onGmPmEvaluationPendingCount"
+                      @timeline-refresh="loadProcessTimeline"
+                    />
                   </div>
                   <div v-show="dashboardWorkspaceTab === 'approved-kpi'" class="p-3 sm:p-4 lg:p-5">
                     <p v-if="!useMockHub && approvedKpiQueueLoading" class="mb-3 text-xs font-medium text-slate-500"
                       role="status">
                       Đang tải Approved KPI…
                     </p>
-                    <GmApprovedKpiPanel :rows="inactivePendingRowsForSelectedCycle" @approve-kpi="onApproveInactiveKpi"
-                      @reject-kpi="onRejectInactiveKpi" />
+                    <GmApprovedKpiPanel
+                      :rows="inactivePendingRowsForSelectedCycle"
+                      :action-busy="approvedKpiPanelBusy"
+                      @approve-kpi="onApproveInactiveKpi"
+                      @reject-kpi="onRejectInactiveKpi"
+                      @approve-all-kpis="onApproveAllGmApprovedQueue"
+                      @reject-all-kpis="onRejectAllGmApprovedQueue"
+                    />
                   </div>
                   <div v-show="dashboardWorkspaceTab === 'personal'" class="p-3 sm:p-4 lg:p-5">
                     <GmGmPersonalKpiPanel :year-id="String(gmEvaluationYear)" :cycle-id="selectedCycleId"
                       :rows="gmPersonalKpiRows" :loading="gmPersonalKpiLoading"
                       :assignments-by-id="gmPersonalKpiAssignmentsById"
-                      @sheet-saved="() => void loadGmPersonalKpiRows()" />
+                      @sheet-saved="
+                        () => {
+                          void loadGmPersonalKpiRows()
+                          void loadProcessTimeline()
+                        }
+                      "
+                    />
                   </div>
                 </div>
               </div>
@@ -1100,8 +1288,13 @@ function closeModal() { showKpiModal.value = false; selectedMember.value = null 
                 role="alert">
                 {{ diagnosticsApiError }}
               </p>
-              <GmKpiDiagnosticsTable :rows="diagnosticsHierarchyRows" @edit-kpi="onDiagnosticsEditKpi"
-                @delete-kpi="onDiagnosticsDeleteKpi" @resolve-feedback="onResolveDiagnosticsFeedback" />
+              <GmKpiDiagnosticsTable
+                ref="gmDiagnosticsTableRef"
+                :rows="diagnosticsHierarchyRows"
+                @edit-kpi="onDiagnosticsEditKpi"
+                @delete-kpi="onDiagnosticsDeleteKpi"
+                @resolve-feedback="onResolveDiagnosticsFeedback"
+              />
             </div>
           </div>
 
@@ -1111,7 +1304,9 @@ function closeModal() { showKpiModal.value = false; selectedMember.value = null 
             @view-kpi="openModal" />
 
           <GmCreateStrategicKpiModal v-model="showCreateStrategicKpiModal" :cycle-id="selectedCycleId"
-            :edit-initial="strategicKpiEditTarget" :prefetched-evaluation-cycles="gmHeaderCycleRows"
+            :edit-initial="strategicKpiEditTarget"
+            :feedback-assignment-id="pendingGmFeedbackEdit?.assignmentId ?? null"
+            :prefetched-evaluation-cycles="gmHeaderCycleRows"
             @evaluation-cycles-loaded="onGmEvaluationCyclesLoaded" @saved="onStrategicKpiSaved" />
 
           <Teleport to="body">

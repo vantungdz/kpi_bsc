@@ -6,6 +6,7 @@ import {
 } from '@/utils/memberKpiHelpers'
 import { useMemberKpiFormatters } from '@/composables/useMemberKpiFormatters'
 import { extractRawInputFromApiTargetDescription } from '@/utils/kpiScoringRulesDsl'
+import { formatTargetDisplayForMemeber } from '@/utils/strategicKpiTypeCodes'
 
 type KpiCategorySection = { key: string; headerLabel: string; items: KpiItem[] }
 
@@ -24,7 +25,9 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'open-evidence', item: KpiItem): void
+  (e: 'open-edit-self-created', item: KpiItem): void
   (e: 'open-feedback', item: KpiItem): void
+  (e: 'delete-self-created', item: KpiItem): void
   (e: 'submit'): void
 }>()
 
@@ -32,6 +35,7 @@ const { formatKpiActualResult } = useMemberKpiFormatters()
 
 function rowAlertClass(item: KpiItem): string {
   if (Number(item.statusCode ?? 0) === 407) return 'bg-violet-100/70 ring-1 ring-inset ring-violet-200'
+  if (Number(item.statusCode ?? 0) === 406) return 'bg-rose-50/60'
   const s = memberItemEvalStatus(item)
   if (s === 'overdue') return 'bg-rose-50/55'
   if (s === 'revision') return 'bg-orange-50/50'
@@ -65,16 +69,60 @@ function canOpenEvidence(item: KpiItem): boolean {
 }
 
 function canSendFeedback(item: KpiItem): boolean {
+  if (item.createdByCurrentUser === true) return false
   const status = Number(item.statusCode ?? 0)
   return status === 404 || status === 407
 }
 
-function formatTargetDisplay(item: KpiItem): string {
-  const raw = item.assignmentTargetValue ?? item.kpiTemplateTargetValue
-  if (raw == null) return '-'
-  const unit = String(item.unitName ?? '').trim()
-  return unit ? `${raw} ${unit}` : String(raw)
+function canDeleteSelfCreatedVisible(item: KpiItem): boolean {
+  if (!props.isCurrentYear) return false
+  const status = Number(item.statusCode ?? 0)
+  return item.createdByCurrentUser === true && (status === 402 || status === 404 || status === 406)
 }
+
+function canDeleteSelfCreatedEnabled(item: KpiItem): boolean {
+  const status = Number(item.statusCode ?? 0)
+  // 402: đã submit target_setup, chờ PM duyệt -> chỉ hiển thị disabled
+  return status === 404 || status === 406
+}
+
+function shouldOpenRejectedEditForm(item: KpiItem): boolean {
+  return (
+    item.createdByCurrentUser === true
+    && Number(item.statusCode ?? 0) === 406
+    && String(item.kpiInformationId ?? '').trim().length > 0
+  )
+}
+
+function scoreColorClass(score: number | null | undefined): string {
+  if (score == null || !Number.isFinite(Number(score))) return 'text-slate-400'
+  const v = Number(score)
+  if (v <= 2) return 'text-rose-600'
+  if (v < 4) return 'text-amber-600'
+  return 'text-emerald-600'
+}
+
+function finalScoreTooltip(item: KpiItem): string | undefined {
+  if (item.pmScore == null || item.selfScore == null) return undefined
+  if (Number(item.pmScore) === Number(item.selfScore)) return undefined
+  const gm = String(item.gmComment ?? '').trim()
+  if (!gm) return undefined
+  return `${gm}`
+}
+
+function statusTooltip(item: KpiItem): string {
+  const status = Number(item.statusCode ?? 0)
+  const reason = String(item.updateReason ?? item.feedbackComment ?? '').trim()
+  if (status === 406 && reason) return `Lý do từ chối:\n${reason}`
+  return item.assignmentStatusName ?? ''
+}
+
+// function formatTargetDisplay(item: KpiItem): string {
+//   const raw = item.assignmentTargetValue ?? item.kpiTemplateTargetValue
+//   if (raw == null) return '-'
+//   const unit = String(item.unitName ?? '').trim()
+//   return unit ? `${raw} ${unit}` : String(raw)
+// }
 
 function targetDataTooltip(item: KpiItem): string {
   const rawRules =
@@ -82,7 +130,7 @@ function targetDataTooltip(item: KpiItem): string {
     || extractRawInputFromApiTargetDescription(item.target ?? '')
   if (rawRules) return `Quy tắc chấm điểm:\n${rawRules}`
   const fallback = String(item.target ?? '').trim()
-  return fallback || formatTargetDisplay(item)
+  return fallback || formatTargetDisplayForMemeber(item)
 }
 
 const totalPromotionSelfWeightedScore = computed(() =>
@@ -171,7 +219,7 @@ const totalPromotionPmWeightedScore = computed(() =>
               <span
                 class="inline-flex max-w-full flex-col items-center gap-0.5 rounded-lg border px-2 py-1.5 text-[10px] font-semibold leading-tight"
                 :class="statusBadgeClass(item.statusCode)"
-                :title="item.assignmentStatusName ?? ''"
+                :title="statusTooltip(item)"
               >
                 <span class="line-clamp-3 text-center" :class="statusPhaseClass(item.statusCode)">{{ item.assignmentStatusName ?? '—' }}</span>
               </span>
@@ -180,7 +228,7 @@ const totalPromotionPmWeightedScore = computed(() =>
             <td class="max-w-xs px-5 py-4 align-middle">
               <div class="inline-flex items-center gap-1">
                 <p class="text-sm font-medium text-slate-700">
-                  {{ formatTargetDisplay(item) }}
+                  {{ formatTargetDisplayForMemeber(item) }}
                 </p>
                 <span
                   class="inline-flex h-4 w-4 items-center justify-center rounded-full border border-slate-300 text-[10px] font-bold text-slate-500 cursor-help"
@@ -208,11 +256,17 @@ const totalPromotionPmWeightedScore = computed(() =>
             </td>
 
             <td class="bg-sky-50/50 px-5 py-4 text-center align-middle">
-              <span class="text-sm font-bold text-slate-800">{{ item.selfScore ?? '-' }}</span>
+              <span class="text-sm font-bold" :class="scoreColorClass(item.selfScore)">
+                {{ item.selfScore ?? '-' }}
+              </span>
             </td>
 
             <td class="px-5 py-4 text-center align-middle">
-              <span class="text-sm font-medium text-slate-400">
+              <span
+                class="text-sm font-medium"
+                :class="scoreColorClass(item.pmScore)"
+                :title="finalScoreTooltip(item)"
+              >
                 {{ item.pmScore !== null ? item.pmScore : '-' }}
               </span>
             </td>
@@ -225,12 +279,12 @@ const totalPromotionPmWeightedScore = computed(() =>
                   :class="!canOpenEvidence(item) ? 'pointer-events-none opacity-50' : ''"
                   :title="item.evidenceTooltip ?? ''"
                   :disabled="!canOpenEvidence(item)"
-                  @click="emit('open-evidence', item)"
+                  @click="shouldOpenRejectedEditForm(item) ? emit('open-edit-self-created', item) : emit('open-evidence', item)"
                 >
-                  <i class="fas fa-eye text-xs" />
-                  Detail
+                  <i class="fas fa-pen text-xs" />
                 </button>
                 <button
+                  v-if="canSendFeedback(item)"
                   type="button"
                   class="flex h-8 items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-3 text-[10px] font-bold text-violet-700 shadow-sm transition-colors hover:bg-violet-100 disabled:cursor-not-allowed disabled:opacity-45"
                   :disabled="!canSendFeedback(item)"
@@ -238,6 +292,17 @@ const totalPromotionPmWeightedScore = computed(() =>
                   @click="emit('open-feedback', item)"
                 >
                   <i class="fas fa-message text-[10px]" />
+                </button>
+                <button
+                  v-if="canDeleteSelfCreatedVisible(item)"
+                  type="button"
+                  class="flex h-8 items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-3 text-[10px] font-bold text-rose-700 shadow-sm transition-colors hover:bg-rose-100"
+                  :class="!canDeleteSelfCreatedEnabled(item) ? 'cursor-not-allowed opacity-45 hover:bg-rose-50' : ''"
+                  :disabled="!canDeleteSelfCreatedEnabled(item)"
+                  :title="canDeleteSelfCreatedEnabled(item) ? 'Xóa KPI tự tạo' : 'KPI đã submit đầu năm, không thể xóa'"
+                  @click="emit('delete-self-created', item)"
+                >
+                  <i class="fas fa-trash text-[10px]" />
                 </button>
               </div>
             </td>

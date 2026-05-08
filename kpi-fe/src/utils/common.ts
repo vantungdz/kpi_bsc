@@ -24,7 +24,11 @@ export function getSubmitButtonState(
   const passedMidYearWindow = midYearEndTs != null && Number.isFinite(midYearEndTs) && now > midYearEndTs;
 
   // PENDING_ACCEPTANCE (404): GM đã approve, member cần accept → luôn show button dù date window đã qua
-  const GOAL_SETTING_PENDING_STATUSES = [404];
+  const GOAL_SETTING_PENDING_STATUSES = [404, 406];
+  // 402/403: đã nộp target setup và đang chờ duyệt -> ẩn nút submit
+  const GOAL_SETTING_SUBMITTED_STATUSES = [402, 403];
+  // Goal setting được xem là hoàn tất khi đã submit/chốt (trừ trạng thái bị từ chối 406).
+  const GOAL_SETTING_DONE_STATUSES = [402, 403, 405, 501, 502, 503, 601, 602, 603];
   // 501/502: đã nộp mid-year, đang chờ PM/GM duyệt → ẩn nút submit
   const MID_YEAR_SUBMITTED_STATUSES = [501, 502];
   // 601/602: đã nộp end-year, đang chờ PM/GM duyệt → ẩn nút submit
@@ -32,7 +36,7 @@ export function getSubmitButtonState(
 
   const phases = [
     {
-      isDone: statusCode >= 405, // isGoalSettingDone
+      isDone: GOAL_SETTING_DONE_STATUSES.includes(statusCode),
       actionType: 'GOAL_SETTING' as const,
       text: 'Accept KPI',
       startDate: kpiCycle.goalSettingStart,
@@ -41,7 +45,7 @@ export function getSubmitButtonState(
       errEarly: 'It is not yet time to set goals',
       errLate:  'Goal setting period has ended',
       bypassDateCheck: GOAL_SETTING_PENDING_STATUSES.includes(statusCode),
-      forceHide: false,
+      forceHide: GOAL_SETTING_SUBMITTED_STATUSES.includes(statusCode),
     },
     {
       // Mid-year chỉ "done" khi đã có submission mốc giữa năm.

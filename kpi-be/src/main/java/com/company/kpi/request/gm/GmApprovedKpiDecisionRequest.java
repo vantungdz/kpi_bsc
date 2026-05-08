@@ -21,4 +21,10 @@ public class GmApprovedKpiDecisionRequest {
      */
     @NotNull
     private Boolean approve;
+
+    /**
+     * Khi {@code approve == false} và cập nhật 403→406: lý do bắt buộc, lưu {@code kpi_assignments.update_reason}.
+     * Khi duyệt hoặc xử lý nhánh feedback (407) có thể bỏ qua.
+     */
+    private String rejectReason;
 }

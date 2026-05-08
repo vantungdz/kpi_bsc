@@ -44,14 +44,30 @@ public class GmApprovedKpiService {
             }
             updatedCount = 1;
         } else {
+            Integer currentStatus = kpiAssignmentMapper.findAssignmentStatusCode(req.getAssignmentId(), cycleId);
+            if (currentStatus != null && currentStatus == Constants.AssignStatus.FEEDBACK_IN_PROGRESS) {
+                throw AppException.badRequest(
+                        "KPI đang ở trạng thái feedback (407) nhưng không có feedback chờ GM. "
+                                + "Nếu feedback dành cho PM, GM xử lý từ tab Strategic; nếu đã xử lý, hãy làm mới danh sách.");
+            }
             int newStatus = Boolean.TRUE.equals(req.getApprove())
                     ? Constants.AssignStatus.ACCEPTED
                     : Constants.AssignStatus.REJECTED;
+            String updateReason;
+            if (Boolean.TRUE.equals(req.getApprove())) {
+                updateReason = "GM chấp nhận đề xuất KPI đầu năm (403→405)";
+            } else {
+                String rr = req.getRejectReason() != null ? req.getRejectReason().trim() : "";
+                if (rr.isEmpty()) {
+                    throw AppException.badRequest("Vui lòng nhập lý do từ chối.");
+                }
+                updateReason = rr;
+            }
             int n = kpiAssignmentMapper.updateGmAssignmentStatusFromWaitingGm(
-                    req.getAssignmentId(), cycleId, newStatus, gmUserId);
+                    req.getAssignmentId(), cycleId, newStatus, gmUserId, updateReason);
             if (n != 1) {
                 throw AppException.badRequest(
-                        "Không thể cập nhật: assignment không tồn tại, sai chu kỳ, hoặc không ở trạng thái chờ GM (403/407).");
+                        "Không thể cập nhật: assignment không tồn tại, sai chu kỳ, hoặc không ở trạng thái chờ GM duyệt mới.");
             }
             updatedCount = n;
         }

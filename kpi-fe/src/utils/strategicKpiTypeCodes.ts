@@ -1,4 +1,5 @@
 import type { GmStrategicKpiKind } from '@/types/gm-workspace'
+import { KpiItem } from '@/types/kpi'
 
 /** 102 TEAM → UI «Cascading»; 101 INDIVIDUAL; 103 PROMOTION — đồng bộ BE diagnostics. */
 export function strategicKpiKindFromTypeCode(code: number | null | undefined): GmStrategicKpiKind {
@@ -37,4 +38,45 @@ export function strategicKpiTypeIconClass(code: number): string {
   if (code === 102) return 'fas fa-code-branch text-xs text-blue-600'
   if (code === 103) return 'fas fa-user-plus text-xs text-purple-600'
   return 'fas fa-crosshairs text-xs text-slate-600'
+}
+
+
+export function formatTargetDisplay(assign: any): string {
+  const raw = assign?.targetValue
+  if (raw == null || raw === '') return '-'
+
+  const unit = String(assign?.unitName ?? '').trim()
+
+  if (unit === 'Percent') {
+    return `${raw}%`
+  }
+
+  return unit ? `${raw} ${unit}` : String(raw)
+}
+
+export function formatTargetDisplayForMemeber(item: KpiItem): string {
+  const raw = item.assignmentTargetValue ?? item.kpiTemplateTargetValue
+
+  if (raw == null) return '-'
+
+  const unit = String(item.unitName ?? '').trim()
+
+  if (unit.toLowerCase() === 'percent') {
+    return `${raw}%`
+  }
+
+  return unit ? `${raw} ${unit}` : String(raw)
+}
+
+export function displayTargetValue(item: KpiItem, data?: string): string {
+
+  if (data === null) return '-'
+
+  const unit = String(item.unitName ?? '').trim()
+
+  if(unit.toLowerCase() === 'percent') {
+    return ''
+  }
+
+  return unit ? `${unit}` : '-'
 }

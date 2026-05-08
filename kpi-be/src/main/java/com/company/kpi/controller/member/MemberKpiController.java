@@ -8,6 +8,7 @@ import com.company.kpi.request.member.SaveDraftRequest;
 import com.company.kpi.request.member.SubmitFeedbackRequest;
 import com.company.kpi.request.member.SubmitEvalRequest;
 import com.company.kpi.request.member.SubmitMemberSheetRequest;
+import com.company.kpi.response.member.MemberFeedbackSubmitResponse;
 import com.company.kpi.response.member.MemberKpiDashboardResponse;
 import com.company.kpi.response.member.MemberKpiFormMetaResponse;
 import com.company.kpi.response.pm.KpiSheetResponse;
@@ -57,13 +58,12 @@ public class MemberKpiController extends BaseController {
     }
 
     @PostMapping("/sheet/{assignmentId}/feedback")
-    public ResponseEntity<BaseResponse<Void>> submitFeedback(
+    public ResponseEntity<BaseResponse<MemberFeedbackSubmitResponse>> submitFeedback(
             @PathVariable UUID assignmentId,
             @Valid @RequestBody SubmitFeedbackRequest request,
             Authentication authentication) {
         UUID userId = UUID.fromString((String) authentication.getPrincipal());
-        memberKpiService.submitFeedback(assignmentId, userId, request.getFeedbackComment());
-        return success();
+        return success(memberKpiService.submitFeedback(assignmentId, userId, request.getFeedbackComment()));
     }
 
     @PostMapping("/evidences/submit")
@@ -100,5 +100,14 @@ public class MemberKpiController extends BaseController {
         UUID userId = UUID.fromString((String) authentication.getPrincipal());
         UUID assignmentId = memberKpiService.createIndividualKpi(request, userId);
         return created(Map.of("assignmentId", assignmentId.toString()));
+    }
+
+    @DeleteMapping("/individual-kpi/{assignmentId}")
+    public ResponseEntity<BaseResponse<Void>> deleteSelfCreatedKpi(
+            @PathVariable UUID assignmentId,
+            Authentication authentication) {
+        UUID userId = UUID.fromString((String) authentication.getPrincipal());
+        memberKpiService.deleteSelfCreatedKpi(assignmentId, userId);
+        return success();
     }
 }

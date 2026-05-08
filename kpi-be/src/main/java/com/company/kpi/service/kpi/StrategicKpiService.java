@@ -77,6 +77,7 @@ public class StrategicKpiService {
         boolean important = Boolean.TRUE.equals(req.getIsImportant());
 
         List<UUID> assigneeUserIds = resolveAssigneeUserIds(req, type);
+        requireExplicitPmTargetsForTeam(req);
         if ((Constant.ROLE_MEMBER.equals(role) || Constant.ROLE_LEADER.equals(role)) && !assigneeUserIds.contains(actorId)) {
             assigneeUserIds.add(actorId);
         }
@@ -191,6 +192,7 @@ public class StrategicKpiService {
                 actorId);
 
         List<UUID> desired = resolveAssigneeUserIds(req, type);
+        requireExplicitPmTargetsForTeam(req);
 
         if (typeChanged) {
             kpiAssignmentMapper.softDeleteAssignmentsForKpiInformation(
@@ -405,7 +407,7 @@ public class StrategicKpiService {
     private static int initialAssignmentStatusForStrategicCreate(int type, String role) {
         if ((Constant.ROLE_MEMBER.equals(role) || Constant.ROLE_LEADER.equals(role))
                 && type == TYPE_INDIVIDUAL) {
-            return Constants.AssignStatus.WAITING_PM_APPROVAL;
+            return Constants.AssignStatus.PENDING_ACCEPTANCE;
         }
         if (Constant.ROLE_PM.equals(role)) {
             return Constants.AssignStatus.WAITING_GM_APPROVAL;
@@ -413,10 +415,46 @@ public class StrategicKpiService {
         return Constants.AssignStatus.PENDING_ACCEPTANCE;
     }
 
-    private static BigDecimal teamTarget(int type, UUID userId, CreateStrategicKpiRequest req, BigDecimal fallback) {
-        if (type != TYPE_TEAM) return fallback;
+    /**
+     * TEAM KPI: nếu đã chọn PM ({@code assignPMs}) thì bắt buộc nhập mục tiêu từng người trong {@code pmTargets}
+     * — không fallback sang {@code targetValue} của KPI cha (tránh gán nhầm cùng một số cho mọi PM).
+     */
+    private static void requireExplicitPmTargetsForTeam(CreateStrategicKpiRequest req) {
+        if (req.getTypeCode() != TYPE_TEAM) {
+            return;
+        }
+        List<UUID> assign = req.getAssignPMs();
+        if (assign == null || assign.isEmpty()) {
+            return;
+        }
         Map<String, Object> pm = req.getPmTargets();
-        if (pm == null || pm.isEmpty()) return fallback;
+        for (UUID uid : assign) {
+            Object raw = lookupPmTargetRaw(pm, uid);
+            if (raw == null) {
+                throw AppException.badRequest(
+                        "Team KPI: thiếu mục tiêu (pmTargets) cho PM đã chọn (" + uid + ").");
+            }
+            String s = String.valueOf(raw).trim();
+            if (s.isEmpty()) {
+                throw AppException.badRequest(
+                        "Team KPI: pmTargets không được để trống cho PM (" + uid + ").");
+            }
+            try {
+                BigDecimal val = normalizeTargetValue(new BigDecimal(s));
+                if (val.compareTo(BigDecimal.ZERO) < 0) {
+                    throw AppException.badRequest(
+                            "Team KPI: mục tiêu PM phải ≥ 0 (" + uid + ").");
+                }
+            } catch (NumberFormatException ex) {
+                throw AppException.badRequest("pmTargets has invalid number for user " + uid + ": " + s);
+            }
+        }
+    }
+
+    private static Object lookupPmTargetRaw(Map<String, Object> pm, UUID userId) {
+        if (pm == null || pm.isEmpty()) {
+            return null;
+        }
         String canonical = userId.toString();
         Object raw = pm.get(canonical);
         if (raw == null) {
@@ -428,6 +466,14 @@ public class StrategicKpiService {
                 }
             }
         }
+        return raw;
+    }
+
+    private static BigDecimal teamTarget(int type, UUID userId, CreateStrategicKpiRequest req, BigDecimal fallback) {
+        if (type != TYPE_TEAM) return fallback;
+        Map<String, Object> pm = req.getPmTargets();
+        if (pm == null || pm.isEmpty()) return fallback;
+        Object raw = lookupPmTargetRaw(pm, userId);
         if (raw == null) return fallback;
         if (raw instanceof BigDecimal bd) return normalizeTargetValue(bd);
         if (raw instanceof Number n) return normalizeTargetValue(BigDecimal.valueOf(n.doubleValue()));
@@ -554,7 +600,8 @@ public class StrategicKpiService {
         }
 
         if (requestedTargets.isEmpty()) {
-            throw AppException.badRequest("At least one member must be selected for assignment.");
+            // Cho phép PM lưu phân bổ rỗng: nếu có parentAssignmentId thì các assignment con cũ đã được soft-delete ở trên.
+            return;
         }
 
         List<UUID> assigneeUserIds = new ArrayList<>(requestedTargets.keySet());
@@ -635,6 +682,17 @@ public class StrategicKpiService {
                             request.getStatusCode(),
                             true,
                             request.getOnlyFromStatusCode());
+
+            // Team KPI của chính PM không nằm trong cây managed members.
+            // Đồng bộ parent Team assignment lên 502/602 để GM Evaluation Hub nhìn thấy dòng PM.
+            Integer nextStatus = request.getStatusCode();
+            if (request.isPromotion() == false && nextStatus != null && (nextStatus == 502 || nextStatus == 602)) {
+                updatedCount += kpiAssignmentMapper.syncPmTeamParentStatusesFromManagedChildren(
+                        currentUserId,
+                        request.getCycleId(),
+                        nextStatus,
+                        currentUserId);
+            }
         } else {
             updatedCount =
                     kpiAssignmentMapper.updateKpiStatuses(

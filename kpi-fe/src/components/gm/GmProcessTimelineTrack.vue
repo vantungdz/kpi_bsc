@@ -7,11 +7,13 @@ defineProps<{
   nowMarkerPositionStyle: Record<string, string>
   nowMarkerLabel: string
   milestones: { idx: number; outerClass: string; status: GmProcessTimelineMilestoneStatus }[]
+  /** Left % tuyệt đối cho mỗi milestone (cùng thứ tự với milestones[]). Nếu có → dùng absolute positioning. */
+  milestoneLeftPcts?: number[]
 }>()
 </script>
 
 <template>
-  <div class="relative grid min-h-[2.25rem] w-full min-w-0 grid-cols-3 items-center">
+  <div class="relative min-h-[2.25rem] w-full min-w-0" :class="milestoneLeftPcts ? 'block' : 'grid grid-cols-3 items-center'">
     <div
       class="pointer-events-none absolute z-0 h-[3px] rounded-full bg-slate-200"
       :style="trackBarStyle"
@@ -35,22 +37,43 @@ defineProps<{
       />
     </div>
 
-    <div v-for="m in milestones" :key="m.idx" class="relative z-10 flex justify-center">
-      <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full" :class="m.outerClass">
-        <i
-          v-if="m.status === 'complete'"
-          class="fas fa-check text-[15px] text-white"
-          aria-hidden="true"
-        />
-        <span
-          v-else-if="m.status === 'active'"
-          class="flex h-6 w-6 items-center justify-center rounded-full border-2 bg-white"
-          :class="m.idx === 0 ? 'border-emerald-600' : 'border-blue-500'"
-        >
-          <span class="h-2 w-2 rounded-full" :class="m.idx === 0 ? 'bg-emerald-600' : 'bg-blue-500'" />
-        </span>
-        <span v-else class="h-2 w-2 rounded-full bg-slate-400/90" aria-hidden="true" />
+    <!-- Absolute positioning khi có milestoneLeftPcts (date-based) -->
+    <template v-if="milestoneLeftPcts">
+      <div
+        v-for="m in milestones"
+        :key="m.idx"
+        class="absolute top-1/2 z-10 -translate-x-1/2 -translate-y-1/2"
+        :style="{ left: `${milestoneLeftPcts[m.idx] ?? 50}%` }"
+      >
+        <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full" :class="m.outerClass">
+          <i v-if="m.status === 'complete'" class="fas fa-check text-[15px] text-white" aria-hidden="true" />
+          <span
+            v-else-if="m.status === 'active'"
+            class="flex h-6 w-6 items-center justify-center rounded-full border-2 bg-white"
+            :class="m.idx === 0 ? 'border-emerald-600' : 'border-blue-500'"
+          >
+            <span class="h-2 w-2 rounded-full" :class="m.idx === 0 ? 'bg-emerald-600' : 'bg-blue-500'" />
+          </span>
+          <span v-else class="h-2 w-2 rounded-full bg-slate-400/90" aria-hidden="true" />
+        </div>
       </div>
-    </div>
+    </template>
+
+    <!-- Grid layout fallback (backward compat) -->
+    <template v-else>
+      <div v-for="m in milestones" :key="m.idx" class="relative z-10 flex justify-center">
+        <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full" :class="m.outerClass">
+          <i v-if="m.status === 'complete'" class="fas fa-check text-[15px] text-white" aria-hidden="true" />
+          <span
+            v-else-if="m.status === 'active'"
+            class="flex h-6 w-6 items-center justify-center rounded-full border-2 bg-white"
+            :class="m.idx === 0 ? 'border-emerald-600' : 'border-blue-500'"
+          >
+            <span class="h-2 w-2 rounded-full" :class="m.idx === 0 ? 'bg-emerald-600' : 'bg-blue-500'" />
+          </span>
+          <span v-else class="h-2 w-2 rounded-full bg-slate-400/90" aria-hidden="true" />
+        </div>
+      </div>
+    </template>
   </div>
 </template>

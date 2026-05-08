@@ -29,6 +29,8 @@ export interface GmEvaluationHubAssignmentApiRow {
   sectionManagerFullName: string | null
   memberRoleCode: string | null
   memberRoleName: string | null
+  /** PM comment tổng từ user_kpi_summaries.evaluation_supervisor_comments. */
+  supervisorComment: string | null
 }
 
 export interface GmEvaluationHubApiResponse {
@@ -42,6 +44,8 @@ export interface GmEvaluationHubConfirmLineBody {
   assignmentId: string
   /** Chỉ gửi khi assignment ASM 602 (chấm điểm cuối kỳ). */
   endGmScore?: number
+  /** Comment theo từng KPI của GM — ghi vào `kpi_assignments.evidences.gmComment`. */
+  gmComment?: string
 }
 
 export interface GmEvaluationHubConfirmBody {

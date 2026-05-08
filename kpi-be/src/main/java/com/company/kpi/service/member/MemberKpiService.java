@@ -5,16 +5,19 @@
     import com.company.kpi.common.constant.Constant;
     import com.company.kpi.entity.KpiCycle;
     import com.company.kpi.entity.User;
+    import com.company.kpi.entity.UserKpiSummary;
     import com.company.kpi.mapper.KpiAssignmentMapper;
     import com.company.kpi.mapper.KpiCycleMapper;
     import com.company.kpi.mapper.KpiLibraryMapper;
     // import com.company.kpi.mapper.ReferenceDataMapper;
+    import com.company.kpi.mapper.UserKpiSummaryMapper;
     import com.company.kpi.mapper.UserMapper;
     import com.company.kpi.request.member.CreateIndividualKpiRequest;
     import com.company.kpi.request.member.MemberSheetItemUpdateRequest;
     import com.company.kpi.request.member.SaveDraftRequest;
     import com.company.kpi.request.member.SubmitEvalRequest;
     import com.company.kpi.request.member.SubmitMemberSheetRequest;
+    import com.company.kpi.response.member.MemberFeedbackSubmitResponse;
     import com.company.kpi.response.member.MemberKpiAssignmentDTO;
     import com.company.kpi.response.member.MemberKpiDashboardResponse;
     import com.company.kpi.response.member.MemberKpiDashboardResponse.MemberKpiItemPayload;
@@ -83,10 +86,10 @@
         /** ASM_STATUS labels — đồng bộ document/db/init-db.sql */
         private static final Map<Integer, String> ASM_STATUS_LABEL = Map.ofEntries(
                 Map.entry(401, "KPI mới tạo (Chưa kích hoạt)"),
-                Map.entry(402, "Member tạo, chờ PM duyệt"),
+                Map.entry(402, "Chờ PM duyệt KPI đầu năm"),
                 Map.entry(403, "Chờ GM duyệt tạo mới"),
                 Map.entry(404, "Chờ Member bấm Accept"),
-                Map.entry(407, "Chờ PM kiểm tra feedback"),
+                Map.entry(407, "Chờ PM/GM kiểm tra feedback"),
                 Map.entry(405, "Đã chốt mục tiêu (Đang chạy)"),
                 Map.entry(406, "Bị từ chối"),
                 Map.entry(501, "Member đã nộp bằng chứng 1st Half, chờ PM duyệt"),
@@ -98,6 +101,7 @@
 
         private final KpiCycleMapper kpiCycleMapper;
         private final UserMapper userMapper;
+        private final UserKpiSummaryMapper userKpiSummaryMapper;
         private final KpiAssignmentMapper kpiAssignmentMapper;
         private final KpiLibraryMapper kpiLibraryMapper;
         // private final ReferenceDataMapper referenceDataMapper;
@@ -132,6 +136,8 @@
             OffsetDateTime now = OffsetDateTime.now();
             boolean canSubmit = computeCanSubmit(cycle, phase, rows, pending, now);
             log.info("Dashboard for user {} in year {}: phase={}, pendingCount={}, canSubmit={}", userId, y, phase, pending.size(), canSubmit);
+            Optional<UserKpiSummary> summaryOpt = userKpiSummaryMapper.findByUserIdAndCycleId(userId, cycle.getId());
+            UserKpiSummary summary = summaryOpt.orElse(null);
 
             return MemberKpiDashboardResponse.builder()
                     .year(y)
@@ -140,6 +146,8 @@
                     .sheet(sheet)
                     .pendingItems(pending)
                     .canSubmit(canSubmit)
+                    .evaluationComments(summary != null ? summary.getEvaluationComments() : null)
+                    .evaluationSupervisorComments(summary != null ? summary.getEvaluationSupervisorComments() : null)
                     .build();
         }
 
@@ -177,8 +185,10 @@
                     mid = v;
                 } else if (Constant.END_YEAR_PHASE.equals(phase)) {
                     end = v;
+                } else if (Constant.TARGET_SETUP_PHASE.equals(phase)) {
+                    // Giữ hành vi nhất quán với auto-score: lưu nháp self score để refresh vẫn thấy.
+                    end = v;
                 }
-                // target_setup: không ghi điểm vào cột — chỉ evidences
             }
             int n = kpiAssignmentMapper.patchMemberAssignment(
                     assignmentId,
@@ -195,7 +205,7 @@
         }
 
         @Transactional
-        public void submitFeedback(UUID assignmentId, UUID userId, String feedbackComment) {
+        public MemberFeedbackSubmitResponse submitFeedback(UUID assignmentId, UUID userId, String feedbackComment) {
             MemberKpiAssignmentDTO row = kpiAssignmentMapper.findByIdAndUser(assignmentId, userId);
             if (row == null) {
                 throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Assignment not found");
@@ -217,6 +227,20 @@
             if (n == 0) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Không thể gửi feedback cho KPI này");
             }
+            MemberKpiAssignmentDTO refreshed = kpiAssignmentMapper.findByIdAndUser(assignmentId, userId);
+            String roleCode = refreshed != null ? refreshed.getFeedbackTargetRoleCode() : null;
+            return MemberFeedbackSubmitResponse.builder()
+                    .feedbackTargetRoleCode(roleCode)
+                    .assignmentStatusName(feedback407StatusLabel(roleCode))
+                    .build();
+        }
+
+        private static String feedback407StatusLabel(String feedbackTargetRoleCode) {
+            if (StringUtils.isNotBlank(feedbackTargetRoleCode)
+                    && "GM".equalsIgnoreCase(feedbackTargetRoleCode.trim())) {
+                return "Chờ GM kiểm tra feedback";
+            }
+            return "Chờ PM kiểm tra feedback";
         }
 
         /** Cập nhật evidences — có kiểm tra assignment thuộc member. */
@@ -247,6 +271,15 @@
                 throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Cycle not found for year " + y);
             }
             return reloadSheetResponse(userId, c.get().getId());
+        }
+
+        public void deleteSelfCreatedKpi(UUID assignmentId, UUID userId) {
+            int n = kpiAssignmentMapper.softDeleteSelfCreatedAssignment(assignmentId, userId);
+            if (n == 0) {
+                throw new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST,
+                        "KPI không thể xóa (chỉ cho phép KPI tự tạo ở trạng thái chờ duyệt/chờ xác nhận/từ chối)");
+            }
         }
 
         /**
@@ -294,11 +327,16 @@
                 for (MemberKpiAssignmentDTO row : scopedRowsSnapshot) {
                     Integer currentStatus = row.getStatusCode();
                     if (!Objects.equals(currentStatus, ASM_PENDING_ACCEPTANCE)
+                            && !Objects.equals(currentStatus, 406)
                             && !Objects.equals(currentStatus, ASM_FEEDBACK_IN_PROGRESS)) {
                         continue;
                     }
                     boolean hasFeedback = StringUtils.isNotBlank(row.getFeedbackComment());
-                    int nextStatus = hasFeedback ? ASM_FEEDBACK_IN_PROGRESS : ASM_ACCEPTED;
+                    // target_setup submit: 404/406 -> 402 (chờ PM duyệt), 407 giữ nguyên
+                    int nextStatus = (Objects.equals(currentStatus, ASM_PENDING_ACCEPTANCE)
+                            || Objects.equals(currentStatus, 406))
+                            ? ASM_MEMBER_CREATED_PENDING_PM
+                            : (hasFeedback ? ASM_FEEDBACK_IN_PROGRESS : ASM_ACCEPTED);
                     if (Objects.equals(currentStatus, nextStatus)) {
                         updated++;
                         continue;
@@ -315,12 +353,16 @@
                 if (updated == 0) {
                     throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No target-setup assignments eligible to accept");
                 }
+                persistEmployeeEvaluationComment(cycle.getId(), userId, request.getEvaluationComments());
                 return;
             }
 
             kpiAssignmentMapper.updateKpiStatuses(userId, cycle.getId(), ASM_ACCEPTED, promotionSubmit, ASM_PENDING_ACCEPTANCE);
             List<MemberKpiAssignmentDTO> rows = kpiAssignmentMapper.findDetailsByUserAndCycle(userId, cycle.getId());
             List<MemberKpiAssignmentDTO> scopedRows = filterRowsBySubmitType(rows, promotionSubmit);
+            if (Constant.END_YEAR_PHASE.equals(submitPhase)) {
+                backfillEndSelfScoreFromMidSelfScore(cycle.getId(), userId, scopedRows);
+            }
             List<String> pending = computePendingAssignmentIds(submitPhase, scopedRows);
                 if (!pending.isEmpty()) {
                     throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Incomplete KPI rows: " + pending.size());
@@ -340,6 +382,7 @@
                                 HttpStatus.BAD_REQUEST, "No end-year assignments eligible to submit");
                     }
                 }
+            persistEmployeeEvaluationComment(cycle.getId(), userId, request.getEvaluationComments());
             }
 
         /**
@@ -549,7 +592,7 @@
                     userId,
                     user.getJobTitleId(),
                     BigDecimal.ONE,
-                    ASM_MEMBER_CREATED_PENDING_PM,
+                    ASM_PENDING_ACCEPTANCE,
                     userId);
             if (ka != 1) {
                 throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Không thể tạo kpi_assignments");
@@ -589,6 +632,8 @@
                     .sheet(sheet)
                     .pendingItems(List.of())
                     .canSubmit(false)
+                    .evaluationComments(null)
+                    .evaluationSupervisorComments(null)
                     .build();
         }
 
@@ -635,23 +680,28 @@
             String evidenceFormCase = resolveEvidenceFormCase(group, row.getMasterCode());
 
             Double selfScore = resolveSelfScoreForPhase(phase, row);
-            Double pmScore = Constant.END_YEAR_PHASE.equals(phase) ? row.getEndPmScore() : null;
+            Double pmScore = Constant.END_YEAR_PHASE.equals(phase)
+                    ? row.getEndGmScore()
+                    : null;
 
             EvidencesParsed ev = parseEvidences(row.getEvidences());
 
             String evidenceStatus = deriveEvidenceStatus(row.getEvidences(), ev);
-            boolean hasFeedback = StringUtils.isNotBlank(row.getFeedbackComment())
-                    || StringUtils.isNotBlank(ev.memberFeedback)
-                    || StringUtils.isNotBlank(ev.leaderFeedback);
+            boolean hasFeedback = StringUtils.isNotBlank(row.getFeedbackComment());
             String evaluationStatus = deriveEvaluationStatus(row, selfScore, pmScore, evidenceStatus, hasFeedback);
 
             String target = buildTargetDisplay(row);
             Integer sc = row.getStatusCode();
+            String ftr = row.getFeedbackTargetRoleCode();
             String statusName = sc != null ? ASM_STATUS_LABEL.getOrDefault(sc, "Mã " + sc) : null;
-            MemberWorkflowUi workflow = MemberWorkflowUi.from(evaluationStatus, sc);
+            if (sc != null && sc == ASM_FEEDBACK_IN_PROGRESS) {
+                statusName = feedback407StatusLabel(ftr);
+            }
+            MemberWorkflowUi workflow = MemberWorkflowUi.from(evaluationStatus, sc, ftr);
 
             var b = MemberKpiItemPayload.builder()
                     .id(row.getAssignmentId().toString())
+                    .kpiInformationId(row.getKpiInformationId() != null ? row.getKpiInformationId().toString() : null)
                     .code(Optional.ofNullable(row.getMasterCode()).orElse(""))
                     .name(Optional.ofNullable(row.getMasterName()).orElse(""))
                     .description(Optional.ofNullable(row.getObjective()).orElse(""))
@@ -677,6 +727,8 @@
                     .memberFeedback(ev.memberFeedback)
                     .leaderFeedback(ev.leaderFeedback)
                     .feedbackComment(Optional.ofNullable(row.getFeedbackComment()).orElse(""))
+                    .updateReason(Optional.ofNullable(row.getUpdateReason()).orElse(""))
+                    .createdByCurrentUser(Boolean.TRUE.equals(row.getCreatedByCurrentUser()))
                     .gmComment(ev.gmComment)
                     .certificateOutcomeNote(ev.certificateOutcomeNote)
                     .selfScore(selfScore)
@@ -690,7 +742,8 @@
                     .canEditEvidence(workflow.canEditEvidence())
                     .canEditScore(workflow.canEditScore())
                     .evidenceTooltip(workflow.evidenceTooltip())
-                    .evaluationState(workflow.evaluationState());
+                    .evaluationState(workflow.evaluationState())
+                    .feedbackTargetRoleCode(ftr);
 
             return b.build();
         }
@@ -799,23 +852,26 @@
                 String evidenceTooltip,
                 String evaluationState) {
 
-            static MemberWorkflowUi from(String evaluationStatus, Integer statusCode) {
+            static MemberWorkflowUi from(String evaluationStatus, Integer statusCode, String feedbackTargetRoleCode) {
                 boolean pendingProposal = statusCode != null && (statusCode == 402 || statusCode == 403);
                 boolean pendingAccept = statusCode != null && statusCode == 404;
+                boolean firstHalfCompleted = statusCode != null && statusCode == 503;
                 boolean submittedRound = statusCode != null
                         && (statusCode == 501
                                 || statusCode == 502
-                                || statusCode == 503
                                 || statusCode == 601
                                 || statusCode == 602
                                 || statusCode == 603);
                 boolean approvedEval = "approved".equals(evaluationStatus);
-                boolean canViewEvidence = !pendingProposal && !approvedEval;
-                boolean canEditEvidence = canViewEvidence && !submittedRound && !pendingAccept;
+                boolean canViewEvidence = !pendingProposal;
+                boolean canEditEvidence =
+                        canViewEvidence
+                                && !pendingAccept
+                                && (!submittedRound || firstHalfCompleted);
                 boolean canEditScore = canEditEvidence;
                 String tooltip = buildEvidenceTooltip(
                         canViewEvidence, canEditEvidence, approvedEval, pendingProposal, pendingAccept, submittedRound);
-                String evalStateVi = memberEvaluationStateVi(evaluationStatus);
+                String evalStateVi = memberEvaluationStateVi(evaluationStatus, feedbackTargetRoleCode);
                 return new MemberWorkflowUi(canViewEvidence, canEditEvidence, canEditScore, tooltip, evalStateVi);
             }
 
@@ -844,7 +900,7 @@
                 return "Tự đánh giá & bằng chứng";
             }
 
-            private static String memberEvaluationStateVi(String evaluationStatus) {
+            private static String memberEvaluationStateVi(String evaluationStatus, String feedbackTargetRoleCode) {
                 if (evaluationStatus == null) {
                     return null;
                 }
@@ -854,7 +910,7 @@
                     case "approved" -> "Đã duyệt";
                     case "revision" -> "Cần làm lại";
                     case "overdue" -> "Quá hạn";
-                    case "feedback" -> "Chờ PM kiểm tra feedback";
+                    case "feedback" -> feedback407StatusLabel(feedbackTargetRoleCode);
                     default -> null;
                 };
             }
@@ -877,7 +933,8 @@
                 }
                 /* Flow 3: chờ duyệt đề xuất */
                 if (Objects.equals(row.getStatusCode(), ASM_MEMBER_CREATED_PENDING_PM)
-                    || Objects.equals(row.getStatusCode(), ASM_MEMBER_CREATED_PENDING_GM)) {
+                    || Objects.equals(row.getStatusCode(), ASM_MEMBER_CREATED_PENDING_GM)
+                    || Objects.equals(row.getStatusCode(), 406)) {
                     pending.add(row.getAssignmentId().toString());
                     continue;
                 }
@@ -886,12 +943,53 @@
                 }
 
                 if (Constant.END_YEAR_PHASE.equals(phase)) {
-                    if (row.getEndSelfScore() == null) {
+                    if (row.getEndSelfScore() == null && row.getMidSelfScore() == null) {
                         pending.add(row.getAssignmentId().toString());
                     }
                 }
             }
             return pending;
+        }
+
+        private void backfillEndSelfScoreFromMidSelfScore(
+                UUID cycleId,
+                UUID userId,
+                List<MemberKpiAssignmentDTO> rows) {
+            if (rows == null || rows.isEmpty()) {
+                return;
+            }
+            for (MemberKpiAssignmentDTO row : rows) {
+                if (row == null || row.getAssignmentId() == null) {
+                    continue;
+                }
+                if (row.getEndSelfScore() != null || row.getMidSelfScore() == null) {
+                    continue;
+                }
+                kpiAssignmentMapper.patchMemberAssignment(
+                        row.getAssignmentId(),
+                        cycleId,
+                        userId,
+                        null,
+                        row.getMidSelfScore(),
+                        null,
+                        null);
+                row.setEndSelfScore(row.getMidSelfScore());
+            }
+        }
+
+        private void persistEmployeeEvaluationComment(UUID cycleId, UUID userId, String rawComment) {
+            String comment = StringUtils.trimToNull(rawComment);
+            int updated = userKpiSummaryMapper.updateEvaluationComments(userId, cycleId, comment, userId);
+            if (updated > 0) {
+                return;
+            }
+            userKpiSummaryMapper.insertEvaluationComments(
+                    UUID.randomUUID(),
+                    userId,
+                    cycleId,
+                    comment,
+                    userId,
+                    userId);
         }
 
         /**
@@ -904,6 +1002,7 @@
             if (Constant.TARGET_SETUP_PHASE.equals(phase)) {
                 return rows.stream().noneMatch(r ->
                         Objects.equals(r.getStatusCode(), ASM_PENDING_ACCEPTANCE)
+                                || Objects.equals(r.getStatusCode(), 406)
                                 || Objects.equals(r.getStatusCode(), ASM_FEEDBACK_IN_PROGRESS));
             }
             if (Constant.MID_YEAR_PHASE.equals(phase)) {
@@ -984,7 +1083,7 @@
             }
             return rows.stream()
                     .map(MemberKpiAssignmentDTO::getStatusCode)
-                    .anyMatch(sc -> Objects.equals(sc, ASM_PENDING_ACCEPTANCE));
+                    .anyMatch(sc -> Objects.equals(sc, ASM_PENDING_ACCEPTANCE) || Objects.equals(sc, 406));
         }
 
     private static boolean hasLateMidYearSubmitCandidate(
@@ -1025,7 +1124,10 @@
             if (rows != null && !rows.isEmpty()) {
                 boolean hasPendingAcceptance = rows.stream()
                         .map(MemberKpiAssignmentDTO::getStatusCode)
-                        .anyMatch(sc -> Objects.equals(sc, ASM_PENDING_ACCEPTANCE));
+                        .anyMatch(sc ->
+                                Objects.equals(sc, ASM_PENDING_ACCEPTANCE)
+                                        || Objects.equals(sc, 406)
+                                        || Objects.equals(sc, ASM_FEEDBACK_IN_PROGRESS));
                 if (hasPendingAcceptance) {
                     return Constant.TARGET_SETUP_PHASE;
                 }

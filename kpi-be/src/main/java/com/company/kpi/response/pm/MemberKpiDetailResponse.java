@@ -14,6 +14,7 @@ public class MemberKpiDetailResponse {
     private BigDecimal weight;
     private BigDecimal selfScore;
     private BigDecimal pmScore;
+    private String pmComment;
     private Integer statusCode;
     private Integer kpiTypeCode;
     private Integer calcRuleCode;

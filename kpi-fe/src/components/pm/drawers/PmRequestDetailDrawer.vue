@@ -1,77 +1,485 @@
 <script setup lang="ts">
-import { watch, onUnmounted } from 'vue'
+import { computed, ref, watch, onUnmounted } from 'vue'
+
+type RequestRow = {
+  id: string
+  userId: string
+  user: string
+  avatar: string
+  kpiName: string
+  type: string
+  oldValue: string | null
+  newValue: string
+  reason: string
+  status: string
+  date: string
+  memberTarget: string
+  bscAspect: string
+  weightLabel: string
+  unitLabel: string
+  calculationMethodLabel: string
+  scoringRuleText: string
+}
+
+type MemberApprovalPayload = {
+  userFullName: string
+  avatar: string
+  kpis: RequestRow[]
+}
 
 const props = defineProps({
   open: { type: Boolean, default: false },
-  request: { type: Object, default: null },
+  memberApproval: { type: Object as () => MemberApprovalPayload | null, default: null },
   actionBusy: { type: Boolean, default: false },
 })
-const emit = defineEmits(['close', 'approve', 'reject'])
 
-watch(() => props.open, (val) => { document.body.style.overflow = val ? 'hidden' : '' })
-onUnmounted(() => { document.body.style.overflow = '' })
+const emit = defineEmits<{
+  close: []
+  approve: [req: RequestRow]
+  reject: [payload: { req: RequestRow; reason: string }]
+  'approve-all': [rows: RequestRow[]]
+  'reject-all': [payload: { rows: RequestRow[]; reason: string }]
+}>()
 
-const handleApprove = () => { emit('approve') }
-const handleReject = () => { emit('reject') }
+const selectedKpi = ref<RequestRow | null>(null)
+const rejectDialog = ref<{ open: boolean; targetId: string | 'all' | null }>({
+  open: false,
+  targetId: null,
+})
+const rejectReason = ref('')
+const rejectError = ref('')
+
+const pendingKpis = computed(() =>
+  (props.memberApproval?.kpis ?? []).filter((k) => k.status === 'PENDING'),
+)
+
+const selectedKpiRuleBands = computed(() =>
+  selectedKpi.value ? parseScoringRuleBands(selectedKpi.value.scoringRuleText) : [],
+)
+
+const selectedKpiRuleLinesFallback = computed(() =>
+  selectedKpi.value ? scoringRuleLines(selectedKpi.value.scoringRuleText) : [],
+)
+
+function openKpiDetail(req: RequestRow) {
+  selectedKpi.value = req
+}
+
+function closeKpiDetail() {
+  selectedKpi.value = null
+}
+
+function initiateReject(targetId: string | 'all') {
+  rejectDialog.value = { open: true, targetId }
+  rejectReason.value = ''
+  rejectError.value = ''
+}
+
+function closeRejectDialog() {
+  rejectDialog.value = { open: false, targetId: null }
+  rejectReason.value = ''
+  rejectError.value = ''
+}
+
+function confirmReject() {
+  const reason = rejectReason.value.trim()
+  if (!reason) {
+    rejectError.value = 'Vui lòng nhập lý do từ chối.'
+    return
+  }
+  if (rejectDialog.value.targetId === 'all') {
+    emit('reject-all', { rows: pendingKpis.value, reason })
+  } else {
+    const req = (props.memberApproval?.kpis ?? []).find((k) => k.id === rejectDialog.value.targetId)
+    if (req) emit('reject', { req, reason })
+  }
+  closeRejectDialog()
+}
+
+watch(
+  () => props.open,
+  (val) => {
+    document.body.style.overflow = val ? 'hidden' : ''
+    if (!val) {
+      selectedKpi.value = null
+      closeRejectDialog()
+    }
+  },
+)
+
+watch(
+  () => props.memberApproval?.kpis,
+  (kpis) => {
+    if (!selectedKpi.value) return
+    const exists = Array.isArray(kpis) && kpis.some((k) => k.id === selectedKpi.value?.id)
+    if (!exists) selectedKpi.value = null
+  },
+)
+
+onUnmounted(() => {
+  document.body.style.overflow = ''
+})
+
+function scoringRuleLines(text: string): string[] {
+  if (!text?.trim()) return []
+  return text
+    .split(/\n/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+}
+
+type ScoringRuleBand = { levelLabel: string; rangeText: string }
+
+/** Parse "5: >4.5" / "5 : > 4.5" → ô MỨC 5 (ảnh thiết kế). */
+function parseScoringRuleBands(text: string): ScoringRuleBand[] {
+  const lines = scoringRuleLines(text)
+  const bands: ScoringRuleBand[] = []
+  for (const line of lines) {
+    const m = line.match(/^\s*(\d+)\s*[:：]\s*(.+)$/)
+    if (m) {
+      const num = m[1]
+      let range = m[2].trim()
+      range = range.replace(/\s+/g, ' ')
+      bands.push({ levelLabel: `MỨC ${num}`, rangeText: range })
+    }
+  }
+  bands.sort((a, b) => {
+    const na = parseInt(a.levelLabel.replace(/\D/g, ''), 10) || 0
+    const nb = parseInt(b.levelLabel.replace(/\D/g, ''), 10) || 0
+    return nb - na
+  })
+  return bands
+}
+
+/** Hiển thị phần % trong modal (vd "10% trọng số" → "10%"). */
+function weightDisplayShort(weightLabel: string): string {
+  const m = weightLabel.match(/([\d.]+\s*%)/)
+  if (m) return m[1].replace(/\s+/g, '')
+  return weightLabel.replace(/\s*trọng số\s*/gi, '').trim() || weightLabel
+}
 </script>
 
 <template>
   <Teleport to="body">
     <Transition name="pm-drawer">
-      <div v-if="open && request" class="fixed inset-0 z-[100] flex justify-end">
-        <div class="pm-drawer-backdrop absolute inset-0 cursor-pointer bg-slate-900/60 backdrop-blur-sm" @click="emit('close')" />
-        
-        <div class="pm-drawer-panel will-change-transform relative flex h-full w-full flex-col border-l border-slate-200 bg-slate-50 shadow-2xl md:w-[500px] lg:w-[600px]">
-          
+      <div v-if="open && memberApproval" class="fixed inset-0 z-[100] flex justify-end">
+        <div
+          class="pm-drawer-backdrop absolute inset-0 cursor-pointer bg-slate-900/60 backdrop-blur-sm"
+          @click="emit('close')"
+        />
+
+        <div class="pm-drawer-panel will-change-transform relative flex h-full w-full flex-col border-l border-slate-200 bg-slate-50 shadow-2xl md:w-[520px] lg:w-[640px]">
           <div class="z-10 flex shrink-0 items-center justify-between border-b border-slate-200 bg-white p-5 shadow-sm">
             <div>
-              <h2 class="flex items-center gap-2 text-lg font-bold text-slate-800"><span class="rounded-lg bg-orange-100 p-1.5 text-orange-600 shadow-sm"><i class="fas fa-inbox text-sm"></i></span>Request Approval</h2>
+              <h2 class="flex items-center gap-2 text-lg font-bold text-slate-800">
+                <span class="rounded-lg bg-orange-100 p-1.5 text-orange-600 shadow-sm">
+                  <i class="fas fa-inbox text-sm"></i>
+                </span>
+                Đề xuất chờ duyệt
+              </h2>
             </div>
-            <button type="button" @click="emit('close')" class="rounded-full p-2 text-slate-400 hover:bg-slate-100"><i class="fas fa-times text-base"></i></button>
+            <button
+              type="button"
+              class="rounded-full p-2 text-slate-400 hover:bg-slate-100"
+              aria-label="Đóng"
+              @click="emit('close')"
+            >
+              <i class="fas fa-times text-base"></i>
+            </button>
           </div>
 
-          <div class="flex-1 overflow-y-auto p-6 space-y-6">
-            <div class="flex items-center gap-4 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-              <div class="w-12 h-12 rounded-full border border-slate-200 bg-slate-100 flex items-center justify-center text-slate-600 font-bold text-lg">{{ request.avatar }}</div>
-              <div><p class="font-bold text-slate-800 text-base">{{ request.user }}</p><p class="text-xs font-semibold text-slate-500 uppercase">Submitted a request</p></div>
-            </div>
-
-            <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-              <h4 class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4 border-b border-slate-100 pb-2">Thông tin thay đổi</h4>
-              <div class="space-y-4">
-                <div><p class="text-[10px] font-bold text-slate-400 uppercase mb-1">Loại Request</p><p class="text-sm font-bold text-blue-700 bg-blue-50 px-2 py-1 rounded inline-block">{{ request.type }}</p></div>
-                <div><p class="text-[10px] font-bold text-slate-400 uppercase mb-1">KPI Name</p><p class="text-sm font-bold text-slate-800">{{ request.kpiName }}</p></div>
-                <div class="grid grid-cols-2 gap-4 pt-2">
-                  <div class="bg-slate-50 p-3 rounded-lg border border-slate-100"><p class="text-[10px] font-bold text-slate-400 uppercase mb-1">Old Target</p><p class="text-sm font-semibold text-slate-600 line-through">{{ request.oldValue || 'None' }}</p></div>
-                  <div class="bg-emerald-50 p-3 rounded-lg border border-emerald-100"><p class="text-[10px] font-bold text-emerald-600 uppercase mb-1">New Target</p><p class="text-sm font-bold text-emerald-700">{{ request.newValue }}</p></div>
-                </div>
+          <div class="flex-1 overflow-y-auto p-4 space-y-3">
+            <div class="flex items-center gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div
+                class="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-slate-100 text-lg font-bold text-slate-600"
+              >
+                {{ memberApproval.avatar }}
+              </div>
+              <div class="min-w-0">
+                <p class="truncate text-base font-bold text-slate-800">{{ memberApproval.userFullName }}</p>
+                <p class="text-xs font-semibold uppercase text-slate-500">
+                  {{ pendingKpis.length }} KPI chờ xử lý
+                </p>
               </div>
             </div>
 
-            <div class="bg-orange-50 p-5 rounded-xl border border-orange-100 shadow-sm">
-              <h4 class="text-xs font-bold text-orange-800 uppercase mb-2 flex items-center gap-2"><i class="fas fa-comment-alt"></i> Reason / Justification</h4>
-              <p class="text-sm text-orange-900 leading-relaxed font-medium">{{ request.reason }}</p>
+            <div v-if="pendingKpis.length > 0" class="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                :disabled="actionBusy"
+                class="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
+                @click="emit('approve-all', pendingKpis)"
+              >
+                <i class="fas fa-list-check mr-1.5 text-xs" />
+                Duyệt tất cả
+              </button>
+              <button
+                type="button"
+                :disabled="actionBusy"
+                class="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-100 disabled:opacity-50"
+                @click="initiateReject('all')"
+              >
+                <i class="fas fa-circle-xmark mr-1.5 text-xs" />
+                Từ chối tất cả
+              </button>
+            </div>
+
+            <div v-if="memberApproval.kpis.length === 0" class="rounded-xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">
+              Không còn KPI chờ duyệt cho thành viên này.
+            </div>
+
+            <div
+              v-for="req in memberApproval.kpis"
+              :key="req.id"
+              class="rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm"
+            >
+              <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0 flex-1">
+                  <span class="inline-block rounded bg-blue-50 px-2 py-0.5 text-[9px] font-bold uppercase text-blue-700">
+                    {{ req.type.replace('_', ' ') }}
+                  </span>
+                  <span class="ml-2 rounded border border-amber-200 bg-amber-50 px-2 py-0.5 text-[9px] font-bold uppercase text-amber-800">
+                    {{ req.status }}
+                  </span>
+                  <h4 class="mt-2 truncate text-sm font-bold text-slate-800">{{ req.kpiName }}</h4>
+                  <p class="mt-1 text-[10px] font-medium text-slate-400">Gửi: {{ req.date }}</p>
+                </div>
+                <button
+                  type="button"
+                  class="shrink-0 rounded-md px-2 py-1 text-slate-400 hover:bg-slate-100 hover:text-blue-600"
+                  @click="openKpiDetail(req)"
+                >
+                  <i class="fas fa-chevron-right text-[10px]" />
+                </button>
+              </div>
+
+              <div v-if="req.status === 'PENDING'" class="mt-3 flex justify-end gap-2 border-t border-slate-100 pt-3">
+                <button
+                  type="button"
+                  :disabled="actionBusy"
+                  class="rounded-md px-3 py-1.5 text-sm font-semibold text-rose-600 hover:bg-rose-50 disabled:opacity-50"
+                  @click="initiateReject(req.id)"
+                >
+                  Từ chối
+                </button>
+                <button
+                  type="button"
+                  :disabled="actionBusy"
+                  class="rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                  @click="emit('approve', req)"
+                >
+                  Duyệt
+                </button>
+              </div>
             </div>
           </div>
 
-          <div class="z-10 flex shrink-0 justify-end gap-3 border-t border-slate-200 bg-white p-4 shadow-sm">
+          <Transition name="fade">
+            <div
+              v-if="selectedKpi"
+              class="absolute inset-0 z-20 flex items-center justify-center bg-slate-900/50 p-3 backdrop-blur-[2px]"
+              @click.self="closeKpiDetail"
+            >
+              <div
+                class="flex max-h-[min(90vh,560px)] w-full max-w-lg flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl"
+                @click.stop
+              >
+                <!-- Header gọn -->
+                <div class="flex shrink-0 items-start justify-between border-b border-slate-100 px-4 py-3">
+                  <div class="min-w-0 pr-2">
+                    <p class="text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                      Chi tiết KPI chờ duyệt
+                    </p>
+                    <h2 class="mt-0.5 text-lg font-bold leading-snug text-slate-900">
+                      {{ selectedKpi.kpiName }}
+                    </h2>
+                    <div class="mt-2 flex flex-wrap gap-1.5">
+                      <span class="rounded-md bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700">
+                        {{ selectedKpi.type.replace('_', ' ') }}
+                      </span>
+                      <span
+                        v-if="selectedKpi.status === 'PENDING'"
+                        class="rounded-md border border-orange-200 bg-orange-50 px-2 py-0.5 text-[11px] font-semibold text-orange-700"
+                      >
+                        PENDING
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                    aria-label="Đóng chi tiết KPI"
+                    @click="closeKpiDetail"
+                  >
+                    <i class="fas fa-times text-sm leading-none" />
+                  </button>
+                </div>
+
+                <!-- Body: 2 thẻ, padding vừa -->
+                <div class="flex-1 space-y-3 overflow-y-auto px-4 py-3">
+                  <!-- Thẻ 1: 4 hàng icon | nhãn | giá trị -->
+                  <div class="divide-y divide-slate-100 overflow-hidden rounded-lg border border-slate-200 bg-white">
+                    <div class="flex items-center gap-3 px-3 py-2.5">
+                      <i class="fas fa-bullseye w-4 shrink-0 text-center text-[13px] text-slate-400" />
+                      <span class="min-w-0 flex-1 text-xs font-medium text-slate-500">Target của Member</span>
+                      <span class="max-w-[55%] text-right text-sm font-bold text-slate-900">{{
+                        selectedKpi.memberTarget
+                      }}</span>
+                    </div>
+                    <div class="flex items-center gap-3 px-3 py-2.5">
+                      <i class="fas fa-percent w-4 shrink-0 text-center text-[13px] text-slate-400" />
+                      <span class="min-w-0 flex-1 text-xs font-medium text-slate-500">Trọng số</span>
+                      <span class="text-right text-sm font-bold text-blue-600">{{
+                        weightDisplayShort(selectedKpi.weightLabel)
+                      }}</span>
+                    </div>
+                    <div class="flex items-center gap-3 px-3 py-2.5">
+                      <i class="fas fa-book w-4 shrink-0 text-center text-[13px] text-slate-400" />
+                      <span class="min-w-0 flex-1 text-xs font-medium text-slate-500">Khía cạnh BSC</span>
+                      <span class="max-w-[58%] text-right text-xs font-bold leading-snug text-slate-900">{{
+                        selectedKpi.bscAspect
+                      }}</span>
+                    </div>
+                    <div class="flex items-center gap-3 px-3 py-2.5">
+                      <i class="fas fa-calculator w-4 shrink-0 text-center text-[13px] text-slate-400" />
+                      <span class="min-w-0 flex-1 text-xs font-medium text-slate-500">Cách tính</span>
+                      <span class="max-w-[58%] text-right text-xs font-bold leading-snug text-slate-900">{{
+                        selectedKpi.calculationMethodLabel
+                      }}</span>
+                    </div>
+                  </div>
+
+                  <!-- Thẻ 2: quy tắc — hàng ô MỨC -->
+                  <div class="overflow-hidden rounded-lg border border-slate-200 bg-white">
+                    <div class="flex items-center gap-2 border-b border-slate-100 px-3 py-2">
+                      <i class="fas fa-list-check text-[13px] text-slate-600" />
+                      <span class="text-[11px] font-bold uppercase tracking-wide text-slate-600">
+                        Quy tắc tính điểm
+                      </span>
+                    </div>
+                    <div class="px-3 py-3">
+                      <div
+                        v-if="selectedKpiRuleBands.length"
+                        class="flex gap-2 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                      >
+                        <div
+                          v-for="(band, idx) in selectedKpiRuleBands"
+                          :key="idx"
+                          class="min-w-[4.25rem] flex-1 shrink-0 rounded-md border border-slate-200 bg-slate-50 px-2 py-2 text-center sm:min-w-0"
+                        >
+                          <div class="text-[10px] font-bold uppercase leading-tight text-slate-500">
+                            {{ band.levelLabel }}
+                          </div>
+                          <div class="mt-1 text-[11px] font-bold leading-tight text-slate-900">
+                            {{ band.rangeText }}
+                          </div>
+                        </div>
+                      </div>
+                      <p
+                        v-else-if="selectedKpiRuleLinesFallback.length"
+                        class="font-mono text-[11px] leading-relaxed text-slate-600 whitespace-pre-line"
+                      >
+                        {{ selectedKpi.scoringRuleText }}
+                      </p>
+                      <p v-else class="text-center text-xs text-slate-400">—</p>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Footer gọn -->
+                <div
+                  class="flex shrink-0 flex-wrap justify-end gap-2 border-t border-slate-100 bg-slate-50/80 px-4 py-2.5"
+                >
+                  <button
+                    type="button"
+                    class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-50"
+                    @click="closeKpiDetail"
+                  >
+                    Đóng
+                  </button>
+                  <button
+                    v-if="selectedKpi.status === 'PENDING'"
+                    type="button"
+                    :disabled="actionBusy"
+                    class="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-white px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    @click="initiateReject(selectedKpi.id)"
+                  >
+                    <i class="fas fa-circle-xmark text-sm leading-none" />
+                    Từ chối
+                  </button>
+                  <button
+                    v-if="selectedKpi.status === 'PENDING'"
+                    type="button"
+                    :disabled="actionBusy"
+                    class="inline-flex items-center gap-1.5 rounded-lg bg-green-600 px-3.5 py-2 text-xs font-semibold text-white shadow-sm hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    @click="emit('approve', selectedKpi)"
+                  >
+                    <i class="fas fa-circle-check text-sm leading-none" />
+                    Duyệt (Approved)
+                  </button>
+                </div>
+              </div>
+            </div>
+          </Transition>
+
+          <Transition name="fade">
+            <div
+              v-if="rejectDialog.open"
+              class="absolute inset-0 z-30 flex items-center justify-center bg-slate-900/55 p-4 backdrop-blur-sm"
+              @click.self="closeRejectDialog"
+            >
+              <div class="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl">
+                <div class="mb-3 flex items-center gap-3">
+                  <div class="rounded-full bg-rose-100 p-2 text-rose-600">
+                    <i class="fas fa-circle-exclamation text-lg" />
+                  </div>
+                  <h3 class="text-lg font-bold text-slate-900">Xác nhận từ chối</h3>
+                </div>
+                <p class="mb-3 text-sm text-slate-600">
+                  {{
+                    rejectDialog.targetId === 'all'
+                      ? 'Bạn đang từ chối TẤT CẢ KPI chờ duyệt. Vui lòng nhập lý do.'
+                      : 'Vui lòng nhập lý do từ chối KPI này.'
+                  }}
+                </p>
+                <label class="mb-1 block text-sm font-semibold text-slate-700">
+                  Lý do từ chối <span class="text-rose-500">*</span>
+                </label>
+                <textarea
+                  v-model="rejectReason"
+                  class="min-h-[110px] w-full resize-none rounded-lg border p-3 text-sm outline-none focus:ring-2"
+                  :class="rejectError ? 'border-rose-400 focus:ring-rose-100' : 'border-slate-300 focus:ring-rose-100'"
+                  placeholder="Nhập lý do chi tiết..."
+                />
+                <p v-if="rejectError" class="mt-1 text-xs font-medium text-rose-600">{{ rejectError }}</p>
+                <div class="mt-4 flex justify-end gap-2">
+                  <button
+                    type="button"
+                    class="rounded-lg px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100"
+                    @click="closeRejectDialog"
+                  >
+                    Hủy
+                  </button>
+                  <button
+                    type="button"
+                    :disabled="actionBusy"
+                    class="rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-50"
+                    @click="confirmReject"
+                  >
+                    Xác nhận từ chối
+                  </button>
+                </div>
+              </div>
+            </div>
+          </Transition>
+
+          <div class="z-10 shrink-0 border-t border-slate-200 bg-white p-4 shadow-sm">
             <button
               type="button"
-              :disabled="actionBusy"
-              @click="handleReject"
-              class="rounded-lg border border-rose-200 bg-rose-50 px-6 py-2 text-xs font-bold text-rose-700 hover:bg-rose-100 disabled:opacity-50 disabled:cursor-not-allowed"
+              class="w-full rounded-lg border border-slate-200 bg-slate-50 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-100"
+              @click="emit('close')"
             >
-              Từ chối (406)
-            </button>
-            <button
-              type="button"
-              :disabled="actionBusy"
-              @click="handleApprove"
-              class="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-6 py-2 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <i v-if="actionBusy" class="fas fa-spinner fa-spin text-sm" />
-              <i v-else class="fas fa-check text-sm" />
-              Duyệt (403)
+              Đóng
             </button>
           </div>
         </div>
@@ -108,6 +516,14 @@ const handleReject = () => { emit('reject') }
 .pm-drawer-enter-to .pm-drawer-panel,
 .pm-drawer-leave-from .pm-drawer-panel {
   transform: translate3d(0, 0, 0);
+}
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }
 
 @media (prefers-reduced-motion: reduce) {

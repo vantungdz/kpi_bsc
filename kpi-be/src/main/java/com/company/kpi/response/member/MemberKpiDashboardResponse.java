@@ -26,6 +26,8 @@ public class MemberKpiDashboardResponse {
     /** Assignment IDs chưa đủ điều kiện nộp */
     private List<String> pendingItems;
     private boolean canSubmit;
+    private String evaluationComments;
+    private String evaluationSupervisorComments;
 
     @Data
     @Builder
@@ -54,6 +56,7 @@ public class MemberKpiDashboardResponse {
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public static class MemberKpiItemPayload {
         private String id;
+        private String kpiInformationId;
         private String code;
         private String name;
         private String description;
@@ -95,6 +98,9 @@ public class MemberKpiDashboardResponse {
         private String memberFeedback;
         private String leaderFeedback;
         private String feedbackComment;
+        /** Lý do cập nhật / từ chối từ luồng PM/GM (kpi_assignments.update_reason). */
+        private String updateReason;
+        private Boolean createdByCurrentUser;
         private String gmComment;
         private String certificateOutcomeNote;
         private Double selfScore;
@@ -111,6 +117,8 @@ public class MemberKpiDashboardResponse {
         private String evidenceTooltip;
         /** Nhãn ngắn trạng thái đánh giá (hiển thị); optional. */
         private String evaluationState;
+        /** Khi 407: role cần xử lý feedback — PM hoặc GM. */
+        private String feedbackTargetRoleCode;
     }
 
     @Data

@@ -41,8 +41,8 @@ INSERT INTO sys_status_codes (code, category, name, description) VALUES
 -- ==========================================
 -- 4xx: Phase 1 (Giao việc & Xin đổi)
 (401, 'ASM_STATUS', 'INACTIVE', 'KPI mới tạo (Chưa kích hoạt)'),
-(402, 'ASM_STATUS', 'WAITING_PM_APPROVAL', 'Member tạo, chờ PM duyệt'),
-(403, 'ASM_STATUS', 'WAITING_GM_APPROVAL', 'Chờ GM duyệt tạo mới'),
+(402, 'ASM_STATUS', 'WAITING_PM_APPROVAL', 'Chờ PM duyệt KPI đầu năm'),
+(403, 'ASM_STATUS', 'WAITING_GM_APPROVAL', 'Chờ GM duyệt KPI đầu năm'),
 (404, 'ASM_STATUS', 'PENDING_ACCEPTANCE', 'Chờ Member bấm Accept'),
 (405, 'ASM_STATUS', 'ACCEPTED', 'Đã chốt mục tiêu (Đang chạy)'),
 (406, 'ASM_STATUS', 'REJECTED', 'Bị từ chối'),

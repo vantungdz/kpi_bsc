@@ -22,5 +22,7 @@ public class GmDiagLeaderNode {
     private String actual;
     private String status;
     private String blockerSummary;
+    /** KPI của chính supervisor (assignee trùng tên nhóm leader); không nằm trong {@link #members}. */
+    private GmDiagMemberNode leaderOwnRow;
     private List<GmDiagMemberNode> members;
 }

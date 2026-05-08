@@ -14,8 +14,18 @@
             ka.status_code AS status_code,
             asm.name AS assignment_status_name,
             asm.description AS assignment_status_description,
-            ka.mid_self_score,
-            ka.end_self_score,
+            CASE
+                WHEN km.type_code = 102
+                     AND ka.parent_assignment_id IS NULL
+                    THEN COALESCE(ka.mid_self_score, child_self.avg_child_self_score)
+                ELSE ka.mid_self_score
+            END AS mid_self_score,
+            CASE
+                WHEN km.type_code = 102
+                     AND ka.parent_assignment_id IS NULL
+                    THEN COALESCE(ka.end_self_score, child_self.avg_child_self_score)
+                ELSE ka.end_self_score
+            END AS end_self_score,
             ka.end_pm_score,
             ka.end_gm_score,
             ka.evidences::text AS evidences,
@@ -66,8 +76,36 @@
                     END,
                     r2.code
                 LIMIT 1
-            ) AS member_role_name
-        FROM kpi_assignments ka
+            ) AS member_role_name,
+            uks.evaluation_supervisor_comments AS supervisor_comment
+        FROM (
+            SELECT DISTINCT ON (ka.user_id, ka.kpi_info_id)
+                ka.*
+            FROM kpi_assignments ka
+            WHERE ka.cycle_id = #{cycleId, jdbcType=OTHER}
+              AND ka.deleted_at IS NULL
+              AND ka.user_id IS NOT NULL
+              AND ka.status_code IN (501, 502, 503, 601, 602, 603)
+            ORDER BY
+                ka.user_id,
+                ka.kpi_info_id,
+                CASE
+                    WHEN COALESCE(ka.end_self_score, ka.mid_self_score) IS NOT NULL THEN 0
+                    ELSE 1
+                END,
+                CASE WHEN ka.parent_assignment_id IS NULL THEN 0 ELSE 1 END,
+                ka.status_code DESC,
+                ka.updated_at DESC,
+                ka.created_at DESC
+        ) ka
+        LEFT JOIN LATERAL (
+            SELECT AVG(COALESCE(ch.end_self_score, ch.mid_self_score)) AS avg_child_self_score
+            FROM kpi_assignments ch
+            WHERE ch.parent_assignment_id = ka.id
+              AND ch.cycle_id = ka.cycle_id
+              AND ch.deleted_at IS NULL
+              AND COALESCE(ch.end_self_score, ch.mid_self_score) IS NOT NULL
+        ) child_self ON TRUE
         INNER JOIN kpis_information ki ON ka.kpi_info_id = ki.id AND ki.deleted_at IS NULL
         INNER JOIN kpi_master km ON ki.master_kpi_id = km.id AND km.deleted_at IS NULL
         INNER JOIN kpi_categories kc ON km.category_id = kc.id AND kc.deleted_at IS NULL
@@ -77,13 +115,14 @@
         LEFT JOIN job_titles jt ON u.job_title_id = jt.id AND jt.deleted_at IS NULL
         LEFT JOIN ranks r ON jt.rank_id = r.id AND r.deleted_at IS NULL
         LEFT JOIN user_departments ud ON ud.user_id = u.id AND ud.is_primary = TRUE
+        LEFT JOIN user_kpi_summaries uks
+               ON uks.user_id = u.id
+              AND uks.cycle_id = ka.cycle_id
+              AND uks.deleted_at IS NULL
         INNER JOIN departments d ON ud.department_id = d.id AND d.deleted_at IS NULL
         LEFT JOIN users mgr ON mgr.id = d.manager_id AND mgr.deleted_at IS NULL
         LEFT JOIN users sup ON sup.id = ud.supervisor_id AND sup.deleted_at IS NULL
-        WHERE ka.cycle_id = #{cycleId, jdbcType=OTHER}
-          AND ka.deleted_at IS NULL
-          AND ka.user_id IS NOT NULL
-          AND ka.status_code IN (501, 502, 503, 601, 602, 603)
         ORDER BY d.name, u.full_name, kc.name, km.code
     </select>
+
 </mapper>

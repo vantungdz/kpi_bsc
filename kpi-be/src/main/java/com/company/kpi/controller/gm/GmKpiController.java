@@ -268,14 +268,14 @@ public class GmKpiController extends BaseController {
         return success(gmEvaluationHubService.confirmGmEvaluation(body, gmUserId));
     }
 
-    /** Tab Approved KPI: danh sách assignment cá nhân đang 401 / 402 / 403 trong chu kỳ. */
+    /** Tab Approved KPI: assignment cá nhân 401 / 402 / 403. Feedback 407 xử lý ở Strategic diagnostics. */
     @GetMapping("/approved-kpi-queue")
     public ResponseEntity<BaseResponse<List<GmApprovedKpiQueueItemResponse>>> listApprovedKpiQueue(
             @RequestParam("cycleId") UUID cycleId) {
         return success(gmApprovedKpiService.listQueue(cycleId));
     }
 
-    /** GM duyệt/từ chối đề xuất KPI (403) hoặc xử lý feedback PM (407→404). */
+    /** GM duyệt/từ chối đề xuất KPI (403) hoặc xử lý feedback chờ GM (407→404). */
     @PostMapping("/approved-kpi-queue/decision")
     public ResponseEntity<BaseResponse<GmApprovedKpiDecisionResponse>> decideApprovedKpi(
             @Valid @RequestBody GmApprovedKpiDecisionRequest body, Authentication authentication) {

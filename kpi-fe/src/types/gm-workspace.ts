@@ -251,6 +251,8 @@ export interface GmHierarchyLeader {
   actual: string;
   status: GmHierarchyStatus;
   blockerSummary: string;
+  /** KPI của chính supervisor — dùng để tiến độ dòng leader không chỉ trung bình member. */
+  leaderOwnRow?: GmHierarchyMember;
   members: GmHierarchyMember[];
 }
 
@@ -281,7 +283,10 @@ export interface GmHierarchyMember {
   leader?: string;
   submissionTarget?: number;
   submissionActual?: number;
+  evidences?: string | null;
   feedbackNote?: string | null;
+  /** BE: true khi 407 và feedback cần GM xử lý (không dựa vào có/không có nội dung note). */
+  feedbackAwaitingGm?: boolean;
   evidenceAttachmentUrl?: string;
 }
 
@@ -326,6 +331,8 @@ export interface GmHierarchyKpi {
   /** `kpi_master.is_global`: true = KPI GM (công ty), false = member đề xuất; undefined = API cũ / không rõ. */
   isGlobal?: boolean | null;
   unitCode?: number;
+  calculationRuleCode?: number;
+  calculationTypeCode?: number;
   pmOwners: GmHierarchyPm[];
   investigateDeptId?: string;
   investigateKpiName?: string;
@@ -336,10 +343,18 @@ export interface GmHierarchyKpi {
   /** ASM 401 / 402 / 403 — nút ✓/✗ chỉ bật khi 403. */
   assignmentStatusCode?: number | null;
   assigneeDisplayName?: string | null;
+  /** Assignee — tab Approved KPI (API queue). */
+  assigneeUserId?: string | null;
+  /** roles.code (uppercase), đã tách từ BE. */
+  assigneeRoleCodes?: string[];
+  /** Thời điểm assignment (API) — gộp “gửi gần nhất” theo member. */
+  requestedAt?: string | null;
   /** `sys_status_codes.description` (ưu tiên hiển thị). */
   assignmentStatusLabel?: string | null;
   /** `sys_status_codes.name` — tooltip / tương lai. */
   assignmentStatusName?: string | null;
+  /** Quy tắc chấm điểm (DSL / rawInput) — khi API trả `target_description`. */
+  scoringRulesText?: string | null;
 }
 
 export interface GmMidYearIssuesData {

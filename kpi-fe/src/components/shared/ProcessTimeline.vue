@@ -8,6 +8,9 @@ const props = defineProps<{
   year: number
 }>()
 
+const TRACK_LEFT_PCT = 100 / 6
+const TRACK_RIGHT_PCT = 100 - 100 / 6
+
 // ==========================================
 // 1. MOCK API & STATE LƯU DỮ LIỆU
 // ==========================================
@@ -144,6 +147,8 @@ const phaseStatuses = computed((): PhaseStatus[] => {
   return statuses
 })
 
+const TRACK_SPAN_PCT = TRACK_RIGHT_PCT - TRACK_LEFT_PCT
+
 const settingStatus = computed(() => phaseStatuses.value[0]!)
 const midYearStatus = computed(() => phaseStatuses.value[1]!)
 const yearEndStatus = computed(() => phaseStatuses.value[2]!)
@@ -171,24 +176,70 @@ function milestoneOuterClass(idx: number) {
 // ==========================================
 // 3. LOGIC HIỂN THỊ TRACK (Đường Line ngang)
 // ==========================================
-const TRACK_LEFT_PCT = 100 / 6
-const TRACK_RIGHT_PCT = 100 - 100 / 6
-const TRACK_SPAN_PCT = TRACK_RIGHT_PCT - TRACK_LEFT_PCT
+/**
+ * Piecewise progress fraction (0→1):
+ * - Trong phase [start, end] → nằm tại milestone (fraction cố định).
+ * - Giữa 2 phase → di chuyển linear từ milestone trước tới milestone tiếp.
+ * - Fallback: calendar year nếu thiếu dữ liệu hoặc năm khác.
+ */
+const cycleProgressFraction = computed((): number => {
+  const cd = cycleData.value
+  const now = dayjs()
+  const yNow = now.year()
 
-function calendarYearProgressForYear(y: number): number {
-  const now = new Date()
-  if (y < now.getFullYear()) return 1
-  if (y > now.getFullYear()) return 0
-  const t0 = new Date(y, 0, 1).getTime()
-  const t1 = new Date(y, 11, 31, 23, 59, 59, 999).getTime()
-  if (t1 <= t0) return 0
-  return Math.min(1, Math.max(0, (now.getTime() - t0) / (t1 - t0)))
-}
+  // Năm đã qua → hoàn thành 100%; năm tương lai → 0%
+  if (props.year < yNow) return 1
+  if (props.year > yNow) return 0
 
-const calendarYearProgress = computed(() => calendarYearProgressForYear(props.year))
+  const gs = cd.goalSettingStart ? dayjs(cd.goalSettingStart) : null
+  const ge = cd.goalSettingEnd   ? dayjs(cd.goalSettingEnd)   : null
+  const ms = cd.midYearStart     ? dayjs(cd.midYearStart)     : null
+  const me = cd.midYearEnd       ? dayjs(cd.midYearEnd)       : null
+  const es = cd.endYearStart     ? dayjs(cd.endYearStart)     : null
+  const ee = cd.endYearEnd       ? dayjs(cd.endYearEnd)       : null
+
+  if (gs && ge && ms && me && es && ee && ee.isAfter(gs)) {
+    // Vị trí cố định của 3 milestone (độc lập với date)
+    const F0 = 0    // milestone 0 tại 16.67%
+    const F1 = 0.5  // milestone 1 tại 50%
+    const F2 = 1.0  // milestone 2 tại 83.33%
+
+    if (now.isBefore(gs)) return 0
+
+    // Phase 0 [goalSettingStart, goalSettingEnd] → đứng tại milestone 0
+    if (!now.isAfter(ge)) return F0
+
+    // Giữa phase 0 và phase 1 → đi từ F0 → F1
+    if (now.isBefore(ms)) {
+      const gapTotal = ms.valueOf() - ge.valueOf()
+      const gapElapsed = now.valueOf() - ge.valueOf()
+      return F0 + (gapElapsed / gapTotal) * (F1 - F0)
+    }
+
+    // Phase 1 [midYearStart, midYearEnd] → đứng tại milestone 1
+    if (!now.isAfter(me)) return F1
+
+    // Giữa phase 1 và phase 2 → đi từ F1 → F2
+    if (now.isBefore(es)) {
+      const gapTotal = es.valueOf() - me.valueOf()
+      const gapElapsed = now.valueOf() - me.valueOf()
+      return F1 + (gapElapsed / gapTotal) * (F2 - F1)
+    }
+
+    // Phase 2 [endYearStart, endYearEnd] → đứng tại milestone 2
+    if (!now.isAfter(ee)) return F2
+
+    return 1
+  }
+
+  // Fallback: calendar year linear
+  const t0 = new Date(props.year, 0, 1).getTime()
+  const t1 = new Date(props.year, 11, 31, 23, 59, 59, 999).getTime()
+  return Math.min(1, Math.max(0, (now.valueOf() - t0) / (t1 - t0)))
+})
 
 const nowMarkerLeftPct = computed(
-    () => TRACK_LEFT_PCT + calendarYearProgress.value * TRACK_SPAN_PCT,
+    () => TRACK_LEFT_PCT + cycleProgressFraction.value * TRACK_SPAN_PCT,
 )
 
 const nowMarkerPositionStyle = computed(() => ({
@@ -206,7 +257,7 @@ const trackBarStyle = {
 
 const progressFillStyle = computed(() => ({
   left: `${TRACK_LEFT_PCT}%`,
-  width: `${Math.max(0, calendarYearProgress.value) * TRACK_SPAN_PCT}%`,
+  width: `${Math.max(0, cycleProgressFraction.value) * TRACK_SPAN_PCT}%`,
   top: '50%',
   transform: 'translateY(-50%)',
 }))

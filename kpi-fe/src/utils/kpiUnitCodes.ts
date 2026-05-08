@@ -80,17 +80,17 @@ function kpiUnitSuffixForTable(unitCode: unknown): string {
     case KPI_UNIT_CODE.MM:
       return ' MM'
     case KPI_UNIT_CODE.POINT:
-      return ' điểm'
+      return ' POINT'
     case KPI_UNIT_CODE.PRODUCT:
-      return ' SP'
+      return ' PRODUCT'
     case KPI_UNIT_CODE.PROJECT:
-      return ' DA'
+      return ' PROJECT'
     case KPI_UNIT_CODE.CERTIFICATION:
-      return ' cert'
+      return ' CERTIFICATION'
     case KPI_UNIT_CODE.ARTICLE:
-      return ' bài'
+      return ' ARTICLE'
     case KPI_UNIT_CODE.PERSON:
-      return ' người'
+      return ' PERSON'
     default:
       return ` ${kpiUnitCodeToFormUnit(n)}`
   }

@@ -29,6 +29,10 @@ public class GmDiagKpiNode {
     private Boolean isGlobal;
     /** {@code kpi_master.unit_code} — đồng bộ form Unit (FE). */
     private Integer unitCode;
+    /** {@code kpi_master.calculation_rule_code}. */
+    private Integer calculationRuleCode;
+    /** {@code kpi_master.calculation_type_code}. */
+    private Integer calculationTypeCode;
     /** {@code kpi_master.category_id} — FE dùng thay cho BSC khi gắn KPI với thư viện. */
     private String categoryId;
     /** {@code kpi_categories.name} */

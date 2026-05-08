@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, reactive } from 'vue'
 import type { LeaderKpiInformationResponse } from '@/types/kpi'
+import { formatTargetDisplay } from '@/utils/strategicKpiTypeCodes';
 
 const props = defineProps<{
   member: LeaderMember | null
@@ -75,12 +76,12 @@ const totalPmWeightedScore = computed(() =>
   ),
 )
 
-function formatTargetDisplay(assign: any): string {
-  const raw = assign?.targetValue
-  if (raw == null || raw === '') return '-'
-  const unit = String(assign?.unitName ?? '').trim()
-  return unit ? `${raw} ${unit}` : String(raw)
-}
+// function formatTargetDisplay(assign: any): string {
+//   const raw = assign?.targetValue
+//   if (raw == null || raw === '') return '-'
+//   const unit = String(assign?.unitName ?? '').trim()
+//   return unit ? `${raw} ${unit}` : String(raw)
+// }
 
 const selfWeightedAvg = computed((): number | null => {
   if (!selfWeightSum.value) return null

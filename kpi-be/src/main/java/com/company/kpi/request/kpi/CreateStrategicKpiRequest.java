@@ -5,6 +5,7 @@ import com.company.kpi.dto.kpi.KpiScoringRulesPayload;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+import jakarta.validation.constraints.DecimalMin;
 import lombok.Data;
 
 import java.math.BigDecimal;
@@ -40,6 +41,7 @@ public class CreateStrategicKpiRequest {
      * Giá trị mục tiêu số — lưu vào {@code kpis_information.target_value} / assignment.
      * JSON nên gửi kiểu số (vd. {@code 95}, {@code 95.5}); có thể {@code null} (vd. KPI không có target số trên form).
      */
+    @DecimalMin(value = "0", message = "targetValue must be >= 0")
     private BigDecimal targetValue;
 
     @NotNull

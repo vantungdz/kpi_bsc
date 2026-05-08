@@ -14,7 +14,7 @@ public interface UserKpiSummaryMapper {
     int updateEvaluationSupervisorComments(
             @Param("userId") UUID userId,
             @Param("cycleId") UUID cycleId,
-            @Param("comments") String comments,
+            @Param("supervisorCommentValue") String supervisorCommentValue,
             @Param("evaluatorId") UUID evaluatorId,
             @Param("updatedBy") UUID updatedBy);
 
@@ -22,8 +22,22 @@ public interface UserKpiSummaryMapper {
             @Param("id") UUID id,
             @Param("userId") UUID userId,
             @Param("cycleId") UUID cycleId,
-            @Param("comments") String comments,
+            @Param("supervisorCommentValue") String supervisorCommentValue,
             @Param("evaluatorId") UUID evaluatorId,
+            @Param("createdBy") UUID createdBy,
+            @Param("updatedBy") UUID updatedBy);
+
+    int updateEvaluationComments(
+            @Param("userId") UUID userId,
+            @Param("cycleId") UUID cycleId,
+            @Param("evaluationCommentValue") String evaluationCommentValue,
+            @Param("updatedBy") UUID updatedBy);
+
+    int insertEvaluationComments(
+            @Param("id") UUID id,
+            @Param("userId") UUID userId,
+            @Param("cycleId") UUID cycleId,
+            @Param("evaluationCommentValue") String evaluationCommentValue,
             @Param("createdBy") UUID createdBy,
             @Param("updatedBy") UUID updatedBy);
 }

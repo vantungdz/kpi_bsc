@@ -21,6 +21,8 @@ public class GmDiagnosticsFlatRow {
     private UUID categoryId;
     private String categoryName;
     private Integer typeCode;
+    private Integer calculationRuleCode;
+    private Integer calculationTypeCode;
     /** {@code kpi_master.is_global} — {@code true}: KPI GM giao công ty; {@code false}: member đề xuất / mẫu. */
     private Boolean isGlobal;
     /** {@code kpi_master.unit_code} — KPI_UNIT (sys_status_codes). */
@@ -63,5 +65,11 @@ public class GmDiagnosticsFlatRow {
     private BigDecimal endPmScore;
     private BigDecimal endGmScore;
     private BigDecimal memberTargetValue;
+    private String evidences;
     private String feedbackNote;
+    /**
+     * {@code roles.code} của feedback active trên assignment (bất kỳ target PM/GM),
+     * dùng để biết 407 có cần GM xử lý hay không.
+     */
+    private String activeFeedbackTargetRoleCode;
 }

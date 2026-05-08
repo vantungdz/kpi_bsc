@@ -7,6 +7,7 @@ import java.util.UUID;
 @Data
 public class MemberKpiAssignmentDTO {
     private UUID assignmentId;
+    private UUID kpiInformationId;
     private UUID cycleId;
     private String masterCode;
     private String masterName;
@@ -26,10 +27,17 @@ public class MemberKpiAssignmentDTO {
     /** Final: đủ 3 cấp đánh giá */
     private Double endSelfScore;
     private Double endPmScore;
+    private Double endGmScore;
     /** JSON string (JSONB column) */
     private String evidences;
     /** Feedback tách riêng khỏi evidences JSON */
     private String feedbackComment;
+    /** Lý do cập nhật / từ chối từ luồng PM/GM (kpi_assignments.update_reason). */
+    private String updateReason;
+    /** Assignment do chính user hiện tại tạo ra. */
+    private Boolean createdByCurrentUser;
+    /** Mã role đang xử lý feedback active — PM hoặc GM (roles.code). */
+    private String feedbackTargetRoleCode;
     /** {@code kpi_master.calculation_rule_code} — CALC_RULE 801–804 */
     private Integer calculationRuleCode;
     /** {@code kpi_master.calculation_type_code} — CALC_TYPE 701 (Actual/Plan) | 702 (Plan/Actual) */

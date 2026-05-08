@@ -17,13 +17,85 @@ import { gmTimelinePhaseHasOpenIssues } from '@/utils/gm-timeline-phase'
 import GmProcessTimelineTrack from '@/components/gm/GmProcessTimelineTrack.vue'
 import GmTimelineDrawerAssigneeTreeItem from '@/components/gm/GmTimelineDrawerAssigneeTreeItem.vue'
 import { gmDrawerEmployeeRowKey } from '@/utils/gm-drawer-assignee-keys'
+import { kpiCycleService } from '@/services/shared/kpi-cycle.service'
+import dayjs from 'dayjs'
 
 const props = defineProps<{
   midYearIssues: GmMidYearIssuesData
-  /** KPI Setting (Jan–Mar): mock ~80% + View Issues; bỏ qua = giữ UI cũ cột Setting. */
+  /** KPI Setting: View Issues khi có issue. */
   settingIssues?: GmMidYearIssuesData | null
   yearEndIssues?: GmMidYearIssuesData | null
+  /** Năm dương lịch — dùng để load dates từ kpi_cycles DB. Mặc định là năm hiện tại. */
+  year?: number
 }>()
+
+// ── Cycle dates từ DB ──────────────────────────────────────────────────────────
+const cycleData = ref<{
+  activePhase: string | null
+  goalSettingStart: string | null
+  goalSettingEnd: string | null
+  midYearStart: string | null
+  midYearEnd: string | null
+  endYearStart: string | null
+  endYearEnd: string | null
+}>({
+  activePhase: null,
+  goalSettingStart: null,
+  goalSettingEnd: null,
+  midYearStart: null,
+  midYearEnd: null,
+  endYearStart: null,
+  endYearEnd: null,
+})
+
+const cycleLoading = ref(true)
+
+watch(
+  () => props.year ?? new Date().getFullYear(),
+  async (newYear) => {
+    cycleLoading.value = true
+    try {
+      const res = await kpiCycleService.getKpiCycleByYear(newYear)
+      cycleData.value = {
+        activePhase: res.activePhase,
+        goalSettingStart: res.goalSettingStart,
+        goalSettingEnd: res.goalSettingEnd,
+        midYearStart: res.midYearStart,
+        midYearEnd: res.midYearEnd,
+        endYearStart: res.endYearStart,
+        endYearEnd: res.endYearEnd,
+      }
+    } catch {
+      cycleData.value = {
+        activePhase: null,
+        goalSettingStart: null,
+        goalSettingEnd: null,
+        midYearStart: null,
+        midYearEnd: null,
+        endYearStart: null,
+        endYearEnd: null,
+      }
+    } finally {
+      cycleLoading.value = false
+    }
+  },
+  { immediate: true },
+)
+
+/** Format `start – end` thành "MMM" hoặc "MMM - MMM", fallback về giá trị cứng. */
+function formatPhaseDuration(start: string | null, end: string | null, fallback: string): string {
+  if (!start || !end) return fallback
+  const s = dayjs(start).format('MMM')
+  const e = dayjs(end).format('MMM')
+  return s === e ? s : `${s} - ${e}`
+}
+
+/** Label tháng động từ DB. */
+const phaseLabels = computed(() => ({
+  setting: formatPhaseDuration(cycleData.value.goalSettingStart, cycleData.value.goalSettingEnd, 'Q1'),
+  mid: formatPhaseDuration(cycleData.value.midYearStart, cycleData.value.midYearEnd, 'Q2-Q3'),
+  yearEnd: formatPhaseDuration(cycleData.value.endYearStart, cycleData.value.endYearEnd, 'Q4'),
+}))
 
 type TimelineIssuesPhase = 'setting' | 'mid' | 'yearEnd'
 
@@ -72,26 +144,46 @@ type IssuePopoverRow = {
   dotClass: string
 }
 
-/** Calendar month 1–12 for each review phase (labels match UI: Jan–Mar, Jun–Jul, Nov–Dec). */
-const PHASE_WINDOWS = [
-  { key: 'setting', monthStart: 1, monthEnd: 3 },
-  { key: 'mid', monthStart: 6, monthEnd: 7 },
-  { key: 'yearEnd', monthStart: 11, monthEnd: 12 },
-] as const
-
 type PhaseStatus = 'upcoming' | 'active' | 'complete'
 
-function phaseStatusForMonth(month: number, start: number, end: number): PhaseStatus {
-  if (month < start) return 'upcoming'
-  if (month <= end) return 'active'
-  return 'complete'
-}
+/** Xác định status dựa trên start/end dates từ DB, và activePhase flag từ backend. */
+const phaseStatuses = computed((): PhaseStatus[] => {
+  const now = dayjs()
+  const ap = cycleData.value.activePhase
 
-const currentMonth = computed(() => new Date().getMonth() + 1)
+  // Ưu tiên cờ activePhase từ API (backend đã tính theo DB)
+  if (ap === 'target_setup') return ['active', 'upcoming', 'upcoming']
+  if (ap === 'mid_year') {
+    // Chỉ hiện mid là 'active' khi đã tới ngày bắt đầu
+    const midStart = cycleData.value.midYearStart
+    if (midStart && dayjs().isBefore(dayjs(midStart))) {
+      return ['complete', 'upcoming', 'upcoming']
+    }
+    return ['complete', 'active', 'upcoming']
+  }
+  if (ap === 'year_end') {
+    // Chỉ hiện year-end là 'active' khi đã tới ngày bắt đầu
+    const endStart = cycleData.value.endYearStart
+    if (endStart && dayjs().isBefore(dayjs(endStart))) {
+      return ['complete', 'complete', 'upcoming']
+    }
+    return ['complete', 'complete', 'active']
+  }
 
-const phaseStatuses = computed(() =>
-  PHASE_WINDOWS.map((p) => phaseStatusForMonth(currentMonth.value, p.monthStart, p.monthEnd)),
-)
+  // Fallback: tính theo start/end dates thực từ DB
+  function calcStatus(start: string | null, end: string | null): PhaseStatus {
+    if (!start || !end) return 'upcoming'
+    if (now.isBefore(dayjs(start))) return 'upcoming'
+    if (now.isAfter(dayjs(end))) return 'complete'
+    return 'active'
+  }
+
+  return [
+    calcStatus(cycleData.value.goalSettingStart, cycleData.value.goalSettingEnd),
+    calcStatus(cycleData.value.midYearStart, cycleData.value.midYearEnd),
+    calcStatus(cycleData.value.endYearStart, cycleData.value.endYearEnd),
+  ]
+})
 
 const settingStatus = computed(() => phaseStatuses.value[0]!)
 const midYearStatus = computed(() => phaseStatuses.value[1]!)
@@ -194,24 +286,82 @@ function milestoneOuterClass(idx: number) {
   return 'bg-slate-200 shadow-sm ring-2 ring-white'
 }
 
-/** Trục ngang: trùng tâm cột 1 → tâm cột 3 (cùng `left-[16.666%] right-[16.666%]`). */
+/** Trục ngang: trùng tâm cột 1 → tâm cột 3. */
 const TRACK_LEFT_PCT = 100 / 6
 const TRACK_RIGHT_PCT = 100 - 100 / 6
-
-/** 0 = đầu năm, 1 = cuối năm (theo thời gian thực). */
-const calendarYearProgress = computed(() => {
-  const now = new Date()
-  const y = now.getFullYear()
-  const t0 = new Date(y, 0, 1).getTime()
-  const t1 = new Date(y, 11, 31, 23, 59, 59, 999).getTime()
-  if (t1 <= t0) return 0
-  return Math.min(1, Math.max(0, (now.getTime() - t0) / (t1 - t0)))
-})
-
 const TRACK_SPAN_PCT = TRACK_RIGHT_PCT - TRACK_LEFT_PCT
 
-const nowMarkerLeftPct = computed(
-  () => TRACK_LEFT_PCT + calendarYearProgress.value * TRACK_SPAN_PCT,
+/**
+ * Piecewise progress fraction (0→1) — milestone positions cố định tại 0, 0.5, 1.0:
+ * - Trong phase [start, end]: marker NẰM TẠI milestone (fraction cố định).
+ * - Giữa 2 phase: di chuyển linear từ milestone trước tới milestone tiếp.
+ * - Fallback: calendar year nếu thiếu dữ liệu.
+ */
+const cycleProgressFraction = computed(() => {
+  const cd = cycleData.value
+  const now = dayjs()
+
+  const gs = cd.goalSettingStart ? dayjs(cd.goalSettingStart) : null
+  const ge = cd.goalSettingEnd   ? dayjs(cd.goalSettingEnd)   : null
+  const ms = cd.midYearStart     ? dayjs(cd.midYearStart)     : null
+  const me = cd.midYearEnd       ? dayjs(cd.midYearEnd)       : null
+  const es = cd.endYearStart     ? dayjs(cd.endYearStart)     : null
+  const ee = cd.endYearEnd       ? dayjs(cd.endYearEnd)       : null
+
+  // Vị trí cố định của 3 milestone (độc lập với date)
+  const F0 = 0    // milestone 0 tại 16.67% (TRACK_LEFT_PCT)
+  const F1 = 0.5  // milestone 1 tại 50%
+  const F2 = 1.0  // milestone 2 tại 83.33% (TRACK_RIGHT_PCT)
+
+  if (gs && ge && ms && me && es && ee) {
+    if (now.isBefore(gs)) return 0
+
+    // Phase 0 [goalSettingStart, goalSettingEnd] → đứng tại milestone 0
+    if (!now.isAfter(ge)) return F0
+
+    // Giữa phase 0 và phase 1 → đi từ F0 → F1
+    if (now.isBefore(ms)) {
+      const gapTotal = ms.valueOf() - ge.valueOf()
+      const gapElapsed = now.valueOf() - ge.valueOf()
+      return F0 + (gapElapsed / gapTotal) * (F1 - F0)
+    }
+
+    // Phase 1 [midYearStart, midYearEnd] → đứng tại milestone 1
+    if (!now.isAfter(me)) return F1
+
+    // Giữa phase 1 và phase 2 → đi từ F1 → F2
+    if (now.isBefore(es)) {
+      const gapTotal = es.valueOf() - me.valueOf()
+      const gapElapsed = now.valueOf() - me.valueOf()
+      return F1 + (gapElapsed / gapTotal) * (F2 - F1)
+    }
+
+    // Phase 2 [endYearStart, endYearEnd] → đứng tại milestone 2
+    if (!now.isAfter(ee)) return F2
+
+    return 1
+  }
+
+  // Fallback: calendar year linear
+  const y = now.year()
+  const t0 = dayjs(`${y}-01-01`).valueOf()
+  const t1 = dayjs(`${y}-12-31T23:59:59`).valueOf()
+  return Math.min(1, Math.max(0, (now.valueOf() - t0) / (t1 - t0)))
+})
+
+/**
+ * Vị trí % (0→1) của mỗi milestone — CỐ ĐỊNH tại 0, 0.5, 1.0.
+ * Milestone dots luôn ở 16.67%, 50%, 83.33% (khớp với grid-cols-3).
+ */
+const milestoneFractions = computed(() => [0, 0.5, 1.0])
+
+/** Chuyển fraction (0→1) sang left% tuyệt đối trong container. */
+function fractionToLeftPct(fraction: number): number {
+  return TRACK_LEFT_PCT + fraction * TRACK_SPAN_PCT
+}
+
+const nowMarkerLeftPct = computed(() =>
+  fractionToLeftPct(cycleProgressFraction.value),
 )
 
 const nowMarkerPositionStyle = computed(() => ({
@@ -229,7 +379,7 @@ const trackBarStyle = {
 
 const progressFillStyle = computed(() => ({
   left: `${TRACK_LEFT_PCT}%`,
-  width: `${Math.max(0, calendarYearProgress.value) * TRACK_SPAN_PCT}%`,
+  width: `${Math.max(0, cycleProgressFraction.value) * TRACK_SPAN_PCT}%`,
   top: '50%',
   transform: 'translateY(-50%)',
 }))
@@ -444,6 +594,9 @@ const trackMilestones = computed(() =>
   })),
 )
 
+/** Milestone dots dùng grid layout cố định — không cần absolute positioning. */
+const milestoneLeftPcts = computed((): number[] | undefined => undefined)
+
 const timelineCardClass = computed(() =>
   timelineCollapsed.value ? 'py-2' : 'pb-6 pt-4',
 )
@@ -517,7 +670,7 @@ onUnmounted(() => {
           class="pointer-events-none absolute inset-x-0 top-1/2 z-0 w-full -translate-y-1/2" aria-hidden="true">
           <GmProcessTimelineTrack :track-bar-style="trackBarStyle" :progress-fill-style="progressFillStyle"
             :now-marker-position-style="nowMarkerPositionStyle" :now-marker-label="nowMarkerLabel"
-            :milestones="trackMilestones" />
+            :milestones="trackMilestones" :milestone-left-pcts="milestoneLeftPcts" />
         </div>
       </Transition>
 
@@ -541,15 +694,24 @@ onUnmounted(() => {
         <div v-if="showExpandedTimeline" key="tl-phases" class="grid grid-cols-3 gap-1.5">
           <div class="min-w-0">
             <span class="text-xs font-bold" :class="phaseTitleClass(0)">KPI Setting</span>
-            <p class="mt-0.5 text-[15px]" :class="phaseSubLabelClass(0)">Jan - Mar</p>
+            <p class="mt-0.5 text-[15px]" :class="phaseSubLabelClass(0)">
+              <span v-if="cycleLoading" class="inline-block h-4 w-16 animate-pulse rounded bg-slate-200" />
+              <span v-else>{{ phaseLabels.setting }}</span>
+            </p>
           </div>
           <div class="min-w-0">
             <span class="text-xs font-bold" :class="phaseTitleClass(1)">Mid-Year Review</span>
-            <p class="mt-0.5 text-[15px]" :class="phaseSubLabelClass(1)">Jun - Jul</p>
+            <p class="mt-0.5 text-[15px]" :class="phaseSubLabelClass(1)">
+              <span v-if="cycleLoading" class="inline-block h-4 w-16 animate-pulse rounded bg-slate-200" />
+              <span v-else>{{ phaseLabels.mid }}</span>
+            </p>
           </div>
           <div class="min-w-0">
             <span class="text-xs font-bold" :class="phaseTitleClass(2)">Year-End Review</span>
-            <p class="mt-0.5 text-[15px]" :class="phaseSubLabelClass(2)">Nov - Dec</p>
+            <p class="mt-0.5 text-[15px]" :class="phaseSubLabelClass(2)">
+              <span v-if="cycleLoading" class="inline-block h-4 w-16 animate-pulse rounded bg-slate-200" />
+              <span v-else>{{ phaseLabels.yearEnd }}</span>
+            </p>
           </div>
         </div>
       </Transition>
@@ -558,7 +720,7 @@ onUnmounted(() => {
         <div v-if="showExpandedTimeline" key="track-below" class="mt-4">
           <GmProcessTimelineTrack :track-bar-style="trackBarStyle" :progress-fill-style="progressFillStyle"
             :now-marker-position-style="nowMarkerPositionStyle" :now-marker-label="nowMarkerLabel"
-            :milestones="trackMilestones" />
+            :milestones="trackMilestones" :milestone-left-pcts="milestoneLeftPcts" />
         </div>
       </Transition>
 

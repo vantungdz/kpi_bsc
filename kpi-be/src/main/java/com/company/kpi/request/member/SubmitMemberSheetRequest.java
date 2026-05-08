@@ -17,4 +17,7 @@ public class SubmitMemberSheetRequest {
      */
     @Pattern(regexp = "INDIVIDUAL|PROMOTION")
     private String kpiType = "INDIVIDUAL";
+
+    /** Comment của employee — lưu vào user_kpi_summaries.evaluation_comments khi submit thành công. */
+    private String evaluationComments;
 }

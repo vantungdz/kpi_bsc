@@ -1,8 +1,11 @@
 package com.company.kpi.controller.pm;
 
 import com.company.kpi.request.pm.PmMemberKpiApprovalDecisionRequest;
+import com.company.kpi.request.pm.PmAcceptMemberFeedbackWithCascadeRequest;
 import com.company.kpi.request.pm.PmMemberFeedbackDecisionRequest;
 import com.company.kpi.request.pm.PmGmFeedbackRequest;
+import com.company.kpi.request.pm.PmKpiCommentRequest;
+import com.company.kpi.request.pm.PmSupervisorCommentRequest;
 import com.company.kpi.response.gm.GmProcessTimelineResponse;
 import com.company.kpi.response.pm.MemberKpiDetailResponse;
 import com.company.kpi.response.pm.PmDashboardResponse;
@@ -106,6 +109,36 @@ public class PmDashboardController extends BaseController {
             Authentication authentication) {
         UUID pmId = jwtUtil.resolveUserId(authentication);
         pmDashboardService.decideMemberFeedback(pmId, body);
+        return success();
+    }
+
+    /** PM chấp nhận feedback + lưu phân bổ KPI Team trong một transaction (sau khi chỉnh drawer phân bổ). */
+    @PostMapping("/member-feedbacks/accept-with-cascade")
+    public ResponseEntity<BaseResponse<Void>> acceptMemberFeedbackWithCascade(
+            @Valid @RequestBody PmAcceptMemberFeedbackWithCascadeRequest body,
+            Authentication authentication) {
+        UUID pmId = jwtUtil.resolveUserId(authentication);
+        pmDashboardService.acceptMemberFeedbackWithCascade(pmId, body);
+        return success();
+    }
+
+    /** PM saves comment for individual KPI during Team Review evaluation. */
+    @PostMapping("/member-kpi-comment")
+    public ResponseEntity<BaseResponse<Void>> saveMemberKpiComment(
+            @Valid @RequestBody PmKpiCommentRequest body,
+            Authentication authentication) {
+        UUID pmId = jwtUtil.resolveUserId(authentication);
+        pmDashboardService.savePmKpiComment(pmId, body.getYear(), body.getAssignmentId(), body.getPmComment());
+        return success();
+    }
+
+    /** PM lưu nhận xét tổng của member để hiển thị Team Review/GM hub. */
+    @PostMapping("/member-supervisor-comment")
+    public ResponseEntity<BaseResponse<Void>> saveMemberSupervisorComment(
+            @Valid @RequestBody PmSupervisorCommentRequest body,
+            Authentication authentication) {
+        UUID pmId = jwtUtil.resolveUserId(authentication);
+        pmDashboardService.savePmSupervisorComment(pmId, body.getYear(), body.getMemberId(), body.getPmComment());
         return success();
     }
 }

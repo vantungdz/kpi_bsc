@@ -3,6 +3,7 @@ package com.company.kpi.request.gm;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 import java.math.BigDecimal;
@@ -18,4 +19,8 @@ public class GmEvaluationHubConfirmLine {
     @DecimalMin(value = "1.0", inclusive = true)
     @DecimalMax(value = "5.0", inclusive = true)
     private BigDecimal endGmScore;
+
+    /** Nhận xét theo từng KPI — lưu ở {@code kpi_assignments.evidences.gmComment}. */
+    @Size(max = 8000)
+    private String gmComment;
 }

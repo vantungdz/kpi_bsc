@@ -376,7 +376,6 @@ function displayTargetWithUnit(row: GmPersonalKpiRowMock): string {
     <div v-else-if="rows.length === 0"
       class="rounded-2xl border border-dashed border-slate-200 bg-slate-50/80 px-4 py-10 text-center">
       <p class="text-sm font-semibold text-slate-700">Chưa có dữ liệu KPI cá nhân</p>
-      <p class="mt-1 text-xs text-slate-500">Không có assignment Individual/Promotion cho năm {{ yearLabel }}.</p>
     </div>
 
     <div v-else class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">

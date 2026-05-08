@@ -97,7 +97,8 @@ const itemGroup = computed<string>(() => {
  * canEditEvidence derived from statusCode:
  *   - 402, 403 (pending proposal/accept) → false
  *   - 404 (pending acceptance) → false
- *   - 501–603 (any submitted/approved round) → false (read-only)
+ *   - 501, 502, 601, 602, 603 → false (read-only)
+ *   - 503 (first-half completed) → true (re-open for year-end edits)
  *   - otherwise (active editing states) → true
  */
 const canEditEvidence = computed<boolean>(() => {
@@ -109,7 +110,7 @@ const canEditEvidence = computed<boolean>(() => {
   const pendingProposal = code === 402 || code === 403
   const pendingAccept = code === 404
   const feedbackPending = code === 407
-  const submittedRound = code === 501 || code === 502 || code === 503
+  const submittedRound = code === 501 || code === 502
     || code === 601 || code === 602 || code === 603
   if (pendingProposal || submittedRound || feedbackPending) return false
   if (pendingAccept) return false
@@ -169,6 +170,10 @@ const hasFileAttachmentsSection = computed(
   () => pendingEvidenceFiles.value.length > 0 || pendingEvidenceNamedRows.value.length > 0,
 )
 const hasEvidenceUrlList = computed(() => pendingEvidenceUrls.value.length > 0)
+const rejectedReasonNote = computed(() => {
+  if (Number(props.item?.statusCode ?? 0) !== 406) return ''
+  return String(props.item?.updateReason ?? props.item?.feedbackComment ?? '').trim()
+})
 
 /** Live ratio result computed across all plan/actual rows (average mode only) */
 const averageRatioResult = computed<string | undefined>(() => {
@@ -481,7 +486,6 @@ async function handleSave() {
 
     const evidencesObj: Record<string, unknown> = {
       note: evidenceNoteDraft.value,
-      leaderFeedback: leaderFeedbackDraft.value,
       gmComment: gmCommentDraft.value,
       content: contentDraft.value,
       files: pendingEvidenceUrls.value.map(u => ({ url: u.url, name: u.name })),
@@ -496,7 +500,6 @@ async function handleSave() {
     const payload = {
       selfScore: effectiveScore,
       evidenceNote: evidenceNoteDraft.value,
-      leaderFeedback: leaderFeedbackDraft.value,
       gmComment: gmCommentDraft.value,
       certificateOutcomeNote: certificateOutcomeDraft.value,
       pendingEvidenceFiles: pendingEvidenceFiles.value,
@@ -561,6 +564,19 @@ async function handleSave() {
             <i class="fas fa-eye mr-2 shrink-0 text-amber-600" />
             Chế độ chỉ xem - KPI đã nộp hoặc đang chờ duyệt; bạn vẫn xem được minh chứng, không
             lưu chỉnh sửa.
+          </div>
+
+          <div
+            v-if="rejectedReasonNote"
+            class="shrink-0 border-b border-rose-200 bg-rose-50 px-6 py-2.5 text-xs leading-snug text-rose-900"
+          >
+            <p class="font-semibold">
+              <i class="fas fa-triangle-exclamation mr-2 text-rose-600" />
+              KPI đã bị từ chối - vui lòng chỉnh sửa và submit lại.
+            </p>
+            <p class="mt-1.5 whitespace-pre-wrap text-rose-800">
+              {{ rejectedReasonNote }}
+            </p>
           </div>
 
           <!-- KPI info banner -->

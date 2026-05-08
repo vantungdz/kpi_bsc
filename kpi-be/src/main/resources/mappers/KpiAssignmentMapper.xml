@@ -21,6 +21,7 @@
             resultType="com.company.kpi.response.member.MemberKpiAssignmentDTO">
         SELECT
             ka.id              AS assignment_id,
+            ki.id              AS kpi_information_id,
             ka.cycle_id        AS cycle_id,
             km.code            AS master_code,
             km.name            AS master_name,
@@ -38,8 +39,12 @@
             ka.mid_self_score,
             ka.end_self_score,
             ka.end_pm_score,
+            ka.end_gm_score,
             ka.evidences::text AS evidences,
             kaf.feedback_note AS feedback_comment,
+            ka.update_reason AS update_reason,
+            (ka.created_by = #{userId}) AS created_by_current_user,
+            kaf.feedback_target_role_code AS feedback_target_role_code,
             km.calculation_rule_code AS calculation_rule_code,
             km.calculation_type_code AS calculation_type_code,
             kc.id              AS category_id,
@@ -57,8 +62,10 @@
             LEFT JOIN sys_status_codes unit_sc ON km.unit_code = unit_sc.code
                 AND unit_sc.category = 'KPI_UNIT'
             LEFT JOIN LATERAL (
-                SELECT f.feedback_note
+                SELECT f.feedback_note,
+                       UPPER(TRIM(BOTH FROM r.code)) AS feedback_target_role_code
                 FROM kpi_assignment_feedbacks f
+                INNER JOIN roles r ON r.id = f.target_role_id AND r.deleted_at IS NULL
                 WHERE f.assignment_id = ka.id
                   AND f.cycle_id = ka.cycle_id
                   AND f.is_active = TRUE
@@ -101,6 +108,7 @@
             resultType="com.company.kpi.response.member.MemberKpiAssignmentDTO">
         SELECT
             ka.id              AS assignment_id,
+            ki.id              AS kpi_information_id,
             ka.cycle_id        AS cycle_id,
             km.code            AS master_code,
             km.name            AS master_name,
@@ -117,8 +125,12 @@
             ka.mid_self_score,
             ka.end_self_score,
             ka.end_pm_score,
+            ka.end_gm_score,
             ka.evidences::text AS evidences,
             kaf.feedback_note AS feedback_comment,
+            ka.update_reason AS update_reason,
+            (ka.created_by = #{userId}) AS created_by_current_user,
+            kaf.feedback_target_role_code AS feedback_target_role_code,
             km.calculation_rule_code AS calculation_rule_code,
             km.calculation_type_code AS calculation_type_code,
             kc.id              AS category_id,
@@ -136,8 +148,10 @@
             LEFT JOIN sys_status_codes unit_sc ON km.unit_code = unit_sc.code
                 AND unit_sc.category = 'KPI_UNIT'
             LEFT JOIN LATERAL (
-                SELECT f.feedback_note
+                SELECT f.feedback_note,
+                       UPPER(TRIM(BOTH FROM r.code)) AS feedback_target_role_code
                 FROM kpi_assignment_feedbacks f
+                INNER JOIN roles r ON r.id = f.target_role_id AND r.deleted_at IS NULL
                 WHERE f.assignment_id = ka.id
                   AND f.cycle_id = ka.cycle_id
                   AND f.is_active = TRUE
@@ -166,21 +180,91 @@
           AND deleted_at IS NULL
     </update>
 
+    <update id="softDeleteSelfCreatedAssignment">
+        UPDATE kpi_assignments ka
+        SET
+            deleted_at = NOW(),
+            updated_at = NOW(),
+            updated_by = #{userId}
+        FROM kpis_information ki
+        JOIN kpi_master km ON km.id = ki.master_kpi_id AND km.deleted_at IS NULL
+        WHERE ka.id = #{assignmentId}
+          AND ka.kpi_info_id = ki.id
+          AND ka.deleted_at IS NULL
+          AND ka.user_id = #{userId}
+          AND ka.created_by = #{userId}
+          AND ka.status_code IN (402, 404, 406)
+          AND km.type_code IN (101, 103)
+    </update>
+
     <update id="submitAssignmentFeedback">
         WITH pm_role AS (
             SELECT r.id AS role_id
             FROM roles r
-            WHERE UPPER(TRIM(r.code)) = 'PM'
+            WHERE UPPER(TRIM(BOTH FROM r.code)) = 'PM'
               AND r.deleted_at IS NULL
             ORDER BY r.created_at ASC
             LIMIT 1
         ),
+        gm_role AS (
+            SELECT r.id AS role_id
+            FROM roles r
+            WHERE UPPER(TRIM(BOTH FROM r.code)) = 'GM'
+              AND r.deleted_at IS NULL
+            ORDER BY r.created_at ASC
+            LIMIT 1
+        ),
+        ka_row AS (
+            SELECT ka.id, ka.cycle_id, ka.created_by
+            FROM kpi_assignments ka
+            WHERE ka.id = #{id}
+              AND ka.cycle_id = #{cycleId}
+              AND ka.user_id = #{userId}
+              AND ka.deleted_at IS NULL
+        ),
+        assigner_best AS (
+            SELECT COALESCE(
+                (
+                    SELECT UPPER(TRIM(BOTH FROM r.code))
+                    FROM user_roles ur
+                    INNER JOIN roles r ON r.id = ur.role_id AND r.deleted_at IS NULL
+                    WHERE ur.user_id = kr.created_by
+                    ORDER BY
+                        CASE UPPER(TRIM(BOTH FROM r.code))
+                            WHEN 'GM' THEN 1
+                            WHEN 'PM' THEN 2
+                            WHEN 'LEADER' THEN 3
+                            WHEN 'MEMBER' THEN 4
+                            ELSE 99
+                        END,
+                        r.code
+                    LIMIT 1
+                ),
+                'PM'
+            ) AS best_code
+            FROM ka_row kr
+        ),
+        target_pick AS (
+            SELECT CASE
+                WHEN ab.best_code = 'GM' THEN gr.role_id
+                ELSE pr.role_id
+            END AS target_role_id
+            FROM assigner_best ab
+            CROSS JOIN pm_role pr
+            CROSS JOIN gm_role gr
+        ),
         updated_feedback AS (
-            UPDATE kpi_assignment_feedbacks
-            SET feedback_note = #{feedbackComment}
-            WHERE assignment_id = #{id}
-              AND cycle_id = #{cycleId}
-            RETURNING assignment_id
+            UPDATE kpi_assignment_feedbacks f
+            SET
+                feedback_note = #{feedbackComment},
+                target_role_id = tp.target_role_id
+            FROM ka_row k
+            CROSS JOIN target_pick tp
+            WHERE f.assignment_id = k.id
+              AND f.cycle_id = k.cycle_id
+              AND f.is_active = TRUE
+              AND f.deleted_at IS NULL
+            RETURNING f.assignment_id
         ),
         inserted_feedback AS (
             INSERT INTO kpi_assignment_feedbacks (
@@ -190,13 +274,9 @@
                 target_role_id,
                 created_by
             )
-            SELECT
-                #{id},
-                #{cycleId},
-                #{feedbackComment},
-                pr.role_id,
-                #{userId}
-            FROM pm_role pr
+            SELECT k.id, k.cycle_id, #{feedbackComment}, tp.target_role_id, #{userId}
+            FROM ka_row k
+            CROSS JOIN target_pick tp
             WHERE NOT EXISTS (SELECT 1 FROM updated_feedback)
             RETURNING assignment_id
         )
@@ -260,6 +340,7 @@
     <resultMap id="PmDashboardAggregateResultMap" type="com.company.kpi.aggregate.PmDashboardAggregate">
         <result property="pmFeedbackNote" column="pm_feedback_note"/>
         <result property="childFeedbackNote" column="child_feedback_note"/>
+        <result property="childFeedbackTargetRoleCode" column="child_feedback_target_role_code"/>
         <association property="pmAssignment" javaType="com.company.kpi.entity.KpiAssignment">
             <id property="id" column="pm_asm_id"/>
             <result property="targetValue" column="pm_asm_target"/>
@@ -346,6 +427,7 @@
             child_ka.status_code AS child_status_code,
             child_ka.evidences AS child_evidences,
             child_kf.feedback_note AS child_feedback_note,
+            child_fb_role.target_role_code AS child_feedback_target_role_code,
 
             child_u.id AS child_user_id,
             child_u.full_name AS child_full_name,
@@ -393,6 +475,18 @@
             ORDER BY f.created_at DESC
             LIMIT 1
         ) child_kf ON TRUE
+        LEFT JOIN LATERAL (
+            SELECT UPPER(TRIM(BOTH FROM r.code)) AS target_role_code
+            FROM kpi_assignment_feedbacks f
+            INNER JOIN roles r ON r.id = f.target_role_id AND r.deleted_at IS NULL
+            WHERE child_ka.id IS NOT NULL
+              AND f.assignment_id = child_ka.id
+              AND f.cycle_id = child_ka.cycle_id
+              AND f.is_active = TRUE
+              AND f.deleted_at IS NULL
+            ORDER BY f.created_at DESC
+            LIMIT 1
+        ) child_fb_role ON TRUE
         LEFT JOIN users child_u ON child_ka.user_id = child_u.id AND child_u.deleted_at IS NULL
         LEFT JOIN job_titles child_jt ON child_u.job_title_id = child_jt.id AND child_jt.deleted_at IS NULL
 
@@ -410,6 +504,7 @@
             resultType="com.company.kpi.response.leader.LeaderKpiAssignmentDTO">
         SELECT
             ka.id              AS assignment_id,
+            ki.id              AS kpi_information_id,
             COALESCE(ka.target_value, ki.target_value) AS target_value,
             km.unit_code       AS unit_code,
             unit_sc.name       AS unit_name,
@@ -423,8 +518,11 @@
             ka.mid_self_score,
             ka.end_self_score,
             ka.end_pm_score,
+            ka.end_gm_score,
             ka.evidences,
             kaf.feedback_note AS feedback_comment,
+            ka.update_reason AS update_reason,
+            (ka.created_by = #{userId}) AS created_by_current_user,
             CASE
                 WHEN ka.status_code = 407 THEN 'feedback'
                 WHEN ka.end_pm_score IS NOT NULL THEN 'approved'
@@ -441,6 +539,8 @@
                 ELSE 'not_started'
             END AS evaluation_status,
             CASE
+                WHEN ka.status_code = 407 AND UPPER(TRIM(BOTH FROM kaf.feedback_target_role_code)) = 'GM'
+                    THEN 'Chờ GM kiểm tra feedback'
                 WHEN ka.status_code = 407 THEN 'Chờ PM kiểm tra feedback'
                 WHEN ka.end_pm_score IS NOT NULL THEN 'Đã duyệt'
                 WHEN (ka.mid_self_score IS NOT NULL OR ka.end_self_score IS NOT NULL
@@ -485,8 +585,10 @@
             LEFT JOIN sys_status_codes unit_sc ON km.unit_code = unit_sc.code
                 AND unit_sc.category = 'KPI_UNIT'
             LEFT JOIN LATERAL (
-                SELECT f.feedback_note
+                SELECT f.feedback_note,
+                       UPPER(TRIM(BOTH FROM r.code)) AS feedback_target_role_code
                 FROM kpi_assignment_feedbacks f
+                INNER JOIN roles r ON r.id = f.target_role_id AND r.deleted_at IS NULL
                 WHERE f.assignment_id = ka.id
                   AND f.cycle_id = ka.cycle_id
                   AND f.is_active = TRUE
@@ -720,7 +822,28 @@
           AND status_code = 602
     </update>
 
-    <!-- Tab GM Approved KPI: KPI cá nhân (user_id NOT NULL) ASM 401/402/403 trong chu kỳ. -->
+    <update id="updateGmEvaluationHubLineComment">
+        UPDATE kpi_assignments
+        SET
+            evidences = jsonb_set(
+                CASE
+                    WHEN evidences IS NULL THEN '{}'::jsonb
+                    WHEN jsonb_typeof(evidences) = 'object' THEN evidences
+                    ELSE '{}'::jsonb
+                END,
+                '{gmComment}',
+                to_jsonb(COALESCE(#{gmComment, jdbcType=VARCHAR}, '')::text),
+                TRUE
+            ),
+            updated_at = NOW(),
+            updated_by = #{updatedBy, jdbcType=OTHER}
+        WHERE id = #{assignmentId}
+          AND cycle_id = #{cycleId}
+          AND user_id = #{evaluationUserId, jdbcType=OTHER}
+          AND deleted_at IS NULL
+    </update>
+
+    <!-- Tab GM Approved KPI: KPI cá nhân (user_id NOT NULL) ASM 401/402/403. Feedback 407 xử lý ở Strategic diagnostics. -->
     <select id="listGmApprovedKpiQueue" resultType="com.company.kpi.response.gm.GmApprovedKpiQueueItemResponse">
         SELECT
             ka.id AS assignment_id,
@@ -731,6 +854,22 @@
             ka.user_id AS user_id,
             u.full_name AS user_full_name,
             u.username AS user_username,
+            (
+                SELECT string_agg(TRIM(r.code), '|||' ORDER BY
+                    CASE UPPER(TRIM(r.code))
+                        WHEN 'GM' THEN 1
+                        WHEN 'PM' THEN 2
+                        WHEN 'LEADER' THEN 3
+                        WHEN 'MEMBER' THEN 4
+                        ELSE 5
+                    END,
+                    r.code
+                )
+                FROM user_roles ur
+                INNER JOIN roles r ON r.id = ur.role_id AND r.deleted_at IS NULL
+                WHERE ur.user_id = ka.user_id
+            ) AS user_role_codes,
+            ka.created_at AS requested_at,
             km.code AS master_code,
             km.name AS master_name,
             COALESCE(ka.target_value, ki.target_value) AS target_value,
@@ -739,28 +878,59 @@
             ki.is_important AS important,
             kc.name AS category_name,
             km.type_code AS type_code,
-            km.unit_code AS unit_code
-        FROM kpi_assignments ka
+            km.unit_code AS unit_code,
+            (
+                SELECT f.feedback_note
+                FROM kpi_assignment_feedbacks f
+                INNER JOIN roles r ON r.id = f.target_role_id AND r.deleted_at IS NULL
+                WHERE f.assignment_id = ka.id
+                  AND f.cycle_id = ka.cycle_id
+                  AND f.is_active = TRUE
+                  AND f.deleted_at IS NULL
+                  AND UPPER(TRIM(BOTH FROM r.code)) = 'GM'
+                ORDER BY f.created_at DESC
+                LIMIT 1
+            ) AS feedback_note
+        FROM (
+            SELECT DISTINCT ON (user_id, kpi_info_id)
+                id, cycle_id, kpi_info_id, user_id, status_code, target_value, created_at
+            FROM kpi_assignments
+            WHERE cycle_id = #{cycleId, jdbcType=OTHER}
+              AND deleted_at IS NULL
+              AND user_id IS NOT NULL
+            ORDER BY user_id, kpi_info_id, status_code DESC, created_at DESC
+        ) ka
         JOIN kpis_information ki ON ka.kpi_info_id = ki.id AND ki.deleted_at IS NULL
         JOIN kpi_master km ON ki.master_kpi_id = km.id AND km.deleted_at IS NULL
         JOIN kpi_categories kc ON km.category_id = kc.id AND kc.deleted_at IS NULL
         JOIN users u ON ka.user_id = u.id AND u.deleted_at IS NULL
         LEFT JOIN sys_status_codes asm ON asm.code = ka.status_code AND asm.category = 'ASM_STATUS'
-        WHERE ka.cycle_id = #{cycleId, jdbcType=OTHER}
-          AND ka.deleted_at IS NULL
-          AND ka.user_id IS NOT NULL
-          AND ka.status_code IN (401, 402, 403)
+        WHERE ka.status_code IN (401, 402, 403)
         ORDER BY
-            CASE ka.status_code WHEN 403 THEN 0 WHEN 402 THEN 1 ELSE 2 END,
+            CASE ka.status_code
+                WHEN 403 THEN 0
+                WHEN 402 THEN 1
+                ELSE 3
+            END,
             kc.name,
             km.code,
             u.full_name
+    </select>
+
+    <select id="findAssignmentStatusCode" resultType="java.lang.Integer">
+        SELECT ka.status_code
+        FROM kpi_assignments ka
+        WHERE ka.id = #{assignmentId, jdbcType=OTHER}
+          AND ka.cycle_id = #{cycleId, jdbcType=OTHER}
+          AND ka.deleted_at IS NULL
+        LIMIT 1
     </select>
 
     <update id="updateGmAssignmentStatusFromWaitingGm">
         UPDATE kpi_assignments
         SET
             status_code = #{newStatus},
+            update_reason = #{updateReason, jdbcType=VARCHAR},
             updated_at = NOW(),
             updated_by = #{updatedBy, jdbcType=OTHER}
         WHERE id = #{assignmentId, jdbcType=OTHER}
@@ -1293,12 +1463,52 @@
             </if>
     </update>
 
+    <!--
+        Team Review (PM): sau khi đẩy member dưới quyền lên 502/602, đồng bộ KPI Team cha của chính PM
+        để GM Evaluation Hub có thể hiển thị dòng PM tương ứng.
+    -->
+    <update id="syncPmTeamParentStatusesFromManagedChildren">
+        WITH RECURSIVE team_tree AS (
+            SELECT ud.user_id
+            FROM user_departments ud
+            WHERE ud.supervisor_id = #{pmId, jdbcType=OTHER}
+            UNION ALL
+            SELECT ud.user_id
+            FROM user_departments ud
+            INNER JOIN team_tree tt ON ud.supervisor_id = tt.user_id
+        )
+        UPDATE kpi_assignments parent
+        SET
+            status_code = #{statusCode},
+            updated_at = CURRENT_TIMESTAMP,
+            updated_by = #{updatedBy, jdbcType=OTHER}
+        FROM kpis_information ki
+        INNER JOIN kpi_master km ON km.id = ki.master_kpi_id AND km.deleted_at IS NULL
+        WHERE parent.kpi_info_id = ki.id
+          AND parent.cycle_id = #{cycleId, jdbcType=OTHER}
+          AND parent.user_id = #{pmId, jdbcType=OTHER}
+          AND parent.parent_assignment_id IS NULL
+          AND parent.deleted_at IS NULL
+          AND km.type_code = 102
+          AND COALESCE(parent.status_code, 0) &lt;&gt; #{statusCode}
+          AND EXISTS (
+              SELECT 1
+              FROM kpi_assignments child
+              WHERE child.parent_assignment_id = parent.id
+                AND child.cycle_id = parent.cycle_id
+                AND child.deleted_at IS NULL
+                AND child.user_id IN (SELECT user_id FROM team_tree)
+                AND child.status_code = #{statusCode}
+          );
+    </update>
+
     <resultMap id="KpiAssignmentDetailResultMap" type="com.company.kpi.aggregate.KpiAssignmentDetailAggregate" autoMapping="true">
         <id property="id" column="assign_id"/>
         <result property="targetValue" column="assign_target_value"/>
         <result property="midSelfScore" column="mid_self_score"/>
         <result property="endSelfScore" column="end_self_score"/>
         <result property="endPmScore" column="end_pm_score"/>
+        <result property="pmComment" column="pm_comment"/>
         <result property="statusCode" column="status_code"/>
 
         <association property="kpisInformation" javaType="com.company.kpi.entity.KpisInformation" autoMapping="true">
@@ -1327,6 +1537,7 @@
             ka.mid_self_score,
             ka.end_self_score,
             ka.end_pm_score,
+            ka.evidences ->> 'gmComment' AS pm_comment,
             ka.status_code, ka.evidences,
             ki.id AS info_id, ki.target_description, ki.target_value, ki.weight,
             km.id AS master_id, km.code AS master_code, km.name AS master_name, 
@@ -1360,10 +1571,29 @@
             ka.cycle_id AS cycle_id,
             ka.user_id AS user_id,
             u.full_name AS user_full_name,
+            (
+                SELECT string_agg(TRIM(r.code), '|||' ORDER BY
+                    CASE UPPER(TRIM(r.code))
+                        WHEN 'GM' THEN 1
+                        WHEN 'PM' THEN 2
+                        WHEN 'LEADER' THEN 3
+                        WHEN 'MEMBER' THEN 4
+                        ELSE 5
+                    END,
+                    r.code
+                )
+                FROM user_roles ur
+                INNER JOIN roles r ON r.id = ur.role_id AND r.deleted_at IS NULL
+                WHERE ur.user_id = ka.user_id
+            ) AS user_role_codes,
             km.name AS kpi_name,
             ki.target_description AS target_description,
+            COALESCE(ka.target_value, ki.target_value) AS target_value,
             ki.weight AS weight,
             kc.name AS category_name,
+            km.unit_code AS unit_code,
+            km.calculation_rule_code AS calculation_rule_code,
+            km.calculation_type_code AS calculation_type_code,
             km.type_code AS type_code,
             ka.created_at AS requested_at
         FROM kpi_assignments ka
@@ -1383,6 +1613,9 @@
         UPDATE kpi_assignments ka
         SET
             status_code = #{newStatus},
+            <if test="updateReason != null">
+            update_reason = #{updateReason, jdbcType=VARCHAR},
+            </if>
             updated_at = NOW(),
             updated_by = #{updatedBy, jdbcType=OTHER}
         WHERE ka.id = #{assignmentId, jdbcType=OTHER}
@@ -1415,6 +1648,76 @@
           AND ka.deleted_at IS NULL
           AND ka.status_code = 407
           AND ka.user_id IS NOT NULL
+          AND EXISTS (
+              SELECT 1
+              FROM kpi_assignment_feedbacks f
+              WHERE f.assignment_id = ka.id
+                AND f.cycle_id = ka.cycle_id
+                AND f.is_active = TRUE
+                AND f.deleted_at IS NULL
+                AND f.target_role_id = (
+                    SELECT r.id
+                    FROM roles r
+                    WHERE UPPER(TRIM(BOTH FROM r.code)) = 'PM'
+                      AND r.deleted_at IS NULL
+                    ORDER BY r.created_at ASC
+                    LIMIT 1
+                )
+          )
+          AND EXISTS (
+              WITH RECURSIVE pm_team AS (
+                  SELECT ud.user_id
+                  FROM user_departments ud
+                  WHERE ud.supervisor_id = #{pmId, jdbcType=OTHER}
+                  UNION ALL
+                  SELECT ud.user_id
+                  FROM user_departments ud
+                  INNER JOIN pm_team pt ON ud.supervisor_id = pt.user_id
+              )
+              SELECT 1 FROM pm_team pt WHERE pt.user_id = ka.user_id
+          )
+    </update>
+
+    <update id="updatePmComment">
+        UPDATE kpi_assignments ka
+        SET
+            evidences = jsonb_set(
+                CASE
+                    WHEN ka.evidences IS NULL THEN '{}'::jsonb
+                    WHEN jsonb_typeof(ka.evidences) = 'object' THEN ka.evidences
+                    ELSE '{}'::jsonb
+                END,
+                '{gmComment}',
+                to_jsonb(COALESCE(#{gmComment, jdbcType=VARCHAR}, '')::text),
+                TRUE
+            ),
+            updated_at = NOW()
+        WHERE ka.id = #{assignmentId, jdbcType=OTHER}
+          AND ka.cycle_id = #{cycleId, jdbcType=OTHER}
+          AND ka.deleted_at IS NULL
+          AND EXISTS (
+              WITH RECURSIVE pm_team AS (
+                  SELECT ud.user_id
+                  FROM user_departments ud
+                  WHERE ud.supervisor_id = #{pmId, jdbcType=OTHER}
+                  UNION ALL
+                  SELECT ud.user_id
+                  FROM user_departments ud
+                  INNER JOIN pm_team pt ON ud.supervisor_id = pt.user_id
+              )
+              SELECT 1 FROM pm_team pt WHERE pt.user_id = ka.user_id
+          )
+    </update>
+
+    <update id="updateEndPmScoreForPmManagedMember">
+        UPDATE kpi_assignments ka
+        SET
+            end_pm_score = #{pmScoreValue, jdbcType=NUMERIC},
+            updated_at = NOW()
+        WHERE ka.id = #{assignmentId, jdbcType=OTHER}
+          AND ka.user_id = #{memberUserId, jdbcType=OTHER}
+          AND ka.deleted_at IS NULL
+          AND ka.status_code = 601
           AND EXISTS (
               WITH RECURSIVE pm_team AS (
                   SELECT ud.user_id

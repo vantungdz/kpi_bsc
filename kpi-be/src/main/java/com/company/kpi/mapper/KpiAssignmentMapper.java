@@ -45,6 +45,10 @@ public interface KpiAssignmentMapper {
             @Param("evidences") String evidences,
             @Param("statusCode") Integer statusCode);
 
+    int softDeleteSelfCreatedAssignment(
+            @Param("assignmentId") UUID assignmentId,
+            @Param("userId") UUID userId);
+
     int submitAssignmentFeedback(
             @Param("id") UUID id,
             @Param("cycleId") UUID cycleId,
@@ -155,14 +159,26 @@ public interface KpiAssignmentMapper {
             @Param("endGmScore") BigDecimal endGmScore,
             @Param("updatedBy") UUID updatedBy);
 
+    /** Cập nhật comment theo từng KPI của GM vào {@code evidences.gmComment}. */
+    int updateGmEvaluationHubLineComment(
+            @Param("assignmentId") UUID assignmentId,
+            @Param("cycleId") UUID cycleId,
+            @Param("evaluationUserId") UUID evaluationUserId,
+            @Param("gmComment") String gmComment,
+            @Param("updatedBy") UUID updatedBy);
+
     List<GmApprovedKpiQueueItemResponse> listGmApprovedKpiQueue(@Param("cycleId") UUID cycleId);
+
+    Integer findAssignmentStatusCode(
+            @Param("assignmentId") UUID assignmentId, @Param("cycleId") UUID cycleId);
 
     /** Chỉ khi {@code status_code = 403} (chờ GM duyệt tạo mới). */
     int updateGmAssignmentStatusFromWaitingGm(
             @Param("assignmentId") UUID assignmentId,
             @Param("cycleId") UUID cycleId,
             @Param("newStatus") int newStatus,
-            @Param("updatedBy") UUID updatedBy);
+            @Param("updatedBy") UUID updatedBy,
+            @Param("updateReason") String updateReason);
 
     /** PM gửi feedback lên GM: assignment do PM sở hữu, 404→407. */
     int updatePmAssignmentStatusToFeedbackInProgress(
@@ -247,6 +263,16 @@ public interface KpiAssignmentMapper {
             @Param("promotion") boolean promotion,
             @Param("onlyFromStatusCode") Integer onlyFromStatusCode);
 
+    /**
+     * Đồng bộ KPI Team assignment cha của PM theo trạng thái mới của assignment con trong cây team.
+     * Dùng cho luồng Team Review bulk submit (đưa parent vào 502/602 để GM Evaluation Hub hiển thị).
+     */
+    int syncPmTeamParentStatusesFromManagedChildren(
+            @Param("pmId") UUID pmId,
+            @Param("cycleId") UUID cycleId,
+            @Param("statusCode") Integer statusCode,
+            @Param("updatedBy") UUID updatedBy);
+
     List<KpiAssignmentDetailAggregate> findKpiDetailsByUserAndCycle(@Param("userId") UUID userId, @Param("cycleId") UUID cycleId);
 
     /**
@@ -265,7 +291,8 @@ public interface KpiAssignmentMapper {
             @Param("cycleId") UUID cycleId,
             @Param("pmId") UUID pmId,
             @Param("newStatus") int newStatus,
-            @Param("updatedBy") UUID updatedBy);
+            @Param("updatedBy") UUID updatedBy,
+            @Param("updateReason") String updateReason);
 
     /** PM xử lý feedback member: 407→404 cho assignment thuộc cây báo cáo dưới PM. */
     int updateMemberFeedbackStatusByPm(
@@ -273,4 +300,25 @@ public interface KpiAssignmentMapper {
             @Param("cycleId") UUID cycleId,
             @Param("pmId") UUID pmId,
             @Param("updatedBy") UUID updatedBy);
+
+    /**
+     * PM lưu comment theo từng KPI vào {@code kpi_assignments.evidences.gmComment}.
+     * Chỉ cho phép assignment của member thuộc cây báo cáo dưới PM trong cùng chu kỳ.
+     */
+    int updatePmComment(
+            @Param("assignmentId") UUID assignmentId,
+            @Param("cycleId") UUID cycleId,
+            @Param("pmId") UUID pmId,
+            @Param("gmComment") String gmComment);
+
+    /**
+     * PM lưu {@code end_pm_score} cho assignment của member ở giai đoạn cuối kỳ (ASM {@code 601} chờ PM) —
+     * cùng tập member được phép {@link #updatePmComment}. Giữa kỳ ({@code 501}) không chấm điểm PM.
+     * Tham số điểm đặt tên {@code pmScoreValue} để tránh interceptor mã hóa nhầm (map key {@code endPmScore}).
+     */
+    int updateEndPmScoreForPmManagedMember(
+            @Param("assignmentId") UUID assignmentId,
+            @Param("memberUserId") UUID memberUserId,
+            @Param("pmId") UUID pmId,
+            @Param("pmScoreValue") java.math.BigDecimal pmScoreValue);
 }

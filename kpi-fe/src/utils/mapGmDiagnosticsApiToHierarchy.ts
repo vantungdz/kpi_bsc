@@ -54,7 +54,10 @@ function mapMember(m: GmDiagMemberApi): GmHierarchyMember {
     performanceLabel: m.performanceLabel ?? undefined,
     submissionTarget: parseOptionalSubmissionNum(m.submissionTarget),
     submissionActual: parseOptionalSubmissionNum(m.submissionActual),
+    evidences: m.evidences ?? undefined,
     feedbackNote: m.feedbackNote ?? undefined,
+    feedbackAwaitingGm:
+      typeof m.feedbackAwaitingGm === 'boolean' ? m.feedbackAwaitingGm : undefined,
     blocker: m.blocker ?? '—',
     rank: m.rank ?? undefined,
     leader: m.leader ?? undefined,
@@ -73,6 +76,7 @@ function mapLeader(l: GmDiagLeaderApi): GmHierarchyLeader {
     actual: l.actual,
     status: asStatus(l.status),
     blockerSummary: l.blockerSummary ?? '',
+    leaderOwnRow: l.leaderOwnRow ? mapMember(l.leaderOwnRow) : undefined,
     members: (l.members ?? []).map(mapMember),
   }
 }
@@ -121,6 +125,14 @@ export function mapGmDiagnosticsApiKpisToHierarchyRows(kpis: GmDiagKpiApi[] | nu
       blockerSummary: k.blockerSummary,
       kpiType,
       unitCode: k.unitCode ?? undefined,
+      calculationRuleCode:
+        typeof k.calculationRuleCode === 'number' && Number.isFinite(k.calculationRuleCode)
+          ? k.calculationRuleCode
+          : undefined,
+      calculationTypeCode:
+        typeof k.calculationTypeCode === 'number' && Number.isFinite(k.calculationTypeCode)
+          ? k.calculationTypeCode
+          : undefined,
       diagnosticsFallbackGroup: fallbackGroup,
       categoryId: cid,
       categoryName: cname,

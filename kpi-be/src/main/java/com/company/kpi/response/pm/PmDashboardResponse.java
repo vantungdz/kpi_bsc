@@ -64,6 +64,8 @@ public class PmDashboardResponse {
         private String actualResult;    // evidences
         /** Nội dung feedback active member -> PM (kpi_assignment_feedbacks.feedback_note). */
         private String feedbackNote;
+        /** Role cần xử lý feedback member (PM / GM) — theo feedback active. */
+        private String feedbackTargetRoleCode;
         private BigDecimal selfScore;   // end_self_score fallback mid_self_score
         private BigDecimal pmScore;     // end_pm_score
         private Integer statusCode;

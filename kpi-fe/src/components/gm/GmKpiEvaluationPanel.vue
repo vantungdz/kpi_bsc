@@ -93,6 +93,8 @@ const expandedLeaderKeys = reactive<Record<string, boolean>>({});
 const expandedSectionIds = reactive<Record<string, boolean>>({});
 const openEvidence = reactive<Record<string, boolean>>({});
 const pmScores = reactive<Record<string, Record<string, number | null>>>({});
+const gmScoreTouched = reactive<Record<string, Record<string, boolean>>>({});
+const gmKpiComments = reactive<Record<string, Record<string, string>>>({});
 const supervisorComments = reactive<Record<string, string>>({});
 const banner = ref<{ type: "ok" | "info"; text: string } | null>(null);
 const confirmBusy = ref(false);
@@ -140,6 +142,17 @@ function hubRowGmScoreEnabled(item: GmKpiItem): boolean {
   return item.hubAssignmentStatusCode === 602;
 }
 
+/** Hiển thị điểm GM ở bảng tổng hợp cho cả dòng đang chấm (602) và đã chốt (603). */
+function hubRowGmScoreDisplayEnabled(item: GmKpiItem): boolean {
+  const code = Number(item.hubAssignmentStatusCode)
+  return code === 602 || code === 603
+}
+
+/** ASM 502/602: GM có thể ghi comment theo từng KPI. */
+function hubRowGmCommentEnabled(item: GmKpiItem): boolean {
+  return item.hubAssignmentStatusCode === 502 || item.hubAssignmentStatusCode === 602;
+}
+
 function drawerRequiresGmFinalGrading(emp: GmEvalMember): boolean {
   return flattenGmKpiItems(emp).some(hubRowGmScoreEnabled);
 }
@@ -157,18 +170,39 @@ function isEvidenceCellHttpUrl(raw: unknown): raw is string {
 function ensurePmScoreKeys() {
   for (const emp of employees.value) {
     if (!pmScores[emp.id]) pmScores[emp.id] = {};
+    if (!gmScoreTouched[emp.id]) gmScoreTouched[emp.id] = {};
     for (const item of flattenGmKpiItems(emp)) {
       if (pmScores[emp.id][item.id] === undefined)
-        pmScores[emp.id][item.id] = null;
+        pmScores[emp.id][item.id] = item.pmSeedScore ?? item.pmScore ?? null;
+      if (gmScoreTouched[emp.id][item.id] === undefined)
+        gmScoreTouched[emp.id][item.id] = false;
     }
+  }
+}
+
+function initGmCommentDraft(emp: GmEvalMember, reset = false) {
+  if (!gmKpiComments[emp.id]) gmKpiComments[emp.id] = {};
+  for (const item of flattenGmKpiItems(emp)) {
+    const fromEvidence = String(item.gmComment ?? "");
+    if (reset || gmKpiComments[emp.id][item.id] === undefined) {
+      gmKpiComments[emp.id][item.id] = fromEvidence;
+    }
+  }
+}
+
+function ensureGmCommentKeys(reset = false) {
+  for (const emp of employees.value) {
+    initGmCommentDraft(emp, reset);
   }
 }
 
 function resetPmScores() {
   for (const emp of employees.value) {
     if (!pmScores[emp.id]) pmScores[emp.id] = {};
+    if (!gmScoreTouched[emp.id]) gmScoreTouched[emp.id] = {};
     for (const item of flattenGmKpiItems(emp)) {
-      pmScores[emp.id][item.id] = null;
+      pmScores[emp.id][item.id] = item.pmSeedScore ?? item.pmScore ?? null;
+      gmScoreTouched[emp.id][item.id] = false;
     }
   }
 }
@@ -178,7 +212,30 @@ function prefillLockedPmScores() {
   for (const emp of employees.value) {
     for (const item of flattenGmKpiItems(emp)) {
       pmScores[emp.id][item.id] = item.selfScore;
+      gmScoreTouched[emp.id][item.id] = false;
     }
+  }
+}
+
+function currentDisplayableGmScore(emp: GmEvalMember, item: GmKpiItem): number | null {
+  const persisted = item.pmScore;
+  if (persisted != null && persisted > 0) return persisted;
+  if (gmScoreTouched[emp.id]?.[item.id]) {
+    const v = pmScores[emp.id]?.[item.id];
+    if (v != null && v > 0) return v;
+  }
+  return null;
+}
+
+function initSupervisorCommentDraft(emp: GmEvalMember, reset = false) {
+  if (reset || supervisorComments[emp.id] === undefined) {
+    supervisorComments[emp.id] = String(emp.supervisorComment ?? "");
+  }
+}
+
+function ensureSupervisorCommentKeys(reset = false) {
+  for (const emp of employees.value) {
+    initSupervisorCommentDraft(emp, reset);
   }
 }
 
@@ -187,6 +244,16 @@ watch(
   (y) => {
     if (isReadonlyKpiYear(y)) prefillLockedPmScores();
     else resetPmScores();
+  },
+  { immediate: true },
+);
+
+watch(
+  employees,
+  () => {
+    ensurePmScoreKeys();
+    ensureGmCommentKeys(true);
+    ensureSupervisorCommentKeys(true);
   },
   { immediate: true },
 );
@@ -202,7 +269,7 @@ function scaledWeightedAvgItems(
   mode: "pm" | "self",
 ): { value: number; filledPmSlots: number; totalPmSlots: number } {
   const iterItems =
-    mode === "pm" ? items.filter((i) => hubRowGmScoreEnabled(i)) : items;
+    mode === "pm" ? items.filter((i) => hubRowGmScoreDisplayEnabled(i)) : items;
   const totalSlots = iterItems.length;
   let weighted = 0;
   let filledPm = 0;
@@ -210,7 +277,7 @@ function scaledWeightedAvgItems(
     if (mode === "self") {
       weighted += item.selfScore * (item.weight / 100);
     } else {
-      const v = pmScores[emp.id]?.[item.id];
+      const v = currentDisplayableGmScore(emp, item);
       if (v != null && v > 0) {
         weighted += v * (item.weight / 100);
         filledPm++;
@@ -298,8 +365,10 @@ function pmSelectClass(emp: GmEvalMember, item: GmKpiItem) {
 function setPmScore(empId: string, kpiId: string, raw: string) {
   if (isReadonly.value) return;
   if (!pmScores[empId]) pmScores[empId] = {};
+  if (!gmScoreTouched[empId]) gmScoreTouched[empId] = {};
   const n = parseInt(raw, 10);
   pmScores[empId][kpiId] = Number.isFinite(n) && n >= 1 && n <= 5 ? n : null;
+  gmScoreTouched[empId][kpiId] = true;
 }
 
 function flattenPmBranchSheetHolders(br: GmEvalPmBranch): GmEvalMember[] {
@@ -308,6 +377,18 @@ function flattenPmBranchSheetHolders(br: GmEvalPmBranch): GmEvalMember[] {
     ...br.leaders.flatMap((l) => [l.sheet, ...l.members]),
     ...br.directMembers,
   ];
+}
+
+function isAwaitingGmEvaluation(emp: GmEvalMember): boolean {
+  if (!hasKpis(emp)) return false;
+  const visibleStatus = new Set([502, 503, 602, 603]);
+  return flattenGmKpiItems(emp).some((item) =>
+    visibleStatus.has(Number(item.hubAssignmentStatusCode)),
+  );
+}
+
+function sectionMembers(br: GmEvalPmBranch): GmEvalMember[] {
+  return flattenPmBranchSheetHolders(br).filter(isAwaitingGmEvaluation);
 }
 
 function pmBranchHasChildren(br: GmEvalPmBranch) {
@@ -333,11 +414,7 @@ function pmBranchMatchesSearch(br: GmEvalPmBranch, q: string): boolean {
 }
 
 function pmBranchHasPending(br: GmEvalPmBranch): boolean {
-  if (br.pm.status === "pending_pm") return true;
-  if (br.leaders.some((l) => l.sheet.status === "pending_pm")) return true;
-  return [...br.leaders.flatMap((l) => l.members), ...br.directMembers].some(
-    (m) => m.status === "pending_pm",
-  );
+  return sectionMembers(br).length > 0;
 }
 
 const displayedPmBranches = computed(() => {
@@ -358,16 +435,35 @@ interface GmPmEvalLayoutSection {
 }
 
 const pmEvalSectionsForDisplay = computed((): GmPmEvalLayoutSection[] =>
-  displayedPmBranches.value.map((br) => ({
-    sectionId: br.sectionId ?? br.pm.id,
-    sectionName: br.sectionName ?? "Section",
-    branch: br,
-  })),
+  displayedPmBranches.value
+    .map((br) => ({
+      sectionId: br.sectionId ?? br.pm.id,
+      sectionName: br.sectionName ?? "Section",
+      branch: br,
+    }))
+    .filter((sec) => sectionMembers(sec.branch).length > 0),
+);
+
+function ensureSectionExpandDefaults() {
+  for (const sec of pmEvalSectionsForDisplay.value) {
+    if (expandedSectionIds[sec.sectionId] === undefined) {
+      expandedSectionIds[sec.sectionId] = true;
+    }
+  }
+}
+
+watch(
+  pmEvalSectionsForDisplay,
+  () => {
+    if (!usePmTree.value) return;
+    ensureSectionExpandDefaults();
+  },
+  { immediate: true },
 );
 
 const filteredEmployees = computed(() => {
   if (usePmTree.value) {
-    return displayedPmBranches.value.flatMap(flattenPmBranchSheetHolders);
+    return pmEvalSectionsForDisplay.value.flatMap((sec) => sectionMembers(sec.branch));
   }
   const q = nameFilter.value.trim().toLowerCase();
   return employees.value.filter((emp) => {
@@ -479,6 +575,9 @@ function evalThaoTacDisabled(emp: GmEvalMember) {
 
 function toggleEvaluationDrawer(emp: GmEvalMember) {
   if (evalThaoTacDisabled(emp)) return;
+  if (drawerEmpId.value !== emp.id) {
+    initGmCommentDraft(emp, false);
+  }
   drawerEmpId.value = drawerEmpId.value === emp.id ? null : emp.id;
 }
 
@@ -595,11 +694,21 @@ async function confirmDone(emp: GmEvalMember) {
         evaluationUserId: uid,
         supervisorComment: needFinal ? c : "",
         lines: items.map((it) => {
-          const line: { assignmentId: string; endGmScore?: number } = {
+          const line: {
+            assignmentId: string;
+            endGmScore?: number;
+            gmComment?: string;
+          } = {
             assignmentId: it.id,
           };
           if (hubRowGmScoreEnabled(it)) {
             line.endGmScore = pmScores[emp.id]![it.id]!;
+          }
+          if (hubRowGmCommentEnabled(it)) {
+            const itemComment = (gmKpiComments[emp.id]?.[it.id] ?? "").trim();
+            if (itemComment) {
+              line.gmComment = itemComment;
+            }
           }
           return line;
         }),
@@ -948,7 +1057,7 @@ async function confirmDone(emp: GmEvalMember) {
                       <span
                         class="text-[10px] font-semibold normal-case text-slate-500 sm:text-xs"
                       >
-                        · PM {{ sec.branch.pm.name }}
+                        · {{ sectionMembers(sec.branch).length }} thành viên
                       </span>
                     </div>
                   </td>
@@ -976,6 +1085,88 @@ async function confirmDone(emp: GmEvalMember) {
                             <col style="width: 12%" />
                           </colgroup>
                           <tbody class="divide-y divide-slate-200">
+                            <tr
+                              v-for="emp in sectionMembers(sec.branch)"
+                              :key="`${sec.sectionId}:${emp.id}`"
+                              class="hover:bg-slate-50/80 transition-colors group"
+                              :class="
+                                drawerEmpId === emp.id
+                                  ? 'bg-slate-100/80 border-l-4 border-indigo-500'
+                                  : ''
+                              "
+                            >
+                              <td class="px-3 py-2.5 sm:px-4 sm:py-3">
+                                <div class="flex items-center gap-1.5 pl-1 sm:pl-2">
+                                  <span
+                                    class="ml-2 inline-block h-7 w-7 shrink-0 sm:ml-3 sm:h-8 sm:w-8"
+                                    aria-hidden="true"
+                                  />
+                                  <div
+                                    class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-bold sm:h-8 sm:w-8 sm:text-xs"
+                                    :class="emp.initialsClass"
+                                  >
+                                    {{ emp.initials }}
+                                  </div>
+                                  <div class="min-w-0 flex-1">
+                                    <p
+                                      class="flex flex-wrap items-center gap-1.5 text-xs font-bold text-slate-900 transition-colors group-hover:text-indigo-600 sm:text-sm"
+                                    >
+                                      <span>{{ emp.name }}</span>
+                                      <span :class="roleTagClass('member')">{{ emp.role }}</span>
+                                    </p>
+                                  </div>
+                                </div>
+                              </td>
+                              <td class="px-3 py-2.5 text-center sm:px-4 sm:py-3">
+                                <span
+                                  class="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-600 sm:px-2 sm:py-1 sm:text-xs"
+                                >
+                                  {{ emp.rank }}
+                                </span>
+                              </td>
+                              <td class="px-3 py-2.5 text-center sm:px-4 sm:py-3">
+                                <span :class="statusBadgeClass(emp)">
+                                  <span
+                                    v-if="emp.status === 'pending_pm'"
+                                    class="h-1.5 w-1.5 shrink-0 rounded-full bg-rose-500 animate-pulse"
+                                  />
+                                  <i
+                                    v-else-if="emp.status === 'self_scoring'"
+                                    class="fas fa-pen text-[10px]"
+                                  />
+                                  <i v-else class="fas fa-check text-[10px]" />
+                                  {{ assignmentProgressLabel(emp) }}
+                                </span>
+                              </td>
+                              <td class="bg-slate-50/80 px-3 py-2.5 text-center sm:px-4 sm:py-3">
+                                <span v-if="emp.selfScoreDisplay" class="font-bold text-slate-700">{{
+                                  emp.selfScoreDisplay
+                                }}</span>
+                                <span v-else class="font-medium italic text-slate-400">-</span>
+                              </td>
+                              <td class="bg-indigo-50/40 px-3 py-2.5 text-center sm:px-4 sm:py-3">
+                                <span :class="pmPreviewClass(emp)">{{ pmPreviewText(emp) }}</span>
+                              </td>
+                              <td class="px-2 py-2.5 text-center sm:px-3" @click.stop>
+                                <button
+                                  v-if="canShowEvalActionButton(emp)"
+                                  type="button"
+                                  class="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-indigo-200 bg-white text-indigo-600 shadow-sm transition-colors hover:bg-indigo-50 hover:text-indigo-800 disabled:pointer-events-none disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-50 disabled:text-slate-300 disabled:shadow-none disabled:hover:bg-slate-50"
+                                  :disabled="evalThaoTacDisabled(emp)"
+                                  :title="
+                                    evalThaoTacDisabled(emp) && !isReadonly
+                                      ? 'Chỉ mở khi trạng thái ASM là 502 hoặc 602'
+                                      : 'Mở đánh giá KPI'
+                                  "
+                                  aria-label="Mở đánh giá KPI"
+                                  @click="toggleEvaluationDrawer(emp)"
+                                >
+                                  <i class="fas fa-clipboard-check text-xs" aria-hidden="true" />
+                                </button>
+                                <span v-else class="text-[11px] font-medium text-slate-300">—</span>
+                              </td>
+                            </tr>
+                            <template v-if="false">
                             <template
                               v-for="br in [sec.branch]"
                               :key="br.pm.id"
@@ -1733,6 +1924,7 @@ async function confirmDone(emp: GmEvalMember) {
                                 </tr>
                               </template>
                             </template>
+                            </template>
                           </tbody>
                         </table>
                       </div>
@@ -1747,7 +1939,7 @@ async function confirmDone(emp: GmEvalMember) {
         <div
           v-if="
             usePmTree
-              ? displayedPmBranches.length === 0
+              ? pmEvalSectionsForDisplay.length === 0
               : filteredEmployees.length === 0
           "
           class="px-4 py-10 text-center text-xs font-medium text-slate-500 sm:py-12 sm:text-sm"
@@ -2109,6 +2301,7 @@ async function confirmDone(emp: GmEvalMember) {
                                         </a>
                                       </p>
                                       <table
+                                        v-if="item.evidence.rows.length > 0"
                                         class="w-full overflow-hidden rounded-lg border border-slate-200 bg-white text-left text-sm shadow-sm"
                                       >
                                         <thead
@@ -2197,6 +2390,29 @@ async function confirmDone(emp: GmEvalMember) {
                                           </tr>
                                         </tfoot>
                                       </table>
+                                      <p
+                                        v-else
+                                        class="rounded-lg border border-dashed border-slate-200 bg-slate-50/80 px-3 py-2 text-xs italic text-slate-500"
+                                      >
+                                        Chưa có dữ liệu minh chứng.
+                                      </p>
+                                      <div
+                                        v-if="hubRowGmCommentEnabled(item)"
+                                        class="mt-4 rounded-lg border border-indigo-200 bg-indigo-50/40 p-3"
+                                      >
+                                        <label
+                                          class="mb-2 block text-[11px] font-bold uppercase tracking-wider text-indigo-700"
+                                        >
+                                          GM Comment (Theo từng KPI)
+                                        </label>
+                                        <textarea
+                                          v-model="gmKpiComments[drawerEmployee.id][item.id]"
+                                          class="w-full resize-y rounded-lg border border-indigo-200 bg-white p-2.5 text-sm text-slate-800 shadow-sm outline-none focus:ring-2 focus:ring-indigo-100 disabled:bg-slate-50 disabled:text-slate-500"
+                                          rows="3"
+                                          :disabled="isReadonly || confirmBusy"
+                                          placeholder="Nhập nhận xét của GM cho KPI này..."
+                                        />
+                                      </div>
                                     </div>
                                   </td>
                                 </tr>

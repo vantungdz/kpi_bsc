@@ -67,7 +67,13 @@ export interface GmKpiItem {
   evidenceButtonIcon: string
   evidenceTone: 'blue' | 'emerald'
   selfScore: number
+  /** Điểm GM đã lưu (end_gm_score) — chỉ dùng để hiển thị cột GM trước khi chỉnh. */
+  pmScore?: number | null
+  /** Điểm PM (hoặc GM đã có) để prefill dropdown chấm điểm của GM. */
+  pmSeedScore?: number | null
   evidence: GmEvidenceTable
+  /** Ghi chú theo từng KPI từ `kpi_assignments.evidences.gmComment` (GM có thể chỉnh sửa/ghi đè). */
+  gmComment?: string
   /** ASM assignment từ hub API: 502 = review GM (không chấm), 602 = chấm điểm GM + comment. */
   hubAssignmentStatusCode?: number | null
 }
@@ -96,6 +102,8 @@ export interface GmEvalMember {
   canScore: boolean
   projectIds: string[]
   employeeComment?: string
+  /** Seed Supervisor Comment (lấy từ nhận xét tổng PM) để GM có thể chỉnh sửa tiếp. */
+  supervisorComment?: string
   groups: GmKpiGroup[]
 }
 

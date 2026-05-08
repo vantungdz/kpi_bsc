@@ -33,6 +33,7 @@ export type MemberKpiEvaluationStatus =
 /** KPI Item (individual KPI row in the KPI sheet) */
 export interface KpiItem {
   id: string
+  kpiInformationId?: string | null
   code: string
   name: string
   description?: string
@@ -48,6 +49,8 @@ export interface KpiItem {
   statusCode?: number | null
   /** Nhãn ASM_STATUS từ API */
   assignmentStatusName?: string | null
+  /** Khi 407: role cần xử lý feedback — PM hoặc GM */
+  feedbackTargetRoleCode?: string | null
   weight: number
   group: string
   /** kpi_categories — nhóm hiển thị Personal KPI */
@@ -80,6 +83,10 @@ export interface KpiItem {
   leaderFeedback?: string
   /** Feedback comment lưu cột riêng trên DB */
   feedbackComment?: string
+  /** Lý do từ chối/cập nhật từ PM/GM (kpi_assignments.update_reason) */
+  updateReason?: string | null
+  /** KPI do chính user hiện tại tự tạo */
+  createdByCurrentUser?: boolean
   /** Ghi chú từ GM cho KPI */
   gmComment?: string
   /**
@@ -189,6 +196,8 @@ export interface MemberKpiDashboard {
   sheet: KpiSheet
   pendingItems: string[]
   canSubmit: boolean
+  evaluationComments?: string | null
+  evaluationSupervisorComments?: string | null
 }
 
 /** GET /kpi/member/form-meta — tạo KPI cá nhân */
@@ -330,6 +339,9 @@ export interface LeaderKpiCategoryGroup {
 
 export interface LeaderKpiAssignment {
   assignmentId: string;
+  kpiInformationId?: string | null;
+  categoryId?: string | null;
+  categoryName?: string | null;
   kpiName: string;
   kpiCode: string;
   /** Mục tiêu số; không có → tab KPI cá nhân GM hiển thị «-» (không dùng targetDescription). */
@@ -344,8 +356,11 @@ export interface LeaderKpiAssignment {
   midSelfScore: number | null;
   endSelfScore: number | null;
   endPmScore: number | null;
+  endGmScore?: number | null;
   evidences: string | null;
   feedbackComment?: string | null;
+  updateReason?: string | null;
+  createdByCurrentUser?: boolean | null;
   evaluationStatus?: MemberKpiEvaluationStatus | string | null;
   evaluationState?: string | null;
   /** kpi_master.calculation_rule_code — 802 = ratio/average, 803 = comment/text */
@@ -356,12 +371,11 @@ export interface LeaderKpiAssignment {
   typeCode?: number | null;
   /** sys_status_codes.name — loại KPI */
   typeName?: string | null;
-  /** kpi_master.unit_code — KPI_UNIT */
-  unitCode?: number | null;
 }
 
 export interface LeaderKpiSummary {
   finalScore: number;
   evaluationComments: string;
-  evaluationStatus: string;
+  evaluationSupervisorComments?: string;
+  evaluationStatus?: string;
 }

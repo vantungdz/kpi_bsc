@@ -72,6 +72,20 @@ const ctx = inject(EVIDENCE_DRAWER_KEY)!
             lưu chỉnh sửa.
           </div>
 
+          <div
+            v-if="Number(ctx.selectedDrawerItem.value?.statusCode ?? 0) === 406
+              && String(ctx.selectedDrawerItem.value?.updateReason ?? ctx.selectedDrawerItem.value?.feedbackComment ?? '').trim().length > 0"
+            class="shrink-0 border-b border-rose-200 bg-rose-50 px-6 py-2.5 text-xs leading-snug text-rose-900"
+          >
+            <p class="font-semibold">
+              <i class="fas fa-triangle-exclamation mr-2 text-rose-600" />
+              KPI đã bị từ chối - vui lòng chỉnh sửa và submit lại.
+            </p>
+            <p class="mt-1.5 whitespace-pre-wrap text-rose-800">
+              {{ String(ctx.selectedDrawerItem.value?.updateReason ?? ctx.selectedDrawerItem.value?.feedbackComment ?? '').trim() }}
+            </p>
+          </div>
+
           <!-- KPI info banner -->
           <div class="relative shrink-0 overflow-hidden bg-slate-800 p-5 text-white">
             <div class="pointer-events-none absolute -bottom-4 -right-4 opacity-[0.03]">

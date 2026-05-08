@@ -5,6 +5,7 @@
 import type { KpiItem } from '@/types/kpi'
 import { useMemberKpiDraftStore } from '@/stores/member-kpi-drafts.store'
 import { memberItemEvalStatus } from '@/utils/memberKpiHelpers'
+import { displayTargetValue, formatTargetDisplayForMemeber } from '@/utils/strategicKpiTypeCodes'
 
 export function useMemberKpiFormatters() {
   const draftStore = useMemberKpiDraftStore()
@@ -64,14 +65,13 @@ export function useMemberKpiFormatters() {
 
   function formatKpiActualResult(item: KpiItem): string {
     const evidenceDisplay = formatEvidenceJsonSummary(item)
-    if (evidenceDisplay) return evidenceDisplay
+    if (evidenceDisplay) return `${evidenceDisplay} ${displayTargetValue(item, evidenceDisplay)}`
 
     if (item.group === 'B') {
       const c = item.evidenceNote?.trim()
       if (!c) return '-'
       return c.length > 64 ? `${c.slice(0, 63)}…` : c
     }
-    console.log('item', item.result);
 
     const r = item.result?.toString().trim()
     return r || '-'

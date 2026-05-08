@@ -19,6 +19,11 @@ export interface SubmitFeedbackBody {
   feedbackComment: string
 }
 
+export interface MemberFeedbackSubmitResponse {
+  feedbackTargetRoleCode?: string | null
+  assignmentStatusName?: string | null
+}
+
 /** document/db/README.md — Flow 3: member đề xuất KPI (ASM 402) */
 export interface CreateIndividualKpiBody {
   cycleYear: number
@@ -55,7 +60,7 @@ export async function apiUpdateMemberSheetItem(
 export async function apiSubmitFeedback(
   assignmentId: string,
   body: SubmitFeedbackBody,
-): Promise<ApiResponse<void>> {
+): Promise<ApiResponse<MemberFeedbackSubmitResponse>> {
   return http.post(`/kpi/member/sheet/${assignmentId}/feedback`, body).then(r => r.data)
 }
 
@@ -63,8 +68,9 @@ export async function apiSubmitFeedback(
 export async function apiSubmitMemberSheet(
   year: number,
   kpiType: MemberSheetSubmitType = 'INDIVIDUAL',
+  evaluationComments?: string,
 ): Promise<ApiResponse<void>> {
-  return http.post('/kpi/member/sheet/submit', { year, kpiType }).then(r => r.data)
+  return http.post('/kpi/member/sheet/submit', { year, kpiType, evaluationComments }).then(r => r.data)
 }
 
 /** POST …/kpi/member/sheet/save-draft */
@@ -79,6 +85,12 @@ export async function apiCreateIndividualKpi(
   return http.post('/kpi/member/individual-kpi', body).then(r => r.data)
 }
 
+export async function apiDeleteSelfCreatedKpi(
+  assignmentId: string,
+): Promise<ApiResponse<void>> {
+  return http.delete(`/kpi/member/individual-kpi/${assignmentId}`).then(r => r.data)
+}
+
 export const memberKpiService = {
   getDashboard: (year?: number) => apiGetMemberKpiDashboard(year).then(r => r.data),
   getFormMeta: (year?: number) => apiGetMemberKpiFormMeta(year).then(r => r.data),
@@ -86,9 +98,11 @@ export const memberKpiService = {
     apiUpdateMemberSheetItem(assignmentId, body).then(r => r.data),
   submitFeedback: (assignmentId: string, feedbackComment: string) =>
     apiSubmitFeedback(assignmentId, { feedbackComment }).then(r => r.data),
-  submit: (year: number, kpiType: MemberSheetSubmitType = 'INDIVIDUAL') =>
-    apiSubmitMemberSheet(year, kpiType).then(r => r.data),
+  submit: (year: number, kpiType: MemberSheetSubmitType = 'INDIVIDUAL', evaluationComments?: string) =>
+    apiSubmitMemberSheet(year, kpiType, evaluationComments).then(r => r.data),
   saveDraft: (year: number) => apiSaveDraft(year).then(r => r.data),
   createIndividualKpi: (body: CreateIndividualKpiBody) =>
     apiCreateIndividualKpi(body).then(r => r.data),
+  deleteSelfCreatedKpi: (assignmentId: string) =>
+    apiDeleteSelfCreatedKpi(assignmentId).then(r => r.data),
 }

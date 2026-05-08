@@ -37,4 +37,6 @@ public class GmEvaluationHubAssignmentRow {
     private String sectionManagerFullName;
     private String memberRoleCode;
     private String memberRoleName;
+    /** Nhận xét PM tổng (user_kpi_summaries.evaluation_supervisor_comments). */
+    private String supervisorComment;
 }

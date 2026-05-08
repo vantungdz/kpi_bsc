@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.company.kpi.mapper.GmReportMapper">
+
+  <!--
+    listAssignmentsByYears:
+    - Lấy mọi KPI assignments cá nhân (user_id NOT NULL) thuộc các chu kỳ trong tham số.
+    - Trả thêm thông tin section primary, KPI category, role.
+    - Score là plaintext SAU khi đi qua interceptor giải mã.
+  -->
+  <select id="listAssignmentsByYears"
+          resultType="com.company.kpi.aggregate.report.GmReportAssignmentRow">
+    SELECT
+      ka.id              AS assignmentId,
+      ka.user_id         AS userId,
+      u.full_name        AS userFullName,
+      COALESCE((
+        SELECT r.code FROM user_roles ur
+        JOIN roles r ON r.id = ur.role_id AND r.deleted_at IS NULL
+        WHERE ur.user_id = u.id
+        ORDER BY CASE upper(trim(both FROM r.code))
+            WHEN 'GM' THEN 1
+            WHEN 'PM' THEN 2
+            WHEN 'LEADER' THEN 3
+            WHEN 'MEMBER' THEN 4
+            ELSE 5
+          END,
+          r.code
+        LIMIT 1
+      ), '')             AS userRoleCode,
+      d.id               AS sectionId,
+      d.name             AS sectionName,
+      kc.id              AS categoryId,
+      kc.name            AS categoryName,
+      cy.year            AS year,
+      ka.status_code     AS statusCode,
+      CASE WHEN ka.evidences IS NULL OR ka.evidences::text = 'null'
+                OR ka.evidences::text = '{}' THEN NULL ELSE 1 END AS evidenceFlag,
+      ka.mid_self_score  AS midSelfScore,
+      ka.end_self_score  AS endSelfScore,
+      ka.end_pm_score    AS endPmScore,
+      ka.end_gm_score    AS endGmScore
+    FROM kpi_assignments ka
+    JOIN users u ON u.id = ka.user_id AND u.deleted_at IS NULL
+    JOIN kpi_cycles cy ON cy.id = ka.cycle_id AND cy.deleted_at IS NULL
+    JOIN kpis_information ki ON ki.id = ka.kpi_info_id AND ki.deleted_at IS NULL
+    JOIN kpi_master km ON km.id = ki.master_kpi_id AND km.deleted_at IS NULL
+    LEFT JOIN kpi_categories kc ON kc.id = km.category_id AND kc.deleted_at IS NULL
+    LEFT JOIN user_departments ud ON ud.user_id = u.id AND ud.is_primary = TRUE
+    LEFT JOIN departments d ON d.id = ud.department_id AND d.deleted_at IS NULL
+    WHERE ka.deleted_at IS NULL
+      AND cy.year IN
+      <foreach collection="years" item="y" open="(" separator="," close=")">
+        #{y}
+      </foreach>
+  </select>
+
+  <!--
+    listBottleneckCandidates:
+    - Lấy assignment đang chờ duyệt / đã nộp đang chờ duyệt / đang chạy chưa nộp giữa kỳ.
+    - Service tự lọc severity & label.
+  -->
+  <select id="listBottleneckCandidates"
+          resultType="com.company.kpi.aggregate.report.GmReportAssignmentRow">
+    SELECT
+      ka.id              AS assignmentId,
+      ka.user_id         AS userId,
+      u.full_name        AS userFullName,
+      COALESCE((
+        SELECT r.code FROM user_roles ur
+        JOIN roles r ON r.id = ur.role_id AND r.deleted_at IS NULL
+        WHERE ur.user_id = u.id
+        ORDER BY CASE upper(trim(both FROM r.code))
+            WHEN 'GM' THEN 1
+            WHEN 'PM' THEN 2
+            WHEN 'LEADER' THEN 3
+            WHEN 'MEMBER' THEN 4
+            ELSE 5
+          END,
+          r.code
+        LIMIT 1
+      ), '')             AS userRoleCode,
+      d.id               AS sectionId,
+      d.name             AS sectionName,
+      kc.id              AS categoryId,
+      kc.name            AS categoryName,
+      cy.year            AS year,
+      ka.status_code     AS statusCode,
+      CASE WHEN ka.evidences IS NULL OR ka.evidences::text = 'null'
+                OR ka.evidences::text = '{}' THEN NULL ELSE 1 END AS evidenceFlag,
+      ka.mid_self_score  AS midSelfScore,
+      ka.end_self_score  AS endSelfScore,
+      ka.end_pm_score    AS endPmScore,
+      ka.end_gm_score    AS endGmScore
+    FROM kpi_assignments ka
+    JOIN users u ON u.id = ka.user_id AND u.deleted_at IS NULL
+    JOIN kpi_cycles cy ON cy.id = ka.cycle_id AND cy.deleted_at IS NULL
+    JOIN kpis_information ki ON ki.id = ka.kpi_info_id AND ki.deleted_at IS NULL
+    JOIN kpi_master km ON km.id = ki.master_kpi_id AND km.deleted_at IS NULL
+    LEFT JOIN kpi_categories kc ON kc.id = km.category_id AND kc.deleted_at IS NULL
+    LEFT JOIN user_departments ud ON ud.user_id = u.id AND ud.is_primary = TRUE
+    LEFT JOIN departments d ON d.id = ud.department_id AND d.deleted_at IS NULL
+    WHERE ka.deleted_at IS NULL
+      AND cy.year = #{year}
+      AND ka.status_code IN (501, 502, 601, 602, 405)
+    ORDER BY ka.status_code DESC, ka.updated_at ASC
+  </select>
+</mapper>

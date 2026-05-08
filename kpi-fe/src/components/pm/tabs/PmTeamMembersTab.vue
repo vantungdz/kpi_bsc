@@ -4,7 +4,10 @@ import { pmKpiService } from '@/services/modules/kpi-pm.service'
 
 import { generateInitials } from '@/utils/common'
 import { KPI_STATUS } from '@/config/constants'
-import { isPmEvaluationSubject } from '@/utils/pmEvaluationSubject'
+import {
+  countPmEvaluationSubjectsInHierarchy,
+  isPmEvaluationSubject,
+} from '@/utils/pmEvaluationSubject'
 
 const props = defineProps({
   year: { type: [Number, String], required: true },
@@ -15,7 +18,7 @@ const props = defineProps({
   commentsCache: { type: Object as PropType<Record<string, string>>, default: () => ({}) }
 })
 
-const emit = defineEmits(['open-member', 'submit-evaluations'])
+const emit = defineEmits(['open-member', 'submit-evaluations', 'pending-pm-evaluation-count'])
 
 
 const teamTreeRaw = ref<any[]>([])
@@ -66,8 +69,13 @@ const fetchTeamHierarchy = async () => {
     }
 
     teamTreeRaw.value = filterTree(response)
+    emit(
+      'pending-pm-evaluation-count',
+      countPmEvaluationSubjectsInHierarchy(teamTreeRaw.value),
+    )
   } catch (error) {
     console.error('Failed to fetch team hierarchy:', error)
+    emit('pending-pm-evaluation-count', 0)
   } finally {
     isLoading.value = false
   }
@@ -173,17 +181,19 @@ const openMemberDetail = (member: any) => {
       </thead>
       <TransitionGroup name="list" tag="tbody" class="divide-y divide-slate-100 relative">
         <tr v-for="member in visibleTeamMembers" :key="member.id"
-          class="hover:bg-slate-50 transition-colors cursor-pointer group"
+          class="transition-colors cursor-pointer group"
           :class="[
             invalidMembers.includes(member.id) && isPmEvaluationSubject(member)
-              ? '!bg-red-50 !border-red-200 shadow-[inset_4px_0_0_0_#ef4444]'
-              : 'bg-white',
+              ? '!bg-red-50 !border-red-200 shadow-[inset_4px_0_0_0_#ef4444] hover:!bg-red-50'
+              : isPmEvaluationSubject(member)
+                ? 'bg-amber-50 hover:bg-amber-100/90'
+                : 'bg-white hover:bg-slate-50',
             !isPmEvaluationSubject(member) ? 'text-slate-500' : '',
           ]"
           :title="
-            !isPmEvaluationSubject(member)
-              ? 'Chỉ hiển thị org — không có KPI đang chờ PM đánh giá (501/601) trong kỳ này.'
-              : ''
+            isPmEvaluationSubject(member)
+              ? 'Đang chờ PM đánh giá: 501 giữa kỳ (chỉ nhận xét); 601 cuối kỳ (điểm PM + nhận xét).'
+              : 'Không có KPI đang chờ PM đánh giá (501/601) — chỉ hiển thị trong org chart.'
           "
           @click="openMemberDetail(member)">
 
@@ -240,7 +250,7 @@ const openMemberDetail = (member: any) => {
         </tr>
 
         <tr v-if="visibleTeamMembers.length === 0 && !isLoading" key="empty-state">
-          <td colspan="4" class="py-8 text-center text-slate-500 text-sm">
+          <td colspan="5" class="py-8 text-center text-slate-500 text-sm">
             Don't have any team members in the list.
           </td>
         </tr>

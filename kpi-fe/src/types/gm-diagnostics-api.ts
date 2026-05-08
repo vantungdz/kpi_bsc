@@ -41,6 +41,10 @@ export interface GmDiagKpiApi {
   kpiType: string
   /** `kpi_master.unit_code` — KPI_UNIT; map sang select Unit trên form. */
   unitCode?: number | null
+  /** `kpi_master.calculation_rule_code`. */
+  calculationRuleCode?: number | null
+  /** `kpi_master.calculation_type_code`. */
+  calculationTypeCode?: number | null
   /** `kpi_master.category_id` — đồng bộ thư viện; không dùng BSC cố định. */
   categoryId?: string | null
   /** `kpi_categories.name` */
@@ -86,6 +90,8 @@ export interface GmDiagLeaderApi {
   actual: string
   status: string
   blockerSummary: string
+  /** KPI của chính supervisor (assignee trùng tên nhóm); không trùng phần tử trong `members`. */
+  leaderOwnRow?: GmDiagMemberApi | null
   members: GmDiagMemberApi[]
 }
 
@@ -114,7 +120,11 @@ export interface GmDiagMemberApi {
   submissionTarget?: number | string | null
   /** Giữa kỳ: điểm giữa kỳ; cuối kỳ: điểm final sau GM→PM→self. */
   submissionActual?: number | string | null
+  /** Raw evidences JSON text từ assignment (`kpi_assignments.evidences`). */
+  evidences?: string | null
   feedbackNote?: string | null
+  /** BE GmDiagMemberNode: 407 + feedback active target GM. */
+  feedbackAwaitingGm?: boolean
   blocker: string
   rank?: string | null
   leader?: string | null

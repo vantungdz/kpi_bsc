@@ -41,6 +41,12 @@ public class GmDiagMemberNode {
     /** Giữa kỳ: {@code mid_self_score}; cuối kỳ: GM → PM → self score cuối. */
     private BigDecimal submissionActual;
 
+    /** Raw evidences JSON text từ {@code kpi_assignments.evidences}. */
+    private String evidences;
+
     /** Nội dung feedback active target về GM (nếu có). */
     private String feedbackNote;
+
+    /** {@code true} khi ASM 407 và feedback active cần GM xử lý (theo {@code roles.code}). */
+    private boolean feedbackAwaitingGm;
 }

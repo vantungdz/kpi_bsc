@@ -32,23 +32,68 @@ public class KpiCycleService {
         KpiCycle kpiCycle = optionalKpiCycle.get();
         KpiCycleResponse response = modelMapper.map(kpiCycle, KpiCycleResponse.class);
         String activePhase = calculateActivePhase(
+                kpiCycle.getGoalSettingStart(),
                 kpiCycle.getGoalSettingEnd(),
-                kpiCycle.getMidYearEnd()
+                kpiCycle.getMidYearStart(),
+                kpiCycle.getMidYearEnd(),
+                kpiCycle.getEndYearStart(),
+                kpiCycle.getEndYearEnd()
         );
         response.setActivePhase(activePhase);
 
         return response;
     }
 
-    private String calculateActivePhase(OffsetDateTime goalDeadline, OffsetDateTime midDeadline) {
+    /**
+     * Xác định phase đang active dựa trên 6 mốc thời gian thực từ bảng kpi_cycles.
+     * <p>
+     * Ưu tiên: kiểm tra từng cửa sổ [start, end]. Nếu now nằm trong cửa sổ → phase đó active.
+     * Nếu now nằm giữa 2 phase → lấy phase tiếp theo chưa bắt đầu (upcoming next), 
+     * nhưng hiển thị phase trước đó là complete.
+     * Thực tế UI sẽ dùng: setting=complete, mid=active theo flag "mid_year" dù chưa tới midYearStart.
+     * </p>
+     */
+    private String calculateActivePhase(
+            OffsetDateTime goalStart, OffsetDateTime goalEnd,
+            OffsetDateTime midStart, OffsetDateTime midEnd,
+            OffsetDateTime endStart, OffsetDateTime endEnd) {
+
         OffsetDateTime now = OffsetDateTime.now();
 
-        if (midDeadline != null && now.isAfter(midDeadline)) {
+        // Đang trong cửa sổ Year-End
+        if (isWithinWindow(now, endStart, endEnd)) {
             return Constant.END_YEAR_PHASE;
-        } else if (goalDeadline != null && now.isAfter(goalDeadline)) {
+        }
+        // Đang trong cửa sổ Mid-Year
+        if (isWithinWindow(now, midStart, midEnd)) {
             return Constant.MID_YEAR_PHASE;
-        } else {
+        }
+        // Đang trong cửa sổ Goal Setting
+        if (isWithinWindow(now, goalStart, goalEnd)) {
             return Constant.TARGET_SETUP_PHASE;
         }
+
+        // Nằm ngoài tất cả cửa sổ → xác định bằng deadline gần nhất đã qua
+        if (endEnd != null && now.isAfter(endEnd)) {
+            // Sau khi Year-End kết thúc → vẫn giữ year_end
+            return Constant.END_YEAR_PHASE;
+        }
+        if (midEnd != null && now.isAfter(midEnd)) {
+            // Giữa midYearEnd và endYearStart → chuẩn bị Year-End
+            return Constant.END_YEAR_PHASE;
+        }
+        if (goalEnd != null && now.isAfter(goalEnd)) {
+            // Giữa goalSettingEnd và midYearStart → chuẩn bị Mid-Year
+            return Constant.MID_YEAR_PHASE;
+        }
+
+        // Trước goalSettingStart hoặc không có dữ liệu
+        return Constant.TARGET_SETUP_PHASE;
+    }
+
+    /** Kiểm tra `now` nằm trong [start, end] (cả 2 đầu inclusive). */
+    private boolean isWithinWindow(OffsetDateTime now, OffsetDateTime start, OffsetDateTime end) {
+        if (start == null || end == null) return false;
+        return !now.isBefore(start) && !now.isAfter(end);
     }
 }

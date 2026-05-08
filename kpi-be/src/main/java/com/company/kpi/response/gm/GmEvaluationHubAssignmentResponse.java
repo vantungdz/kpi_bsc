@@ -39,4 +39,6 @@ public class GmEvaluationHubAssignmentResponse {
     private String sectionManagerFullName;
     private String memberRoleCode;
     private String memberRoleName;
+    /** Nhận xét PM tổng để GM tham chiếu/chỉnh sửa tại ô Supervisor Comment. */
+    private String supervisorComment;
 }

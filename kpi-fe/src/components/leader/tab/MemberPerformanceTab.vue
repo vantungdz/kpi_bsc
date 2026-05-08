@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, reactive } from 'vue'
 import type { LeaderKpiInformationResponse } from '@/types/kpi'
+import { formatTargetDisplay } from '@/utils/strategicKpiTypeCodes';
 
 const props = defineProps<{
   member: LeaderMember | null
@@ -27,12 +28,18 @@ const totalWeight = computed(() => {
   return sum
 })
 
-function formatTargetDisplay(assign: any): string {
-  const raw = assign?.targetValue
-  if (raw == null || raw === '') return '-'
-  const unit = String(assign?.unitName ?? '').trim()
-  return unit ? `${raw} ${unit}` : String(raw)
-}
+// function formatTargetDisplay(assign: any): string {
+//   const raw = assign?.targetValue
+//   if (raw == null || raw === '') return '-'
+
+//   const unit = String(assign?.unitName ?? '').trim()
+
+//   if (unit === 'Percent') {
+//     return `${raw}%`
+//   }
+
+//   return unit ? `${raw} ${unit}` : String(raw)
+// }
 
 const evaluationComment = computed(() =>
   String(props.data?.kpiSummary?.evaluationComments ?? '').trim(),

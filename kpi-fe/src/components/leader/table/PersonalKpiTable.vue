@@ -10,6 +10,7 @@ import {getSubmitButtonState} from "@/utils/common";
 import {computeRatioPreview, parseNumericFromField, CALC_RULE_AVERAGE} from "@/utils/memberKpiHelpers";
 import { extractRawInputFromApiTargetDescription } from "@/utils/kpiScoringRulesDsl";
 import EvidenceDrawer from '@/components/leader/drawer/EvidenceDrawer.vue';
+import { displayTargetValue, formatTargetDisplay } from "@/utils/strategicKpiTypeCodes";
 
 const toast = useToast();
 
@@ -31,7 +32,7 @@ const apiData = ref<LeaderKpiInformationResponse | null>(null);
 const employeeComment = ref("");
 const supervisorComment = ref("");
 
-const emit = defineEmits(['updateAverage'])
+const emit = defineEmits(['updateAverage', 'refresh-summary', 'open-edit-self-created'])
 
 // draftMap: lưu tạm evidence/score/actualResult chưa submit lên server
 type DraftEntry = { evidencesJson: string; selfScore: number | null; actualResult: string | null }
@@ -43,6 +44,8 @@ const draftMap = ref<Record<string, DraftEntry>>({})
 const isDrawerOpen = ref(false);
 const selectedKpi = ref<any>(null);
 const drawerMode = ref<'detail' | 'feedback'>('detail')
+const showDeleteConfirmModal = ref(false)
+const pendingDeleteAssignment = ref<any | null>(null)
 
 function openEvidence(assign: any, mode: 'detail' | 'feedback' = 'detail') {
   drawerMode.value = mode
@@ -60,6 +63,7 @@ async function onEvidenceSaved(payload: any) {
       selectedKpi.value.statusDesc = 'Chờ PM kiểm tra feedback'
       selectedKpi.value.feedbackComment = String(payload.feedbackComment ?? '').trim()
       isDrawerOpen.value = false
+      emit('refresh-summary')
       toast.success('Gửi feedback thành công')
     } catch (error) {
       console.error('Failed to submit Personal KPI feedback', error)
@@ -160,10 +164,24 @@ const hasSubmitBlockingStatus = computed(() => {
     return status === 407 || (status > 0 && status < 404)
   })
 })
+const hasRejectedAssignments = computed(() => {
+  const all = apiData.value?.categories?.flatMap(c => c.assignments) ?? []
+  return all.some(a => Number(a.statusCode ?? 0) === 406)
+})
+
+const isEmployeeCommentReadonly = computed(() => {
+  if (props.isReadonly) return true
+  const all = apiData.value?.categories?.flatMap(c => c.assignments) ?? []
+  return all.some(a => Number(a.statusCode ?? 0) >= 501)
+})
 
 const buttonState = computed(() => {
   if (!apiData.value?.kpiCycle) {
     return {show: false, disabled: true, text: null, actionType: 'COMPLETED'};
+  }
+  const all = apiData.value?.categories?.flatMap(c => c.assignments) ?? []
+  if (hasRejectedAssignments.value) {
+    return { show: true, disabled: false, text: 'Resubmit KPI', actionType: 'GOAL_SETTING' as const }
   }
   return getSubmitButtonState(apiData.value.kpiCycle, currentStatusCode.value);
 });
@@ -182,6 +200,8 @@ async function fetchData() {
   loading.value = true;
   try {
     apiData.value = await leaderKpiService.getKpiInfo(props.year, KPI_TYPE_INDIVIDUAL);
+    employeeComment.value = String(apiData.value?.kpiSummary?.evaluationComments ?? '')
+    supervisorComment.value = String(apiData.value?.kpiSummary?.evaluationSupervisorComments ?? '')
     draftMap.value = {}; // Reset draft sau khi reload
   } catch (error) {
     console.error("Lỗi khi tải dữ liệu Personal KPI:", error);
@@ -206,9 +226,10 @@ async function submitEvaluation() {
         )
       )
     }
-    await memberKpiService.submit(props.year, 'INDIVIDUAL')
+    await memberKpiService.submit(props.year, 'INDIVIDUAL', employeeComment.value)
     toast.success('Nộp KPI thành công!')
-    fetchData() // Reset draft + reload
+    await fetchData() // Reset draft + reload
+    emit('refresh-summary')
   } catch (error) {
     console.error('Failed to submit KPI', error)
     toast.error('Có lỗi xảy ra khi nộp KPI.')
@@ -258,14 +279,14 @@ function statusDescForUi(assign: any): string {
 function statusBadgeClass(code: number): string {
   if ([501, 502, 601, 602].includes(code)) return 'border-sky-200 bg-sky-50'
   if (code === 407) return 'border-violet-200 bg-violet-50'
-  if (code === 406) return 'border-orange-200 bg-orange-50'
+  if (code === 406) return 'border-rose-200 bg-rose-50'
   if ([503, 603].includes(code)) return 'border-emerald-200 bg-emerald-50'
   if ([402, 403, 404, 405].includes(code)) return 'border-slate-200 bg-slate-50'
   return 'border-slate-200 bg-slate-50'
 }
 
 function rowAlertClass(code: number): string {
-  if (code === 406) return 'bg-orange-50/50'
+  if (code === 406) return 'bg-rose-50/60'
   if (code === 407) return 'bg-violet-100/70 ring-1 ring-inset ring-violet-200'
   if ([501, 502, 601, 602].includes(code)) return 'bg-sky-50/45'
   if ([503, 603].includes(code)) return 'bg-emerald-50/35'
@@ -274,16 +295,96 @@ function rowAlertClass(code: number): string {
 }
 
 function canSendFeedback(assign: any): boolean {
+  if (assign?.createdByCurrentUser === true) return false
   const status = Number(assign?.statusCode ?? 0)
   return status === 404 || status === 407
 }
 
-function formatTargetDisplay(assign: any): string {
-  const raw = assign?.targetValue
-  if (raw == null || raw === '') return '-'
-  const unit = String(assign?.unitName ?? '').trim()
-  return unit ? `${raw} ${unit}` : String(raw)
+function canDeleteSelfCreatedVisible(assign: any): boolean {
+  const status = Number(assign?.statusCode ?? 0)
+  return !props.isReadonly && assign?.createdByCurrentUser === true && [402, 404, 406].includes(status)
 }
+
+function canDeleteSelfCreatedEnabled(assign: any): boolean {
+  const status = Number(assign?.statusCode ?? 0)
+  // 402: đã submit target_setup, chờ PM duyệt -> chỉ hiển thị disabled
+  return status === 404 || status === 406
+}
+
+function shouldOpenRejectedEditForm(assign: any): boolean {
+  return (
+    assign?.createdByCurrentUser === true
+    && Number(assign?.statusCode ?? 0) === 406
+    && String(assign?.kpiInformationId ?? '').trim().length > 0
+  )
+}
+
+function scoreColorClass(score: number | null | undefined): string {
+  if (score == null || !Number.isFinite(Number(score))) return 'text-slate-400'
+  const v = Number(score)
+  if (v <= 2) return 'text-rose-600'
+  if (v < 4) return 'text-amber-600'
+  return 'text-emerald-600'
+}
+
+function parseGmComment(assign: any): string {
+  try {
+    const parsed = JSON.parse(String(assign?.evidences ?? '{}'))
+    return String(parsed?.gmComment ?? '').trim()
+  } catch {
+    return ''
+  }
+}
+
+function finalScoreTooltip(assign: any): string | undefined {
+  const selfScore = Number(draftMap.value[assign.assignmentId]?.selfScore ?? assign.endSelfScore ?? assign.midSelfScore)
+  const finalScore = Number(assign.endGmScore ?? assign.endPmScore)
+  if (!Number.isFinite(selfScore) || !Number.isFinite(finalScore)) return undefined
+  if (selfScore === finalScore) return undefined
+  const gm = parseGmComment(assign)
+  if (!gm) return undefined
+  return `${gm}`
+}
+
+function statusTooltip(assign: any): string {
+  const status = Number(assign?.statusCode ?? 0)
+  const reason = String(assign?.updateReason ?? assign?.feedbackComment ?? '').trim()
+  if (status === 406 && reason) return `Lý do từ chối:\n${reason}`
+  return statusDescForUi(assign)
+}
+
+async function handleDeleteSelfCreated(assign: any) {
+  pendingDeleteAssignment.value = assign
+  showDeleteConfirmModal.value = true
+}
+
+function cancelDeleteSelfCreated() {
+  showDeleteConfirmModal.value = false
+  pendingDeleteAssignment.value = null
+}
+
+async function confirmDeleteSelfCreated() {
+  const assignmentId = String(pendingDeleteAssignment.value?.assignmentId ?? '').trim()
+  if (!assignmentId) return
+  try {
+    await memberKpiService.deleteSelfCreatedKpi(assignmentId)
+    toast.success('Đã xóa KPI tự tạo')
+    await fetchData()
+    emit('refresh-summary')
+  } catch (error) {
+    console.error('Failed to delete self-created KPI', error)
+    toast.error('Xóa KPI thất bại')
+  } finally {
+    cancelDeleteSelfCreated()
+  }
+}
+
+// function formatTargetDisplay(assign: any): string {
+//   const raw = assign?.targetValue
+//   if (raw == null || raw === '') return '-'
+//   const unit = String(assign?.unitName ?? '').trim()
+//   return unit ? `${raw} ${unit}` : String(raw)
+// }
 
 function targetDataTooltip(assign: any): string {
   const rawRules = extractRawInputFromApiTargetDescription(assign?.targetDescription ?? '')
@@ -296,7 +397,9 @@ function targetDataTooltip(assign: any): string {
 function getActualResult(assign: any): string {
   // Ưu tiên draft local (vừa nhập, chưa submit)
   const draft = draftMap.value[assign.assignmentId]
-  if (draft?.actualResult) return draft.actualResult
+  const parsed = JSON.parse(assign.evidences ?? '{}')
+  const actualValue = draft?.actualResult ?? parsed.result
+  if (actualValue) return `${actualValue} ${displayTargetValue(assign, actualValue)}`
   // Parse từ evidences JSON trả về từ API
   return parseActualResultFromEvidences(
     assign.evidences,
@@ -382,7 +485,7 @@ function parseActualResultFromEvidences(
               </span>
             </th>
             <th class="w-28 px-5 py-4 text-center text-slate-600">Self Score</th>
-            <th class="w-28 px-5 py-4 text-center">PM Score</th>
+            <th class="w-28 px-5 py-4 text-center">Final Score</th>
             <th class="w-28 px-5 py-4 text-right">Thao tác</th>
           </tr>
           </thead>
@@ -413,7 +516,7 @@ function parseActualResultFromEvidences(
                 <span
                   class="inline-flex max-w-full flex-col items-center gap-0.5 rounded-lg border px-2 py-1.5 text-[10px] font-semibold leading-tight"
                   :class="statusBadgeClass(statusCodeForUi(assign))"
-                  :title="statusDescForUi(assign)"
+                :title="statusTooltip(assign)"
                 >
                   <span class="line-clamp-3 text-center" :class="statusTextClass(assign)">{{ statusDescForUi(assign) }}</span>
                 </span>
@@ -451,13 +554,19 @@ function parseActualResultFromEvidences(
 
               <td class="py-4 px-5 text-center align-middle">
                 <span class="text-sm font-semibold leading-snug text-slate-700 inline-block">
-                  {{ (draftMap[assign.assignmentId]?.selfScore ?? assign.midSelfScore) ?? 0 }}
+                  <span :class="scoreColorClass((draftMap[assign.assignmentId]?.selfScore ?? assign.endSelfScore ?? assign.midSelfScore))">
+                    {{ (draftMap[assign.assignmentId]?.selfScore ?? assign.endSelfScore ?? assign.midSelfScore) ?? 0 }}
+                  </span>
                 </span>
               </td>
 
               <td class="py-4 px-5 text-center align-middle">
-                  <span class="text-slate-500 font-medium text-sm">
-                    {{ assign.endPmScore ?? 0 }}
+                  <span
+                    class="font-medium text-sm"
+                    :class="scoreColorClass(assign.endGmScore ?? assign.endPmScore)"
+                    :title="finalScoreTooltip(assign)"
+                  >
+                    {{ assign.endGmScore ?? assign.endPmScore ?? '' }}
                   </span>
               </td>
 
@@ -466,11 +575,12 @@ function parseActualResultFromEvidences(
                   <button
                     type="button"
                     class="flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-[10px] font-bold text-slate-600 shadow-sm transition-colors hover:bg-slate-50 hover:text-indigo-600"
-                    @click.stop="openEvidence(assign)"
+                    @click.stop="shouldOpenRejectedEditForm(assign) ? emit('open-edit-self-created', assign) : openEvidence(assign)"
                   >
                     <i class="fas fa-pen text-[10px]"></i>
                   </button>
                   <button
+                    v-if="canSendFeedback(assign)"
                     type="button"
                     class="flex h-8 items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-3 text-[10px] font-bold text-violet-700 shadow-sm transition-colors hover:bg-violet-100 disabled:cursor-not-allowed disabled:opacity-45"
                     :disabled="isReadonly || !canSendFeedback(assign)"
@@ -479,6 +589,17 @@ function parseActualResultFromEvidences(
                   >
                     <i class="fas fa-message text-[10px]"></i>
                   </button>
+                <button
+                  v-if="canDeleteSelfCreatedVisible(assign)"
+                  type="button"
+                  class="flex h-8 items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-3 text-[10px] font-bold text-rose-700 shadow-sm transition-colors hover:bg-rose-100"
+                  :class="!canDeleteSelfCreatedEnabled(assign) ? 'cursor-not-allowed opacity-45 hover:bg-rose-50' : ''"
+                  :disabled="!canDeleteSelfCreatedEnabled(assign)"
+                  :title="canDeleteSelfCreatedEnabled(assign) ? 'Xóa KPI tự tạo' : 'KPI đã submit đầu năm, không thể xóa'"
+                  @click.stop="handleDeleteSelfCreated(assign)"
+                >
+                  <i class="fas fa-trash text-[10px]"></i>
+                </button>
                 </div>
               </td>
             </tr>
@@ -502,7 +623,7 @@ function parseActualResultFromEvidences(
               {{ totals.weightedSelfPoints }}
             </td>
             <td class="py-4 px-5 text-center">
-              <span class="text-sm text-slate-800">{{ totals.weightedPmPoints }}</span>
+              <span class="text-sm text-slate-800">{{ totals.weightedPmPoints === 0 ? '' : totals.weightedPmPoints }}</span>
             </td>
             <td class="py-4 px-5"></td>
           </tr>
@@ -540,8 +661,8 @@ function parseActualResultFromEvidences(
               </label>
               <textarea v-model="employeeComment" rows="4" placeholder="Nhập ý kiến của bạn..."
                         class="w-full resize-none p-3 bg-white border border-slate-200 rounded-lg text-sm text-slate-700 focus:ring-2 focus:ring-blue-100 outline-none shadow-sm"
-                        :class="{ 'bg-slate-100 text-slate-500': isReadonly }"
-                        :readonly="isReadonly"/>
+                        :class="{ 'bg-slate-100 text-slate-500': isEmployeeCommentReadonly }"
+                        :readonly="isEmployeeCommentReadonly"/>
             </div>
           </div>
           <div class="space-y-3">
@@ -562,7 +683,7 @@ function parseActualResultFromEvidences(
         <button
           v-if="buttonState.show"
           type="button"
-          :disabled="buttonState.disabled || submitting || hasMissingMidYearSelfScore || hasSubmitBlockingStatus"
+          :disabled="buttonState.disabled || submitting || (!hasRejectedAssignments && hasMissingMidYearSelfScore) || (!hasRejectedAssignments && hasSubmitBlockingStatus)"
           class="px-4 py-2 bg-slate-900 border border-transparent rounded-lg text-sm font-semibold text-white shadow-sm hover:bg-slate-800 flex items-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           @click="submitEvaluation"
         >
@@ -570,12 +691,6 @@ function parseActualResultFromEvidences(
           <i v-else class="fas fa-paper-plane text-xs" />
           {{ submitting ? 'Đang xử lý...' : submitLabel }}
         </button>
-        <p
-          v-if="hasSubmitBlockingStatus"
-          class="text-xs font-medium text-amber-700"
-        >
-          Có KPI đang chờ feedback hoặc KPI mới chưa được PM duyệt, tạm thời chưa thể submit.
-        </p>
       </div>
 
       <div v-if="isReadonly && hasPersonalAssignments && !loading" class="bg-slate-50 p-4 border-t border-slate-200 flex flex-col items-center gap-2">
@@ -592,5 +707,46 @@ function parseActualResultFromEvidences(
         @close="isDrawerOpen = false"
         @save="onEvidenceSaved"
     />
+
+    <Teleport to="body">
+      <div
+        v-if="showDeleteConfirmModal"
+        class="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/50 p-4"
+        role="dialog"
+        aria-modal="true"
+      >
+        <div class="w-full max-w-md rounded-xl border border-slate-200 bg-white shadow-2xl">
+          <div class="border-b border-slate-100 px-5 py-4">
+            <h3 class="text-base font-bold text-slate-800">Xác nhận xóa KPI</h3>
+            <p class="mt-1 text-xs text-slate-500">KPI tự tạo sẽ bị xóa khỏi danh sách hiện tại.</p>
+          </div>
+          <div class="px-5 py-4 text-sm text-slate-700">
+            <p>
+              Bạn có chắc muốn xóa KPI:
+              <span class="font-semibold text-slate-900">
+                {{ pendingDeleteAssignment?.kpiCode }} {{ pendingDeleteAssignment?.kpiName }}
+              </span>
+              ?
+            </p>
+          </div>
+          <div class="flex items-center justify-end gap-2 border-t border-slate-100 px-5 py-4">
+            <button
+              type="button"
+              class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+              @click="cancelDeleteSelfCreated"
+            >
+              Hủy
+            </button>
+            <button
+              type="button"
+              class="rounded-lg bg-rose-600 px-3 py-2 text-xs font-semibold text-white hover:bg-rose-700"
+              @click="confirmDeleteSelfCreated"
+            >
+              Xóa KPI
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>

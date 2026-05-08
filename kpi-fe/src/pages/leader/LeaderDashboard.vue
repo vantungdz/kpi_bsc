@@ -8,11 +8,12 @@ import MemberKpiDeadlineBanner from '@/components/member/MemberKpiDeadlineBanner
 import ProcessTimeline from '@/components/shared/ProcessTimeline.vue'
 import { isReadonlyKpiYear } from '@/utils/kpi-year'
 import { leaderKpiService } from '@/services/modules/kpi-leader.service'
-import type { LeaderKpiInformationResponse } from '@/types/kpi'
+import type { LeaderKpiAssignment, LeaderKpiInformationResponse } from '@/types/kpi'
 import type { EvalPhase } from '@/types/kpi'
 import type { KpiCycleResponse } from '@/types/shared/kpi-cycle.type'
 import { kpiCycleService } from '@/services/shared/kpi-cycle.service'
 import { buildKpiDeadlineBanner, type KpiDeadlineBannerVm } from '@/utils/kpiDeadlineBanner'
+import { getSubmitButtonState } from '@/utils/common'
 
 // ── Core state ────────────────────────────────────────────────────────────────
 const selectedYear = ref(new Date().getFullYear())
@@ -27,13 +28,26 @@ const availableYears = Array.from({ length: 5 }, (_, i) => {
 
 // ── Create individual KPI ─────────────────────────────────────────────────────
 const showCreateIndividualKpiDrawer = ref(false)
+const editingRejectedSelfCreatedItem = ref<LeaderKpiAssignment | null>(null)
 const personalTableKey = ref(0)
 
 const average = ref(0)
 const averagePromotion = ref(0)
 
 function onLeaderIndividualKpiSaved() {
+  editingRejectedSelfCreatedItem.value = null
   personalTableKey.value += 1
+  loadSummary()
+}
+
+function openCreateIndividualDrawer() {
+  editingRejectedSelfCreatedItem.value = null
+  showCreateIndividualKpiDrawer.value = true
+}
+
+function openRejectedSelfCreatedEditor(assign: LeaderKpiAssignment) {
+  editingRejectedSelfCreatedItem.value = assign
+  showCreateIndividualKpiDrawer.value = true
 }
 
 // ── Tab helpers ───────────────────────────────────────────────────────────────
@@ -85,6 +99,37 @@ const evidenceCount = computed(() => {
   )
 })
 
+const hasAnyLeaderKpi = computed(() => {
+  const personalCount = (summaryData.value?.categories ?? []).reduce((sum, c) => sum + (c.assignments?.length ?? 0), 0)
+  const promotionCount = (promotionSummaryData.value?.categories ?? []).reduce((sum, c) => sum + (c.assignments?.length ?? 0), 0)
+  return personalCount + promotionCount > 0
+})
+
+const canCreatePersonalKpi = computed(() => {
+  if (isReadonly.value || activeTab.value !== 'personal') return false
+  const submittedStatuses = new Set([402, 403, 405, 501, 502, 503, 601, 602, 603])
+  const statusCodes = assignmentStatuses(summaryData.value)
+  if (!statusCodes.length) return true
+  return !statusCodes.some(sc => submittedStatuses.has(sc))
+})
+
+function assignmentStatuses(data: LeaderKpiInformationResponse | null): number[] {
+  return (data?.categories ?? [])
+    .flatMap(c => c.assignments.map(a => Number(a.statusCode)))
+    .filter(n => Number.isFinite(n))
+}
+
+function derivePhaseFromAssignments(data: LeaderKpiInformationResponse | null): EvalPhase | null {
+  const statusCodes = assignmentStatuses(data)
+  if (!statusCodes.length) return null
+  if (statusCodes.some(sc => sc === 404 || sc === 407 || (sc > 0 && sc < 404))) return 'target_setup'
+  if (statusCodes.some(sc => sc === 601 || sc === 602 || sc === 603)) return 'year_end'
+  if (statusCodes.some(sc => sc === 503)) return 'year_end'
+  if (statusCodes.some(sc => sc === 501 || sc === 502)) return 'mid_year'
+  if (statusCodes.some(sc => sc === 405)) return 'mid_year'
+  return null
+}
+
 const leaderActiveEvalPhase = computed<EvalPhase | null>(() => {
   const raw = String(cycleData.value?.activePhase ?? '').trim()
   if (raw === 'target_setup' || raw === 'mid_year' || raw === 'year_end') return raw
@@ -115,11 +160,9 @@ function hasPendingActionInSummary(
   phase: EvalPhase | null,
 ): boolean {
   if (!data || !phase) return false
-  const statusCodes = data.categories
-    .flatMap(c => c.assignments.map(a => Number(a.statusCode)))
-    .filter(n => Number.isFinite(n))
+  const statusCodes = assignmentStatuses(data)
   if (!statusCodes.length) return false
-  if (phase === 'target_setup') return statusCodes.some(sc => sc === 404 || sc === 407)
+  if (phase === 'target_setup') return statusCodes.some(sc => sc === 404 || sc === 407 || (sc > 0 && sc < 404))
   if (phase === 'mid_year') return statusCodes.some(sc => sc === 405)
   if (phase === 'year_end') return statusCodes.some(sc => sc === 405 || sc === 503)
   return false
@@ -128,7 +171,7 @@ function hasPendingActionInSummary(
 const kpiDeadlineBanner = computed((): KpiDeadlineBannerVm | null => {
   if (activeTab.value === 'team') return null
   const currentSummary = activeTab.value === 'promotion' ? promotionSummaryData.value : summaryData.value
-  let phase = leaderActiveEvalPhase.value
+  let phase = derivePhaseFromAssignments(currentSummary) ?? leaderActiveEvalPhase.value
   const cycle = cycleData.value
   if (cycle && phase === 'year_end') {
     const now = Date.now()
@@ -153,6 +196,10 @@ const kpiDeadlineBanner = computed((): KpiDeadlineBannerVm | null => {
     hasPendingAction,
   })
 })
+
+function onLeaderStatusChanged() {
+  loadSummary()
+}
 
 function scrollToLeaderKpiSection() {
   document.getElementById('leader-kpi-section')?.scrollIntoView({
@@ -212,7 +259,7 @@ function scrollToLeaderKpiSection() {
     </div>
 
     <!-- Process Timeline -->
-    <ProcessTimeline :year="selectedYear" />
+    <ProcessTimeline v-if="hasAnyLeaderKpi" :year="selectedYear" />
 
     <!-- Summary cards (Tình trạng bằng chứng + Avg Self Score) -->
     <div class="grid grid-cols-1 gap-5 md:grid-cols-2">
@@ -295,10 +342,10 @@ function scrollToLeaderKpiSection() {
         </nav>
 
         <button
-          v-if="!isReadonly && activeTab === 'personal'"
+          v-if="canCreatePersonalKpi"
           type="button"
           class="mb-1.5 mr-1 flex shrink-0 items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:bg-blue-700"
-          @click="showCreateIndividualKpiDrawer = true"
+          @click="openCreateIndividualDrawer"
         >
           <i class="fas fa-plus text-xs" aria-hidden="true" />
           Tạo KPI
@@ -308,6 +355,7 @@ function scrollToLeaderKpiSection() {
       <CreateIndividualKpiDrawer
         v-model="showCreateIndividualKpiDrawer"
         :cycle-year="String(selectedYear)"
+        :edit-item="editingRejectedSelfCreatedItem"
         @saved="onLeaderIndividualKpiSaved"
       />
 
@@ -316,7 +364,14 @@ function scrollToLeaderKpiSection() {
 
         <!-- Personal KPI -->
         <div v-show="activeTab === 'personal'">
-          <PersonalKpiTable :key="personalTableKey" :year="selectedYear" :is-readonly="isReadonly" @updateAverage="average = $event"/>
+          <PersonalKpiTable
+            :key="personalTableKey"
+            :year="selectedYear"
+            :is-readonly="isReadonly"
+            @updateAverage="average = $event"
+            @refresh-summary="onLeaderStatusChanged"
+            @open-edit-self-created="openRejectedSelfCreatedEditor"
+          />
         </div>
 
         <!-- Team Members -->
@@ -334,7 +389,13 @@ function scrollToLeaderKpiSection() {
 
         <!-- Promotion KPI -->
         <div v-show="activeTab === 'promotion'">
-          <PromotionKpiTable :year="selectedYear" :is-readonly="isReadonly" @updateAverage="averagePromotion = $event"/>
+          <PromotionKpiTable
+            :year="selectedYear"
+            :is-readonly="isReadonly"
+            @updateAverage="averagePromotion = $event"
+            @refresh-summary="onLeaderStatusChanged"
+            @open-edit-self-created="openRejectedSelfCreatedEditor"
+          />
         </div>
 
       </div>

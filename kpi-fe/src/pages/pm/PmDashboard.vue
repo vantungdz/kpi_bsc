@@ -15,7 +15,11 @@ import {
   formatPmPortfolioActualCell,
   parsePmPortfolioEvidenceString,
 } from '@/utils/memberKpiHelpers'
-import { isPmEvaluationSubject } from '@/utils/pmEvaluationSubject'
+import { formatKpiTargetWithUnit, kpiUnitCodeToFormUnit } from '@/utils/kpiUnitCodes'
+import {
+  countPmEvaluationSubjectsInHierarchy,
+  isPmEvaluationSubject,
+} from '@/utils/pmEvaluationSubject'
 import PmPersonalKpiTab from '@/components/pm/tabs/PmPersonalKpiTab.vue'
 import PmTeamMembersTab from '@/components/pm/tabs/PmTeamMembersTab.vue'
 import PmRequestsTab from '@/components/pm/tabs/PmRequestsTab.vue'
@@ -71,6 +75,23 @@ function memberFailsBulkSubmitRules(m: any, isEndYear: boolean): boolean {
 const personalKpiKey = ref(0)
 /** Tăng để Team Review refetch hierarchy sau bulk gửi đánh giá (không reload trang). */
 const teamReviewReloadNonce = ref(0)
+/** Số member đang chờ PM đánh giá (501 / 601) — badge tab Team Review + đồng bộ khi mở tab. */
+const teamPmEvaluationPendingCount = ref(0)
+
+async function loadTeamReviewPendingCount() {
+  try {
+    const response = await pmKpiService.getTeamHierarchy(String(approvalYear))
+    const roots = Array.isArray(response) ? response : []
+    teamPmEvaluationPendingCount.value = countPmEvaluationSubjectsInHierarchy(roots)
+  } catch {
+    teamPmEvaluationPendingCount.value = 0
+  }
+}
+
+function onTeamPendingPmEvaluationCount(count: number) {
+  const n = Number(count)
+  teamPmEvaluationPendingCount.value = Number.isFinite(n) ? Math.max(0, Math.floor(n)) : 0
+}
 
 const approvalYear = new Date().getFullYear()
 const approvalLoading = ref(false)
@@ -97,6 +118,7 @@ async function loadProcessTimeline() {
 
 type PmRequestUiRow = {
   id: string
+  userId: string
   user: string
   avatar: string
   type: string
@@ -106,10 +128,96 @@ type PmRequestUiRow = {
   reason: string
   status: string
   date: string
+  memberTarget: string
+  bscAspect: string
+  weightLabel: string
+  unitLabel: string
+  calculationMethodLabel: string
+  scoringRuleText: string
 }
 
-const requests = ref<PmRequestUiRow[]>([])
-const pendingRequestsCount = computed(() => requests.value.filter((r) => r.status === 'PENDING').length)
+/** Dữ liệu gốc từ API — nhóm theo member ở tab Request Approval. */
+const approvalRawItems = ref<PmMemberKpiApprovalItem[]>([])
+
+type PmApprovalMemberSummary = {
+  userId: string
+  userFullName: string
+  avatar: string
+  pendingCount: number
+  latestDateLabel: string
+  /** roles.code (uppercase), đã tách và bỏ trùng. */
+  roleCodes: string[]
+}
+
+/** BE trả user_role_codes nối bằng |||. */
+function parseUserRoleCodes(raw: string | null | undefined): string[] {
+  if (raw == null || !String(raw).trim()) return []
+  const parts = String(raw)
+    .split('|||')
+    .map((s) => s.trim().toUpperCase())
+    .filter(Boolean)
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const p of parts) {
+    if (seen.has(p)) continue
+    seen.add(p)
+    out.push(p)
+  }
+  return out
+}
+
+function roleCodesFromApprovalItems(items: PmMemberKpiApprovalItem[]): string[] {
+  for (const it of items) {
+    const parsed = parseUserRoleCodes(it.userRoleCodes)
+    if (parsed.length) return parsed
+  }
+  return []
+}
+
+function maxRequestedAtIso(items: PmMemberKpiApprovalItem[]): string | null {
+  let best: string | null = null
+  let bestMs = -Infinity
+  for (const i of items) {
+    const t = i.requestedAt
+    if (t == null || String(t).trim() === '') continue
+    const s = String(t)
+    const ms = Date.parse(s)
+    if (!Number.isFinite(ms)) continue
+    if (ms >= bestMs) {
+      bestMs = ms
+      best = s
+    }
+  }
+  return best
+}
+
+const approvalMemberSummaries = computed<PmApprovalMemberSummary[]>(() => {
+  const map = new Map<string, { userId: string; userFullName: string; items: PmMemberKpiApprovalItem[] }>()
+  for (const r of approvalRawItems.value) {
+    const uid = String(r.userId ?? '').trim()
+    if (!uid) continue
+    if (!map.has(uid)) {
+      map.set(uid, { userId: uid, userFullName: r.userFullName ?? '—', items: [] })
+    }
+    map.get(uid)!.items.push(r)
+  }
+  const rows: PmApprovalMemberSummary[] = []
+  for (const m of map.values()) {
+    rows.push({
+      userId: m.userId,
+      userFullName: m.userFullName,
+      avatar: initialsFromName(m.userFullName),
+      pendingCount: m.items.length,
+      latestDateLabel: formatRequestedAt(maxRequestedAtIso(m.items)),
+      roleCodes: roleCodesFromApprovalItems(m.items),
+    })
+  }
+  rows.sort((a, b) => b.pendingCount - a.pendingCount || a.userFullName.localeCompare(b.userFullName, 'vi'))
+  return rows
+})
+
+/** Số member có ít nhất một KPI chờ duyệt (402) — badge tab Request Approval. */
+const pendingRequestsCount = computed(() => approvalMemberSummaries.value.length)
 
 function initialsFromName(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean)
@@ -123,10 +231,38 @@ function formatRequestedAt(iso: string | null | undefined): string {
   try {
     const d = new Date(iso)
     if (Number.isNaN(d.getTime())) return '—'
-    return d.toLocaleDateString('vi-VN', { day: 'numeric', month: 'short' })
+    return d.toLocaleDateString('vi-VN', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    })
   } catch {
     return '—'
   }
+}
+
+function calcMethodLabel(ruleCode: number | null | undefined, typeCode: number | null | undefined): string {
+  const r = Number(ruleCode)
+  const t = Number(typeCode)
+  if (r === 801) return 'Tổng Plan/Actual'
+  if (r === 802 && t === 701) return 'Trung bình Actual / Plan'
+  if (r === 802 && t === 702) return 'Trung bình Plan / Actual'
+  if (r === 802) return 'Trung bình Plan/Actual (%)'
+  if (r === 803) return 'Nhập tay theo nhận xét'
+  return '—'
+}
+
+function scoringRulesText(targetDescription: string | null | undefined): string {
+  const raw = String(targetDescription ?? '').trim()
+  if (!raw) return '—'
+  try {
+    const parsed = JSON.parse(raw) as { rawInput?: string }
+    const txt = String(parsed?.rawInput ?? '').trim()
+    if (txt) return txt
+  } catch {
+    // targetDescription có thể không phải JSON
+  }
+  return raw
 }
 
 function mapApprovalToUi(r: PmMemberKpiApprovalItem): PmRequestUiRow {
@@ -136,10 +272,17 @@ function mapApprovalToUi(r: PmMemberKpiApprovalItem): PmRequestUiRow {
   if (r.categoryName) newValueParts.push(r.categoryName)
   const just = (r.justification && r.justification.trim()) || ''
   const target = (r.targetDescription && r.targetDescription.trim()) || ''
+  const name = r.userFullName ?? '—'
+  const unitLabel = r.unitCode != null ? kpiUnitCodeToFormUnit(r.unitCode) : '—'
+  const memberTarget = formatKpiTargetWithUnit(
+    r.targetValue != null ? String(r.targetValue) : '-',
+    r.unitCode ?? undefined,
+  )
   return {
     id: r.assignmentId,
-    user: r.userFullName ?? '—',
-    avatar: initialsFromName(r.userFullName ?? ''),
+    userId: String(r.userId ?? ''),
+    user: name,
+    avatar: initialsFromName(name),
     type: 'CREATE_KPI',
     kpiName: r.kpiName ?? '—',
     oldValue: null,
@@ -147,6 +290,12 @@ function mapApprovalToUi(r: PmMemberKpiApprovalItem): PmRequestUiRow {
     reason: just || target || '—',
     status: 'PENDING',
     date: formatRequestedAt(r.requestedAt),
+    memberTarget,
+    bscAspect: r.categoryName?.trim() || '—',
+    weightLabel,
+    unitLabel,
+    calculationMethodLabel: calcMethodLabel(r.calculationRuleCode, r.calculationTypeCode),
+    scoringRuleText: scoringRulesText(r.targetDescription),
   }
 }
 
@@ -154,11 +303,36 @@ async function loadApprovalRequests() {
   approvalLoading.value = true
   try {
     const rows = await pmKpiService.listMemberKpiApprovals(approvalYear)
-    requests.value = rows.map(mapApprovalToUi)
+    approvalRawItems.value = rows
+
+    const openMemberApproval =
+      rightPanelVisible.value &&
+      rightPanelMode.value === 'request_detail' &&
+      activeItem.value &&
+      activeItem.value._approvalMember === true &&
+      activeItem.value.userId != null
+
+    if (openMemberApproval) {
+      const uid = String(activeItem.value.userId)
+      const kpis = rows.filter((r) => String(r.userId) === uid).map(mapApprovalToUi)
+      if (kpis.length === 0) {
+        closePanel()
+      } else {
+        const snap = activeItem.value
+        activeItem.value = {
+          ...snap,
+          kpis,
+          userFullName: rows.find((r) => String(r.userId) === uid)?.userFullName ?? snap.userFullName,
+          avatar: initialsFromName(
+            rows.find((r) => String(r.userId) === uid)?.userFullName ?? snap.userFullName ?? '',
+          ),
+        }
+      }
+    }
   } catch (e) {
     console.error(e)
     toast.error('Không tải được danh sách đề xuất KPI')
-    requests.value = []
+    approvalRawItems.value = []
   } finally {
     approvalLoading.value = false
   }
@@ -174,7 +348,7 @@ function apiErrorMessage(err: unknown): string {
   return 'Thao tác thất bại'
 }
 
-async function submitApprovalDecision(req: PmRequestUiRow, approve: boolean) {
+async function submitApprovalDecision(req: PmRequestUiRow, approve: boolean, rejectReason?: string) {
   if (approvalSubmitting.value) return
   approvalSubmitting.value = true
   try {
@@ -182,14 +356,55 @@ async function submitApprovalDecision(req: PmRequestUiRow, approve: boolean) {
       year: approvalYear,
       assignmentId: req.id,
       approve,
+      rejectReason: approve ? undefined : (rejectReason ?? ''),
     })
     toast.success(
-      approve ? 'Đã duyệt — KPI chuyển sang chờ GM (403).' : 'Đã từ chối đề xuất KPI (406).',
+      approve ? 'Đã duyệt — KPI chuyển sang chờ GM.' : 'Đã từ chối đề xuất KPI.',
     )
-    if (rightPanelVisible.value && rightPanelMode.value === 'request_detail' && activeItem.value?.id === req.id) {
-      closePanel()
+    await loadApprovalRequests()
+    void loadProcessTimeline()
+  } catch (err: unknown) {
+    toast.error(apiErrorMessage(err))
+  } finally {
+    approvalSubmitting.value = false
+  }
+}
+
+async function submitApprovalDecisionBatch(
+  rows: PmRequestUiRow[],
+  approve: boolean,
+  rejectReason?: string,
+) {
+  const targets = rows.filter((r) => r.status === 'PENDING')
+  if (!targets.length || approvalSubmitting.value) return
+  approvalSubmitting.value = true
+  let ok = 0
+  try {
+    for (const req of targets) {
+      try {
+        await pmKpiService.decideMemberKpiApproval({
+          year: approvalYear,
+          assignmentId: req.id,
+          approve,
+          rejectReason: approve ? undefined : (rejectReason ?? ''),
+        })
+        ok += 1
+      } catch (e) {
+        console.error(e)
+      }
+    }
+    if (ok > 0) {
+      toast.success(
+        approve
+          ? `Đã duyệt ${ok} KPI — chuyển sang chờ GM.`
+          : `Đã từ chối ${ok} KPI.`,
+      )
+    }
+    if (ok < targets.length) {
+      toast.warning(`Có ${targets.length - ok} KPI chưa cập nhật được. Vui lòng thử lại.`)
     }
     await loadApprovalRequests()
+    void loadProcessTimeline()
   } catch (err: unknown) {
     toast.error(apiErrorMessage(err))
   } finally {
@@ -199,6 +414,10 @@ async function submitApprovalDecision(req: PmRequestUiRow, approve: boolean) {
 
 watch(activeTab, (t) => {
   if (t === 'requests') loadApprovalRequests()
+})
+
+watch(teamReviewReloadNonce, () => {
+  void loadTeamReviewPendingCount()
 })
 
 const initLocalStorage = () => {
@@ -215,17 +434,24 @@ const initLocalStorage = () => {
 onMounted(() => {
   initLocalStorage()
   void loadProcessTimeline()
-  if (activeTab.value === 'requests') loadApprovalRequests()
+  void loadApprovalRequests()
+  void loadTeamReviewPendingCount()
 })
 
-function onDrawerApproveRequest() {
-  const r = activeItem.value as PmRequestUiRow | null
-  if (r) submitApprovalDecision(r, true)
+function onDrawerApproveRequest(req: PmRequestUiRow) {
+  if (req) submitApprovalDecision(req, true)
 }
 
-function onDrawerRejectRequest() {
-  const r = activeItem.value as PmRequestUiRow | null
-  if (r) submitApprovalDecision(r, false)
+function onDrawerRejectRequest(payload: any) {
+  if (payload?.req) submitApprovalDecision(payload.req as PmRequestUiRow, false, String(payload.reason ?? ''))
+}
+
+function onDrawerApproveAll(rows: PmRequestUiRow[]) {
+  void submitApprovalDecisionBatch(rows, true)
+}
+
+function onDrawerRejectAll(payload: { rows: PmRequestUiRow[]; reason: string }) {
+  void submitApprovalDecisionBatch(payload.rows, false, payload.reason)
 }
 
 /** KPI của member thay đổi (vd xóa KPI) — bỏ draft localStorage tránh nhầm Supervisor Comment. */
@@ -244,11 +470,45 @@ function discardMemberEvalDraft(memberId: string) {
 const rightPanelVisible = ref(false)
 const rightPanelMode = ref<'assign' | 'member_detail' | 'request_detail' | 'none'>('none')
 const activeItem = ref<any>(null)
+/** Truyền vào PmAssignKpiDrawer khi mở từ «Chấp nhận và phân bổ» (feedback member). */
+const pendingAssignDrawerMemberFeedbackAssignmentId = ref<string | undefined>(undefined)
 
-const openAssignDrawer = (kpi: any) => { activeItem.value = kpi; rightPanelMode.value = 'assign'; rightPanelVisible.value = true }
+function openAssignDrawer(kpi: any) {
+  pendingAssignDrawerMemberFeedbackAssignmentId.value = undefined
+  activeItem.value = kpi
+  rightPanelMode.value = 'assign'
+  rightPanelVisible.value = true
+}
+
+function openAssignDrawerAfterMemberFeedback(payload: { parentKpi: any; feedbackAssignmentId: string }) {
+  const id = String(payload?.feedbackAssignmentId ?? '').trim()
+  pendingAssignDrawerMemberFeedbackAssignmentId.value = id || undefined
+  activeItem.value = payload.parentKpi
+  rightPanelMode.value = 'assign'
+  rightPanelVisible.value = true
+}
 const openMemberDrawer = (member: any) => { activeItem.value = member; rightPanelMode.value = 'member_detail'; rightPanelVisible.value = true }
-const openRequestDrawer = (req: any) => { activeItem.value = req; rightPanelMode.value = 'request_detail'; rightPanelVisible.value = true }
+
+function openMemberApprovalDrawer(summary: PmApprovalMemberSummary) {
+  const uid = String(summary.userId ?? '').trim()
+  if (!uid) return
+  const kpis = approvalRawItems.value.filter((r) => String(r.userId) === uid).map(mapApprovalToUi)
+  activeItem.value = {
+    _approvalMember: true,
+    userId: uid,
+    userFullName: summary.userFullName,
+    avatar: summary.avatar,
+    kpis,
+  }
+  rightPanelMode.value = 'request_detail'
+  rightPanelVisible.value = true
+}
 const closePanel = () => { rightPanelVisible.value = false; setTimeout(() => { activeItem.value = null; rightPanelMode.value = 'none' }, 300); personalKpiKey.value += 1 }
+
+function onPmAssignDrawerClose() {
+  pendingAssignDrawerMemberFeedbackAssignmentId.value = undefined
+  closePanel()
+}
 
 const handleSaveMemberKpis = (payload: { kpis: any[]; comments: any; memberId?: string }) => {
   const mid = payload.memberId ?? activeItem.value?.id
@@ -294,7 +554,11 @@ const handleSubmitEvaluations = async (evaluationSubjects: any[]) => {
   invalidMembers.value = newInvalidMembers
 
   if (!isValid) {
-    toast.error('Vui lòng đảm bảo TOÀN BỘ thành viên đều đã nộp KPI và được PM đánh giá (Điểm & Nhận xét)!')
+    toast.error(
+      isEndYear
+        ? 'Vui lòng đảm bảo TOÀN BỘ thành viên đều đã nộp KPI và được PM đánh giá cuối kỳ (điểm PM 1–5 và nhận xét)!'
+        : 'Vui lòng đảm bảo TOÀN BỘ thành viên đều đã nộp KPI và được PM đánh giá giữa kỳ (nhận xét PM)!',
+    )
     return
   }
 
@@ -302,27 +566,34 @@ const handleSubmitEvaluations = async (evaluationSubjects: any[]) => {
     const initData = await pmKpiService.getRegistrationInitData()
     const cycleId = initData.activeCycle.id
     
-    // Call API to save PM scores for all valid members
-    const promises: Promise<any>[] = []
-    
-    if (isEndYear) {
-      for (const m of evaluationSubjects) {
-        if (m.statusCode === 601) {
-          const kpis = memberKpisCache.value[m.id]
-          if (kpis) {
-            for (const kpi of kpis) {
-              if (kpi.pmScore != null) {
-                // Ignore API failures for scores since it might not be fully implemented, but try our best
-                promises.push(pmKpiService.scoreItem(m.id, kpi.id, kpi.pmScore).catch(() => {}))
-              }
-            }
-          }
-        }
+    // Đồng bộ điểm PM lên server chỉ cuối kỳ (601→602). Giữa kỳ (501→502) chỉ nhận xét, không chấm điểm PM.
+    const scorePromises: Promise<unknown>[] = []
+    const supervisorCommentPromises: Promise<unknown>[] = []
+    for (const m of evaluationSubjects) {
+      const sc = Number(m.statusCode)
+      const pmComment = String(memberComments.value[m.id] ?? '').trim()
+      supervisorCommentPromises.push(
+        pmKpiService.saveMemberSupervisorComment({
+          year: approvalYear,
+          memberId: String(m.id),
+          pmComment,
+        }),
+      )
+      if (sc !== 601) continue
+      const kpis = memberKpisCache.value[m.id]
+      if (!kpis?.length) continue
+      for (const kpi of kpis) {
+        if (kpi.pmScore == null) continue
+        const score = Number(kpi.pmScore)
+        if (!Number.isFinite(score) || score < 1 || score > 5) continue
+        scorePromises.push(pmKpiService.scoreItem(String(m.id), String(kpi.id), score))
       }
     }
-    
-    if (promises.length > 0) {
-      await Promise.all(promises)
+    if (scorePromises.length > 0) {
+      await Promise.all(scorePromises)
+    }
+    if (supervisorCommentPromises.length > 0) {
+      await Promise.all(supervisorCommentPromises)
     }
 
     // Call Bulk Update Status API
@@ -348,6 +619,7 @@ const handleSubmitEvaluations = async (evaluationSubjects: any[]) => {
     personalKpiKey.value += 1
 
     toast.success('Gửi toàn bộ đánh giá thành công!')
+    void loadProcessTimeline()
   } catch (err: any) {
     console.error('Failed to submit evaluations:', err)
     toast.error('Gửi đánh giá thất bại: ' + (err.response?.data?.message || err.message))
@@ -455,6 +727,7 @@ const handleRefresh = () => {
         :mid-year-issues="processTimelineData?.midYear ?? EMPTY_PM_PROCESS_TIMELINE_MID"
         :setting-issues="processTimelineData?.setting ?? undefined"
         :year-end-issues="processTimelineData?.yearEnd ?? undefined"
+        :year="approvalYear"
       />
     </div>
 
@@ -488,6 +761,10 @@ const handleRefresh = () => {
           :class="activeTab === 'team' ? 'bg-white text-blue-700 border border-slate-200 border-b-white z-10' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-200/50 border border-transparent'"
         >
           <i class="fas fa-sitemap text-base"></i> Team Review
+          <span
+            v-if="teamPmEvaluationPendingCount > 0"
+            class="flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-bold text-white shadow-sm ml-1"
+          >{{ teamPmEvaluationPendingCount }}</span>
         </button>
         
         <button 
@@ -506,16 +783,20 @@ const handleRefresh = () => {
           :key="`pf-${personalKpiKey}`"
           portfolio-scope="portfolio"
           @open-assign="openAssignDrawer"
+          @open-assign-after-member-feedback="openAssignDrawerAfterMemberFeedback"
           @open-member-detail="openKpiChildDetail"
           @feedback-pending-count="onPmFeedbackPendingCount"
+          @timeline-refresh="() => void loadProcessTimeline()"
         />
         <PmPersonalKpiTab
           v-if="activeTab === 'promotion'"
           :key="`pm-${personalKpiKey}`"
           portfolio-scope="promotion"
           @open-assign="openAssignDrawer"
+          @open-assign-after-member-feedback="openAssignDrawerAfterMemberFeedback"
           @open-member-detail="openKpiChildDetail"
           @feedback-pending-count="onPmFeedbackPendingCount"
+          @timeline-refresh="() => void loadProcessTimeline()"
         />
         <PmTeamMembersTab
           v-if="activeTab === 'team'"
@@ -526,15 +807,13 @@ const handleRefresh = () => {
           :comments-cache="memberComments"
           @open-member="openMemberDrawer"
           @submit-evaluations="handleSubmitEvaluations"
+          @pending-pm-evaluation-count="onTeamPendingPmEvaluationCount"
         />
         <PmRequestsTab
           v-if="activeTab === 'requests'"
-          :requests="requests"
+          :members="approvalMemberSummaries"
           :loading="approvalLoading"
-          :action-busy="approvalSubmitting"
-          @open-request="openRequestDrawer"
-          @approve="submitApprovalDecision($event, true)"
-          @reject="submitApprovalDecision($event, false)"
+          @open-member="openMemberApprovalDrawer"
         />
       </div>
     </div>
@@ -543,7 +822,8 @@ const handleRefresh = () => {
     <PmAssignKpiDrawer
       :open="rightPanelVisible && rightPanelMode === 'assign'"
       :kpi="rightPanelMode === 'assign' ? activeItem : null"
-      @close="closePanel"
+      :pending-member-feedback-assignment-id="pendingAssignDrawerMemberFeedbackAssignmentId"
+      @close="onPmAssignDrawerClose"
       @refresh="handleRefresh"
     />
     <PmMemberDetailDrawer
@@ -559,11 +839,21 @@ const handleRefresh = () => {
     <PmRequestDetailDrawer
       v-if="rightPanelVisible && rightPanelMode === 'request_detail'"
       :open="rightPanelVisible && rightPanelMode === 'request_detail'"
-      :request="activeItem"
+      :member-approval="
+        activeItem && activeItem._approvalMember
+          ? {
+              userFullName: activeItem.userFullName,
+              avatar: activeItem.avatar,
+              kpis: activeItem.kpis ?? [],
+            }
+          : null
+      "
       :action-busy="approvalSubmitting"
       @close="closePanel"
       @approve="onDrawerApproveRequest"
       @reject="onDrawerRejectRequest"
+      @approve-all="onDrawerApproveAll"
+      @reject-all="onDrawerRejectAll"
     />
     <!-- Luôn mount (không v-if) để Transition trong drawer chạy enter/leave khi mở Chi tiết thực hiện KPI. -->
     <GmMemberKpiDrawer

@@ -20,7 +20,13 @@ import { pushGmNotification } from '@/composables/useGmNotifications'
 
 const emit = defineEmits<{
   (e: 'pending-count', count: number): void
+  (e: 'timeline-refresh'): void
 }>()
+
+function onReloadEvaluationHub() {
+  void loadEvaluationHub()
+  emit('timeline-refresh')
+}
 
 const route = useRoute()
 const useMock = import.meta.env.VITE_USE_MOCK === 'true'
@@ -139,7 +145,7 @@ const filterSubtitle = computed(() => {
       list-entity="pm"
       :employees="employees"
       :pm-branches="pmBranches"
-      @reload-evaluation-hub="loadEvaluationHub"
+      @reload-evaluation-hub="onReloadEvaluationHub"
     />
   </div>
 </template>

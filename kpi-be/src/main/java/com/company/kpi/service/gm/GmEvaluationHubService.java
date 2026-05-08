@@ -26,7 +26,6 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 public class GmEvaluationHubService {
-
     private final KpiCycleMapper kpiCycleMapper;
     private final GmEvaluationHubMapper gmEvaluationHubMapper;
     private final KpiAssignmentMapper kpiAssignmentMapper;
@@ -87,6 +86,7 @@ public class GmEvaluationHubService {
                     throw AppException.badRequest(
                             "Assignment không ở trạng thái chờ review GM (502) hoặc đã xử lý: " + aid);
                 }
+                persistLineGmCommentIfPresent(line, aid, cycleId, evaluationUserId, gmUserId);
                 updated++;
             } else if (st == 602) {
                 BigDecimal score = line.getEndGmScore();
@@ -99,6 +99,7 @@ public class GmEvaluationHubService {
                     throw AppException.badRequest(
                             "Assignment không ở trạng thái chờ chấm GM (602) hoặc đã xử lý: " + aid);
                 }
+                persistLineGmCommentIfPresent(line, aid, cycleId, evaluationUserId, gmUserId);
                 wrote602 = true;
                 updated++;
             } else {
@@ -131,6 +132,23 @@ public class GmEvaluationHubService {
         return out;
     }
 
+    private void persistLineGmCommentIfPresent(
+            GmEvaluationHubConfirmLine line,
+            UUID assignmentId,
+            UUID cycleId,
+            UUID evaluationUserId,
+            UUID gmUserId) {
+        String gmComment = line.getGmComment();
+        if (gmComment == null || gmComment.isBlank()) {
+            return;
+        }
+        int commentUpdated = kpiAssignmentMapper.updateGmEvaluationHubLineComment(
+                assignmentId, cycleId, evaluationUserId, gmComment.trim(), gmUserId);
+        if (commentUpdated != 1) {
+            throw AppException.badRequest("Không thể lưu GM comment cho assignment: " + assignmentId);
+        }
+    }
+
     private GmEvaluationHubAssignmentResponse toAssignmentResponse(GmEvaluationHubAssignmentRow r) {
         GmEvaluationHubAssignmentResponse a = new GmEvaluationHubAssignmentResponse();
         a.setAssignmentId(r.getAssignmentId());
@@ -160,6 +178,7 @@ public class GmEvaluationHubService {
         a.setSectionManagerFullName(r.getSectionManagerFullName());
         a.setMemberRoleCode(r.getMemberRoleCode());
         a.setMemberRoleName(r.getMemberRoleName());
+        a.setSupervisorComment(r.getSupervisorComment());
         return a;
     }
 }

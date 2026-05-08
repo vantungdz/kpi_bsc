@@ -8,6 +8,7 @@ import java.util.UUID;
 @Data
 public class LeaderKpiAssignmentDTO {
     private UUID assignmentId;
+    private UUID kpiInformationId;
     private String kpiName;
     private String kpiCode;
     /** Ưu tiên {@code kpi_assignments.target_value}, không có thì {@code kpis_information.target_value}. */
@@ -24,9 +25,14 @@ public class LeaderKpiAssignmentDTO {
     // Final: đủ 3 cấp đánh giá
     private Double endSelfScore;
     private Double endPmScore;
+    private Double endGmScore;
     private String evidences;
     /** Feedback tách riêng khỏi evidences JSON */
     private String feedbackComment;
+    /** Lý do cập nhật / từ chối từ luồng PM/GM (kpi_assignments.update_reason). */
+    private String updateReason;
+    /** Assignment do chính user hiện tại tạo ra. */
+    private Boolean createdByCurrentUser;
     /** Trạng thái đánh giá FE (not_started/pending_approval/approved/overdue/feedback). */
     private String evaluationStatus;
     /** Nhãn hiển thị trạng thái đánh giá. */

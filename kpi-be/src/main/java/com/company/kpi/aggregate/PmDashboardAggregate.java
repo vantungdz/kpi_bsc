@@ -17,6 +17,8 @@ public class PmDashboardAggregate {
     private KpiAssignment childAssignment;
     /** Nội dung feedback active của member gửi PM cho assignment con. */
     private String childFeedbackNote;
+    /** Mã role của feedback active trên assignment con (PM / GM). */
+    private String childFeedbackTargetRoleCode;
     private User childUser;
     private JobTitle childJobTitle;
 }
