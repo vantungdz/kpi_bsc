@@ -16,9 +16,8 @@ const isActive = (path: string) => route.path.startsWith(path);
 // State điều khiển Drawer tạo mới KPI
 const showCreateDrawer = ref(false);
 
-const handleKpiCreated = (payload: any) => {
-  console.log("Đã tạo KPI mới:", payload);
-  // Thực tế sẽ gọi API và Toast thông báo ở đây
+const handleKpiCreated = () => {
+  window.dispatchEvent(new CustomEvent('pm-kpi-created'));
 }
 </script>
 
@@ -129,7 +128,7 @@ const handleKpiCreated = (payload: any) => {
         :open="showCreateDrawer" 
         mode="create" 
         @close="showCreateDrawer = false" 
-        @save="handleKpiCreated" 
+        @refresh="handleKpiCreated" 
       />
     </main>
   </div>

@@ -12,6 +12,7 @@ public final class Constants {
 
     public static final class AssignStatus {
         private AssignStatus() {}
+        public static final int INACTIVE = 401;
         public static final int WAITING_PM_APPROVAL = 402;
         /** Member đề xuất đã được PM duyệt — chờ GM. */
         public static final int WAITING_GM_APPROVAL = 403;

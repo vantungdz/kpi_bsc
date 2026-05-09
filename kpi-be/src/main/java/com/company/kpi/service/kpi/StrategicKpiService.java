@@ -41,8 +41,8 @@ import java.util.stream.Collectors;
 public class StrategicKpiService {
 
     private static final int TYPE_INDIVIDUAL = 101;
-    private static final int TYPE_TEAM       = 102;
-    private static final int TYPE_PROMOTION  = 103;
+    private static final int TYPE_TEAM = 102;
+    private static final int TYPE_PROMOTION = 103;
 
     private final KpiCycleMapper kpiCycleMapper;
     private final KpiCategoryMapper kpiCategoryMapper;
@@ -71,20 +71,20 @@ public class StrategicKpiService {
         int type = req.getTypeCode();
         validateTypeCode(type);
 
-        CalcCodes calc   = CalcCodes.fromPersisted(req.getCalculationMethod());
+        CalcCodes calc = CalcCodes.fromPersisted(req.getCalculationMethod());
         BigDecimal weight = normalizeWeight(req.getWeightPct());
         BigDecimal targetNum = normalizeTargetValue(req.getTargetValue());
         boolean important = Boolean.TRUE.equals(req.getIsImportant());
 
         List<UUID> assigneeUserIds = resolveAssigneeUserIds(req, type);
         requireExplicitPmTargetsForTeam(req);
-        if ((Constant.ROLE_MEMBER.equals(role) || Constant.ROLE_LEADER.equals(role)) && !assigneeUserIds.contains(actorId)) {
+        if ((Constant.ROLE_MEMBER.equals(role) || Constant.ROLE_LEADER.equals(role))
+                && !assigneeUserIds.contains(actorId)) {
             assigneeUserIds.add(actorId);
         }
 
-
         UUID masterId = UUID.randomUUID();
-        UUID infoId   = UUID.randomUUID();
+        UUID infoId = UUID.randomUUID();
 
         kpiMasterMapper.insertKpiMaster(
                 masterId,
@@ -108,8 +108,26 @@ public class StrategicKpiService {
                 important,
                 actorId);
 
-        List<KpiAssignmentInsertRow> rows = buildAssignmentRows(
-                assigneeUserIds, type, req, infoId, req.getCycleId(), targetNum, actorId, role);
+        List<KpiAssignmentInsertRow> rows = new ArrayList<>();
+        UUID parentAssignmentId = null;
+        if (Constant.ROLE_PM.equals(role)) {
+            parentAssignmentId = UUID.randomUUID();
+            rows.add(KpiAssignmentInsertRow.builder()
+                    .id(parentAssignmentId)
+                    .cycleId(req.getCycleId())
+                    .kpiInfoId(infoId)
+                    .userId(actorId)
+                    .jobTitleId(null)
+                    .parentAssignmentId(null)
+                    .targetValue(targetNum)
+                    .statusCode(Constants.AssignStatus.WAITING_GM_APPROVAL)
+                    .createdBy(actorId)
+                    .build());
+        }
+
+        rows.addAll(buildAssignmentRows(
+                assigneeUserIds, type, req, infoId, req.getCycleId(), targetNum, actorId, role, parentAssignmentId));
+
         if (!rows.isEmpty()) {
             kpiAssignmentMapper.insertKpiAssignments(rows);
         }
@@ -141,7 +159,8 @@ public class StrategicKpiService {
     // ── UPDATE ────────────────────────────────────────────────────────────────
 
     @Transactional
-    public StrategicKpiResponse update(UUID kpiInformationId, CreateStrategicKpiRequest req, UUID actorId, String role) {
+    public StrategicKpiResponse update(UUID kpiInformationId, CreateStrategicKpiRequest req, UUID actorId,
+            String role) {
         KpiStrategicEditMasterRow existing = kpisInformationMapper.selectStrategicKpiEditMaster(kpiInformationId);
         if (existing == null) {
             throw AppException.notFound("KPI information not found: " + kpiInformationId);
@@ -164,7 +183,7 @@ public class StrategicKpiService {
         }
         validateTypeCode(type);
 
-        CalcCodes calc   = CalcCodes.fromPersisted(req.getCalculationMethod());
+        CalcCodes calc = CalcCodes.fromPersisted(req.getCalculationMethod());
         BigDecimal weight = normalizeWeight(req.getWeightPct());
         BigDecimal targetNum = normalizeTargetValue(req.getTargetValue());
         boolean important = Boolean.TRUE.equals(req.getIsImportant());
@@ -197,8 +216,27 @@ public class StrategicKpiService {
         if (typeChanged) {
             kpiAssignmentMapper.softDeleteAssignmentsForKpiInformation(
                     kpiInformationId, existing.getCycleId(), actorId);
-            List<KpiAssignmentInsertRow> rows = buildAssignmentRows(
-                    desired, type, req, kpiInformationId, existing.getCycleId(), targetNum, actorId, role);
+            List<KpiAssignmentInsertRow> rows = new ArrayList<>();
+            UUID parentAssignmentId = null;
+            if (Constant.ROLE_PM.equals(role)) {
+                parentAssignmentId = UUID.randomUUID();
+                rows.add(KpiAssignmentInsertRow.builder()
+                        .id(parentAssignmentId)
+                        .cycleId(existing.getCycleId())
+                        .kpiInfoId(kpiInformationId)
+                        .userId(actorId)
+                        .jobTitleId(null)
+                        .parentAssignmentId(null)
+                        .targetValue(targetNum)
+                        .statusCode(Constants.AssignStatus.WAITING_GM_APPROVAL)
+                        .createdBy(actorId)
+                        .build());
+            }
+
+            rows.addAll(buildAssignmentRows(
+                    desired, type, req, kpiInformationId, existing.getCycleId(), targetNum, actorId, role,
+                    parentAssignmentId));
+
             if (!rows.isEmpty()) {
                 kpiAssignmentMapper.insertKpiAssignments(rows);
             }
@@ -206,7 +244,8 @@ public class StrategicKpiService {
             syncAssignments(kpiInformationId, existing.getCycleId(), desired, type, req, targetNum, actorId, role);
         }
 
-        int assignmentCount = kpiAssignmentMapper.listAssignmentUserTargets(kpiInformationId, existing.getCycleId()).size();
+        int assignmentCount = kpiAssignmentMapper.listAssignmentUserTargets(kpiInformationId, existing.getCycleId())
+                .size();
         GmKpiCategoryResponse cat = kpiCategoryMapper.findActiveById(req.getPerspective()).orElse(null);
         KpiScoringRulesPayload scoringView = kpiScoringRulesService.parseForApi(scoringJson);
 
@@ -234,8 +273,10 @@ public class StrategicKpiService {
     // ── GET FOR EDIT ──────────────────────────────────────────────────────────
 
     /**
-     * @param parentAssignmentId khi PM mở drawer phân bổ: chỉ trả {@code memberIds}/{@code memberTargets}
-     *                         cho assignment con của đúng dòng PM (không lẫn PM khác do GM giao).
+     * @param parentAssignmentId khi PM mở drawer phân bổ: chỉ trả
+     *                           {@code memberIds}/{@code memberTargets}
+     *                           cho assignment con của đúng dòng PM (không lẫn PM
+     *                           khác do GM giao).
      */
     public StrategicKpiEditResponse getForEdit(
             UUID kpiInformationId, UUID actorId, UUID parentAssignmentId) {
@@ -249,9 +290,8 @@ public class StrategicKpiService {
 
         List<KpiAssignmentUserTargetRow> assigns;
         if (parentAssignmentId != null) {
-            int owned =
-                    kpiAssignmentMapper.countAssignmentOwnedByUserForKpiInfo(
-                            parentAssignmentId, actorId, kpiInformationId);
+            int owned = kpiAssignmentMapper.countAssignmentOwnedByUserForKpiInfo(
+                    parentAssignmentId, actorId, kpiInformationId);
             if (owned < 1) {
                 throw AppException.forbidden(
                         "Parent assignment is invalid, not owned by you, or does not match this KPI.");
@@ -279,7 +319,8 @@ public class StrategicKpiService {
                 .calculationMethod(calcMethod)
                 .isImportant(Boolean.TRUE.equals(row.getIsImportant()));
 
-        // TEAM: danh sách PM do GM giao — chỉ khi xem full KPI (không lọc theo parent PM).
+        // TEAM: danh sách PM do GM giao — chỉ khi xem full KPI (không lọc theo parent
+        // PM).
         if (row.getTypeCode() != null
                 && row.getTypeCode() == TYPE_TEAM
                 && parentAssignmentId == null) {
@@ -307,8 +348,7 @@ public class StrategicKpiService {
                 .collect(Collectors.toMap(
                         targetRow -> targetRow.getUserId().toString(),
                         KpiAssignmentUserTargetRow::getTargetValue,
-                        (existing, replacement) -> existing
-                ));
+                        (existing, replacement) -> existing));
         b.memberIds(memberIds);
         b.memberTargets(memberTargets);
 
@@ -343,10 +383,10 @@ public class StrategicKpiService {
     // ── PRIVATE HELPERS ───────────────────────────────────────────────────────
 
     private void syncAssignments(UUID kpiInfoId, UUID cycleId, List<UUID> desired,
-                                  int type, CreateStrategicKpiRequest req,
-                                  BigDecimal targetNum, UUID actorId, String role) {
-        List<KpiAssignmentUserTargetRow> currentRows =
-                kpiAssignmentMapper.listAssignmentUserTargets(kpiInfoId, cycleId);
+            int type, CreateStrategicKpiRequest req,
+            BigDecimal targetNum, UUID actorId, String role) {
+        List<KpiAssignmentUserTargetRow> currentRows = kpiAssignmentMapper.listAssignmentUserTargets(kpiInfoId,
+                cycleId);
 
         Map<UUID, UUID> assignmentIdByUser = currentRows.stream()
                 .filter(r -> r.getUserId() != null)
@@ -356,13 +396,20 @@ public class StrategicKpiService {
         LinkedHashSet<UUID> desiredSet = new LinkedHashSet<>(desired);
 
         for (KpiAssignmentUserTargetRow row : currentRows) {
-            if (row.getUserId() == null) continue;
+            if (row.getUserId() == null)
+                continue;
+            // Never delete the PM's parent assignment here
+            if (Constant.ROLE_PM.equals(role) && actorId.equals(row.getUserId())
+                    && row.getParentAssignmentId() == null) {
+                continue;
+            }
             if (!desiredSet.contains(row.getUserId())) {
                 kpiAssignmentMapper.softDeleteKpiAssignmentById(row.getId(), cycleId, actorId);
             }
         }
 
         for (UUID uid : desired) {
+            // Update child assignments
             BigDecimal rowTarget = teamTarget(type, uid, req, targetNum);
             UUID aid = assignmentIdByUser.get(uid);
             if (aid != null) {
@@ -370,8 +417,45 @@ public class StrategicKpiService {
             }
         }
 
+        // Ensure PM's parent assignment target is updated
+        if (Constant.ROLE_PM.equals(role)) {
+            UUID aid = assignmentIdByUser.get(actorId);
+            if (aid != null) {
+                kpiAssignmentMapper.updateKpiAssignmentTarget(aid, cycleId, targetNum, actorId);
+            }
+        }
+
+        UUID parentAssignmentId = null;
+        if (Constant.ROLE_PM.equals(role)) {
+            // Find existing parent assignment for the PM
+            parentAssignmentId = currentRows.stream()
+                    .filter(r -> actorId.equals(r.getUserId()) && r.getParentAssignmentId() == null)
+                    .map(KpiAssignmentUserTargetRow::getId)
+                    .findFirst()
+                    .orElse(null);
+
+            if (parentAssignmentId == null) {
+                // If it doesn't exist, create it
+                parentAssignmentId = UUID.randomUUID();
+                List<KpiAssignmentInsertRow> pmRow = new ArrayList<>();
+                pmRow.add(KpiAssignmentInsertRow.builder()
+                        .id(parentAssignmentId)
+                        .cycleId(cycleId)
+                        .kpiInfoId(kpiInfoId)
+                        .userId(actorId)
+                        .jobTitleId(null)
+                        .parentAssignmentId(null)
+                        .targetValue(targetNum)
+                        .statusCode(Constants.AssignStatus.WAITING_GM_APPROVAL)
+                        .createdBy(actorId)
+                        .build());
+                kpiAssignmentMapper.insertKpiAssignments(pmRow);
+            }
+        }
+
         List<UUID> newIds = desired.stream().filter(uid -> !assignmentIdByUser.containsKey(uid)).toList();
-        List<KpiAssignmentInsertRow> newRows = buildAssignmentRows(newIds, type, req, kpiInfoId, cycleId, targetNum, actorId, role);
+        List<KpiAssignmentInsertRow> newRows = buildAssignmentRows(newIds, type, req, kpiInfoId, cycleId, targetNum,
+                actorId, role, parentAssignmentId);
         if (!newRows.isEmpty()) {
             kpiAssignmentMapper.insertKpiAssignments(newRows);
         }
@@ -379,9 +463,13 @@ public class StrategicKpiService {
 
     private List<KpiAssignmentInsertRow> buildAssignmentRows(
             List<UUID> userIds, int type, CreateStrategicKpiRequest req,
-            UUID kpiInfoId, UUID cycleId, BigDecimal targetNum, UUID actorId, String role) {
-        if (userIds.isEmpty()) return List.of();
+            UUID kpiInfoId, UUID cycleId, BigDecimal targetNum, UUID actorId, String role, UUID parentAssignmentId) {
+        if (userIds.isEmpty())
+            return new ArrayList<>();
         int initialStatus = initialAssignmentStatusForStrategicCreate(type, role);
+        if (Constant.ROLE_PM.equals(role)) {
+            initialStatus = Constants.AssignStatus.WAITING_GM_APPROVAL;
+        }
         Map<UUID, UUID> jobByUser = loadJobTitleByUserId(userIds);
         List<KpiAssignmentInsertRow> rows = new ArrayList<>();
         for (UUID uid : userIds) {
@@ -391,6 +479,7 @@ public class StrategicKpiService {
                     .kpiInfoId(kpiInfoId)
                     .userId(uid)
                     .jobTitleId(jobByUser.get(uid))
+                    .parentAssignmentId(parentAssignmentId)
                     .targetValue(teamTarget(type, uid, req, targetNum))
                     .statusCode(initialStatus)
                     .createdBy(actorId)
@@ -416,8 +505,10 @@ public class StrategicKpiService {
     }
 
     /**
-     * TEAM KPI: nếu đã chọn PM ({@code assignPMs}) thì bắt buộc nhập mục tiêu từng người trong {@code pmTargets}
-     * — không fallback sang {@code targetValue} của KPI cha (tránh gán nhầm cùng một số cho mọi PM).
+     * TEAM KPI: nếu đã chọn PM ({@code assignPMs}) thì bắt buộc nhập mục tiêu từng
+     * người trong {@code pmTargets}
+     * — không fallback sang {@code targetValue} của KPI cha (tránh gán nhầm cùng
+     * một số cho mọi PM).
      */
     private static void requireExplicitPmTargetsForTeam(CreateStrategicKpiRequest req) {
         if (req.getTypeCode() != TYPE_TEAM) {
@@ -432,18 +523,18 @@ public class StrategicKpiService {
             Object raw = lookupPmTargetRaw(pm, uid);
             if (raw == null) {
                 throw AppException.badRequest(
-                        "Team KPI: thiếu mục tiêu (pmTargets) cho PM đã chọn (" + uid + ").");
+                        "Team KPI: thiếu mục tiêu cho PM đã chọn");
             }
             String s = String.valueOf(raw).trim();
             if (s.isEmpty()) {
                 throw AppException.badRequest(
-                        "Team KPI: pmTargets không được để trống cho PM (" + uid + ").");
+                        "Team KPI: Target value không được để trống cho PM");
             }
             try {
                 BigDecimal val = normalizeTargetValue(new BigDecimal(s));
                 if (val.compareTo(BigDecimal.ZERO) < 0) {
                     throw AppException.badRequest(
-                            "Team KPI: mục tiêu PM phải ≥ 0 (" + uid + ").");
+                            "Team KPI: mục tiêu PM phải ≥ 0");
                 }
             } catch (NumberFormatException ex) {
                 throw AppException.badRequest("pmTargets has invalid number for user " + uid + ": " + s);
@@ -470,15 +561,21 @@ public class StrategicKpiService {
     }
 
     private static BigDecimal teamTarget(int type, UUID userId, CreateStrategicKpiRequest req, BigDecimal fallback) {
-        if (type != TYPE_TEAM) return fallback;
+        if (type != TYPE_TEAM)
+            return fallback;
         Map<String, Object> pm = req.getPmTargets();
-        if (pm == null || pm.isEmpty()) return fallback;
+        if (pm == null || pm.isEmpty())
+            return fallback;
         Object raw = lookupPmTargetRaw(pm, userId);
-        if (raw == null) return fallback;
-        if (raw instanceof BigDecimal bd) return normalizeTargetValue(bd);
-        if (raw instanceof Number n) return normalizeTargetValue(BigDecimal.valueOf(n.doubleValue()));
+        if (raw == null)
+            return fallback;
+        if (raw instanceof BigDecimal bd)
+            return normalizeTargetValue(bd);
+        if (raw instanceof Number n)
+            return normalizeTargetValue(BigDecimal.valueOf(n.doubleValue()));
         String s = String.valueOf(raw).trim();
-        if (s.isEmpty()) return fallback;
+        if (s.isEmpty())
+            return fallback;
         try {
             return normalizeTargetValue(new BigDecimal(s));
         } catch (NumberFormatException ex) {
@@ -488,7 +585,8 @@ public class StrategicKpiService {
 
     private List<UUID> resolveAssigneeUserIds(CreateStrategicKpiRequest req, int type) {
         List<UUID> ids = (type == TYPE_TEAM) ? req.getAssignPMs() : req.getMemberIds();
-        if (ids == null || ids.isEmpty()) return new ArrayList<>();
+        if (ids == null || ids.isEmpty())
+            return new ArrayList<>();
         List<UUID> distinct = new ArrayList<>(new LinkedHashSet<>(ids));
         List<UUID> existing = userMapper.listExistingActiveUserIds(distinct);
         if (existing.size() != distinct.size()) {
@@ -506,15 +604,17 @@ public class StrategicKpiService {
 
     private static void validateTypeCode(int type) {
         if (type != TYPE_INDIVIDUAL && type != TYPE_TEAM && type != TYPE_PROMOTION) {
-            throw AppException.badRequest("typeCode must be 101 (individual), 102 (team/cascading), or 103 (promotion).");
+            throw AppException
+                    .badRequest("typeCode must be 101 (individual), 102 (team/cascading), or 103 (promotion).");
         }
     }
 
-    private static String nullableTrim(String s) {
-        if (s == null) return null;
-        String t = s.trim();
-        return t.isEmpty() ? null : t;
-    }
+    // private static String nullableTrim(String s) {
+    // if (s == null)
+    // return null;
+    // String t = s.trim();
+    // return t.isEmpty() ? null : t;
+    // }
 
     private static String truncate(String s, int max) {
         String t = s.trim();
@@ -522,7 +622,8 @@ public class StrategicKpiService {
     }
 
     private static BigDecimal normalizeWeight(BigDecimal raw) {
-        if (raw == null) throw AppException.badRequest("weightPct is required.");
+        if (raw == null)
+            throw AppException.badRequest("weightPct is required.");
         BigDecimal w = raw.setScale(2, RoundingMode.HALF_UP);
         if (w.compareTo(BigDecimal.ZERO) <= 0 || w.compareTo(new BigDecimal("1000")) > 0) {
             throw AppException.badRequest("weightPct must be between 0 and 1000.");
@@ -535,18 +636,24 @@ public class StrategicKpiService {
     }
 
     /**
-     * DB code (ruleCode, typeCode) → persisted string — đồng bộ kpi-fe kpiCalculationCodes.ts.
+     * DB code (ruleCode, typeCode) → persisted string — đồng bộ kpi-fe
+     * kpiCalculationCodes.ts.
      */
     static final class StrategicKpiCalcMapper {
-        private StrategicKpiCalcMapper() {}
+        private StrategicKpiCalcMapper() {
+        }
 
         static String fromDb(Integer typeCode, Integer ruleCode) {
             int rule = ruleCode != null ? ruleCode : 802;
-            if (rule == 801) return "mean_plan_actual_sum";
-            if (rule == 803) return "manual_member_input";
+            if (rule == 801)
+                return "mean_plan_actual_sum";
+            if (rule == 803)
+                return "manual_member_input";
             if (rule == 802) {
-                if (typeCode != null && typeCode == 702) return "mean_plan_actual";
-                if (typeCode != null && typeCode == 701) return "mean_actual_plan";
+                if (typeCode != null && typeCode == 702)
+                    return "mean_plan_actual";
+                if (typeCode != null && typeCode == 701)
+                    return "mean_actual_plan";
                 return "mean_plan_actual_pct";
             }
             return "mean_actual_plan";
@@ -555,18 +662,20 @@ public class StrategicKpiService {
         static CalcCodes fromPersisted(String persisted) {
             String k = persisted == null ? "" : persisted.trim();
             return switch (k) {
-                case "manual_member_input"  -> new CalcCodes(803, null);
-                case "mean_actual_plan"     -> new CalcCodes(802, 701);
-                case "mean_plan_actual"     -> new CalcCodes(802, 702);
+                case "manual_member_input" -> new CalcCodes(803, null);
+                case "mean_actual_plan" -> new CalcCodes(802, 701);
+                case "mean_plan_actual" -> new CalcCodes(802, 702);
                 case "mean_plan_actual_pct" -> new CalcCodes(802, 701);
                 case "mean_plan_actual_sum" -> new CalcCodes(801, null);
-                default                     -> new CalcCodes(802, 701);
+                default -> new CalcCodes(802, 701);
             };
         }
     }
 
     private record CalcCodes(int ruleCode, Integer typeCode) {
-        static CalcCodes fromPersisted(String p) { return StrategicKpiCalcMapper.fromPersisted(p); }
+        static CalcCodes fromPersisted(String p) {
+            return StrategicKpiCalcMapper.fromPersisted(p);
+        }
     }
 
     @Transactional
@@ -577,30 +686,31 @@ public class StrategicKpiService {
         KpiAssignmentUserTargetRow parentAssignment = null;
 
         if (req.getParentAssignmentId() != null) {
-            int owned =
-                    kpiAssignmentMapper.countAssignmentOwnedByUserForKpiInfo(
-                            req.getParentAssignmentId(), userId, req.getKpiInformationId());
+            int owned = kpiAssignmentMapper.countAssignmentOwnedByUserForKpiInfo(
+                    req.getParentAssignmentId(), userId, req.getKpiInformationId());
             if (owned < 1) {
                 throw AppException.forbidden(
                         "Parent assignment is invalid, not owned by you, or does not match this KPI.");
             }
 
-            parentAssignment =
-                    kpiAssignmentMapper.findAssignmentUserTargetByIdAndCycle(
-                            req.getParentAssignmentId(), req.getCycleId());
+            parentAssignment = kpiAssignmentMapper.findAssignmentUserTargetByIdAndCycle(
+                    req.getParentAssignmentId(), req.getCycleId());
             if (parentAssignment == null || parentAssignment.getUserId() == null) {
                 throw AppException.badRequest("Parent assignment not found in this cycle.");
             }
 
-            // Phần target chưa phân không tự gán cho PM khi lưu — chỉ khi PM có trong payload (vd. bấm «Assign to me» trên FE).
+            // Phần target chưa phân không tự gán cho PM khi lưu — chỉ khi PM có trong
+            // payload (vd. bấm «Assign to me» trên FE).
 
-            // Đồng bộ danh sách: gỡ cascade cũ rồi tạo lại (PM bỏ chọn member → không còn bản ghi / không insert trùng).
+            // Đồng bộ danh sách: gỡ cascade cũ rồi tạo lại (PM bỏ chọn member → không còn
+            // bản ghi / không insert trùng).
             kpiAssignmentMapper.softDeleteChildAssignmentsByParentAndCycle(
                     req.getParentAssignmentId(), req.getCycleId(), userId);
         }
 
         if (requestedTargets.isEmpty()) {
-            // Cho phép PM lưu phân bổ rỗng: nếu có parentAssignmentId thì các assignment con cũ đã được soft-delete ở trên.
+            // Cho phép PM lưu phân bổ rỗng: nếu có parentAssignmentId thì các assignment
+            // con cũ đã được soft-delete ở trên.
             return;
         }
 
@@ -625,7 +735,8 @@ public class StrategicKpiService {
             if (parentAssignment != null
                     && parentAssignment.getUserId() != null
                     && parentAssignment.getUserId().equals(memberId)) {
-                // PM tự nhận phần target còn lại phải giữ trạng thái hiện tại của assignment cha (thường là 405).
+                // PM tự nhận phần target còn lại phải giữ trạng thái hiện tại của assignment
+                // cha (thường là 405).
                 statusCode = parentAssignment.getStatusCode() != null
                         ? parentAssignment.getStatusCode()
                         : Constants.AssignStatus.ACCEPTED;
@@ -667,24 +778,24 @@ public class StrategicKpiService {
 
         int updatedCount;
         if (Boolean.TRUE.equals(request.getBulkForManagedMembers())) {
-            // Team Review: assignment thuộc member/leader dưới PM — không dùng ka.user_id = PM.
-            updatedCount =
-                    kpiAssignmentMapper.updateKpiStatusesForPmManagedMembers(
-                            currentUserId,
-                            request.getCycleId(),
-                            request.getStatusCode(),
-                            false,
-                            request.getOnlyFromStatusCode());
-            updatedCount +=
-                    kpiAssignmentMapper.updateKpiStatusesForPmManagedMembers(
-                            currentUserId,
-                            request.getCycleId(),
-                            request.getStatusCode(),
-                            true,
-                            request.getOnlyFromStatusCode());
+            // Team Review: assignment thuộc member/leader dưới PM — không dùng ka.user_id =
+            // PM.
+            updatedCount = kpiAssignmentMapper.updateKpiStatusesForPmManagedMembers(
+                    currentUserId,
+                    request.getCycleId(),
+                    request.getStatusCode(),
+                    false,
+                    request.getOnlyFromStatusCode());
+            updatedCount += kpiAssignmentMapper.updateKpiStatusesForPmManagedMembers(
+                    currentUserId,
+                    request.getCycleId(),
+                    request.getStatusCode(),
+                    true,
+                    request.getOnlyFromStatusCode());
 
             // Team KPI của chính PM không nằm trong cây managed members.
-            // Đồng bộ parent Team assignment lên 502/602 để GM Evaluation Hub nhìn thấy dòng PM.
+            // Đồng bộ parent Team assignment lên 502/602 để GM Evaluation Hub nhìn thấy
+            // dòng PM.
             Integer nextStatus = request.getStatusCode();
             if (request.isPromotion() == false && nextStatus != null && (nextStatus == 502 || nextStatus == 602)) {
                 updatedCount += kpiAssignmentMapper.syncPmTeamParentStatusesFromManagedChildren(
@@ -694,13 +805,12 @@ public class StrategicKpiService {
                         currentUserId);
             }
         } else {
-            updatedCount =
-                    kpiAssignmentMapper.updateKpiStatuses(
-                            currentUserId,
-                            request.getCycleId(),
-                            request.getStatusCode(),
-                            request.isPromotion(),
-                            request.getOnlyFromStatusCode());
+            updatedCount = kpiAssignmentMapper.updateKpiStatuses(
+                    currentUserId,
+                    request.getCycleId(),
+                    request.getStatusCode(),
+                    request.isPromotion(),
+                    request.getOnlyFromStatusCode());
         }
 
         if (updatedCount == 0) {

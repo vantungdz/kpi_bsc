@@ -69,6 +69,16 @@ public class GmApprovedKpiService {
                 throw AppException.badRequest(
                         "Không thể cập nhật: assignment không tồn tại, sai chu kỳ, hoặc không ở trạng thái chờ GM duyệt mới.");
             }
+            
+            // Cascade status to child assignments
+            if (newStatus == Constants.AssignStatus.ACCEPTED) {
+                // Activate child assignments (401 -> 404 PENDING_ACCEPTANCE)
+                kpiAssignmentMapper.cascadeActivateChildAssignments(req.getAssignmentId(), cycleId, Constants.AssignStatus.PENDING_ACCEPTANCE, gmUserId);
+            } else if (newStatus == Constants.AssignStatus.REJECTED) {
+                // Reject child assignments (401 -> 406 REJECTED)
+                kpiAssignmentMapper.cascadeActivateChildAssignments(req.getAssignmentId(), cycleId, Constants.AssignStatus.REJECTED, gmUserId);
+            }
+            
             updatedCount = n;
         }
         GmApprovedKpiDecisionResponse out = new GmApprovedKpiDecisionResponse();

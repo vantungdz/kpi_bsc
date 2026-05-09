@@ -180,6 +180,12 @@ public interface KpiAssignmentMapper {
             @Param("updatedBy") UUID updatedBy,
             @Param("updateReason") String updateReason);
 
+    int cascadeActivateChildAssignments(
+            @Param("parentAssignmentId") UUID parentAssignmentId,
+            @Param("cycleId") UUID cycleId,
+            @Param("newStatus") int newStatus,
+            @Param("updatedBy") UUID updatedBy);
+
     /** PM gửi feedback lên GM: assignment do PM sở hữu, 404→407. */
     int updatePmAssignmentStatusToFeedbackInProgress(
             @Param("assignmentId") UUID assignmentId,

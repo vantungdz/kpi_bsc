@@ -944,7 +944,7 @@ const handleSave = async () => {
             </div>
 
             <!-- Assignment Section -->
-            <div class="gm-kpi-section-card p-5 rounded-xl bg-white border border-slate-200 shadow-sm">
+            <div v-if="!(isCreate && typeCode === KPI_TYPE.INDIVIDUAL)" class="gm-kpi-section-card p-5 rounded-xl bg-white border border-slate-200 shadow-sm">
               <label class="mb-4 flex items-center gap-2 text-xs font-bold tracking-wide text-slate-800 uppercase">
                 <span class="p-1.5 rounded-lg bg-indigo-100 text-indigo-600">
                   <i class="fas fa-diagram-project text-sm" />

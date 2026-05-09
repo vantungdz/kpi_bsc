@@ -645,14 +645,14 @@
     <insert id="insertKpiAssignments">
         INSERT INTO kpi_assignments (
             id, cycle_id, kpi_info_id,
-            user_id, job_title_id,
+            user_id, job_title_id, parent_assignment_id,
             target_value, status_code,
             created_by, updated_by
         ) VALUES
         <foreach collection="rows" item="r" separator=",">
             (
                 #{r.id}, #{r.cycleId}, #{r.kpiInfoId},
-                #{r.userId}, #{r.jobTitleId},
+                #{r.userId}, #{r.jobTitleId}, #{r.parentAssignmentId},
                 #{r.targetValue}, #{r.statusCode},
                 #{r.createdBy}, #{r.createdBy}
             )
@@ -673,7 +673,9 @@
         SELECT
             ka.id,
             ka.user_id AS userId,
-            ka.target_value AS targetValue
+            ka.target_value AS targetValue,
+            ka.status_code AS statusCode,
+            ka.parent_assignment_id AS parentAssignmentId
         FROM kpi_assignments ka
         WHERE ka.kpi_info_id = #{kpiInfoId}
           AND ka.cycle_id = #{cycleId}
@@ -893,7 +895,7 @@
             ) AS feedback_note
         FROM (
             SELECT DISTINCT ON (user_id, kpi_info_id)
-                id, cycle_id, kpi_info_id, user_id, status_code, target_value, created_at
+                id, cycle_id, kpi_info_id, user_id, status_code, target_value, created_at, parent_assignment_id
             FROM kpi_assignments
             WHERE cycle_id = #{cycleId, jdbcType=OTHER}
               AND deleted_at IS NULL
@@ -906,6 +908,16 @@
         JOIN users u ON ka.user_id = u.id AND u.deleted_at IS NULL
         LEFT JOIN sys_status_codes asm ON asm.code = ka.status_code AND asm.category = 'ASM_STATUS'
         WHERE ka.status_code IN (401, 402, 403)
+          AND (
+                ka.parent_assignment_id IS NULL
+                OR
+                EXISTS (
+                    SELECT 1 FROM kpi_assignments p
+                    WHERE p.id = ka.parent_assignment_id
+                      AND p.status_code IN (404, 405)
+                      AND p.deleted_at IS NULL
+                )
+              )
         ORDER BY
             CASE ka.status_code
                 WHEN 403 THEN 0
@@ -937,6 +949,18 @@
           AND cycle_id = #{cycleId, jdbcType=OTHER}
           AND deleted_at IS NULL
           AND user_id IS NOT NULL
+          AND status_code = 403
+    </update>
+
+    <update id="cascadeActivateChildAssignments">
+        UPDATE kpi_assignments
+        SET
+            status_code = #{newStatus},
+            updated_at = NOW(),
+            updated_by = #{updatedBy, jdbcType=OTHER}
+        WHERE parent_assignment_id = #{parentAssignmentId, jdbcType=OTHER}
+          AND cycle_id = #{cycleId, jdbcType=OTHER}
+          AND deleted_at IS NULL
           AND status_code = 403
     </update>
 

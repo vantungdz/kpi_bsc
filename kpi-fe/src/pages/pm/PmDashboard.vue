@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useToast } from 'vue-toastification'
 import { useAuthStore } from '@/stores/auth.store'
 import { pmKpiService } from '@/services/modules/kpi-pm.service'
@@ -436,6 +436,11 @@ onMounted(() => {
   void loadProcessTimeline()
   void loadApprovalRequests()
   void loadTeamReviewPendingCount()
+  window.addEventListener('pm-kpi-created', handleRefresh)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('pm-kpi-created', handleRefresh)
 })
 
 function onDrawerApproveRequest(req: PmRequestUiRow) {
