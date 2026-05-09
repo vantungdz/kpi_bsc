@@ -104,6 +104,53 @@ export async function apiRemoveGmDepartmentMember(
   );
 }
 
+export interface GmMemberKpiAssignment {
+  assignmentId: string
+  kpiInformationId: string
+  kpiInfoTargetValue: number | null
+  assignmentTargetValue: number | null
+  weight: number | null
+  masterName: string
+  unitName: string | null
+}
+
+export interface GmCopyKpiItemPayload {
+  kpiInfoId: string
+  targetValue: number | null
+}
+
+/** Lấy KPI assignment của member cho chức năng Copy KPI */
+export async function apiGetMemberKpiAssignments(
+  userId: string,
+  cycleId: string,
+): Promise<GmMemberKpiAssignment[]> {
+  const uid = encodeURIComponent(userId.trim())
+  return http
+    .get<ApiResponse<GmMemberKpiAssignment[]>>(`/kpi/gm/members/${uid}/kpi-assignments`, {
+      params: { cycleId }
+    })
+    .then((r) => r.data.data)
+}
+
+/** Bulk assign KPI đã chọn sang member mới */
+export async function apiCopyKpisToMember(
+  targetUserId: string,
+  cycleId: string,
+  items: GmCopyKpiItemPayload[],
+): Promise<void> {
+  const uid = encodeURIComponent(targetUserId.trim())
+  await http.post<ApiResponse<null>>(`/kpi/gm/members/${uid}/copy-kpis`, {
+    cycleId,
+    items,
+  })
+}
+
+/** DELETE /kpi/gm/members/:userId — xóa hoàn toàn nhân viên khỏi hệ thống (GM). */
+export async function apiDeleteGmMember(userId: string): Promise<void> {
+  const uid = encodeURIComponent(userId.trim())
+  await http.delete<ApiResponse<null>>(`/kpi/gm/members/${uid}`)
+}
+
 /** GET /kpi/gm/departments — danh sách phòng ban; `year` lọc KPI team theo năm chu kỳ. */
 export async function apiListGmDepartments(
   year?: number,
@@ -505,6 +552,11 @@ export const gmKpiService = {
   ) => apiAddGmDepartmentMembers(departmentId, body),
   removeDepartmentMember: (departmentId: string, userId: string) =>
     apiRemoveGmDepartmentMember(departmentId, userId),
+  deleteMember: (userId: string) => apiDeleteGmMember(userId),
+  getMemberKpiAssignments: (userId: string, cycleId: string) =>
+    apiGetMemberKpiAssignments(userId, cycleId),
+  copyKpisToMember: (targetUserId: string, cycleId: string, items: GmCopyKpiItemPayload[]) =>
+    apiCopyKpisToMember(targetUserId, cycleId, items),
   createDepartment: (body: GmCreateDepartmentBody) =>
     apiCreateGmDepartment(body),
   updateDepartment: (departmentId: string, body: GmUpdateDepartmentBody) =>

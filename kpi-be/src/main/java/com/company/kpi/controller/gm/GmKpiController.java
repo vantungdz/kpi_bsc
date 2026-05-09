@@ -12,6 +12,7 @@ import com.company.kpi.request.gm.GmPersonalEvaluationSubmitRequest;
 import com.company.kpi.request.gm.UpdateDepartmentRequest;
 import com.company.kpi.request.gm.UpdateKpiTemplateItemRequest;
 import com.company.kpi.request.gm.UpdateKpiTemplateRequest;
+import com.company.kpi.request.gm.GmCopyKpisRequest;
 import com.company.kpi.response.gm.GmDepartmentMemberCandidateResponse;
 import com.company.kpi.response.gm.GmDepartmentResponse;
 import com.company.kpi.response.gm.GmDiagnosticsHierarchyResponse;
@@ -26,6 +27,7 @@ import com.company.kpi.response.gm.GmKpiTemplateItemResponse;
 import com.company.kpi.response.gm.GmKpiTemplatePackageResponse;
 import com.company.kpi.response.gm.GmProcessTimelineResponse;
 import com.company.kpi.response.gm.KpiSectionMemberResponse;
+import com.company.kpi.response.member.MemberKpiAssignmentDTO;
 import com.company.kpi.service.gm.GmApprovedKpiService;
 import com.company.kpi.service.gm.GmDepartmentService;
 import com.company.kpi.service.gm.GmEvaluationHubService;
@@ -316,5 +318,24 @@ public class GmKpiController extends BaseController {
         UUID userId = UUID.fromString((String) authentication.getPrincipal());
         memberKpiService.submitGmPersonalEvaluation(userId, body.getCycleId());
         return success(null);
+    }
+
+    /** Lấy danh sách KPI assignment của một member trong chu kỳ (Dùng cho chức năng Copy KPI) */
+    @GetMapping("/members/{userId}/kpi-assignments")
+    public ResponseEntity<BaseResponse<List<MemberKpiAssignmentDTO>>> getMemberKpiAssignments(
+            @PathVariable UUID userId,
+            @RequestParam("cycleId") UUID cycleId) {
+        return success(gmKpiService.getMemberKpiAssignments(userId, cycleId));
+    }
+
+    /** Copy KPI đã chọn sang cho member mới với status_code = 404 */
+    @PostMapping("/members/{targetUserId}/copy-kpis")
+    public ResponseEntity<BaseResponse<Void>> copyKpisToMember(
+            @PathVariable UUID targetUserId,
+            @Valid @RequestBody GmCopyKpisRequest request,
+            Authentication authentication) {
+        UUID gmUserId = UUID.fromString((String) authentication.getPrincipal());
+        gmKpiService.copyKpisToMember(targetUserId, request, gmUserId);
+        return ResponseEntity.ok(BaseResponse.ok(null, "Successfully copied KPIs to member."));
     }
 }

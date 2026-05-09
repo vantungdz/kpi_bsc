@@ -58,11 +58,11 @@ const navItems = [
 ]
 
 const settingsNavItems = [
-  { name: 'Create Department', icon: 'fas fa-folder-plus', to: '/gm/settings/create-department' },
+  { name: 'Tổ chức & Nhân sự', icon: 'fas fa-sitemap', to: '/gm/settings/organization' },
   { name: 'KPI Template', icon: 'fas fa-layer-group', to: '/gm/settings/kpi-template' },
 ]
 
-/** Trang Organization đăng ký `open` — nút header «Thêm phòng ban mới» (route create-department). */
+/** Trang Organization đăng ký `open` — nút header «Thêm phòng ban mới» (route gm-organization). */
 const gmOrgSectionDrawer = reactive<{ open: () => void }>({ open: () => { } })
 provide('gmOrgSectionDrawer', gmOrgSectionDrawer)
 
@@ -77,7 +77,7 @@ function isNavItemActive(to: string): boolean {
 }
 
 const isGmEvaluationRoute = computed(() => route.name === 'gm-employee-evaluation')
-const isGmCreateDepartmentRoute = computed(() => route.name === 'gm-create-department')
+const isGmCreateDepartmentRoute = computed(() => route.name === 'gm-organization')
 const isGmKpiTemplateRoute = computed(() => route.name === 'gm-kpi-template')
 const isGmReportsRoute = computed(() => route.name === 'gm-reports')
 const isGmSettingsRoute = computed(() =>
@@ -125,8 +125,8 @@ function setDashboardWorkspaceTab(tab: GmDashboardWorkspaceTab) {
 }
 
 const headerConfig = computed(() => {
-  if (route.name === 'gm-create-department') {
-    return { category: 'GM Workspace', title: 'Create Department' }
+  if (route.name === 'gm-organization') {
+    return { category: 'GM Workspace', title: 'Tổ chức & Nhân sự' }
   }
   if (route.name === 'gm-kpi-template') {
     return { category: 'GM Workspace', title: 'Template Library' }
@@ -317,7 +317,7 @@ async function loadProcessTimeline() {
 watch(
   () => route.name,
   (name) => {
-    if (name === 'gm-employee-evaluation' || name === 'gm-create-department' || name === 'gm-kpi-template') {
+    if (name === 'gm-employee-evaluation' || name === 'gm-organization' || name === 'gm-kpi-template') {
       selectedDept.value = null
       investigatingKPI.value = null
     }

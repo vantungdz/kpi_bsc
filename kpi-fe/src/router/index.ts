@@ -42,9 +42,9 @@ const router = createRouter({
           component: () => import('@/pages/gm/GmEmployeeEvaluationHub.vue'),
         },
         {
-          path: 'settings/create-department',
-          name: 'gm-create-department',
-          component: () => import('@/pages/gm/GmCreateSectionPage.vue'),
+          path: 'settings/organization',
+          name: 'gm-organization',
+          component: () => import('@/pages/gm/GmOrganizationPage.vue'),
         },
         {
           path: 'settings/kpi-template',

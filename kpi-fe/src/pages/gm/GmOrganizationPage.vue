@@ -5,6 +5,7 @@ import {
   apiAddGmDepartmentMembers,
   apiCreateGmDepartment,
   apiDeleteGmDepartment,
+  apiDeleteGmMember,
   apiListGmDepartmentMemberCandidates,
   apiListGmDepartments,
   apiRemoveGmDepartmentMember,
@@ -18,6 +19,7 @@ import type { GmDepartmentMock, GmMemberDetailMock } from '@/types/gm-workspace'
 import type { DepartmentManagerOption } from '@/types/department-manager'
 import { mapGmDepartmentApiRowToWorkspaceMock } from '@/utils/gm-department-from-api'
 import { pushGmNotification } from '@/composables/useGmNotifications'
+import GmCopyKpiDrawer from '@/components/gm/GmCopyKpiDrawer.vue'
 
 /** Khớp `#gm-main-modal-anchor` trong `GmLayout.vue` — overlay chỉ phủ cột nội dung, không xám sidebar. */
 const GM_MAIN_MODAL_ANCHOR = '#gm-main-modal-anchor'
@@ -563,6 +565,11 @@ const removeMemberTarget = ref<GmMemberDetailMock | null>(null)
 const removingMember = ref(false)
 
 function openRemoveMemberModal(m: GmMemberDetailMock) {
+  const isManager = departmentsLocal.value.some((d) => d.managerUserId === m.id)
+  if (isManager) {
+    showPageToast('Không thể gỡ nhân viên đang là Quản lý của một phòng ban.', 'error')
+    return
+  }
   removeMemberTarget.value = m
   removeMemberModalOpen.value = true
 }
@@ -676,11 +683,113 @@ async function onSubmit() {
   }
 }
 
+// ── Tab ─────────────────────────────────────────────────────────────────────
+type OrgPageTab = 'departments' | 'employees'
+const activeTab = ref<OrgPageTab>('departments')
+
+/** Danh sách tất cả nhân viên gầp phẳng từ mọi phòng ban. */
+const allMembers = computed((): Array<GmMemberDetailMock & { deptName: string }> => {
+  const result: Array<GmMemberDetailMock & { deptName: string }> = []
+  for (const d of departmentsLocal.value) {
+    for (const m of d.staffDetails ?? []) {
+      result.push({ ...m, deptName: d.name })
+    }
+  }
+  return result
+})
+
+const employeeSearch = ref('')
+const filteredEmployees = computed(() => {
+  const q = employeeSearch.value.trim().toLowerCase()
+  if (!q) return allMembers.value
+  return allMembers.value.filter((m) => {
+    const hay = `${m.name} ${m.rank ?? ''} ${m.deptName}`.toLowerCase()
+    return hay.includes(q)
+  })
+})
+
+/** Xóa member từ tab Nhân viên — xóa hoàn toàn khỏi hệ thống (hard delete). */
+const deleteEmployeeModalOpen = ref(false)
+const deleteEmployeeTarget = ref<(GmMemberDetailMock & { deptName: string }) | null>(null)
+const deletingEmployee = ref(false)
+
+function onEmployeeTabRemoveMember(emp: GmMemberDetailMock & { deptName: string }) {
+  const isManager = departmentsLocal.value.some((d) => d.managerUserId === emp.id)
+  if (isManager) {
+    showPageToast('Không thể xóa nhân viên đang là Quản lý của một phòng ban.', 'error')
+    return
+  }
+  deleteEmployeeTarget.value = emp
+  deleteEmployeeModalOpen.value = true
+}
+
+function closeDeleteEmployeeModal() {
+  deleteEmployeeModalOpen.value = false
+  deleteEmployeeTarget.value = null
+  deletingEmployee.value = false
+}
+
+async function confirmDeleteEmployee() {
+  const emp = deleteEmployeeTarget.value
+  if (!emp || deletingEmployee.value) return
+  deletingEmployee.value = true
+  try {
+    await apiDeleteGmMember(emp.id)
+    await loadDepartments()
+    gmRequestStrategicDiagnosticsReload?.()
+    showPageToast(`Đã xóa nhân viên «${emp.name}» khỏi hệ thống.`)
+    closeDeleteEmployeeModal()
+  } catch (e: unknown) {
+    showPageToast(e instanceof Error ? e.message : 'Không xóa được nhân viên', 'error')
+    closeDeleteEmployeeModal()
+  }
+}
+
+/** Logic Copy KPI */
+const copyKpiDrawerOpen = ref(false)
+const copyKpiTargetMember = ref<(GmMemberDetailMock & { deptName: string }) | null>(null)
+
+function openCopyKpiDrawer(emp: GmMemberDetailMock & { deptName: string }) {
+  copyKpiTargetMember.value = emp
+  copyKpiDrawerOpen.value = true
+}
+
 </script>
 
 <template>
   <div class="w-full bg-slate-50/50 pb-12">
     <div class="mx-auto w-full max-w-none space-y-6 px-4 py-4 sm:px-6 lg:px-8">
+
+      <!-- Tab bar -->
+      <div class="flex gap-1 rounded-xl border border-slate-200 bg-white p-1 shadow-sm">
+        <button
+          type="button"
+          class="flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-colors"
+          :class="activeTab === 'departments'
+            ? 'bg-indigo-600 text-white shadow-sm'
+            : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800'"
+          @click="activeTab = 'departments'"
+        >
+          <i class="fas fa-building text-xs" aria-hidden="true" />
+          Danh sách Phòng ban
+        </button>
+        <button
+          type="button"
+          class="flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-colors"
+          :class="activeTab === 'employees'
+            ? 'bg-indigo-600 text-white shadow-sm'
+            : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800'"
+          @click="activeTab = 'employees'"
+        >
+          <i class="fas fa-users text-xs" aria-hidden="true" />
+          Danh sách Nhân viên
+          <span v-if="allMembers.length > 0"
+            class="rounded-full px-1.5 py-0.5 text-[10px] font-bold"
+            :class="activeTab === 'employees' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'"
+          >{{ allMembers.length }}</span>
+        </button>
+      </div>
+
       <div
         v-if="listError"
         class="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-900 shadow-sm"
@@ -693,6 +802,9 @@ async function onSubmit() {
         <i class="fas fa-spinner fa-spin mr-2 text-indigo-500" aria-hidden="true" />
         Đang tải danh sách phòng ban…
       </div>
+
+      <!-- Tab: Phòng ban -->
+      <template v-if="activeTab === 'departments'">
 
       <!-- Tìm kiếm — canh phải -->
       <div v-if="sections.length > 0" class="flex justify-end">
@@ -856,6 +968,103 @@ async function onSubmit() {
           </p>
         </div>
       </div>
+
+      </template>
+      <!-- /Tab Phòng ban -->
+
+      <!-- Tab: Danh sách Nhân viên -->
+      <template v-if="activeTab === 'employees'">
+        <!-- Thanh tìm kiếm -->
+        <div class="relative">
+          <i class="fas fa-search pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-400" aria-hidden="true" />
+          <input
+            v-model="employeeSearch"
+            type="search"
+            placeholder="Tìm theo tên, phòng ban, rank..."
+            class="w-full rounded-lg border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm font-medium text-slate-800 shadow-sm outline-none transition-all placeholder:text-slate-400 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+          />
+        </div>
+
+        <!-- Bảng nhân viên -->
+        <div v-if="filteredEmployees.length > 0" class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="border-b border-slate-100 bg-slate-50">
+                <th class="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500">Họ tên</th>
+                <th class="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500">Phòng ban</th>
+                <th class="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500">Rank</th>
+                <th class="px-4 py-3 text-center text-[11px] font-bold uppercase tracking-wider text-slate-500">Thao tác</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+              <tr
+                v-for="(emp, idx) in filteredEmployees"
+                :key="emp.id"
+                class="transition-colors hover:bg-slate-50"
+              >
+                <td class="px-4 py-3">
+                  <div class="flex items-center gap-2.5">
+                    <div
+                      class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold"
+                      :class="memberAvatarClass(idx)"
+                    >
+                      {{ memberInitial(emp.name) }}
+                    </div>
+                    <span class="font-semibold text-slate-800">{{ emp.name }}</span>
+                  </div>
+                </td>
+                <td class="px-4 py-3">
+                  <span class="inline-flex items-center gap-1 rounded-md bg-indigo-50 px-2 py-0.5 text-xs font-semibold text-indigo-700">
+                    <i class="fas fa-building text-[10px]" aria-hidden="true" />
+                    {{ emp.deptName }}
+                  </span>
+                </td>
+                <td class="px-4 py-3">
+                  <span v-if="emp.rank" class="inline-flex items-center rounded-md bg-amber-50 px-2 py-0.5 text-xs font-bold text-amber-700">Rank {{ emp.rank }}</span>
+                  <span v-else class="text-slate-400">—</span>
+                </td>
+                <td class="px-4 py-3">
+                  <div class="flex items-center justify-center gap-2">
+                    <!-- Copy KPI -->
+                    <button
+                      type="button"
+                      class="inline-flex items-center gap-1 rounded-md border border-indigo-200 bg-indigo-50 px-2.5 py-1.5 text-[11px] font-semibold text-indigo-700 transition-colors hover:bg-indigo-100 hover:text-indigo-900"
+                      title="Sao chép KPI cho nhân viên này"
+                      @click.stop="openCopyKpiDrawer(emp)"
+                    >
+                      <i class="fas fa-copy text-[10px]" aria-hidden="true" />
+                      Copy KPI
+                    </button>
+                    <!-- Xóa member -->
+                    <button
+                      type="button"
+                      class="inline-flex items-center gap-1 rounded-md border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-[11px] font-semibold text-rose-700 transition-colors hover:bg-rose-100 hover:text-rose-900"
+                      title="Xóa nhân viên khỏi phòng ban"
+                      @click.stop="onEmployeeTabRemoveMember(emp)"
+                    >
+                      <i class="fas fa-user-minus text-[10px]" aria-hidden="true" />
+                      Xóa
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Empty state nhân viên -->
+        <div
+          v-else-if="!listLoading"
+          class="rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 px-6 py-14 text-center"
+        >
+          <i class="fas fa-users mb-3 text-4xl text-slate-300" aria-hidden="true" />
+          <p class="text-sm font-bold text-slate-500">
+            {{ employeeSearch ? 'Không tìm thấy nhân viên khớp tìm kiếm' : 'Chưa có nhân viên nào trong hệ thống' }}
+          </p>
+        </div>
+      </template>
+      <!-- /Tab Nhân viên -->
+
     </div>
 
     <!-- Drawer Create Section — theo index.html + mock ảnh -->
@@ -1617,6 +1826,66 @@ async function onSubmit() {
         </div>
       </div>
     </Teleport>
+
+    <!-- Modal xác nhận xóa nhân viên khỏi hệ thống -->
+    <Teleport :to="GM_MAIN_MODAL_ANCHOR">
+      <div
+        v-if="deleteEmployeeModalOpen && deleteEmployeeTarget"
+        class="absolute inset-0 z-[160] flex items-center justify-center p-4"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="gm-delete-employee-title"
+      >
+        <div
+          class="absolute inset-0 cursor-pointer bg-slate-900/60 backdrop-blur-sm"
+          @click="closeDeleteEmployeeModal"
+        />
+        <div class="relative z-10 w-full max-w-md overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
+          <div class="border-b border-rose-100 bg-rose-50/80 px-5 py-4">
+            <h3
+              id="gm-delete-employee-title"
+              class="flex items-center gap-2 text-sm font-bold text-slate-900"
+            >
+              <i class="fas fa-trash-can text-rose-600" aria-hidden="true" />
+              Xóa nhân viên khỏi hệ thống?
+            </h3>
+            <p class="mt-2 text-xs font-medium leading-relaxed text-slate-600">
+              Bạn có chắc muốn xóa hoàn toàn nhân viên
+              <span class="font-bold text-slate-800">«{{ deleteEmployeeTarget.name }}»</span>
+              (phòng ban: <span class="font-bold text-slate-800">{{ deleteEmployeeTarget.deptName }}</span>)
+              khỏi hệ thống? Hành động này <span class="font-bold text-rose-600">không thể hoàn tác</span>.
+            </p>
+          </div>
+          <div class="flex justify-end gap-2 bg-white px-5 py-4">
+            <button
+              type="button"
+              class="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-600 shadow-sm transition-colors hover:bg-slate-50 disabled:pointer-events-none disabled:opacity-50"
+              :disabled="deletingEmployee"
+              @click="closeDeleteEmployeeModal"
+            >
+              Hủy
+            </button>
+            <button
+              type="button"
+              class="inline-flex items-center gap-1.5 rounded-lg bg-rose-600 px-4 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:bg-rose-700 disabled:pointer-events-none disabled:opacity-60"
+              :disabled="deletingEmployee"
+              @click="confirmDeleteEmployee"
+            >
+              <i v-if="deletingEmployee" class="fas fa-spinner fa-spin text-[10px]" aria-hidden="true" />
+              <i v-else class="fas fa-trash-can text-[10px]" aria-hidden="true" />
+              {{ deletingEmployee ? 'Đang xóa…' : 'Xác nhận xóa' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+    <!-- Drawer Copy KPI -->
+    <GmCopyKpiDrawer
+      v-model:open="copyKpiDrawerOpen"
+      :target-member="copyKpiTargetMember"
+      :all-members="allMembers"
+      @copied="gmRequestStrategicDiagnosticsReload?.()"
+    />
   </div>
 </template>
 

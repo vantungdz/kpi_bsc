@@ -1,8 +1,18 @@
-bổ sung màu cho từng KPI được tạo bởi GM/PM/Leader/Member 
-bổ sung chức năng copy KPI
-sửa lại chức năng xóa member tại GM 
-bổ sung chức năng xóa các KPI tự tạo của các pages 
+bổ sung màu cho từng KPI được tạo bởi GM/PM/Leader/Member - > done
+bổ sung chức năng copy KPI -> sửa design
+sửa lại chức năng xóa member tại GM - > Done
+bổ sung chức năng xóa các KPI tự tạo của các pages
 tô màu điểm 
 tính toán lại điểm cho trường hợp giữa năm 
 comment của GM cho từng KPI bổ sung hover hiển thị 
-Sửa chức năng tạo KPI cho PM
+Sửa chức năng tạo KPI cho PM - done
+
+
+TRước đây ở GM tôi có làm chức năng copy KPI từ một KPI hoặc tạo KPI từ template. Bây giờ tôi cần bạn giúp tôi làm chức copy KPI từ một member. Tôi tạo ra chức năng này cho trường hợp một member mới , cần đươc assign các KPI mà không cần phải vào từng KPI để assign. Chức năng này hoạt động như sau.
+
+Trên danh sách member vừa tạo. Click vào copy KPI trên member mới cần được assign KPI sẽ mở ra drawer để chọn member có các KPI cần copy. trên đó sẽ có bộ lọc để GM dễ lọc ra member mong muốn ( lọc theo tên , theo rank, theo department,..). 
+Khi chọn vào member ẩn danh sách member đi, chỉ hiện thị member vừa chọn thôi và bên dưới là danh sách các KPI và các thông tin của KPI ( Tên KPI ,target , trọng số , đơn vị). 
+Trên mỗi KPI sẽ có thêm một checkbox để GM có thể chọn KPI cần copy chứ không bắt buộc phải copy hết. 
+Khi click vào 1 KPI sẽ hiện thị ra một modal chứa thông tin của KPI cùng input target có thể thay đổi để Gm có thể sửa target mà GM muốn assign cho member mới đó. Sau khi GM sửa target số target trên KPI sẽ được tay đổi và hiện thị màu đỏ trên drawer để GM biết mình đã sửa target của KPI nào nhé( lưu ý việc sửa này không làm thay đổi target của member cũ dùng để copy KPI) . Khi bấm xác nhận thì member mới sẽ được assign các KPI mà GM đã chọn với staus code là 404.
+
+Bạn hiểu rõ chứ ? 
