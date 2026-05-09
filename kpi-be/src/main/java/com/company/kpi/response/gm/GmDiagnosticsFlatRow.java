@@ -25,6 +25,8 @@ public class GmDiagnosticsFlatRow {
     private Integer calculationTypeCode;
     /** {@code kpi_master.is_global} — {@code true}: KPI GM giao công ty; {@code false}: member đề xuất / mẫu. */
     private Boolean isGlobal;
+    /** Một {@code roles.code} của user tạo KPI (GM, PM, LEADER, MEMBER). */
+    private String creatorRoleCode;
     /** {@code kpi_master.unit_code} — KPI_UNIT (sys_status_codes). */
     private Integer unitCode;
     private BigDecimal kpiWeight;

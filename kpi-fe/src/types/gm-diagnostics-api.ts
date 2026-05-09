@@ -53,6 +53,8 @@ export interface GmDiagKpiApi {
   isImportant?: boolean | null
   /** `kpi_master.is_global` — GM giao công ty vs member đề xuất. */
   isGlobal?: boolean | null
+  /** Role code của người tạo KPI: 'GM' | 'PM' | 'LEADER' | 'MEMBER'. */
+  creatorRoleCode?: string | null
   pmOwners: GmDiagPmApi[]
   investigateDeptId?: string | null
   investigateKpiName?: string | null

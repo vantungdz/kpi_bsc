@@ -122,6 +122,16 @@ public class GmKpiDiagnosticsHierarchyService {
 
         List<GmDiagKpiNode> kpis = new ArrayList<>();
         for (Map.Entry<UUID, List<GmDiagnosticsFlatRow>> e : ordered) {
+            GmDiagnosticsFlatRow firstRow = e.getValue().get(0);
+            // KPI do non-GM tạo chỉ hiển thị nếu có ít nhất 1 assignment đã được GM duyệt (status >= 404)
+            String creatorRole = firstRow.getCreatorRoleCode();
+            if (creatorRole != null && !"GM".equalsIgnoreCase(creatorRole.trim())) {
+                boolean hasGmApprovedAssignment = e.getValue().stream()
+                        .anyMatch(r -> r.getStatusCode() != null && r.getStatusCode() >= 404);
+                if (!hasGmApprovedAssignment) {
+                    continue; // Bỏ qua KPI này — chưa được GM duyệt
+                }
+            }
             kpis.add(buildKpiNode(e.getKey(), e.getValue()));
         }
 
@@ -196,6 +206,7 @@ public class GmKpiDiagnosticsHierarchyService {
                 .blockerSummary(pmOwners.size() + " đơn vị · " + assignmentCount + " assignment")
                 .kpiType(mapTypeCodeToKpiType(first.getTypeCode()))
                 .isGlobal(first.getIsGlobal())
+                .creatorRoleCode(first.getCreatorRoleCode())
                 .unitCode(first.getUnitCode())
                 .calculationRuleCode(first.getCalculationRuleCode())
                 .calculationTypeCode(first.getCalculationTypeCode())

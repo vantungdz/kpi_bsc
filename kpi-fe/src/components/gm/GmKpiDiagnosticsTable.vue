@@ -1068,6 +1068,17 @@ function kpiIconWrapClass(status: GmHierarchyStatus) {
   return 'bg-green-100 text-green-600'
 }
 
+/** Màu nền dòng KPI theo role người tạo. Khi expanded dùng tông đậm hơn. */
+function kpiCreatorRowBgClass(roleCode?: string, expanded = false): string {
+  switch (roleCode) {
+    case 'GM':     return expanded ? 'bg-indigo-200'  : 'bg-indigo-100 hover:bg-indigo-200'
+    case 'PM':     return expanded ? 'bg-sky-200'     : 'bg-sky-100 hover:bg-sky-200'
+    case 'LEADER': return expanded ? 'bg-emerald-200' : 'bg-emerald-100 hover:bg-emerald-200'
+    case 'MEMBER': return expanded ? 'bg-rose-200'    : 'bg-rose-100 hover:bg-rose-200'
+    default:       return expanded ? 'bg-slate-100'   : 'hover:bg-slate-50'
+  }
+}
+
 const showMemberDrawer = ref(false)
 const drawerMember = shallowRef<GmMemberKpiDrawerProfile | null>(null)
 const drawerKpiItems = shallowRef<GmModalKpiItemMock[]>([])
@@ -1425,7 +1436,7 @@ export default {
                   <div class="flex flex-col">
                     <div
                       class="grid cursor-pointer grid-cols-15 items-center gap-2 px-3 py-2.5 transition-colors sm:gap-3"
-                      :class="expandedKpis.has(kpi.id) ? 'bg-indigo-50/50' : 'hover:bg-slate-50'"
+                      :class="kpiCreatorRowBgClass(kpi.creatorRoleCode, expandedKpis.has(kpi.id))"
                       @click="toggleKpi(kpi.id)">
                       <div class="col-span-4 flex items-center">
                         <button type="button" class="mr-1 p-0.5 text-slate-500 hover:text-slate-800"
@@ -1443,14 +1454,6 @@ export default {
                             <i v-if="kpi.isImportant" class="fas fa-star shrink-0 text-[11px] text-amber-500"
                               title="KPI quan trọng (Important)" aria-label="KPI quan trọng" />
                             <span class="text-sm font-bold leading-snug text-slate-800">{{ kpi.name }}</span>
-                            <span
-                              v-if="kpi.isGlobal === true"
-                              class="shrink-0 rounded border border-indigo-200 bg-indigo-50 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-indigo-800"
-                              title="KPI chiến lược do GM giao (cấp công ty)">GM</span>
-                            <span
-                              v-else-if="kpi.isGlobal === false"
-                              class="shrink-0 rounded border border-violet-200 bg-violet-50 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-violet-800"
-                              title="KPI do nhân viên đề xuất">Member</span>
                             <GmStrategicKpiTypeTag :type="kpi.kpiType" size="sm" class="shrink-0" />
                           </div>
                         </div>

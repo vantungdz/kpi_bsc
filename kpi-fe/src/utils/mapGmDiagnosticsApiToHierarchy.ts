@@ -139,6 +139,7 @@ export function mapGmDiagnosticsApiKpisToHierarchyRows(kpis: GmDiagKpiApi[] | nu
       lifecycleStatus: lifecycle,
       isImportant: k.isImportant === true,
       isGlobal: k.isGlobal ?? undefined,
+      creatorRoleCode: k.creatorRoleCode ?? undefined,
       pmOwners: (k.pmOwners ?? []).map(mapPm),
       investigateDeptId: k.investigateDeptId ?? undefined,
       investigateKpiName: k.investigateKpiName ?? undefined,

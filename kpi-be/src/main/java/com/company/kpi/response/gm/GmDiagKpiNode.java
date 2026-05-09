@@ -27,6 +27,8 @@ public class GmDiagKpiNode {
     private String kpiType;
     /** {@code kpi_master.is_global} — phân biệt KPI GM (công ty) vs member đề xuất. */
     private Boolean isGlobal;
+    /** Code role của người tạo KPI. */
+    private String creatorRoleCode;
     /** {@code kpi_master.unit_code} — đồng bộ form Unit (FE). */
     private Integer unitCode;
     /** {@code kpi_master.calculation_rule_code}. */

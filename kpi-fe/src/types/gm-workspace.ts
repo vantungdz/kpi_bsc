@@ -328,6 +328,7 @@ export interface GmHierarchyKpi {
   categoryName?: string;
   lifecycleStatus?: GmKpiLifecycleStatus;
   isImportant?: boolean;
+  creatorRoleCode?: string;
   /** `kpi_master.is_global`: true = KPI GM (công ty), false = member đề xuất; undefined = API cũ / không rõ. */
   isGlobal?: boolean | null;
   unitCode?: number;

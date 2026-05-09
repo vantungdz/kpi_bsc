@@ -137,6 +137,21 @@
             km.calculation_rule_code,
             km.calculation_type_code,
             km.is_global,
+            (
+                SELECT cr.code
+                FROM user_roles cur
+                INNER JOIN roles cr ON cr.id = cur.role_id AND cr.deleted_at IS NULL
+                WHERE cur.user_id = km.created_by
+                ORDER BY
+                    CASE UPPER(TRIM(cr.code))
+                        WHEN 'GM' THEN 1
+                        WHEN 'PM' THEN 2
+                        WHEN 'LEADER' THEN 3
+                        WHEN 'MEMBER' THEN 4
+                        ELSE 99
+                    END
+                LIMIT 1
+            ) AS creator_role_code,
             km.unit_code,
             ki.weight AS kpi_weight,
             ki.target_value AS catalog_target_value,
