@@ -286,6 +286,7 @@ async function loadPmPortfolio(cycleId?: string) {
           : '',
       isTree: kpi.isTree,
       expanded: kpi.expanded !== undefined ? kpi.expanded : true,
+      isSelfCreated: Boolean(kpi.isSelfCreated),
       children: (kpi.children || []).map((c: any) => ({
         id: String(c.id),
         userId: c.userId != null ? String(c.userId) : undefined,
@@ -852,6 +853,44 @@ async function removeAssignedMemberFromTeamKpi(parent: any, child: any) {
   }
 }
 
+const deletingSelfCreatedKpiIds = ref<Set<string>>(new Set())
+
+const deleteConfirmModalOpen = ref(false)
+const deleteConfirmItem = ref<any>(null)
+
+function promptDeleteSelfCreatedPmKpi(item: any) {
+  deleteConfirmItem.value = item
+  deleteConfirmModalOpen.value = true
+}
+
+function closeDeleteConfirmModal() {
+  deleteConfirmModalOpen.value = false
+  deleteConfirmItem.value = null
+}
+
+async function executeDeleteSelfCreatedPmKpi() {
+  const item = deleteConfirmItem.value
+  if (!item?.id) return
+
+  const assignmentId = String(item.id)
+  deletingSelfCreatedKpiIds.value = new Set(deletingSelfCreatedKpiIds.value).add(assignmentId)
+
+  try {
+    closeDeleteConfirmModal()
+    // Calling the new backend endpoint
+    await pmKpiService.deleteSelfCreatedPmKpi(assignmentId)
+    toast.success('Đã xóa KPI thành công.')
+    await loadPmPortfolio(currentPortfolioYearParam())
+    emit('timeline-refresh')
+  } catch (err: unknown) {
+    toast.error(sheetUpdateErrorMessage(err))
+  } finally {
+    const next = new Set(deletingSelfCreatedKpiIds.value)
+    next.delete(assignmentId)
+    deletingSelfCreatedKpiIds.value = next
+  }
+}
+
 function sheetUpdateErrorMessage(err: unknown): string {
   if (typeof err === 'object' && err !== null && 'response' in err) {
     const ax = err as { response?: { data?: { message?: string | null } } }
@@ -1269,6 +1308,17 @@ const handleSubmitClick = async () => {
                         <i class="fas fa-pen text-xs" />
                         Edit
                       </button>
+                      <button
+                        v-if="item.isSelfCreated && [402, 403, 404, 406].includes(Number(item.statusCode))"
+                        type="button"
+                        :disabled="deletingSelfCreatedKpiIds.has(item.id)"
+                        @click.stop="promptDeleteSelfCreatedPmKpi(item)"
+                        class="flex h-8 items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-3 text-[10px] font-bold text-rose-700 shadow-sm hover:bg-rose-100"
+                        :class="deletingSelfCreatedKpiIds.has(item.id) ? 'cursor-not-allowed opacity-70' : ''"
+                      >
+                        <i :class="deletingSelfCreatedKpiIds.has(item.id) ? 'fas fa-spinner fa-spin text-xs' : 'fas fa-trash text-xs'" />
+                        Xóa
+                      </button>
                     </div>
                 </td>
               </tr>
@@ -1631,6 +1681,41 @@ const handleSubmitClick = async () => {
         </div>
       </Transition>
     </Teleport>
+    <Teleport to="body">
+      <Transition name="gm-diag-filter-pop">
+        <div v-if="deleteConfirmModalOpen" class="fixed inset-0 z-[300] flex items-center justify-center p-4">
+          <div class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity" @click="closeDeleteConfirmModal"></div>
+          <div class="relative w-full max-w-md transform overflow-hidden rounded-xl bg-white p-6 text-left align-middle shadow-xl transition-all">
+            <h3 class="text-lg font-bold leading-6 text-slate-900 flex items-center gap-2">
+              <i class="fas fa-exclamation-triangle text-rose-500"></i> Xác nhận xóa KPI
+            </h3>
+            <div class="mt-3">
+              <p class="text-sm text-slate-600">
+                Bạn có chắc chắn muốn xóa KPI <span class="font-bold text-slate-800">"{{ deleteConfirmItem?.name }}"</span> không?
+              </p>
+              <p class="text-sm text-rose-600 mt-2 font-medium">Lưu ý: Hành động này không thể hoàn tác.</p>
+            </div>
+            <div class="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                class="inline-flex justify-center rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 focus:outline-none"
+                @click="closeDeleteConfirmModal"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                class="inline-flex justify-center rounded-lg border border-transparent bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700 focus:outline-none"
+                @click="executeDeleteSelfCreatedPmKpi"
+              >
+                Xóa KPI
+              </button>
+            </div>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
+
   </div>
 </template>
 

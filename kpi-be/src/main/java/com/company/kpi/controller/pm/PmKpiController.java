@@ -55,4 +55,13 @@ public class PmKpiController extends BaseController {
                         "id", assignmentId.toString(),
                         "pmScore", body.getPmScore()));
     }
+
+    @DeleteMapping("/portfolio/{assignmentId}")
+    public ResponseEntity<BaseResponse<Void>> deleteSelfCreatedPmKpi(
+            @PathVariable UUID assignmentId,
+            Authentication authentication) {
+        UUID pmId = jwtUtil.resolveUserId(authentication);
+        pmDashboardService.deleteSelfCreatedPmKpi(assignmentId, pmId);
+        return success();
+    }
 }

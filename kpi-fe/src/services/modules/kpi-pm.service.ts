@@ -177,6 +177,9 @@ export async function apiPmSaveMemberSupervisorComment(body: {
   return http.post('/pm/dashboard/member-supervisor-comment', body).then((r) => r.data)
 }
 
+export async function apiDeleteSelfCreatedPmKpi(assignmentId: string): Promise<ApiResponse<null>> {
+  return http.delete(`/kpi/pm/portfolio/${assignmentId}`).then((r) => r.data)
+}
 
 // ==========================================
 // SERVICE EXPORT
@@ -213,6 +216,7 @@ export const pmKpiService = {
     apiPmSaveMemberKpiComment(body).then((r) => r.data),
   saveMemberSupervisorComment: (body: Parameters<typeof apiPmSaveMemberSupervisorComment>[0]) =>
     apiPmSaveMemberSupervisorComment(body).then((r) => r.data),
+  deleteSelfCreatedPmKpi: (assignmentId: string) => apiDeleteSelfCreatedPmKpi(assignmentId).then((r) => r.data),
 }
 
 // Thêm alias để tương thích với file PmAssignKpiDrawer.vue ở bước trước (vì component đang import tên này)

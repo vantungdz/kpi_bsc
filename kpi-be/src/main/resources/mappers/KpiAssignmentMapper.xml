@@ -193,8 +193,8 @@
           AND ka.deleted_at IS NULL
           AND ka.user_id = #{userId}
           AND ka.created_by = #{userId}
-          AND ka.status_code IN (402, 404, 406)
-          AND km.type_code IN (101, 103)
+          AND ka.status_code IN (402, 403, 404, 406)
+          AND km.type_code IN (101, 102, 103)
     </update>
 
     <update id="submitAssignmentFeedback">
@@ -349,6 +349,7 @@
             <result property="endPmScore" column="pm_end_pm_score"/>
             <result property="statusCode" column="pm_status_code"/>
             <result property="evidences" column="pm_evidences"/>
+            <result property="createdBy" column="pm_created_by"/>
         </association>
 
         <association property="kpiInfo" javaType="com.company.kpi.entity.KpisInformation">
@@ -400,6 +401,7 @@
             pm_ka.end_pm_score AS pm_end_pm_score,
             pm_ka.status_code AS pm_status_code,
             pm_ka.evidences AS pm_evidences,
+            pm_ka.created_by AS pm_created_by,
             pm_kf.feedback_note AS pm_feedback_note,
 
             ki.id AS info_id,

@@ -47,6 +47,7 @@ public class PmDashboardResponse {
         private BigDecimal pmScore; // Điểm của PM (do GM đánh giá)
         private Boolean isTree;
         private Boolean expanded;
+        private Boolean isSelfCreated;
         
         @Builder.Default
         private List<KpiChildDto> children = new ArrayList<>();

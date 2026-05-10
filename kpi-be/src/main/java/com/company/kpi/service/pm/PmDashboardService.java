@@ -104,6 +104,7 @@ public class PmDashboardService {
                         .pmScore(agg.getPmAssignment().getEndPmScore())
                         .isTree(agg.getKpiMaster() != null && agg.getKpiMaster().getTypeCode() != null && agg.getKpiMaster().getTypeCode() == 102)
                         .expanded(true)
+                        .isSelfCreated(pmId.equals(agg.getPmAssignment().getCreatedBy()))
                         .build();
             });
 
@@ -448,6 +449,15 @@ public class PmDashboardService {
         if (n != 1) {
             throw AppException.badRequest(
                     "Không lưu được điểm PM: assignment không thuộc member dưới quyền PM, không ở trạng thái chờ đánh giá PM cuối kỳ (601), hoặc không tồn tại.");
+        }
+    }
+
+    @Transactional
+    public void deleteSelfCreatedPmKpi(UUID assignmentId, UUID pmId) {
+        int n = kpiAssignmentMapper.softDeleteSelfCreatedAssignment(assignmentId, pmId);
+        if (n == 0) {
+            throw AppException.badRequest(
+                    "KPI không thể xóa (chỉ cho phép KPI tự tạo ở trạng thái chờ duyệt/chờ xác nhận/từ chối)");
         }
     }
 }
