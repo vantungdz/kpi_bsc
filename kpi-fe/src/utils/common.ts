@@ -20,8 +20,6 @@ export function getSubmitButtonState(
   currentDateInput: string | number | Date = new Date(),
 ): SubmitButtonState {
   const now = new Date(currentDateInput).getTime();
-  const midYearEndTs = kpiCycle.midYearEnd ? new Date(kpiCycle.midYearEnd).getTime() : null;
-  const passedMidYearWindow = midYearEndTs != null && Number.isFinite(midYearEndTs) && now > midYearEndTs;
 
   // PENDING_ACCEPTANCE (404): GM đã approve, member cần accept → luôn show button dù date window đã qua
   const GOAL_SETTING_PENDING_STATUSES = [404, 406];
@@ -58,7 +56,7 @@ export function getSubmitButtonState(
       errNoConfig: 'The system has not configured the mid-year review time',
       errEarly: 'It is not yet time for the mid-year review',
       errLate:  'Mid-year review period has ended',
-      bypassDateCheck: statusCode === 405 && passedMidYearWindow,
+      bypassDateCheck: statusCode === 405 && (kpiCycle.midYearEnd ? now > new Date(kpiCycle.midYearEnd).getTime() : false),
       forceHide: MID_YEAR_SUBMITTED_STATUSES.includes(statusCode),
     },
     {
@@ -215,6 +213,38 @@ export function getPmPortfolioSubmitButtonState(
   // --- Send Review (405 Đang chạy, hoặc 503 Đã chốt 1st half) ---
   if (sc === KPI_STATUS.ACCEPTED || sc === KPI_STATUS.FIRST_COMPLETED) {
     if (sc === KPI_STATUS.ACCEPTED) {
+      const passedMidYear = midEnd != null && Number.isFinite(midEnd) && now > midEnd;
+      
+      if (passedMidYear) {
+        // Đã qua hạn Mid-year → Chuyển sang nộp End-year
+        if (!endStart) {
+          return {
+            show: true,
+            disabled: true,
+            text: 'Send Review',
+            actionType: 'END_YEAR',
+            reason: 'Chưa cấu hình cửa sổ đánh giá cuối kỳ.',
+          };
+        }
+        if (!inEnd) {
+          // Chưa tới cửa sổ End-Year hoặc đã quá hạn End-Year
+          return {
+            show: true,
+            disabled: true,
+            text: 'Send Review',
+            actionType: 'END_YEAR',
+            reason: 'Không nằm trong khoảng thời gian đánh giá cuối kỳ.',
+          };
+        }
+        return {
+          show: true,
+          disabled: false,
+          text: 'Send Review',
+          actionType: 'END_YEAR',
+        };
+      }
+      
+      // Chưa lố hạn Mid-year → kiểm tra Mid-year bình thường
       if (!midStart) {
         return {
           show: true,

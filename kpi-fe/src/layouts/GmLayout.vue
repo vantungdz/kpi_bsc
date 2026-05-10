@@ -43,6 +43,8 @@ import {
   type GmNotificationVariant,
 } from '@/composables/useGmNotifications'
 import { KPI_STATUS } from '@/config/constants'
+import { kpiCycleService } from '@/services/shared/kpi-cycle.service'
+import type { KpiCycleResponse } from '@/types/shared/kpi-cycle.type'
 
 /** Gọi `openFeedbackDrawerByAssignmentId` từ `GmKpiDiagnosticsTable` (tab Strategic KPIs). */
 const gmDiagnosticsTableRef = ref<{
@@ -171,6 +173,21 @@ const gmPersonalKpiLoading = ref(false)
 /** Cache phản hồi leader — map `assignmentId` → assignment cho drawer minh chứng (tab KPI cá nhân). */
 const gmPersonalKpiLeaderIndividual = ref<LeaderKpiInformationResponse | null>(null)
 const gmPersonalKpiLeaderPromotion = ref<LeaderKpiInformationResponse | null>(null)
+
+/** KPI Cycle chi tiết cho GmKpiDiagnosticsTable — dùng để tính mid-year progress. */
+const gmDiagnosticsCycle = ref<KpiCycleResponse | null>(null)
+
+watch(gmEvaluationYear, async (year) => {
+  if (!Number.isFinite(year)) {
+    gmDiagnosticsCycle.value = null
+    return
+  }
+  try {
+    gmDiagnosticsCycle.value = await kpiCycleService.getKpiCycleByYear(year) ?? null
+  } catch {
+    gmDiagnosticsCycle.value = null
+  }
+}, { immediate: true })
 
 const gmPersonalKpiAssignmentsById = computed((): Record<string, LeaderKpiAssignment> => {
   const m: Record<string, LeaderKpiAssignment> = {}
@@ -1239,6 +1256,7 @@ function closeModal() { showKpiModal.value = false; selectedMember.value = null 
                     <GmKpiDiagnosticsTable
                       ref="gmDiagnosticsTableRef"
                       :rows="diagnosticsHierarchyRows"
+                      :kpi-cycle="gmDiagnosticsCycle"
                       @edit-kpi="onDiagnosticsEditKpi"
                       @delete-kpi="onDiagnosticsDeleteKpi"
                       @resolve-feedback="onResolveDiagnosticsFeedback"
@@ -1291,6 +1309,7 @@ function closeModal() { showKpiModal.value = false; selectedMember.value = null 
               <GmKpiDiagnosticsTable
                 ref="gmDiagnosticsTableRef"
                 :rows="diagnosticsHierarchyRows"
+                :kpi-cycle="gmDiagnosticsCycle"
                 @edit-kpi="onDiagnosticsEditKpi"
                 @delete-kpi="onDiagnosticsDeleteKpi"
                 @resolve-feedback="onResolveDiagnosticsFeedback"

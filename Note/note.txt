@@ -1,9 +1,9 @@
 bổ sung màu cho từng KPI được tạo bởi GM/PM/Leader/Member - > done
 bổ sung chức năng copy KPI -> sửa design
 sửa lại chức năng xóa member tại GM - > Done
-bổ sung chức năng xóa các KPI tự tạo của các pages
-tô màu điểm 
-tính toán lại điểm cho trường hợp giữa năm 
+bổ sung chức năng xóa các KPI tự tạo của các pages - done
+tô màu điểm  ok -> done
+tính toán lại điểm cho trường hợp giữa năm ok -> done
 comment của GM cho từng KPI bổ sung hover hiển thị 
 Sửa chức năng tạo KPI cho PM - done
 

@@ -19,16 +19,20 @@ import { GM_BSC_LABELS, GM_BSC_ORDER, normalizeGmBscPerspective } from '@/utils/
 import { formatKpiTargetWithUnit } from '@/utils/kpiUnitCodes'
 import {
   CALC_RULE_AVERAGE,
+  CALC_RULE_COMMENT,
   formatPmPortfolioActualCell,
   parseNumericFromField,
 } from '@/utils/memberKpiHelpers'
+import type { KpiCycleResponse } from '@/types/shared/kpi-cycle.type'
 
 const props = withDefaults(
   defineProps<{
     /** Dữ liệu từ API diagnostics — mặc định rỗng. */
     rows?: GmHierarchyKpi[]
+    /** KPI Cycle info để xác định phase mid-year (tính tiến độ điều chỉnh cho CALC_RULE 803). */
+    kpiCycle?: KpiCycleResponse | null
   }>(),
-  { rows: () => [] },
+  { rows: () => [], kpiCycle: null },
 )
 
 const emit = defineEmits<{
@@ -605,6 +609,20 @@ function completionPctFromActualTarget(actual: number | null, target: number | n
   return Math.max(0, pct)
 }
 
+/**
+ * Đang trong giai đoạn Mid-Year không? So sánh now với midYearStart và midYearEnd.
+ * Dùng để áp dụng công thức target/2 cho KPI 803.
+ */
+const isMidYearPhase = computed(() => {
+  const cycle = props.kpiCycle
+  if (!cycle) return false
+  const now = Date.now()
+  const start = cycle.midYearStart ? new Date(cycle.midYearStart).getTime() : null
+  const end = cycle.midYearEnd ? new Date(cycle.midYearEnd).getTime() : null
+  if (start == null || end == null) return false
+  return now >= start && now <= end
+})
+
 function memberActualWithUnit(member: GmHierarchyMember, kpi: GmHierarchyKpi): string {
   return diagnosticsActualWithUnit(kpi, memberActualDisplayRaw(member, kpi))
 }
@@ -672,22 +690,37 @@ function kpiActualWithUnit(kpi: GmHierarchyKpi): string {
   return diagnosticsActualWithUnit(kpi, kpiActualDisplayRaw(kpi))
 }
 
-/** % tiến độ trong drawer: chỉ khi tỉ lệ điểm/chỉ tiêu năm có ý nghĩa (0–100%); tránh % sai khi khác đơn vị. */
+/** % tiến độ trong drawer — có tính đến mid-year 803 (dùng target/2 làm mục tiêu kỳ vọng). */
 function memberDrawerActualProgressPct(member: GmHierarchyMember, kpi: GmHierarchyKpi): string | null {
+  const targetFull = memberTargetNumericForProgress(member)
+  const actual = memberActualNumericForProgress(member, kpi)
+
+  const isMidYear803 =
+    isMidYearPhase.value &&
+    Number(kpi.calculationRuleCode) === CALC_RULE_COMMENT &&
+    targetFull != null &&
+    targetFull > 0
+
+  // Ưu tiên submissionTarget/submissionActual từ BE (nếu có)
   if (
     member.submissionTarget != null &&
     member.submissionTarget > 0 &&
     member.submissionActual != null
   ) {
-    const rawPct = (100 * Number(member.submissionActual)) / Number(member.submissionTarget)
-    if (Number.isFinite(rawPct) && rawPct >= 0 && rawPct <= 100) {
-      return `${Math.round(rawPct)}%`
+    const effectiveTarget = isMidYear803
+      ? Number(member.submissionTarget) / 2
+      : Number(member.submissionTarget)
+    const rawPct = (100 * Number(member.submissionActual)) / effectiveTarget
+    if (Number.isFinite(rawPct) && rawPct >= 0) {
+      return `${Math.round(Math.min(rawPct, 100))}%`
     }
     return null
   }
-  const t = memberTargetNumericForProgress(member)
-  const a = memberActualNumericForProgress(member, kpi)
-  if (t != null && t > 0 && a != null) return `${Math.round((100 * a) / t)}%`
+
+  // Fallback: actual / effectiveTarget
+  const effectiveTarget = isMidYear803 ? (targetFull as number) / 2 : targetFull
+  if (effectiveTarget != null && effectiveTarget > 0 && actual != null)
+    return `${Math.round(Math.min((100 * actual) / effectiveTarget, 100))}%`
   return null
 }
 
@@ -695,12 +728,104 @@ function actualBelowTarget(actual: string, target: string) {
   return parseNumPct(actual) < parseNumPct(target)
 }
 
-/** Tiến độ member: tính trực tiếp theo Actual/Target. */
+/**
+ * Màu cột Actual cho một member — có tính đến mid-year 803.
+ * Trả về class CSS: 'text-red-600' hoặc 'text-green-600'.
+ * Với CALC_RULE 803 ở giai đoạn Mid-Year: actual >= target/2 → xanh.
+ */
+function memberActualColorClass(member: GmHierarchyMember, kpi: GmHierarchyKpi): string {
+  const targetFull = memberTargetNumericForProgress(member)
+  const actualNum = memberActualNumericForProgress(member, kpi)
+
+  const isMidYear803 =
+    isMidYearPhase.value &&
+    Number(kpi.calculationRuleCode) === CALC_RULE_COMMENT &&
+    targetFull != null &&
+    targetFull > 0
+
+  if (isMidYear803) {
+    // Đúng/vượt tiến độ khi actual >= target/2
+    return actualNum != null && actualNum >= targetFull / 2 ? 'text-green-600' : 'text-red-600'
+  }
+  return actualBelowTarget(memberActualDisplayRaw(member, kpi), member.target)
+    ? 'text-red-600'
+    : 'text-green-600'
+}
+
+/**
+ * Status UI cho member — override về 'success' khi CALC_RULE 803 + mid-year + đúng tiến độ.
+ * Tránh hiện "chậm tiến độ" (danger) khi member thực chất đang đúng hướng.
+ */
+function memberStatusForUiMidYear(member: GmHierarchyMember, kpi: GmHierarchyKpi): GmHierarchyStatus {
+  const base = memberStatusForUi(member)
+
+  const targetFull = memberTargetNumericForProgress(member)
+  const actualNum = memberActualNumericForProgress(member, kpi)
+
+  const isMidYear803 =
+    isMidYearPhase.value &&
+    Number(kpi.calculationRuleCode) === CALC_RULE_COMMENT &&
+    targetFull != null &&
+    targetFull > 0
+
+  if (isMidYear803 && base === 'danger') {
+    // Nếu actual >= target/2 → đúng tiến độ → override 'danger' → 'success'
+    if (actualNum != null && actualNum >= targetFull / 2) return 'success'
+    // Nếu actual >= target*0.3 (gần đạt theo mid-year) → 'warning'
+    if (actualNum != null && actualNum >= targetFull * 0.3) return 'warning'
+  }
+
+  return base
+}
+
+/**
+ * Label trạng thái cho member — dùng cùng memberStatusForUiMidYear để nhất quán màu/chữ.
+ */
+function memberDiagnosticsStatusLabelMidYear(member: GmHierarchyMember, kpi: GmHierarchyKpi): string {
+  const pl = member.performanceLabel?.trim()
+  // Với 803 mid-year đang override, bỏ qua performanceLabel từ BE
+  const isMidYear803 =
+    isMidYearPhase.value &&
+    Number(kpi.calculationRuleCode) === CALC_RULE_COMMENT
+
+  if (!isMidYear803 && pl) return pl
+  return kpiStatusLabel(memberStatusForUiMidYear(member, kpi))
+}
+
+/** Tóm tắt số member đạt đối với KPI individual/promotion ở level PM. */
+function pmNonCascadingSummary(pm: GmHierarchyPm, kpi: GmHierarchyKpi): string {
+  const members = allMembersUnderPm(pm)
+  if (!members.length) return '—'
+  const successCount = members.filter(m => memberStatusForUiMidYear(m, kpi) === 'success').length
+  return `✓ ${successCount}/${members.length} đạt`
+}
+
+/** Tóm tắt số member đạt đối với KPI individual/promotion ở level toàn KPI. */
+function kpiNonCascadingSummary(kpi: GmHierarchyKpi): string {
+  const members = kpi.pmOwners.flatMap(pm => allMembersUnderPm(pm))
+  if (!members.length) return '—'
+  const uniqueMembers = Array.from(new Map(members.map(m => [m.id, m])).values())
+  const successCount = uniqueMembers.filter(m => memberStatusForUiMidYear(m, kpi) === 'success').length
+  return `✓ ${successCount}/${uniqueMembers.length} đạt`
+}
+
+
+/** Tiến độ member: tính trực tiếp theo Actual/Target.
+ * Với KPI CALC_RULE 803 ở giai đoạn Mid-Year, dùng target/2 làm mục tiêu kỳ vọng.
+ */
 function memberCompletionPct(member: GmHierarchyMember, kpi: GmHierarchyKpi): number {
-  return completionPctFromActualTarget(
-    memberActualNumericForProgress(member, kpi),
-    memberTargetNumericForProgress(member),
-  )
+  const actual = memberActualNumericForProgress(member, kpi)
+  const targetFull = memberTargetNumericForProgress(member)
+
+  // Áp dụng target/2 khi: đang mid-year phase VÀ calcRule = 803 VÀ target là số hợp lệ
+  const isMidYear803 =
+    isMidYearPhase.value &&
+    Number(kpi.calculationRuleCode) === CALC_RULE_COMMENT &&
+    targetFull != null &&
+    targetFull > 0
+
+  const effectiveTarget = isMidYear803 ? targetFull / 2 : targetFull
+  return completionPctFromActualTarget(actual, effectiveTarget)
 }
 
 /**
@@ -723,10 +848,17 @@ function formatCompletionPct(pct: number): string {
   return `${Math.round(pct)}%`
 }
 
-/** Màu chữ cho cột tiến độ (dựa trên số %). */
+/**
+ * Màu chữ cho cột tiến độ (4 mức):
+ * - > 100%: Xanh đậm (vượt tiến độ)
+ * - 80–100%: Xanh lá (đúng tiến độ)
+ * - 60–79%: Vàng (gần đạt)
+ * - < 60%: Đỏ (chưa đạt)
+ */
 function completionPctTextClass(pct: number): string {
-  if (pct >= 100) return 'text-green-600'
-  if (pct > 0) return 'text-amber-600'
+  if (pct > 100) return 'text-green-700'
+  if (pct >= 80) return 'text-green-500'
+  if (pct >= 60) return 'text-amber-500'
   return 'text-red-600'
 }
 
@@ -1183,14 +1315,14 @@ function memberRowToModalItem(member: GmHierarchyMember, kpi: GmHierarchyKpi): G
     weight: parseWeightPct(kpi.weight),
     target: drawerTarget,
     actual: drawerActual,
-    isFail: memberStatusForUi(member) === 'danger',
+    isFail: memberStatusForUiMidYear(member, kpi) === 'danger',
     rootCause:
       rawBlocker && rawBlocker !== '-' && rawBlocker !== '—' && rawBlocker !== '–'
         ? diagnosticsTableCellText(member.blocker)
         : '',
     score: memberTableScoreDisplay(member),
     kpiType: kpi.kpiType,
-    submissionStatus: submissionFromMemberStatus(memberStatusForUi(member)),
+    submissionStatus: submissionFromMemberStatus(memberStatusForUiMidYear(member, kpi)),
     assignmentStatusCode: member.assignmentStatusCode ?? null,
     targetSummary: `Đóng góp trong KPI «${kpi.name}» · Minh chứng / ghi chú: ${evidenceNote}`,
     actualProgressPct: memberDrawerActualProgressPct(member, kpi),
@@ -1464,25 +1596,26 @@ export default {
                           diagnosticsWeightDisplay(kpi.weight) }}</span>
                       </div>
                       <div class="col-span-2 flex justify-center text-center">
-                        <span
+                        <span v-if="kpi.kpiType === 'cascading'"
                           :class="diagnosticsTargetPillClass(kpi.targetBalance)"
                           :title="diagnosticsTargetTitle(kpi.targetBalance)">{{ diagnosticsTargetWithUnit(kpi, kpi.target) }}</span>
+                        <span v-else class="text-slate-400 font-bold">-</span>
                       </div>
                       <div class="col-span-2 text-center text-sm font-bold tabular-nums"
-                        :class="actualBelowTarget(kpiActualDisplayRaw(kpi), kpi.target) ? 'text-red-600' : 'text-green-600'">
-                        {{ kpiActualWithUnit(kpi) }}
+                        :class="kpi.kpiType === 'cascading' ? (actualBelowTarget(kpiActualDisplayRaw(kpi), kpi.target) ? 'text-red-600' : 'text-green-600') : 'text-slate-400'">
+                        {{ kpi.kpiType === 'cascading' ? kpiActualWithUnit(kpi) : '-' }}
                       </div>
                       <div
                         class="col-span-1 text-center text-xs font-bold tabular-nums"
-                        :class="completionPctTextClass(kpiCompletionPct(kpi))"
-                        title="Tiến độ hoàn thành = (Actual / Target) x 100.">
-                        {{ formatCompletionPct(kpiCompletionPct(kpi)) }}
+                        :class="kpi.kpiType === 'cascading' ? completionPctTextClass(kpiCompletionPct(kpi)) : 'text-slate-400'"
+                        :title="kpi.kpiType === 'cascading' ? 'Tiến độ hoàn thành = (Actual / Target) x 100.' : undefined">
+                        {{ kpi.kpiType === 'cascading' ? formatCompletionPct(kpiCompletionPct(kpi)) : '-' }}
                       </div>
                       <div class="col-span-2 text-center text-xs font-bold tabular-nums text-slate-400">
                         -
                       </div>
                       <div class="col-span-2 flex justify-center">
-                        <span
+                        <span v-if="kpi.kpiType === 'cascading'"
                           class="inline-flex max-w-full cursor-default items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold leading-tight"
                           :class="badgeClass(kpi.status)" :title="diagnosticsReasonTooltip(kpi.blockerSummary)">
                           <i class="fas shrink-0 text-[11px]" :class="kpi.status === 'success'
@@ -1492,6 +1625,10 @@ export default {
                                 : 'fa-times-circle'
                             " />
                           <span class="truncate">{{ kpiStatusLabel(kpi.status) }}</span>
+                        </span>
+                        <span v-else
+                          class="inline-flex max-w-full cursor-default items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-0.5 text-[11px] font-bold text-blue-700 shadow-sm">
+                          {{ kpiNonCascadingSummary(kpi) }}
                         </span>
                       </div>
                       <div class="col-span-1 flex flex-wrap items-center justify-center gap-1" @click.stop>
@@ -1548,26 +1685,27 @@ export default {
                                     }}</span>
                                 </div>
                                 <div class="col-span-2 flex justify-center text-center">
-                                  <span
+                                  <span v-if="kpi.kpiType === 'cascading'"
                                     :class="diagnosticsTargetPillClass(pm.targetBalance)"
                                     :title="diagnosticsTargetTitle(pm.targetBalance)">{{ diagnosticsTargetWithUnit(kpi, pm.target) }}</span>
+                                  <span v-else class="text-slate-400 font-bold">-</span>
                                 </div>
                                 <div class="col-span-2 text-center text-xs font-bold tabular-nums"
-                                  :class="actualBelowTarget(pmActualDisplayRaw(pm, kpi), pm.target) ? 'text-red-600' : 'text-green-600'">
-                                  {{ pmActualWithUnit(pm, kpi) }}
+                                  :class="kpi.kpiType === 'cascading' ? (actualBelowTarget(pmActualDisplayRaw(pm, kpi), pm.target) ? 'text-red-600' : 'text-green-600') : 'text-slate-400'">
+                                  {{ kpi.kpiType === 'cascading' ? pmActualWithUnit(pm, kpi) : '-' }}
                                 </div>
                                 <div
                                   class="col-span-1 text-center text-xs font-bold tabular-nums"
-                                  :class="completionPctTextClass(pmCompletionPct(pm, kpi))"
-                                  title="Tiến độ hoàn thành = (Actual / Target) x 100.">
-                                  {{ formatCompletionPct(pmCompletionPct(pm, kpi)) }}
+                                  :class="kpi.kpiType === 'cascading' ? completionPctTextClass(pmCompletionPct(pm, kpi)) : 'text-slate-400'"
+                                  :title="kpi.kpiType === 'cascading' ? 'Tiến độ hoàn thành = (Actual / Target) x 100.' : undefined">
+                                  {{ kpi.kpiType === 'cascading' ? formatCompletionPct(pmCompletionPct(pm, kpi)) : '-' }}
                                 </div>
                                 <div class="col-span-2 text-center text-xs font-bold tabular-nums"
-                                  :class="pmSectionScoreClass(pm)">
-                                  {{ pmSectionScoreDisplay(pm) }}
+                                  :class="kpi.kpiType === 'cascading' ? pmSectionScoreClass(pm) : 'text-slate-400'">
+                                  {{ kpi.kpiType === 'cascading' ? pmSectionScoreDisplay(pm) : '-' }}
                                 </div>
                                 <div class="col-span-2 flex justify-center">
-                                  <span
+                                  <span v-if="kpi.kpiType === 'cascading'"
                                     class="inline-flex max-w-full cursor-default items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold leading-tight"
                                     :class="badgeClass(pm.status)" :title="diagnosticsReasonTooltip(pm.blockerSummary)">
                                     <i class="fas shrink-0 text-[11px]" :class="pm.status === 'success'
@@ -1577,6 +1715,10 @@ export default {
                                           : 'fa-times-circle'
                                       " />
                                     <span class="truncate">{{ kpiStatusLabel(pm.status) }}</span>
+                                  </span>
+                                  <span v-else
+                                    class="inline-flex max-w-full cursor-default items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-0.5 text-[11px] font-bold text-blue-700 shadow-sm">
+                                    {{ pmNonCascadingSummary(pm, kpi) }}
                                   </span>
                                 </div>
                                 <div class="col-span-1 flex justify-center pr-0.5">
@@ -1722,7 +1864,7 @@ export default {
                                                   }}</span>
                                               </div>
                                               <div class="col-span-2 text-center text-xs font-bold tabular-nums"
-                                                :class="actualBelowTarget(memberActualDisplayRaw(member, kpi), member.target) ? 'text-red-600' : 'text-green-600'">
+                                                :class="memberActualColorClass(member, kpi)">
                                                 {{ memberActualWithUnit(member, kpi) }}
                                               </div>
                                               <div
@@ -1731,9 +1873,9 @@ export default {
                                                 title="Tiến độ hoàn thành = (Actual / Target) x 100.">
                                                 {{ diagnosticsMemberProgressPct(member, kpi) }}
                                               </div>
-                                              <div class="col-span-2 text-center text-xs font-bold tabular-nums" :class="memberStatusForUi(member) === 'danger'
+                                              <div class="col-span-2 text-center text-xs font-bold tabular-nums" :class="memberStatusForUiMidYear(member, kpi) === 'danger'
                                                   ? 'text-red-600'
-                                                  : memberStatusForUi(member) === 'warning'
+                                                  : memberStatusForUiMidYear(member, kpi) === 'warning'
                                                     ? 'text-yellow-600'
                                                     : 'text-green-600'
                                                 " :title="memberDiagnosticsScoreTooltip(member)">
@@ -1743,22 +1885,22 @@ export default {
                                                 <span
                                                   class="inline-flex max-w-full cursor-default items-center gap-1 truncate rounded px-0.5 py-0.5"
                                                   :title="diagnosticsReasonTooltip(member.blocker)">
-                                                  <template v-if="memberStatusForUi(member) === 'danger'">
+                                                  <template v-if="memberStatusForUiMidYear(member, kpi) === 'danger'">
                                                     <span class="inline-flex items-center text-red-600">
                                                       <i class="fas fa-times-circle mr-1 shrink-0 text-[11px]" />
-                                                      {{ memberDiagnosticsStatusLabel(member) }}
+                                                      {{ memberDiagnosticsStatusLabelMidYear(member, kpi) }}
                                                     </span>
                                                   </template>
-                                                  <template v-else-if="memberStatusForUi(member) === 'warning'">
+                                                  <template v-else-if="memberStatusForUiMidYear(member, kpi) === 'warning'">
                                                     <span class="inline-flex items-center text-yellow-700">
                                                       <i class="fas fa-exclamation-circle mr-1 shrink-0 text-[11px]" />
-                                                      {{ memberDiagnosticsStatusLabel(member) }}
+                                                      {{ memberDiagnosticsStatusLabelMidYear(member, kpi) }}
                                                     </span>
                                                   </template>
                                                   <template v-else>
                                                     <span class="inline-flex items-center text-green-600">
                                                       <i class="fas fa-check-circle mr-1 shrink-0 text-[11px]" />
-                                                      {{ memberDiagnosticsStatusLabel(member) }}
+                                                      {{ memberDiagnosticsStatusLabelMidYear(member, kpi) }}
                                                     </span>
                                                   </template>
                                                 </span>
@@ -1813,7 +1955,7 @@ export default {
                                                       }}</span>
                                                   </div>
                                                   <div class="col-span-2 text-center text-xs font-bold tabular-nums"
-                                                    :class="actualBelowTarget(memberActualDisplayRaw(row.leader.leaderOwnRow!, kpi), row.leader.leaderOwnRow!.target) ? 'text-red-600' : 'text-green-600'">
+                                                    :class="memberActualColorClass(row.leader.leaderOwnRow!, kpi)">
                                                     {{ memberActualWithUnit(row.leader.leaderOwnRow!, kpi) }}
                                                   </div>
                                                   <div
@@ -1822,9 +1964,9 @@ export default {
                                                     title="Tiến độ hoàn thành = (Actual / Target) x 100.">
                                                     {{ diagnosticsMemberProgressPct(row.leader.leaderOwnRow!, kpi) }}
                                                   </div>
-                                                  <div class="col-span-2 text-center text-xs font-bold tabular-nums" :class="memberStatusForUi(row.leader.leaderOwnRow!) === 'danger'
+                                                  <div class="col-span-2 text-center text-xs font-bold tabular-nums" :class="memberStatusForUiMidYear(row.leader.leaderOwnRow!, kpi) === 'danger'
                                                       ? 'text-red-600'
-                                                      : memberStatusForUi(row.leader.leaderOwnRow!) === 'warning'
+                                                      : memberStatusForUiMidYear(row.leader.leaderOwnRow!, kpi) === 'warning'
                                                         ? 'text-yellow-600'
                                                         : 'text-green-600'
                                                     " :title="memberDiagnosticsScoreTooltip(row.leader.leaderOwnRow!)">
@@ -1834,22 +1976,22 @@ export default {
                                                     <span
                                                       class="inline-flex max-w-full cursor-default items-center gap-1 truncate rounded px-0.5 py-0.5"
                                                       :title="diagnosticsReasonTooltip(row.leader.leaderOwnRow!.blocker)">
-                                                      <template v-if="memberStatusForUi(row.leader.leaderOwnRow!) === 'danger'">
+                                                      <template v-if="memberStatusForUiMidYear(row.leader.leaderOwnRow!, kpi) === 'danger'">
                                                         <span class="inline-flex items-center text-red-600">
                                                           <i class="fas fa-times-circle mr-1 shrink-0 text-[11px]" />
-                                                          {{ memberDiagnosticsStatusLabel(row.leader.leaderOwnRow!) }}
+                                                          {{ memberDiagnosticsStatusLabelMidYear(row.leader.leaderOwnRow!, kpi) }}
                                                         </span>
                                                       </template>
-                                                      <template v-else-if="memberStatusForUi(row.leader.leaderOwnRow!) === 'warning'">
+                                                      <template v-else-if="memberStatusForUiMidYear(row.leader.leaderOwnRow!, kpi) === 'warning'">
                                                         <span class="inline-flex items-center text-yellow-700">
                                                           <i class="fas fa-exclamation-circle mr-1 shrink-0 text-[11px]" />
-                                                          {{ memberDiagnosticsStatusLabel(row.leader.leaderOwnRow!) }}
+                                                          {{ memberDiagnosticsStatusLabelMidYear(row.leader.leaderOwnRow!, kpi) }}
                                                         </span>
                                                       </template>
                                                       <template v-else>
                                                         <span class="inline-flex items-center text-green-600">
                                                           <i class="fas fa-check-circle mr-1 shrink-0 text-[11px]" />
-                                                          {{ memberDiagnosticsStatusLabel(row.leader.leaderOwnRow!) }}
+                                                          {{ memberDiagnosticsStatusLabelMidYear(row.leader.leaderOwnRow!, kpi) }}
                                                         </span>
                                                       </template>
                                                     </span>
@@ -1898,7 +2040,7 @@ export default {
                                                       }}</span>
                                                   </div>
                                                   <div class="col-span-2 text-center text-xs font-bold tabular-nums"
-                                                    :class="actualBelowTarget(memberActualDisplayRaw(row.member, kpi), row.member.target) ? 'text-red-600' : 'text-green-600'">
+                                                    :class="memberActualColorClass(row.member, kpi)">
                                                     {{ memberActualWithUnit(row.member, kpi) }}
                                                   </div>
                                                   <div
@@ -1907,9 +2049,9 @@ export default {
                                                     title="Tiến độ hoàn thành = (Actual / Target) x 100.">
                                                     {{ diagnosticsMemberProgressPct(row.member, kpi) }}
                                                   </div>
-                                                  <div class="col-span-2 text-center text-xs font-bold tabular-nums" :class="memberStatusForUi(row.member) === 'danger'
+                                                  <div class="col-span-2 text-center text-xs font-bold tabular-nums" :class="memberStatusForUiMidYear(row.member, kpi) === 'danger'
                                                       ? 'text-red-600'
-                                                      : memberStatusForUi(row.member) === 'warning'
+                                                      : memberStatusForUiMidYear(row.member, kpi) === 'warning'
                                                         ? 'text-yellow-600'
                                                         : 'text-green-600'
                                                     " :title="memberDiagnosticsScoreTooltip(row.member)">
@@ -1919,22 +2061,22 @@ export default {
                                                     <span
                                                       class="inline-flex max-w-full cursor-default items-center gap-1 truncate rounded px-0.5 py-0.5"
                                                       :title="diagnosticsReasonTooltip(row.member.blocker)">
-                                                      <template v-if="memberStatusForUi(row.member) === 'danger'">
+                                                      <template v-if="memberStatusForUiMidYear(row.member, kpi) === 'danger'">
                                                         <span class="inline-flex items-center text-red-600">
                                                           <i class="fas fa-times-circle mr-1 shrink-0 text-[11px]" />
-                                                          {{ memberDiagnosticsStatusLabel(row.member) }}
+                                                          {{ memberDiagnosticsStatusLabelMidYear(row.member, kpi) }}
                                                         </span>
                                                       </template>
-                                                      <template v-else-if="memberStatusForUi(row.member) === 'warning'">
+                                                      <template v-else-if="memberStatusForUiMidYear(row.member, kpi) === 'warning'">
                                                         <span class="inline-flex items-center text-yellow-700">
                                                           <i class="fas fa-exclamation-circle mr-1 shrink-0 text-[11px]" />
-                                                          {{ memberDiagnosticsStatusLabel(row.member) }}
+                                                          {{ memberDiagnosticsStatusLabelMidYear(row.member, kpi) }}
                                                         </span>
                                                       </template>
                                                       <template v-else>
                                                         <span class="inline-flex items-center text-green-600">
                                                           <i class="fas fa-check-circle mr-1 shrink-0 text-[11px]" />
-                                                          {{ memberDiagnosticsStatusLabel(row.member) }}
+                                                          {{ memberDiagnosticsStatusLabelMidYear(row.member, kpi) }}
                                                         </span>
                                                       </template>
                                                     </span>
@@ -1990,7 +2132,7 @@ export default {
                                             }}</span>
                                         </div>
                                         <div class="col-span-2 text-center text-xs font-bold tabular-nums"
-                                          :class="actualBelowTarget(memberActualDisplayRaw(member, kpi), member.target) ? 'text-red-600' : 'text-green-600'">
+                                          :class="memberActualColorClass(member, kpi)">
                                           {{ memberActualWithUnit(member, kpi) }}
                                         </div>
                                         <div
@@ -1999,9 +2141,9 @@ export default {
                                           title="Tiến độ hoàn thành = (Actual / Target) x 100.">
                                           {{ diagnosticsMemberProgressPct(member, kpi) }}
                                         </div>
-                                        <div class="col-span-2 text-center text-xs font-bold tabular-nums" :class="memberStatusForUi(member) === 'danger'
+                                        <div class="col-span-2 text-center text-xs font-bold tabular-nums" :class="memberStatusForUiMidYear(member, kpi) === 'danger'
                                             ? 'text-red-600'
-                                            : memberStatusForUi(member) === 'warning'
+                                            : memberStatusForUiMidYear(member, kpi) === 'warning'
                                               ? 'text-yellow-600'
                                               : 'text-green-600'
                                           " :title="memberDiagnosticsScoreTooltip(member)">
@@ -2011,22 +2153,22 @@ export default {
                                           <span
                                             class="inline-flex max-w-full cursor-default items-center gap-1 truncate rounded px-0.5 py-0.5"
                                             :title="diagnosticsReasonTooltip(member.blocker)">
-                                            <template v-if="memberStatusForUi(member) === 'danger'">
+                                            <template v-if="memberStatusForUiMidYear(member, kpi) === 'danger'">
                                               <span class="inline-flex items-center text-red-600">
                                                 <i class="fas fa-times-circle mr-1 shrink-0 text-[11px]" />
-                                                {{ memberDiagnosticsStatusLabel(member) }}
+                                                {{ memberDiagnosticsStatusLabelMidYear(member, kpi) }}
                                               </span>
                                             </template>
-                                            <template v-else-if="memberStatusForUi(member) === 'warning'">
+                                            <template v-else-if="memberStatusForUiMidYear(member, kpi) === 'warning'">
                                               <span class="inline-flex items-center text-yellow-700">
                                                 <i class="fas fa-exclamation-circle mr-1 shrink-0 text-[11px]" />
-                                                {{ memberDiagnosticsStatusLabel(member) }}
+                                                {{ memberDiagnosticsStatusLabelMidYear(member, kpi) }}
                                               </span>
                                             </template>
                                             <template v-else>
                                               <span class="inline-flex items-center text-green-600">
                                                 <i class="fas fa-check-circle mr-1 shrink-0 text-[11px]" />
-                                                {{ memberDiagnosticsStatusLabel(member) }}
+                                                {{ memberDiagnosticsStatusLabelMidYear(member, kpi) }}
                                               </span>
                                             </template>
                                           </span>
@@ -2082,7 +2224,7 @@ export default {
                                               }}</span>
                                           </div>
                                           <div class="col-span-2 text-center text-xs font-bold tabular-nums"
-                                            :class="actualBelowTarget(memberActualDisplayRaw(row.leader.leaderOwnRow!, kpi), row.leader.leaderOwnRow!.target) ? 'text-red-600' : 'text-green-600'">
+                                            :class="memberActualColorClass(row.leader.leaderOwnRow!, kpi)">
                                             {{ memberActualWithUnit(row.leader.leaderOwnRow!, kpi) }}
                                           </div>
                                           <div
@@ -2091,9 +2233,9 @@ export default {
                                             title="Tiến độ hoàn thành = (Actual / Target) x 100.">
                                             {{ diagnosticsMemberProgressPct(row.leader.leaderOwnRow!, kpi) }}
                                           </div>
-                                          <div class="col-span-2 text-center text-xs font-bold tabular-nums" :class="memberStatusForUi(row.leader.leaderOwnRow!) === 'danger'
+                                          <div class="col-span-2 text-center text-xs font-bold tabular-nums" :class="memberStatusForUiMidYear(row.leader.leaderOwnRow!, kpi) === 'danger'
                                               ? 'text-red-600'
-                                              : memberStatusForUi(row.leader.leaderOwnRow!) === 'warning'
+                                              : memberStatusForUiMidYear(row.leader.leaderOwnRow!, kpi) === 'warning'
                                                 ? 'text-yellow-600'
                                                 : 'text-green-600'
                                             " :title="memberDiagnosticsScoreTooltip(row.leader.leaderOwnRow!)">
@@ -2103,22 +2245,22 @@ export default {
                                             <span
                                               class="inline-flex max-w-full cursor-default items-center gap-1 truncate rounded px-0.5 py-0.5"
                                               :title="diagnosticsReasonTooltip(row.leader.leaderOwnRow!.blocker)">
-                                              <template v-if="memberStatusForUi(row.leader.leaderOwnRow!) === 'danger'">
+                                              <template v-if="memberStatusForUiMidYear(row.leader.leaderOwnRow!, kpi) === 'danger'">
                                                 <span class="inline-flex items-center text-red-600">
                                                   <i class="fas fa-times-circle mr-1 shrink-0 text-[11px]" />
-                                                  {{ memberDiagnosticsStatusLabel(row.leader.leaderOwnRow!) }}
+                                                  {{ memberDiagnosticsStatusLabelMidYear(row.leader.leaderOwnRow!, kpi) }}
                                                 </span>
                                               </template>
-                                              <template v-else-if="memberStatusForUi(row.leader.leaderOwnRow!) === 'warning'">
+                                              <template v-else-if="memberStatusForUiMidYear(row.leader.leaderOwnRow!, kpi) === 'warning'">
                                                 <span class="inline-flex items-center text-yellow-700">
                                                   <i class="fas fa-exclamation-circle mr-1 shrink-0 text-[11px]" />
-                                                  {{ memberDiagnosticsStatusLabel(row.leader.leaderOwnRow!) }}
+                                                  {{ memberDiagnosticsStatusLabelMidYear(row.leader.leaderOwnRow!, kpi) }}
                                                 </span>
                                               </template>
                                               <template v-else>
                                                 <span class="inline-flex items-center text-green-600">
                                                   <i class="fas fa-check-circle mr-1 shrink-0 text-[11px]" />
-                                                  {{ memberDiagnosticsStatusLabel(row.leader.leaderOwnRow!) }}
+                                                  {{ memberDiagnosticsStatusLabelMidYear(row.leader.leaderOwnRow!, kpi) }}
                                                 </span>
                                               </template>
                                             </span>
@@ -2167,7 +2309,7 @@ export default {
                                               }}</span>
                                           </div>
                                           <div class="col-span-2 text-center text-xs font-bold tabular-nums"
-                                            :class="actualBelowTarget(memberActualDisplayRaw(row.member, kpi), row.member.target) ? 'text-red-600' : 'text-green-600'">
+                                            :class="memberActualColorClass(row.member, kpi)">
                                             {{ memberActualWithUnit(row.member, kpi) }}
                                           </div>
                                           <div
@@ -2176,9 +2318,9 @@ export default {
                                             title="Tiến độ hoàn thành = (Actual / Target) x 100.">
                                             {{ diagnosticsMemberProgressPct(row.member, kpi) }}
                                           </div>
-                                          <div class="col-span-2 text-center text-xs font-bold tabular-nums" :class="memberStatusForUi(row.member) === 'danger'
+                                          <div class="col-span-2 text-center text-xs font-bold tabular-nums" :class="memberStatusForUiMidYear(row.member, kpi) === 'danger'
                                               ? 'text-red-600'
-                                              : memberStatusForUi(row.member) === 'warning'
+                                              : memberStatusForUiMidYear(row.member, kpi) === 'warning'
                                                 ? 'text-yellow-600'
                                                 : 'text-green-600'
                                             " :title="memberDiagnosticsScoreTooltip(row.member)">
@@ -2188,22 +2330,22 @@ export default {
                                             <span
                                               class="inline-flex max-w-full cursor-default items-center gap-1 truncate rounded px-0.5 py-0.5"
                                               :title="diagnosticsReasonTooltip(row.member.blocker)">
-                                              <template v-if="memberStatusForUi(row.member) === 'danger'">
+                                              <template v-if="memberStatusForUiMidYear(row.member, kpi) === 'danger'">
                                                 <span class="inline-flex items-center text-red-600">
                                                   <i class="fas fa-times-circle mr-1 shrink-0 text-[11px]" />
-                                                  {{ memberDiagnosticsStatusLabel(row.member) }}
+                                                  {{ memberDiagnosticsStatusLabelMidYear(row.member, kpi) }}
                                                 </span>
                                               </template>
-                                              <template v-else-if="memberStatusForUi(row.member) === 'warning'">
+                                              <template v-else-if="memberStatusForUiMidYear(row.member, kpi) === 'warning'">
                                                 <span class="inline-flex items-center text-yellow-700">
                                                   <i class="fas fa-exclamation-circle mr-1 shrink-0 text-[11px]" />
-                                                  {{ memberDiagnosticsStatusLabel(row.member) }}
+                                                  {{ memberDiagnosticsStatusLabelMidYear(row.member, kpi) }}
                                                 </span>
                                               </template>
                                               <template v-else>
                                                 <span class="inline-flex items-center text-green-600">
                                                   <i class="fas fa-check-circle mr-1 shrink-0 text-[11px]" />
-                                                  {{ memberDiagnosticsStatusLabel(row.member) }}
+                                                  {{ memberDiagnosticsStatusLabelMidYear(row.member, kpi) }}
                                                 </span>
                                               </template>
                                             </span>

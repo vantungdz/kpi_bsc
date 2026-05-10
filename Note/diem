@@ -1,0 +1,76 @@
+# Mid-Year Progress Calculation for CALC_RULE 803
+
+## Mô tả vấn đề
+Với KPI dạng **CALC_RULE 803** (manual input, ví dụ "hoàn thành 2 chứng chỉ tiếng anh"), hệ thống hiện tính progress bằng công thức:
+```
+progress% = (actual / target) × 100
+```
+Kết quả: nộp `actual=1` so với `target=2` → `50%` → màu **vàng** (gần đạt), trong khi về mặt nghiệp vụ, đây là **đúng tiến độ** (nửa năm hoàn thành một nửa mục tiêu).
+
+## Giải pháp
+Ở giai đoạn **Mid-Year**, áp dụng hệ số `target/2` làm mục tiêu kỳ vọng:
+```
+mid_year_expected_target = target / 2
+progress% = (actual / mid_year_expected_target) × 100
+          = (1 / 1) × 100 = 100% → Đúng tiến độ ✅
+```
+
+---
+
+## Phân tích kỹ thuật
+
+### 1. Xác định "đang ở giai đoạn Mid-Year"
+`GmKpiDiagnosticsTable` hiện **không nhận prop cycle**. Cần thêm prop `kpiCycle` để biết khi nào là mid-year:
+```
+isMidYear = now > midYearStart AND now <= midYearEnd
+```
+`GmLayout.vue` đã có `gmEvaluationYear` và `kpiCycleService` sẵn — chỉ cần load cycle info và truyền xuống bảng.
+
+### 2. Điều kiện áp dụng công thức mới
+Chỉ áp dụng `target/2` khi **tất cả 3 điều kiện** thỏa mãn:
+- `calculationRuleCode === 803`
+- Đang trong window Mid-Year (`isMidYear = true`)
+- `target` là số hợp lệ (numeric)
+
+### 3. Bảng màu mới (4 mức — áp dụng toàn bảng)
+
+| Progress | Nhãn | Màu |
+|---|---|---|
+| `>100%` | Vượt tiến độ | 🟢 Xanh đậm (`text-green-700`) |
+| `=100%` hoặc sát 100 (≥80%) | Đúng tiến độ / Gần đạt | 🟢 Xanh lá (`text-green-500`) |
+| `60–79%` | Gần đạt | 🟡 Vàng (`text-amber-500`) |
+| `<60%` | Chưa đạt | 🔴 Đỏ (`text-red-600`) |
+
+> [!IMPORTANT]
+> **Yêu cầu xác nhận ngưỡng màu:** Tôi đề xuất ngưỡng `>100%` = xanh đậm, `80-100%` = xanh lá, `60-79%` = vàng, `<60%` = đỏ. Bạn có muốn điều chỉnh không?
+
+---
+
+## Proposed Changes
+
+### Component: GmKpiDiagnosticsTable
+
+#### [MODIFY] [GmKpiDiagnosticsTable.vue](file:///d:/Source/kpi_bsc/kpi-fe/src/components/gm/GmKpiDiagnosticsTable.vue)
+
+1. **Thêm prop** `kpiCycle?: KpiCycleResponse | null` để biết window thời gian của cycle.
+2. **Thêm computed** `isMidYearPhase` dựa trên `kpiCycle.midYearStart`, `kpiCycle.midYearEnd` và `Date.now()`.
+3. **Sửa hàm** `memberCompletionPct(member, kpi)` — áp dụng `target/2` khi `kpi.calculationRuleCode === 803` và `isMidYearPhase`.
+4. **Sửa hàm** `completionPctTextClass(pct)` — thêm case `>100%` cho xanh đậm, điều chỉnh ngưỡng.
+
+### Component: GmLayout (parent của GmKpiDiagnosticsTable)
+
+#### [MODIFY] [GmLayout.vue](file:///d:/Source/kpi_bsc/kpi-fe/src/layouts/GmLayout.vue)
+
+1. **Load kpiCycle** dựa trên `gmEvaluationYear` bằng `kpiCycleService.getKpiCycleByYear()`.
+2. **Truyền prop** `kpiCycle` xuống `<GmKpiDiagnosticsTable>` ở cả 2 nơi nó được sử dụng (line 1239–1245 và 1291–1297).
+
+---
+
+## Verification Plan
+
+### Manual Verification
+Tạo/dùng KPI CALC_RULE 803 với `target = 2`:
+- Ở giai đoạn **Mid-Year**: nộp `actual = 1` → `1/(2/2) = 100%` → màu xanh lá ✅
+- Ở giai đoạn **Mid-Year**: nộp `actual = 2` → `2/(2/2) = 200%` → màu xanh đậm ✅  
+- Ở giai đoạn **End-Year**: nộp `actual = 1` → `1/2 = 50%` → màu đỏ ✅ (logic cũ giữ nguyên)
+- KPI CALC_RULE 802: không bị ảnh hưởng (logic cũ giữ nguyên) ✅
