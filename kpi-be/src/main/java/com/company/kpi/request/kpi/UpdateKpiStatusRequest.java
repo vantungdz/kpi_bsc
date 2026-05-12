@@ -28,4 +28,10 @@ public class UpdateKpiStatusRequest {
      * (ví dụ 404 → 405). Không gửi = giữ hành vi cũ (mọi assignment khớp loại KPI).
      */
     private Integer onlyFromStatusCode;
+
+    /**
+     * Khi {@link #bulkForManagedMembers} = true: chỉ cập nhật assignment của member này
+     * (gửi đánh giá từng nhân viên / từng tab). Null = toàn team như trước.
+     */
+    private UUID managedMemberUserId;
 }

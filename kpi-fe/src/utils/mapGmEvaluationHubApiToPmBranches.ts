@@ -6,7 +6,7 @@ import type {
   GmEmployeeSheetStatus,
   GmKpiGroup,
   GmKpiItem,
-} from '@/mocks/gmEmployeeEvaluation.mock'
+} from '@/types/gm-employee-evaluation'
 import type { GmEvaluationHubApiResponse, GmEvaluationHubAssignmentApiRow } from '@/types/gm-evaluation-hub-api'
 
 function initialsFromName(name: string): string {
@@ -130,9 +130,12 @@ function appendPlanActualRecords(rows: string[][], arr: unknown) {
     const r = rec as Record<string, unknown>
     const plan = r.plan ?? r.total
     const actual = r.actual ?? r.completed
+    const commentRaw = r.comment ?? r.note
+    const commentStr = typeof commentRaw === 'string' ? commentRaw.trim() : ''
+    const label = commentStr 
     rows.push([
-      `Kế hoạch / thực tế #${i + 1}`,
-      `Kế hoạch: ${evidenceJsonCell(plan)} · Thực tế: ${evidenceJsonCell(actual)}`,
+      label,
+      `Plan: ${evidenceJsonCell(plan)} · Actual: ${evidenceJsonCell(actual)}`,
     ])
   })
 }
@@ -156,10 +159,10 @@ function parseEvidenceObject(raw: string): Record<string, unknown> | null {
  */
 function evidenceRowsFromObject(o: Record<string, unknown>): string[][] {
   const rows: string[][] = []
-  appendAttachmentArray(rows, o.evd, 'Tệp minh chứng')
+  appendAttachmentArray(rows, o.evd, 'Evidence files')
   appendAttachmentArray(rows, o.files, 'File')
   appendAttachmentArray(rows, o.urls, 'URL')
-  pushScalarField(rows, 'Ghi chú (note)', o.note)
+  pushScalarField(rows, 'Note', o.note)
 
   const actualNorm =
     o.actual !== undefined && o.actual !== null
@@ -167,7 +170,7 @@ function evidenceRowsFromObject(o: Record<string, unknown>): string[][] {
       : o.result !== undefined && o.result !== null
         ? evidenceJsonCell(o.result).trim()
         : ''
-  if (actualNorm) rows.push(['actual', actualNorm])
+  if (actualNorm) rows.push(['Actual', actualNorm])
 
   const contentNorm =
     typeof o.content === 'string'
@@ -219,10 +222,10 @@ function evidenceFromRow(row: GmEvaluationHubAssignmentApiRow): GmEvidenceTable 
       const j = JSON.parse(raw) as unknown
       if (Array.isArray(j)) {
         return {
-          title: 'Minh chứng / JSON',
+          title: 'Evidence / JSON',
           icon: 'fas fa-file-code',
           accent: 'indigo',
-          headers: ['#', 'Mục'],
+          headers: ['#', 'Item'],
           rows: j.map((x, i) => [String(i + 1), typeof x === 'string' ? x : evidenceJsonCell(x)]),
         }
       }
@@ -230,10 +233,10 @@ function evidenceFromRow(row: GmEvaluationHubAssignmentApiRow): GmEvidenceTable 
         const o = j as Record<string, unknown>
         const rows = evidenceRowsFromObject(o)
         return {
-          title: 'Minh chứng',
+          title: 'Evidence',
           icon: 'fas fa-paperclip',
           accent: 'emerald',
-          headers: ['Khóa', 'Giá trị'],
+          headers: ['Key', 'Value'],
           rows,
         }
       }
@@ -246,10 +249,10 @@ function evidenceFromRow(row: GmEvaluationHubAssignmentApiRow): GmEvidenceTable 
     fallbackRows.push(['content', raw])
   }
   return {
-    title: 'Minh chứng',
+    title: 'Evidence',
     icon: 'fas fa-paperclip',
     accent: 'emerald',
-    headers: ['Khóa', 'Giá trị'],
+    headers: ['Key', 'Value'],
     rows: fallbackRows,
   }
 }
@@ -270,11 +273,11 @@ function toKpiItem(row: GmEvaluationHubAssignmentApiRow, index: number): GmKpiIt
     /** Không gán mô tả target JSON dài vào drawer — chỉ hiển thị tiêu đề KPI (UI GM). */
     target: '',
     weight: parseWeight(row),
-    evidenceButtonLabel: 'Minh chứng',
+    evidenceButtonLabel: 'Evidence',
     evidenceButtonIcon: 'fas fa-file-alt',
     evidenceTone: 'blue',
     selfScore: parseSelfScore(row),
-    // Cột "Điểm GM" chỉ hiển thị điểm GM đã lưu; điểm PM chỉ dùng để seed dropdown nhập điểm.
+    // pmScore = điểm GM đã lưu; pmSeedScore = GM ?? PM (seed dropdown + fallback cột Supervisor Score khi chưa có GM).
     pmScore: parseReviewScore(row.endGmScore),
     pmSeedScore: parseReviewScore(row.endGmScore) ?? parseReviewScore(row.endPmScore),
     evidence: evidenceFromRow(row),
@@ -286,9 +289,16 @@ function toKpiItem(row: GmEvaluationHubAssignmentApiRow, index: number): GmKpiIt
   }
 }
 
-function supervisorCommentFromRows(rows: GmEvaluationHubAssignmentApiRow[]): string {
+function hubSummaryFieldFromRows(
+  rows: GmEvaluationHubAssignmentApiRow[],
+  key:
+    | 'evaluationComments'
+    | 'evaluationCommentsPromotion'
+    | 'supervisorCommentPortfolio'
+    | 'supervisorCommentPromotion',
+): string {
   for (const row of rows) {
-    const s = String(row.supervisorComment ?? '').trim()
+    const s = String(row[key] ?? '').trim()
     if (s) return s
   }
   return ''
@@ -341,7 +351,7 @@ function buildUserMember(
 
   if (groups.length === 0) {
     groups.push({
-      groupTitle: 'KPI được giao (chu kỳ)',
+      groupTitle: 'Assigned KPIs (cycle)',
       items: [],
     })
   }
@@ -363,7 +373,10 @@ function buildUserMember(
     selfScoreDisplay: avgSelfFromItems(flatItems),
     canScore: true,
     projectIds: [brokerId],
-    supervisorComment: supervisorCommentFromRows(rows),
+    employeeCommentPortfolio: hubSummaryFieldFromRows(rows, 'evaluationComments'),
+    employeeCommentPromotion: hubSummaryFieldFromRows(rows, 'evaluationCommentsPromotion'),
+    supervisorCommentPortfolio: hubSummaryFieldFromRows(rows, 'supervisorCommentPortfolio'),
+    supervisorCommentPromotion: hubSummaryFieldFromRows(rows, 'supervisorCommentPromotion'),
     groups,
   }
 }
@@ -406,9 +419,9 @@ export function mapGmEvaluationHubApiToPmBranches(api: GmEvaluationHubApiRespons
   const branches: GmEvalPmBranch[] = []
   for (const [sectionId, sectionRows] of bySection) {
     const head = sectionRows[0]!
-    const sectionName = head.sectionName?.trim() || 'Khối'
+    const sectionName = head.sectionName?.trim() || 'Section'
     const mgrId = String(head.sectionManagerId ?? '').trim()
-    const mgrName = head.sectionManagerFullName?.trim() || 'PM khối'
+    const mgrName = head.sectionManagerFullName?.trim() || 'Section PM'
     const brokerId = `hub-${sectionId}`
 
     if (!mgrId) {

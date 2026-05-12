@@ -2,6 +2,7 @@ package com.company.kpi.response.member;
 
 import lombok.Data;
 
+import java.time.OffsetDateTime;
 import java.util.UUID;
 
 @Data
@@ -36,6 +37,8 @@ public class MemberKpiAssignmentDTO {
     private String updateReason;
     /** Assignment do chính user hiện tại tạo ra. */
     private Boolean createdByCurrentUser;
+    /** Vai trò người tạo assignment (GM / PM / LEADER / MEMBER). */
+    private String createdByRoleCode;
     /** Mã role đang xử lý feedback active — PM hoặc GM (roles.code). */
     private String feedbackTargetRoleCode;
     /** {@code kpi_master.calculation_rule_code} — CALC_RULE 801–804 */
@@ -44,4 +47,6 @@ public class MemberKpiAssignmentDTO {
     private Integer calculationTypeCode;
     private UUID categoryId;
     private String categoryName;
+    /** {@code kpi_assignments.created_at} — dùng để phân nhánh onboard sau giữa kỳ (bỏ nộp 1H). */
+    private OffsetDateTime assignmentCreatedAt;
 }

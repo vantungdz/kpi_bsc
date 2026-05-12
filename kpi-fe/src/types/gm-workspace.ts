@@ -284,6 +284,8 @@ export interface GmHierarchyMember {
   submissionTarget?: number;
   submissionActual?: number;
   evidences?: string | null;
+  /** PM nhận xét tổng trên summary (`user_kpi_summaries.evaluation_supervisor_comments`). */
+  evaluationSupervisorComments?: string | null;
   feedbackNote?: string | null;
   /** BE: true khi 407 và feedback cần GM xử lý (không dựa vào có/không có nội dung note). */
   feedbackAwaitingGm?: boolean;

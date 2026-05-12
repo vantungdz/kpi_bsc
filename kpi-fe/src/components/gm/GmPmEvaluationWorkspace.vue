@@ -6,14 +6,13 @@
 import { computed, inject, ref, watch, type Ref } from 'vue'
 import { useRoute, RouterLink } from 'vue-router'
 import GmKpiEvaluationPanel from '@/components/gm/GmKpiEvaluationPanel.vue'
+import { flattenGmEvalPmHubTreeForScores } from '@/utils/gmEmployeeEvaluation'
 import {
-  flattenGmEvalPmHubTreeForScores,
   getGmEvalBroker,
   getGmEvalPmHubRows,
   getGmEvalPmHubTree,
-  type GmEvalMember,
-  type GmEvalPmBranch,
 } from '@/mocks/gmEmployeeEvaluation.mock'
+import type { GmEvalMember, GmEvalPmBranch } from '@/types/gm-employee-evaluation'
 import { gmKpiService } from '@/services/modules/kpi-gm.service'
 import { mapGmEvaluationHubApiToPmBranches } from '@/utils/mapGmEvaluationHubApiToPmBranches'
 import { pushGmNotification } from '@/composables/useGmNotifications'
@@ -62,7 +61,7 @@ async function loadEvaluationHub() {
   } catch (e: unknown) {
     basePmBranches.value = []
     baseEmployees.value = []
-    pushGmNotification(e instanceof Error ? e.message : 'Không tải được dữ liệu tab Đánh giá', {
+    pushGmNotification(e instanceof Error ? e.message : 'Could not load Evaluation tab data', {
       variant: 'error',
       durationMs: 8000,
     })

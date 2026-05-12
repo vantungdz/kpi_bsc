@@ -13,7 +13,7 @@ import type { EvalPhase } from '@/types/kpi'
 import type { KpiCycleResponse } from '@/types/shared/kpi-cycle.type'
 import { kpiCycleService } from '@/services/shared/kpi-cycle.service'
 import { buildKpiDeadlineBanner, type KpiDeadlineBannerVm } from '@/utils/kpiDeadlineBanner'
-import { getSubmitButtonState } from '@/utils/common'
+import { shouldCollapseKpiProcessTimelineToYearEndOnly } from '@/utils/common'
 
 // ── Core state ────────────────────────────────────────────────────────────────
 const selectedYear = ref(new Date().getFullYear())
@@ -103,6 +103,63 @@ const hasAnyLeaderKpi = computed(() => {
   const personalCount = (summaryData.value?.categories ?? []).reduce((sum, c) => sum + (c.assignments?.length ?? 0), 0)
   const promotionCount = (promotionSummaryData.value?.categories ?? []).reduce((sum, c) => sum + (c.assignments?.length ?? 0), 0)
   return personalCount + promotionCount > 0
+})
+
+/** Timeline chỉ Year-End khi đúng case onboard sau giữa kỳ (có kiểm tra goal_setting_end + ASM giữa kỳ). */
+const leaderTimelineYearEndOnly = computed(() => {
+  const data = activeTab.value === 'promotion' ? promotionSummaryData.value : summaryData.value
+  const cycle = data?.kpiCycle
+  if (!cycle?.midYearEnd) return false
+  return shouldCollapseKpiProcessTimelineToYearEndOnly(data?.accountCreatedAt, cycle.midYearEnd)
+})
+
+function weightedManagerAvgFromResponse(data: LeaderKpiInformationResponse | null): number | null {
+  if (!data?.categories?.length) return null
+  let num = 0
+  let den = 0
+  for (const cat of data.categories) {
+    for (const a of cat.assignments ?? []) {
+      const w = Number(a.weight) || 0
+      if (w <= 0) continue
+      const raw = a.endGmScore ?? a.endPmScore
+      if (raw == null) continue
+      const v = Number(raw)
+      if (!Number.isFinite(v)) continue
+      num += v * w
+      den += w
+    }
+  }
+  return den > 0 ? num / den : null
+}
+
+const leaderScorecardData = computed(() => {
+  if (activeTab.value === 'promotion') return promotionSummaryData.value
+  if (activeTab.value === 'personal') return summaryData.value
+  return null
+})
+
+const leaderManagerWeightedAvg = computed(() => weightedManagerAvgFromResponse(leaderScorecardData.value))
+
+const leaderCycleFinalScore = computed((): number | null => {
+  const fs = leaderScorecardData.value?.kpiSummary?.finalScore
+  if (fs == null) return null
+  const n = Number(fs)
+  return Number.isFinite(n) ? n : null
+})
+
+/** Tab personal/promotion: mọi KPI 603; tab team: cả hai sheet đều 603. */
+const leaderTimelineEvaluationFullyComplete = computed(() => {
+  if (activeTab.value === 'team') {
+    const pRows = (summaryData.value?.categories ?? []).flatMap(c => c.assignments ?? [])
+    const prRows = (promotionSummaryData.value?.categories ?? []).flatMap(c => c.assignments ?? [])
+    const merged = [...pRows, ...prRows]
+    if (!merged.length) return false
+    return merged.every(a => Number(a.statusCode) === 603)
+  }
+  const data = activeTab.value === 'promotion' ? promotionSummaryData.value : summaryData.value
+  const all = (data?.categories ?? []).flatMap(c => c.assignments ?? [])
+  if (!all.length) return false
+  return all.every(a => Number(a.statusCode) === 603)
 })
 
 const canCreatePersonalKpi = computed(() => {
@@ -259,7 +316,12 @@ function scrollToLeaderKpiSection() {
     </div>
 
     <!-- Process Timeline -->
-    <ProcessTimeline v-if="hasAnyLeaderKpi" :year="selectedYear" />
+    <ProcessTimeline
+      v-if="hasAnyLeaderKpi"
+      :year="selectedYear"
+      :year-end-only="leaderTimelineYearEndOnly"
+      :evaluation-fully-completed="leaderTimelineEvaluationFullyComplete"
+    />
 
     <!-- Summary cards (Tình trạng bằng chứng + Avg Self Score) -->
     <div class="grid grid-cols-1 gap-5 md:grid-cols-2">
@@ -286,7 +348,7 @@ function scrollToLeaderKpiSection() {
         </div>
       </div>
 
-      <!-- Avg Self Score -->
+      <!-- Điểm tự chấm + PM/GM + tổng chu kỳ (tab Personal / Promotion) -->
       <div class="relative flex items-center gap-5 overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <div class="absolute right-0 top-0 h-20 w-20 rounded-bl-full bg-violet-50" />
         <div class="z-10 rounded-xl bg-violet-100 p-3 text-violet-600">
@@ -344,7 +406,7 @@ function scrollToLeaderKpiSection() {
         <button
           v-if="canCreatePersonalKpi"
           type="button"
-          class="mb-1.5 mr-1 flex shrink-0 items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:bg-blue-700"
+          class="mb-1.5 mr-1 flex shrink-0 items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:bg-blue-700 cursor-pointer"
           @click="openCreateIndividualDrawer"
         >
           <i class="fas fa-plus text-xs" aria-hidden="true" />

@@ -16,9 +16,11 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -199,36 +201,11 @@ public class GmReportService {
     public GmReportComplianceResponse getCompliance(int year) {
         List<GmReportAssignmentRow> rows = safeList(gmReportMapper.listBottleneckCandidates(year));
 
-        int completed = 0;
-        int pendingApproval = 0;
-        int missingEvidence = 0;
-        for (GmReportAssignmentRow r : rows) {
-            int sc = r.getStatusCode() == null ? 0 : r.getStatusCode();
-            if (sc == 503 || sc == 603) {
-                completed++;
-            } else if (sc == 501 || sc == 502 || sc == 601 || sc == 602) {
-                pendingApproval++;
-            } else if (sc == 405 && r.getEvidenceFlag() == null) {
-                missingEvidence++;
-            }
-        }
-        // Tổng thực sự: thêm assignments đã hoàn tất nhưng không có trong query bottleneck.
-        // Đơn giản hóa: total = completed + pendingApproval + missingEvidence (đủ phục vụ chart).
-        int total = completed + pendingApproval + missingEvidence;
-        int percent = total == 0 ? 0 : (int) Math.round(100.0 * completed / total);
-
-        GmReportComplianceResponse.Status status = new GmReportComplianceResponse.Status();
-        status.setCompleted(completed);
-        status.setPendingApproval(pendingApproval);
-        status.setMissingEvidence(missingEvidence);
-        status.setTotal(total);
-        status.setPercentComplete(percent);
-
-        // Bottleneck list — top 10 dòng có status quá hạn
+        int pendingApprovalUsers = 0;
+        int missingEvidenceUsers = 0;
         List<GmReportComplianceResponse.Bottleneck> bottlenecks = new ArrayList<>();
-        int idx = 0;
+        Set<UUID> seenBottleneckUserIds = new HashSet<>();
         for (GmReportAssignmentRow r : rows) {
-            if (idx++ >= 10) break;
             int sc = r.getStatusCode() == null ? 0 : r.getStatusCode();
             GmReportComplianceResponse.Bottleneck b = new GmReportComplianceResponse.Bottleneck();
             b.setUserId(r.getUserId() == null ? null : r.getUserId().toString());
@@ -243,15 +220,30 @@ public class GmReportService {
                 b.setReason("PM đã duyệt — chờ GM chốt");
                 b.setSeverity("warning");
                 b.setDelayLabel("Chờ GM");
-            } else if (sc == 405 && r.getEvidenceFlag() == null) {
+            } else if ((sc == 404 || sc == 405) && r.getEvidenceFlag() == null) {
                 b.setReason("Chưa nộp Evidence");
                 b.setSeverity("warning");
                 b.setDelayLabel("Đang chạy");
             } else {
                 continue;
             }
+            UUID uid = r.getUserId();
+            if (uid != null && !seenBottleneckUserIds.add(uid)) {
+                continue;
+            }
             bottlenecks.add(b);
+            if (sc == 501 || sc == 502 || sc == 601 || sc == 602) {
+                pendingApprovalUsers++;
+            } else {
+                missingEvidenceUsers++;
+            }
         }
+        int total = pendingApprovalUsers + missingEvidenceUsers;
+
+        GmReportComplianceResponse.Status status = new GmReportComplianceResponse.Status();
+        status.setPendingApproval(pendingApprovalUsers);
+        status.setMissingEvidence(missingEvidenceUsers);
+        status.setTotal(total);
 
         GmReportComplianceResponse out = new GmReportComplianceResponse();
         out.setStatus(status);

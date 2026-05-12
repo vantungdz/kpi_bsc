@@ -60,7 +60,7 @@ watch(() => props.yearId, async (year) => {
 }, { immediate: true })
 
 const submitButtonState = computed(() => {
-  if (!currentCycleInfo.value) return { disabled: true, reason: 'Đang tải hoặc không có thông tin chu kỳ đánh giá.' }
+  if (!currentCycleInfo.value) return { disabled: true, reason: 'Loading or no evaluation cycle info.' }
   const acceptedRow = props.rows.find(r => Number(r.assignmentStatusCode) === KPI_STATUS.ACCEPTED || Number(r.assignmentStatusCode) === KPI_STATUS.FIRST_COMPLETED)
   if (!acceptedRow) return { disabled: false, reason: '' }
   return getPmPortfolioSubmitButtonState(currentCycleInfo.value, Number(acceptedRow.assignmentStatusCode))
@@ -83,13 +83,13 @@ function sheetUpdateErrorMessage(err: unknown): string {
     if (m != null && String(m).trim() !== '') return String(m)
   }
   if (err instanceof Error) return err.message
-  return 'Không lưu được — vui lòng thử lại'
+  return 'Could not save — please try again'
 }
 
 async function submitGmPersonalEvaluation() {
   const cid = cycleIdTrimmed.value
   if (!cid) {
-    toast.error('Chưa chọn chu kỳ đánh giá.')
+    toast.error('No evaluation cycle selected.')
     return
   }
   if (props.rows.length === 0) return
@@ -108,7 +108,7 @@ async function submitGmPersonalEvaluation() {
   if (missingRows.length > 0) {
     invalidRowIds.value = new Set(missingRows.map((r) => String(r.id)))
     toast.error(
-      `${missingRows.length} KPI chưa nhập đầy đủ Actual và điểm đánh giá`,
+      `${missingRows.length} KPIs are missing Actual or score`,
     )
     return
   }
@@ -117,7 +117,7 @@ async function submitGmPersonalEvaluation() {
   submitGmPersonalEvalLoading.value = true
   try {
     await gmKpiService.submitPersonalEvaluation(cid)
-    toast.success('Đã gửi đánh giá — trạng thái KPI đã cập nhật theo đợt (giữa kỳ / cuối kỳ).')
+    toast.success('Evaluation submitted — KPI statuses updated for this checkpoint (mid-year / year-end).')
     emit('sheet-saved')
   } catch (err: unknown) {
     toast.error(sheetUpdateErrorMessage(err))
@@ -129,7 +129,7 @@ async function submitGmPersonalEvaluation() {
 async function acceptPendingKpis() {
   const cid = cycleIdTrimmed.value
   if (!cid) {
-    toast.error('Chưa chọn chu kỳ đánh giá.')
+    toast.error('No evaluation cycle selected.')
     return
   }
   if (!hasPendingAcceptanceKpis.value) return
@@ -141,7 +141,7 @@ async function acceptPendingKpis() {
       promotion: false,
       onlyFromStatusCode: KPI_STATUS.PENDING_ACCEPTANCE,
     })
-    toast.success('Đã chấp nhận KPI.')
+    toast.success('KPIs accepted.')
     emit('sheet-saved')
   } catch (err: unknown) {
     toast.error(sheetUpdateErrorMessage(err))
@@ -153,7 +153,7 @@ async function acceptPendingKpis() {
 function openGmPersonalEvidence(row: GmPersonalKpiRowMock) {
   const a = props.assignmentsById[row.id]
   if (!a) {
-    toast.warning('Không tìm thấy chi tiết KPI — tải lại hoặc thử sau.')
+    toast.warning('KPI details not found — refresh or try again later.')
     return
   }
   gmPersonalEvidenceAssign.value = a
@@ -216,13 +216,13 @@ async function onGmPersonalEvidenceSaved(data: {
   const finalUrls = [...(data.urls ?? [])]
   if (data.files && data.files.length > 0) {
     try {
-      toast.info('Đang tải file lên...')
+      toast.info('Uploading file…')
       for (const item of data.files) {
         const res = await fileService.uploadFile(item.file)
         finalUrls.push({ id: Math.random().toString(), url: res.url, name: res.name })
       }
     } catch (e) {
-      toast.error('Lỗi khi tải file lên')
+      toast.error('Upload failed')
       return
     }
   }
@@ -249,14 +249,14 @@ async function onGmPersonalEvidenceSaved(data: {
   if (finalActualResult !== '') body.evidences = finalActualResult
 
   if (Object.keys(body).length === 0) {
-    toast.info('Không có thay đổi để lưu.')
+    toast.info('No changes to save.')
     closeGmPersonalEvidence()
     return
   }
 
   try {
     const sheet = (await memberKpiService.updateSheetItem(id, body)) as KpiSheet
-    toast.success('Đã lưu minh chứng và điểm tự đánh giá.')
+    toast.success('Evidence and self-assessment score saved.')
     const updated = sheet?.items?.find((it) => String(it.id) === id)
     const a = gmPersonalEvidenceAssign.value
     if (a && updated != null) {
@@ -325,7 +325,7 @@ function toggleBscSection(p: GmBscPerspective) {
 /** Tooltip: mã ASM + `sys_status_codes.name` (API leader kpi-info). */
 function assignmentStatusTooltip(row: GmPersonalKpiRowMock): string | undefined {
   const parts: string[] = []
-  if (row.assignmentStatusCode != null) parts.push(`Mã: ${row.assignmentStatusCode}`)
+  if (row.assignmentStatusCode != null) parts.push(`Code: ${row.assignmentStatusCode}`)
   if (row.assignmentStatusName) parts.push(row.assignmentStatusName)
   return parts.length ? parts.join(' · ') : undefined
 }
@@ -352,7 +352,7 @@ function displayTargetWithUnit(row: GmPersonalKpiRowMock): string {
           aria-hidden="true">
           <i class="fas fa-bullseye text-lg" />
         </div>
-        <h1 class="text-lg font-bold uppercase tracking-wide text-slate-800">KPI cá nhân (GM)</h1>
+        <h1 class="text-lg font-bold uppercase tracking-wide text-slate-800">Personal KPI (GM)</h1>
       </div>
       <div v-if="hasPendingAcceptanceKpis && cycleIdTrimmed"
         class="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
@@ -361,7 +361,7 @@ function displayTargetWithUnit(row: GmPersonalKpiRowMock): string {
           :disabled="loading || acceptKpisLoading" @click="acceptPendingKpis">
           <i class="fas text-[11px]" :class="acceptKpisLoading ? 'fa-spinner fa-spin' : 'fa-check'"
             aria-hidden="true" />
-          {{ acceptKpisLoading ? 'Đang xử lý…' : 'Chấp nhận KPI' }}
+          {{ acceptKpisLoading ? 'Processing…' : 'Accept KPIs' }}
         </button>
       </div>
     </div>
@@ -370,33 +370,33 @@ function displayTargetWithUnit(row: GmPersonalKpiRowMock): string {
       class="flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-12 text-sm font-medium text-slate-600 shadow-sm"
       role="status">
       <i class="fas fa-spinner fa-spin text-indigo-500" aria-hidden="true" />
-      Đang tải KPI cá nhân (Individual + Promotion)…
+      Loading personal KPIs (Individual + Promotion)…
     </div>
 
     <div v-else-if="rows.length === 0"
       class="rounded-2xl border border-dashed border-slate-200 bg-slate-50/80 px-4 py-10 text-center">
-      <p class="text-sm font-semibold text-slate-700">Chưa có dữ liệu KPI cá nhân</p>
+      <p class="text-sm font-semibold text-slate-700">No personal KPI data yet</p>
     </div>
 
     <div v-else class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
       <div class="flex items-center justify-between border-b border-slate-100 bg-slate-50/50 px-6 py-4">
         <h2 class="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-500">
           <i class="fas fa-file-alt w-4 shrink-0 text-center text-base text-slate-400" aria-hidden="true" />
-          Chi tiết bảng KPI cá nhân
+          Personal KPI table
         </h2>
       </div>
       <div class="overflow-x-auto">
         <table class="w-full min-w-[52rem] border-collapse text-left text-sm text-slate-800">
           <thead class="border-b border-slate-200 bg-slate-50/80 text-xs font-semibold uppercase text-slate-500">
             <tr>
-              <th class="w-16 px-6 py-4 text-center">STT</th>
-              <th class="px-6 py-4">Mục tiêu</th>
+              <th class="w-16 px-6 py-4 text-center">#</th>
+              <th class="px-6 py-4">Objective</th>
               <th class="px-6 py-4 text-center">Target</th>
-              <th class="px-6 py-4 text-center">Trọng số</th>
+              <th class="px-6 py-4 text-center">Weight</th>
               <th class="px-6 py-4 text-center">Actual</th>
-              <th class="px-6 py-4 text-center">Điểm</th>
-              <th class="px-6 py-4 text-center">Trạng thái</th>
-              <th class="px-6 py-4 text-right">Thao tác</th>
+              <th class="px-6 py-4 text-center">Score</th>
+              <th class="px-6 py-4 text-center">Status</th>
+              <th class="px-6 py-4 text-right">Actions</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-slate-100">
@@ -458,7 +458,7 @@ function displayTargetWithUnit(row: GmPersonalKpiRowMock): string {
                       <i class="fas fa-exclamation-circle text-[13px]" v-if="invalidRowIds.has(row.id)"
                         aria-hidden="true" />
                       <i class="fas fa-eye text-[13px]" v-else aria-hidden="true" />
-                      Đánh giá
+                      Evaluate
                     </button>
                   </td>
                 </tr>
@@ -473,7 +473,7 @@ function displayTargetWithUnit(row: GmPersonalKpiRowMock): string {
           :disabled="loading || !cycleIdTrimmed || submitGmPersonalEvalLoading || submitButtonState.disabled" @click="submitGmPersonalEvaluation">
           <i class="fas text-sm" :class="submitGmPersonalEvalLoading ? 'fa-spinner fa-spin' : 'fa-paper-plane'"
             aria-hidden="true" />
-          {{ submitGmPersonalEvalLoading ? 'Đang gửi…' : 'Gửi đánh giá' }}
+          {{ submitGmPersonalEvalLoading ? 'Sending…' : 'Submit evaluation' }}
         </button>
       </div>
     </div>

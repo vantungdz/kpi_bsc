@@ -86,8 +86,8 @@
         /** ASM_STATUS labels — đồng bộ document/db/init-db.sql */
         private static final Map<Integer, String> ASM_STATUS_LABEL = Map.ofEntries(
                 Map.entry(401, "KPI mới tạo (Chưa kích hoạt)"),
-                Map.entry(402, "Chờ PM duyệt KPI đầu năm"),
-                Map.entry(403, "Chờ GM duyệt tạo mới"),
+                Map.entry(402, "Chờ PM duyệt KPI"),
+                Map.entry(403, "Chờ GM duyệt KPI"),
                 Map.entry(404, "Chờ Member bấm Accept"),
                 Map.entry(407, "Chờ PM/GM kiểm tra feedback"),
                 Map.entry(405, "Đã chốt mục tiêu (Đang chạy)"),
@@ -129,24 +129,27 @@
             }
             KpiCycle cycle = optionalKpiCycle.get();
             List<MemberKpiAssignmentDTO> rows = kpiAssignmentMapper.findDetailsByUserAndCycle(userId, cycle.getId());
-            String phase = resolveDashboardPhase(cycle, rows);
+            OffsetDateTime accountCreatedAt = user.getCreatedAt();
+            String phase = resolveDashboardPhase(cycle, rows, accountCreatedAt);
             String phaseLabel = Constant.PHASE_LABEL_MAP.getOrDefault(phase, StringUtils.EMPTY);
             MemberKpiSheetPayload sheet = buildSheet(user, y, phase, rows);
             List<String> pending = computePendingAssignmentIds(phase, rows);
             OffsetDateTime now = OffsetDateTime.now();
-            boolean canSubmit = computeCanSubmit(cycle, phase, rows, pending, now);
+            boolean canSubmit = computeCanSubmit(cycle, phase, rows, pending, now, accountCreatedAt);
             log.info("Dashboard for user {} in year {}: phase={}, pendingCount={}, canSubmit={}", userId, y, phase, pending.size(), canSubmit);
             Optional<UserKpiSummary> summaryOpt = userKpiSummaryMapper.findByUserIdAndCycleId(userId, cycle.getId());
             UserKpiSummary summary = summaryOpt.orElse(null);
 
             return MemberKpiDashboardResponse.builder()
                     .year(y)
+                    .accountCreatedAt(accountCreatedAt != null ? accountCreatedAt.toString() : null)
                     .phase(phase)
                     .phaseLabel(phaseLabel)
                     .sheet(sheet)
                     .pendingItems(pending)
                     .canSubmit(canSubmit)
                     .evaluationComments(summary != null ? summary.getEvaluationComments() : null)
+                    .evaluationCommentsPromotion(summary != null ? summary.getEvaluationCommentsPromotion() : null)
                     .evaluationSupervisorComments(summary != null ? summary.getEvaluationSupervisorComments() : null)
                     .build();
         }
@@ -163,9 +166,12 @@
                         HttpStatus.BAD_REQUEST, "KPI đề xuất đang chờ PM/GM duyệt — chưa chỉnh được");
             }
             UUID cycleId = row.getCycleId();
-            String phase = kpiCycleMapper.findById(cycleId)
-                    .map(this::getCurrentPhase)
-                    .orElse(Constant.END_YEAR_PHASE);
+            KpiCycle cycle = kpiCycleMapper.findById(cycleId)
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Cycle not found"));
+            List<MemberKpiAssignmentDTO> allRows = kpiAssignmentMapper.findDetailsByUserAndCycle(userId, cycleId);
+            User sheetUser = userMapper.findById(userId)
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User not found"));
+            String phase = resolveDashboardPhase(cycle, allRows, sheetUser.getCreatedAt());
             Double mid = null;
             Double end = null;
             Integer autoScore = computeAutoSelfScoreFromEvidences(row, request.getEvidences());
@@ -301,6 +307,8 @@
             if (!Objects.equals(cycle.getStatusCode(), Constants.CycleStatus.OPEN)) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "KPI cycle is not open for submissions");
             }
+            User submitUser = userMapper.findById(userId)
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User not found"));
             String phase = getCurrentPhase(cycle);
             OffsetDateTime now = OffsetDateTime.now();
             List<MemberKpiAssignmentDTO> rowsSnapshot = kpiAssignmentMapper.findDetailsByUserAndCycle(userId, cycle.getId());
@@ -308,7 +316,7 @@
             if (scopedRowsSnapshot.isEmpty()) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No KPI rows available for submit scope");
             }
-            String submitPhase = resolveSubmitPhaseForSubmission(cycle, phase, now, scopedRowsSnapshot);
+            String submitPhase = resolveSubmitPhaseForSubmission(cycle, phase, now, scopedRowsSnapshot, submitUser.getCreatedAt());
             if (submitPhase == null) {
                     throw new ResponseStatusException(
                             HttpStatus.BAD_REQUEST, "Submissions are not open for the current phase (outside time window)");
@@ -353,7 +361,7 @@
                 if (updated == 0) {
                     throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No target-setup assignments eligible to accept");
                 }
-                persistEmployeeEvaluationComment(cycle.getId(), userId, request.getEvaluationComments());
+                persistEmployeeEvaluationComment(cycle.getId(), userId, request.getEvaluationComments(), promotionSubmit);
                 return;
             }
 
@@ -382,7 +390,7 @@
                                 HttpStatus.BAD_REQUEST, "No end-year assignments eligible to submit");
                     }
                 }
-            persistEmployeeEvaluationComment(cycle.getId(), userId, request.getEvaluationComments());
+            persistEmployeeEvaluationComment(cycle.getId(), userId, request.getEvaluationComments(), promotionSubmit);
             }
 
         /**
@@ -403,9 +411,11 @@
             if (rows == null || rows.isEmpty()) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No KPI assignments in this cycle");
             }
+            User gmUser = userMapper.findById(userId)
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User not found"));
             String phase = getCurrentPhase(cycle);
             OffsetDateTime now = OffsetDateTime.now();
-            String submitPhase = resolveSubmitPhaseForSubmission(cycle, phase, now, rows);
+            String submitPhase = resolveSubmitPhaseForSubmission(cycle, phase, now, rows, gmUser.getCreatedAt());
             if (submitPhase == null) {
                 throw new ResponseStatusException(
                         HttpStatus.BAD_REQUEST, "Submissions are not open for the current phase (outside time window)");
@@ -627,6 +637,7 @@
                     .build();
             return MemberKpiDashboardResponse.builder()
                     .year(year)
+                    .accountCreatedAt(user.getCreatedAt() != null ? user.getCreatedAt().toString() : null)
                     .phase(Constant.TARGET_SETUP_PHASE)
                     .phaseLabel(Constant.PHASE_LABEL_MAP.get(Constant.TARGET_SETUP_PHASE))
                     .sheet(sheet)
@@ -680,9 +691,7 @@
             String evidenceFormCase = resolveEvidenceFormCase(group, row.getMasterCode());
 
             Double selfScore = resolveSelfScoreForPhase(phase, row);
-            Double pmScore = Constant.END_YEAR_PHASE.equals(phase)
-                    ? row.getEndGmScore()
-                    : null;
+            Double pmScore = resolveDisplayedManagerFinalScore(phase, row);
 
             EvidencesParsed ev = parseEvidences(row.getEvidences());
 
@@ -729,6 +738,7 @@
                     .feedbackComment(Optional.ofNullable(row.getFeedbackComment()).orElse(""))
                     .updateReason(Optional.ofNullable(row.getUpdateReason()).orElse(""))
                     .createdByCurrentUser(Boolean.TRUE.equals(row.getCreatedByCurrentUser()))
+                    .createdByRoleCode(Optional.ofNullable(row.getCreatedByRoleCode()).orElse(""))
                     .gmComment(ev.gmComment)
                     .certificateOutcomeNote(ev.certificateOutcomeNote)
                     .selfScore(selfScore)
@@ -743,7 +753,9 @@
                     .canEditScore(workflow.canEditScore())
                     .evidenceTooltip(workflow.evidenceTooltip())
                     .evaluationState(workflow.evaluationState())
-                    .feedbackTargetRoleCode(ftr);
+                    .feedbackTargetRoleCode(ftr)
+                    .assignmentCreatedAt(
+                            row.getAssignmentCreatedAt() != null ? row.getAssignmentCreatedAt().toString() : null);
 
             return b.build();
         }
@@ -753,13 +765,31 @@
                 return row.getMidSelfScore();
             }
             if (Constant.END_YEAR_PHASE.equals(phase)) {
-                return row.getEndSelfScore();
+                // year_end: nếu chưa có end_self_score thì giữ điểm giữa kỳ để không mất khi refresh.
+                return row.getEndSelfScore() != null ? row.getEndSelfScore() : row.getMidSelfScore();
             }
             // target_setup: hiển thị bản nháp nếu có
             if (row.getMidSelfScore() != null) {
                 return row.getMidSelfScore();
             }
             return row.getEndSelfScore();
+        }
+
+        /**
+         * Điểm cột «chấm PM/GM» trên dashboard member: ưu tiên GM, sau đó PM
+         * (đồng bộ với báo cáo GM / bảng Leader {@code endGm ?? endPm}).
+         */
+        private static Double resolveDisplayedManagerFinalScore(String phase, MemberKpiAssignmentDTO row) {
+            if (Constant.TARGET_SETUP_PHASE.equals(phase)) {
+                return null;
+            }
+            if (!Constant.MID_YEAR_PHASE.equals(phase) && !Constant.END_YEAR_PHASE.equals(phase)) {
+                return null;
+            }
+            if (row.getEndGmScore() != null) {
+                return row.getEndGmScore();
+            }
+            return row.getEndPmScore();
         }
 
         /**
@@ -977,19 +1007,35 @@
             }
         }
 
-        private void persistEmployeeEvaluationComment(UUID cycleId, UUID userId, String rawComment) {
+        private void persistEmployeeEvaluationComment(UUID cycleId, UUID userId, String rawComment, boolean promotionSubmit) {
             String comment = StringUtils.trimToNull(rawComment);
-            int updated = userKpiSummaryMapper.updateEvaluationComments(userId, cycleId, comment, userId);
-            if (updated > 0) {
-                return;
+            if (promotionSubmit) {
+                int updated = userKpiSummaryMapper.updateEvaluationCommentsPromotion(userId, cycleId, comment, userId);
+                if (updated > 0) {
+                    return;
+                }
+                userKpiSummaryMapper.insertEvaluationComments(
+                        UUID.randomUUID(),
+                        userId,
+                        cycleId,
+                        null,
+                        comment,
+                        userId,
+                        userId);
+            } else {
+                int updated = userKpiSummaryMapper.updateEvaluationComments(userId, cycleId, comment, userId);
+                if (updated > 0) {
+                    return;
+                }
+                userKpiSummaryMapper.insertEvaluationComments(
+                        UUID.randomUUID(),
+                        userId,
+                        cycleId,
+                        comment,
+                        null,
+                        userId,
+                        userId);
             }
-            userKpiSummaryMapper.insertEvaluationComments(
-                    UUID.randomUUID(),
-                    userId,
-                    cycleId,
-                    comment,
-                    userId,
-                    userId);
         }
 
         /**
@@ -1025,14 +1071,15 @@
                 String phase,
                 List<MemberKpiAssignmentDTO> rows,
                 List<String> pending,
-                OffsetDateTime now) {
+                OffsetDateTime now,
+                OffsetDateTime accountCreatedAt) {
             if (rows.isEmpty()) {
                 return false;
             }
             if (!Objects.equals(cycle.getStatusCode(), Constants.CycleStatus.OPEN)) {
                 return false;
             }
-            String submitPhase = resolveSubmitPhaseForSubmission(cycle, phase, now, rows);
+            String submitPhase = resolveSubmitPhaseForSubmission(cycle, phase, now, rows, accountCreatedAt);
             if (submitPhase == null) {
                     return false;
                 }
@@ -1048,8 +1095,8 @@
          * <ul>
      *   <li>Nếu còn ASM {@code 404} (PENDING_ACCEPTANCE) thì luôn ưu tiên submit {@code target_setup}
      *       (hỗ trợ member nộp muộn đầu năm, vẫn ghi nhận ở phase target).</li>
-     *   <li>Nếu chưa nộp vòng mid-year và còn ASM {@code 405} thì cho phép nộp muộn ở {@code mid_year}
-     *       (vẫn ghi nhận là phase mid-year).</li>
+     *   <li>Nếu chưa nộp vòng mid-year và còn ASM {@code 405} (user không phải onboard sau {@code mid_year_end})
+     *       thì cho phép nộp muộn ở {@code mid_year}. User tạo sau hết giữa kỳ → không ép nộp 1H, chờ cửa sổ cuối kỳ.</li>
      *   <li>Nếu không có {@code 404}: ưu tiên phase đang mở cửa sổ thời gian.</li>
      *   <li>Ngoài cửa sổ và không đủ điều kiện nộp muộn: không cho submit.</li>
          * </ul>
@@ -1058,11 +1105,12 @@
                 KpiCycle cycle,
                 String currentPhase,
                 OffsetDateTime now,
-                List<MemberKpiAssignmentDTO> rows) {
+                List<MemberKpiAssignmentDTO> rows,
+                OffsetDateTime accountCreatedAt) {
         if (hasLateTargetSetupSubmitCandidate(cycle, now, rows)) {
             return Constant.TARGET_SETUP_PHASE;
         }
-        if (hasLateMidYearSubmitCandidate(cycle, now, rows)) {
+        if (hasLateMidYearSubmitCandidate(cycle, now, rows, accountCreatedAt)) {
             return Constant.MID_YEAR_PHASE;
         }
             if (isWithinPhaseSubmitWindow(cycle, currentPhase, now)) {
@@ -1089,7 +1137,11 @@
     private static boolean hasLateMidYearSubmitCandidate(
             KpiCycle cycle,
             OffsetDateTime now,
-            List<MemberKpiAssignmentDTO> rows) {
+            List<MemberKpiAssignmentDTO> rows,
+            OffsetDateTime accountCreatedAt) {
+        if (lateOnboardUserForCycle(accountCreatedAt, cycle)) {
+            return false;
+        }
         if (cycle.getMidYearEnd() == null || !now.isAfter(cycle.getMidYearEnd())) {
             return false;
         }
@@ -1106,10 +1158,19 @@
         if (hasFinalSubmission) {
             return false;
         }
-        return rows.stream()
-                .map(MemberKpiAssignmentDTO::getStatusCode)
-                .anyMatch(sc -> Objects.equals(sc, ASM_ACCEPTED));
+        return rows.stream().anyMatch(row -> Objects.equals(row.getStatusCode(), ASM_ACCEPTED));
     }
+
+        /**
+         * {@code users.created_at} sau {@code kpi_cycles.mid_year_end} → không còn lộ trình nộp giữa kỳ
+         * (đồng bộ FE timeline Year-End only).
+         */
+        private static boolean lateOnboardUserForCycle(OffsetDateTime accountCreatedAt, KpiCycle cycle) {
+            if (accountCreatedAt == null || cycle == null || cycle.getMidYearEnd() == null) {
+                return false;
+            }
+            return accountCreatedAt.isAfter(cycle.getMidYearEnd());
+        }
 
         /**
          * Dashboard phase ưu tiên theo ASM status để đồng bộ UI:
@@ -1120,7 +1181,7 @@
          *   <li>Không suy ra được thì fallback theo time windows.</li>
          * </ul>
          */
-        private String resolveDashboardPhase(KpiCycle cycle, List<MemberKpiAssignmentDTO> rows) {
+        private String resolveDashboardPhase(KpiCycle cycle, List<MemberKpiAssignmentDTO> rows, OffsetDateTime accountCreatedAt) {
             if (rows != null && !rows.isEmpty()) {
                 boolean hasPendingAcceptance = rows.stream()
                         .map(MemberKpiAssignmentDTO::getStatusCode)
@@ -1145,7 +1206,7 @@
                 if (hasMidYearSubmission) {
                     return Constant.MID_YEAR_PHASE;
                 }
-                if (hasLateMidYearSubmitCandidate(cycle, OffsetDateTime.now(), rows)) {
+                if (hasLateMidYearSubmitCandidate(cycle, OffsetDateTime.now(), rows, accountCreatedAt)) {
                     return Constant.MID_YEAR_PHASE;
                 }
             }
@@ -1438,8 +1499,8 @@
             }
             KpiCycle cycle = kpiCycleMapper.findById(cycleId).orElseThrow(() ->
                     new ResponseStatusException(HttpStatus.NOT_FOUND, "Cycle not found"));
-            String phase = getCurrentPhase(cycle);
             List<MemberKpiAssignmentDTO> rows = kpiAssignmentMapper.findDetailsByUserAndCycle(userId, cycleId);
+            String phase = resolveDashboardPhase(cycle, rows, user.get().getCreatedAt());
             MemberKpiSheetPayload sheet = buildSheet(user.get(), cycle.getYear(), phase, rows);
             return toKpiSheetResponse(sheet, userId);
         }

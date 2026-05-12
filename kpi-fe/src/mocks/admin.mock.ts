@@ -52,6 +52,8 @@ export interface Employee {
   rank: string;
   /** Chức danh (chỉ hiển thị trong bảng, không edit) */
   jobTitle: string;
+  /** UUID job_titles.id (phục vụ edit bằng dropdown) */
+  jobTitleId?: string;
   status: EmployeeStatus;
 }
 
@@ -67,6 +69,15 @@ export interface RankOption {
   id: string;
   code: string;
   name: string;
+}
+
+/** Chức danh — lấy từ bảng job_titles (kèm rank + job family để hiển thị đẹp) */
+export interface JobTitleOption {
+  id: string;
+  name: string;
+  rankCode: string;
+  jobFamilyCode: string;
+  jobFamilyName: string;
 }
 
 /**
@@ -104,6 +115,23 @@ export const MOCK_RANK_OPTIONS: RankOption[] = [
   { id: "c1000000-0000-0000-0000-000000000003", code: "R2", name: "Mid-Level" },
   { id: "c1000000-0000-0000-0000-000000000004", code: "R3", name: "Senior" },
   { id: "c1000000-0000-0000-0000-000000000005", code: "R4", name: "Lead / Principal" },
+];
+
+export const MOCK_JOB_TITLES: JobTitleOption[] = [
+  {
+    id: "jt-00000000-0000-0000-0000-000000000001",
+    name: "Software Engineer",
+    rankCode: "R2",
+    jobFamilyCode: "DEV",
+    jobFamilyName: "Development",
+  },
+  {
+    id: "jt-00000000-0000-0000-0000-000000000002",
+    name: "Team Leader",
+    rankCode: "R4",
+    jobFamilyCode: "DEV",
+    jobFamilyName: "Development",
+  },
 ];
 
 export type TemplateStatus = "active" | "inactive";

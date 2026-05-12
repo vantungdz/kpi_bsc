@@ -23,6 +23,7 @@ import org.modelmapper.ModelMapper;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.time.OffsetDateTime;
 import java.util.*;
 
 @Slf4j
@@ -50,6 +51,8 @@ public class LeaderKpiService {
         if (optionalUser.isEmpty()) {
             return null;
         }
+        User viewer = optionalUser.get();
+        OffsetDateTime accountCreatedAt = viewer.getCreatedAt();
 
         List<LeaderKpiAssignmentDTO> assignmentDTOs = kpiAssignmentMapper.findDetailsByUserAndCycleAndRoleLeader(userId, cycle.getId(), type.name());
         Map<UUID, LeaderKpiCategoryGroup> categoryMap = new LinkedHashMap<>();
@@ -84,6 +87,7 @@ public class LeaderKpiService {
 
         return LeaderKpiInformationResponse.builder()
                 .year(year)
+                .accountCreatedAt(accountCreatedAt != null ? accountCreatedAt.toString() : null)
                 .kpiCycle(leaderKpiCycleInfo)
                 .categories(new ArrayList<>(categoryMap.values()))
                 .kpiSummary(kpiSummary)

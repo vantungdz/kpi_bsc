@@ -44,11 +44,16 @@ public class PmDashboardResponse {
         /** Nội dung feedback active PM -> GM (kpi_assignment_feedbacks.feedback_note). */
         private String feedbackNote;
         private BigDecimal selfScore;
-        private BigDecimal pmScore; // Điểm của PM (do GM đánh giá)
+        /** Điểm supervisor hiển thị: {@code end_gm_score} nếu GM đã chấm, không thì {@code end_pm_score}. */
+        private BigDecimal pmScore;
+        /** Nhận xét GM theo KPI — {@code kpi_assignments.evidences.gmComment}. */
+        private String gmEvaluationComment;
         private Boolean isTree;
         private Boolean expanded;
         private Boolean isSelfCreated;
-        
+        /** {@code roles.code} người tạo KPI master — màu nền dòng trên PM dashboard. */
+        private String creatorRoleCode;
+
         @Builder.Default
         private List<KpiChildDto> children = new ArrayList<>();
     }
@@ -68,7 +73,10 @@ public class PmDashboardResponse {
         /** Role cần xử lý feedback member (PM / GM) — theo feedback active. */
         private String feedbackTargetRoleCode;
         private BigDecimal selfScore;   // end_self_score fallback mid_self_score
-        private BigDecimal pmScore;     // end_pm_score
+        /** Điểm supervisor: {@code end_gm_score} nếu có, không thì {@code end_pm_score}. */
+        private BigDecimal pmScore;
+        /** Nhận xét GM — {@code kpi_assignments.evidences.gmComment}. */
+        private String gmEvaluationComment;
         private Integer statusCode;
     }
 }

@@ -80,6 +80,22 @@ export async function apiBulkUpdateKpiStatus(payload: any): Promise<any> {
   return http.put('/kpi/strategic-kpis/status/bulk-update', payload).then(r => r.data)
 }
 
+/** GET /v1/pm/dashboard/pm-portfolio-evaluation-gate?year= — toàn team đã nộp KPI Member (individual/team ≥501) cho PM chưa. */
+export type PmPortfolioEvaluationGate = {
+  allPortfolioSubmittedToPm: boolean
+  pendingMembers: { userId: string; fullName: string }[]
+}
+
+export async function apiGetPmPortfolioEvaluationGate(
+  year: number,
+): Promise<ApiResponse<PmPortfolioEvaluationGate>> {
+  return http
+    .get<ApiResponse<PmPortfolioEvaluationGate>>('/pm/dashboard/pm-portfolio-evaluation-gate', {
+      params: { year },
+    })
+    .then((r) => r.data)
+}
+
 /** GET /api/pm/dashboard/team-members?year=... — Get team hierarchy (Used in PmTeamMembersTab.vue) */
 export async function apiGetTeamHierarchy(year?: string): Promise<ApiResponse<any>> {
   return http.get('/pm/dashboard/team-members', { params: year ? { year } : {} }).then(r => r.data)
@@ -173,8 +189,27 @@ export async function apiPmSaveMemberSupervisorComment(body: {
   year: number
   memberId: string
   pmComment: string
+  /** true = tab Promotion KPI; false/omit = KPI Member (portfolio). */
+  promotion?: boolean
 }): Promise<ApiResponse<null>> {
   return http.post('/pm/dashboard/member-supervisor-comment', body).then((r) => r.data)
+}
+
+export type PmMemberReviewMeta = {
+  evaluationCommentsPortfolio: string | null
+  evaluationCommentsPromotion: string | null
+  supervisorCommentsPortfolio: string | null
+  supervisorCommentsPromotion: string | null
+}
+
+/** GET /v1/pm/dashboard/team-members/{memberId}/review-meta?year= */
+export async function apiGetPmMemberReviewMeta(
+  memberId: string,
+  year: number,
+): Promise<ApiResponse<PmMemberReviewMeta>> {
+  return http
+    .get(`/pm/dashboard/team-members/${memberId}/review-meta`, { params: { year } })
+    .then((r) => r.data)
 }
 
 export async function apiDeleteSelfCreatedPmKpi(assignmentId: string): Promise<ApiResponse<null>> {
@@ -200,6 +235,8 @@ export const pmKpiService = {
   cascadeKpi: (payload: any) => apiCascadeKpi(payload).then(r => r.data),
   bulkUpdateKpiStatus: (payload: any) => apiBulkUpdateKpiStatus(payload).then(r => r.data),
   getTeamHierarchy: (year?: string) => apiGetTeamHierarchy(year).then(r => r.data),
+  getPmPortfolioEvaluationGate: (year: number) =>
+    apiGetPmPortfolioEvaluationGate(year).then((r) => r.data),
   getMemberKpi: (year?: string) => apiGetMemberKpi(year).then(r => r.data),
   getMemberKpiDetails: (memberId: string, year: number) => apiGetMemberKpiDetails(memberId, year).then(r => r.data),
   listMemberKpiApprovals: (year: number) =>
@@ -216,6 +253,8 @@ export const pmKpiService = {
     apiPmSaveMemberKpiComment(body).then((r) => r.data),
   saveMemberSupervisorComment: (body: Parameters<typeof apiPmSaveMemberSupervisorComment>[0]) =>
     apiPmSaveMemberSupervisorComment(body).then((r) => r.data),
+  getMemberReviewMeta: (memberId: string, year: number) =>
+    apiGetPmMemberReviewMeta(memberId, year).then((r) => r.data),
   deleteSelfCreatedPmKpi: (assignmentId: string) => apiDeleteSelfCreatedPmKpi(assignmentId).then((r) => r.data),
 }
 

@@ -149,7 +149,7 @@ type PhaseStatus = 'upcoming' | 'active' | 'complete'
 /** Xác định status dựa trên start/end dates từ DB, và activePhase flag từ backend. */
 const phaseStatuses = computed((): PhaseStatus[] => {
   const now = dayjs()
-  const ap = cycleData.value.activePhase
+  const ap = cycleData.value.activePhase === 'end_year' ? 'year_end' : cycleData.value.activePhase
 
   // Ưu tiên cờ activePhase từ API (backend đã tính theo DB)
   if (ap === 'target_setup') return ['active', 'upcoming', 'upcoming']
@@ -225,10 +225,7 @@ const issuePopoverRows = computed((): IssuePopoverRow[] => {
     return groups.map((g) => ({
       id: g.id,
       title: g.title,
-      subline:
-        g.affectedEmployees > 0
-          ? `${g.affectedEmployees} employees · ${g.affectedKpis} KPIs`
-          : '',
+      subline: buildIssueSubline(g),
       dotClass: severityDotClass(g.severity),
     }))
   }
@@ -245,13 +242,22 @@ const issuePopoverRows = computed((): IssuePopoverRow[] => {
   return issueGroupsForPhase(phase).map((g) => ({
     id: g.id,
     title: g.title,
-    subline:
-      g.affectedEmployees > 0
-        ? `${g.affectedEmployees} employees · ${g.affectedKpis} KPIs`
-        : '',
+    subline: buildIssueSubline(g),
     dotClass: severityDotClass(g.severity),
   }))
 })
+
+/**
+ * Subline cho mỗi issue group trong popover.
+ * `unassigned_members`: chỉ hiện số employees (không có KPI nên không hiện "· 0 KPIs").
+ */
+function buildIssueSubline(g: GmTimelineIssueGroup): string {
+  if (g.affectedEmployees <= 0) return ''
+  if (g.id === 'unassigned_members') {
+    return `${g.affectedEmployees} employee${g.affectedEmployees === 1 ? '' : 's'} · 0 KPIs`
+  }
+  return `${g.affectedEmployees} employee${g.affectedEmployees === 1 ? '' : 's'} · ${g.affectedKpis} KPI${g.affectedKpis === 1 ? '' : 's'}`
+}
 
 const popoverTitleForOpen = computed(() => {
   if (issuesPopoverPhase.value === 'yearEnd') return props.yearEndIssues?.popoverTitle ?? ''
@@ -386,7 +392,7 @@ const progressFillStyle = computed(() => ({
 
 const nowMarkerLabel = computed(() => {
   const d = new Date()
-  return `Vị trí theo thời gian hệ thống: ${d.toLocaleDateString('vi-VN')}`
+  return `System date position: ${d.toLocaleDateString('en-US')}`
 })
 
 const drawerIssueGroups = computed((): GmTimelineIssueGroup[] => {
@@ -681,11 +687,11 @@ onUnmounted(() => {
       <div class="relative z-10 h-px min-w-0" />
 
       <button type="button" :class="[timelineToggleBtnClass, 'relative z-10 justify-self-end bg-white py-0.5 pl-3']"
-        :aria-expanded="!timelineCollapsed" :aria-label="timelineCollapsed ? 'Mở rộng timeline' : 'Thu gọn timeline'"
+        :aria-expanded="!timelineCollapsed" :aria-label="timelineCollapsed ? 'Expand timeline' : 'Collapse timeline'"
         @click="toggleTimelineCollapsed">
         <i class="fas text-[10px] text-slate-500" :class="timelineCollapsed ? 'fa-chevron-down' : 'fa-chevron-up'"
           aria-hidden="true" />
-        {{ timelineCollapsed ? 'Mở rộng' : 'Thu gọn' }}
+        {{ timelineCollapsed ? 'Expand' : 'Collapse' }}
       </button>
     </div>
 
@@ -731,9 +737,9 @@ onUnmounted(() => {
               <div class="flex flex-col items-center gap-0.5 text-slate-400">
                 <div class="flex items-center justify-center gap-1">
                   <i class="fas fa-calendar-xmark text-[13px] opacity-80" aria-hidden="true" />
-                  <span class="text-[13px] font-semibold leading-snug">Chưa tới KPI Setting</span>
+                  <span class="text-[13px] font-semibold leading-snug">KPI Setting not started</span>
                 </div>
-                <span class="text-[11px] font-medium leading-tight">Bắt đầu tháng 1</span>
+                <span class="text-[11px] font-medium leading-tight">Starts in January</span>
               </div>
             </template>
             <template v-else>
@@ -745,7 +751,7 @@ onUnmounted(() => {
                 </div>
                 <div v-else class="flex items-center justify-center gap-1 text-emerald-700">
                   <span class="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />
-                  <span class="text-[13px] font-semibold">Đang thực hiện</span>
+                  <span class="text-[13px] font-semibold">In progress</span>
                 </div>
               </template>
               <template v-else>
@@ -815,9 +821,9 @@ onUnmounted(() => {
               <div class="flex flex-col items-center gap-0.5 text-slate-400">
                 <div class="flex items-center justify-center gap-1">
                   <i class="fas fa-calendar-xmark text-[13px] opacity-80" aria-hidden="true" />
-                  <span class="text-[13px] font-semibold leading-snug">Chưa tới Mid-Year</span>
+                  <span class="text-[13px] font-semibold leading-snug">Mid-Year not started</span>
                 </div>
-                <span class="text-[11px] font-medium leading-tight">Bắt đầu tháng 6</span>
+                <span class="text-[11px] font-medium leading-tight">Starts in June</span>
               </div>
             </template>
             <template v-else>
@@ -828,13 +834,13 @@ onUnmounted(() => {
                 </div>
                 <div v-else class="flex items-center justify-center gap-1 text-blue-700">
                   <span class="h-1.5 w-1.5 shrink-0 rounded-full bg-blue-500" />
-                  <span class="text-[13px] font-semibold">Đang thực hiện</span>
+                  <span class="text-[13px] font-semibold">In progress</span>
                 </div>
               </template>
               <template v-else>
                 <div class="flex items-center justify-center gap-1 text-emerald-700">
                   <i class="fas fa-check text-[15px]" />
-                  <span class="text-[13px] font-semibold leading-snug">Mid-Year đã kết thúc</span>
+                  <span class="text-[13px] font-semibold leading-snug">Mid-Year complete</span>
                 </div>
               </template>
               <div v-if="showMidViewIssues" ref="midIssuesPopoverRoot"
@@ -892,9 +898,9 @@ onUnmounted(() => {
               <div class="flex flex-col items-center gap-0.5 text-slate-400">
                 <div class="flex items-center justify-center gap-1">
                   <i class="fas fa-calendar-xmark text-[13px] opacity-80" aria-hidden="true" />
-                  <span class="text-[13px] font-semibold leading-snug">Chưa tới Year-End</span>
+                  <span class="text-[13px] font-semibold leading-snug">Year-End not started</span>
                 </div>
-                <span class="text-[11px] font-medium leading-tight">Bắt đầu tháng 11</span>
+                <span class="text-[11px] font-medium leading-tight">Starts in November</span>
               </div>
             </template>
             <template v-else>
@@ -906,13 +912,13 @@ onUnmounted(() => {
                 </div>
                 <div v-else class="flex items-center justify-center gap-1 text-blue-700">
                   <span class="h-1.5 w-1.5 shrink-0 rounded-full bg-blue-500" />
-                  <span class="text-[13px] font-semibold">Đang thực hiện</span>
+                  <span class="text-[13px] font-semibold">In progress</span>
                 </div>
               </template>
               <template v-else>
                 <div class="flex items-center justify-center gap-1 text-emerald-600">
                   <i class="fas fa-check text-[15px]" />
-                  <span class="text-[13px] font-semibold">Hoàn thành</span>
+                  <span class="text-[13px] font-semibold">Complete</span>
                 </div>
               </template>
               <div v-if="showYearEndViewIssues" ref="yearEndIssuesPopoverRoot"

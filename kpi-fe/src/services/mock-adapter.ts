@@ -57,6 +57,7 @@ import {
   MOCK_EMAIL_TEMPLATES,
   MOCK_DEPARTMENTS,
   MOCK_RANK_OPTIONS,
+  MOCK_JOB_TITLES,
 } from "@/mocks/admin.mock";
 import type { Employee, EmailTemplate } from "@/mocks/admin.mock";
 
@@ -1651,6 +1652,16 @@ const adminRoutes: typeof routes = [
     },
   },
 
+  // GET /admin/job-titles — danh sách chức danh từ job_titles
+  {
+    method: "get",
+    test: (p) => p === "/admin/job-titles",
+    handler: async (cfg) => {
+      await sleep(220);
+      return ok(cfg, MOCK_JOB_TITLES);
+    },
+  },
+
   // GET /admin/campaigns
   {
     method: "get",
@@ -1722,8 +1733,23 @@ const adminRoutes: typeof routes = [
     test: (p) => p === "/admin/employees",
     handler: async (cfg) => {
       await sleep(400);
-      const body = parseBody<Omit<Employee, "id">>(cfg);
-      const newEmp: Employee = { id: `emp-${Date.now()}`, ...body };
+      const body = parseBody<Record<string, unknown>>(cfg);
+      const sectionId = String(body.sectionId ?? "");
+      const sectionName =
+        MOCK_DEPARTMENTS.find((d) => d.id === sectionId)?.name ?? "N/A";
+      const jobTitleId = String(body.jobTitleId ?? "");
+      const jobTitle = MOCK_JOB_TITLES.find((j) => j.id === jobTitleId);
+      const newEmp: Employee = {
+        id: `emp-${Date.now()}`,
+        code: String(body.code ?? ""),
+        name: String(body.name ?? ""),
+        email: String(body.email ?? ""),
+        section: sectionName,
+        rank: jobTitle?.rankCode ?? "N/A",
+        jobTitle: jobTitle?.name ?? "N/A",
+        jobTitleId: jobTitle?.id,
+        status: (String(body.status ?? "active") as Employee["status"]) ?? "active",
+      };
       mockEmployeeStore = [...mockEmployeeStore, newEmp];
       return ok(cfg, newEmp);
     },
@@ -1736,11 +1762,34 @@ const adminRoutes: typeof routes = [
     handler: async (cfg, path) => {
       await sleep(350);
       const id = path.split("/")[3];
-      const body = parseBody<Partial<Employee>>(cfg);
-      mockEmployeeStore = mockEmployeeStore.map((e) =>
-        e.id === id ? { ...e, ...body } : e,
-      );
-      return ok(cfg, mockEmployeeStore.find((e) => e.id === id) ?? body);
+      const body = parseBody<Record<string, unknown>>(cfg);
+      const sectionId = String(body.sectionId ?? "");
+      const sectionName = sectionId
+        ? MOCK_DEPARTMENTS.find((d) => d.id === sectionId)?.name ?? "N/A"
+        : undefined;
+      const jobTitleId = String(body.jobTitleId ?? "");
+      const jobTitle = jobTitleId
+        ? MOCK_JOB_TITLES.find((j) => j.id === jobTitleId)
+        : undefined;
+
+      mockEmployeeStore = mockEmployeeStore.map((e) => {
+        if (e.id !== id) return e;
+        return {
+          ...e,
+          code: body.code != null ? String(body.code) : e.code,
+          name: body.name != null ? String(body.name) : e.name,
+          email: body.email != null ? String(body.email) : e.email,
+          section: sectionName ?? e.section,
+          rank: jobTitle?.rankCode ?? e.rank,
+          jobTitle: jobTitle?.name ?? e.jobTitle,
+          jobTitleId: jobTitle?.id ?? e.jobTitleId,
+          status:
+            body.status != null
+              ? (String(body.status) as Employee["status"])
+              : e.status,
+        };
+      });
+      return ok(cfg, mockEmployeeStore.find((e) => e.id === id));
     },
   },
 

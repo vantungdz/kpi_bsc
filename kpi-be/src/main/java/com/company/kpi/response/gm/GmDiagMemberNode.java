@@ -11,6 +11,8 @@ public class GmDiagMemberNode {
     private String id;
     /** assignment id gốc để GM xử lý feedback / đổi trạng thái. */
     private String assignmentId;
+    /** {@code kpi_assignments.parent_assignment_id} — null = assignment gốc (vd slice GM → PM). */
+    private String parentAssignmentId;
     private String name;
     /** Cùng nhãn trọng số KPI như dòng KPI cha. */
     private String weight;
@@ -46,6 +48,9 @@ public class GmDiagMemberNode {
 
     /** Nội dung feedback active target về GM (nếu có). */
     private String feedbackNote;
+
+    /** {@code user_kpi_summaries.evaluation_supervisor_comments} (theo assignee + chu kỳ). */
+    private String evaluationSupervisorComments;
 
     /** {@code true} khi ASM 407 và feedback active cần GM xử lý (theo {@code roles.code}). */
     private boolean feedbackAwaitingGm;

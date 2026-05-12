@@ -57,7 +57,7 @@
 
   <!--
     listBottleneckCandidates:
-    - Lấy assignment đang chờ duyệt / đã nộp đang chờ duyệt / đang chạy chưa nộp giữa kỳ.
+    - Lấy assignment đang chờ duyệt / đã nộp đang chờ duyệt / 404|405 chưa có evidence (giữa kỳ).
     - Service tự lọc severity & label.
   -->
   <select id="listBottleneckCandidates"
@@ -102,7 +102,7 @@
     LEFT JOIN departments d ON d.id = ud.department_id AND d.deleted_at IS NULL
     WHERE ka.deleted_at IS NULL
       AND cy.year = #{year}
-      AND ka.status_code IN (501, 502, 601, 602, 405)
+      AND ka.status_code IN (501, 502, 601, 602, 404, 405)
     ORDER BY ka.status_code DESC, ka.updated_at ASC
   </select>
 </mapper>

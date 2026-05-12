@@ -14,6 +14,8 @@ import java.util.UUID;
 @Builder
 public class LeaderKpiInformationResponse {
     private Integer year;
+    /** ISO-8601 — {@code users.created_at} của user đang xem (Leader/GM personal). */
+    private String accountCreatedAt;
     private LeaderKpiCycleInfo kpiCycle;
     private List<LeaderKpiCategoryGroup> categories;
     private LeaderKpiSummary kpiSummary;
@@ -80,6 +82,7 @@ public class LeaderKpiInformationResponse {
         private String feedbackComment;
         private String updateReason;
         private Boolean createdByCurrentUser;
+        private String createdByRoleCode;
         private String evaluationStatus;
         private String evaluationState;
         /** kpi_master.calculation_rule_code — 801 (none) | 802 (average/ratio) | 803 (comment/text) */
@@ -90,5 +93,7 @@ public class LeaderKpiInformationResponse {
         private Integer typeCode;
         /** sys_status_codes.name — loại KPI từ master. */
         private String typeName;
+        /** {@code kpi_assignments.created_at} — khớp logic skip giữa kỳ (Leader submit). */
+        private OffsetDateTime assignmentCreatedAt;
     }
 }

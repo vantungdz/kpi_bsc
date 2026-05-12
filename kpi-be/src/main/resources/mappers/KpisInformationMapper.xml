@@ -263,6 +263,7 @@
             ) AS leader_role_name,
             jt.name AS member_rank,
             ka.id AS assignment_id,
+            ka.parent_assignment_id AS parentAssignmentId,
             ka.status_code,
             ka.mid_self_score,
             ka.end_self_score,
@@ -271,6 +272,16 @@
             ka.target_value AS member_target_value,
             ka.evidences::text AS evidences,
             kf.feedback_note,
+            NULLIF(
+                TRIM(
+                    CONCAT_WS(
+                        E'\n',
+                        NULLIF(TRIM(COALESCE(uks.evaluation_supervisor_comments, '')), ''),
+                        NULLIF(TRIM(COALESCE(uks.evaluation_supervisor_comments_promotion, '')), '')
+                    )
+                ),
+                ''
+            ) AS evaluation_supervisor_comments,
             (
                 SELECT UPPER(TRIM(BOTH FROM r.code))
                 FROM kpi_assignment_feedbacks f
@@ -292,7 +303,7 @@
                 SELECT DISTINCT ON (user_id, kpi_info_id)
                     id, cycle_id, kpi_info_id, user_id,
                     status_code, mid_self_score, end_self_score,
-                    end_pm_score, end_gm_score, target_value, evidences
+                    end_pm_score, end_gm_score, target_value, evidences, parent_assignment_id
                 FROM kpi_assignments
                 WHERE deleted_at IS NULL
                   AND user_id IS NOT NULL
@@ -312,6 +323,9 @@
                 AND kf.deleted_at IS NULL
             LEFT JOIN users u ON u.id = ka.user_id
                 AND u.deleted_at IS NULL
+            LEFT JOIN user_kpi_summaries uks ON uks.user_id = u.id
+                AND uks.cycle_id = ki.cycle_id
+                AND uks.deleted_at IS NULL
             LEFT JOIN user_departments ud ON ud.user_id = u.id
                 AND ud.is_primary = TRUE
             LEFT JOIN departments d ON d.id = ud.department_id

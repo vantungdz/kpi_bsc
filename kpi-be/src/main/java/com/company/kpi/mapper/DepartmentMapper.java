@@ -78,5 +78,8 @@ public interface DepartmentMapper {
 
     // ── Thêm từ AdminMapper ───────────────────────────────────────────────────
     List<AdminSectionResponse> getSections();
+
+    /** Lấy manager_id (PM) của phòng ban (departments.manager_id). */
+    UUID getManagerIdByDepartmentId(@Param("departmentId") UUID departmentId);
 }
 

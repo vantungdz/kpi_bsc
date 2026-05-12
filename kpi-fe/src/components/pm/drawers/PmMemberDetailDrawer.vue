@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { computed, ref, watch, onUnmounted } from 'vue'
 import EvaluationCommentBlock from '@/components/evaluation/EvaluationCommentBlock.vue'
-import { pmKpiService } from '@/services/modules/kpi-pm.service'
+import { pmKpiService, type PmMemberReviewMeta } from '@/services/modules/kpi-pm.service'
 import { useToast } from 'vue-toastification'
-import { KPI_TYPE } from '@/config/constants'
+import { KPI_TYPE, KPI_STATUS } from '@/config/constants'
 import {
   formatPmPortfolioActualCell,
   formatNumericTarget,
@@ -16,10 +16,16 @@ import {
 const props = defineProps({
   open: { type: Boolean, default: false },
   member: { type: Object, default: null },
-  /** pm_comment từ BE (trước overlay localStorage trên bảng team). */
-  persistedPmComment: { type: String, default: '' },
-  cachedComment: { type: String, default: '' },
-  cachedKpis: { type: Array, default: null }
+  /** Đã load xong API “cổng” portfolio — tab KPI Member chờ gate trước khi bật Gửi đánh giá. */
+  portfolioGateLoaded: { type: Boolean, default: false },
+  /** true = mọi member đã nộp individual/team ≥501 cho PM. */
+  portfolioGateOpen: { type: Boolean, default: false },
+  /** Draft PM nhận xét tổng theo tab (localStorage / cache parent). */
+  cachedSupervisorComments: {
+    type: Object,
+    default: () => ({ main: '', promo: '' }),
+  },
+  cachedKpis: { type: Array, default: null },
 })
 
 const emit = defineEmits(['close', 'save', 'discard-draft'])
@@ -28,10 +34,15 @@ const toast = useToast()
 const activeTab = ref<'main' | 'promotion'>('main')
 const memberKpis = ref<any[]>([])
 const isLoadingKpis = ref(false)
+const reviewMeta = ref<PmMemberReviewMeta | null>(null)
 
-const reviewComments = ref({
+const reviewCommentsMain = ref({
   memberComment: '',
-  pmComment: ''
+  pmComment: '',
+})
+const reviewCommentsPromo = ref({
+  memberComment: '',
+  pmComment: '',
 })
 
 function assignmentFingerprint(kpis: { id: string }[]): string {
@@ -40,48 +51,58 @@ function assignmentFingerprint(kpis: { id: string }[]): string {
 
 watch(
   () => props.open,
-  (val) => {
+  async (val) => {
     document.body.style.overflow = val ? 'hidden' : ''
     if (!val || !props.member?.id) return
     activeTab.value = 'main'
-    reviewComments.value = { memberComment: '', pmComment: '' }
+    reviewMeta.value = null
+    reviewCommentsMain.value = { memberComment: '', pmComment: '' }
+    reviewCommentsPromo.value = { memberComment: '', pmComment: '' }
 
-    fetchMemberKpis().then(() => {
-      const cached = props.cachedKpis as any[] | null | undefined
-      const apiIds = assignmentFingerprint(memberKpis.value)
-      const cacheIds =
-        cached && cached.length > 0 ? assignmentFingerprint(cached as { id: string }[]) : ''
-      const hasCachedAssignments = Boolean(cacheIds)
-      const cacheCompatible = !hasCachedAssignments || apiIds === cacheIds
+    await Promise.all([fetchMemberKpis(), fetchReviewMeta()])
 
-      if (!cacheCompatible) {
-        emit('discard-draft', props.member.id)
-      }
+    const cached = props.cachedKpis as any[] | null | undefined
+    const apiIds = assignmentFingerprint(memberKpis.value)
+    const cacheIds =
+      cached && cached.length > 0 ? assignmentFingerprint(cached as { id: string }[]) : ''
+    const hasCachedAssignments = Boolean(cacheIds)
+    const cacheCompatible = !hasCachedAssignments || apiIds === cacheIds
 
-      /** Không đọc draft sau discard — prop có thể chưa flush trong cùng tick. */
-      const draftPm = cacheCompatible ? (props.cachedComment ?? '').trim() : ''
-      const persisted = (props.persistedPmComment ?? '').trim()
+    if (!cacheCompatible) {
+      emit('discard-draft', props.member.id)
+    }
 
-      if (cacheCompatible && draftPm) {
-        reviewComments.value.pmComment = props.cachedComment ?? ''
-      } else {
-        reviewComments.value.pmComment = persisted ? (props.persistedPmComment ?? '') : ''
-      }
+    const draftMain = cacheCompatible ? String(props.cachedSupervisorComments?.main ?? '').trim() : ''
+    const draftPromo = cacheCompatible ? String(props.cachedSupervisorComments?.promo ?? '').trim() : ''
 
-      if (cacheCompatible && cached && cached.length > 0) {
-        memberKpis.value.forEach((kpi) => {
-          const hit = cached.find((c: any) => String(c.id) === String(kpi.id))
-          if (hit) {
-            if (hit.pmScore != null) {
-              kpi.pmScore = hit.pmScore
-            }
-            if (hit.pmComment) {
-              kpi.pmComment = hit.pmComment
-            }
+    const metaLoaded = reviewMeta.value as PmMemberReviewMeta | null
+    reviewCommentsMain.value.memberComment = String(metaLoaded?.evaluationCommentsPortfolio ?? '')
+    reviewCommentsPromo.value.memberComment = String(metaLoaded?.evaluationCommentsPromotion ?? '')
+
+    if (draftMain) {
+      reviewCommentsMain.value.pmComment = String(props.cachedSupervisorComments?.main ?? '')
+    } else {
+      reviewCommentsMain.value.pmComment = String(metaLoaded?.supervisorCommentsPortfolio ?? '')
+    }
+    if (draftPromo) {
+      reviewCommentsPromo.value.pmComment = String(props.cachedSupervisorComments?.promo ?? '')
+    } else {
+      reviewCommentsPromo.value.pmComment = String(metaLoaded?.supervisorCommentsPromotion ?? '')
+    }
+
+    if (cacheCompatible && cached && cached.length > 0) {
+      memberKpis.value.forEach((kpi) => {
+        const hit = cached.find((c: any) => String(c.id) === String(kpi.id))
+        if (hit) {
+          if (hit.pmScore != null) {
+            kpi.pmScore = hit.pmScore
           }
-        })
-      }
-    })
+          if (hit.pmComment) {
+            kpi.pmComment = hit.pmComment
+          }
+        }
+      })
+    }
   },
   { immediate: true },
 )
@@ -131,7 +152,18 @@ async function fetchMemberKpis() {
   }
 }
 
-const mainKpis = computed(() => memberKpis.value.filter(k => k.kpiType !== 'promotion'))
+async function fetchReviewMeta() {
+  if (!props.member?.id) return
+  try {
+    const year = props.member.year ? Number(props.member.year) : new Date().getFullYear()
+    reviewMeta.value = await pmKpiService.getMemberReviewMeta(String(props.member.id), year)
+  } catch (err) {
+    console.error('Failed to fetch PM review meta:', err)
+    reviewMeta.value = null
+  }
+}
+
+const mainKpis = computed(() => memberKpis.value.filter((k) => k.kpiType !== 'promotion'))
 const promoKpis = computed(() => memberKpis.value.filter(k => k.kpiType === 'promotion'))
 const hasPromotion = computed(() => promoKpis.value.length > 0)
 
@@ -223,10 +255,30 @@ const averageWeightedPmDisplay = computed((): string => {
   return formatWeightedTotalDisplay(pmSum / tw)
 })
 
-const canEvaluate = computed(() => {
-  if (!props.member || !props.member.statusCode) return false;
-  const status = Number(props.member.statusCode);
-  return status === 501 || status === 601;
+/** Chờ PM giữa kỳ / cuối kỳ — theo từng assignment, không dùng MIN(status) của cả member. */
+function isPmPendingAssignmentStatus(statusCode: unknown): boolean {
+  const sc = Number(statusCode)
+  return sc === KPI_STATUS.FIRST_WAITING_PM_APPROVAL || sc === KPI_STATUS.SECOND_WAITING_PM_APPROVAL
+}
+
+function tabHasPmPendingRows(rows: { statusCode?: unknown }[]): boolean {
+  return rows.some((k) => isPmPendingAssignmentStatus(k.statusCode))
+}
+
+const canEvaluateMainTab = computed(() => tabHasPmPendingRows(mainKpis.value))
+const canEvaluatePromotionTab = computed(() => tabHasPmPendingRows(promoKpis.value))
+const canEvaluateActiveTab = computed(() =>
+  activeTab.value === 'promotion' ? canEvaluatePromotionTab.value : canEvaluateMainTab.value,
+)
+
+/** Tab KPI Member: chỉ gửi lên GM khi cả team đã nộp portfolio cho PM; tab Promotion không áp dụng cổng này. */
+const canSubmitPmEvaluationToGm = computed(() => {
+  if (!canEvaluateActiveTab.value) return false
+  if (activeTab.value === 'main') {
+    if (!props.portfolioGateLoaded) return false
+    if (!props.portfolioGateOpen) return false
+  }
+  return true
 })
 
 const expandedEvidenceRows = ref(new Set<string>())
@@ -246,13 +298,63 @@ function toggleComment(id: string) {
 }
 
 const saving = ref(false)
-const saveEvaluation = async () => {
+const sendEvaluationForActiveTab = async () => {
   if (!props.member?.id) return
+  const tab = activeTab.value
+  const isPromo = tab === 'promotion'
+  const rows = isPromo ? promoKpis.value : mainKpis.value
+  const rc = isPromo ? reviewCommentsPromo.value : reviewCommentsMain.value
+
+  if (tab === 'main' && (!props.portfolioGateLoaded || !props.portfolioGateOpen)) {
+    toast.error(
+      'Chưa thể gửi: còn nhân viên chưa nộp KPI Member (individual/team) cho PM. Xem danh sách phía trên bảng Team Hierarchy & Performance.',
+    )
+    return
+  }
+
+  if (!rows.length) {
+    toast.error(isPromo ? 'Không có Promotion KPI để gửi.' : 'Không có KPI Member để gửi.')
+    return
+  }
+
+  const rowsPendingPm = rows.filter((item) => isPmPendingAssignmentStatus(item.statusCode))
+  if (!rowsPendingPm.length) {
+    toast.error(
+      isPromo
+        ? 'Chưa có Promotion KPI nào đang chờ PM (501/601). Member cần gửi đánh giá phần Promotion trước.'
+        : 'Chưa có KPI Member nào đang chờ PM (501/601) trên tab này.',
+    )
+    return
+  }
+
+  const hasMidYear = rowsPendingPm.some((k) => Number(k.statusCode) === KPI_STATUS.FIRST_WAITING_PM_APPROVAL)
+  const hasFinalYear = rowsPendingPm.some((k) => Number(k.statusCode) === KPI_STATUS.SECOND_WAITING_PM_APPROVAL)
+
+  if (!String(rc.pmComment ?? '').trim()) {
+    toast.error(
+      hasFinalYear
+        ? 'Vui lòng nhập nhận xét supervisor (bắt buộc cuối kỳ).'
+        : 'Vui lòng nhập nhận xét supervisor (bắt buộc giữa kỳ).',
+    )
+    return
+  }
+
+  if (hasFinalYear) {
+    for (const item of rowsPendingPm) {
+      if (Number(item.statusCode) !== KPI_STATUS.SECOND_WAITING_PM_APPROVAL) continue
+      const score = item.pmScore != null ? Number(item.pmScore) : NaN
+      if (!Number.isFinite(score) || score < 1 || score > 5) {
+        toast.error('Cuối kỳ: cần chấm điểm PM (1–5) cho mọi KPI 601 trên tab này.')
+        return
+      }
+    }
+  }
+
   saving.value = true
   try {
     const year = props.member.year ? Number(props.member.year) : new Date().getFullYear()
     const memberId = String(props.member.id)
-    const requests: Promise<unknown>[] = memberKpis.value.map((item) =>
+    const requests: Promise<unknown>[] = rows.map((item) =>
       pmKpiService.saveMemberKpiComment({
         year,
         assignmentId: String(item.id),
@@ -263,13 +365,13 @@ const saveEvaluation = async () => {
       pmKpiService.saveMemberSupervisorComment({
         year,
         memberId,
-        pmComment: String(reviewComments.value.pmComment ?? ''),
+        pmComment: String(rc.pmComment ?? ''),
+        promotion: isPromo,
       }),
     )
-    const sc = (code: unknown) => Number(code)
-    for (const item of memberKpis.value) {
-      const st = sc(item.statusCode)
-      if (item.pmScore != null && st === 601) {
+    for (const item of rows) {
+      const st = Number(item.statusCode)
+      if (item.pmScore != null && st === KPI_STATUS.SECOND_WAITING_PM_APPROVAL) {
         const score = Number(item.pmScore)
         if (Number.isFinite(score) && score >= 1 && score <= 5) {
           requests.push(pmKpiService.scoreItem(memberId, String(item.id), score))
@@ -277,11 +379,40 @@ const saveEvaluation = async () => {
       }
     }
     await Promise.all(requests)
-    emit('save', { kpis: memberKpis.value, comments: reviewComments.value, memberId: props.member.id })
+
+    const initData = await pmKpiService.getRegistrationInitData()
+    const cycleId = initData.activeCycle.id
+    if (hasMidYear) {
+      await pmKpiService.bulkUpdateKpiStatus({
+        cycleId,
+        statusCode: KPI_STATUS.FIRST_WAITING_GM_APPROVAL,
+        onlyFromStatusCode: KPI_STATUS.FIRST_WAITING_PM_APPROVAL,
+        promotion: isPromo,
+        bulkForManagedMembers: true,
+        managedMemberUserId: memberId,
+      })
+    }
+    if (hasFinalYear) {
+      await pmKpiService.bulkUpdateKpiStatus({
+        cycleId,
+        statusCode: KPI_STATUS.SECOND_WAITING_GM_APPROVAL,
+        onlyFromStatusCode: KPI_STATUS.SECOND_WAITING_PM_APPROVAL,
+        promotion: isPromo,
+        bulkForManagedMembers: true,
+        managedMemberUserId: memberId,
+      })
+    }
+
+    emit('save', {
+      memberId: props.member.id,
+      kpis: memberKpis.value,
+      comments: { main: reviewCommentsMain.value.pmComment, promo: reviewCommentsPromo.value.pmComment },
+    })
+    toast.success('Đã gửi đánh giá tới GM.')
     emit('close')
   } catch (err) {
-    console.error('Failed to save PM evaluation:', err)
-    toast.error('Lưu đánh giá PM thất bại (điểm hoặc nhận xét).')
+    console.error('Failed to send PM evaluation:', err)
+    toast.error('Gửi đánh giá thất bại (điểm, nhận xét hoặc trạng thái KPI).')
   } finally {
     saving.value = false
   }
@@ -400,7 +531,7 @@ const saveEvaluation = async () => {
 
                         <td class="px-4 py-4 text-center">
                           <select v-model="item.pmScore" @click.stop
-                            :disabled="Number(item.statusCode) !== 601"
+                            :disabled="Number(item.statusCode) !== KPI_STATUS.SECOND_WAITING_PM_APPROVAL"
                             class="w-14 rounded border border-slate-300 bg-white px-1 py-1 text-xs font-bold text-slate-800 outline-none focus:border-blue-500 shadow-sm cursor-pointer text-center disabled:opacity-50 disabled:bg-slate-50 disabled:cursor-not-allowed">
                             <option :value="null">-</option>
                             <option v-for="n in 5" :key="n" :value="n">{{ n }}</option>
@@ -494,7 +625,7 @@ const saveEvaluation = async () => {
                             <p class="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-3">PM's Comment</p>
                             <textarea
                               v-model="item.pmComment"
-                              :disabled="!canEvaluate"
+                              :disabled="!isPmPendingAssignmentStatus(item.statusCode)"
                               class="w-full px-3 py-2.5 text-sm font-normal text-slate-700 bg-white border border-slate-300 rounded-lg shadow-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 disabled:opacity-50 disabled:bg-slate-50 disabled:cursor-not-allowed resize-vertical"
                               rows="4"
                               placeholder="Nhập nhận xét / đánh giá cho KPI này..."
@@ -532,10 +663,49 @@ const saveEvaluation = async () => {
               </table>
             </div>
 
-            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-              <EvaluationCommentBlock v-model:employeeComment="reviewComments.memberComment"
-                v-model:managerComment="reviewComments.pmComment" employeeTitle="My Comment"
-                managerTitle="Supervisor Comment" :employeeReadonly="true" :managerReadonly="!canEvaluate" />
+            <div
+              v-if="activeTab === 'main' && !isLoadingKpis && mainKpis.length > 0 && !canEvaluateMainTab"
+              class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700"
+            >
+              <i class="fas fa-info-circle mr-2 text-slate-500" />
+              Chưa có KPI Member nào đang chờ PM trên tab này (không có mục 501/601). PM chỉ gửi đánh giá khi member đã nộp phần tương ứng.
+            </div>
+            <div
+              v-if="hasPromotion && activeTab === 'promotion' && !isLoadingKpis && !canEvaluatePromotionTab"
+              class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950"
+            >
+              <i class="fas fa-info-circle mr-2 text-amber-600" />
+              Member chưa gửi đánh giá phần <strong>Promotion KPI</strong>.
+            </div>
+
+            <div
+              v-if="activeTab === 'main' && portfolioGateLoaded && !portfolioGateOpen"
+              class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950 mb-3"
+            >
+              <i class="fas fa-user-clock mr-2 text-amber-600" aria-hidden="true" />
+              Chỉ gửi đánh giá KPI Member lên GM khi toàn team đã nộp kết quả cho PM. Xem tên còn thiếu ở thông báo phía trên bảng
+              <strong>Team Hierarchy & Performance</strong>.
+            </div>
+
+            <div v-if="activeTab === 'main'" class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+              <EvaluationCommentBlock
+                v-model:employeeComment="reviewCommentsMain.memberComment"
+                v-model:managerComment="reviewCommentsMain.pmComment"
+                employeeTitle="My Comment"
+                managerTitle="Supervisor Comment"
+                :employeeReadonly="true"
+                :managerReadonly="!canEvaluateMainTab"
+              />
+            </div>
+            <div v-if="activeTab === 'promotion'" class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+              <EvaluationCommentBlock
+                v-model:employeeComment="reviewCommentsPromo.memberComment"
+                v-model:managerComment="reviewCommentsPromo.pmComment"
+                employeeTitle="My Comment (Promotion)"
+                managerTitle="Supervisor Comment (Promotion)"
+                :employeeReadonly="true"
+                :managerReadonly="!canEvaluatePromotionTab"
+              />
             </div>
 
             <div class="h-4"></div>
@@ -546,11 +716,11 @@ const saveEvaluation = async () => {
               class="px-5 py-2.5 text-sm font-semibold text-slate-600 bg-white border border-slate-300 rounded-xl hover:bg-slate-50 hover:text-slate-900 transition-colors">
               Hủy
             </button>
-            <button @click="saveEvaluation" :disabled="saving || !canEvaluate"
+            <button @click="sendEvaluationForActiveTab" :disabled="saving || !canSubmitPmEvaluationToGm"
               class="px-6 py-2.5 text-sm font-semibold text-white bg-slate-900 rounded-xl hover:bg-indigo-600 hover:shadow-lg transition-all flex items-center gap-2 focus:ring-4 focus:ring-indigo-500/20 disabled:opacity-60 disabled:cursor-not-allowed">
               <i v-if="saving" class="fas fa-spinner fa-spin" />
-              <i v-else class="fas fa-save" />
-              {{ saving ? 'Đang lưu...' : 'Lưu đánh giá' }}
+              <i v-else class="fas fa-paper-plane" />
+              {{ saving ? 'Đang gửi...' : 'Gửi đánh giá' }}
             </button>
           </div>
 

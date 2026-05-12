@@ -55,6 +55,7 @@ function mapMember(m: GmDiagMemberApi): GmHierarchyMember {
     submissionTarget: parseOptionalSubmissionNum(m.submissionTarget),
     submissionActual: parseOptionalSubmissionNum(m.submissionActual),
     evidences: m.evidences ?? undefined,
+    evaluationSupervisorComments: m.evaluationSupervisorComments ?? undefined,
     feedbackNote: m.feedbackNote ?? undefined,
     feedbackAwaitingGm:
       typeof m.feedbackAwaitingGm === 'boolean' ? m.feedbackAwaitingGm : undefined,

@@ -10,6 +10,8 @@ import com.company.kpi.response.gm.GmProcessTimelineResponse;
 import com.company.kpi.response.pm.MemberKpiDetailResponse;
 import com.company.kpi.response.pm.PmDashboardResponse;
 import com.company.kpi.response.pm.PmMemberKpiApprovalItemResponse;
+import com.company.kpi.response.pm.PmMemberReviewMetaResponse;
+import com.company.kpi.response.pm.PmPortfolioGateResponse;
 import com.company.kpi.response.pm.TeamMemberResponse;
 import com.company.kpi.service.pm.PmDashboardService;
 import jakarta.validation.Valid;
@@ -66,11 +68,30 @@ public class PmDashboardController extends BaseController {
         return success(pmDashboardService.getTeamHierarchy(pmId, year));
     }
 
+    /** Tab Team Review: còn member nào chưa nộp KPI Member (individual/team, status &lt; 501) cho PM thì chưa gửi đánh giá lên GM. */
+    @GetMapping("/pm-portfolio-evaluation-gate")
+    public ResponseEntity<BaseResponse<PmPortfolioGateResponse>> getPmPortfolioEvaluationGate(
+            @RequestParam Integer year,
+            Authentication authentication) {
+        UUID pmId = jwtUtil.resolveUserId(authentication);
+        return success(pmDashboardService.getPmPortfolioEvaluationGate(pmId, year));
+    }
+
     @GetMapping("/team-members/{memberId}/kpis")
     public ResponseEntity<BaseResponse<List<MemberKpiDetailResponse>>> getMemberKpiDetails(
             @PathVariable UUID memberId,
             @RequestParam Integer year) {
         return success(pmDashboardService.getMemberKpiDetails(memberId, year));
+    }
+
+    /** Nhận xét tổng member/PM (portfolio vs promotion) cho drawer Team Review. */
+    @GetMapping("/team-members/{memberId}/review-meta")
+    public ResponseEntity<BaseResponse<PmMemberReviewMetaResponse>> getMemberReviewMeta(
+            @PathVariable UUID memberId,
+            @RequestParam Integer year,
+            Authentication authentication) {
+        UUID pmId = jwtUtil.resolveUserId(authentication);
+        return success(pmDashboardService.getMemberReviewMeta(pmId, memberId, year));
     }
 
     /** Tab Request Approval: đề xuất KPI cá nhân (402) — member có supervisor = PM đăng nhập. */
@@ -138,7 +159,7 @@ public class PmDashboardController extends BaseController {
             @Valid @RequestBody PmSupervisorCommentRequest body,
             Authentication authentication) {
         UUID pmId = jwtUtil.resolveUserId(authentication);
-        pmDashboardService.savePmSupervisorComment(pmId, body.getYear(), body.getMemberId(), body.getPmComment());
+        pmDashboardService.savePmSupervisorComment(pmId, body.getYear(), body.getMemberId(), body.getPmComment(), body.getPromotion());
         return success();
     }
 }

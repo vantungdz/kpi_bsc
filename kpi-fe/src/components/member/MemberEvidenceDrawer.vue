@@ -708,7 +708,7 @@ const ctx = inject(EVIDENCE_DRAWER_KEY)!
                   </span>
                 </div>
                 <p
-                  v-if="ctx.exceedsMaxMetricRule.value"
+                  v-if="ctx.metricOutOfDslRule.value"
                   class="mt-1 text-xs font-medium text-rose-600"
                 >
                   Giá trị Actual/Kết quả tính đang vượt mức tối đa của Quy tắc chấm điểm.

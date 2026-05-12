@@ -248,7 +248,7 @@ async function loadGmPersonalKpiRows() {
       pushGmNotification(errs.join(' · '), { variant: 'error', durationMs: 8000 })
       gmPersonalKpiRows.value = []
     } else if (errs.length === 1) {
-      pushGmNotification(`Một phần KPI cá nhân không tải được — ${errs[0]}`, {
+      pushGmNotification(`Some personal KPI data failed to load — ${errs[0]}`, {
         variant: 'info',
         durationMs: 7000,
       })
@@ -257,7 +257,7 @@ async function loadGmPersonalKpiRows() {
     gmPersonalKpiRows.value = []
     gmPersonalKpiLeaderIndividual.value = null
     gmPersonalKpiLeaderPromotion.value = null
-    pushGmNotification(e instanceof Error ? e.message : 'Không tải được KPI cá nhân', {
+    pushGmNotification(e instanceof Error ? e.message : 'Could not load personal KPIs', {
       variant: 'error',
       durationMs: 8000,
     })
@@ -417,7 +417,7 @@ async function loadStrategicDiagnosticsFromApi() {
     const data = await gmKpiService.getDiagnosticsHierarchy(y)
     diagnosticsApiRows.value = mapGmDiagnosticsApiKpisToHierarchyRows(data.kpis)
   } catch (e: unknown) {
-    diagnosticsApiError.value = e instanceof Error ? e.message : 'Không tải được Strategic KPIs'
+    diagnosticsApiError.value = e instanceof Error ? e.message : 'Could not load strategic KPIs'
     diagnosticsApiRows.value = []
   } finally {
     diagnosticsApiLoading.value = false
@@ -1178,7 +1178,7 @@ function closeModal() { showKpiModal.value = false; selectedMember.value = null 
               <div class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
                 <!-- Tab kiểu gọn, canh trái + gạch dưới (tham khảo Personal KPI) -->
                 <div class="border-b border-slate-200 bg-white px-4 pt-2 sm:px-5" role="tablist"
-                  aria-label="Khu vực làm việc GM dưới timeline">
+                  aria-label="GM workspace below timeline">
                   <nav class="flex flex-wrap items-end gap-1 sm:gap-2">
                     <button type="button" role="tab" :aria-selected="dashboardWorkspaceTab === 'diagnostics'"
                       class="-mb-px shrink-0 border-b-2 px-3 py-2.5 text-left text-xs font-semibold transition-colors sm:px-4 sm:text-sm"
@@ -1205,7 +1205,7 @@ function closeModal() { showKpiModal.value = false; selectedMember.value = null 
                         " @click="setDashboardWorkspaceTab('pm-eval')">
                       <span class="flex items-center gap-2 sm:whitespace-nowrap">
                         <i class="fas fa-user-tie shrink-0 text-[11px] opacity-70" aria-hidden="true" />
-                        Đánh giá
+                        Evaluation
                         <span
                           v-if="gmPmEvaluationPendingCount > 0"
                           class="inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold leading-none text-white">
@@ -1237,7 +1237,7 @@ function closeModal() { showKpiModal.value = false; selectedMember.value = null 
                         " @click="setDashboardWorkspaceTab('personal')">
                       <span class="flex items-center gap-2 sm:whitespace-nowrap">
                         <i class="fas fa-bullseye shrink-0 text-[11px] opacity-70" aria-hidden="true" />
-                        KPI cá nhân
+                        Personal KPI
                       </span>
                     </button>
                   </nav>
@@ -1246,7 +1246,7 @@ function closeModal() { showKpiModal.value = false; selectedMember.value = null 
                 <div class="min-h-0">
                   <div v-show="dashboardWorkspaceTab === 'diagnostics'" class="p-3 sm:p-4 lg:p-5">
                     <p v-if="diagnosticsApiLoading" class="mb-3 text-xs font-medium text-slate-500" role="status">
-                      Đang tải Strategic KPIs…
+                      Loading strategic KPIs…
                     </p>
                     <p v-else-if="diagnosticsApiError"
                       class="mb-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-800"
@@ -1271,7 +1271,7 @@ function closeModal() { showKpiModal.value = false; selectedMember.value = null 
                   <div v-show="dashboardWorkspaceTab === 'approved-kpi'" class="p-3 sm:p-4 lg:p-5">
                     <p v-if="!useMockHub && approvedKpiQueueLoading" class="mb-3 text-xs font-medium text-slate-500"
                       role="status">
-                      Đang tải Approved KPI…
+                      Loading approved KPI…
                     </p>
                     <GmApprovedKpiPanel
                       :rows="inactivePendingRowsForSelectedCycle"
@@ -1299,7 +1299,7 @@ function closeModal() { showKpiModal.value = false; selectedMember.value = null 
             </template>
             <div v-else class="p-3 sm:p-4 lg:p-5">
               <p v-if="diagnosticsApiLoading" class="mb-3 text-xs font-medium text-slate-500" role="status">
-                Đang tải Strategic KPIs…
+                Loading strategic KPIs…
               </p>
               <p v-else-if="diagnosticsApiError"
                 class="mb-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-800"

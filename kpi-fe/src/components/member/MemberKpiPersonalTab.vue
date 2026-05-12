@@ -87,12 +87,29 @@ function canDeleteSelfCreatedEnabled(item: KpiItem): boolean {
   return status === 404 || status === 406
 }
 
-function shouldOpenRejectedEditForm(item: KpiItem): boolean {
+function shouldOpenSelfCreatedEditForm(item: KpiItem): boolean {
+  const status = Number(item.statusCode ?? 0)
   return (
     item.createdByCurrentUser === true
-    && Number(item.statusCode ?? 0) === 406
+    && (status === 404 || status === 406)
     && String(item.kpiInformationId ?? '').trim().length > 0
   )
+}
+
+function sourceRowClass(item: KpiItem): string {
+  if (item.createdByCurrentUser === true) return 'bg-fuchsia-50 hover:bg-fuchsia-100'
+  const role = String(item.createdByRoleCode ?? '').trim().toUpperCase()
+  if (role === 'GM') return 'bg-amber-50 hover:bg-amber-100'
+  if (role === 'PM') return 'bg-blue-50 hover:bg-sky-100'
+  return ''
+}
+
+function rowClass(item: KpiItem): string {
+  const source = sourceRowClass(item)
+  if (source) return source
+  const alert = rowAlertClass(item)
+  if (alert) return alert
+  return 'hover:bg-slate-50'
 }
 
 function scoreColorClass(score: number | null | undefined): string {
@@ -210,7 +227,7 @@ const pmWeightedAvg = computed((): number | null => {
       </thead>
       <tbody class="divide-y divide-slate-100">
         <template v-for="section in sections" :key="section.key">
-          <tr class="bg-amber-50/80 border-y border-amber-100">
+          <tr class="bg-amber-100 border-y border-amber-100">
             <td colspan="9" class="py-2 px-5 text-xs font-bold text-amber-800 uppercase tracking-wider">
               {{ section.headerLabel }}
             </td>
@@ -218,8 +235,8 @@ const pmWeightedAvg = computed((): number | null => {
           <tr
             v-for="(item, idx) in section.items"
             :key="item.id"
-            class="group transition-colors hover:bg-slate-50"
-            :class="rowAlertClass(item)"
+            class="group transition-colors"
+            :class="rowClass(item)"
           >
             <td class="py-4 px-5 text-center text-sm font-semibold text-slate-400">{{ idx + 1 }}</td>
 
@@ -245,7 +262,7 @@ const pmWeightedAvg = computed((): number | null => {
                   {{ formatTargetDisplayForMemeber(item) }}
                 </p>
                 <span
-                  class="inline-flex h-4 w-4 items-center justify-center rounded-full border border-slate-300 text-[10px] font-bold text-slate-500 cursor-help cursor-pointer"
+                  class="inline-flex h-4 w-4 items-center justify-center rounded-full border border-slate-300 text-[10px] font-bold text-slate-500 cursor-help cursor-pointer hover:bg-sky-200"
                   :title="targetDataTooltip(item)"
                 >
                   ?
@@ -276,13 +293,20 @@ const pmWeightedAvg = computed((): number | null => {
             </td>
 
             <td class="py-4 px-5 text-center align-middle">
-              <span
-                class="font-medium text-sm"
-                :class="scoreColorClass(item.pmScore)"
-                :title="finalScoreTooltip(item)"
-              >
-                {{ item.pmScore !== null ? item.pmScore : '-' }}
-              </span>
+              <div class="inline-flex items-center gap-1 justify-center">
+                <p 
+                  class="font-medium text-sm display-inline-flex items-center gap-1"
+                  :class="scoreColorClass(item.pmScore)">
+                  {{ item.pmScore !== null ? item.pmScore : '-' }}
+                </p>
+                <span
+                  v-if="finalScoreTooltip(item)"
+                  class="inline-flex h-4 w-4 items-center justify-center rounded-full border border-slate-300 text-[10px] font-bold text-slate-500 cursor-help cursor-pointer hover:bg-sky-200"
+                  :title="finalScoreTooltip(item)"
+                >
+                  ?
+                </span>
+              </div>
             </td>
 
             <td class="py-4 px-5 text-right align-middle">
@@ -293,7 +317,7 @@ const pmWeightedAvg = computed((): number | null => {
                   :class="!canOpenEvidence(item) ? 'pointer-events-none opacity-50' : ''"
                   :title="item.evidenceTooltip ?? ''"
                   :disabled="!canOpenEvidence(item)"
-                  @click="shouldOpenRejectedEditForm(item) ? emit('open-edit-self-created', item) : emit('open-evidence', item)"
+                  @click="shouldOpenSelfCreatedEditForm(item) ? emit('open-edit-self-created', item) : emit('open-evidence', item)"
                 >
                   <i class="fas fa-pen text-[10px]" />
                 </button>
@@ -310,7 +334,7 @@ const pmWeightedAvg = computed((): number | null => {
                 <button
                   v-if="item.createdByCurrentUser === true"
                   type="button"
-                  class="flex h-8 items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-3 text-[10px] font-bold text-rose-700 shadow-sm transition-colors hover:bg-rose-100"
+                  class="flex h-8 items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-3 text-[10px] font-bold text-rose-700 shadow-sm transition-colors hover:bg-rose-100 cursor-pointer"
                   :class="!canDeleteSelfCreatedEnabled(item) ? 'cursor-not-allowed opacity-45 hover:bg-rose-50' : ''"
                   :disabled="!canDeleteSelfCreatedEnabled(item)"
                   :title="canDeleteSelfCreatedEnabled(item) ? 'Xóa KPI tự tạo' : 'KPI đã submit đầu năm, không thể xóa'"
@@ -340,7 +364,7 @@ const pmWeightedAvg = computed((): number | null => {
           </td>
           <td class="py-4 px-5 text-center">
             <span class="text-sm text-slate-800">
-              {{ totalPmWeightedScore > 0 ? totalPmWeightedScore.toFixed(2) : '-' }}
+              {{ totalPmWeightedScore > 0 ? totalPmWeightedScore : '-' }}
             </span>
           </td>
           <td class="py-4 px-5 text-center text-slate-500 text-sm"></td>
@@ -413,7 +437,7 @@ const pmWeightedAvg = computed((): number | null => {
         v-if="canSubmit"
         type="button"
         :disabled="isSubmitDisabled"
-        class="px-4 py-2 bg-slate-900 border border-transparent rounded-lg text-sm font-semibold text-white shadow-sm hover:bg-slate-800 flex items-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        class="px-4 py-2 bg-slate-900 border border-transparent rounded-lg text-sm font-semibold text-white shadow-sm hover:bg-slate-800 flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
         @click="emit('submit')"
       >
         <i v-if="submitting" class="fas fa-spinner fa-spin text-xs" />

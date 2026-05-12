@@ -13,5 +13,9 @@ public class UserKpiSummary {
     private BigDecimal finalScore;
     private String evaluationComments;
     private String evaluationSupervisorComments;
+    /** Tự đánh giá member khi nộp scope Promotion (SubmitMemberSheetRequest.kpiType=PROMOTION). */
+    private String evaluationCommentsPromotion;
+    /** Nhận xét PM tổng tab Promotion (Team Review). */
+    private String evaluationSupervisorCommentsPromotion;
     private UUID evaluatorId;
 }

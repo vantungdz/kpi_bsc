@@ -47,6 +47,8 @@ export interface KpiItem {
   kpiTemplateTargetValue?: number | null
   /** kpi_assignments.status_code */
   statusCode?: number | null
+  /** ISO timestamp — kpi_assignments.created_at (PM/GM giao sau giữa kỳ → bỏ nộp 1H) */
+  assignmentCreatedAt?: string | null
   /** Nhãn ASM_STATUS từ API */
   assignmentStatusName?: string | null
   /** Khi 407: role cần xử lý feedback — PM hoặc GM */
@@ -87,6 +89,8 @@ export interface KpiItem {
   updateReason?: string | null
   /** KPI do chính user hiện tại tự tạo */
   createdByCurrentUser?: boolean
+  /** Vai trò người tạo assignment: GM / PM / LEADER / MEMBER */
+  createdByRoleCode?: string | null
   /** Ghi chú từ GM cho KPI */
   gmComment?: string
   /**
@@ -191,6 +195,8 @@ export interface GmSummary {
 /** Member KPI Dashboard data */
 export interface MemberKpiDashboard {
   year: number
+  /** ISO — users.created_at; sau mid_year_end → timeline / submit bỏ giữa kỳ */
+  accountCreatedAt?: string | null
   phase: EvalPhase
   phaseLabel: string
   sheet: KpiSheet
@@ -326,6 +332,8 @@ export interface KpiRegistrationRequest {
 
 export interface LeaderKpiInformationResponse {
   year: number;
+  /** ISO — users.created_at của user đang xem */
+  accountCreatedAt?: string | null;
   kpiCycle: KpiCycleResponse;
   categories: LeaderKpiCategoryGroup[];
   kpiSummary: LeaderKpiSummary;
@@ -361,6 +369,7 @@ export interface LeaderKpiAssignment {
   feedbackComment?: string | null;
   updateReason?: string | null;
   createdByCurrentUser?: boolean | null;
+  createdByRoleCode?: string | null;
   evaluationStatus?: MemberKpiEvaluationStatus | string | null;
   evaluationState?: string | null;
   /** kpi_master.calculation_rule_code — 802 = ratio/average, 803 = comment/text */
@@ -371,6 +380,8 @@ export interface LeaderKpiAssignment {
   typeCode?: number | null;
   /** sys_status_codes.name — loại KPI */
   typeName?: string | null;
+  /** ISO — kpi_assignments.created_at (khớp nút submit / onboard sau giữa kỳ) */
+  assignmentCreatedAt?: string | null;
 }
 
 export interface LeaderKpiSummary {

@@ -123,10 +123,11 @@ const canSaveEvidence = computed(() => {
   if (isFeedbackMode.value) return String(leaderFeedbackDraft.value ?? '').trim().length > 0
   const feedbackOnly = Number(props.item?.statusCode ?? 0) === 404
   if (feedbackOnly) return leaderFeedbackDraft.value.trim().length > 0
-  if (exceedsMaxMetricRule.value) return false
+  if (metricOutOfDslRule.value) return false
   // Auto-score available (CALC_RULE 803 with scoring rules + actual entered)
   if (computedEvalScore.value !== null) return true
-  return detailSelfScore.value !== null
+  const s = detailSelfScore.value
+  return s !== null && Number.isFinite(Number(s)) && Number(s) >= 1 && Number(s) <= 5
 })
 
 const drawerCase = computed<EvidenceFormCase>(() => {
@@ -231,6 +232,17 @@ const exceedsMaxMetricRule = computed(() => {
   return metric > maxAllowed
 })
 
+const hasDslScoringRules = computed(() =>
+  (drawerFormMode.value === 'comment' || drawerFormMode.value === 'average')
+  && scoringRulesFromItem.value.length > 0,
+)
+
+const metricOutOfDslRule = computed(() => {
+  if (!hasDslScoringRules.value) return false
+  if (autoScoreMetric.value == null) return false
+  return computedEvalScore.value == null || exceedsMaxMetricRule.value
+})
+
 // Auto-computed score from metric + scoring rules (comment/average mode)
 const computedEvalScore = computed((): number | null => {
   const metric = autoScoreMetric.value
@@ -239,6 +251,17 @@ const computedEvalScore = computed((): number | null => {
   if (!rules.length) return null
   return resolveScoringScoreForMetric(metric, rules)
 })
+
+function initialSelfScoreFromItem(it: any): number | null {
+  const status = Number(it?.statusCode ?? 0)
+  if (status >= 501 && status < 601) {
+    return it?.midSelfScore ?? it?.endSelfScore ?? it?.selfScore ?? null
+  }
+  if (status >= 601) {
+    return it?.endSelfScore ?? it?.midSelfScore ?? it?.selfScore ?? null
+  }
+  return it?.endSelfScore ?? it?.midSelfScore ?? it?.selfScore ?? null
+}
 
 // ── Form initialization ───────────────────────────────────────────────────────
 function initForm() {
@@ -252,7 +275,7 @@ function initForm() {
   contentDraft.value = ''
   pendingEvidenceFiles.value = []
 
-  detailSelfScore.value = it.endSelfScore ?? it.selfScore ?? null
+  detailSelfScore.value = initialSelfScoreFromItem(it)
   evidenceNoteDraft.value = it.evidenceNote || ''
   certificateOutcomeDraft.value = it.certificateOutcomeNote || ''
 
@@ -443,7 +466,7 @@ async function handleSave() {
     })
     return
   }
-  if (exceedsMaxMetricRule.value) {
+  if (metricOutOfDslRule.value) {
     toast.warning('Giá trị Actual/Kết quả tính vượt mức tối đa trong Quy tắc chấm điểm.')
     return
   }
@@ -454,6 +477,13 @@ async function handleSave() {
     )
     if (hasIncomplete) {
       toast.warning('Mỗi dòng phải nhập đủ 3 trường: Comment, Plan và Actual.')
+      return
+    }
+    const hasAnyCompleteRow = generalPlanActualRows.value.some(r =>
+      [r.comment, r.plan, r.actual].every(v => String(v ?? '').trim().length > 0),
+    )
+    if (!hasAnyCompleteRow) {
+      toast.warning('Vui lòng nhập đủ Comment, Plan và Actual cho ít nhất 1 dòng trước khi lưu.')
       return
     }
   }
@@ -478,7 +508,11 @@ async function handleSave() {
     const feedbackOnly = Number(props.item?.statusCode ?? 0) === 404
     // Prefer auto-computed score (CALC_RULE 803 with scoring rules) over manual
     const autoScore = computedEvalScore.value
-    const effectiveScore = feedbackOnly ? null : (autoScore !== null ? autoScore : detailSelfScore.value)
+    const normalizedScore =
+      detailSelfScore.value == null || !Number.isFinite(Number(detailSelfScore.value))
+        ? null
+        : Math.min(5, Math.max(1, Math.round(Number(detailSelfScore.value))))
+    const effectiveScore = feedbackOnly ? null : (autoScore !== null ? autoScore : normalizedScore)
 
     // For comment mode with actual value, use it as actualResult too
     const actualValTrimmed = String(commentActualDraft.value ?? '').trim()
@@ -1200,7 +1234,7 @@ async function handleSave() {
                   </span>
                 </div>
                 <p
-                  v-if="exceedsMaxMetricRule"
+                  v-if="metricOutOfDslRule"
                   class="mt-1 text-xs font-medium text-rose-600"
                 >
                   Giá trị Actual/Kết quả tính đang vượt mức tối đa của Quy tắc chấm điểm.

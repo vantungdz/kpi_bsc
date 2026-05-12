@@ -17,6 +17,9 @@ const props = defineProps<{
   promotionSelfWeightedAvg: number | null
   promotionPmWeightedAvg: number | null
   isCurrentYear: boolean
+  employeeComment: string
+  supervisorComment: string
+  employeeCommentReadonly: boolean
   submitting: boolean
   canSubmit: boolean
   isSubmitDisabled: boolean
@@ -28,6 +31,7 @@ const emit = defineEmits<{
   (e: 'open-edit-self-created', item: KpiItem): void
   (e: 'open-feedback', item: KpiItem): void
   (e: 'delete-self-created', item: KpiItem): void
+  (e: 'update-employee-comment', value: string): void
   (e: 'submit'): void
 }>()
 
@@ -86,12 +90,29 @@ function canDeleteSelfCreatedEnabled(item: KpiItem): boolean {
   return status === 404 || status === 406
 }
 
-function shouldOpenRejectedEditForm(item: KpiItem): boolean {
+function shouldOpenSelfCreatedEditForm(item: KpiItem): boolean {
+  const status = Number(item.statusCode ?? 0)
   return (
     item.createdByCurrentUser === true
-    && Number(item.statusCode ?? 0) === 406
+    && (status === 404 || status === 406)
     && String(item.kpiInformationId ?? '').trim().length > 0
   )
+}
+
+function sourceRowClass(item: KpiItem): string {
+  if (item.createdByCurrentUser === true) return 'bg-fuchsia-50 hover:bg-fuchsia-100'
+  const role = String(item.createdByRoleCode ?? '').trim().toUpperCase()
+  if (role === 'GM') return 'bg-amber-50 hover:bg-amber-100'
+  if (role === 'PM') return 'bg-blue-50 hover:bg-blue-100'
+  return ''
+}
+
+function rowClass(item: KpiItem): string {
+  const source = sourceRowClass(item)
+  if (source) return source
+  const alert = rowAlertClass(item)
+  if (alert) return alert
+  return 'hover:bg-slate-50'
 }
 
 function scoreColorClass(score: number | null | undefined): string {
@@ -146,6 +167,8 @@ const totalPromotionPmWeightedScore = computed(() =>
     0,
   ),
 )
+
+const hasPromotionAssignments = computed(() => props.promotionItemsFlat.length > 0)
 </script>
 
 <template>
@@ -167,7 +190,8 @@ const totalPromotionPmWeightedScore = computed(() =>
     </p>
   </div>
 
-  <div v-else class="overflow-x-auto">
+  <div v-else>
+    <div class="overflow-x-auto">
     <table class="w-full text-left">
       <thead class="border-b border-slate-200 bg-white">
         <tr class="text-[11px] font-bold uppercase tracking-wider text-slate-500">
@@ -188,7 +212,7 @@ const totalPromotionPmWeightedScore = computed(() =>
       </thead>
       <tbody class="divide-y divide-slate-100">
         <template v-for="section in sections" :key="'p-' + section.key">
-          <tr class="bg-amber-50/80 border-y border-amber-100">
+          <tr class="bg-amber-100 border-y border-amber-100">
             <td colspan="9" class="py-2 px-5 text-xs font-bold text-amber-800 uppercase tracking-wider">
               {{ section.headerLabel }}
             </td>
@@ -196,8 +220,8 @@ const totalPromotionPmWeightedScore = computed(() =>
           <tr
             v-for="(item, idx) in section.items"
             :key="item.id"
-            class="group transition-colors hover:bg-slate-50"
-            :class="rowAlertClass(item)"
+            class="group transition-colors"
+            :class="rowClass(item)"
           >
             <td class="px-5 py-4 text-center text-sm font-semibold text-slate-400">{{ idx + 1 }}</td>
 
@@ -261,14 +285,21 @@ const totalPromotionPmWeightedScore = computed(() =>
               </span>
             </td>
 
-            <td class="px-5 py-4 text-center align-middle">
-              <span
-                class="text-sm font-medium"
-                :class="scoreColorClass(item.pmScore)"
-                :title="finalScoreTooltip(item)"
-              >
-                {{ item.pmScore !== null ? item.pmScore : '-' }}
-              </span>
+            <td class="py-4 px-5 text-center align-middle">
+              <div class="inline-flex items-center gap-1 justify-center">
+                <p 
+                  class="font-medium text-sm display-inline-flex items-center gap-1"
+                  :class="scoreColorClass(item.pmScore)">
+                  {{ item.pmScore !== null ? item.pmScore : '-' }}
+                </p>
+                <span
+                  v-if="finalScoreTooltip(item)"
+                  class="inline-flex h-4 w-4 items-center justify-center rounded-full border border-slate-300 text-[10px] font-bold text-slate-500 cursor-help cursor-pointer hover:bg-sky-200"
+                  :title="finalScoreTooltip(item)"
+                >
+                  ?
+                </span>
+              </div>
             </td>
 
             <td class="px-5 py-4 text-right align-middle">
@@ -279,7 +310,7 @@ const totalPromotionPmWeightedScore = computed(() =>
                   :class="!canOpenEvidence(item) ? 'pointer-events-none opacity-50' : ''"
                   :title="item.evidenceTooltip ?? ''"
                   :disabled="!canOpenEvidence(item)"
-                  @click="shouldOpenRejectedEditForm(item) ? emit('open-edit-self-created', item) : emit('open-evidence', item)"
+                  @click="shouldOpenSelfCreatedEditForm(item) ? emit('open-edit-self-created', item) : emit('open-evidence', item)"
                 >
                   <i class="fas fa-pen text-xs" />
                 </button>
@@ -296,7 +327,7 @@ const totalPromotionPmWeightedScore = computed(() =>
                 <button
                   v-if="canDeleteSelfCreatedVisible(item)"
                   type="button"
-                  class="flex h-8 items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-3 text-[10px] font-bold text-rose-700 shadow-sm transition-colors hover:bg-rose-100"
+                  class="flex h-8 items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-3 text-[10px] font-bold text-rose-700 shadow-sm transition-colors hover:bg-rose-100 cursor-pointer"
                   :class="!canDeleteSelfCreatedEnabled(item) ? 'cursor-not-allowed opacity-45 hover:bg-rose-50' : ''"
                   :disabled="!canDeleteSelfCreatedEnabled(item)"
                   :title="canDeleteSelfCreatedEnabled(item) ? 'Xóa KPI tự tạo' : 'KPI đã submit đầu năm, không thể xóa'"
@@ -321,10 +352,10 @@ const totalPromotionPmWeightedScore = computed(() =>
           </td>
           <td class="px-5 py-4 text-center text-xs font-medium text-slate-400">-</td>
           <td class="bg-sky-50/50 px-5 py-4 text-center text-sm text-slate-600">
-            {{ totalPromotionSelfWeightedScore > 0 ? totalPromotionSelfWeightedScore.toFixed(2) : '-' }}
+            {{ totalPromotionSelfWeightedScore > 0 ? totalPromotionSelfWeightedScore : '-' }}
           </td>
           <td class="px-5 py-4 text-center text-sm text-slate-600">
-            {{ totalPromotionPmWeightedScore > 0 ? totalPromotionPmWeightedScore.toFixed(2) : '-' }}
+            {{ totalPromotionPmWeightedScore > 0 ? totalPromotionPmWeightedScore : '-' }}
           </td>
           <td class="px-5 py-4" />
         </tr>
@@ -346,15 +377,54 @@ const totalPromotionPmWeightedScore = computed(() =>
         </tr>
       </tfoot>
     </table>
+    </div>
+
+    <!-- Comments section -->
+    <div v-if="hasPromotionAssignments" class="p-6 border-t border-slate-200 bg-slate-50/30">
+      <h4 class="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
+        <i class="fas fa-comments text-blue-600" />
+        Comment of employee and supervisor
+      </h4>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div class="space-y-3">
+          <div>
+            <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
+              Employee's Comment
+            </label>
+            <textarea
+              class="w-full h-24 p-3 bg-white border border-slate-200 rounded-lg text-sm text-slate-700 focus:ring-2 focus:ring-blue-100 outline-none resize-none shadow-sm"
+              :class="{ 'bg-slate-100 text-slate-500': employeeCommentReadonly }"
+              placeholder="Nhập ý kiến của bạn..."
+              :readonly="employeeCommentReadonly"
+              :value="employeeComment"
+              @input="emit('update-employee-comment', String(($event.target as HTMLTextAreaElement).value ?? ''))"
+            />
+          </div>
+        </div>
+        <div class="space-y-3">
+          <div>
+            <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
+              Supervisor Comment
+            </label>
+            <textarea
+              class="w-full h-24 p-3 bg-slate-100 border border-slate-200 rounded-lg text-sm text-slate-500 outline-none resize-none"
+              placeholder="Supervisor sẽ nhập ý kiến tại đây..."
+              :value="supervisorComment"
+              readonly
+            />
+          </div>
+        </div>
+      </div>
+    </div>
 
     <!-- Footer / Submit -->
-    <div class="bg-slate-50 p-4 border-t border-slate-200 flex justify-center gap-3">
+    <div v-if="hasPromotionAssignments" class="bg-slate-50 p-4 border-t border-slate-200 flex justify-center gap-3">
       <template v-if="isCurrentYear">
         <button
           v-if="canSubmit"
           type="button"
           :disabled="isSubmitDisabled"
-          class="px-4 py-2 bg-violet-700 border border-transparent rounded-lg text-sm font-semibold text-white shadow-sm hover:bg-violet-800 flex items-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          class="px-4 py-2 bg-violet-700 border border-transparent rounded-lg text-sm font-semibold text-white shadow-sm hover:bg-violet-800 flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           @click="emit('submit')"
         >
           <i v-if="submitting" class="fas fa-spinner fa-spin text-xs" />

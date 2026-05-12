@@ -32,6 +32,10 @@ const evaluationComment = computed(() =>
   String(props.data?.kpiSummary?.evaluationComments ?? '').trim(),
 )
 
+const evaluationSupervisorComment = computed(() =>
+  String(props.data?.kpiSummary?.evaluationSupervisorComments ?? '').trim(),
+)
+
 const allAssignments = computed(() =>
   (props.data?.categories ?? []).flatMap(c => c.assignments ?? []),
 )
@@ -169,7 +173,7 @@ function actualPreview(raw: string | null | undefined): string {
 </script>
 
 <template>
-  <div class="flex h-full flex-col">
+  <div class="flex min-h-0 flex-col">
     <div v-if="!data?.categories?.length" class="p-8 text-center text-slate-500">
       Chưa có dữ liệu KPI Promotion.
     </div>
@@ -383,11 +387,10 @@ function actualPreview(raw: string | null | undefined): string {
               Supervisor Comment
             </label>
             <textarea
-              value=""
+              :value="evaluationSupervisorComment || 'Chưa có nhận xét từ Supervisor.'"
               rows="3"
               readonly
-              placeholder="Chưa có nhận xét từ Supervisor."
-              class="w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-500"
+              class="w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700"
             />
           </div>
         </div>

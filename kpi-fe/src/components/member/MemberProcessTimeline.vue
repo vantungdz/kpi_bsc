@@ -1,13 +1,17 @@
 <script setup lang="ts">
 import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import type { EvalPhase } from '@/types/kpi'
-import GmProcessTimelineTrack from '@/components/gm/GmProcessTimelineTrack.vue'
+import ProcessTimelineTrack from '@/components/shared/ProcessTimelineTrack.vue'
 import { kpiCycleService } from '@/services/shared/kpi-cycle.service'
 import dayjs from 'dayjs'
 
 const props = defineProps<{
   year: number
   activePhase?: EvalPhase | null
+  /** Late entry: two milestones (KPI Setting + Year-End), Mid-Year omitted. */
+  yearEndOnly?: boolean
+  /** All KPIs finalized (603) — treat timeline as done (no “In period” at Year-End even if cycle dates are open). */
+  evaluationFullyCompleted?: boolean
 }>()
 
 const isLoading = ref(true)
@@ -61,17 +65,17 @@ watch(
   { immediate: true },
 )
 
-function formatPhaseDuration(start: string | null, end: string | null, fallback: string): string {
+function formatMonthRangeLabel(start: string | null, end: string | null, fallback: string): string {
   if (!start || !end) return fallback
-  const startMonth = dayjs(start).format('MMM')
-  const endMonth = dayjs(end).format('MMM')
-  return startMonth === endMonth ? startMonth : `${startMonth} - ${endMonth}`
+  const a = dayjs(start).format('MMM')
+  const b = dayjs(end).format('MMM')
+  return a === b ? a : `${a} – ${b}`
 }
 
 const phaseLabels = computed(() => ({
-  setting: formatPhaseDuration(cycleData.value.goalSettingStart, cycleData.value.goalSettingEnd, 'Q1'),
-  mid: formatPhaseDuration(cycleData.value.midYearStart, cycleData.value.midYearEnd, 'Q2-Q3'),
-  yearEnd: formatPhaseDuration(cycleData.value.endYearStart, cycleData.value.endYearEnd, 'Q4'),
+  setting: formatMonthRangeLabel(cycleData.value.goalSettingStart, cycleData.value.goalSettingEnd, 'Jan – Feb'),
+  mid: formatMonthRangeLabel(cycleData.value.midYearStart, cycleData.value.midYearEnd, 'Apr – Aug'),
+  yearEnd: formatMonthRangeLabel(cycleData.value.endYearStart, cycleData.value.endYearEnd, 'Oct – Dec'),
 }))
 
 type PhaseStatus = 'upcoming' | 'active' | 'complete'
@@ -82,7 +86,12 @@ const phaseStatuses = computed((): PhaseStatus[] => {
   if (props.year < currentYear) return ['complete', 'complete', 'complete']
   if (props.year > currentYear) return ['upcoming', 'upcoming', 'upcoming']
 
-  const activePhase = props.activePhase ?? cycleData.value.activePhase
+  if (props.evaluationFullyCompleted) {
+    return ['complete', 'complete', 'complete']
+  }
+
+  const raw = props.activePhase ?? cycleData.value.activePhase
+  const activePhase = raw === 'end_year' ? 'year_end' : raw
   if (activePhase === 'target_setup') return ['active', 'upcoming', 'upcoming']
   if (activePhase === 'mid_year') return ['complete', 'active', 'upcoming']
   if (activePhase === 'year_end') return ['complete', 'complete', 'active']
@@ -120,7 +129,7 @@ function phaseSubLabelClass(idx: number) {
 function milestoneOuterClass(idx: number) {
   const status = phaseStatuses.value[idx]!
   if (status === 'complete') return 'bg-emerald-500 shadow-sm ring-2 ring-white'
-  if (status === 'active') return 'bg-white shadow-sm ring-2 ring-white'
+  if (status === 'active') return 'bg-white shadow-sm ring-1 ring-slate-200/90'
   return 'bg-slate-200 shadow-sm ring-2 ring-white'
 }
 
@@ -133,6 +142,7 @@ const cycleProgressFraction = computed((): number => {
   const currentYear = now.year()
   if (props.year < currentYear) return 1
   if (props.year > currentYear) return 0
+  if (props.evaluationFullyCompleted) return 1
 
   const gs = cycleData.value.goalSettingStart ? dayjs(cycleData.value.goalSettingStart) : null
   const ge = cycleData.value.goalSettingEnd ? dayjs(cycleData.value.goalSettingEnd) : null
@@ -172,7 +182,42 @@ const cycleProgressFraction = computed((): number => {
   return Math.min(1, Math.max(0, (now.valueOf() - t0) / (t1 - t0)))
 })
 
-const nowMarkerLeftPct = computed(() => TRACK_LEFT_PCT + cycleProgressFraction.value * TRACK_SPAN_PCT)
+/** Late entry: progress along KPI Setting → Year-End (no Mid-Year). */
+const cycleProgressFractionYearEndOnly = computed((): number => {
+  const now = dayjs()
+  const yNow = now.year()
+  if (props.year < yNow) return 1
+  if (props.year > yNow) return 0
+  if (props.evaluationFullyCompleted) return 1
+
+  const ge = cycleData.value.goalSettingEnd ? dayjs(cycleData.value.goalSettingEnd) : null
+  const ee = cycleData.value.endYearEnd ? dayjs(cycleData.value.endYearEnd) : null
+  if (ge && ee && ee.isAfter(ge)) {
+    if (now.isBefore(ge)) return 0
+    if (!now.isAfter(ee)) {
+      return (now.valueOf() - ge.valueOf()) / (ee.valueOf() - ge.valueOf())
+    }
+    return 1
+  }
+
+  const es = cycleData.value.endYearStart ? dayjs(cycleData.value.endYearStart) : null
+  if (es && ee && ee.isAfter(es)) {
+    if (now.isBefore(es)) return 0
+    if (!now.isAfter(ee)) {
+      return (now.valueOf() - es.valueOf()) / (ee.valueOf() - es.valueOf())
+    }
+    return 1
+  }
+  return cycleProgressFraction.value
+})
+
+const cycleProgressFractionEffective = computed(() =>
+  props.yearEndOnly ? cycleProgressFractionYearEndOnly.value : cycleProgressFraction.value,
+)
+
+const nowMarkerLeftPct = computed(
+  () => TRACK_LEFT_PCT + cycleProgressFractionEffective.value * TRACK_SPAN_PCT,
+)
 const nowMarkerPositionStyle = computed(() => ({
   left: `${nowMarkerLeftPct.value}%`,
   top: '50%',
@@ -188,21 +233,48 @@ const trackBarStyle = {
 
 const progressFillStyle = computed(() => ({
   left: `${TRACK_LEFT_PCT}%`,
-  width: `${Math.max(0, cycleProgressFraction.value) * TRACK_SPAN_PCT}%`,
+  width: `${Math.max(0, cycleProgressFractionEffective.value) * TRACK_SPAN_PCT}%`,
   top: '50%',
   transform: 'translateY(-50%)',
 }))
 
-const nowMarkerLabel = computed(
-  () => `Tiến độ năm ${props.year}: ${new Date().toLocaleDateString('vi-VN')}`,
-)
+const nowMarkerLabel = computed(() => {
+  const d = new Date()
+  return `${props.year} progress: ${d.toLocaleDateString('en-US')}`
+})
 
-const trackMilestones = computed(() =>
-  [0, 1, 2].map((idx) => ({
+const milestoneLeftPctsYearEndOnly = computed<(number | undefined)[] | undefined>(() => {
+  if (!props.yearEndOnly) return undefined
+  const L0 = TRACK_LEFT_PCT + 0 * TRACK_SPAN_PCT
+  const L2 = TRACK_LEFT_PCT + 1 * TRACK_SPAN_PCT
+  return [L0, undefined, L2]
+})
+
+const trackMilestones = computed(() => {
+  if (props.yearEndOnly) {
+    return [
+      {
+        idx: 0,
+        outerClass: milestoneOuterClass(0),
+        status: phaseStatuses.value[0] as 'complete' | 'active' | 'upcoming',
+      },
+      {
+        idx: 2,
+        outerClass: milestoneOuterClass(2),
+        status: phaseStatuses.value[2] as 'complete' | 'active' | 'upcoming',
+      },
+    ]
+  }
+  return [0, 1, 2].map((idx) => ({
     idx,
     outerClass: milestoneOuterClass(idx),
     status: phaseStatuses.value[idx] as 'complete' | 'active' | 'upcoming',
-  })),
+  }))
+})
+
+/** Hide “today” marker when every milestone is complete — avoids covering the tick (especially Year-End). */
+const timelineShowNowMarker = computed(
+  () => !trackMilestones.value.every((m) => m.status === 'complete'),
 )
 
 const timelineCollapsed = ref(false)
@@ -277,12 +349,14 @@ onUnmounted(() => {
           class="pointer-events-none absolute inset-x-0 top-1/2 z-0 w-full -translate-y-1/2"
           aria-hidden="true"
         >
-          <GmProcessTimelineTrack
+          <ProcessTimelineTrack
             :track-bar-style="trackBarStyle"
             :progress-fill-style="progressFillStyle"
             :now-marker-position-style="nowMarkerPositionStyle"
             :now-marker-label="nowMarkerLabel"
             :milestones="trackMilestones"
+            :milestone-left-pcts="milestoneLeftPctsYearEndOnly"
+            :show-now-marker="timelineShowNowMarker"
           />
         </div>
       </Transition>
@@ -295,7 +369,7 @@ onUnmounted(() => {
         type="button"
         :class="[timelineToggleBtnClass, 'relative z-10 justify-self-end bg-white py-0.5 pl-3']"
         :aria-expanded="!timelineCollapsed"
-        :aria-label="timelineCollapsed ? 'Mở rộng timeline' : 'Thu gọn timeline'"
+        :aria-label="timelineCollapsed ? 'Expand process timeline' : 'Collapse process timeline'"
         @click="toggleTimelineCollapsed"
       >
         <i
@@ -303,30 +377,125 @@ onUnmounted(() => {
           :class="timelineCollapsed ? 'fa-chevron-down' : 'fa-chevron-up'"
           aria-hidden="true"
         />
-        {{ timelineCollapsed ? 'Mở rộng' : 'Thu gọn' }}
+        {{ timelineCollapsed ? 'Expand' : 'Collapse' }}
       </button>
     </div>
 
     <div class="text-center">
+      <p
+        v-if="yearEndOnly && showExpandedTimeline"
+        class="mb-2 text-center text-[11px] leading-snug text-slate-500"
+      >
+        KPIs assigned after mid-year — this timeline shows KPI Setting and Year-End only (Mid-Year is omitted).
+      </p>
+
       <Transition name="member-timeline-fold">
-        <div v-if="showExpandedTimeline" key="tl-phases" class="grid grid-cols-3 gap-1.5">
+        <div
+          v-if="showExpandedTimeline && yearEndOnly"
+          key="tl-year-end-only-stack"
+          class="relative mx-auto w-full pb-1 pt-0"
+        >
+          <div class="relative z-[2] min-h-[2.75rem] w-full">
+            <div
+              class="absolute top-0 max-w-[min(11rem,40vw)] -translate-x-1/2 text-center"
+              :style="{ left: `${TRACK_LEFT_PCT}%` }"
+            >
+              <span class="text-xs font-bold" :class="phaseTitleClass(0)">KPI Setting</span>
+              <p class="mt-0.5 text-[12px] leading-tight" :class="phaseSubLabelClass(0)">
+                <span v-if="isLoading" class="inline-block h-4 w-16 animate-pulse rounded bg-slate-200" />
+                <span v-else>{{ phaseLabels.setting }}</span>
+              </p>
+            </div>
+            <div
+              class="absolute top-0 max-w-[min(11rem,40vw)] -translate-x-1/2 text-center"
+              :style="{ left: `${TRACK_RIGHT_PCT}%` }"
+            >
+              <span class="text-xs font-bold" :class="phaseTitleClass(2)">Year-End Review</span>
+              <p class="mt-0.5 text-[12px] leading-tight" :class="phaseSubLabelClass(2)">
+                <span v-if="isLoading" class="inline-block h-4 w-16 animate-pulse rounded bg-slate-200" />
+                <span v-else>{{ phaseLabels.yearEnd }}</span>
+              </p>
+            </div>
+          </div>
+
+          <div class="relative z-0 mt-1 w-full">
+            <ProcessTimelineTrack
+              :track-bar-style="trackBarStyle"
+              :progress-fill-style="progressFillStyle"
+              :now-marker-position-style="nowMarkerPositionStyle"
+              :now-marker-label="nowMarkerLabel"
+              :milestones="trackMilestones"
+              :milestone-left-pcts="milestoneLeftPctsYearEndOnly"
+              :show-now-marker="timelineShowNowMarker"
+            />
+          </div>
+
+          <div class="relative z-[2] mt-2 min-h-[5rem] w-full pb-0.5">
+            <div
+              class="absolute top-0 max-w-[min(11rem,40vw)] -translate-x-1/2 text-center"
+              :style="{ left: `${TRACK_LEFT_PCT}%` }"
+            >
+              <div class="flex flex-col items-center gap-1 px-0.5 text-slate-600">
+                <template v-if="settingStatus === 'upcoming'">
+                  <span class="font-semibold text-slate-400">Milestone not reached</span>
+                  <span class="text-[11px] text-slate-400">Prepare your targets when this period opens.</span>
+                </template>
+                <template v-else-if="settingStatus === 'active'">
+                  <span class="font-semibold text-emerald-800">In period</span>
+                  <span class="text-[11px]">Confirm KPIs, attach evidence, and complete self-assessment per PM/Leader guidance.</span>
+                </template>
+                <template v-else>
+                  <span class="font-semibold text-emerald-700">Milestone passed</span>
+                  <span class="text-[11px]">Review again if PM returns KPIs for revision.</span>
+                </template>
+              </div>
+            </div>
+            <div
+              class="absolute top-0 max-w-[min(11rem,40vw)] -translate-x-1/2 text-center"
+              :style="{ left: `${TRACK_RIGHT_PCT}%` }"
+            >
+              <div class="flex flex-col items-center gap-1 px-0.5 text-slate-600">
+                <template v-if="yearEndStatus === 'upcoming'">
+                  <span class="font-semibold text-slate-400">Milestone not reached</span>
+                  <span class="text-[11px] text-slate-400">Prepare your Year-End summary when the review window opens.</span>
+                </template>
+                <template v-else-if="yearEndStatus === 'active'">
+                  <span class="font-semibold text-blue-800">In period</span>
+                  <span class="text-[11px]">Summarize full-year results and verify evidence before closing the review.</span>
+                </template>
+                <template v-else>
+                  <span class="font-semibold text-emerald-700">Milestone passed</span>
+                  <span class="text-[11px]">Year-End has ended per schedule — see each KPI’s status below.</span>
+                </template>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Transition>
+
+      <Transition name="member-timeline-fold">
+        <div
+          v-if="showExpandedTimeline && !yearEndOnly"
+          key="tl-phases"
+          class="grid grid-cols-3 gap-1.5"
+        >
           <div class="min-w-0">
             <span class="text-xs font-bold" :class="phaseTitleClass(0)">KPI Setting</span>
-            <p class="mt-0.5 text-[15px]" :class="phaseSubLabelClass(0)">
+            <p class="mt-0.5 text-[12px]" :class="phaseSubLabelClass(0)">
               <span v-if="isLoading" class="inline-block h-4 w-16 animate-pulse rounded bg-slate-200" />
               <span v-else>{{ phaseLabels.setting }}</span>
             </p>
           </div>
           <div class="min-w-0">
             <span class="text-xs font-bold" :class="phaseTitleClass(1)">Mid-Year Review</span>
-            <p class="mt-0.5 text-[15px]" :class="phaseSubLabelClass(1)">
+            <p class="mt-0.5 text-[12px]" :class="phaseSubLabelClass(1)">
               <span v-if="isLoading" class="inline-block h-4 w-16 animate-pulse rounded bg-slate-200" />
               <span v-else>{{ phaseLabels.mid }}</span>
             </p>
           </div>
           <div class="min-w-0">
             <span class="text-xs font-bold" :class="phaseTitleClass(2)">Year-End Review</span>
-            <p class="mt-0.5 text-[15px]" :class="phaseSubLabelClass(2)">
+            <p class="mt-0.5 text-[12px]" :class="phaseSubLabelClass(2)">
               <span v-if="isLoading" class="inline-block h-4 w-16 animate-pulse rounded bg-slate-200" />
               <span v-else>{{ phaseLabels.yearEnd }}</span>
             </p>
@@ -335,31 +504,37 @@ onUnmounted(() => {
       </Transition>
 
       <Transition name="member-tl-track-slot">
-        <div v-if="showExpandedTimeline" key="track-below" class="mt-4">
-          <GmProcessTimelineTrack
+        <div v-if="showExpandedTimeline && !yearEndOnly" key="track-below" class="mt-4">
+          <ProcessTimelineTrack
             :track-bar-style="trackBarStyle"
             :progress-fill-style="progressFillStyle"
             :now-marker-position-style="nowMarkerPositionStyle"
             :now-marker-label="nowMarkerLabel"
             :milestones="trackMilestones"
+            :milestone-left-pcts="milestoneLeftPctsYearEndOnly"
+            :show-now-marker="timelineShowNowMarker"
           />
         </div>
       </Transition>
 
       <Transition name="member-timeline-fold">
-        <div v-if="showExpandedTimeline" key="tl-notes" class="mt-3 grid grid-cols-3 gap-1.5 text-[12px] leading-snug">
+        <div
+          v-if="showExpandedTimeline && !yearEndOnly"
+          key="tl-notes"
+          class="mt-3 grid grid-cols-3 gap-1.5 text-[12px] leading-snug"
+        >
           <div class="flex flex-col items-center gap-1 px-0.5 text-slate-600">
             <template v-if="settingStatus === 'upcoming'">
-              <span class="font-semibold text-slate-400">Chưa tới mốc</span>
-              <span class="text-[11px] text-slate-400">Chuẩn bị mục tiêu khi tới kỳ.</span>
+              <span class="font-semibold text-slate-400">Milestone not reached</span>
+              <span class="text-[11px] text-slate-400">Prepare your targets when this period opens.</span>
             </template>
             <template v-else-if="settingStatus === 'active'">
-              <span class="font-semibold text-emerald-800">Đang trong kỳ</span>
-              <span class="text-[11px]">Xác nhận KPI, đính kèm bằng chứng và tự đánh giá theo hướng dẫn PM/Leader.</span>
+              <span class="font-semibold text-emerald-800">In period</span>
+              <span class="text-[11px]">Confirm KPIs, attach evidence, and complete self-assessment per PM/Leader guidance.</span>
             </template>
             <template v-else>
-              <span class="font-semibold text-emerald-700">Đã qua mốc</span>
-              <span class="text-[11px]">Rà soát lại nếu PM trả KPI về sửa (Revision).</span>
+              <span class="font-semibold text-emerald-700">Milestone passed</span>
+              <span class="text-[11px]">Review again if PM returns KPIs for revision.</span>
             </template>
           </div>
 
@@ -368,31 +543,31 @@ onUnmounted(() => {
             :class="midYearStatus === 'upcoming' ? 'opacity-95' : ''"
           >
             <template v-if="midYearStatus === 'upcoming'">
-              <span class="font-semibold text-slate-400">Chưa tới mốc</span>
-              <span class="text-[11px] text-slate-400">Giữ Actual cập nhật để tới tháng đánh giá không bị dồn việc.</span>
+              <span class="font-semibold text-slate-400">Milestone not reached</span>
+              <span class="text-[11px] text-slate-400">Keep Actual up to date so work does not pile up before the review month.</span>
             </template>
             <template v-else-if="midYearStatus === 'active'">
-              <span class="font-semibold text-blue-800">Đang trong kỳ</span>
-              <span class="text-[11px]">Nhập đủ Actual / Plan, Self Score và nộp trước deadline nội bộ.</span>
+              <span class="font-semibold text-blue-800">In period</span>
+              <span class="text-[11px]">Enter Actual / Plan, Self Score, and submit before the internal deadline.</span>
             </template>
             <template v-else>
-              <span class="font-semibold text-emerald-700">Đã qua mốc</span>
-              <span class="text-[11px]">Theo dõi phản hồi PM, chỉnh sửa nếu cần làm lại.</span>
+              <span class="font-semibold text-emerald-700">Milestone passed</span>
+              <span class="text-[11px]">Follow PM feedback and revise if you need to resubmit.</span>
             </template>
           </div>
 
           <div class="flex flex-col items-center gap-1 px-0.5 text-slate-600">
             <template v-if="yearEndStatus === 'upcoming'">
-              <span class="font-semibold text-slate-400">Chưa tới mốc</span>
-              <span class="text-[11px] text-slate-400">Tiếp tục cập nhật KPI trong các kỳ giữa năm.</span>
+              <span class="font-semibold text-slate-400">Milestone not reached</span>
+              <span class="text-[11px] text-slate-400">Keep updating KPIs through mid-year periods.</span>
             </template>
             <template v-else-if="yearEndStatus === 'active'">
-              <span class="font-semibold text-blue-800">Đang trong kỳ</span>
-              <span class="text-[11px]">Tổng hợp kết quả cả năm, kiểm tra minh chứng trước khi đóng đánh giá.</span>
+              <span class="font-semibold text-blue-800">In period</span>
+              <span class="text-[11px]">Summarize full-year results and verify evidence before closing the review.</span>
             </template>
             <template v-else>
-              <span class="font-semibold text-emerald-700">Đã qua mốc</span>
-              <span class="text-[11px]">Kỳ Year-End đã kết thúc theo lịch, xem trạng thái KPI ở bảng bên dưới.</span>
+              <span class="font-semibold text-emerald-700">Milestone passed</span>
+              <span class="text-[11px]">Year-End has ended per schedule — see each KPI’s status below.</span>
             </template>
           </div>
         </div>

@@ -148,7 +148,7 @@ async function loadEvaluationCycles() {
     emit('evaluationCyclesLoaded', evaluationCycleRows.value)
   } catch (e: unknown) {
     evaluationCycleRows.value = []
-    evaluationCyclesError.value = e instanceof Error ? e.message : 'Không tải được chu kỳ đánh giá'
+    evaluationCyclesError.value = e instanceof Error ? e.message : 'Could not load evaluation cycles'
   } finally {
     evaluationCyclesLoading.value = false
   }
@@ -205,7 +205,7 @@ async function loadCopySourceCycles() {
     copySourceCycleApiRows.value = await gmKpiService.getKpiCyclesWithKpis()
   } catch (e: unknown) {
     copySourceCycleApiRows.value = []
-    copyCyclesError.value = e instanceof Error ? e.message : 'Không tải được danh sách chu kỳ KPI'
+    copyCyclesError.value = e instanceof Error ? e.message : 'Could not load KPI cycle list'
   } finally {
     copyCyclesLoading.value = false
   }
@@ -250,7 +250,7 @@ async function loadKpiTypes() {
     }
   } catch (e: unknown) {
     kpiTypeRows.value = []
-    kpiTypesError.value = e instanceof Error ? e.message : 'Không tải được loại hình KPI'
+    kpiTypesError.value = e instanceof Error ? e.message : 'Could not load KPI types'
   } finally {
     kpiTypesLoading.value = false
   }
@@ -285,12 +285,19 @@ const {
   load: loadRanks,
 } = useRankOptions()
 
-/** Checkbox rank — `val` = `ranks.code` (đồng bộ member mock / payload). */
+/** Checkbox rank — `val` = `ranks.code` (đồng bộ member mock / payload), sort tự nhiên R1 → R10. */
 const rankOptionsForUi = computed(() =>
-  rankRows.value.map((r) => ({
-    val: r.code,
-    label: r.name,
-  })),
+  [...rankRows.value]
+    .sort((a, b) =>
+      String(a.code ?? '').localeCompare(String(b.code ?? ''), undefined, {
+        numeric: true,
+        sensitivity: 'base',
+      }),
+    )
+    .map((r) => ({
+      val: r.code,
+      label: r.name,
+    })),
 )
 
 /** Member theo `ranks.code` — tải từ `GET /kpi/reference/members-by-rank`. */
@@ -347,7 +354,7 @@ async function loadPromotionAssignees() {
   } catch (e: unknown) {
     promotionAssigneeRows.value = []
     promotionAssigneesError.value =
-      e instanceof Error ? e.message : 'Không tải được danh sách nhân sự (Promotion)'
+      e instanceof Error ? e.message : 'Could not load people list (Promotion)'
   } finally {
     promotionAssigneesLoading.value = false
   }
@@ -367,7 +374,7 @@ async function ensureMembersLoadedForRank(rankCode: string) {
     membersByRankCache.value = { ...membersByRankCache.value, [code]: [] }
     membersByRankError.value = {
       ...membersByRankError.value,
-      [code]: e instanceof Error ? e.message : 'Không tải được danh sách member',
+      [code]: e instanceof Error ? e.message : 'Could not load member list',
     }
   } finally {
     membersByRankLoading.value = { ...membersByRankLoading.value, [code]: false }
@@ -392,9 +399,9 @@ function rankAssignCheckboxTitle(rankCode: string, rankLabel: string): string {
   const code = String(rankCode ?? '').trim()
   if (!code) return ''
   if (membersByRankLoading.value[code] || !isRankMemberListLoaded(code)) {
-    return 'Đang tải danh sách member cho rank này…'
+    return 'Loading members for this rank…'
   }
-  if (!rankHasMembers(code)) return 'Không có member nào thuộc rank này'
+  if (!rankHasMembers(code)) return 'No members in this rank'
   const lab = String(rankLabel ?? '').trim()
   return lab || code
 }
@@ -490,7 +497,7 @@ async function loadTemplatePackages() {
     templatePackageId.value = ''
     templateItems.value = []
     templateApiError.value =
-      e instanceof Error ? e.message : 'Không tải được danh sách gói template KPI.'
+      e instanceof Error ? e.message : 'Could not load KPI template packages.'
   } finally {
     templatePackagesLoading.value = false
   }
@@ -509,7 +516,7 @@ async function loadTemplateItemsForPackage(id: string) {
   } catch (e: unknown) {
     templateItems.value = []
     templateApiError.value =
-      e instanceof Error ? e.message : 'Không tải được KPI trong gói template.'
+      e instanceof Error ? e.message : 'Could not load KPIs in the template package.'
   } finally {
     templateItemsLoading.value = false
   }
@@ -543,7 +550,7 @@ const templateKpiDisplayGroups = computed<GmTemplateKpiDisplayGroup[]>(() => {
     const meta = new Map<string, { label: string; rows: GmTemplateKpiPickRow[] }>()
     for (const r of rows) {
       const id = String(r.item.categoryId ?? '').trim() || 'uncategorized'
-      const label = String(r.item.categoryName ?? '').trim() || 'Không phân loại'
+      const label = String(r.item.categoryName ?? '').trim() || 'Uncategorized'
       if (!meta.has(id)) meta.set(id, { label, rows: [] })
       meta.get(id)!.rows.push(r)
     }
@@ -661,7 +668,7 @@ function buildPayloadFromTemplateApiItem(it: GmKpiTemplateItemRow): Record<strin
 async function confirmTemplateBatchCreate() {
   if (!String(templatePackageId.value ?? '').trim()) {
     clearFormErrors()
-    formErrors.value = { template: 'Vui lòng chọn gói template KPI trước.' }
+    formErrors.value = { template: 'Please select a KPI template package first.' }
     await nextTick()
     errorBannerRef.value?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
     return
@@ -669,7 +676,7 @@ async function confirmTemplateBatchCreate() {
   const rows = templateKpiRows.value.filter((r) => templateSelectedKeys.value.has(r.key))
   if (!rows.length) {
     clearFormErrors()
-    formErrors.value = { template: 'Chọn ít nhất một KPI trong gói mẫu.' }
+    formErrors.value = { template: 'Select at least one KPI in the package.' }
     await nextTick()
     errorBannerRef.value?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
     return
@@ -683,7 +690,7 @@ async function confirmTemplateBatchCreate() {
   }
   savingTemplateBatch.value = false
   if (payloads.length === 0) {
-    formErrors.value = { template: 'Không tạo được payload từ mẫu đã chọn.' }
+    formErrors.value = { template: 'Could not build payload from the selected template.' }
     return
   }
   emit('saved', payloads)
@@ -728,7 +735,7 @@ async function loadCopyKpisForSourceYear() {
     copyKpiHierarchyRows.value = mapGmDiagnosticsApiKpisToHierarchyRows(data.kpis)
   } catch (e: unknown) {
     copyKpiHierarchyRows.value = []
-    copyKpisError.value = e instanceof Error ? e.message : 'Không tải được danh sách KPI theo năm'
+    copyKpisError.value = e instanceof Error ? e.message : 'Could not load KPI list for the year'
   } finally {
     copyKpisLoading.value = false
   }
@@ -822,18 +829,18 @@ function applyCopyFromKpi(id: string) {
 const assignLabel = computed(() => {
   if (kpiType.value === 'promotion') return 'Assign To Individuals'
   if (kpiType.value === 'individual') return 'Assign To Ranks / Roles'
-  return 'Giao cho quản lý department'
+  return 'Assign to department manager'
 })
 
 /** Tooltip cho công thức đang chọn (select + icon). */
 const selectedFormulaExpression = computed(() => {
   const ruleRow = calcRulesWithTypes.value.find((row) => row.code === calculationRuleCode.value)
-  if (!ruleRow) return 'Chọn quy tắc tính toán.'
+  if (!ruleRow) return 'Select a calculation rule.'
   const parts = [ruleRow.label]
   const types = typesForSelectedRule.value
   const typeRow = types.find((t) => t.code === calculationTypeCode.value)
-  if (types.length > 1 && typeRow) parts.push(`Chiều tính: ${typeRow.label}.`)
-  else if (types.length === 1 && typeRow) parts.push(`Chiều tính: ${typeRow.label}.`)
+  if (types.length > 1 && typeRow) parts.push(`Comparison: ${typeRow.label}.`)
+  else if (types.length === 1 && typeRow) parts.push(`Comparison: ${typeRow.label}.`)
   return parts.join(' — ')
 })
 
@@ -1388,7 +1395,7 @@ watch(open, async (v) => {
           await hydrateFormFromStrategicKpiEditData(data, props.editInitial)
         } catch (e: unknown) {
           strategicEditDetailError.value =
-            e instanceof Error ? e.message : 'Không tải được dữ liệu KPI để sửa'
+            e instanceof Error ? e.message : 'Could not load KPI data for editing'
           hydrateFormFromHierarchyKpi(props.editInitial)
         } finally {
           strategicEditDetailLoading.value = false
@@ -1474,54 +1481,54 @@ function validateForm(): boolean {
   const err: Record<string, string> = {}
 
   if (!kpiName.value.trim()) {
-    err.kpiName = 'Vui lòng nhập tên KPI.'
+    err.kpiName = 'Please enter a KPI name.'
   }
 
   if (!String(perspective.value).trim()) {
-    err.perspective = 'Chọn nhóm KPI (kpi_categories).'
+    err.perspective = 'Select a KPI group (kpi_categories).'
   }
 
   if (evaluationYearOptions.value.length === 0) {
     err.formCycleId =
-      evaluationCyclesError.value || 'Chưa có chu kỳ KPI (năm ≥ năm hiện tại) trong hệ thống.'
+      evaluationCyclesError.value || 'No KPI cycle (year ≥ current year) is configured.'
   } else if (!String(formCycleId.value).trim()) {
-    err.formCycleId = 'Chọn chu kỳ đánh giá (năm KPI).'
+    err.formCycleId = 'Select an evaluation cycle (KPI year).'
   }
 
   if (needsStrategicTargetInput.value) {
     const tvRaw = targetValue.value
     const tvStr = String(tvRaw ?? '').trim()
     if (tvStr === '' || Number.isNaN(Number(tvRaw))) {
-      err.targetValue = 'Nhập mục tiêu (số).'
+      err.targetValue = 'Enter a numeric target.'
     } else if (Number(tvRaw) < 0) {
-      err.targetValue = 'Mục tiêu phải ≥ 0.'
+      err.targetValue = 'Target must be ≥ 0.'
     }
   }
 
   const wStr = String(weightPct.value).trim()
   const wNum = Number.parseFloat(wStr)
   if (!wStr) {
-    err.weightPct = 'Nhập trọng số (%).'
+    err.weightPct = 'Enter weight (%).'
   } else if (!Number.isFinite(wNum) || wNum <= 0 || wNum > 100) {
-    err.weightPct = 'Trọng số phải từ 1 đến 100.'
+    err.weightPct = 'Weight must be between 1 and 100.'
   }
 
   const ruleOpts = calcRulesWithTypes.value
   if (!ruleOpts.some((row) => row.code === calculationRuleCode.value)) {
-    err.calculationMethod = 'Chọn quy tắc tính toán.'
+    err.calculationMethod = 'Select a calculation rule.'
   } else {
     const types = typesForSelectedRule.value
     if (types.length > 0) {
       const tc = calculationTypeCode.value
       if (tc == null || !types.some((t) => t.code === tc)) {
-        err.calculationMethod = 'Chọn chiều tính toán.'
+        err.calculationMethod = 'Select a calculation direction.'
       }
     }
   }
 
   const descTrim = description.value.trim()
   if (!descTrim) {
-    err.scoringRules = 'Vui lòng nhập quy tắc chấm điểm (đủ các mức 1–5 theo cú pháp).'
+    err.scoringRules = 'Enter scoring rules (levels 1–5 per syntax).'
   } else {
     const vr = validateScoringRulesDsl(description.value)
     if (!vr.ok) {
@@ -1546,10 +1553,10 @@ function validateForm(): boolean {
     if (missingLabels.length > 0) {
       err.pmTargets =
         missingLabels.length === selectedPMs.value.length
-          ? 'Đã chọn PM — vui lòng nhập mục tiêu riêng cho từng PM'
-          : `Nhập mục tiêu cho: ${missingLabels.join(', ')}.`
+          ? 'PMs selected — enter a separate target for each PM'
+          : `Enter targets for: ${missingLabels.join(', ')}.`
     } else if (invalidLabels.length > 0) {
-      err.pmTargets = `Mục tiêu PM phải là số ≥ 0: ${invalidLabels.join(', ')}.`
+      err.pmTargets = `PM targets must be numbers ≥ 0: ${invalidLabels.join(', ')}.`
     }
   }
 
@@ -1645,12 +1652,12 @@ async function save() {
                 <span class="rounded-lg bg-blue-100 p-1.5 text-blue-700 shadow-sm">
                   <i class="fas fa-bullseye text-sm" />
                 </span>
-                {{ isEditingFromDiagnostics ? 'Sửa Strategic KPI' : 'Create Strategic KPI' }}
+                {{ isEditingFromDiagnostics ? 'Edit strategic KPI' : 'Create Strategic KPI' }}
               </h2>
               <p class="mt-1 text-[10px] font-bold uppercase tracking-wider text-slate-500">
                 {{
                   isEditingFromDiagnostics
-                    ? 'Chỉnh sửa thông tin KPI chiến lược'
+                    ? 'Edit strategic KPI details'
                     : 'Define organization-level targets'
                 }}
               </p>
@@ -1658,7 +1665,7 @@ async function save() {
             <button
               type="button"
               class="rounded-full p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-800"
-              aria-label="Đóng"
+              aria-label="Close"
               @click="close"
             >
               <i class="fas fa-times text-base" />
@@ -1682,7 +1689,7 @@ async function save() {
                 @click="createTab = 'custom'"
               >
                 <i class="fas fa-pen-to-square" aria-hidden="true" />
-                Tạo mới KPI
+                Create custom KPI
               </button>
               <button
                 type="button"
@@ -1695,7 +1702,7 @@ async function save() {
                 @click="createTab = 'template'"
               >
                 <i class="fas fa-table-columns" aria-hidden="true" />
-                Từ Template
+                From template
               </button>
             </div>
           </div>
@@ -1707,15 +1714,15 @@ async function save() {
               class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700"
               role="status"
             >
-              Đang tải dữ liệu KPI từ máy chủ…
+              Loading KPI data from server…
             </p>
             <p
               v-else-if="strategicEditDetailError"
               class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900"
               role="alert"
             >
-              {{ strategicEditDetailError }} — đã hiển thị tạm từ bảng diagnostics; kiểm tra lại assignee trước khi
-              lưu.
+              {{ strategicEditDetailError }} — showing cached diagnostics row; verify assignees before
+              saving.
             </p>
             <div
               v-if="Object.keys(formErrors).length > 0"
@@ -1726,7 +1733,7 @@ async function save() {
             >
               <p class="mb-2 flex items-center gap-2 font-bold">
                 <i class="fas fa-circle-exclamation text-rose-600" aria-hidden="true" />
-                {{ isEditingFromDiagnostics ? 'Vui lòng sửa các lỗi sau trước khi lưu.' : 'Vui lòng sửa các lỗi sau trước khi tạo KPI.' }}
+                {{ isEditingFromDiagnostics ? 'Please fix the following before saving.' : 'Please fix the following before creating the KPI.' }}
               </p>
               <ul class="list-inside list-disc space-y-0.5 text-[11px] font-semibold text-rose-800">
                 <li v-for="(msg, key) in formErrors" :key="key">{{ msg }}</li>
@@ -1742,7 +1749,7 @@ async function save() {
               <div class="mb-3 flex items-center gap-2 text-indigo-900">
                 <i class="fas fa-copy text-xs" aria-hidden="true" />
                 <p class="text-[10px] font-bold uppercase tracking-wider">
-                  Sao chép nhanh từ KPI đã có
+                  Quick copy from existing KPI
                 </p>
               </div>
               <div class="flex flex-col gap-3 sm:flex-row sm:items-end">
@@ -1751,7 +1758,7 @@ async function save() {
                     for="gm-copy-source-year"
                     class="mb-1 block text-[9px] font-bold uppercase tracking-wider text-indigo-900/85"
                   >
-                    Năm nguồn
+                    Source year
                   </label>
                   <p v-if="copyCyclesError" class="mb-1 text-[9px] font-semibold text-rose-600">
                     {{ copyCyclesError }}
@@ -1799,7 +1806,7 @@ async function save() {
                         {{
                           copyFromId
                             ? copyKpiSelectedLabel
-                            : '-- Chọn KPI để tải thông tin & Assignment --'
+                            : '-- Select a KPI to load details & assignment --'
                         }}
                       </span>
                       <i
@@ -1830,7 +1837,7 @@ async function save() {
                             v-model="copyKpiFilterQuery"
                             type="search"
                             autocomplete="off"
-                            placeholder="Gõ tên KPI để lọc…"
+                            placeholder="Type KPI name to filter…"
                             class="w-full rounded-md border border-indigo-200 bg-white py-1.5 pl-8 pr-2 text-xs font-medium text-slate-800 outline-none transition focus:border-indigo-500 focus:ring-1 focus:ring-indigo-200"
                             @click.stop
                           />
@@ -1858,9 +1865,9 @@ async function save() {
                           class="px-3 py-6 text-center text-xs font-medium text-slate-500"
                         >
                           <template v-if="copyKpiFilterQuery.trim()">
-                            Không có KPI khớp “{{ copyKpiFilterQuery.trim() }}”.
+                            No KPIs match “{{ copyKpiFilterQuery.trim() }}”.
                           </template>
-                          <template v-else> Không có KPI trong danh sách. </template>
+                          <template v-else> No KPIs in the list. </template>
                         </p>
                       </div>
                     </div>
@@ -1875,13 +1882,13 @@ async function save() {
                 <span class="rounded-lg bg-slate-100 p-1.5 text-indigo-600">
                   <i class="fas fa-file-lines text-sm" />
                 </span>
-                Thông tin cơ bản &amp; phân loại
+                Basic information &amp; classification
               </label>
               <div class="space-y-4">
                 <div class="flex flex-col gap-3 sm:flex-row">
                   <div class="sm:w-1/3">
                     <label class="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                      Nhóm KPI (kpi_categories) <span class="text-rose-500">*</span>
+                      KPI group (kpi_categories) <span class="text-rose-500">*</span>
                     </label>
                     <p v-if="kpiCategoriesError" class="mb-1 text-[10px] font-semibold text-rose-600">
                       {{ kpiCategoriesError }}
@@ -1893,7 +1900,7 @@ async function save() {
                         class="input-required w-full cursor-pointer appearance-none rounded-md py-2 pl-3 pr-8 text-xs font-bold text-slate-800 outline-none transition-all disabled:cursor-not-allowed disabled:opacity-60"
                         :class="formErrors.perspective ? '!border-rose-400 !bg-rose-50/50' : ''"
                       >
-                        <option value="" disabled>{{ kpiCategoriesLoading ? 'Đang tải…' : '— Chọn nhóm —' }}</option>
+                        <option value="" disabled>{{ kpiCategoriesLoading ? 'Loading…' : '— Select group —' }}</option>
                         <option v-for="o in perspectiveOptions" :key="o.value" :value="o.value">{{ o.label }}</option>
                       </select>
                       <i class="fas fa-chevron-down pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400" />
@@ -1921,11 +1928,11 @@ async function save() {
 
                 <div>
                   <label class="mb-2 block text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                    Loại hình KPI (cách thức giao) <span class="text-rose-500">*</span>
+                    KPI assignment type <span class="text-rose-500">*</span>
                   </label>
                   <p v-if="kpiTypesError" class="mb-2 text-[10px] font-semibold text-rose-600">{{ kpiTypesError }}</p>
                   <p v-else-if="kpiTypesLoading" class="mb-2 text-[10px] font-medium text-slate-500">
-                    Đang tải loại hình KPI từ hệ thống…
+                    Loading KPI types…
                   </p>
                   <div
                     class="grid grid-cols-1 gap-3"
@@ -1964,7 +1971,7 @@ async function save() {
                     v-if="!kpiTypesLoading && !kpiTypesError && kpiTypeRows.length === 0"
                     class="mt-2 text-[11px] font-medium text-amber-800"
                   >
-                    Chưa có dữ liệu loại KPI (nhóm KPI_TYPE trong hệ thống).
+                    No KPI type data (KPI_TYPE group in the system).
                   </p>
                 </div>
 
@@ -1990,7 +1997,7 @@ async function save() {
                   </div>
                   <div class="min-w-0">
                     <label class="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                      Trọng số (Weight) <span class="text-rose-500">*</span>
+                      Weight <span class="text-rose-500">*</span>
                     </label>
                     <div class="relative">
                       <input
@@ -2031,7 +2038,7 @@ async function save() {
                   </div>
                   <div class="min-w-0">
                     <label class="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                      Năm đánh giá <span class="text-rose-500">*</span>
+                      Evaluation year <span class="text-rose-500">*</span>
                     </label>
                     <p v-if="evaluationCyclesError" class="mb-1 text-[10px] font-semibold text-amber-700">
                       {{ evaluationCyclesError }}
@@ -2063,7 +2070,7 @@ async function save() {
                     type="checkbox"
                     class="h-3.5 w-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-400/40"
                   />
-                  <span>KPI quan trọng <span class="font-normal text-slate-500">(is_important)</span></span>
+                  <span>Important KPI</span>
                 </label>
 
                 <!-- Phân loại cách tính: quy tắc (dropdown) + chiều tính (radio khi có) -->
@@ -2073,14 +2080,14 @@ async function save() {
                   </p>
                   <div class="mb-1.5 flex items-center gap-1.5">
                     <label class="block flex-1 text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                      Phân loại cách tính <span class="text-rose-500">*</span>
+                      Calculation type <span class="text-rose-500">*</span>
                     </label>
                     <span
                       class="inline-flex shrink-0 cursor-help text-slate-400 transition-colors hover:text-blue-600"
                       :title="selectedFormulaExpression"
                       tabindex="0"
                       role="note"
-                      aria-label="Biểu thức công thức đang chọn"
+                      aria-label="Selected formula expression"
                     >
                       <i class="fas fa-circle-question text-[12px]" aria-hidden="true" />
                     </span>
@@ -2143,13 +2150,13 @@ async function save() {
                 <div>
                   <div class="mb-1.5 flex items-center gap-1.5">
                     <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                      Quy tắc chấm điểm <span class="text-rose-500">*</span>
+                      Scoring rules <span class="text-rose-500">*</span>
                     </label>
                     <span class="group relative inline-flex shrink-0">
                       <button
                         type="button"
                         class="cursor-help rounded p-0.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-blue-600 focus-visible:outline focus-visible:ring-2 focus-visible:ring-slate-300"
-                        aria-label="Ví dụ cú pháp quy tắc chấm điểm"
+                        aria-label="Scoring rules syntax example"
                       >
                         <i class="fas fa-circle-question text-[12px]" aria-hidden="true" />
                       </button>
@@ -2187,7 +2194,7 @@ async function save() {
                 <span class="rounded-lg bg-slate-100 p-1.5 text-indigo-600">
                   <i class="fas fa-diagram-project text-sm" />
                 </span>
-                Phân bổ / Giao việc
+                Assignment &amp; rollout
               </label>
             </div>
 
@@ -2208,8 +2215,8 @@ async function save() {
                     <span class="w-full font-medium text-slate-400">
                       {{
                         selectedPMs.length === 0
-                          ? 'Chọn một hoặc nhiều quản lý department…'
-                          : `Đã chọn ${selectedPMs.length} quản lý — bấm để thêm; xóa từng người ở danh sách bên dưới`
+                          ? 'Select one or more department managers…'
+                          : `${selectedPMs.length} manager(s) selected — click to add more; remove from the list below`
                       }}
                     </span>
                   </button>
@@ -2228,7 +2235,7 @@ async function save() {
                       {{ pmUsersError }}
                     </p>
                     <div v-if="pmUsersLoading" class="px-4 py-3 text-xs font-medium text-slate-500">
-                      Đang tải danh sách quản lý department…
+                      Loading department managers…
                     </div>
                     <template v-else>
                       <label
@@ -2247,7 +2254,7 @@ async function save() {
                         }}</span>
                       </label>
                       <p v-if="pmUsers.length === 0" class="px-4 py-3 text-xs text-slate-500">
-                        Không có department nào được gán manager.
+                        No departments have an assigned manager.
                       </p>
                     </template>
                   </div>
@@ -2259,7 +2266,7 @@ async function save() {
                 >
                   <p class="mb-2 flex items-center gap-1.5 text-[10px] font-bold uppercase text-blue-800">
                     <i class="fas fa-crosshairs text-[10px]" />
-                    Mục tiêu theo từng quản lý
+                    Targets per manager
                   </p>
                   <p v-if="formErrors.pmTargets" class="mb-2 text-[11px] font-semibold leading-snug text-rose-600">
                     {{ formErrors.pmTargets }}
@@ -2280,7 +2287,7 @@ async function save() {
                       <span
                         v-if="isFeedbackAssignee(pm)"
                         class="ml-1 inline-flex items-center gap-1 rounded-md border border-amber-300 bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-800"
-                        title="Đang xử lý feedback của người này"
+                        title="Processing feedback for this person"
                       >
                         <i class="fas fa-comment-dots text-[8px]" />
                         Feedback
@@ -2292,7 +2299,7 @@ async function save() {
                         type="number"
                         min="0"
                         step="any"
-                        placeholder="Nhập target..."
+                        placeholder="Enter target..."
                         class="min-w-0 flex-1 rounded-md border bg-white px-2 py-1 text-xs font-bold text-slate-800 outline-none transition-all focus:ring-1 focus:ring-blue-100"
                         :class="
                           pmTargetRowHasValidationIssue(pm)
@@ -2306,7 +2313,7 @@ async function save() {
                         class="shrink-0 rounded-md border border-rose-200 bg-rose-50 px-2.5 py-1 text-[10px] font-bold text-rose-700 transition-colors hover:bg-rose-100"
                         @click="togglePm(pm)"
                       >
-                        Xóa
+                        Remove
                       </button>
                     </div>
                   </div>
@@ -2316,7 +2323,7 @@ async function save() {
               <!-- Independent: rank chips + member override -->
               <div v-else-if="kpiType === 'individual'" class="space-y-4">
                 <p v-if="ranksError" class="text-[11px] font-semibold text-amber-800">{{ ranksError }}</p>
-                <p v-else-if="ranksLoading" class="text-[11px] font-medium text-slate-500">Đang tải danh sách cấp bậc…</p>
+                <p v-else-if="ranksLoading" class="text-[11px] font-medium text-slate-500">Loading ranks…</p>
                 <div class="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-5">
                   <label
                     v-for="rk in rankOptionsForUi"
@@ -2359,7 +2366,7 @@ async function save() {
 
                 <div v-if="selectedRanks.length > 0" class="space-y-3 rounded-xl border border-blue-100 bg-blue-50/40 p-4">
                   <div>
-                    <p class="text-[10px] font-bold uppercase tracking-wider text-blue-700">Danh sách member theo rank</p>
+                    <p class="text-[10px] font-bold uppercase tracking-wider text-blue-700">Members by rank</p>
                   </div>
 
                   <div class="relative">
@@ -2369,7 +2376,7 @@ async function save() {
                     <input
                       v-model="individualRankMemberSearch"
                       type="text"
-                      placeholder="Nhập tên member hoặc section để tìm kiếm..."
+                      placeholder="Search by member name or section..."
                       class="w-full rounded-lg border border-slate-200 bg-white py-2 pl-8 pr-3 text-xs font-medium text-slate-700 outline-none transition focus:border-blue-500 focus:ring-1 focus:ring-blue-100"
                     >
                   </div>
@@ -2393,7 +2400,7 @@ async function save() {
                             <span class="truncate text-sm font-bold text-slate-800">{{ rankCard.label }}</span>
                           </div>
                           <p class="mt-1 text-[11px] text-slate-500">
-                            Đã chọn {{ rankCard.selectedCount }}/{{ rankCard.totalCount }} member
+                            Selected {{ rankCard.selectedCount }}/{{ rankCard.totalCount }} members
                           </p>
                         </div>
                         <i
@@ -2404,7 +2411,7 @@ async function save() {
 
                       <div v-if="rankCard.isExpanded" class="border-t border-slate-100 px-4 py-3">
                         <div v-if="rankCard.loadingMembers" class="text-xs font-medium text-slate-500">
-                          Đang tải danh sách member…
+                          Loading members…
                         </div>
                         <p v-else-if="rankCard.membersLoadError" class="text-xs font-medium text-rose-700">
                           {{ rankCard.membersLoadError }}
@@ -2412,8 +2419,8 @@ async function save() {
                         <div v-else-if="rankCard.members.length === 0" class="text-xs font-medium text-slate-400">
                           {{
                             individualRankMemberSearch.trim()
-                              ? 'Không tìm thấy member phù hợp với bộ lọc trong rank này.'
-                              : 'Không có nhân sự với cấp bậc này trong hệ thống.'
+                              ? 'No members match the filter for this rank.'
+                              : 'No people with this rank in the system.'
                           }}
                         </div>
 
@@ -2446,7 +2453,7 @@ async function save() {
                             <span
                               v-if="isFeedbackAssignee(member.val)"
                               class="ml-1 inline-flex shrink-0 items-center gap-1 rounded-md border border-amber-300 bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-800"
-                              title="Đang xử lý feedback của người này"
+                              title="Processing feedback for this person"
                             >
                               <i class="fas fa-comment-dots text-[8px]" />
                               Feedback
@@ -2461,7 +2468,7 @@ async function save() {
                     v-else
                     class="rounded-xl border border-dashed border-slate-300 bg-white px-4 py-5 text-center text-xs font-medium text-slate-500"
                   >
-                    Không tìm thấy member phù hợp với từ khóa theo tên hoặc section.
+                    No members match the keyword by name or section.
                   </div>
                 </div>
               </div>
@@ -2476,8 +2483,8 @@ async function save() {
                   <span class="w-full font-medium text-slate-400">
                     {{
                       selectedMembers.length === 0
-                        ? 'Tìm và chọn nhiều thành viên...'
-                        : `Đã chọn ${selectedMembers.length} thành viên — bấm để thêm; xóa từng người ở danh sách bên dưới`
+                        ? 'Search and select multiple members...'
+                        : `${selectedMembers.length} member(s) selected — click to add more; remove from the list below`
                     }}
                   </span>
                 </button>
@@ -2516,7 +2523,7 @@ async function save() {
                     v-if="promotionAssigneesLoading"
                     class="shrink-0 border-b border-slate-100 px-3 py-6 text-center text-xs font-medium text-slate-500"
                   >
-                    Đang tải danh sách nhân sự…
+                    Loading people…
                   </div>
                   <div class="custom-scrollbar flex-1 overflow-y-auto p-1">
                     <template v-if="filteredMemberOptions.length > 0">
@@ -2558,8 +2565,8 @@ async function save() {
                     >
                       {{
                         promotionAssigneeDirectOptions.length === 0
-                          ? 'Chưa có nhân sự khả dụng.'
-                          : 'Không có thành viên khớp bộ lọc.'
+                          ? 'No people available yet.'
+                          : 'No members match the filter.'
                       }}
                     </p>
                   </div>
@@ -2569,7 +2576,7 @@ async function save() {
                   v-if="selectedMembers.length > 0"
                   class="mt-2 space-y-1.5 rounded-lg border border-blue-100 bg-blue-50/50 p-3"
                 >
-                  <p class="mb-1 text-[10px] font-bold uppercase tracking-wide text-blue-800">Thành viên đã chọn</p>
+                  <p class="mb-1 text-[10px] font-bold uppercase tracking-wide text-blue-800">Selected members</p>
                   <div
                     v-for="id in selectedMembers"
                     :key="id"
@@ -2587,7 +2594,7 @@ async function save() {
                       <span
                         v-if="isFeedbackAssignee(id)"
                         class="ml-1 inline-flex shrink-0 items-center gap-1 rounded-md border border-amber-300 bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-800"
-                        title="Đang xử lý feedback của người này"
+                        title="Processing feedback for this person"
                       >
                         <i class="fas fa-comment-dots text-[8px]" />
                         Feedback
@@ -2598,7 +2605,7 @@ async function save() {
                       class="shrink-0 rounded-md border border-rose-200 bg-rose-50 px-2.5 py-1 text-[10px] font-bold text-rose-700 transition-colors hover:bg-rose-100"
                       @click="toggleMember(id)"
                     >
-                      Xóa
+                      Remove
                     </button>
                   </div>
                 </div>
@@ -2616,7 +2623,7 @@ async function save() {
               class="mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-500"
               for="gm-template-package"
             >
-              Gói template KPI
+              KPI template package
             </label>
             <p v-if="templateApiError" class="mb-2 text-[11px] font-semibold text-rose-600">
               {{ templateApiError }}
@@ -2630,11 +2637,11 @@ async function save() {
               >
                 <template v-if="templatePackages.length === 0">
                   <option value="" disabled>
-                    {{ templatePackagesLoading ? 'Đang tải gói mẫu…' : 'Chưa có gói template trên hệ thống' }}
+                    {{ templatePackagesLoading ? 'Loading packages…' : 'No template packages on the system' }}
                   </option>
                 </template>
                 <template v-else>
-                  <option value="" disabled>— Chọn gói template —</option>
+                  <option value="" disabled>— Select template package —</option>
                   <option v-for="s in templatePackages" :key="s.id" :value="s.id">
                     {{ s.name }}
                   </option>
@@ -2646,7 +2653,7 @@ async function save() {
               />
             </div>
             <p v-if="templateItemsLoading" class="text-[11px] font-medium text-slate-500">
-              Đang tải danh sách KPI trong gói…
+              Loading KPIs in package…
             </p>
             <div
               class="overflow-hidden rounded-lg border border-slate-200 bg-white"
@@ -2663,20 +2670,20 @@ async function save() {
                   :checked="templateSelectAllChecked"
                   @change="toggleTemplateSelectAll()"
                 />
-                <span class="text-[10px] font-bold uppercase tracking-wider text-slate-600">Chọn tất cả</span>
+                <span class="text-[10px] font-bold uppercase tracking-wider text-slate-600">Select all</span>
               </label>
               <div class="divide-y divide-slate-100">
                 <p
                   v-if="!templatePackageId.trim() && !templateItemsLoading"
                   class="px-4 py-6 text-center text-xs font-medium text-slate-500"
                 >
-                  Chọn một gói template ở trên để tải danh sách KPI mẫu.
+                  Select a template package above to load sample KPIs.
                 </p>
                 <p
                   v-else-if="!templateItemsLoading && templateKpiRows.length === 0 && templatePackageId"
                   class="px-4 py-6 text-center text-xs font-medium text-slate-500"
                 >
-                  Gói này chưa có KPI mẫu (kpi_template_items).
+                  This package has no template KPIs (kpi_template_items).
                 </p>
                 <template v-for="group in templateKpiDisplayGroups" :key="'tpl-grp-' + group.key">
                   <div class="border-t border-slate-100 first:border-t-0">
@@ -2743,7 +2750,7 @@ async function save() {
           >
             <i v-if="savingTemplateBatch" class="fas fa-spinner fa-spin text-sm" aria-hidden="true" />
             <i v-else class="fas fa-layer-group text-sm" aria-hidden="true" />
-            {{ savingTemplateBatch ? 'Đang tạo…' : 'Tạo các KPI đã chọn' }}
+            {{ savingTemplateBatch ? 'Creating…' : 'Create selected KPIs' }}
           </button>
           <button
             v-else
@@ -2754,7 +2761,7 @@ async function save() {
           >
             <i v-if="saving" class="fas fa-spinner fa-spin text-sm" aria-hidden="true" />
             <i v-else class="fas fa-save text-sm" aria-hidden="true" />
-            {{ saving ? 'Saving...' : isEditingFromDiagnostics ? 'Lưu thay đổi' : 'Create KPI' }}
+            {{ saving ? 'Saving...' : isEditingFromDiagnostics ? 'Save changes' : 'Create KPI' }}
           </button>
         </div>
         </div>

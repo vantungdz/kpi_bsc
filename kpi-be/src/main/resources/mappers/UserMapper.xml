@@ -240,7 +240,7 @@
                 WHEN COUNT(ka.id) = 0 THEN 'not_started'
                 WHEN COUNT(ka.id) FILTER (WHERE ka.status_code != 603) = 0 THEN 'completed'
                 WHEN COUNT(ka.id) FILTER (WHERE ka.status_code IN (501,502,601,602)) > 0 THEN 'pending'
-                WHEN MAX(kc.end_year_deadline) &lt; NOW()
+                WHEN MAX(kc.end_year_end) &lt; NOW()
                      AND COUNT(ka.id) FILTER (WHERE ka.status_code != 603) > 0 THEN 'overdue'
                 ELSE 'not_started'
             END                                                   AS status,
@@ -292,6 +292,7 @@
             COALESCE(d.name, 'N/A')                                               AS section,
             COALESCE(rk.code, 'N/A')                                              AS rank,
             COALESCE(jt.name, 'N/A')                                              AS jobTitle,
+            CAST(jt.id AS VARCHAR)                                                AS jobTitleId,
             CASE WHEN u.is_active = TRUE THEN 'active' ELSE 'inactive' END        AS status
         FROM users u
         LEFT JOIN user_departments ud
@@ -320,6 +321,7 @@
             COALESCE(d.name, 'N/A')                                               AS section,
             COALESCE(rk.code, 'N/A')                                              AS rank,
             COALESCE(jt.name, 'N/A')                                              AS jobTitle,
+            CAST(jt.id AS VARCHAR)                                                AS jobTitleId,
             CASE WHEN u.is_active = TRUE THEN 'active' ELSE 'inactive' END        AS status
         FROM users u
         LEFT JOIN user_departments ud
@@ -335,7 +337,7 @@
 
     <insert id="insertEmployee">
         INSERT INTO users (id, username, email, password_hash, full_name, job_title_id, is_active)
-        VALUES (#{id}, #{username}, #{email}, #{passwordHash}, #{fullName},
+        VALUES (#{id}, #{code}, #{email}, #{passwordHash}, #{fullName},
                 #{jobTitleId, jdbcType=OTHER, typeHandler=com.company.kpi.common.mybatis.UUIDTypeHandler},
                 #{isActive})
     </insert>
@@ -412,7 +414,17 @@
             AVG(ka.end_pm_score) AS pm_score,
             <!-- user_kpi_summaries là /user+cycle: không hiển thị khi còn KPI ở giai đoạn giao/chấp nhận (404…) để tránh nhầm nhận xét từ KPI khác -->
             CASE
-                WHEN MIN(ka.status_code) IS NOT NULL AND MIN(ka.status_code) >= 501 THEN MAX(uks.evaluation_supervisor_comments)
+                WHEN MIN(ka.status_code) IS NOT NULL AND MIN(ka.status_code) >= 501 THEN
+                    NULLIF(
+                        TRIM(
+                            CONCAT_WS(
+                                E'\n',
+                                NULLIF(TRIM(COALESCE(MAX(uks.evaluation_supervisor_comments), '')), ''),
+                                NULLIF(TRIM(COALESCE(MAX(uks.evaluation_supervisor_comments_promotion), '')), '')
+                            )
+                        ),
+                        ''
+                    )
                 ELSE NULL
             END AS pm_comment,
             MIN(ka.status_code) AS min_status_code,
@@ -424,5 +436,33 @@
         LEFT JOIN user_kpi_summaries uks ON uks.user_id = u.id AND uks.cycle_id = #{cycleId} AND uks.deleted_at IS NULL
         WHERE u.deleted_at IS NULL
         GROUP BY u.id, u.full_name, jt.id, jt.name, tt.supervisor_id
+    </select>
+
+    <select id="listPmPortfolioGateBlockingMembers" resultType="com.company.kpi.response.pm.PmPortfolioGatePendingMemberResponse">
+        WITH RECURSIVE team_tree AS (
+            SELECT ud.user_id
+            FROM user_departments ud
+            WHERE ud.supervisor_id = #{pmId}
+            UNION ALL
+            SELECT ud.user_id
+            FROM user_departments ud
+            INNER JOIN team_tree tt ON ud.supervisor_id = tt.user_id
+        )
+        SELECT DISTINCT u.id AS userId, u.full_name AS fullName
+        FROM team_tree tt
+        INNER JOIN users u ON u.id = tt.user_id AND u.deleted_at IS NULL
+        WHERE EXISTS (
+            SELECT 1
+            FROM kpi_assignments ka
+            INNER JOIN kpis_information ki ON ka.kpi_info_id = ki.id AND ki.deleted_at IS NULL
+            INNER JOIN kpi_master km ON ki.master_kpi_id = km.id AND km.deleted_at IS NULL
+            INNER JOIN sys_status_codes sc ON sc.code = km.type_code AND sc.category = 'KPI_TYPE'
+            WHERE ka.user_id = u.id
+              AND ka.cycle_id = #{cycleId}
+              AND ka.deleted_at IS NULL
+              AND UPPER(TRIM(sc.name)) IN ('INDIVIDUAL', 'TEAM')
+              AND ka.status_code &lt; 501
+        )
+        ORDER BY u.full_name
     </select>
 </mapper>

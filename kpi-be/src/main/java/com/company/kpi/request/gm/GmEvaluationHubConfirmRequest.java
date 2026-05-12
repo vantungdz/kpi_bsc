@@ -19,9 +19,15 @@ public class GmEvaluationHubConfirmRequest {
     @NotNull
     private UUID evaluationUserId;
 
-    /** Nhận xét tổng (602) — lưu {@code user_kpi_summaries.evaluation_supervisor_comments}; 502-only có thể bỏ trống. */
+    /** Nhận xét tổng (602) — lưu portfolio hoặc promotion theo {@link #promotion}. */
     @Size(max = 8000)
     private String supervisorComment;
+
+    /**
+     * {@code true}: lưu vào {@code evaluation_supervisor_comments_promotion};
+     * {@code false}/null: lưu vào {@code evaluation_supervisor_comments} (portfolio/BSC).
+     */
+    private Boolean promotion;
 
     @NotEmpty
     @Size(max = 500)

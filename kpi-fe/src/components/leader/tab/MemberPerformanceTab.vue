@@ -45,6 +45,10 @@ const evaluationComment = computed(() =>
   String(props.data?.kpiSummary?.evaluationComments ?? '').trim(),
 )
 
+const evaluationSupervisorComment = computed(() =>
+  String(props.data?.kpiSummary?.evaluationSupervisorComments ?? '').trim(),
+)
+
 const allAssignments = computed(() =>
   (props.data?.categories ?? []).flatMap(c => c.assignments ?? []),
 )
@@ -196,7 +200,7 @@ function actualPreview(raw: string | null | undefined): string {
         </thead>
         <tbody class="divide-y divide-slate-100">
           <template v-for="(category, catIndex) in data.categories" :key="`p-${catIndex}`">
-            <tr class="bg-amber-50/80 border-y border-amber-100">
+            <tr class="bg-amber-100 border-y border-amber-100">
               <td colspan="8" class="px-4 py-2 text-xs font-bold uppercase tracking-wider text-amber-800">
                 {{ category.name }}
               </td>
@@ -389,11 +393,10 @@ function actualPreview(raw: string | null | undefined): string {
               Supervisor Comment
             </label>
             <textarea
-              value=""
+              :value="evaluationSupervisorComment || 'Chưa có nhận xét từ Supervisor.'"
               rows="3"
               readonly
-              placeholder="Chưa có nhận xét từ Supervisor."
-              class="w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-500"
+              class="w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700"
             />
           </div>
         </div>

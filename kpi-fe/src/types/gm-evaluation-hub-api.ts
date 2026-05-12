@@ -29,8 +29,14 @@ export interface GmEvaluationHubAssignmentApiRow {
   sectionManagerFullName: string | null
   memberRoleCode: string | null
   memberRoleName: string | null
-  /** PM comment tổng từ user_kpi_summaries.evaluation_supervisor_comments. */
-  supervisorComment: string | null
+  /** Member — user_kpi_summaries.evaluation_comments (BSC / portfolio). */
+  evaluationComments: string | null
+  /** Member — user_kpi_summaries.evaluation_comments_promotion. */
+  evaluationCommentsPromotion: string | null
+  /** PM tổng — evaluation_supervisor_comments. */
+  supervisorCommentPortfolio: string | null
+  /** PM tổng — evaluation_supervisor_comments_promotion. */
+  supervisorCommentPromotion: string | null
 }
 
 export interface GmEvaluationHubApiResponse {
@@ -51,8 +57,10 @@ export interface GmEvaluationHubConfirmLineBody {
 export interface GmEvaluationHubConfirmBody {
   cycleId: string
   evaluationUserId: string
-  /** Bắt buộc khi có dòng 602; 502-only có thể rỗng. */
+  /** Bắt buộc khi có dòng 602; lưu portfolio hoặc promotion theo `promotion`. */
   supervisorComment?: string
+  /** true = tab Promotion — lưu evaluation_supervisor_comments_promotion. */
+  promotion?: boolean
   lines: GmEvaluationHubConfirmLineBody[]
 }
 

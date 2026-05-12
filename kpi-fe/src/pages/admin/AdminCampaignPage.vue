@@ -420,11 +420,11 @@ const remindBtnLabel = (status: string) =>
 
         <!-- EMPLOYEE PROGRESS TABLE -->
         <div
-          class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden"
+          class="flex min-h-0 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"
         >
           <!-- Toolbar -->
           <div
-            class="px-5 py-4 border-b border-slate-200 bg-slate-50/50 flex justify-between items-center"
+            class="flex shrink-0 items-center justify-between border-b border-slate-200 bg-slate-50/50 px-5 py-4"
           >
             <div class="flex items-center space-x-3">
               <h2
@@ -469,17 +469,21 @@ const remindBtnLabel = (status: string) =>
             </div>
           </div>
 
-          <table class="w-full text-left border-collapse">
-            <thead>
-              <tr
-                class="bg-white border-b border-slate-200 text-[11px] font-bold text-slate-500 uppercase tracking-wider"
+          <div
+            class="min-h-0 max-h-[38rem] overflow-y-auto overscroll-y-contain"
+            aria-label="Danh sách tiến độ nhân sự — cuộn khi quá khoảng 10 dòng"
+          >
+            <table class="w-full border-collapse text-left">
+              <thead
+                class="sticky top-0 z-10 border-b border-slate-200 bg-white shadow-sm"
               >
-                <th class="p-4 w-[25%]">Nhân viên / Email</th>
-                <th class="p-4 w-[20%]">Phòng ban (Section)</th>
-                <th class="p-4 w-[20%] text-center">Trạng thái (Status)</th>
-                <th class="p-4 text-center">Cập nhật cuối</th>
-                <th v-if="isActive" class="p-4 text-center w-32">Thao tác</th>
-              </tr>
+                <tr class="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                  <th class="w-[25%] p-4">Nhân viên / Email</th>
+                  <th class="w-[20%] p-4">Phòng ban (Section)</th>
+                  <th class="w-[20%] p-4 text-center">Trạng thái (Status)</th>
+                  <th class="p-4 text-center">Cập nhật cuối</th>
+                  <th v-if="isActive" class="w-32 p-4 text-center">Thao tác</th>
+                </tr>
             </thead>
 
             <!-- Skeleton loading -->
@@ -626,6 +630,7 @@ const remindBtnLabel = (status: string) =>
               </tr>
             </tbody>
           </table>
+          </div>
         </div>
       </div>
     </main>

@@ -40,7 +40,9 @@ public class SensitiveDataMybatisInterceptor implements Interceptor {
             "supervisorComment",
             "pmComment",
             "evaluationComments",
-            "evaluationSupervisorComments");
+            "evaluationCommentsPromotion",
+            "evaluationSupervisorComments",
+            "evaluationSupervisorCommentsPromotion");
     private static final Set<String> EVIDENCE_FIELDS = Set.of("evidences", "evidence", "actualResult");
     private static final Set<String> SCORE_FIELDS = Set.of(
             "midSelfScore", "endSelfScore", "endPmScore", "endGmScore",

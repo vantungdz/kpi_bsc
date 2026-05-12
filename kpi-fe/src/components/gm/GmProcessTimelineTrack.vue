@@ -9,6 +9,8 @@ defineProps<{
   milestones: { idx: number; outerClass: string; status: GmProcessTimelineMilestoneStatus }[]
   /** Left % tuyệt đối cho mỗi milestone (cùng thứ tự với milestones[]). Nếu có → dùng absolute positioning. */
   milestoneLeftPcts?: number[]
+  /** false: ẩn chấm «hôm nay» để không đè icon tick khi mọi mốc đã complete. Mặc định true. */
+  showNowMarker?: boolean
 }>()
 </script>
 
@@ -26,11 +28,13 @@ defineProps<{
     />
 
     <div
+      v-if="showNowMarker !== false"
       class="pointer-events-none absolute z-[14]"
       :style="nowMarkerPositionStyle"
       role="img"
       :aria-label="nowMarkerLabel"
     >
+      <!-- Đồng tâm: viền xanh đậm → vòng xanh nhạt → chấm giữa (theo mẫu «đang trong kỳ») -->
       <span
         class="box-border block h-2.5 w-2.5 rounded-full border-2 border-white bg-sky-500 shadow-md ring-2 ring-sky-300/90"
         :title="nowMarkerLabel"
@@ -42,7 +46,7 @@ defineProps<{
       <div
         v-for="m in milestones"
         :key="m.idx"
-        class="absolute top-1/2 z-10 -translate-x-1/2 -translate-y-1/2"
+        class="absolute top-1/2 z-[18] -translate-x-1/2 -translate-y-1/2"
         :style="{ left: `${milestoneLeftPcts[m.idx] ?? 50}%` }"
       >
         <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full" :class="m.outerClass">
@@ -61,7 +65,7 @@ defineProps<{
 
     <!-- Grid layout fallback (backward compat) -->
     <template v-else>
-      <div v-for="m in milestones" :key="m.idx" class="relative z-10 flex justify-center">
+      <div v-for="m in milestones" :key="m.idx" class="relative z-[18] flex justify-center">
         <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full" :class="m.outerClass">
           <i v-if="m.status === 'complete'" class="fas fa-check text-[15px] text-white" aria-hidden="true" />
           <span

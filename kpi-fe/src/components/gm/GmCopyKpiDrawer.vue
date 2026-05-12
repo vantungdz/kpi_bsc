@@ -30,7 +30,7 @@ const loadingKpis = ref(false)
 const sourceKpis = ref<GmMemberKpiAssignment[]>([])
 const selectedKpiIds = ref<Set<string>>(new Set())
 
-// Lưu target do GM tự nhập lại
+// GM-overridden targets for copy
 const customTargets = ref<Map<string, number>>(new Map())
 
 const submitting = ref(false)
@@ -63,7 +63,7 @@ watch(
       sourceSearch.value = ''
       selectedSourceMember.value = null
       sourceKpis.value = []
-      selectedKpiIds.value.clear()
+      selectedKpiIds.value = new Set()
       customTargets.value.clear()
       
       if (!activeCycleId.value) {
@@ -75,7 +75,7 @@ watch(
             activeCycleId.value = matched.id
           }
         } catch (e) {
-          pushGmNotification('Không thể tải chu kỳ đánh giá', { variant: 'error' })
+          pushGmNotification('Could not load evaluation cycles', { variant: 'error' })
         }
       }
     }
@@ -92,18 +92,18 @@ async function selectSourceMember(member: GmMemberDetailMock & { deptName: strin
   step.value = 2
   loadingKpis.value = true
   sourceKpis.value = []
-  selectedKpiIds.value.clear()
+  selectedKpiIds.value = new Set()
   customTargets.value.clear()
 
   try {
     if (!activeCycleId.value) {
-      throw new Error('Chưa có chu kỳ đánh giá hợp lệ.')
+      throw new Error('No valid evaluation cycle.')
     }
     const kpis = await gmKpiService.getMemberKpiAssignments(member.id, activeCycleId.value)
     sourceKpis.value = kpis
-    kpis.forEach((k) => selectedKpiIds.value.add(k.kpiInformationId))
+    selectedKpiIds.value = new Set(kpis.map((k) => k.kpiInformationId))
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : 'Không tải được KPI của nhân viên này'
+    const msg = e instanceof Error ? e.message : 'Could not load this member’s KPIs'
     pushGmNotification(msg, { variant: 'error' })
     step.value = 1
     selectedSourceMember.value = null
@@ -113,10 +113,17 @@ async function selectSourceMember(member: GmMemberDetailMock & { deptName: strin
 }
 
 function toggleKpiSelection(kpiId: string) {
-  if (selectedKpiIds.value.has(kpiId)) {
-    selectedKpiIds.value.delete(kpiId)
+  const next = new Set(selectedKpiIds.value)
+  if (next.has(kpiId)) next.delete(kpiId)
+  else next.add(kpiId)
+  selectedKpiIds.value = next
+}
+
+function toggleSelectAllKpis() {
+  if (selectedKpiIds.value.size === sourceKpis.value.length) {
+    selectedKpiIds.value = new Set()
   } else {
-    selectedKpiIds.value.add(kpiId)
+    selectedKpiIds.value = new Set(sourceKpis.value.map((k) => k.kpiInformationId))
   }
 }
 
@@ -137,13 +144,23 @@ function closeEditModal() {
 
 function saveCustomTarget() {
   if (!editTargetKpi.value) return
+  const id = editTargetKpi.value.kpiInformationId
   const val = Number(editTargetInput.value)
   if (!isNaN(val) && editTargetInput.value !== '') {
-    customTargets.value.set(editTargetKpi.value.kpiInformationId, val)
+    customTargets.value.set(id, val)
+    if (!selectedKpiIds.value.has(id)) {
+      const next = new Set(selectedKpiIds.value)
+      next.add(id)
+      selectedKpiIds.value = next
+    }
   } else {
-    customTargets.value.delete(editTargetKpi.value.kpiInformationId)
+    customTargets.value.delete(id)
   }
   closeEditModal()
+}
+
+function originalTargetForKpi(kpi: GmMemberKpiAssignment) {
+  return kpi.assignmentTargetValue ?? kpi.kpiInfoTargetValue ?? '—'
 }
 
 function getDisplayTarget(kpi: GmMemberKpiAssignment) {
@@ -174,18 +191,18 @@ async function confirmCopy() {
   }
 
   if (items.length === 0) {
-    pushGmNotification('Vui lòng chọn ít nhất 1 KPI để copy.', { variant: 'error' })
+    pushGmNotification('Select at least one KPI to copy.', { variant: 'error' })
     return
   }
 
   submitting.value = true
   try {
     await gmKpiService.copyKpisToMember(props.targetMember.id, activeCycleId.value, items)
-    pushGmNotification('Đã copy KPI thành công.', { variant: 'success' })
+    pushGmNotification('KPIs copied successfully.', { variant: 'success' })
     emit('copied')
     closeDrawer()
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : 'Lỗi khi copy KPI'
+    const msg = e instanceof Error ? e.message : 'Error copying KPIs'
     pushGmNotification(msg, { variant: 'error' })
   } finally {
     submitting.value = false
@@ -196,236 +213,334 @@ async function confirmCopy() {
 <template>
   <Transition name="gm-copy-kpi-drawer">
     <div v-if="open" class="fixed inset-0 z-[150] flex justify-end">
-      <!-- Backdrop -->
       <div
-        class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity"
+        class="absolute inset-0 bg-slate-900/40 backdrop-blur-sm transition-opacity"
         @click="closeDrawer"
       />
 
-      <!-- Panel -->
       <div
-        class="relative flex h-full w-full max-w-[500px] flex-col bg-white shadow-2xl transition-transform"
+        class="relative flex h-full w-full max-w-[480px] flex-col bg-white shadow-2xl transition-transform"
       >
-        <!-- Header -->
-        <div class="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+        <div class="flex items-start justify-between border-b border-slate-200 bg-white px-6 py-4">
           <div>
-            <h2 class="text-base font-bold text-slate-800">
-              Sao chép KPI
+            <h2 class="text-lg font-bold text-slate-800">
+              Copy KPIs
             </h2>
-            <p class="mt-0.5 text-xs text-slate-500" v-if="targetMember">
-              Đang chọn KPI để gán cho <span class="font-bold text-indigo-600">{{ targetMember.name }}</span>
+            <p v-if="targetMember" class="mt-1 text-sm text-slate-500">
+              Choose KPIs to assign to
+              <span class="font-semibold text-indigo-600">{{ targetMember.name }}</span>
             </p>
           </div>
           <button
-            class="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+            type="button"
+            class="rounded-full p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
             @click="closeDrawer"
           >
-            <i class="fas fa-xmark" aria-hidden="true" />
+            <i class="fas fa-xmark text-lg" aria-hidden="true" />
           </button>
         </div>
 
-        <!-- Body -->
-        <div class="flex-1 overflow-y-auto bg-slate-50 p-5">
-          <!-- Step 1: Chọn Member -->
-          <div v-if="step === 1" class="space-y-4">
-            <h3 class="text-sm font-bold text-slate-700">1. Chọn nhân viên mẫu để sao chép</h3>
-            
-            <div class="relative">
-              <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs" />
+        <div class="flex-1 overflow-y-auto bg-slate-50">
+          <div v-if="step === 1" class="p-6">
+            <h3 class="mb-4 text-sm font-bold text-slate-800">
+              1. Pick a source member to copy from
+            </h3>
+
+            <div class="relative mb-6">
+              <i
+                class="fas fa-search pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-400"
+              />
               <input
                 v-model="sourceSearch"
                 type="text"
-                class="w-full rounded-lg border-slate-200 pl-9 pr-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-                placeholder="Tìm tên, chức danh, phòng ban..."
+                class="w-full rounded-lg border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm shadow-sm transition-all focus:border-transparent focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                placeholder="Search by name, title, department..."
               />
             </div>
 
-            <div class="space-y-2">
-              <div
+            <div class="space-y-3">
+              <button
                 v-for="emp in filteredSourceMembers"
                 :key="emp.id"
-                class="flex cursor-pointer items-center justify-between rounded-xl border border-slate-200 bg-white p-3 shadow-sm transition-all hover:border-indigo-300 hover:shadow-md"
+                type="button"
+                class="group flex w-full items-center justify-between rounded-xl border border-slate-200 bg-white p-4 text-left transition-all hover:border-indigo-300 hover:shadow-md"
                 @click="selectSourceMember(emp)"
               >
-                <div>
-                  <p class="text-sm font-bold text-slate-800">{{ emp.name }}</p>
-                  <div class="mt-1 flex items-center gap-2 text-[11px] font-medium text-slate-500">
-                    <span class="rounded bg-slate-100 px-1.5 py-0.5">{{ emp.rank ?? 'NV' }}</span>
-                    <span>&bull;</span>
+                <div class="min-w-0 flex-1 pr-2">
+                  <p class="font-semibold text-slate-800 transition-colors group-hover:text-indigo-600">
+                    {{ emp.name }}
+                  </p>
+                  <div class="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                    <span class="rounded bg-slate-100 px-2 py-0.5 font-medium text-slate-600">
+                      {{ emp.rank ?? 'NV' }}
+                    </span>
+                    <span class="h-1 w-1 shrink-0 rounded-full bg-slate-300" />
                     <span>{{ emp.deptName }}</span>
                   </div>
                 </div>
-                <i class="fas fa-chevron-right text-slate-300" />
-              </div>
-              
-              <div v-if="filteredSourceMembers.length === 0" class="py-8 text-center text-sm text-slate-500">
-                Không tìm thấy nhân viên phù hợp
-              </div>
+                <i
+                  class="fas fa-chevron-right shrink-0 text-slate-300 transition-colors group-hover:text-indigo-500"
+                />
+              </button>
+
+              <p
+                v-if="filteredSourceMembers.length === 0"
+                class="py-8 text-center text-sm text-slate-500"
+              >
+                No matching members found.
+              </p>
             </div>
           </div>
 
-          <!-- Step 2: Chọn & Sửa KPI -->
-          <div v-else-if="step === 2" class="space-y-4">
-            <div class="flex items-center justify-between">
-              <h3 class="text-sm font-bold text-slate-700">2. Tùy chỉnh KPI sao chép</h3>
-              <button 
-                class="text-xs font-semibold text-indigo-600 hover:text-indigo-700"
+          <div v-else-if="step === 2" class="p-6">
+            <div class="mb-4 flex items-center justify-between">
+              <h3 class="text-sm font-bold text-slate-800">
+                2. Customize KPIs to copy
+              </h3>
+              <button
+                type="button"
+                class="flex items-center gap-1 text-sm font-medium text-indigo-600 hover:text-indigo-700"
                 @click="step = 1"
               >
-                <i class="fas fa-arrow-left mr-1" /> Chọn lại
+                <i class="fas fa-arrow-left text-sm" />
+                Back
               </button>
             </div>
 
-            <div class="rounded-xl border border-slate-200 bg-white p-4">
-              <p class="text-xs font-medium text-slate-500">Nguồn sao chép:</p>
-              <div class="mt-1 flex items-center gap-2">
-                <p class="text-sm font-bold text-slate-800">{{ selectedSourceMember?.name }}</p>
-                <span class="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-500">
+            <div class="mb-6 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <p class="mb-1 text-xs text-slate-500">
+                Copy from:
+              </p>
+              <div class="flex flex-wrap items-center gap-2">
+                <p class="font-bold text-slate-800">
+                  {{ selectedSourceMember?.name }}
+                </p>
+                <span class="rounded bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
                   {{ selectedSourceMember?.rank ?? 'NV' }}
                 </span>
-                <span class="text-xs text-slate-400">&bull;</span>
-                <span class="text-xs font-medium text-slate-600">{{ selectedSourceMember?.deptName }}</span>
+                <span class="text-xs text-slate-500">• {{ selectedSourceMember?.deptName }}</span>
               </div>
             </div>
 
             <div v-if="loadingKpis" class="flex flex-col items-center justify-center py-12">
               <i class="fas fa-spinner fa-spin text-2xl text-indigo-600" />
-              <p class="mt-2 text-sm font-medium text-slate-500">Đang tải KPI...</p>
+              <p class="mt-2 text-sm font-medium text-slate-500">
+                Loading KPIs...
+              </p>
             </div>
 
-            <div v-else-if="sourceKpis.length === 0" class="rounded-lg border border-dashed border-slate-300 py-8 text-center">
+            <div
+              v-else-if="sourceKpis.length === 0"
+              class="rounded-lg border border-dashed border-slate-300 py-8 text-center"
+            >
               <i class="fas fa-folder-open mb-2 text-2xl text-slate-300" />
-              <p class="text-sm font-medium text-slate-500">Nhân viên này chưa có KPI nào trong chu kỳ.</p>
+              <p class="text-sm font-medium text-slate-500">
+                This member has no KPIs in the selected cycle.
+              </p>
             </div>
 
-            <div v-else class="space-y-3">
-              <div class="flex items-center justify-between px-1">
-                <span class="text-xs font-bold text-slate-500">
-                  Đã chọn {{ selectedKpiIds.size }}/{{ sourceKpis.length }} KPI
+            <template v-else>
+              <div class="mb-3 flex items-center justify-between px-1">
+                <span class="text-sm font-medium text-slate-600">
+                  Selected {{ selectedKpiIds.size }}/{{ sourceKpis.length }} KPI(s)
                 </span>
-                <button 
-                  class="text-xs font-semibold text-indigo-600"
-                  @click="selectedKpiIds.size === sourceKpis.length ? selectedKpiIds.clear() : sourceKpis.forEach(k => selectedKpiIds.add(k.kpiInformationId))"
+                <button
+                  type="button"
+                  class="text-sm font-medium text-indigo-600 hover:underline"
+                  @click="toggleSelectAllKpis"
                 >
-                  {{ selectedKpiIds.size === sourceKpis.length ? 'Bỏ chọn tất cả' : 'Chọn tất cả' }}
+                  {{ selectedKpiIds.size === sourceKpis.length ? 'Deselect all' : 'Select all' }}
                 </button>
               </div>
 
-              <!-- Danh sách KPI -->
-              <div
-                v-for="kpi in sourceKpis"
-                :key="kpi.kpiInformationId"
-                class="relative overflow-hidden rounded-xl border border-slate-200 bg-white transition-all hover:border-indigo-300 hover:shadow-md"
-                :class="{ 'ring-1 ring-indigo-500 border-indigo-500': selectedKpiIds.has(kpi.kpiInformationId) }"
-              >
-                <!-- Checkbox Overlay (Click anywhere to toggle if not clicking target) -->
-                <div class="absolute inset-y-0 left-0 flex w-10 cursor-pointer items-center justify-center border-r border-slate-100 bg-slate-50/50"
-                     @click="toggleKpiSelection(kpi.kpiInformationId)">
-                  <div class="flex h-5 w-5 items-center justify-center rounded border transition-colors"
-                       :class="selectedKpiIds.has(kpi.kpiInformationId) ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-slate-300 bg-white'">
-                    <i v-if="selectedKpiIds.has(kpi.kpiInformationId)" class="fas fa-check text-[10px]" />
+              <div class="space-y-3">
+                <div
+                  v-for="kpi in sourceKpis"
+                  :key="kpi.kpiInformationId"
+                  class="group flex cursor-pointer items-center gap-4 rounded-xl border-2 bg-white p-4 transition-all"
+                  :class="
+                    selectedKpiIds.has(kpi.kpiInformationId)
+                      ? 'border-indigo-500 shadow-sm'
+                      : 'border-slate-200 hover:border-slate-300'
+                  "
+                  @click="openEditTargetModal(kpi)"
+                >
+                  <div class="shrink-0" @click.stop="toggleKpiSelection(kpi.kpiInformationId)">
+                    <div
+                      class="flex h-5 w-5 items-center justify-center rounded border transition-colors"
+                      :class="
+                        selectedKpiIds.has(kpi.kpiInformationId)
+                          ? 'border-indigo-600 bg-indigo-600 text-white'
+                          : 'border-slate-300 bg-white'
+                      "
+                    >
+                      <i
+                        v-if="selectedKpiIds.has(kpi.kpiInformationId)"
+                        class="fas fa-check text-[10px]"
+                      />
+                    </div>
                   </div>
-                </div>
 
-                <div class="ml-10 p-3 pl-4">
-                  <div class="pr-16">
-                    <h4 class="text-sm font-bold leading-tight text-slate-800 line-clamp-2">
+                  <div class="min-w-0 flex-1">
+                    <h4 class="truncate text-sm font-semibold text-slate-800">
                       {{ kpi.masterName }}
                     </h4>
-                    <div class="mt-1.5 flex items-center gap-3 text-xs font-medium text-slate-500">
-                      <span class="flex items-center gap-1">
-                        <i class="fas fa-weight-hanging text-slate-400" />
-                        {{ kpi.weight ?? 0 }}%
+                    <div class="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-600">
+                      <span class="flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1">
+                        <i class="fas fa-briefcase text-[10px] text-slate-400" />
+                        Weight:
+                        <strong class="text-slate-800">{{ kpi.weight ?? 0 }}%</strong>
                       </span>
-                      <span class="flex items-center gap-1" v-if="kpi.unitName">
-                        <i class="fas fa-ruler text-slate-400" />
-                        {{ kpi.unitName }}
+                      <span
+                        v-if="kpi.unitName"
+                        class="flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1"
+                      >
+                        <i class="fas fa-shield-alt text-[10px] text-slate-400" />
+                        Unit:
+                        <strong class="text-slate-800">{{ kpi.unitName }}</strong>
                       </span>
                     </div>
                   </div>
 
-                  <!-- Target Box (Click to edit) -->
-                  <div 
-                    class="absolute right-3 top-3 flex cursor-pointer flex-col items-end rounded-lg border p-1.5 transition-colors hover:bg-slate-50"
-                    :class="isTargetCustomized(kpi.kpiInformationId) ? 'border-rose-200 bg-rose-50/50' : 'border-slate-100 bg-slate-50'"
-                    @click="openEditTargetModal(kpi)"
-                    title="Click để sửa chỉ tiêu"
+                  <div
+                    class="flex shrink-0 flex-col items-end rounded-lg border px-3 py-1.5 transition-colors"
+                    :class="
+                      isTargetCustomized(kpi.kpiInformationId)
+                        ? 'border-red-200 bg-red-50'
+                        : 'border-slate-100 bg-slate-50'
+                    "
                   >
-                    <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                      Target <i class="fas fa-pencil ml-0.5 text-[8px]" />
-                    </span>
-                    <span class="text-sm font-black" :class="isTargetCustomized(kpi.kpiInformationId) ? 'text-rose-600' : 'text-slate-700'">
+                    <div
+                      class="mb-0.5 flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-slate-400"
+                    >
+                      Target
+                      <i
+                        class="fas fa-pen text-[9px] text-indigo-500 opacity-0 transition-opacity group-hover:opacity-100"
+                      />
+                    </div>
+                    <span
+                      class="text-base font-bold leading-none"
+                      :class="
+                        isTargetCustomized(kpi.kpiInformationId) ? 'text-red-600' : 'text-slate-800'
+                      "
+                    >
                       {{ getDisplayTarget(kpi) }}
                     </span>
                   </div>
                 </div>
               </div>
-            </div>
+            </template>
           </div>
         </div>
 
-        <!-- Footer -->
-        <div class="border-t border-slate-100 bg-white p-4">
-          <div class="flex gap-3">
-            <button
-              type="button"
-              class="flex-1 rounded-xl border border-slate-200 bg-white py-2.5 text-sm font-bold text-slate-600 transition-colors hover:bg-slate-50"
-              @click="closeDrawer"
-            >
-              Hủy
-            </button>
-            <button
-              v-if="step === 2"
-              type="button"
-              class="flex-1 rounded-xl bg-indigo-600 py-2.5 text-sm font-bold text-white shadow-sm transition-colors hover:bg-indigo-700 disabled:opacity-50"
-              :disabled="submitting || selectedKpiIds.size === 0"
-              @click="confirmCopy"
-            >
-              <i v-if="submitting" class="fas fa-spinner fa-spin mr-1.5" />
-              Xác nhận Copy
-            </button>
-          </div>
+        <div class="flex justify-end gap-3 border-t border-slate-200 bg-white p-4">
+          <button
+            type="button"
+            class="rounded-lg border border-slate-300 bg-white px-5 py-2.5 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-50"
+            @click="closeDrawer"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            class="rounded-lg px-5 py-2.5 text-sm font-semibold transition-colors"
+            :class="
+              step === 2 && selectedKpiIds.size > 0 && !submitting && !loadingKpis
+                ? 'bg-indigo-600 text-white shadow-sm hover:bg-indigo-700'
+                : 'cursor-not-allowed bg-slate-100 text-slate-400'
+            "
+            :disabled="step === 1 || selectedKpiIds.size === 0 || submitting || loadingKpis"
+            @click="confirmCopy"
+          >
+            <i v-if="submitting" class="fas fa-spinner fa-spin mr-1.5" />
+            Confirm copy
+          </button>
         </div>
       </div>
     </div>
   </Transition>
 
-  <!-- Modal Edit Target -->
   <Teleport to="body">
-    <div v-if="editModalOpen && editTargetKpi" class="fixed inset-0 z-[200] flex items-center justify-center p-4">
-      <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" @click="closeEditModal" />
-      <div class="relative w-full max-w-sm rounded-2xl bg-white shadow-2xl">
-        <div class="border-b border-slate-100 px-5 py-4">
-          <h3 class="text-sm font-bold text-slate-800">Chỉnh sửa Target</h3>
+    <div
+      v-if="editModalOpen && editTargetKpi"
+      class="fixed inset-0 z-[200] flex items-center justify-center p-4"
+    >
+      <div class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" @click="closeEditModal" />
+      <div
+        class="relative w-full max-w-sm overflow-hidden rounded-2xl bg-white shadow-xl"
+        @click.stop
+      >
+        <div class="border-b border-slate-200 px-6 py-5">
+          <h3 class="text-base font-bold text-slate-800">
+            Edit target
+          </h3>
         </div>
-        <div class="p-5 space-y-4">
-          <div>
-            <p class="text-xs font-medium text-slate-500 mb-1">KPI:</p>
-            <p class="text-sm font-bold text-slate-800">{{ editTargetKpi.masterName }}</p>
+
+        <div class="p-6">
+          <div class="mb-6 rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <div class="mb-3">
+              <span
+                class="mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-500"
+              >KPI name</span>
+              <p class="text-sm font-semibold text-slate-800">
+                {{ editTargetKpi.masterName }}
+              </p>
+            </div>
+            <div class="grid grid-cols-3 gap-4">
+              <div>
+                <span
+                  class="mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-500"
+                >Weight</span>
+                <p class="text-sm font-medium text-slate-700">
+                  {{ editTargetKpi.weight ?? 0 }}%
+                </p>
+              </div>
+              <div>
+                <span
+                  class="mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-500"
+                >Unit</span>
+                <p class="text-sm font-medium text-slate-700">
+                  {{ editTargetKpi.unitName ?? '—' }}
+                </p>
+              </div>
+              <div>
+                <span
+                  class="mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-500"
+                >Original target</span>
+                <p class="text-sm font-medium text-slate-700">
+                  {{ originalTargetForKpi(editTargetKpi) }}
+                </p>
+              </div>
+            </div>
           </div>
+
           <div>
-            <label class="text-xs font-bold text-slate-700 mb-1 block">Chỉ tiêu (Target) mới</label>
-            <input 
+            <label class="mb-2 block text-xs font-semibold text-slate-600">
+              New target to assign:
+            </label>
+            <input
               v-model="editTargetInput"
               type="number"
-              class="w-full rounded-lg border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-indigo-500"
-              placeholder="Nhập số..."
+              class="w-full rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-lg font-bold text-slate-800 transition-all focus:border-transparent focus:outline-none focus:ring-2 focus:ring-indigo-500"
               @keyup.enter="saveCustomTarget"
             />
           </div>
         </div>
-        <div class="flex justify-end gap-2 border-t border-slate-100 p-4 bg-slate-50 rounded-b-2xl">
-          <button 
-            class="rounded-lg px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-200 transition-colors"
+
+        <div class="flex justify-end gap-3 border-t border-slate-200 bg-slate-50 px-6 py-4">
+          <button
+            type="button"
+            class="rounded-lg px-4 py-2 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-200"
             @click="closeEditModal"
           >
-            Hủy
+            Cancel
           </button>
-          <button 
-            class="rounded-lg bg-indigo-600 px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-indigo-700 transition-colors"
+          <button
+            type="button"
+            class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-indigo-700"
             @click="saveCustomTarget"
           >
-            Lưu thay đổi
+            Save changes
           </button>
         </div>
       </div>

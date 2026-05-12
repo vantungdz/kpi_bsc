@@ -240,7 +240,7 @@ function confirmRejectReasonDialog() {
   if (!k || props.actionBusy) return
   const r = rejectReasonText.value.trim()
   if (!r) {
-    rejectReasonError.value = 'Vui lòng nhập lý do từ chối.'
+    rejectReasonError.value = 'Please enter a rejection reason.'
     return
   }
   emit('reject-kpi', { kpi: k, reason: r })
@@ -276,7 +276,7 @@ function confirmRejectAll() {
   if (!actionableGmKpis.value.length || props.actionBusy) return
   const r = rejectAllReason.value.trim()
   if (!r) {
-    rejectAllError.value = 'Vui lòng nhập lý do từ chối.'
+    rejectAllError.value = 'Please enter a rejection reason.'
     return
   }
   rejectAllError.value = ''
@@ -295,11 +295,11 @@ function asmStatusBadgeDisplay(kpi: GmHierarchyKpi): string {
   const d = approvedKpiAsmDescription(kpi)
   if (d && d !== '—') return d
   const c = kpi.assignmentStatusCode
-  if (c === 403) return 'Chờ GM duyệt'
-  if (c === 402) return 'Chờ PM duyệt'
-  if (c === 401) return 'Soạn thảo / nháp'
+  if (c === 403) return 'Awaiting GM approval'
+  if (c === 402) return 'Awaiting PM approval'
+  if (c === 401) return 'Draft'
   if (c == null) return '—'
-  return `Trạng thái ${c}`
+  return `Status ${c}`
 }
 
 function approvedKpiStatusBadgeClass(kpi: GmHierarchyKpi): string {
@@ -364,7 +364,7 @@ function parseScoringRuleBands(text: string): ScoringRuleBand[] {
       const num = m[1]
       let range = m[2].trim()
       range = range.replace(/\s+/g, ' ')
-      bands.push({ levelLabel: `MỨC ${num}`, rangeText: range })
+      bands.push({ levelLabel: `LEVEL ${num}`, rangeText: range })
     }
   }
   bands.sort((a, b) => {
@@ -414,8 +414,8 @@ watch(drawerKpisSorted, (kpis) => {
           <button
             type="button"
             class="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-sm transition-colors hover:border-slate-300 hover:bg-slate-50 hover:text-slate-700"
-            aria-label="Tìm kiếm"
-            title="Tìm kiếm"
+            aria-label="Search"
+            title="Search"
             @click.stop
           >
             <i class="fas fa-search text-sm" />
@@ -423,8 +423,8 @@ watch(drawerKpisSorted, (kpis) => {
           <button
             type="button"
             class="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-sm transition-colors hover:border-slate-300 hover:bg-slate-50 hover:text-slate-700"
-            aria-label="Lọc"
-            title="Lọc"
+            aria-label="Filter"
+            title="Filter"
             @click.stop
           >
             <i class="fas fa-filter text-sm" />
@@ -436,7 +436,7 @@ watch(drawerKpisSorted, (kpis) => {
         v-if="!rows.length"
         class="border-t border-slate-100 px-4 py-12 text-center text-sm text-slate-500"
       >
-        <p class="font-semibold text-slate-700">Không có KPI chờ duyệt</p>
+        <p class="font-semibold text-slate-700">No KPIs awaiting approval</p>
       </div>
 
       <div v-else class="overflow-x-auto">
@@ -444,22 +444,22 @@ watch(drawerKpisSorted, (kpis) => {
           <thead>
             <tr class="border-b border-slate-200 bg-white">
               <th class="py-3.5 pl-5 pr-3 text-[11px] font-bold uppercase tracking-wide text-slate-500">
-                Thành viên
+                Member
               </th>
               <th
                 class="w-[9.5rem] px-3 py-3.5 text-center text-[11px] font-bold uppercase tracking-wide text-slate-500"
               >
-                Số KPI chờ GM
+                KPIs awaiting GM
               </th>
               <th
                 class="w-[11rem] px-3 py-3.5 text-[11px] font-bold uppercase tracking-wide text-slate-500"
               >
-                Gửi gần nhất
+                Last submitted
               </th>
               <th
                 class="w-[10rem] py-3.5 pl-3 pr-5 text-right text-[11px] font-bold uppercase tracking-wide text-slate-500"
               >
-                Thao tác
+                Actions
               </th>
             </tr>
           </thead>
@@ -513,7 +513,7 @@ watch(drawerKpisSorted, (kpis) => {
                   class="inline-flex items-center justify-center rounded-lg border border-blue-200 bg-white px-3.5 py-2 text-xs font-bold text-blue-700 shadow-sm transition-colors hover:border-blue-300 hover:bg-blue-50/80 hover:text-blue-800"
                   @click.stop="openDrawer(m)"
                 >
-                  Xem &amp; duyệt
+                  View &amp; approve
                 </button>
               </td>
             </tr>
@@ -540,13 +540,13 @@ watch(drawerKpisSorted, (kpis) => {
                   <span class="rounded-lg bg-orange-100 p-1.5 text-orange-600 shadow-sm">
                     <i class="fas fa-inbox text-sm" />
                   </span>
-                  KPI chờ duyệt
+                  KPIs pending approval
                 </h2>
               </div>
               <button
                 type="button"
                 class="rounded-full p-2 text-slate-400 hover:bg-slate-100"
-                aria-label="Đóng"
+                aria-label="Close"
                 @click="closeDrawer"
               >
                 <i class="fas fa-times text-base" />
@@ -575,8 +575,8 @@ watch(drawerKpisSorted, (kpis) => {
                     </span>
                   </div>
                   <p class="mt-0.5 text-xs font-semibold uppercase text-slate-500">
-                    {{ actionableGmKpis.length }} KPI chờ GM · {{ selectedMember.pendingCount }} KPI trong hàng
-                    đợi
+                    {{ actionableGmKpis.length }} KPI(s) awaiting GM · {{ selectedMember.pendingCount }} KPI(s) in
+                    queue
                   </p>
                 </div>
               </div>
@@ -589,7 +589,7 @@ watch(drawerKpisSorted, (kpis) => {
                   @click="onApproveAll"
                 >
                   <i class="fas fa-list-check mr-1.5 text-xs" />
-                  Duyệt tất cả
+                  Approve all
                 </button>
                 <button
                   type="button"
@@ -598,7 +598,7 @@ watch(drawerKpisSorted, (kpis) => {
                   @click="openRejectAllDialog"
                 >
                   <i class="fas fa-circle-xmark mr-1.5 text-xs" />
-                  Từ chối tất cả
+                  Reject all
                 </button>
               </div>
 
@@ -606,7 +606,7 @@ watch(drawerKpisSorted, (kpis) => {
                 v-if="!drawerKpisSorted.length"
                 class="rounded-xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500"
               >
-                Không còn KPI trong hàng đợi cho thành viên này.
+                No more KPIs in the queue for this member.
               </div>
 
               <div
@@ -626,17 +626,17 @@ watch(drawerKpisSorted, (kpis) => {
                       <i
                         v-if="kpi.isImportant"
                         class="fas fa-star shrink-0 text-[11px] text-amber-500"
-                        title="KPI quan trọng"
-                        aria-label="KPI quan trọng"
+                        title="Important KPI"
+                        aria-label="Important KPI"
                       />
                       <h4 class="truncate text-sm font-bold text-slate-800">{{ kpi.name }}</h4>
                     </div>
                     <p class="mt-1 text-[10px] font-medium text-slate-400">
-                      Gửi: {{ formatKpiSentLine(kpi) }}
+                      Sent: {{ formatKpiSentLine(kpi) }}
                     </p>
                     <div class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs">
                       <span
-                        ><span class="font-bold text-slate-400">Trọng số:</span>
+                        ><span class="font-bold text-slate-400">Weight:</span>
                         <span class="font-semibold text-slate-700">{{ kpi.weight }}</span></span
                       >
                       <span
@@ -648,7 +648,7 @@ watch(drawerKpisSorted, (kpis) => {
                   <button
                     type="button"
                     class="shrink-0 rounded-md px-2 py-1 text-slate-400 hover:bg-slate-100 hover:text-blue-600"
-                    aria-label="Chi tiết KPI"
+                    aria-label="KPI details"
                     @click="openKpiDetail(kpi)"
                   >
                     <i class="fas fa-chevron-right text-[10px]" />
@@ -662,7 +662,7 @@ watch(drawerKpisSorted, (kpis) => {
                     class="rounded-md px-3 py-1.5 text-sm font-semibold text-rose-600 hover:bg-rose-50 disabled:opacity-50"
                     @click="openRejectReasonDialog(kpi)"
                   >
-                    Từ chối
+                    Reject
                   </button>
                   <button
                     type="button"
@@ -670,7 +670,7 @@ watch(drawerKpisSorted, (kpis) => {
                     class="rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
                     @click="onApprove(kpi)"
                   >
-                    Duyệt
+                    Approve
                   </button>
                 </div>
               </div>
@@ -682,7 +682,7 @@ watch(drawerKpisSorted, (kpis) => {
                 class="w-full rounded-lg border border-slate-200 bg-slate-50 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-100"
                 @click="closeDrawer"
               >
-                Đóng
+                Close
               </button>
             </div>
 
@@ -699,7 +699,7 @@ watch(drawerKpisSorted, (kpis) => {
                   <div class="flex shrink-0 items-start justify-between border-b border-slate-100 px-4 py-3">
                     <div class="min-w-0 pr-2">
                       <p class="text-[11px] font-bold uppercase tracking-wide text-slate-500">
-                        Chi tiết KPI chờ duyệt
+                        Pending KPI details
                       </p>
                       <h2 class="mt-0.5 text-lg font-bold leading-snug text-slate-900">
                         {{ selectedKpiDetail.name }}
@@ -713,7 +713,7 @@ watch(drawerKpisSorted, (kpis) => {
                     <button
                       type="button"
                       class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
-                      aria-label="Đóng chi tiết KPI"
+                      aria-label="Close KPI details"
                       @click="closeKpiDetail"
                     >
                       <i class="fas fa-times text-sm leading-none" />
@@ -724,7 +724,7 @@ watch(drawerKpisSorted, (kpis) => {
                     <div class="divide-y divide-slate-100 overflow-hidden rounded-lg border border-slate-200 bg-white">
                       <div class="flex items-center gap-3 px-3 py-2.5">
                         <i class="fas fa-user w-4 shrink-0 text-center text-[13px] text-slate-400" />
-                        <span class="min-w-0 flex-1 text-xs font-medium text-slate-500">Thành viên</span>
+                        <span class="min-w-0 flex-1 text-xs font-medium text-slate-500">Member</span>
                         <span class="max-w-[55%] text-right text-sm font-bold leading-snug text-slate-900">{{
                           selectedMember.displayName
                         }}</span>
@@ -738,19 +738,19 @@ watch(drawerKpisSorted, (kpis) => {
                       </div>
                       <div class="flex items-center gap-3 px-3 py-2.5">
                         <i class="fas fa-percent w-4 shrink-0 text-center text-[13px] text-slate-400" />
-                        <span class="min-w-0 flex-1 text-xs font-medium text-slate-500">Trọng số</span>
+                        <span class="min-w-0 flex-1 text-xs font-medium text-slate-500">Weight</span>
                         <span class="text-right text-sm font-bold text-blue-600">{{ selectedKpiDetail.weight }}</span>
                       </div>
                       <div class="flex items-center gap-3 px-3 py-2.5">
                         <i class="fas fa-book w-4 shrink-0 text-center text-[13px] text-slate-400" />
-                        <span class="min-w-0 flex-1 text-xs font-medium text-slate-500">Khía cạnh BSC</span>
+                        <span class="min-w-0 flex-1 text-xs font-medium text-slate-500">BSC perspective</span>
                         <span class="max-w-[58%] text-right text-xs font-bold leading-snug text-slate-900">{{
                           bscAspectLabel(selectedKpiDetail)
                         }}</span>
                       </div>
                       <div class="flex items-center gap-3 px-3 py-2.5">
                         <i class="fas fa-calendar-day w-4 shrink-0 text-center text-[13px] text-slate-400" />
-                        <span class="min-w-0 flex-1 text-xs font-medium text-slate-500">Ngày gửi</span>
+                        <span class="min-w-0 flex-1 text-xs font-medium text-slate-500">Submitted on</span>
                         <span class="text-right text-sm font-bold text-slate-900">{{
                           formatKpiSentLine(selectedKpiDetail)
                         }}</span>
@@ -761,7 +761,7 @@ watch(drawerKpisSorted, (kpis) => {
                       <div class="flex items-center gap-2 border-b border-slate-100 px-3 py-2">
                         <i class="fas fa-list-check text-[13px] text-slate-600" />
                         <span class="text-[11px] font-bold uppercase tracking-wide text-slate-600">
-                          Quy tắc chấm điểm
+                          Scoring rules
                         </span>
                       </div>
                       <div class="px-3 py-3">
@@ -801,7 +801,7 @@ watch(drawerKpisSorted, (kpis) => {
                       class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-50"
                       @click="closeKpiDetail"
                     >
-                      Đóng
+                      Close
                     </button>
                     <template v-if="gmApprovedActionsEnabled(selectedKpiDetail)">
                       <button
@@ -810,7 +810,7 @@ watch(drawerKpisSorted, (kpis) => {
                         class="rounded-lg px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50"
                         @click="onKpiDetailModalReject"
                       >
-                        Từ chối
+                        Reject
                       </button>
                       <button
                         type="button"
@@ -818,7 +818,7 @@ watch(drawerKpisSorted, (kpis) => {
                         class="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
                         @click="onKpiDetailModalApprove"
                       >
-                        Duyệt
+                        Approve
                       </button>
                     </template>
                   </div>
@@ -837,11 +837,11 @@ watch(drawerKpisSorted, (kpis) => {
                     <div class="rounded-full bg-rose-100 p-2 text-rose-600">
                       <i class="fas fa-circle-exclamation text-lg" />
                     </div>
-                    <h3 class="text-lg font-bold text-slate-900">Xác nhận từ chối</h3>
+                    <h3 class="text-lg font-bold text-slate-900">Confirm rejection</h3>
                   </div>
-                  <p class="mb-3 text-sm text-slate-600">Vui lòng nhập lý do từ chối KPI này.</p>
+                  <p class="mb-3 text-sm text-slate-600">Please enter a reason for rejecting this KPI.</p>
                   <label class="mb-1 block text-sm font-semibold text-slate-700">
-                    Lý do từ chối <span class="text-rose-500">*</span>
+                    Rejection reason <span class="text-rose-500">*</span>
                   </label>
                   <textarea
                     v-model="rejectReasonText"
@@ -849,7 +849,7 @@ watch(drawerKpisSorted, (kpis) => {
                     :class="
                       rejectReasonError ? 'border-rose-400 focus:ring-rose-100' : 'border-slate-300 focus:ring-rose-100'
                     "
-                    placeholder="Nhập lý do chi tiết..."
+                    placeholder="Enter a detailed reason..."
                   />
                   <p v-if="rejectReasonError" class="mt-1 text-xs font-medium text-rose-600">{{ rejectReasonError }}</p>
                   <div class="mt-4 flex justify-end gap-2">
@@ -858,7 +858,7 @@ watch(drawerKpisSorted, (kpis) => {
                       class="rounded-lg px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100"
                       @click="closeRejectReasonDialog"
                     >
-                      Hủy
+                      Cancel
                     </button>
                     <button
                       type="button"
@@ -866,7 +866,7 @@ watch(drawerKpisSorted, (kpis) => {
                       class="rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-50"
                       @click="confirmRejectReasonDialog"
                     >
-                      Xác nhận từ chối
+                      Confirm rejection
                     </button>
                   </div>
                 </div>
@@ -884,15 +884,15 @@ watch(drawerKpisSorted, (kpis) => {
                     <div class="rounded-full bg-rose-100 p-2 text-rose-600">
                       <i class="fas fa-circle-exclamation text-lg" />
                     </div>
-                    <h3 class="text-lg font-bold text-slate-900">Từ chối tất cả</h3>
+                    <h3 class="text-lg font-bold text-slate-900">Reject all</h3>
                   </div>
                   <p class="mb-3 text-sm text-slate-600">
-                    Bạn sắp từ chối
+                    You are about to reject
                     <strong>{{ actionableGmKpis.length }}</strong>
-                    KPI đang chờ GM duyệt của thành viên này. Vui lòng nhập lý do áp dụng cho tất cả.
+                    KPI(s) awaiting GM approval for this member. Enter a reason that applies to all of them.
                   </p>
                   <label class="mb-1 block text-sm font-semibold text-slate-700">
-                    Lý do từ chối <span class="text-rose-500">*</span>
+                    Rejection reason <span class="text-rose-500">*</span>
                   </label>
                   <textarea
                     v-model="rejectAllReason"
@@ -900,7 +900,7 @@ watch(drawerKpisSorted, (kpis) => {
                     :class="
                       rejectAllError ? 'border-rose-400 focus:ring-rose-100' : 'border-slate-300 focus:ring-rose-100'
                     "
-                    placeholder="Nhập lý do chi tiết..."
+                    placeholder="Enter a detailed reason..."
                   />
                   <p v-if="rejectAllError" class="mt-1 text-xs font-medium text-rose-600">{{ rejectAllError }}</p>
                   <div class="mt-4 flex justify-end gap-2">
@@ -909,7 +909,7 @@ watch(drawerKpisSorted, (kpis) => {
                       class="rounded-lg px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100"
                       @click="closeRejectAllDialog"
                     >
-                      Hủy
+                      Cancel
                     </button>
                     <button
                       type="button"
@@ -917,7 +917,7 @@ watch(drawerKpisSorted, (kpis) => {
                       class="rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-50"
                       @click="confirmRejectAll"
                     >
-                      Xác nhận từ chối
+                      Confirm rejection
                     </button>
                   </div>
                 </div>

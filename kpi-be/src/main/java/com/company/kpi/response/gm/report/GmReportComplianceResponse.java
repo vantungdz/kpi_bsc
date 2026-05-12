@@ -4,7 +4,7 @@ import lombok.Data;
 
 import java.util.List;
 
-/** Compliance: doughnut tiến độ + danh sách bottleneck quá hạn. */
+/** Compliance: doughnut phân bổ bottleneck (chờ duyệt / thiếu evidence) + danh sách. */
 @Data
 public class GmReportComplianceResponse {
 
@@ -13,12 +13,12 @@ public class GmReportComplianceResponse {
 
     @Data
     public static class Status {
-        private Integer completed;
+        /** Số member có ít nhất một KPI chờ duyệt điểm (501/502/601/602), cùng logic với danh sách bottleneck. */
         private Integer pendingApproval;
+        /** Số member có ít nhất một KPI thiếu evidence (404|405, cùng rule danh sách). */
         private Integer missingEvidence;
+        /** Tổng member trong tập bottleneck (mỗi user tối đa một lần; chờ duyệt + thiếu evidence). */
         private Integer total;
-        /** 0..100 — phần trăm hoàn tất so với total. */
-        private Integer percentComplete;
     }
 
     @Data

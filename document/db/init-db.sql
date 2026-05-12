@@ -41,8 +41,8 @@ INSERT INTO sys_status_codes (code, category, name, description) VALUES
 -- ==========================================
 -- 4xx: Phase 1 (Giao việc & Xin đổi)
 (401, 'ASM_STATUS', 'INACTIVE', 'KPI mới tạo (Chưa kích hoạt)'),
-(402, 'ASM_STATUS', 'WAITING_PM_APPROVAL', 'Chờ PM duyệt KPI đầu năm'),
-(403, 'ASM_STATUS', 'WAITING_GM_APPROVAL', 'Chờ GM duyệt KPI đầu năm'),
+(402, 'ASM_STATUS', 'WAITING_PM_APPROVAL', 'Chờ PM duyệt KPI'),
+(403, 'ASM_STATUS', 'WAITING_GM_APPROVAL', 'Chờ GM duyệt KPI'),
 (404, 'ASM_STATUS', 'PENDING_ACCEPTANCE', 'Chờ Member bấm Accept'),
 (405, 'ASM_STATUS', 'ACCEPTED', 'Đã chốt mục tiêu (Đang chạy)'),
 (406, 'ASM_STATUS', 'REJECTED', 'Bị từ chối'),
@@ -395,7 +395,11 @@ CREATE TABLE user_kpi_summaries (
     final_rating VARCHAR(10), 
     calculation_snapshot JSONB, 
     evaluation_comments TEXT,      
-    evaluation_supervisor_comments TEXT,      
+    evaluation_supervisor_comments TEXT,
+    /** Nhận xét nhân viên (tab Promotion) — tách khỏi evaluation_comments. */
+    evaluation_comments_promotion TEXT,
+    /** Nhận xét PM tổng (tab Promotion) — tách khỏi evaluation_supervisor_comments. */
+    evaluation_supervisor_comments_promotion TEXT,
     evaluator_id UUID REFERENCES users(id),
     
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,

@@ -2,6 +2,7 @@ package com.company.kpi.service.pm;
 
 import com.company.kpi.aggregate.KpiAssignmentDetailAggregate;
 import com.company.kpi.aggregate.PmDashboardAggregate;
+import com.company.kpi.aggregate.PmPortfolioCascadeChildRow;
 import com.company.kpi.aggregate.UserTeamHierarchyAggregate;
 import com.company.kpi.common.Constants;
 import com.company.kpi.common.exception.AppException;
@@ -19,10 +20,15 @@ import com.company.kpi.response.pm.MemberKpiDetailResponse;
 import com.company.kpi.response.gm.GmProcessTimelineResponse;
 import com.company.kpi.response.pm.PmDashboardResponse;
 import com.company.kpi.response.pm.PmMemberKpiApprovalItemResponse;
+import com.company.kpi.response.pm.PmMemberReviewMetaResponse;
+import com.company.kpi.response.pm.PmPortfolioGatePendingMemberResponse;
+import com.company.kpi.response.pm.PmPortfolioGateResponse;
 import com.company.kpi.response.pm.TeamMemberResponse;
 import com.company.kpi.service.gm.GmProcessTimelineService;
 import com.company.kpi.service.kpi.StrategicKpiService;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -38,10 +44,56 @@ import java.util.UUID;
 
 import com.company.kpi.entity.KpiAssignment;
 import com.company.kpi.entity.KpisInformation;
+import com.company.kpi.entity.UserKpiSummary;
 
 @Service
 @RequiredArgsConstructor
 public class PmDashboardService {
+
+    private static final ObjectMapper PM_DASHBOARD_JSON = new ObjectMapper();
+
+    private static String trimUpperOrNull(String raw) {
+        if (raw == null) {
+            return null;
+        }
+        String t = raw.trim();
+        return t.isEmpty() ? null : t.toUpperCase();
+    }
+
+    /**
+     * Cột Supervisor Score (PM dashboard): sau khi GM chấm thì hiển thị {@code end_gm_score},
+     * trước đó vẫn dùng {@code end_pm_score}.
+     */
+    private static BigDecimal supervisorPortfolioScore(KpiAssignment a) {
+        if (a == null) {
+            return null;
+        }
+        if (a.getEndGmScore() != null) {
+            return a.getEndGmScore();
+        }
+        return a.getEndPmScore();
+    }
+
+    /** Trích {@code gmComment} từ JSON evidences assignment (GM đánh giá cuối kỳ). */
+    private static String gmCommentFromEvidencesJson(String evidences) {
+        if (evidences == null) {
+            return null;
+        }
+        String trimmed = evidences.trim();
+        if (trimmed.isEmpty()) {
+            return null;
+        }
+        try {
+            JsonNode root = PM_DASHBOARD_JSON.readTree(trimmed);
+            if (root == null || !root.has("gmComment") || root.get("gmComment").isNull()) {
+                return null;
+            }
+            String c = root.get("gmComment").asText("").trim();
+            return c.isEmpty() ? null : c;
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
 
     private final KpiCycleMapper kpiCycleMapper;
     private final KpiAssignmentMapper kpiAssignmentMapper;
@@ -101,31 +153,39 @@ public class PmDashboardService {
                         .actualResult(agg.getPmAssignment().getEvidences())
                         .feedbackNote(agg.getPmFeedbackNote())
                         .selfScore(pmSelfScore)
-                        .pmScore(agg.getPmAssignment().getEndPmScore())
+                        .pmScore(supervisorPortfolioScore(agg.getPmAssignment()))
+                        .gmEvaluationComment(gmCommentFromEvidencesJson(agg.getPmAssignment().getEvidences()))
                         .isTree(agg.getKpiMaster() != null && agg.getKpiMaster().getTypeCode() != null && agg.getKpiMaster().getTypeCode() == 102)
                         .expanded(true)
                         .isSelfCreated(pmId.equals(agg.getPmAssignment().getCreatedBy()))
+                        .creatorRoleCode(trimUpperOrNull(agg.getKpiCreatorRoleCode()))
                         .build();
             });
 
-            if (agg.getChildAssignment() != null && agg.getChildAssignment().getId() != null) {
-                BigDecimal childSelfScore = agg.getChildAssignment().getEndSelfScore() != null
-                        ? agg.getChildAssignment().getEndSelfScore()
-                        : agg.getChildAssignment().getMidSelfScore();
+            if (agg.getCascadeChildren() != null) {
+                for (PmPortfolioCascadeChildRow slice : agg.getCascadeChildren()) {
+                    if (slice.getChildAssignment() == null || slice.getChildAssignment().getId() == null) {
+                        continue;
+                    }
+                    BigDecimal childSelfScore = slice.getChildAssignment().getEndSelfScore() != null
+                            ? slice.getChildAssignment().getEndSelfScore()
+                            : slice.getChildAssignment().getMidSelfScore();
 
-                groupDto.getChildren().add(PmDashboardResponse.KpiChildDto.builder()
-                        .id(agg.getChildAssignment().getId())
-                        .userId(agg.getChildUser() != null ? agg.getChildUser().getId() : null)
-                        .name(agg.getChildUser() != null ? agg.getChildUser().getFullName() : "Unknown")
-                        .role(agg.getChildJobTitle() != null ? agg.getChildJobTitle().getName() : "Member")
-                        .targetValue(agg.getChildAssignment().getTargetValue())
-                        .actualResult(agg.getChildAssignment().getEvidences())
-                        .feedbackNote(agg.getChildFeedbackNote())
-                        .feedbackTargetRoleCode(agg.getChildFeedbackTargetRoleCode())
-                        .selfScore(childSelfScore)
-                        .pmScore(agg.getChildAssignment().getEndPmScore())
-                        .statusCode(agg.getChildAssignment().getStatusCode())
-                        .build());
+                    groupDto.getChildren().add(PmDashboardResponse.KpiChildDto.builder()
+                            .id(slice.getChildAssignment().getId())
+                            .userId(slice.getChildUser() != null ? slice.getChildUser().getId() : null)
+                            .name(slice.getChildUser() != null ? slice.getChildUser().getFullName() : "Unknown")
+                            .role(slice.getChildJobTitle() != null ? slice.getChildJobTitle().getName() : "Member")
+                            .targetValue(slice.getChildAssignment().getTargetValue())
+                            .actualResult(slice.getChildAssignment().getEvidences())
+                            .feedbackNote(slice.getChildFeedbackNote())
+                            .feedbackTargetRoleCode(slice.getChildFeedbackTargetRoleCode())
+                            .selfScore(childSelfScore)
+                            .pmScore(supervisorPortfolioScore(slice.getChildAssignment()))
+                            .gmEvaluationComment(gmCommentFromEvidencesJson(slice.getChildAssignment().getEvidences()))
+                            .statusCode(slice.getChildAssignment().getStatusCode())
+                            .build());
+                }
             }
         }
 
@@ -194,6 +254,24 @@ public class PmDashboardService {
         }
 
         return roots;
+    }
+
+    /**
+     * Kiểm tra toàn bộ member trong cây PM đã nộp xong KPI Member (individual/team, status ≥ 501) cho PM hay chưa —
+     * điều kiện trước khi PM gửi đánh giá lên GM từng member (tab KPI Member).
+     */
+    public PmPortfolioGateResponse getPmPortfolioEvaluationGate(UUID pmId, Integer year) {
+        var cycleOpt = kpiCycleMapper.findByYear(year);
+        if (cycleOpt.isEmpty()) {
+            throw new IllegalArgumentException("Can't find KPI cycle for year: " + year);
+        }
+        UUID cycleId = cycleOpt.get().getId();
+        List<PmPortfolioGatePendingMemberResponse> pending =
+                userMapper.listPmPortfolioGateBlockingMembers(pmId, cycleId);
+        return PmPortfolioGateResponse.builder()
+                .allPortfolioSubmittedToPm(pending.isEmpty())
+                .pendingMembers(pending)
+                .build();
     }
 
     public List<MemberKpiDetailResponse> getMemberKpiDetails(UUID memberId, Integer year) {
@@ -414,7 +492,7 @@ public class PmDashboardService {
 
     /** PM lưu nhận xét tổng cho member trong user_kpi_summaries để hiển thị ở Team Review / GM Evaluation Hub. */
     @Transactional
-    public void savePmSupervisorComment(UUID pmId, Integer year, UUID memberId, String pmComment) {
+    public void savePmSupervisorComment(UUID pmId, Integer year, UUID memberId, String pmComment, Boolean promotionScope) {
         var cycleOpt = kpiCycleMapper.findByYear(year);
         if (cycleOpt.isEmpty()) {
             throw new IllegalArgumentException("Can't find KPI cycle for year: " + year);
@@ -426,14 +504,47 @@ public class PmDashboardService {
             throw AppException.badRequest("Member không thuộc team do PM quản lý trong chu kỳ này.");
         }
         String comment = Objects.toString(pmComment, "").trim();
+        boolean promotion = Boolean.TRUE.equals(promotionScope);
         var existing = userKpiSummaryMapper.findByUserIdAndCycleId(memberId, cycleId);
         if (existing.isPresent()) {
-            userKpiSummaryMapper.updateEvaluationSupervisorComments(
-                    memberId, cycleId, comment, pmId, pmId);
+            if (promotion) {
+                userKpiSummaryMapper.updateEvaluationSupervisorCommentsPromotion(
+                        memberId, cycleId, comment, pmId, pmId);
+            } else {
+                userKpiSummaryMapper.updateEvaluationSupervisorComments(
+                        memberId, cycleId, comment, pmId, pmId);
+            }
         } else {
             userKpiSummaryMapper.insertEvaluationSupervisorComments(
-                    UUID.randomUUID(), memberId, cycleId, comment, pmId, pmId, pmId);
+                    UUID.randomUUID(),
+                    memberId,
+                    cycleId,
+                    promotion ? null : comment,
+                    promotion ? comment : null,
+                    pmId,
+                    pmId,
+                    pmId);
         }
+    }
+
+    public PmMemberReviewMetaResponse getMemberReviewMeta(UUID pmId, UUID memberId, Integer year) {
+        var cycleOpt = kpiCycleMapper.findByYear(year);
+        if (cycleOpt.isEmpty()) {
+            throw new IllegalArgumentException("Can't find KPI cycle for year: " + year);
+        }
+        UUID cycleId = cycleOpt.get().getId();
+        boolean managed = userMapper.findTeamHierarchyBySupervisor(pmId, cycleId).stream()
+                .anyMatch(row -> memberId.equals(row.getId()));
+        if (!managed) {
+            throw AppException.badRequest("Member không thuộc team do PM quản lý trong chu kỳ này.");
+        }
+        UserKpiSummary s = userKpiSummaryMapper.findByUserIdAndCycleId(memberId, cycleId).orElse(null);
+        return PmMemberReviewMetaResponse.builder()
+                .evaluationCommentsPortfolio(s != null ? s.getEvaluationComments() : null)
+                .evaluationCommentsPromotion(s != null ? s.getEvaluationCommentsPromotion() : null)
+                .supervisorCommentsPortfolio(s != null ? s.getEvaluationSupervisorComments() : null)
+                .supervisorCommentsPromotion(s != null ? s.getEvaluationSupervisorCommentsPromotion() : null)
+                .build();
     }
 
     /**

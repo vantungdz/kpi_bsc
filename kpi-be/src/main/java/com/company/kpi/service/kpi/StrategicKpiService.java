@@ -15,6 +15,7 @@ import com.company.kpi.request.kpi.AssignMemberRequest;
 import com.company.kpi.request.kpi.CreateStrategicKpiRequest;
 import com.company.kpi.request.kpi.UpdateKpiStatusRequest;
 import com.company.kpi.response.gm.GmKpiCategoryResponse;
+import com.company.kpi.response.pm.PmPortfolioGatePendingMemberResponse;
 import com.company.kpi.response.kpi.StrategicKpiEditResponse;
 import com.company.kpi.response.kpi.StrategicKpiResponse;
 import lombok.RequiredArgsConstructor;
@@ -382,11 +383,46 @@ public class StrategicKpiService {
 
     // ── PRIVATE HELPERS ───────────────────────────────────────────────────────
 
+    /**
+     * Team KPI: {@code desired} chỉ chứa PM (assignPMs). Member cascade có
+     * {@code parent_assignment_id} trỏ tới bản ghi PM — không nằm trong {@code desired}
+     * nhưng phải giữ khi PM đó vẫn được giao. Khi gỡ PM khỏi danh sách, xóa luôn các
+     * dòng con (member) thuộc PM đó.
+     */
+    private static boolean shouldSoftDeleteStrategicAssignmentRow(
+            KpiAssignmentUserTargetRow row,
+            LinkedHashSet<UUID> desiredSet,
+            int type,
+            String role,
+            UUID actorId,
+            Map<UUID, KpiAssignmentUserTargetRow> rowsByAssignmentId) {
+        if (row.getUserId() == null) {
+            return false;
+        }
+        if (Constant.ROLE_PM.equals(role) && actorId.equals(row.getUserId())
+                && row.getParentAssignmentId() == null) {
+            return false;
+        }
+        if (type == TYPE_TEAM && row.getParentAssignmentId() != null) {
+            KpiAssignmentUserTargetRow parent = rowsByAssignmentId.get(row.getParentAssignmentId());
+            UUID parentPmUserId = parent != null ? parent.getUserId() : null;
+            if (parentPmUserId != null && desiredSet.contains(parentPmUserId)) {
+                return false;
+            }
+            return true;
+        }
+        return !desiredSet.contains(row.getUserId());
+    }
+
     private void syncAssignments(UUID kpiInfoId, UUID cycleId, List<UUID> desired,
             int type, CreateStrategicKpiRequest req,
             BigDecimal targetNum, UUID actorId, String role) {
         List<KpiAssignmentUserTargetRow> currentRows = kpiAssignmentMapper.listAssignmentUserTargets(kpiInfoId,
                 cycleId);
+
+        Map<UUID, KpiAssignmentUserTargetRow> rowsByAssignmentId = currentRows.stream()
+                .filter(r -> r.getId() != null)
+                .collect(Collectors.toMap(KpiAssignmentUserTargetRow::getId, r -> r, (a, b) -> a));
 
         Map<UUID, UUID> assignmentIdByUser = currentRows.stream()
                 .filter(r -> r.getUserId() != null)
@@ -398,12 +434,7 @@ public class StrategicKpiService {
         for (KpiAssignmentUserTargetRow row : currentRows) {
             if (row.getUserId() == null)
                 continue;
-            // Never delete the PM's parent assignment here
-            if (Constant.ROLE_PM.equals(role) && actorId.equals(row.getUserId())
-                    && row.getParentAssignmentId() == null) {
-                continue;
-            }
-            if (!desiredSet.contains(row.getUserId())) {
+            if (shouldSoftDeleteStrategicAssignmentRow(row, desiredSet, type, role, actorId, rowsByAssignmentId)) {
                 kpiAssignmentMapper.softDeleteKpiAssignmentById(row.getId(), cycleId, actorId);
             }
         }
@@ -776,33 +807,75 @@ public class StrategicKpiService {
                     "Vui lòng phân bổ ít nhất một thành viên cho mỗi KPI Team và chờ họ xác nhận trước khi chấp nhận KPI.");
         }
 
+        // PM gửi đánh giá KPI Member lên GM (501→502 / 601→602): cần mọi member trong cây đã nộp portfolio (individual/team ≥ 501).
+        if (Boolean.TRUE.equals(request.getBulkForManagedMembers())
+                && request.getManagedMemberUserId() != null
+                && !request.isPromotion()) {
+            Integer next = request.getStatusCode();
+            Integer only = request.getOnlyFromStatusCode();
+            boolean pmSubmitMemberEvalToGm = next != null && (next == 502 || next == 602)
+                    && only != null && (only == 501 || only == 601);
+            if (pmSubmitMemberEvalToGm) {
+                List<PmPortfolioGatePendingMemberResponse> pending =
+                        userMapper.listPmPortfolioGateBlockingMembers(currentUserId, request.getCycleId());
+                if (!pending.isEmpty()) {
+                    String names = pending.stream()
+                            .map(PmPortfolioGatePendingMemberResponse::getFullName)
+                            .filter(Objects::nonNull)
+                            .map(String::trim)
+                            .filter(s -> !s.isEmpty())
+                            .collect(Collectors.joining(", "));
+                    throw AppException.badRequest(
+                            "Chưa thể gửi đánh giá KPI Member lên GM: còn thành viên chưa nộp kết quả cho PM "
+                                    + "(KPI individual/team chưa đạt trạng thái chờ PM — dưới 501)."
+                                    + (names.isEmpty() ? "" : " Còn thiếu: " + names + "."));
+                }
+            }
+        }
+
         int updatedCount;
         if (Boolean.TRUE.equals(request.getBulkForManagedMembers())) {
-            // Team Review: assignment thuộc member/leader dưới PM — không dùng ka.user_id =
-            // PM.
-            updatedCount = kpiAssignmentMapper.updateKpiStatusesForPmManagedMembers(
-                    currentUserId,
-                    request.getCycleId(),
-                    request.getStatusCode(),
-                    false,
-                    request.getOnlyFromStatusCode());
-            updatedCount += kpiAssignmentMapper.updateKpiStatusesForPmManagedMembers(
-                    currentUserId,
-                    request.getCycleId(),
-                    request.getStatusCode(),
-                    true,
-                    request.getOnlyFromStatusCode());
-
-            // Team KPI của chính PM không nằm trong cây managed members.
-            // Đồng bộ parent Team assignment lên 502/602 để GM Evaluation Hub nhìn thấy
-            // dòng PM.
-            Integer nextStatus = request.getStatusCode();
-            if (request.isPromotion() == false && nextStatus != null && (nextStatus == 502 || nextStatus == 602)) {
-                updatedCount += kpiAssignmentMapper.syncPmTeamParentStatusesFromManagedChildren(
+            if (request.getManagedMemberUserId() != null) {
+                updatedCount = kpiAssignmentMapper.updateKpiStatusesForPmManagedMemberSingle(
                         currentUserId,
                         request.getCycleId(),
-                        nextStatus,
-                        currentUserId);
+                        request.getManagedMemberUserId(),
+                        request.getStatusCode(),
+                        request.isPromotion(),
+                        request.getOnlyFromStatusCode());
+                Integer nextStatus = request.getStatusCode();
+                if (!request.isPromotion() && nextStatus != null && (nextStatus == 502 || nextStatus == 602)) {
+                    updatedCount += kpiAssignmentMapper.syncPmTeamParentStatusesFromManagedChildren(
+                            currentUserId,
+                            request.getCycleId(),
+                            nextStatus,
+                            currentUserId);
+                }
+            } else {
+                updatedCount = kpiAssignmentMapper.updateKpiStatusesForPmManagedMembers(
+                        currentUserId,
+                        request.getCycleId(),
+                        request.getStatusCode(),
+                        false,
+                        request.getOnlyFromStatusCode());
+                updatedCount += kpiAssignmentMapper.updateKpiStatusesForPmManagedMembers(
+                        currentUserId,
+                        request.getCycleId(),
+                        request.getStatusCode(),
+                        true,
+                        request.getOnlyFromStatusCode());
+
+                // Team KPI của chính PM không nằm trong cây managed members.
+                // Đồng bộ parent Team assignment lên 502/602 để GM Evaluation Hub nhìn thấy
+                // dòng PM.
+                Integer nextStatus = request.getStatusCode();
+                if (request.isPromotion() == false && nextStatus != null && (nextStatus == 502 || nextStatus == 602)) {
+                    updatedCount += kpiAssignmentMapper.syncPmTeamParentStatusesFromManagedChildren(
+                            currentUserId,
+                            request.getCycleId(),
+                            nextStatus,
+                            currentUserId);
+                }
             }
         } else {
             updatedCount = kpiAssignmentMapper.updateKpiStatuses(

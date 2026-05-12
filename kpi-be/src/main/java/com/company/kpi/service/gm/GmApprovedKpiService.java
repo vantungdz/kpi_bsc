@@ -55,7 +55,7 @@ public class GmApprovedKpiService {
                     : Constants.AssignStatus.REJECTED;
             String updateReason;
             if (Boolean.TRUE.equals(req.getApprove())) {
-                updateReason = "GM chấp nhận đề xuất KPI đầu năm (403→405)";
+                updateReason = "";
             } else {
                 String rr = req.getRejectReason() != null ? req.getRejectReason().trim() : "";
                 if (rr.isEmpty()) {

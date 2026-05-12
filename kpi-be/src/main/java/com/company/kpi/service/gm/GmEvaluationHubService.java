@@ -117,12 +117,25 @@ public class GmEvaluationHubService {
             String comment = raw.trim();
             Optional<UserKpiSummary> existing =
                     userKpiSummaryMapper.findByUserIdAndCycleId(evaluationUserId, cycleId);
+            boolean promotion = Boolean.TRUE.equals(req.getPromotion());
             if (existing.isPresent()) {
-                userKpiSummaryMapper.updateEvaluationSupervisorComments(
-                        evaluationUserId, cycleId, comment, gmUserId, gmUserId);
+                if (promotion) {
+                    userKpiSummaryMapper.updateEvaluationSupervisorCommentsPromotion(
+                            evaluationUserId, cycleId, comment, gmUserId, gmUserId);
+                } else {
+                    userKpiSummaryMapper.updateEvaluationSupervisorComments(
+                            evaluationUserId, cycleId, comment, gmUserId, gmUserId);
+                }
             } else {
                 userKpiSummaryMapper.insertEvaluationSupervisorComments(
-                        UUID.randomUUID(), evaluationUserId, cycleId, comment, gmUserId, gmUserId, gmUserId);
+                        UUID.randomUUID(),
+                        evaluationUserId,
+                        cycleId,
+                        promotion ? null : comment,
+                        promotion ? comment : null,
+                        gmUserId,
+                        gmUserId,
+                        gmUserId);
             }
         }
 
@@ -178,7 +191,10 @@ public class GmEvaluationHubService {
         a.setSectionManagerFullName(r.getSectionManagerFullName());
         a.setMemberRoleCode(r.getMemberRoleCode());
         a.setMemberRoleName(r.getMemberRoleName());
-        a.setSupervisorComment(r.getSupervisorComment());
+        a.setEvaluationComments(r.getEvaluationComments());
+        a.setEvaluationCommentsPromotion(r.getEvaluationCommentsPromotion());
+        a.setSupervisorCommentPortfolio(r.getSupervisorCommentPortfolio());
+        a.setSupervisorCommentPromotion(r.getSupervisorCommentPromotion());
         return a;
     }
 }

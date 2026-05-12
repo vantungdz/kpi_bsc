@@ -61,6 +61,8 @@ public class GmDiagnosticsFlatRow {
     private String memberRank;
 
     private UUID assignmentId;
+    /** {@code kpi_assignments.parent_assignment_id} — null = assignment gốc (vd GM giao slice cho PM/đơn vị). */
+    private UUID parentAssignmentId;
     private Integer statusCode;
     private BigDecimal midSelfScore;
     private BigDecimal endSelfScore;
@@ -69,6 +71,8 @@ public class GmDiagnosticsFlatRow {
     private BigDecimal memberTargetValue;
     private String evidences;
     private String feedbackNote;
+    /** {@code user_kpi_summaries.evaluation_supervisor_comments} — nhận xét supervisor (PM) theo user + chu kỳ. */
+    private String evaluationSupervisorComments;
     /**
      * {@code roles.code} của feedback active trên assignment (bất kỳ target PM/GM),
      * dùng để biết 407 có cần GM xử lý hay không.

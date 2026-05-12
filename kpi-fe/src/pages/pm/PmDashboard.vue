@@ -16,10 +16,7 @@ import {
   parsePmPortfolioEvidenceString,
 } from '@/utils/memberKpiHelpers'
 import { formatKpiTargetWithUnit, kpiUnitCodeToFormUnit } from '@/utils/kpiUnitCodes'
-import {
-  countPmEvaluationSubjectsInHierarchy,
-  isPmEvaluationSubject,
-} from '@/utils/pmEvaluationSubject'
+import { countPmEvaluationSubjectsInHierarchy } from '@/utils/pmEvaluationSubject'
 import PmPersonalKpiTab from '@/components/pm/tabs/PmPersonalKpiTab.vue'
 import PmTeamMembersTab from '@/components/pm/tabs/PmTeamMembersTab.vue'
 import PmRequestsTab from '@/components/pm/tabs/PmRequestsTab.vue'
@@ -45,36 +42,49 @@ function onPmFeedbackPendingCount(payload: { scope: 'portfolio' | 'promotion'; c
   }
 }
 
-const invalidMembers = ref<string[]>([])
-/** Giữ khớp rule với lần bấm "Gửi toàn bộ đánh giá" gần nhất — để gỡ highlight sau khi Lưu trong drawer */
-const bulkSubmitUsesEndYearRules = ref(false)
-const memberComments = ref<Record<string, string>>({})
+type PmSupervisorDraft = { main: string; promo: string }
+
+const memberComments = ref<Record<string, PmSupervisorDraft>>({})
 const memberKpisCache = ref<Record<string, any[]>>({})
 
-/** Trả về true nếu member chưa đủ điều kiện bulk (đồng bộ logic trong handleSubmitEvaluations). */
-function memberFailsBulkSubmitRules(m: any, isEndYear: boolean): boolean {
-  if (!m?.id) return false
-  if (!isPmEvaluationSubject(m)) return false
-  if (isEndYear) {
-    if (m.statusCode < 601) return true
-    if (m.statusCode === 601) {
-      const comment = memberComments.value[m.id]
-      const kpis = memberKpisCache.value[m.id]
-      if (!comment?.trim()) return true
-      if (!kpis?.length) return true
-      return kpis.some((kpi: any) => kpi.pmScore == null)
+function normalizePmSupervisorDraft(raw: unknown): PmSupervisorDraft {
+  if (raw == null) return { main: '', promo: '' }
+  if (typeof raw === 'string') return { main: raw, promo: '' }
+  if (typeof raw === 'object') {
+    const o = raw as Record<string, unknown>
+    return {
+      main: String(o.main ?? ''),
+      promo: String(o.promo ?? ''),
     }
-    return false
   }
-  if (m.statusCode < 501) return true
-  if (m.statusCode === 501) return !memberComments.value[m.id]?.trim()
-  return false
+  return { main: '', promo: '' }
 }
 
 // Control refresh of PM Portfolio tab after actions in drawers
 const personalKpiKey = ref(0)
-/** Tăng để Team Review refetch hierarchy sau bulk gửi đánh giá (không reload trang). */
+const approvalYear = new Date().getFullYear()
+/** Tăng để Team Review refetch hierarchy sau khi gửi đánh giá (không reload trang). */
 const teamReviewReloadNonce = ref(0)
+
+/** Điều kiện gửi đánh giá KPI Member lên GM: mọi member trong cây đã nộp individual/team (≥501) cho PM. */
+const pmPortfolioEvalGate = ref<{
+  loaded: boolean
+  open: boolean
+  pending: { userId: string; fullName: string }[]
+}>({ loaded: false, open: false, pending: [] })
+
+async function loadPmPortfolioEvaluationGate() {
+  try {
+    const data = await pmKpiService.getPmPortfolioEvaluationGate(approvalYear)
+    pmPortfolioEvalGate.value = {
+      loaded: true,
+      open: Boolean(data?.allPortfolioSubmittedToPm),
+      pending: Array.isArray(data?.pendingMembers) ? data.pendingMembers : [],
+    }
+  } catch {
+    pmPortfolioEvalGate.value = { loaded: true, open: false, pending: [] }
+  }
+}
 /** Số member đang chờ PM đánh giá (501 / 601) — badge tab Team Review + đồng bộ khi mở tab. */
 const teamPmEvaluationPendingCount = ref(0)
 
@@ -93,7 +103,6 @@ function onTeamPendingPmEvaluationCount(count: number) {
   teamPmEvaluationPendingCount.value = Number.isFinite(n) ? Math.max(0, Math.floor(n)) : 0
 }
 
-const approvalYear = new Date().getFullYear()
 const approvalLoading = ref(false)
 const approvalSubmitting = ref(false)
 
@@ -414,16 +423,29 @@ async function submitApprovalDecisionBatch(
 
 watch(activeTab, (t) => {
   if (t === 'requests') loadApprovalRequests()
+  if (t === 'team') void loadPmPortfolioEvaluationGate()
 })
 
 watch(teamReviewReloadNonce, () => {
   void loadTeamReviewPendingCount()
+  void loadPmPortfolioEvaluationGate()
 })
 
 const initLocalStorage = () => {
   const savedComments = localStorage.getItem('pm_eval_comments')
   if (savedComments) {
-    try { memberComments.value = JSON.parse(savedComments) } catch(e) {}
+    try {
+      const parsed = JSON.parse(savedComments) as Record<string, unknown>
+      const next: Record<string, PmSupervisorDraft> = {}
+      if (parsed && typeof parsed === 'object') {
+        for (const [k, v] of Object.entries(parsed)) {
+          next[k] = normalizePmSupervisorDraft(v)
+        }
+      }
+      memberComments.value = next
+    } catch {
+      /* ignore */
+    }
   }
   const savedKpis = localStorage.getItem('pm_eval_kpis')
   if (savedKpis) {
@@ -436,6 +458,7 @@ onMounted(() => {
   void loadProcessTimeline()
   void loadApprovalRequests()
   void loadTeamReviewPendingCount()
+  void loadPmPortfolioEvaluationGate()
   window.addEventListener('pm-kpi-created', handleRefresh)
 })
 
@@ -515,120 +538,33 @@ function onPmAssignDrawerClose() {
   closePanel()
 }
 
-const handleSaveMemberKpis = (payload: { kpis: any[]; comments: any; memberId?: string }) => {
-  const mid = payload.memberId ?? activeItem.value?.id
-  const memberRow = activeItem.value?.id === mid ? activeItem.value : null
-  if (mid) {
-    memberComments.value = { ...memberComments.value, [mid]: payload.comments.pmComment }
-    memberKpisCache.value = { ...memberKpisCache.value, [mid]: payload.kpis }
-
-    // Save to localStorage to persist across F5 refresh
-    localStorage.setItem('pm_eval_comments', JSON.stringify(memberComments.value))
-    localStorage.setItem('pm_eval_kpis', JSON.stringify(memberKpisCache.value))
-
-    toast.success('Lưu đánh giá thành công (Lưu tạm)')
-
-    // Gỡ tô đỏ hàng Team Review khi dữ liệu đã đủ điều kiện bulk
-    if (invalidMembers.value.includes(mid) && memberRow) {
-      if (!memberFailsBulkSubmitRules(memberRow, bulkSubmitUsesEndYearRules.value)) {
-        invalidMembers.value = invalidMembers.value.filter((id) => id !== mid)
-      }
-    }
+const handleMemberEvalSubmitted = (payload: {
+  kpis: any[]
+  comments: { main: string; promo: string }
+  memberId?: string
+}) => {
+  const mid = String(payload.memberId ?? activeItem.value?.id ?? '')
+  if (!mid) return
+  const prev = memberComments.value[mid] ?? { main: '', promo: '' }
+  memberComments.value = {
+    ...memberComments.value,
+    [mid]: {
+      main: String(payload.comments?.main ?? prev.main),
+      promo: String(payload.comments?.promo ?? prev.promo),
+    },
   }
-}
-
-const handleSubmitEvaluations = async (evaluationSubjects: any[]) => {
-  if (evaluationSubjects.length === 0) {
-    toast.info('Không có nhân sự nào đang chờ PM đánh giá trong kỳ này (501/601).')
-    return
-  }
-
-  bulkSubmitUsesEndYearRules.value = evaluationSubjects.some((m) => Number(m.statusCode) >= 600)
-  const isEndYear = bulkSubmitUsesEndYearRules.value
-
-  let isValid = true
-  const newInvalidMembers: string[] = []
-
-  for (const m of evaluationSubjects) {
-    if (memberFailsBulkSubmitRules(m, isEndYear)) {
-      isValid = false
-      newInvalidMembers.push(m.id)
-    }
-  }
-
-  invalidMembers.value = newInvalidMembers
-
-  if (!isValid) {
-    toast.error(
-      isEndYear
-        ? 'Vui lòng đảm bảo TOÀN BỘ thành viên đều đã nộp KPI và được PM đánh giá cuối kỳ (điểm PM 1–5 và nhận xét)!'
-        : 'Vui lòng đảm bảo TOÀN BỘ thành viên đều đã nộp KPI và được PM đánh giá giữa kỳ (nhận xét PM)!',
-    )
-    return
-  }
+  memberKpisCache.value = { ...memberKpisCache.value, [mid]: payload.kpis }
 
   try {
-    const initData = await pmKpiService.getRegistrationInitData()
-    const cycleId = initData.activeCycle.id
-    
-    // Đồng bộ điểm PM lên server chỉ cuối kỳ (601→602). Giữa kỳ (501→502) chỉ nhận xét, không chấm điểm PM.
-    const scorePromises: Promise<unknown>[] = []
-    const supervisorCommentPromises: Promise<unknown>[] = []
-    for (const m of evaluationSubjects) {
-      const sc = Number(m.statusCode)
-      const pmComment = String(memberComments.value[m.id] ?? '').trim()
-      supervisorCommentPromises.push(
-        pmKpiService.saveMemberSupervisorComment({
-          year: approvalYear,
-          memberId: String(m.id),
-          pmComment,
-        }),
-      )
-      if (sc !== 601) continue
-      const kpis = memberKpisCache.value[m.id]
-      if (!kpis?.length) continue
-      for (const kpi of kpis) {
-        if (kpi.pmScore == null) continue
-        const score = Number(kpi.pmScore)
-        if (!Number.isFinite(score) || score < 1 || score > 5) continue
-        scorePromises.push(pmKpiService.scoreItem(String(m.id), String(kpi.id), score))
-      }
-    }
-    if (scorePromises.length > 0) {
-      await Promise.all(scorePromises)
-    }
-    if (supervisorCommentPromises.length > 0) {
-      await Promise.all(supervisorCommentPromises)
-    }
-
-    // Call Bulk Update Status API
-    // bulkForManagedMembers: cập nhật KPI của cả team dưới PM (501→502 / 601→602), không chỉ dòng KPI của chính PM
-    await pmKpiService.bulkUpdateKpiStatus({
-      cycleId: cycleId,
-      statusCode: isEndYear ? 602 : 502,
-      onlyFromStatusCode: isEndYear ? 601 : 501,
-      promotion: false,
-      bulkForManagedMembers: true,
-    })
-
-    invalidMembers.value = []
-    memberComments.value = {}
-    memberKpisCache.value = {}
-    try {
-      localStorage.removeItem('pm_eval_comments')
-      localStorage.removeItem('pm_eval_kpis')
-    } catch {
-      /* ignore */
-    }
-    teamReviewReloadNonce.value += 1
-    personalKpiKey.value += 1
-
-    toast.success('Gửi toàn bộ đánh giá thành công!')
-    void loadProcessTimeline()
-  } catch (err: any) {
-    console.error('Failed to submit evaluations:', err)
-    toast.error('Gửi đánh giá thất bại: ' + (err.response?.data?.message || err.message))
+    localStorage.setItem('pm_eval_comments', JSON.stringify(memberComments.value))
+    localStorage.setItem('pm_eval_kpis', JSON.stringify(memberKpisCache.value))
+  } catch {
+    /* ignore */
   }
+
+  teamReviewReloadNonce.value += 1
+  personalKpiKey.value += 1
+  void loadProcessTimeline()
 }
 
 const authStore = useAuthStore()
@@ -807,11 +743,12 @@ const handleRefresh = () => {
           v-if="activeTab === 'team'"
           :year="approvalYear"
           :reload-nonce="teamReviewReloadNonce"
-          :invalid-members="invalidMembers"
           :kpis-cache="memberKpisCache"
           :comments-cache="memberComments"
+          :portfolio-gate-loaded="pmPortfolioEvalGate.loaded"
+          :portfolio-gate-open="pmPortfolioEvalGate.open"
+          :portfolio-gate-pending="pmPortfolioEvalGate.pending"
           @open-member="openMemberDrawer"
-          @submit-evaluations="handleSubmitEvaluations"
           @pending-pm-evaluation-count="onTeamPendingPmEvaluationCount"
         />
         <PmRequestsTab
@@ -834,11 +771,16 @@ const handleRefresh = () => {
     <PmMemberDetailDrawer
       :open="rightPanelVisible && rightPanelMode === 'member_detail'"
       :member="activeItem"
-      :persisted-pm-comment="activeItem?.apiPmComment ?? ''"
-      :cached-comment="activeItem ? memberComments[activeItem.id] : ''"
+      :portfolio-gate-loaded="pmPortfolioEvalGate.loaded"
+      :portfolio-gate-open="pmPortfolioEvalGate.open"
+      :cached-supervisor-comments="
+        activeItem?.id
+          ? (memberComments[activeItem.id] ?? { main: '', promo: '' })
+          : { main: '', promo: '' }
+      "
       :cached-kpis="activeItem ? memberKpisCache[activeItem.id] : undefined"
       @close="closePanel"
-      @save="handleSaveMemberKpis"
+      @save="handleMemberEvalSubmitted"
       @discard-draft="discardMemberEvalDraft"
     />
     <PmRequestDetailDrawer

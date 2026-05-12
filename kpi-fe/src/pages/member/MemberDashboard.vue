@@ -19,7 +19,7 @@ import MemberKpiPromotionTab from '@/components/member/MemberKpiPromotionTab.vue
 import MemberEvidenceDrawer from '@/components/member/MemberEvidenceDrawer.vue'
 import { memberItemEvalStatus } from '@/utils/memberKpiHelpers'
 import { buildKpiDeadlineBanner, type KpiDeadlineBannerVm } from '@/utils/kpiDeadlineBanner'
-import { getSubmitButtonState } from '@/utils/common'
+import { getSubmitButtonState, shouldCollapseKpiProcessTimelineToYearEndOnly } from '@/utils/common'
 
 // ── Evidence drawer — provide to child components ───────────────────────────
 const evidenceCtx = useMemberEvidenceDrawer()
@@ -39,7 +39,6 @@ const selectedYear = ref(new Date().getFullYear())
 const memberExtraSheetItems = ref<KpiItem[]>([])
 const showCreateIndividualKpiDrawer = ref(false)
 const editingRejectedSelfCreatedItem = ref<KpiItem | null>(null)
-
 // ── Data loading ─────────────────────────────────────────────────────────────
 async function loadDashboard() {
   loading.value = true
@@ -113,11 +112,26 @@ const personalAssignmentIds = computed(() => personalItemsFlat.value.map(i => i.
 const promotionAssignmentIds = computed(() => promotionItemsFlat.value.map(i => i.id))
 const hasAnyKpiItems = computed(() => (sheet.value?.items?.length ?? 0) > 0)
 
+/** Ẩn mốc đầu năm / giữa năm chỉ khi thật sự onboard sau giữa kỳ (không dùng mỗi điều kiện > mid_year_end). */
+const timelineYearEndOnly = computed(() => {
+  return shouldCollapseKpiProcessTimelineToYearEndOnly(
+    dashboardData.value?.accountCreatedAt,
+    cycleData.value?.midYearEnd,
+  )
+})
+
+/** Mọi KPI trên sheet đã chốt 603 — timeline hiển thị đã hoàn thành (không còn «Đang trong kỳ» Year-End). */
+const memberEvaluationFullyComplete = computed(() => {
+  const items = sheet.value?.items ?? []
+  if (!items.length) return false
+  return items.every(i => Number(i.statusCode ?? 0) === 603)
+})
+
 function minStatusCode(items: KpiItem[]): number {
   const statusCodes = items
     .map(i => Number(i.statusCode))
-    .filter(n => Number.isFinite(n))
-  if (!statusCodes.length) return 0
+    .filter(n => Number.isFinite(n) && n >= 401)
+  if (!statusCodes.length) return 401
   return Math.min(...statusCodes)
 }
 
@@ -129,7 +143,13 @@ const personalButtonState = computed(() => {
   if (hasRejected) {
     return { show: true, disabled: false, text: 'Resubmit KPI', actionType: 'GOAL_SETTING' as const }
   }
-  return getSubmitButtonState(cycleData.value, minStatusCode(personalItemsFlat.value))
+  const skipMid = shouldCollapseKpiProcessTimelineToYearEndOnly(
+    dashboardData.value?.accountCreatedAt,
+    cycleData.value.midYearEnd,
+  )
+  return getSubmitButtonState(cycleData.value, minStatusCode(personalItemsFlat.value), new Date(), {
+    treatMidYearAsSkipped: skipMid,
+  })
 })
 const hasRejectedPersonal = computed(() =>
   personalItemsFlat.value.some(i => Number(i.statusCode ?? 0) === 406),
@@ -143,7 +163,13 @@ const promotionButtonState = computed(() => {
   if (hasRejected) {
     return { show: true, disabled: false, text: 'Resubmit KPI', actionType: 'GOAL_SETTING' as const }
   }
-  return getSubmitButtonState(cycleData.value, minStatusCode(promotionItemsFlat.value))
+  const skipMid = shouldCollapseKpiProcessTimelineToYearEndOnly(
+    dashboardData.value?.accountCreatedAt,
+    cycleData.value.midYearEnd,
+  )
+  return getSubmitButtonState(cycleData.value, minStatusCode(promotionItemsFlat.value), new Date(), {
+    treatMidYearAsSkipped: skipMid,
+  })
 })
 const hasRejectedPromotion = computed(() =>
   promotionItemsFlat.value.some(i => Number(i.statusCode ?? 0) === 406),
@@ -167,8 +193,18 @@ const hasMissingPersonalMidYearSelfScore = computed(() => {
   return personalItemsFlat.value.some(it => it.selfScore == null)
 })
 
+const hasMissingPersonalEndYearSelfScore = computed(() => {
+  if (personalButtonState.value.actionType !== 'END_YEAR') return false
+  return personalItemsFlat.value.some(it => it.selfScore == null)
+})
+
 const hasMissingPromotionMidYearSelfScore = computed(() => {
   if (promotionButtonState.value.actionType !== 'MID_YEAR') return false
+  return promotionItemsFlat.value.some(it => it.selfScore == null)
+})
+
+const hasMissingPromotionEndYearSelfScore = computed(() => {
+  if (promotionButtonState.value.actionType !== 'END_YEAR') return false
   return promotionItemsFlat.value.some(it => it.selfScore == null)
 })
 
@@ -203,12 +239,10 @@ function hasSubmitBlockingStatus(items: KpiItem[]): boolean {
   })
 }
 
-function hasSubmittedEvaluation(items: KpiItem[]): boolean {
+function hasPendingApprovalStatus(items: KpiItem[]): boolean {
   if (!items.length) return false
-  return items.some(i => {
-    const status = Number(i.statusCode)
-    return Number.isFinite(status) && status >= 501
-  })
+  const pendingStatuses = new Set([402, 403, 501, 502, 601, 602])
+  return items.some(i => pendingStatuses.has(Number(i.statusCode ?? 0)))
 }
 
 const canSubmitPersonal = computed(
@@ -222,17 +256,15 @@ const isPersonalSubmitDisabled = computed(
   () =>
     submittingPersonal.value
     || (!hasRejectedPersonal.value && hasMissingPersonalMidYearSelfScore.value)
+    || (!hasRejectedPersonal.value && hasMissingPersonalEndYearSelfScore.value)
     || (!hasRejectedPersonal.value && hasSubmitBlockingStatus(personalItemsFlat.value)),
 )
 const isPromotionSubmitDisabled = computed(
   () =>
     submittingPromotion.value
     || (!hasRejectedPromotion.value && hasMissingPromotionMidYearSelfScore.value)
+    || (!hasRejectedPromotion.value && hasMissingPromotionEndYearSelfScore.value)
     || (!hasRejectedPromotion.value && hasSubmitBlockingStatus(promotionItemsFlat.value)),
-)
-
-const isEmployeeCommentReadonly = computed(
-  () => !isCurrentYear.value || hasSubmittedEvaluation(personalItemsFlat.value),
 )
 
 // ── KPI grouping ──────────────────────────────────────────────────────────────
@@ -338,6 +370,16 @@ const memberKpiStatusCounts = computed(() => {
 // ── Tabs ──────────────────────────────────────────────────────────────────────
 type MemberKpiMainTab = 'personal' | 'promotion'
 const memberKpiMainTab = ref<MemberKpiMainTab>('personal')
+
+const activeMemberSheetItemsForComments = computed(() =>
+  memberKpiMainTab.value === 'promotion' ? promotionItemsFlat.value : personalItemsFlat.value,
+)
+
+const isEmployeeCommentReadonly = computed(
+  () =>
+    !isCurrentYear.value
+    || hasPendingApprovalStatus(activeMemberSheetItemsForComments.value),
+)
 
 function memberKpiTabButtonClass(tab: MemberKpiMainTab) {
   const active = memberKpiMainTab.value === tab
@@ -515,7 +557,8 @@ async function confirmDeleteSelfCreatedKpi() {
       <MemberProcessTimeline
         v-if="hasAnyKpiItems"
         :year="selectedYear"
-        :active-phase="dashboardData.phase"
+        :year-end-only="timelineYearEndOnly"
+        :evaluation-fully-completed="memberEvaluationFullyComplete"
       />
 
       <!-- Summary cards -->
@@ -555,7 +598,7 @@ async function confirmDeleteSelfCreatedKpi() {
           <button
             v-if="canCreatePersonalKpi"
             type="button"
-            class="mb-1.5 mr-1 flex shrink-0 items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:bg-blue-700"
+            class="mb-1.5 mr-1 flex shrink-0 items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:bg-blue-700 cursor-pointer"
             @click="openCreateIndividualDrawer"
           >
             <i class="fas fa-plus text-xs" aria-hidden="true" />
@@ -602,6 +645,9 @@ async function confirmDeleteSelfCreatedKpi() {
               :promotion-self-weighted-avg="promotionSelfWeightedAvg"
               :promotion-pm-weighted-avg="promotionPmWeightedAvg"
               :is-current-year="isCurrentYear"
+              :employee-comment="employeeComment"
+              :supervisor-comment="supervisorComment"
+              :employee-comment-readonly="isEmployeeCommentReadonly"
               :submitting="submittingPromotion"
               :can-submit="canSubmitPromotion"
               :is-submit-disabled="isPromotionSubmitDisabled"
@@ -610,6 +656,7 @@ async function confirmDeleteSelfCreatedKpi() {
               @open-edit-self-created="openRejectedSelfCreatedEditor"
               @open-feedback="evidenceCtx.openFeedbackPanel"
               @delete-self-created="handleDeleteSelfCreatedKpi"
+              @update-employee-comment="employeeComment = $event"
               @submit="handlePromotionSubmit"
             />
           </template>

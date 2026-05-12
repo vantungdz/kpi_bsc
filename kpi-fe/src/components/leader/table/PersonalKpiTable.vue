@@ -6,7 +6,7 @@ import {memberKpiService} from "@/services/modules/kpi-member.service";
 import type {LeaderKpiInformationResponse} from "@/types/kpi";
 import {KPI_TYPE_INDIVIDUAL} from "@/types/constant";
 import {KPI_STATUS} from "@/config/constants";
-import {getSubmitButtonState} from "@/utils/common";
+import {getSubmitButtonState, shouldCollapseKpiProcessTimelineToYearEndOnly} from "@/utils/common";
 import {computeRatioPreview, parseNumericFromField, CALC_RULE_AVERAGE} from "@/utils/memberKpiHelpers";
 import { extractRawInputFromApiTargetDescription } from "@/utils/kpiScoringRulesDsl";
 import EvidenceDrawer from '@/components/leader/drawer/EvidenceDrawer.vue';
@@ -37,6 +37,40 @@ const emit = defineEmits(['updateAverage', 'refresh-summary', 'open-edit-self-cr
 // draftMap: lưu tạm evidence/score/actualResult chưa submit lên server
 type DraftEntry = { evidencesJson: string; selfScore: number | null; actualResult: string | null }
 const draftMap = ref<Record<string, DraftEntry>>({})
+
+function rowHasSelfScoreForSubmit(a: {
+  assignmentId: string
+  endSelfScore?: number | null
+  midSelfScore?: number | null
+}): boolean {
+  const draft = draftMap.value[a.assignmentId]
+  const v = draft?.selfScore ?? resolveSelfScoreForUi(a)
+  if (v == null) return false
+  if (typeof v === 'string' && !String(v).trim()) return false
+  return true
+}
+
+function resolveSelfScoreForUi(assign: {
+  statusCode?: number | null
+  midSelfScore?: number | null
+  endSelfScore?: number | null
+}): number | null {
+  const activePhase = String(apiData.value?.kpiCycle?.activePhase ?? '').trim().toLowerCase()
+  if (activePhase === 'mid_year') {
+    return assign.midSelfScore ?? assign.endSelfScore ?? null
+  }
+  if (activePhase === 'end_year') {
+    return assign.endSelfScore ?? assign.midSelfScore ?? null
+  }
+  const status = Number(assign?.statusCode ?? 0)
+  if (status >= 501 && status < 601) {
+    return assign.midSelfScore ?? assign.endSelfScore ?? null
+  }
+  if (status >= 601) {
+    return assign.endSelfScore ?? assign.midSelfScore ?? null
+  }
+  return assign.endSelfScore ?? assign.midSelfScore ?? null
+}
 
 // ==========================================
 // 2. DRAWER STATE
@@ -82,14 +116,8 @@ async function onEvidenceSaved(payload: any) {
     toast.error('Lưu evidence thất bại')
     return
   }
-  draftMap.value[assignId] = {
-    evidencesJson: payload.evidencesJson,
-    selfScore: payload.selfScore ?? null,
-    actualResult: payload.actualResult ?? null,
-  };
-  // Cập nhật local display ngay (reactive)
-  selectedKpi.value.endSelfScore = payload.selfScore;
-  selectedKpi.value.evidences = payload.evidencesJson;
+  delete draftMap.value[assignId]
+  await fetchData()
   isDrawerOpen.value = false;
 }
 
@@ -110,12 +138,15 @@ const totals = computed(() => {
 
         // Ưu tiên giá trị draft nếu có
         const draft = draftMap.value[assign.assignmentId];
-        const s = (draft?.selfScore ?? assign.endSelfScore ?? assign.midSelfScore) ?? 0;
+        const s = (draft?.selfScore ?? resolveSelfScoreForUi(assign)) ?? 0;
         weighted += s * w;
 
-        const pm =  assign.endPmScore ?? 0;
-        pmWeighted += pm * w;
-        pmWeightSum += w;
+        const pmRaw = assign.endGmScore ?? assign.endPmScore
+        if (pmRaw !== null && Number.isFinite(Number(pmRaw))) {
+          const pm = Number(pmRaw)
+          pmWeighted += pm * w
+          pmWeightSum += w
+        }
       });
     });
   }
@@ -147,10 +178,13 @@ const currentStatusCode = computed(() => {
 const hasMissingMidYearSelfScore = computed(() => {
   if (buttonState.value.actionType !== 'MID_YEAR') return false
   const all = apiData.value?.categories?.flatMap(c => c.assignments) ?? []
-  return all.some(a => {
-    const draft = draftMap.value[a.assignmentId]
-    return (draft?.selfScore ?? a.endSelfScore) == null
-  })
+  return all.some(a => !rowHasSelfScoreForSubmit(a))
+})
+
+const hasMissingEndYearSelfScore = computed(() => {
+  if (buttonState.value.actionType !== 'END_YEAR') return false
+  const all = apiData.value?.categories?.flatMap(c => c.assignments) ?? []
+  return all.some(a => !rowHasSelfScoreForSubmit(a))
 })
 
 const hasPersonalAssignments = computed(() =>
@@ -172,18 +206,24 @@ const hasRejectedAssignments = computed(() => {
 const isEmployeeCommentReadonly = computed(() => {
   if (props.isReadonly) return true
   const all = apiData.value?.categories?.flatMap(c => c.assignments) ?? []
-  return all.some(a => Number(a.statusCode ?? 0) >= 501)
+  const pendingStatuses = new Set([402, 403, 501, 502, 601, 602])
+  return all.some(a => pendingStatuses.has(Number(a.statusCode ?? 0)))
 })
 
 const buttonState = computed(() => {
   if (!apiData.value?.kpiCycle) {
     return {show: false, disabled: true, text: null, actionType: 'COMPLETED'};
   }
-  const all = apiData.value?.categories?.flatMap(c => c.assignments) ?? []
   if (hasRejectedAssignments.value) {
     return { show: true, disabled: false, text: 'Resubmit KPI', actionType: 'GOAL_SETTING' as const }
   }
-  return getSubmitButtonState(apiData.value.kpiCycle, currentStatusCode.value);
+  const skipMid = shouldCollapseKpiProcessTimelineToYearEndOnly(
+    apiData.value.accountCreatedAt,
+    apiData.value.kpiCycle.midYearEnd,
+  )
+  return getSubmitButtonState(apiData.value.kpiCycle, currentStatusCode.value, new Date(), {
+    treatMidYearAsSkipped: skipMid,
+  })
 });
 
 const submitLabel = computed(() => {
@@ -211,7 +251,7 @@ async function fetchData() {
 }
 
 async function submitEvaluation() {
-  if (props.isReadonly || submitting.value || hasMissingMidYearSelfScore.value) return
+  if (props.isReadonly || submitting.value || hasMissingMidYearSelfScore.value || hasMissingEndYearSelfScore.value) return
   submitting.value = true
   try {
     // Lưu tất cả draft xuống server trước khi submit
@@ -311,12 +351,29 @@ function canDeleteSelfCreatedEnabled(assign: any): boolean {
   return status === 404 || status === 406
 }
 
-function shouldOpenRejectedEditForm(assign: any): boolean {
+function shouldOpenSelfCreatedEditForm(assign: any): boolean {
+  const status = Number(assign?.statusCode ?? 0)
   return (
     assign?.createdByCurrentUser === true
-    && Number(assign?.statusCode ?? 0) === 406
+    && (status === 404 || status === 406)
     && String(assign?.kpiInformationId ?? '').trim().length > 0
   )
+}
+
+function sourceRowClass(assign: any): string {
+  if (assign?.createdByCurrentUser === true) return 'bg-emerald-50 hover:bg-emerald-100'
+  const role = String(assign?.createdByRoleCode ?? '').trim().toUpperCase()
+  if (role === 'GM') return 'bg-amber-50 hover:bg-amber-100'
+  if (role === 'PM') return 'bg-blue-50 hover:bg-blue-100'
+  return ''
+}
+
+function rowClass(assign: any): string {
+  const source = sourceRowClass(assign)
+  if (source) return source
+  const alert = rowAlertClass(statusCodeForUi(assign))
+  if (alert) return alert
+  return 'hover:bg-slate-50'
 }
 
 function scoreColorClass(score: number | null | undefined): string {
@@ -337,7 +394,7 @@ function parseGmComment(assign: any): string {
 }
 
 function finalScoreTooltip(assign: any): string | undefined {
-  const selfScore = Number(draftMap.value[assign.assignmentId]?.selfScore ?? assign.endSelfScore ?? assign.midSelfScore)
+  const selfScore = Number(draftMap.value[assign.assignmentId]?.selfScore ?? resolveSelfScoreForUi(assign))
   const finalScore = Number(assign.endGmScore ?? assign.endPmScore)
   if (!Number.isFinite(selfScore) || !Number.isFinite(finalScore)) return undefined
   if (selfScore === finalScore) return undefined
@@ -492,15 +549,15 @@ function parseActualResultFromEvidences(
 
           <tbody class="divide-y divide-slate-100">
           <template v-for="(category, catIndex) in apiData?.categories" :key="'cat-' + catIndex">
-            <tr class="bg-amber-50/80 border-y border-amber-100">
+            <tr class="bg-amber-100 border-y border-amber-100">
               <td colspan="10" class="py-2 px-5 text-xs font-bold text-amber-800 uppercase tracking-wider">
                 {{ category.name }}
               </td>
             </tr>
 
             <tr v-for="(assign, assignIndex) in category.assignments" :key="assign.assignmentId"
-                class="group transition-colors hover:bg-slate-50"
-                :class="rowAlertClass(statusCodeForUi(assign))">
+                class="group transition-colors"
+                :class="rowClass(assign)">
 
               <td class="py-4 px-5 text-center text-sm font-semibold text-slate-400">
                 {{ assignIndex + 1 }}
@@ -554,20 +611,27 @@ function parseActualResultFromEvidences(
 
               <td class="py-4 px-5 text-center align-middle">
                 <span class="text-sm font-semibold leading-snug text-slate-700 inline-block">
-                  <span :class="scoreColorClass((draftMap[assign.assignmentId]?.selfScore ?? assign.endSelfScore ?? assign.midSelfScore))">
-                    {{ (draftMap[assign.assignmentId]?.selfScore ?? assign.endSelfScore ?? assign.midSelfScore) ?? 0 }}
+                  <span :class="scoreColorClass((draftMap[assign.assignmentId]?.selfScore ?? resolveSelfScoreForUi(assign)))">
+                    {{ (draftMap[assign.assignmentId]?.selfScore ?? resolveSelfScoreForUi(assign)) ?? 0 }}
                   </span>
                 </span>
               </td>
 
               <td class="py-4 px-5 text-center align-middle">
-                  <span
-                    class="font-medium text-sm"
-                    :class="scoreColorClass(assign.endGmScore ?? assign.endPmScore)"
-                    :title="finalScoreTooltip(assign)"
-                  >
-                    {{ assign.endGmScore ?? assign.endPmScore ?? '' }}
-                  </span>
+                <div class="inline-flex items-center gap-1 justify-center">
+                <p 
+                  class="font-medium text-sm display-inline-flex items-center gap-1"
+                  :class="scoreColorClass(assign.endGmScore ?? assign.endPmScore)">
+                   {{ assign.endGmScore ?? assign.endPmScore ?? '' }}
+                </p>
+                <span
+                  v-if="finalScoreTooltip(assign)"
+                  class="inline-flex h-4 w-4 items-center justify-center rounded-full border border-slate-300 text-[10px] font-bold text-slate-500 cursor-help cursor-pointer hover:bg-sky-200"
+                  :title="finalScoreTooltip(assign)"
+                >
+                  ?
+                </span>
+                </div>
               </td>
 
               <td class="py-4 px-5 text-right align-middle">
@@ -575,7 +639,7 @@ function parseActualResultFromEvidences(
                   <button
                     type="button"
                     class="flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-[10px] font-bold text-slate-600 shadow-sm transition-colors hover:bg-slate-50 hover:text-indigo-600"
-                    @click.stop="shouldOpenRejectedEditForm(assign) ? emit('open-edit-self-created', assign) : openEvidence(assign)"
+                    @click.stop="shouldOpenSelfCreatedEditForm(assign) ? emit('open-edit-self-created', assign) : openEvidence(assign)"
                   >
                     <i class="fas fa-pen text-[10px]"></i>
                   </button>
@@ -592,7 +656,7 @@ function parseActualResultFromEvidences(
                 <button
                   v-if="canDeleteSelfCreatedVisible(assign)"
                   type="button"
-                  class="flex h-8 items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-3 text-[10px] font-bold text-rose-700 shadow-sm transition-colors hover:bg-rose-100"
+                  class="flex h-8 items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-3 text-[10px] font-bold text-rose-700 shadow-sm transition-colors hover:bg-rose-100 cursor-pointer"
                   :class="!canDeleteSelfCreatedEnabled(assign) ? 'cursor-not-allowed opacity-45 hover:bg-rose-50' : ''"
                   :disabled="!canDeleteSelfCreatedEnabled(assign)"
                   :title="canDeleteSelfCreatedEnabled(assign) ? 'Xóa KPI tự tạo' : 'KPI đã submit đầu năm, không thể xóa'"
@@ -683,8 +747,8 @@ function parseActualResultFromEvidences(
         <button
           v-if="buttonState.show"
           type="button"
-          :disabled="buttonState.disabled || submitting || (!hasRejectedAssignments && hasMissingMidYearSelfScore) || (!hasRejectedAssignments && hasSubmitBlockingStatus)"
-          class="px-4 py-2 bg-slate-900 border border-transparent rounded-lg text-sm font-semibold text-white shadow-sm hover:bg-slate-800 flex items-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          :disabled="buttonState.disabled || submitting || (!hasRejectedAssignments && hasMissingMidYearSelfScore) || (!hasRejectedAssignments && hasMissingEndYearSelfScore) || (!hasRejectedAssignments && hasSubmitBlockingStatus)"
+          class="px-4 py-2 bg-slate-900 border border-transparent rounded-lg text-sm font-semibold text-white shadow-sm hover:bg-slate-800 flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           @click="submitEvaluation"
         >
           <i v-if="submitting" class="fas fa-spinner fa-spin text-xs" />

@@ -77,7 +77,10 @@
                     r2.code
                 LIMIT 1
             ) AS member_role_name,
-            uks.evaluation_supervisor_comments AS supervisor_comment
+            NULLIF(TRIM(COALESCE(uks.evaluation_comments, '')), '') AS evaluation_comments,
+            NULLIF(TRIM(COALESCE(uks.evaluation_comments_promotion, '')), '') AS evaluation_comments_promotion,
+            NULLIF(TRIM(COALESCE(uks.evaluation_supervisor_comments, '')), '') AS supervisor_comment_portfolio,
+            NULLIF(TRIM(COALESCE(uks.evaluation_supervisor_comments_promotion, '')), '') AS supervisor_comment_promotion
         FROM (
             SELECT DISTINCT ON (ka.user_id, ka.kpi_info_id)
                 ka.*

@@ -18,6 +18,7 @@ import { useToast } from 'vue-toastification'
 import { fileService } from '@/services/modules/file.service'
 import { useAuthStore } from '@/stores/auth.store'
 import { formatKpiTargetWithUnit } from '@/utils/kpiUnitCodes'
+import { kpiCreatorRowBgClass } from '@/utils/kpiCreatorRowBg'
 
 const props = withDefaults(
   defineProps<{
@@ -240,6 +241,14 @@ function pmFeedbackPendingRowClass(item: any): string {
   return 'bg-violet-100/70 border-y border-violet-300'
 }
 
+/** Nền dòng KPI cha: màu theo người tạo KPI (GM) hoặc highlight feedback GM. */
+function pmKpiParentRowClass(item: any): string {
+  if (isPmGmFeedbackPending(item)) {
+    return `${pmFeedbackPendingRowClass(item)} hover:bg-violet-100/80`
+  }
+  return kpiCreatorRowBgClass(item.creatorRoleCode, item.expanded)
+}
+
 function isSendingPmFeedback(assignmentId: unknown): boolean {
   return sendingPmFeedbackIds.value.has(String(assignmentId ?? ''))
 }
@@ -275,6 +284,10 @@ async function loadPmPortfolio(cycleId?: string) {
       feedbackNote: kpi.feedbackNote ?? '',
       selfScore: kpi.selfScore != null ? Number(kpi.selfScore) : null,
       pmScore: kpi.pmScore != null ? Number(kpi.pmScore) : null,
+      gmEvaluationComment:
+        kpi.gmEvaluationComment != null && String(kpi.gmEvaluationComment).trim() !== ''
+          ? String(kpi.gmEvaluationComment).trim()
+          : undefined,
       calculationRuleCode:
         kpi.calculationRuleCode != null ? Number(kpi.calculationRuleCode) : undefined,
       calculationTypeCode:
@@ -287,6 +300,10 @@ async function loadPmPortfolio(cycleId?: string) {
       isTree: kpi.isTree,
       expanded: kpi.expanded !== undefined ? kpi.expanded : true,
       isSelfCreated: Boolean(kpi.isSelfCreated),
+      creatorRoleCode:
+        kpi.creatorRoleCode != null && String(kpi.creatorRoleCode).trim() !== ''
+          ? String(kpi.creatorRoleCode).trim().toUpperCase()
+          : undefined,
       children: (kpi.children || []).map((c: any) => ({
         id: String(c.id),
         userId: c.userId != null ? String(c.userId) : undefined,
@@ -303,6 +320,10 @@ async function loadPmPortfolio(cycleId?: string) {
             : undefined,
         selfScore: c.selfScore != null ? Number(c.selfScore) : null,
         pmScore: c.pmScore != null ? Number(c.pmScore) : null,
+        gmEvaluationComment:
+          c.gmEvaluationComment != null && String(c.gmEvaluationComment).trim() !== ''
+            ? String(c.gmEvaluationComment).trim()
+            : undefined,
         statusCode: c.statusCode,
         status: statusMap[c.statusCode] || 'pending_approval',
       }))
@@ -555,6 +576,12 @@ function formatSelfScoreCell(item: any): string {
   const v = effectiveSelfScoreForParent(item)
   if (v == null) return '-'
   return formatWeightedTotalDisplay(v)
+}
+
+/** Tooltip cột Supervisor Score: nhận xét GM (`gmEvaluationComment` từ BE / evidences). */
+function pmSupervisorScoreTitle(row: { gmEvaluationComment?: string }): string | undefined {
+  const t = String(row.gmEvaluationComment ?? '').trim()
+  return t || undefined
 }
 
 function collectPortfolioParentRows(): any[] {
@@ -1205,11 +1232,7 @@ const handleSubmitClick = async () => {
               <tr
                 :id="'pm-kpi-parent-' + item.id"
                 class="cursor-pointer group"
-                :class="
-                  isPmGmFeedbackPending(item)
-                    ? `${pmFeedbackPendingRowClass(item)} hover:bg-violet-100/80`
-                    : 'hover:bg-slate-50'
-                "
+                :class="pmKpiParentRowClass(item)"
                 @click="item.isTree ? item.expanded = !item.expanded : null"
               >
                 <td class="py-4 px-5 text-center align-top pt-5"><span class="text-sm font-semibold text-slate-400">{{ Number(idx) + 1 }}</span></td>
@@ -1263,7 +1286,12 @@ const handleSubmitClick = async () => {
                 >
                   <span class="text-sm font-bold text-slate-800">{{ formatSelfScoreCell(item) }}</span>
                 </td>
-                <td class="py-4 px-5 text-center align-top pt-4"><span class="text-slate-400 font-medium text-sm">{{ item.pmScore ?? '-' }}</span></td>
+                <td class="py-4 px-5 text-center align-top pt-4">
+                  <span
+                    class="text-slate-400 font-medium text-sm"
+                    :title="pmSupervisorScoreTitle(item)"
+                  >{{ item.pmScore ?? '-' }}</span>
+                </td>
                 <td class="py-4 px-5 text-right align-top pt-4">
                     <div class="flex items-center justify-end gap-2">
                       <!-- Team KPI: phân bổ + Feedback GM (404/407); trước đây Feedback chỉ nằm trong nhánh !isTree nên PM team không thấy nút. -->
@@ -1372,7 +1400,10 @@ const handleSubmitClick = async () => {
                     <span class="text-xs font-bold text-slate-600">{{ child.selfScore ?? '-' }}</span>
                   </td>
                   <td class="py-3 px-5 text-center align-top">
-                    <span class="text-xs font-bold text-purple-700">{{ child.pmScore ?? '-' }}</span>
+                    <span
+                      class="text-xs font-bold text-purple-700"
+                      :title="pmSupervisorScoreTitle(child)"
+                    >{{ child.pmScore ?? '-' }}</span>
                   </td>
                   <td class="py-3 px-5 text-right align-top">
                     <div class="inline-flex items-center gap-1.5">

@@ -16,6 +16,7 @@ import type {
   GmPmKpiRolloutPayload,
 } from '@/types/gm-workspace'
 import { GM_BSC_LABELS, GM_BSC_ORDER, normalizeGmBscPerspective } from '@/utils/gm-bsc-diagnostics'
+import { kpiCreatorRowBgClass } from '@/utils/kpiCreatorRowBg'
 import { formatKpiTargetWithUnit } from '@/utils/kpiUnitCodes'
 import {
   CALC_RULE_AVERAGE,
@@ -91,7 +92,7 @@ function collectPendingFeedbackItems(kpi: GmHierarchyKpi): GmPendingFeedbackItem
         assignmentId,
         memberName: String(member.name ?? '').trim() || 'PM',
         roleLabel: String(member.ownerRoleCode ?? '').trim().toUpperCase() || 'PM',
-        note: String(member.feedbackNote ?? '').trim() || 'Không có nội dung feedback.',
+        note: String(member.feedbackNote ?? '').trim() || 'No feedback content.',
       })
     }
   }
@@ -269,9 +270,9 @@ const appliedFilterCount = computed(() => {
 
 /** Nhãn đèn giao thông chung (lọc + rollup KPI/PM/Leader), cùng từ vựng bảng MID/END. */
 function kpiStatusLabel(status: GmHierarchyStatus) {
-  if (status === 'success') return 'Vượt tiến độ / Đạt–vượt'
-  if (status === 'warning') return 'Đúng tiến độ / Gần đạt'
-  return 'Chậm tiến độ / Không đạt'
+  if (status === 'success') return 'Ahead of plan / Exceeding'
+  if (status === 'warning') return 'On track / Nearly there'
+  return 'Behind plan / Not met'
 }
 
 type DiagnosticChipKey = 'section' | 'member' | 'important' | 'status'
@@ -279,19 +280,19 @@ type DiagnosticChipKey = 'section' | 'member' | 'important' | 'status'
 const activeFilterChips = computed(() => {
   const chips: { key: DiagnosticChipKey; label: string }[] = []
   if (filterSections.value.length > 0) {
-    chips.push({ key: 'section', label: `Khối: ${filterSections.value.join(', ')}` })
+    chips.push({ key: 'section', label: `Section: ${filterSections.value.join(', ')}` })
   }
   if (filterMembers.value.length > 0) {
-    chips.push({ key: 'member', label: `Thành viên: ${filterMembers.value.join(', ')}` })
+    chips.push({ key: 'member', label: `Member: ${filterMembers.value.join(', ')}` })
   }
   if (filterImportant.value === 'yes') {
-    chips.push({ key: 'important', label: 'KPI quan trọng' })
+    chips.push({ key: 'important', label: 'Important KPI' })
   } else if (filterImportant.value === 'no') {
-    chips.push({ key: 'important', label: 'Không gắn sao' })
+    chips.push({ key: 'important', label: 'Not starred' })
   }
   if (filterStatuses.value.length > 0) {
     const st = filterStatuses.value.map((s) => kpiStatusLabel(s)).join(', ')
-    chips.push({ key: 'status', label: `Trạng thái: ${st}` })
+    chips.push({ key: 'status', label: `Status: ${st}` })
   }
   return chips
 })
@@ -463,25 +464,23 @@ function memberTableScoreDisplay(member: GmHierarchyMember): string {
   return diagnosticsTableCellText(member.actual)
 }
 
-function memberDiagnosticsScoreTooltip(member: GmHierarchyMember): string {
-  const scoreLine = `Điểm đánh giá: ${memberTableScoreDisplay(member)}`
-  if (member.submissionTarget != null && member.submissionTarget > 0) {
-    return `${scoreLine} · Chỉ tiêu năm (tham chiếu): ${member.submissionTarget}`
-  }
-  return scoreLine
+/** Tooltip cột Score: nhận xét supervisor từ `user_kpi_summaries.evaluation_supervisor_comments`. */
+function memberDiagnosticsScoreTooltip(member: GmHierarchyMember): string | undefined {
+  const t = String(member.evaluationSupervisorComments ?? '').trim()
+  return t || undefined
 }
 
-function memberDiagnosticsStatusLabel(member: GmHierarchyMember): string {
-  const pl = member.performanceLabel?.trim()
-  if (pl) return pl
-  /** Không có nhãn BE → cùng từ vựng đèn GM (không dùng Fail/Warning/Done tiếng Anh). */
-  return kpiStatusLabel(memberStatusForUi(member))
-}
+// function memberDiagnosticsStatusLabel(member: GmHierarchyMember): string {
+//   const pl = member.performanceLabel?.trim()
+//   if (pl) return pl
+//   /** Không có nhãn BE → cùng từ vựng đèn GM (không dùng Fail/Warning/Done tiếng Anh). */
+//   return kpiStatusLabel(memberStatusForUi(member))
+// }
 
 function memberStatusForUi(member: GmHierarchyMember | null | undefined): GmHierarchyStatus {
   if (!member) return 'warning'
   const pl = String(member.performanceLabel ?? '').trim().toLowerCase()
-  if (pl.includes('chưa cấu hình mục tiêu')) return 'warning'
+  if (pl.includes('chưa cấu hình mục tiêu') || pl.includes('target not configured')) return 'warning'
   return member.status
 }
 
@@ -602,11 +601,12 @@ function kpiActualNumericForProgress(kpi: GmHierarchyKpi): number | null {
   return fallback != null && Number.isFinite(fallback) ? fallback : null
 }
 
+/** (Actual / Target) × 100, clamp 0–100 để hiển thị tiến độ tối đa 100%. */
 function completionPctFromActualTarget(actual: number | null, target: number | null): number {
   if (actual == null || target == null || target <= 0) return 0
   const pct = (actual * 100) / target
   if (!Number.isFinite(pct)) return 0
-  return Math.max(0, pct)
+  return Math.min(100, Math.max(0, pct))
 }
 
 /**
@@ -690,7 +690,12 @@ function kpiActualWithUnit(kpi: GmHierarchyKpi): string {
   return diagnosticsActualWithUnit(kpi, kpiActualDisplayRaw(kpi))
 }
 
-/** % tiến độ trong drawer — có tính đến mid-year 803 (dùng target/2 làm mục tiêu kỳ vọng). */
+/**
+ * % tiến độ trong drawer rollout (Chi tiết theo PM): **khớp Actual/Target đang hiển thị**
+ * (`memberActualNumericForProgress` / evidences), cùng mid-year 803 như bảng.
+ * Không ưu tiên submissionActual/submissionTarget trước — đó là điểm/chỉ tiêu năm,
+ * dễ lệch với cột Actual portfolio (vd. Actual 4 vs Target 2 nhưng % = 50% từ điểm/annual).
+ */
 function memberDrawerActualProgressPct(member: GmHierarchyMember, kpi: GmHierarchyKpi): string | null {
   const targetFull = memberTargetNumericForProgress(member)
   const actual = memberActualNumericForProgress(member, kpi)
@@ -701,26 +706,36 @@ function memberDrawerActualProgressPct(member: GmHierarchyMember, kpi: GmHierarc
     targetFull != null &&
     targetFull > 0
 
-  // Ưu tiên submissionTarget/submissionActual từ BE (nếu có)
+  const effectiveTarget =
+    targetFull != null && targetFull > 0
+      ? isMidYear803
+        ? targetFull / 2
+        : targetFull
+      : null
+
+  if (effectiveTarget != null && effectiveTarget > 0 && actual != null && Number.isFinite(actual)) {
+    const rawPct = (100 * actual) / effectiveTarget
+    if (Number.isFinite(rawPct) && rawPct >= 0) {
+      return `${Math.round(Math.min(rawPct, 100))}%`
+    }
+  }
+
   if (
     member.submissionTarget != null &&
     member.submissionTarget > 0 &&
     member.submissionActual != null
   ) {
-    const effectiveTarget = isMidYear803
-      ? Number(member.submissionTarget) / 2
-      : Number(member.submissionTarget)
-    const rawPct = (100 * Number(member.submissionActual)) / effectiveTarget
-    if (Number.isFinite(rawPct) && rawPct >= 0) {
-      return `${Math.round(Math.min(rawPct, 100))}%`
+    const subTarget = Number(member.submissionTarget)
+    const subEff =
+      isMidYear803 && subTarget > 0 ? subTarget / 2 : subTarget
+    if (subEff > 0) {
+      const rawPct = (100 * Number(member.submissionActual)) / subEff
+      if (Number.isFinite(rawPct) && rawPct >= 0) {
+        return `${Math.round(Math.min(rawPct, 100))}%`
+      }
     }
-    return null
   }
 
-  // Fallback: actual / effectiveTarget
-  const effectiveTarget = isMidYear803 ? (targetFull as number) / 2 : targetFull
-  if (effectiveTarget != null && effectiveTarget > 0 && actual != null)
-    return `${Math.round(Math.min((100 * actual) / effectiveTarget, 100))}%`
   return null
 }
 
@@ -753,12 +768,30 @@ function memberActualColorClass(member: GmHierarchyMember, kpi: GmHierarchyKpi):
 }
 
 /**
- * Status UI cho member — override về 'success' khi CALC_RULE 803 + mid-year + đúng tiến độ.
- * Tránh hiện "chậm tiến độ" (danger) khi member thực chất đang đúng hướng.
+ * Đèn trạng thái theo cùng logic ngưỡng với cột "Tiến độ hoàn thành" (`completionPctTextClass`).
+ * Dùng khi đã có chỉ tiêu số — tránh lệch với BE (score / performanceLabel có thể khác đơn vị mục tiêu KPI).
+ */
+function memberStatusFromDiagnosticsProgress(
+  member: GmHierarchyMember,
+  kpi: GmHierarchyKpi,
+): GmHierarchyStatus | null {
+  const targetFull = memberTargetNumericForProgress(member)
+  if (targetFull == null || targetFull <= 0) return null
+  const pct = memberCompletionPct(member, kpi)
+  if (pct >= 80) return 'success'
+  if (pct >= 60) return 'warning'
+  return 'danger'
+}
+
+/**
+ * Status UI cho member trên diagnostics: ưu tiên theo % tiến độ (Actual / Target hiệu dụng, gồm mid-year 803).
+ * Chỉ fallback sang `member.status` + override 803 cũ khi không tính được % từ chỉ tiêu KPI trên bảng.
  */
 function memberStatusForUiMidYear(member: GmHierarchyMember, kpi: GmHierarchyKpi): GmHierarchyStatus {
-  const base = memberStatusForUi(member)
+  const fromProgress = memberStatusFromDiagnosticsProgress(member, kpi)
+  if (fromProgress != null) return fromProgress
 
+  const base = memberStatusForUi(member)
   const targetFull = memberTargetNumericForProgress(member)
   const actualNum = memberActualNumericForProgress(member, kpi)
 
@@ -769,9 +802,7 @@ function memberStatusForUiMidYear(member: GmHierarchyMember, kpi: GmHierarchyKpi
     targetFull > 0
 
   if (isMidYear803 && base === 'danger') {
-    // Nếu actual >= target/2 → đúng tiến độ → override 'danger' → 'success'
     if (actualNum != null && actualNum >= targetFull / 2) return 'success'
-    // Nếu actual >= target*0.3 (gần đạt theo mid-year) → 'warning'
     if (actualNum != null && actualNum >= targetFull * 0.3) return 'warning'
   }
 
@@ -779,16 +810,19 @@ function memberStatusForUiMidYear(member: GmHierarchyMember, kpi: GmHierarchyKpi
 }
 
 /**
- * Label trạng thái cho member — dùng cùng memberStatusForUiMidYear để nhất quán màu/chữ.
+ * Label trạng thái cho member — đồng bộ với `memberStatusForUiMidYear`.
+ * Chỉ dùng `performanceLabel` từ BE khi không có chỉ tiêu số để suy ra % tiến độ trên bảng.
  */
 function memberDiagnosticsStatusLabelMidYear(member: GmHierarchyMember, kpi: GmHierarchyKpi): string {
-  const pl = member.performanceLabel?.trim()
-  // Với 803 mid-year đang override, bỏ qua performanceLabel từ BE
-  const isMidYear803 =
-    isMidYearPhase.value &&
-    Number(kpi.calculationRuleCode) === CALC_RULE_COMMENT
-
-  if (!isMidYear803 && pl) return pl
+  const targetFull = memberTargetNumericForProgress(member)
+  const canUseProgress = targetFull != null && targetFull > 0
+  if (!canUseProgress) {
+    const pl = member.performanceLabel?.trim()
+    const isMidYear803 =
+      isMidYearPhase.value &&
+      Number(kpi.calculationRuleCode) === CALC_RULE_COMMENT
+    if (!isMidYear803 && pl) return pl
+  }
   return kpiStatusLabel(memberStatusForUiMidYear(member, kpi))
 }
 
@@ -797,7 +831,7 @@ function pmNonCascadingSummary(pm: GmHierarchyPm, kpi: GmHierarchyKpi): string {
   const members = allMembersUnderPm(pm)
   if (!members.length) return '—'
   const successCount = members.filter(m => memberStatusForUiMidYear(m, kpi) === 'success').length
-  return `✓ ${successCount}/${members.length} đạt`
+  return `✓ ${successCount}/${members.length} met`
 }
 
 /** Tóm tắt số member đạt đối với KPI individual/promotion ở level toàn KPI. */
@@ -806,7 +840,7 @@ function kpiNonCascadingSummary(kpi: GmHierarchyKpi): string {
   if (!members.length) return '—'
   const uniqueMembers = Array.from(new Map(members.map(m => [m.id, m])).values())
   const successCount = uniqueMembers.filter(m => memberStatusForUiMidYear(m, kpi) === 'success').length
-  return `✓ ${successCount}/${uniqueMembers.length} đạt`
+  return `✓ ${successCount}/${uniqueMembers.length} met`
 }
 
 
@@ -828,19 +862,207 @@ function memberCompletionPct(member: GmHierarchyMember, kpi: GmHierarchyKpi): nu
   return completionPctFromActualTarget(actual, effectiveTarget)
 }
 
+/** Individual/Promotion: còn member có chỉ tiêu số để roll-up % tiến độ trên node KPI. */
+function kpiHasNonCascadingRollupMembers(kpi: GmHierarchyKpi): boolean {
+  if (kpi.kpiType === 'cascading') return false
+  return kpi.pmOwners.some((pm) =>
+    allMembersUnderPm(pm).some((m) => {
+      const t = memberTargetNumericForProgress(m)
+      return t != null && t > 0
+    }),
+  )
+}
+
+/** Individual/Promotion: member dưới PM có target số — hiển thị % tiến độ trên node PM (khối). */
+function pmHasNonCascadingRollupMembers(pm: GmHierarchyPm, kpi: GmHierarchyKpi): boolean {
+  if (kpi.kpiType === 'cascading') return false
+  return allMembersUnderPm(pm).some((m) => {
+    const t = memberTargetNumericForProgress(m)
+    return t != null && t > 0
+  })
+}
+
+/**
+ * TB % hoàn thành theo từng member (memberCompletionPct, gồm mid-year 803) —
+ * chỉ các dòng có target số; dùng cho node KPI / PM khi KPI individual hoặc promotion.
+ */
+function kpiNonCascadingRollupCompletionPct(kpi: GmHierarchyKpi): number {
+  const parts: number[] = []
+  for (const pm of kpi.pmOwners) {
+    for (const m of allMembersUnderPm(pm)) {
+      const t = memberTargetNumericForProgress(m)
+      if (t != null && t > 0) parts.push(memberCompletionPct(m, kpi))
+    }
+  }
+  if (!parts.length) return 0
+  return parts.reduce((a, b) => a + b, 0) / parts.length
+}
+
+function pmNonCascadingRollupCompletionPct(pm: GmHierarchyPm, kpi: GmHierarchyKpi): number {
+  const parts: number[] = []
+  for (const m of allMembersUnderPm(pm)) {
+    const t = memberTargetNumericForProgress(m)
+    if (t != null && t > 0) parts.push(memberCompletionPct(m, kpi))
+  }
+  if (!parts.length) return 0
+  return parts.reduce((a, b) => a + b, 0) / parts.length
+}
+
+/** TB tiến độ (Individual/Promotion) trong cả nhóm section — node department/BSC. */
+function groupNonCascadingRollupCompletionPct(rows: GmHierarchyKpi[]): number | null {
+  const parts: number[] = []
+  for (const kpi of rows) {
+    if (kpi.kpiType === 'cascading') continue
+    for (const pm of kpi.pmOwners) {
+      for (const m of allMembersUnderPm(pm)) {
+        const t = memberTargetNumericForProgress(m)
+        if (t != null && t > 0) parts.push(memberCompletionPct(m, kpi))
+      }
+    }
+  }
+  if (!parts.length) return null
+  return parts.reduce((a, b) => a + b, 0) / parts.length
+}
+
 /**
  * Tiến độ PM: tính theo Actual/Target của dòng PM.
  * Với Team KPI, Actual PM được tổng hợp từ trung bình actual member.
+ * Mid-year + CALC_RULE 803: cùng target/2 như member.
  */
 function pmCompletionPct(pm: GmHierarchyPm, kpi: GmHierarchyKpi): number {
-  const target = parseNumericFromField(String(pm.target ?? ''))
-  return completionPctFromActualTarget(pmActualNumericForProgress(pm, kpi), target)
+  const actual = pmActualNumericForProgress(pm, kpi)
+  const targetFull = pmTargetNumericForProgress(pm)
+  if (targetFull == null || targetFull <= 0) {
+    const t = parseNumericFromField(String(pm.target ?? ''))
+    return completionPctFromActualTarget(actual, t)
+  }
+  const isMidYear803 =
+    isMidYearPhase.value &&
+    Number(kpi.calculationRuleCode) === CALC_RULE_COMMENT &&
+    targetFull > 0
+  const effectiveTarget = isMidYear803 ? targetFull / 2 : targetFull
+  return completionPctFromActualTarget(actual, effectiveTarget)
 }
 
-/** Tiến độ KPI: avg tiến độ các PM con. */
+/**
+ * Tiến độ KPI (cascading): aggregate actual / KPI target.
+ * Mid-year + CALC_RULE 803: cùng target/2 như `memberCompletionPct` — khớp cột % với đèn trạng thái node KPI.
+ */
 function kpiCompletionPct(kpi: GmHierarchyKpi): number {
-  const target = parseNumericFromField(String(kpi.target ?? ''))
-  return completionPctFromActualTarget(kpiActualNumericForProgress(kpi), target)
+  const actual = kpiActualNumericForProgress(kpi)
+  const targetFull = kpiTargetNumericForProgress(kpi)
+  if (targetFull == null || targetFull <= 0) {
+    const t = parseNumericFromField(String(kpi.target ?? ''))
+    return completionPctFromActualTarget(actual, t)
+  }
+  const isMidYear803 =
+    isMidYearPhase.value &&
+    Number(kpi.calculationRuleCode) === CALC_RULE_COMMENT &&
+    targetFull > 0
+  const effectiveTarget = isMidYear803 ? targetFull / 2 : targetFull
+  return completionPctFromActualTarget(actual, effectiveTarget)
+}
+
+function kpiTargetNumericForProgress(kpi: GmHierarchyKpi): number | null {
+  const t = parseNumericFromField(String(kpi.target ?? ''))
+  return t != null && Number.isFinite(t) ? t : null
+}
+
+/**
+ * Đèn KPI: cascading = % aggregate KPI; individual/promotion = TB % member (cùng cột tiến độ).
+ */
+function kpiStatusFromDiagnosticsProgress(kpi: GmHierarchyKpi): GmHierarchyStatus | null {
+  if (kpi.kpiType === 'cascading') {
+    const targetFull = kpiTargetNumericForProgress(kpi)
+    if (targetFull == null || targetFull <= 0) return null
+    const pct = kpiCompletionPct(kpi)
+    if (pct >= 80) return 'success'
+    if (pct >= 60) return 'warning'
+    return 'danger'
+  }
+  if (kpi.kpiType !== 'individual' && kpi.kpiType !== 'promotion') return null
+  if (!kpiHasNonCascadingRollupMembers(kpi)) return null
+  const pct = kpiNonCascadingRollupCompletionPct(kpi)
+  if (pct >= 80) return 'success'
+  if (pct >= 60) return 'warning'
+  return 'danger'
+}
+
+function kpiStatusForUi(kpi: GmHierarchyKpi): GmHierarchyStatus {
+  return kpi.status
+}
+
+/**
+ * Trạng thái hiển thị node KPI (cascading): giống `memberStatusForUiMidYear` —
+ * ưu tiên % tiến độ (đã gồm mid-year 803), rồi fallback + nới đèn 803 khi không suy được %.
+ */
+function kpiStatusForUiMidYear(kpi: GmHierarchyKpi): GmHierarchyStatus {
+  const fromProgress = kpiStatusFromDiagnosticsProgress(kpi)
+  if (fromProgress != null) return fromProgress
+
+  const base = kpiStatusForUi(kpi)
+  const targetFull = kpiTargetNumericForProgress(kpi)
+  const actualNum = kpiActualNumericForProgress(kpi)
+
+  const isMidYear803 =
+    isMidYearPhase.value &&
+    Number(kpi.calculationRuleCode) === CALC_RULE_COMMENT &&
+    targetFull != null &&
+    targetFull > 0
+
+  if (isMidYear803 && base === 'danger') {
+    if (actualNum != null && actualNum >= targetFull / 2) return 'success'
+    if (actualNum != null && actualNum >= targetFull * 0.3) return 'warning'
+  }
+
+  return base
+}
+
+function pmTargetNumericForProgress(pm: GmHierarchyPm): number | null {
+  const t = parseNumericFromField(String(pm.target ?? ''))
+  return t != null && Number.isFinite(t) ? t : null
+}
+
+/**
+ * Đèn dòng PM: cascading = `pmCompletionPct`; individual/promotion = TB % member dưới PM.
+ */
+function pmStatusFromDiagnosticsProgress(pm: GmHierarchyPm, kpi: GmHierarchyKpi): GmHierarchyStatus | null {
+  if (kpi.kpiType === 'cascading') {
+    const targetFull = pmTargetNumericForProgress(pm)
+    if (targetFull == null || targetFull <= 0) return null
+    const pct = pmCompletionPct(pm, kpi)
+    if (pct >= 80) return 'success'
+    if (pct >= 60) return 'warning'
+    return 'danger'
+  }
+  if (kpi.kpiType !== 'individual' && kpi.kpiType !== 'promotion') return null
+  if (!pmHasNonCascadingRollupMembers(pm, kpi)) return null
+  const pct = pmNonCascadingRollupCompletionPct(pm, kpi)
+  if (pct >= 80) return 'success'
+  if (pct >= 60) return 'warning'
+  return 'danger'
+}
+
+function pmStatusForUiMidYear(pm: GmHierarchyPm, kpi: GmHierarchyKpi): GmHierarchyStatus {
+  const fromProgress = pmStatusFromDiagnosticsProgress(pm, kpi)
+  if (fromProgress != null) return fromProgress
+
+  const base = pm.status
+  const targetFull = pmTargetNumericForProgress(pm)
+  const actualNum = pmActualNumericForProgress(pm, kpi)
+
+  const isMidYear803 =
+    isMidYearPhase.value &&
+    Number(kpi.calculationRuleCode) === CALC_RULE_COMMENT &&
+    targetFull != null &&
+    targetFull > 0
+
+  if (isMidYear803 && base === 'danger') {
+    if (actualNum != null && actualNum >= targetFull / 2) return 'success'
+    if (actualNum != null && actualNum >= targetFull * 0.3) return 'warning'
+  }
+
+  return base
 }
 
 /** Format số % (làm tròn) thành chuỗi hiển thị. */
@@ -849,14 +1071,14 @@ function formatCompletionPct(pct: number): string {
 }
 
 /**
- * Màu chữ cho cột tiến độ (4 mức):
- * - > 100%: Xanh đậm (vượt tiến độ)
- * - 80–100%: Xanh lá (đúng tiến độ)
+ * Màu chữ cho cột tiến độ (4 mức; % đã clamp tối đa 100):
+ * - 100%: Xanh đậm (hoàn thành chỉ tiêu)
+ * - 80–99%: Xanh lá (đúng tiến độ)
  * - 60–79%: Vàng (gần đạt)
  * - < 60%: Đỏ (chưa đạt)
  */
 function completionPctTextClass(pct: number): string {
-  if (pct > 100) return 'text-green-700'
+  if (pct >= 100) return 'text-green-700'
   if (pct >= 80) return 'text-green-500'
   if (pct >= 60) return 'text-amber-500'
   return 'text-red-600'
@@ -892,7 +1114,7 @@ function stripRollupUnitLinePrefix(line: string | null | undefined): string {
 function pmManagedSectionLabel(pm: GmHierarchyPm): string {
   const fromLine = stripRollupUnitLinePrefix(pm.unitLine)
   if (fromLine) return fromLine
-  return 'Khối phụ trách'
+  return 'Managed section'
 }
 
 /** Viền tag theo `roles.code` (màu gợi ý); nhãn tag = code (không dùng `roles.name` trên UI). */
@@ -945,19 +1167,19 @@ function pmRollupShortRoleForLabel(pm: GmHierarchyPm): string {
 }
 
 function pmRollupOwnerSubtitle(pm: GmHierarchyPm): string {
-  if (String(pm.id ?? '').includes('diag-pm-unassigned')) return 'Chưa giao'
+  if (String(pm.id ?? '').includes('diag-pm-unassigned')) return 'Unassigned'
   const ct = String(pm.ownerRoleCode ?? '').toUpperCase()
-  if (ct === 'TEAM') return 'Nhóm nhận KPI'
-  if (ct) return `${ct} phụ trách`
-  return 'Quản lý khối phụ trách'
+  if (ct === 'TEAM') return 'Team assignment'
+  if (ct) return `${ct} owner`
+  return 'Section manager'
 }
 
 function pmRollupOwnerSrOnly(pm: GmHierarchyPm): string {
-  if (String(pm.id ?? '').includes('diag-pm-unassigned')) return 'Trạng thái chưa giao'
+  if (String(pm.id ?? '').includes('diag-pm-unassigned')) return 'Unassigned status'
   const ct = String(pm.ownerRoleCode ?? '').toUpperCase()
-  if (ct === 'TEAM') return 'Dòng KPI team - danh sách người nhận bên dưới'
-  if (ct) return `${ct} phụ trách nhóm`
-  return 'Quản lý khối phụ trách nhóm'
+  if (ct === 'TEAM') return 'Team KPI row — assignees listed below'
+  if (ct) return `${ct} group owner`
+  return 'Section manager for group'
 }
 
 function leaderRollupRoleBadge(leader: GmHierarchyLeader): { label: string; badgeClass: string } | null {
@@ -1014,7 +1236,7 @@ function toggleDraftStatus(st: GmHierarchyStatus) {
 function kpiMatchesToolbarFilters(kpi: GmHierarchyKpi): boolean {
   if (filterImportant.value === 'yes' && kpi.isImportant !== true) return false
   if (filterImportant.value === 'no' && kpi.isImportant === true) return false
-  if (filterStatuses.value.length > 0 && !filterStatuses.value.includes(kpi.status)) return false
+  if (filterStatuses.value.length > 0 && !filterStatuses.value.includes(kpiStatusForUiMidYear(kpi))) return false
   if (filterSections.value.length > 0) {
     const secSet = new Set(filterSections.value.map((s) => s.trim()).filter(Boolean))
     const ok = kpi.pmOwners.some((pm) => secSet.has(pmManagedSectionLabel(pm)))
@@ -1095,7 +1317,7 @@ function buildDisplayGroups(list: GmHierarchyKpi[]): DiagnosticsTableGroup[] {
     const meta = new Map<string, { label: string; rows: GmHierarchyKpi[] }>()
     for (const k of list) {
       const id = k.categoryId?.trim() || 'uncategorized'
-      const label = k.categoryName?.trim() || 'Không phân loại'
+      const label = k.categoryName?.trim() || 'Uncategorized'
       if (!meta.has(id)) meta.set(id, { label, rows: [] })
       meta.get(id)!.rows.push(k)
     }
@@ -1200,17 +1422,6 @@ function kpiIconWrapClass(status: GmHierarchyStatus) {
   return 'bg-green-100 text-green-600'
 }
 
-/** Màu nền dòng KPI theo role người tạo. Khi expanded dùng tông đậm hơn. */
-function kpiCreatorRowBgClass(roleCode?: string, expanded = false): string {
-  switch (roleCode) {
-    case 'GM':     return expanded ? 'bg-indigo-200'  : 'bg-indigo-100 hover:bg-indigo-200'
-    case 'PM':     return expanded ? 'bg-sky-200'     : 'bg-sky-100 hover:bg-sky-200'
-    case 'LEADER': return expanded ? 'bg-emerald-200' : 'bg-emerald-100 hover:bg-emerald-200'
-    case 'MEMBER': return expanded ? 'bg-rose-200'    : 'bg-rose-100 hover:bg-rose-200'
-    default:       return expanded ? 'bg-slate-100'   : 'hover:bg-slate-50'
-  }
-}
-
 const showMemberDrawer = ref(false)
 const drawerMember = shallowRef<GmMemberKpiDrawerProfile | null>(null)
 const drawerKpiItems = shallowRef<GmModalKpiItemMock[]>([])
@@ -1222,38 +1433,21 @@ function memberDrawerDepartmentLabel(pm: GmHierarchyPm, _kpi: GmHierarchyKpi) {
   return undefined
 }
 
-function normalizePersonName(raw: string | null | undefined): string {
-  return String(raw ?? '')
-    .trim()
-    .toLowerCase()
-}
-
 /**
- * Drawer rollout: tránh lặp PM self khi PM vừa là owner node cha
- * vừa có assignment con cho chính mình.
+ * Drawer «Personnel performing this KPI»: không lặp dòng slice GM→PM (assignee = `ownerUserId`)
+ * khi đã có rollout xuống người khác — header đã hiện PM. Nếu chỉ còn slice đó thì vẫn giữ 1 dòng
+ * để drawer không trống (PM tự giữ KPI).
  */
 function rolloutMembersForDrawer(pm: GmHierarchyPm): GmHierarchyMember[] {
   const base = allMembersUnderPm(pm)
-  const self = pmSelfMember(pm)
-  if (!self) return base
+  const ownerId = String(pm.ownerUserId ?? '').trim()
+  if (!ownerId) return base
 
-  const selfId = String(self.id ?? '').trim()
-  const selfName = normalizePersonName(self.name)
-  const pmName = normalizePersonName(pm.name)
-  let keptSelf = false
-
-  return base.filter((member) => {
-    const memberId = String(member.id ?? '').trim()
-    const memberName = normalizePersonName(member.name)
-    const isSameSelfById = !!selfId && memberId === selfId
-    const isSameSelfByName = !!selfName && memberName === selfName
-    const isSamePmName = !!pmName && memberName === pmName
-    const sameSelf = isSameSelfById || isSameSelfByName || isSamePmName
-    if (!sameSelf) return true
-    if (keptSelf) return false
-    keptSelf = true
-    return true
-  })
+  const withoutOwnerSlice = base.filter((m) => String(m.id ?? '').trim() !== ownerId)
+  if (withoutOwnerSlice.length === 0) {
+    return base
+  }
+  return withoutOwnerSlice
 }
 
 function parseWeightPct(weight: string): number {
@@ -1284,9 +1478,9 @@ function diagnosticsTargetPillClass(balance: GmHierarchyTargetBalance | null | u
 }
 
 function diagnosticsTargetTitle(balance: GmHierarchyTargetBalance | null | undefined): string | undefined {
-  if (balance === 'short') return 'Tổng target đã giao thấp hơn mục tiêu (thiếu).'
-  if (balance === 'excess') return 'Tổng target đã giao vượt mục tiêu (thừa).'
-  if (balance === 'ok') return 'Tổng target đã giao khớp mục tiêu (đủ).'
+  if (balance === 'short') return 'Allocated targets sum below the parent target (short).'
+  if (balance === 'excess') return 'Allocated targets sum above the parent target (excess).'
+  if (balance === 'ok') return 'Allocated targets match the parent target (balanced).'
   return undefined
 }
 
@@ -1324,7 +1518,7 @@ function memberRowToModalItem(member: GmHierarchyMember, kpi: GmHierarchyKpi): G
     kpiType: kpi.kpiType,
     submissionStatus: submissionFromMemberStatus(memberStatusForUiMidYear(member, kpi)),
     assignmentStatusCode: member.assignmentStatusCode ?? null,
-    targetSummary: `Đóng góp trong KPI «${kpi.name}» · Minh chứng / ghi chú: ${evidenceNote}`,
+    targetSummary: `Contribution in KPI «${kpi.name}» · Evidence / notes: ${evidenceNote}`,
     actualProgressPct: memberDrawerActualProgressPct(member, kpi),
     evidenceAttachmentUrl: member.evidenceAttachmentUrl ?? null,
   }
@@ -1386,16 +1580,16 @@ export default {
           <div class="flex shrink-0 flex-wrap items-center justify-end gap-2 self-start lg:self-auto">
             <button v-if="appliedFilterCount > 0" type="button"
               class="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 shadow-sm transition-colors hover:border-rose-200 hover:bg-rose-50/80 hover:text-rose-800"
-              aria-label="Đặt lại tất cả bộ lọc" @click.stop="resetAllDiagnosticFilters">
+              aria-label="Reset all filters" @click.stop="resetAllDiagnosticFilters">
               <i class="fas fa-rotate-left text-[11px] text-slate-500" aria-hidden="true" />
-              Đặt lại bộ lọc
+              Reset filters
             </button>
             <div ref="filterPopoverWrapRef" class="relative">
               <button type="button"
                 class="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 shadow-sm transition-colors hover:border-slate-300 hover:bg-slate-50"
                 aria-haspopup="dialog" :aria-expanded="filterPopoverOpen" @click.stop="toggleFilterPopover">
                 <i class="fas fa-sliders-h text-sm text-slate-500" aria-hidden="true" />
-                Bộ lọc
+                Filters
                 <span v-if="appliedFilterCount > 0"
                   class="rounded-full bg-blue-100 px-1.5 py-0.5 text-[10px] font-extrabold leading-none text-blue-700">{{
                   appliedFilterCount }}</span>
@@ -1408,14 +1602,14 @@ export default {
           <Transition name="gm-diag-filter-pop">
             <div v-if="filterPopoverOpen" ref="filterPopoverPanelRef"
               class="fixed z-[200] flex max-h-[min(24rem,calc(100vh-1rem))] origin-top-right flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl"
-              :style="filterPanelFixedStyle" role="dialog" aria-label="Tùy chỉnh bộ lọc" @click.stop>
+              :style="filterPanelFixedStyle" role="dialog" aria-label="Customize filters" @click.stop>
               <div class="flex shrink-0 items-center justify-between border-b border-slate-100 bg-slate-50 px-3 py-2.5">
                 <h4 class="text-[11px] font-bold uppercase tracking-wider text-slate-600">
-                  Tùy chỉnh hiển thị
+                  Customize display
                 </h4>
                 <button type="button" class="text-[10px] font-bold text-blue-600 hover:text-blue-800 hover:underline"
                   @click="resetAllDiagnosticFilters">
-                  Đặt lại bộ lọc
+                  Reset filters
                 </button>
               </div>
 
@@ -1426,11 +1620,11 @@ export default {
                   </label>
                   <div v-if="diagnosticsSectionOptions.length === 0"
                     class="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500">
-                    Không có section trong dữ liệu hiện tại.
+                    No sections in the current data.
                   </div>
                   <div v-else
                     class="custom-scrollbar max-h-36 space-y-1 overflow-y-auto rounded-lg border border-slate-200 bg-white p-2"
-                    role="group" aria-label="Chọn section">
+                    role="group" aria-label="Select sections">
                     <label v-for="s in diagnosticsSectionOptions" :key="s"
                       class="flex cursor-pointer items-start gap-2 rounded-md px-2 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50">
                       <input type="checkbox"
@@ -1442,15 +1636,15 @@ export default {
                 </div>
                 <div>
                   <label class="mb-1.5 block text-[10px] font-bold text-slate-500">
-                    Thành viên
+                    Members
                   </label>
                   <div v-if="diagnosticsMemberOptions.length === 0"
                     class="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500">
-                    Không có thành viên trong dữ liệu hiện tại.
+                    No members in the current data.
                   </div>
                   <div v-else
                     class="custom-scrollbar max-h-36 space-y-1 overflow-y-auto rounded-lg border border-slate-200 bg-white p-2"
-                    role="group" aria-label="Chọn thành viên">
+                    role="group" aria-label="Select members">
                     <label v-for="n in diagnosticsMemberOptions" :key="n"
                       class="flex cursor-pointer items-start gap-2 rounded-md px-2 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50">
                       <input type="checkbox"
@@ -1462,14 +1656,14 @@ export default {
                 </div>
                 <div>
                   <label class="mb-1.5 block text-[10px] font-bold text-slate-500" for="diag-draft-important">
-                    Mức độ quan trọng
+                    Importance
                   </label>
                   <div class="relative">
                     <select id="diag-draft-important" v-model="draftImportant"
                       class="w-full cursor-pointer appearance-none rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm outline-none focus:border-amber-500">
-                      <option value="">Tất cả</option>
-                      <option value="yes">Chỉ KPI quan trọng (⭐)</option>
-                      <option value="no">KPI thường (không sao)</option>
+                      <option value="">All</option>
+                      <option value="yes">Important KPIs only (⭐)</option>
+                      <option value="no">Regular KPIs (not starred)</option>
                     </select>
                     <i class="fas fa-chevron-down pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400"
                       aria-hidden="true" />
@@ -1477,10 +1671,10 @@ export default {
                 </div>
                 <div>
                   <label class="mb-1.5 block text-[10px] font-bold text-slate-500">
-                    Trạng thái KPI
+                    KPI status
                   </label>
                   <div class="space-y-1 rounded-lg border border-slate-200 bg-white p-2" role="group"
-                    aria-label="Chọn trạng thái KPI">
+                    aria-label="Select KPI statuses">
                     <label v-for="st in STATUS_FILTER_OPTIONS" :key="st"
                       class="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50">
                       <input type="checkbox"
@@ -1496,12 +1690,12 @@ export default {
                 <button type="button"
                   class="rounded-lg px-3 py-1.5 text-xs font-bold text-slate-600 transition-colors hover:bg-slate-200/60"
                   @click="cancelFilterPopover">
-                  Huỷ
+                  Cancel
                 </button>
                 <button type="button"
                   class="rounded-lg bg-blue-600 px-4 py-1.5 text-xs font-bold text-white shadow-sm transition-colors hover:bg-blue-700"
                   @click="applyPopoverFilters">
-                  Áp dụng / Lọc
+                  Apply / Filter
                 </button>
               </div>
             </div>
@@ -1512,7 +1706,7 @@ export default {
         <div v-if="activeFilterChips.length > 0"
           class="flex flex-wrap items-start gap-2 border-t border-slate-100 pt-3">
           <span class="mt-1.5 shrink-0 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-            Đang lọc theo:
+            Filtering by:
           </span>
           <div class="flex flex-wrap gap-2">
             <span v-for="chip in activeFilterChips" :key="chip.key + chip.label"
@@ -1520,7 +1714,7 @@ export default {
               {{ chip.label }}
               <button type="button"
                 class="ml-0.5 rounded p-0.5 text-blue-400 hover:text-blue-900 focus:outline-none focus-visible:ring-1 focus-visible:ring-blue-400"
-                :aria-label="`Bỏ lọc ${chip.label}`" @click="removeAppliedFilterChip(chip.key)">
+                :aria-label="`Remove filter ${chip.label}`" @click="removeAppliedFilterChip(chip.key)">
                 <i class="fas fa-times text-[10px]" aria-hidden="true" />
               </button>
             </span>
@@ -1533,16 +1727,16 @@ export default {
           <!-- 4+1+2+2+1+2+2+1 - Thêm cột Actual nằm giữa Target và Tiến độ -->
           <div
             class="sticky top-0 z-10 grid grid-cols-15 gap-2 border-b border-slate-200 bg-slate-100 px-3 py-2 text-xs font-bold uppercase tracking-wider text-slate-600 sm:gap-3">
-            <div class="col-span-4 pl-6">Mục tiêu KPI &amp; PM / Leader / Member</div>
-            <div class="col-span-1 text-center">Trọng số</div>
+            <div class="col-span-4 pl-6">KPI target &amp; PM / Leader / Member</div>
+            <div class="col-span-1 text-center">Weight</div>
             <div class="col-span-2 text-center">Target</div>
             <div class="col-span-2 text-center">Actual</div>
-            <div class="col-span-1 text-center leading-tight" title="Tiến độ hoàn thành .">
-              Tiến độ hoàn thành
+            <div class="col-span-1 text-center leading-tight" title="Completion progress.">
+              Completion
             </div>
             <div class="col-span-2 text-center">Score</div>
-            <div class="col-span-2 text-center">Trạng thái</div>
-            <div class="col-span-1 text-center">Thao tác</div>
+            <div class="col-span-2 text-center">Status</div>
+            <div class="col-span-1 text-center">Actions</div>
           </div>
 
           <template v-for="group in visibleRowGroups" :key="'sec-' + group.key">
@@ -1557,6 +1751,12 @@ export default {
                 <span
                   class="rounded-md border border-slate-200/80 bg-white px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-slate-600">{{
                     group.rows.length }} KPI</span>
+                <span
+                  v-if="groupNonCascadingRollupCompletionPct(group.rows) != null"
+                  class="ml-2 inline-flex items-center rounded-md border border-emerald-200/90 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold tabular-nums text-emerald-900"
+                  title="Avg completion (Individual/Promotion): mean % for members with a numeric target in this group.">
+                  Avg {{ formatCompletionPct(groupNonCascadingRollupCompletionPct(group.rows)!) }}
+                </span>
               </button>
             </div>
             <div :id="sectionDomId(group.key)"
@@ -1572,19 +1772,19 @@ export default {
                       @click="toggleKpi(kpi.id)">
                       <div class="col-span-4 flex items-center">
                         <button type="button" class="mr-1 p-0.5 text-slate-500 hover:text-slate-800"
-                          aria-label="Mở rộng KPI" :aria-expanded="expandedKpis.has(kpi.id)"
+                          aria-label="Expand KPI" :aria-expanded="expandedKpis.has(kpi.id)"
                           @click.stop="toggleKpi(kpi.id)">
                           <i class="fas fa-chevron-right text-xs transition-transform duration-300 ease-out motion-reduce:transition-none"
                             :class="expandedKpis.has(kpi.id) ? 'rotate-90' : 'rotate-0'" />
                         </button>
                         <div class="mr-2 flex h-7 w-7 shrink-0 items-center justify-center rounded-md shadow-sm"
-                          :class="kpiIconWrapClass(kpi.status)">
+                          :class="kpiIconWrapClass(kpiStatusForUiMidYear(kpi))">
                           <i class="fas fa-bullseye text-[11px]" />
                         </div>
                         <div class="min-w-0">
                           <div class="flex flex-wrap items-center gap-x-1.5 gap-y-1">
                             <i v-if="kpi.isImportant" class="fas fa-star shrink-0 text-[11px] text-amber-500"
-                              title="KPI quan trọng (Important)" aria-label="KPI quan trọng" />
+                              title="Important KPI" aria-label="Important KPI" />
                             <span class="text-sm font-bold leading-snug text-slate-800">{{ kpi.name }}</span>
                             <GmStrategicKpiTypeTag :type="kpi.kpiType" size="sm" class="shrink-0" />
                           </div>
@@ -1607,9 +1807,27 @@ export default {
                       </div>
                       <div
                         class="col-span-1 text-center text-xs font-bold tabular-nums"
-                        :class="kpi.kpiType === 'cascading' ? completionPctTextClass(kpiCompletionPct(kpi)) : 'text-slate-400'"
-                        :title="kpi.kpiType === 'cascading' ? 'Tiến độ hoàn thành = (Actual / Target) x 100.' : undefined">
-                        {{ kpi.kpiType === 'cascading' ? formatCompletionPct(kpiCompletionPct(kpi)) : '-' }}
+                        :class="
+                          kpi.kpiType === 'cascading'
+                            ? completionPctTextClass(kpiCompletionPct(kpi))
+                            : kpiHasNonCascadingRollupMembers(kpi)
+                              ? completionPctTextClass(kpiNonCascadingRollupCompletionPct(kpi))
+                              : 'text-slate-400'
+                        "
+                        :title="
+                          kpi.kpiType === 'cascading'
+                            ? 'Completion: (Actual / Target) × 100, capped at 100%.'
+                            : kpiHasNonCascadingRollupMembers(kpi)
+                              ? 'Individual/Promotion: average completion % for members with a numeric target (max 100% per person).'
+                              : undefined
+                        ">
+                        {{
+                          kpi.kpiType === 'cascading'
+                            ? formatCompletionPct(kpiCompletionPct(kpi))
+                            : kpiHasNonCascadingRollupMembers(kpi)
+                              ? formatCompletionPct(kpiNonCascadingRollupCompletionPct(kpi))
+                              : '-'
+                        }}
                       </div>
                       <div class="col-span-2 text-center text-xs font-bold tabular-nums text-slate-400">
                         -
@@ -1617,14 +1835,14 @@ export default {
                       <div class="col-span-2 flex justify-center">
                         <span v-if="kpi.kpiType === 'cascading'"
                           class="inline-flex max-w-full cursor-default items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold leading-tight"
-                          :class="badgeClass(kpi.status)" :title="diagnosticsReasonTooltip(kpi.blockerSummary)">
-                          <i class="fas shrink-0 text-[11px]" :class="kpi.status === 'success'
+                          :class="badgeClass(kpiStatusForUiMidYear(kpi))" :title="diagnosticsReasonTooltip(kpi.blockerSummary)">
+                          <i class="fas shrink-0 text-[11px]" :class="kpiStatusForUiMidYear(kpi) === 'success'
                               ? 'fa-check-circle'
-                              : kpi.status === 'warning'
+                              : kpiStatusForUiMidYear(kpi) === 'warning'
                                 ? 'fa-exclamation-circle'
                                 : 'fa-times-circle'
                             " />
-                          <span class="truncate">{{ kpiStatusLabel(kpi.status) }}</span>
+                          <span class="truncate">{{ kpiStatusLabel(kpiStatusForUiMidYear(kpi)) }}</span>
                         </span>
                         <span v-else
                           class="inline-flex max-w-full cursor-default items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-0.5 text-[11px] font-bold text-blue-700 shadow-sm">
@@ -1634,18 +1852,18 @@ export default {
                       <div class="col-span-1 flex flex-wrap items-center justify-center gap-1" @click.stop>
                         <button type="button"
                           class="rounded border border-slate-200 bg-white px-1.5 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-600 shadow-sm transition-colors hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-800"
-                          title="Sửa KPI" aria-label="Sửa KPI" @click="onEditKpiClick(kpi)">
+                          title="Edit KPI" aria-label="Edit KPI" @click="onEditKpiClick(kpi)">
                           <i class="fas fa-pen text-[9px]" aria-hidden="true" />
                         </button>
                         <button type="button"
                           class="rounded border border-slate-200 bg-white px-1.5 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-600 shadow-sm transition-colors hover:border-rose-200 hover:bg-rose-50 hover:text-rose-800"
-                          title="Xóa KPI" aria-label="Xóa KPI" @click="onDeleteKpiClick(kpi)">
+                          title="Delete KPI" aria-label="Delete KPI" @click="onDeleteKpiClick(kpi)">
                           <i class="fas fa-trash text-[9px]" aria-hidden="true" />
                         </button>
                       </div>
                     </div>
 
-                    <!-- Khối quản lý → PM + cấp dưới (collapse) -->
+                    <!-- Team: KPI → department → PM → member. Individual/Promotion: KPI → department → member. -->
                     <div v-if="kpi.pmOwners.length > 0"
                       class="grid overflow-hidden transition-[grid-template-rows] duration-300 ease-in-out motion-reduce:transition-none"
                       :class="expandedKpis.has(kpi.id) ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'">
@@ -1667,12 +1885,15 @@ export default {
                                       class="fas fa-chevron-right text-[10px] transition-transform duration-300 ease-out motion-reduce:transition-none"
                                       :class="expandedPms.has(pm.id) ? 'rotate-90' : 'rotate-0'" />
                                   </button>
-                                  <i class="fas fa-sitemap mr-2 shrink-0 text-[11px] text-indigo-500" />
+                                  <i v-if="kpi.kpiType === 'cascading'"
+                                    class="fas fa-sitemap mr-2 shrink-0 text-[11px] text-indigo-500" aria-hidden="true" />
+                                  <i v-else class="fas fa-building mr-2 shrink-0 text-[11px] text-slate-500"
+                                    aria-hidden="true" />
                                   <div class="min-w-0">
                                     <div class="truncate text-xs font-bold text-slate-800">
                                       {{ pmManagedSectionLabel(pm) }}
                                     </div>
-                                    <div v-if="!pmHasRollout(pm)"
+                                    <div v-if="kpi.kpiType === 'cascading' && !pmHasRollout(pm)"
                                       class="mt-0.5 truncate text-xs font-medium text-slate-500">
                                       {{ pmRollupOwnerSubtitle(pm) }}: {{ pm.name }}
                                     </div>
@@ -1696,9 +1917,27 @@ export default {
                                 </div>
                                 <div
                                   class="col-span-1 text-center text-xs font-bold tabular-nums"
-                                  :class="kpi.kpiType === 'cascading' ? completionPctTextClass(pmCompletionPct(pm, kpi)) : 'text-slate-400'"
-                                  :title="kpi.kpiType === 'cascading' ? 'Tiến độ hoàn thành = (Actual / Target) x 100.' : undefined">
-                                  {{ kpi.kpiType === 'cascading' ? formatCompletionPct(pmCompletionPct(pm, kpi)) : '-' }}
+                                  :class="
+                                    kpi.kpiType === 'cascading'
+                                      ? completionPctTextClass(pmCompletionPct(pm, kpi))
+                                      : pmHasNonCascadingRollupMembers(pm, kpi)
+                                        ? completionPctTextClass(pmNonCascadingRollupCompletionPct(pm, kpi))
+                                        : 'text-slate-400'
+                                  "
+                                  :title="
+                                    kpi.kpiType === 'cascading'
+                                      ? 'Completion: (Actual / Target) × 100, capped at 100%.'
+                                      : pmHasNonCascadingRollupMembers(pm, kpi)
+                                        ? 'Individual/Promotion: average completion % for members with a numeric target under this PM (max 100% per person).'
+                                        : undefined
+                                  ">
+                                  {{
+                                    kpi.kpiType === 'cascading'
+                                      ? formatCompletionPct(pmCompletionPct(pm, kpi))
+                                      : pmHasNonCascadingRollupMembers(pm, kpi)
+                                        ? formatCompletionPct(pmNonCascadingRollupCompletionPct(pm, kpi))
+                                        : '-'
+                                  }}
                                 </div>
                                 <div class="col-span-2 text-center text-xs font-bold tabular-nums"
                                   :class="kpi.kpiType === 'cascading' ? pmSectionScoreClass(pm) : 'text-slate-400'">
@@ -1707,14 +1946,14 @@ export default {
                                 <div class="col-span-2 flex justify-center">
                                   <span v-if="kpi.kpiType === 'cascading'"
                                     class="inline-flex max-w-full cursor-default items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold leading-tight"
-                                    :class="badgeClass(pm.status)" :title="diagnosticsReasonTooltip(pm.blockerSummary)">
-                                    <i class="fas shrink-0 text-[11px]" :class="pm.status === 'success'
+                                    :class="badgeClass(pmStatusForUiMidYear(pm, kpi))" :title="diagnosticsReasonTooltip(pm.blockerSummary)">
+                                    <i class="fas shrink-0 text-[11px]" :class="pmStatusForUiMidYear(pm, kpi) === 'success'
                                         ? 'fa-check-circle'
-                                        : pm.status === 'warning'
+                                        : pmStatusForUiMidYear(pm, kpi) === 'warning'
                                           ? 'fa-exclamation-circle'
                                           : 'fa-times-circle'
                                       " />
-                                    <span class="truncate">{{ kpiStatusLabel(pm.status) }}</span>
+                                    <span class="truncate">{{ kpiStatusLabel(pmStatusForUiMidYear(pm, kpi)) }}</span>
                                   </span>
                                   <span v-else
                                     class="inline-flex max-w-full cursor-default items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-0.5 text-[11px] font-bold text-blue-700 shadow-sm">
@@ -1725,7 +1964,7 @@ export default {
                                   <button v-if="pmHasRollout(pm)" type="button"
                                     class="rounded border border-indigo-200 bg-indigo-50 px-2 py-1 text-[10px] font-bold leading-tight text-indigo-700 transition-colors hover:bg-indigo-100 sm:px-2.5 sm:text-xs"
                                     @click.stop="openPmKpiDrawer(pm, kpi)">
-                                    Chi tiết
+                                    Details
                                   </button>
                                 </div>
                               </div>
@@ -1735,6 +1974,7 @@ export default {
                                 :class="expandedPms.has(pm.id) ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'">
                                 <div class="min-h-0">
                                   <div class="border-y border-slate-100 bg-slate-50/50 py-1">
+                                    <template v-if="kpi.kpiType === 'cascading'">
 
                                     <template v-if="pmSelfMember(pm)">
                                       <div class="border-b border-slate-100/80 last:border-b-0">
@@ -1785,7 +2025,7 @@ export default {
                                           <div
                                             class="col-span-1 text-center text-xs font-bold tabular-nums"
                                             :class="pmSelfRowProgressTextClass(pm, kpi)"
-                                            :title="pmSelfMember(pm) ? 'Tiến độ hoàn thành = (Actual / Target) x 100.' : undefined">
+                                            :title="pmSelfMember(pm) ? 'Completion: (Actual / Target) × 100, capped at 100%.' : undefined">
                                             {{ pmSelfRowProgressPct(pm, kpi) }}
                                           </div>
                                           <div class="col-span-2 text-center text-xs font-bold tabular-nums"
@@ -1797,23 +2037,28 @@ export default {
                                             <span
                                               class="inline-flex max-w-full cursor-default items-center gap-1 truncate rounded px-0.5 py-0.5"
                                               :title="diagnosticsReasonTooltip(pmSelfMember(pm)?.blocker ?? '')">
-                                              <template v-if="memberStatusForUi(pmSelfMember(pm)) === 'danger'">
+                                              <template
+                                                v-if="pmSelfMember(pm) && memberStatusForUiMidYear(pmSelfMember(pm)!, kpi) === 'danger'">
                                                 <span class="inline-flex items-center text-red-600">
                                                   <i class="fas fa-times-circle mr-1 shrink-0 text-[11px]" />
-                                                  {{ pmSelfMember(pm) ? memberDiagnosticsStatusLabel(pmSelfMember(pm)!) : '-' }}
+                                                  {{ memberDiagnosticsStatusLabelMidYear(pmSelfMember(pm)!, kpi) }}
                                                 </span>
                                               </template>
-                                              <template v-else-if="memberStatusForUi(pmSelfMember(pm)) === 'warning'">
+                                              <template
+                                                v-else-if="pmSelfMember(pm) && memberStatusForUiMidYear(pmSelfMember(pm)!, kpi) === 'warning'">
                                                 <span class="inline-flex items-center text-yellow-700">
                                                   <i class="fas fa-exclamation-circle mr-1 shrink-0 text-[11px]" />
-                                                  {{ pmSelfMember(pm) ? memberDiagnosticsStatusLabel(pmSelfMember(pm)!) : '-' }}
+                                                  {{ memberDiagnosticsStatusLabelMidYear(pmSelfMember(pm)!, kpi) }}
+                                                </span>
+                                              </template>
+                                              <template v-else-if="pmSelfMember(pm)">
+                                                <span class="inline-flex items-center text-green-600">
+                                                  <i class="fas fa-check-circle mr-1 shrink-0 text-[11px]" />
+                                                  {{ memberDiagnosticsStatusLabelMidYear(pmSelfMember(pm)!, kpi) }}
                                                 </span>
                                               </template>
                                               <template v-else>
-                                                <span class="inline-flex items-center text-green-600">
-                                                  <i class="fas fa-check-circle mr-1 shrink-0 text-[11px]" />
-                                                  {{ pmSelfMember(pm) ? memberDiagnosticsStatusLabel(pmSelfMember(pm)!) : '-' }}
-                                                </span>
+                                                <span>-</span>
                                               </template>
                                             </span>
                                           </div>
@@ -1870,7 +2115,7 @@ export default {
                                               <div
                                                 class="col-span-1 text-center text-xs font-bold tabular-nums"
                                                 :class="diagnosticsMemberProgressTextClass(member, kpi)"
-                                                title="Tiến độ hoàn thành = (Actual / Target) x 100.">
+                                                title="Completion: (Actual / Target) × 100, capped at 100%.">
                                                 {{ diagnosticsMemberProgressPct(member, kpi) }}
                                               </div>
                                               <div class="col-span-2 text-center text-xs font-bold tabular-nums" :class="memberStatusForUiMidYear(member, kpi) === 'danger'
@@ -1961,7 +2206,7 @@ export default {
                                                   <div
                                                     class="col-span-1 text-center text-xs font-bold tabular-nums"
                                                     :class="diagnosticsMemberProgressTextClass(row.leader.leaderOwnRow!, kpi)"
-                                                    title="Tiến độ hoàn thành = (Actual / Target) x 100.">
+                                                    title="Completion: (Actual / Target) × 100, capped at 100%.">
                                                     {{ diagnosticsMemberProgressPct(row.leader.leaderOwnRow!, kpi) }}
                                                   </div>
                                                   <div class="col-span-2 text-center text-xs font-bold tabular-nums" :class="memberStatusForUiMidYear(row.leader.leaderOwnRow!, kpi) === 'danger'
@@ -2046,7 +2291,7 @@ export default {
                                                   <div
                                                     class="col-span-1 text-center text-xs font-bold tabular-nums"
                                                     :class="diagnosticsMemberProgressTextClass(row.member, kpi)"
-                                                    title="Tiến độ hoàn thành = (Actual / Target) x 100.">
+                                                    title="Completion: (Actual / Target) × 100, capped at 100%.">
                                                     {{ diagnosticsMemberProgressPct(row.member, kpi) }}
                                                   </div>
                                                   <div class="col-span-2 text-center text-xs font-bold tabular-nums" :class="memberStatusForUiMidYear(row.member, kpi) === 'danger'
@@ -2138,7 +2383,7 @@ export default {
                                         <div
                                           class="col-span-1 text-center text-xs font-bold tabular-nums"
                                           :class="diagnosticsMemberProgressTextClass(member, kpi)"
-                                          title="Tiến độ hoàn thành = (Actual / Target) x 100.">
+                                          title="Completion: (Actual / Target) × 100, capped at 100%.">
                                           {{ diagnosticsMemberProgressPct(member, kpi) }}
                                         </div>
                                         <div class="col-span-2 text-center text-xs font-bold tabular-nums" :class="memberStatusForUiMidYear(member, kpi) === 'danger'
@@ -2230,7 +2475,7 @@ export default {
                                           <div
                                             class="col-span-1 text-center text-xs font-bold tabular-nums"
                                             :class="diagnosticsMemberProgressTextClass(row.leader.leaderOwnRow!, kpi)"
-                                            title="Tiến độ hoàn thành = (Actual / Target) x 100.">
+                                            title="Completion: (Actual / Target) × 100, capped at 100%.">
                                             {{ diagnosticsMemberProgressPct(row.leader.leaderOwnRow!, kpi) }}
                                           </div>
                                           <div class="col-span-2 text-center text-xs font-bold tabular-nums" :class="memberStatusForUiMidYear(row.leader.leaderOwnRow!, kpi) === 'danger'
@@ -2315,7 +2560,7 @@ export default {
                                           <div
                                             class="col-span-1 text-center text-xs font-bold tabular-nums"
                                             :class="diagnosticsMemberProgressTextClass(row.member, kpi)"
-                                            title="Tiến độ hoàn thành = (Actual / Target) x 100.">
+                                            title="Completion: (Actual / Target) × 100, capped at 100%.">
                                             {{ diagnosticsMemberProgressPct(row.member, kpi) }}
                                           </div>
                                           <div class="col-span-2 text-center text-xs font-bold tabular-nums" :class="memberStatusForUiMidYear(row.member, kpi) === 'danger'
@@ -2363,6 +2608,92 @@ export default {
                                         </div>
                                       </div>
                                     </template>
+                                    </template>
+                                    <template v-else>
+                                      <div v-for="member in allMembersUnderPm(pm)" :key="`${pm.id}::${String(member.id ?? '').trim() || member.name}`"
+                                        class="grid grid-cols-15 items-center gap-2 border-l-2 border-slate-200/70 px-3 py-1.5 transition-colors hover:bg-white sm:gap-3">
+                                        <div class="col-span-4 flex items-center pl-14">
+                                          <div
+                                            class="mr-2 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white">
+                                            <i class="fas fa-user text-[10px] text-slate-400" />
+                                          </div>
+                                          <div class="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                                            <span class="text-xs font-semibold text-slate-700">{{ member.name }}</span>
+                                            <template v-for="mb in [memberRollupRoleBadge(member)]"
+                                              :key="`mbr-indiv-${pm.id}-${member.id}`">
+                                              <span v-if="mb"
+                                                class="shrink-0 rounded border px-1.5 py-px text-[9px] font-bold uppercase tracking-wide"
+                                                :class="mb.badgeClass">{{ mb.label }}</span>
+                                            </template>
+                                          </div>
+                                        </div>
+                                        <div class="col-span-1 text-center">
+                                          <span
+                                            class="inline-block min-w-[2.25rem] rounded-md bg-slate-100 px-1.5 py-1 text-xs font-semibold tabular-nums text-slate-700">{{
+                                              diagnosticsWeightDisplay(member.weight)
+                                            }}</span>
+                                        </div>
+                                        <div class="col-span-2 flex justify-center text-center">
+                                          <span
+                                            :class="diagnosticsTargetPillClass(member.targetBalance)"
+                                            :title="diagnosticsTargetTitle(member.targetBalance)">{{
+                                              memberTableTargetDisplayWithUnit(member, kpi)
+                                            }}</span>
+                                        </div>
+                                        <div class="col-span-2 text-center text-xs font-bold tabular-nums"
+                                          :class="memberActualColorClass(member, kpi)">
+                                          {{ memberActualWithUnit(member, kpi) }}
+                                        </div>
+                                        <div
+                                          class="col-span-1 text-center text-xs font-bold tabular-nums"
+                                          :class="diagnosticsMemberProgressTextClass(member, kpi)"
+                                          title="Completion: (Actual / Target) × 100, capped at 100%.">
+                                          {{ diagnosticsMemberProgressPct(member, kpi) }}
+                                        </div>
+                                        <div class="col-span-2 text-center text-xs font-bold tabular-nums" :class="memberStatusForUiMidYear(member, kpi) === 'danger'
+                                            ? 'text-red-600'
+                                            : memberStatusForUiMidYear(member, kpi) === 'warning'
+                                              ? 'text-yellow-600'
+                                              : 'text-green-600'
+                                          " :title="memberDiagnosticsScoreTooltip(member)">
+                                          {{ memberTableScoreDisplay(member) }}
+                                        </div>
+                                        <div class="col-span-2 flex justify-center items-center text-xs font-semibold">
+                                          <span
+                                            class="inline-flex max-w-full cursor-default items-center gap-1 truncate rounded px-0.5 py-0.5"
+                                            :title="diagnosticsReasonTooltip(member.blocker)">
+                                            <template v-if="memberStatusForUiMidYear(member, kpi) === 'danger'">
+                                              <span class="inline-flex items-center text-red-600">
+                                                <i class="fas fa-times-circle mr-1 shrink-0 text-[11px]" />
+                                                {{ memberDiagnosticsStatusLabelMidYear(member, kpi) }}
+                                              </span>
+                                            </template>
+                                            <template v-else-if="memberStatusForUiMidYear(member, kpi) === 'warning'">
+                                              <span class="inline-flex items-center text-yellow-700">
+                                                <i class="fas fa-exclamation-circle mr-1 shrink-0 text-[11px]" />
+                                                {{ memberDiagnosticsStatusLabelMidYear(member, kpi) }}
+                                              </span>
+                                            </template>
+                                            <template v-else>
+                                              <span class="inline-flex items-center text-green-600">
+                                                <i class="fas fa-check-circle mr-1 shrink-0 text-[11px]" />
+                                                {{ memberDiagnosticsStatusLabelMidYear(member, kpi) }}
+                                              </span>
+                                            </template>
+                                          </span>
+                                        </div>
+                                        <div class="col-span-1 flex justify-center">
+                                          <button
+                                            v-if="isMemberFeedbackPendingForGm(member)"
+                                            type="button"
+                                            class="rounded border border-violet-200 bg-violet-50 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-violet-700 shadow-sm transition-colors hover:border-violet-300 hover:bg-violet-100"
+                                            @click.stop="openFeedbackDrawerForMember(kpi, member)">
+                                            Feedback
+                                          </button>
+                                          <span v-else class="text-xs text-slate-200">-</span>
+                                        </div>
+                                      </div>
+                                    </template>
                                   </div>
                                 </div>
                               </div>
@@ -2378,10 +2709,10 @@ export default {
           </template>
 
           <div v-if="prunedFilteredRows.length === 0" class="p-8 text-center text-xs font-medium text-slate-500">
-            <p>Không có KPI nào phù hợp với bộ lọc hiện tại.</p>
+            <p>No KPIs match the current filters.</p>
             <button v-if="appliedFilterCount > 0" type="button"
               class="mt-3 text-xs font-bold text-blue-600 hover:underline" @click="resetAllDiagnosticFilters">
-              Xóa bộ lọc
+              Clear filters
             </button>
           </div>
         </div>
@@ -2410,13 +2741,13 @@ export default {
                   </div>
                   <div class="mt-2 flex flex-wrap items-center gap-x-5 gap-y-1 text-sm font-semibold text-slate-700">
                     <p>
-                      Chỉ tiêu:
+                      Target:
                       <span class="font-bold text-slate-900">
                         {{ diagnosticsTargetWithUnit(feedbackDrawerKpi, feedbackDrawerKpi.target) }}
                       </span>
                     </p>
                     <p>
-                      Trọng số:
+                      Weight:
                       <span class="font-bold text-slate-900">{{ diagnosticsWeightDisplay(feedbackDrawerKpi.weight) }}</span>
                     </p>
                   </div>
@@ -2424,7 +2755,7 @@ export default {
                 <button
                   type="button"
                   class="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
-                  aria-label="Đóng drawer feedback"
+                  aria-label="Close feedback drawer"
                   @click="closeFeedbackDrawer">
                   <i class="fas fa-times text-xs" />
                 </button>
@@ -2435,15 +2766,15 @@ export default {
               <section class="border-b border-slate-200 bg-white px-5 py-4">
                 <h4 class="mb-3 flex items-center gap-2 text-sm font-bold text-slate-900">
                   <i class="fas fa-align-left text-xs text-violet-600" />
-                  Đề xuất điều chỉnh
+                  Adjustment request
                 </h4>
                 <div v-if="!activeFeedbackItem" class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
-                  <p class="text-xs font-medium text-slate-600">Không còn feedback nào đang chờ xử lý.</p>
+                  <p class="text-xs font-medium text-slate-600">No pending feedback to review.</p>
                 </div>
                 <div v-else class="space-y-4">
                   <div>
                     <label class="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-600">
-                      Nội dung chi tiết
+                      Full message
                     </label>
                     <div
                       class="min-h-[88px] whitespace-pre-wrap rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-sm leading-relaxed text-slate-700">
@@ -2454,14 +2785,14 @@ export default {
                     <button type="button"
                       class="rounded-md border border-rose-200 bg-white px-4 py-2 text-sm font-semibold text-rose-700 transition-colors hover:bg-rose-50"
                       @click="resolvePendingFeedback(activeFeedbackItem.assignmentId, false)">
-                      Từ chối feedback
+                      Reject feedback
                     </button>
                     <button
                       type="button"
                       class="inline-flex items-center gap-2 rounded-md bg-violet-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-violet-700"
                       @click="resolvePendingFeedback(activeFeedbackItem.assignmentId, true)">
                       <i class="fas fa-sliders-h text-xs" />
-                      Duyệt feedback
+                      Approve feedback
                     </button>
                   </div>
                 </div>

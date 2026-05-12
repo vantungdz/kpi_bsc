@@ -369,6 +369,17 @@ export function useMemberEvidenceDrawer() {
     return metric > maxAllowed
   })
 
+  const hasDslScoringRules = computed(() =>
+    (drawerFormMode.value === 'comment' || drawerFormMode.value === 'average')
+    && scoringRulesFromItem.value.length > 0,
+  )
+
+  const metricOutOfDslRule = computed(() => {
+    if (!hasDslScoringRules.value) return false
+    if (autoScoreMetric.value == null) return false
+    return computedEvalScore.value == null || exceedsMaxMetricRule.value
+  })
+
   const canSaveEvidence = computed(() => {
     const item = selectedDrawerItem.value
     if (!item) return false
@@ -394,7 +405,7 @@ export function useMemberEvidenceDrawer() {
       )
     if (isFeedbackOnly) return memberFeedbackDraft.value.trim().length > 0
     if (item.canEditEvidence !== true) return false
-    if (exceedsMaxMetricRule.value) return false
+    if (metricOutOfDslRule.value) return false
     const s = detailSelfScore.value
     const hasValidSelfScore = s !== null && Number.isFinite(Number(s)) && Number(s) >= 1 && Number(s) <= 5
     return computedEvalScore.value !== null || hasValidSelfScore || hasEvidenceDraft
@@ -793,7 +804,7 @@ export function useMemberEvidenceDrawer() {
     const score = isFeedbackOnly
       ? normalizeDetailSelfScore(item.selfScore)
       : (autoScore !== null ? autoScore : normalizedScore)
-    if (!isFeedbackOnly && exceedsMaxMetricRule.value) {
+    if (!isFeedbackOnly && metricOutOfDslRule.value) {
       toast.warning('Giá trị Actual/Kết quả tính vượt mức tối đa trong Quy tắc chấm điểm.')
       return
     }
@@ -804,6 +815,13 @@ export function useMemberEvidenceDrawer() {
       )
       if (hasIncomplete) {
         toast.warning('Mỗi dòng phải nhập đủ 3 trường: Comment, Plan và Actual.')
+        return
+      }
+      const hasAnyCompleteRow = generalPlanActualRows.value.some(r =>
+        [r.comment, r.plan, r.actual].every(v => String(v ?? '').trim().length > 0),
+      )
+      if (!hasAnyCompleteRow) {
+        toast.warning('Vui lòng nhập đủ Comment, Plan và Actual cho ít nhất 1 dòng trước khi lưu.')
         return
       }
     }
@@ -892,6 +910,7 @@ export function useMemberEvidenceDrawer() {
     autoScoreMetric,
     maxMetricAllowedByRules,
     exceedsMaxMetricRule,
+    metricOutOfDslRule,
     canSaveEvidence,
     canAddEvidenceRecords,
     evidenceDrawerReadOnly,

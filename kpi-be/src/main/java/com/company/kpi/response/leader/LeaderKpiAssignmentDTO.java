@@ -3,6 +3,7 @@ package com.company.kpi.response.leader;
 import lombok.Data;
 
 import java.math.BigDecimal;
+import java.time.OffsetDateTime;
 import java.util.UUID;
 
 @Data
@@ -33,6 +34,8 @@ public class LeaderKpiAssignmentDTO {
     private String updateReason;
     /** Assignment do chính user hiện tại tạo ra. */
     private Boolean createdByCurrentUser;
+    /** Vai trò người tạo assignment (GM / PM / LEADER / MEMBER). */
+    private String createdByRoleCode;
     /** Trạng thái đánh giá FE (not_started/pending_approval/approved/overdue/feedback). */
     private String evaluationStatus;
     /** Nhãn hiển thị trạng thái đánh giá. */
@@ -47,4 +50,6 @@ public class LeaderKpiAssignmentDTO {
     private Integer typeCode;
     /** Tên loại KPI từ {@code sys_status_codes.name} (cùng category KPI_TYPE). */
     private String typeName;
+    /** {@code kpi_assignments.created_at} — đồng bộ nút submit với luồng member (onboard sau giữa kỳ). */
+    private OffsetDateTime assignmentCreatedAt;
 }

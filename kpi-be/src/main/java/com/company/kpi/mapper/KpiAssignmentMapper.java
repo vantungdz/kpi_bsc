@@ -270,6 +270,17 @@ public interface KpiAssignmentMapper {
             @Param("onlyFromStatusCode") Integer onlyFromStatusCode);
 
     /**
+     * Giống {@link #updateKpiStatusesForPmManagedMembers} nhưng chỉ {@code memberUserId} (một nhân viên).
+     */
+    int updateKpiStatusesForPmManagedMemberSingle(
+            @Param("pmId") UUID pmId,
+            @Param("cycleId") UUID cycleId,
+            @Param("memberUserId") UUID memberUserId,
+            @Param("statusCode") Integer statusCode,
+            @Param("promotion") boolean promotion,
+            @Param("onlyFromStatusCode") Integer onlyFromStatusCode);
+
+    /**
      * Đồng bộ KPI Team assignment cha của PM theo trạng thái mới của assignment con trong cây team.
      * Dùng cho luồng Team Review bulk submit (đưa parent vào 502/602 để GM Evaluation Hub hiển thị).
      */

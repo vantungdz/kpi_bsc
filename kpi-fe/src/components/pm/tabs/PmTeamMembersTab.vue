@@ -11,15 +11,24 @@ import {
 
 const props = defineProps({
   year: { type: [Number, String], required: true },
-  /** Tăng sau khi gửi bulk đánh giá / cần refetch cây team (không reload trang). */
+  /** Tăng sau khi gửi đánh giá / cần refetch cây team (không reload trang). */
   reloadNonce: { type: Number, default: 0 },
-  invalidMembers: { type: Array as PropType<string[]>, default: () => [] },
   kpisCache: { type: Object as PropType<Record<string, any[]>>, default: () => ({}) },
-  commentsCache: { type: Object as PropType<Record<string, string>>, default: () => ({}) }
+  commentsCache: {
+    type: Object as PropType<Record<string, { main: string; promo: string } | string>>,
+    default: () => ({}),
+  },
+  /** Đã gọi xong API pm-portfolio-evaluation-gate. */
+  portfolioGateLoaded: { type: Boolean, default: false },
+  /** true = mọi member đã nộp KPI Member (individual/team ≥501) cho PM — PM được gửi đánh giá lên GM tab KPI Member. */
+  portfolioGateOpen: { type: Boolean, default: false },
+  portfolioGatePending: {
+    type: Array as PropType<{ userId: string; fullName: string }[]>,
+    default: () => [],
+  },
 })
 
-const emit = defineEmits(['open-member', 'submit-evaluations', 'pending-pm-evaluation-count'])
-
+const emit = defineEmits(['open-member', 'pending-pm-evaluation-count'])
 
 const teamTreeRaw = ref<any[]>([])
 const isLoading = ref(false)
@@ -50,6 +59,16 @@ function getEvalStatusChip(statusCode: number | null | undefined) {
 
 /** Chỉ ghi đè PM comment từ cache khi đã vào đợt đánh giá (≥501); tránh nhầm draft/localStorage khi KPI còn 404… */
 const PM_COMMENT_CACHE_OVERLAY_MIN_STATUS = KPI_STATUS.FIRST_WAITING_PM_APPROVAL
+
+function pmSupervisorDraftFromCache(nodeId: string): string {
+  const raw = props.commentsCache[nodeId]
+  if (raw === undefined || raw === null) return ''
+  if (typeof raw === 'string') return raw
+  const main = String(raw.main ?? '').trim()
+  const promo = String(raw.promo ?? '').trim()
+  if (main && promo) return `${main}\n${promo}`
+  return main || promo
+}
 
 // Gọi API lấy danh sách Team
 const fetchTeamHierarchy = async () => {
@@ -112,7 +131,7 @@ const visibleTeamMembers = computed(() => {
       props.commentsCache[node.id] !== undefined &&
       statusNum >= PM_COMMENT_CACHE_OVERLAY_MIN_STATUS
     ) {
-      displayNode.pmComment = props.commentsCache[node.id]
+      displayNode.pmComment = pmSupervisorDraftFromCache(node.id)
     }
 
     displayNode.statusChipUi = getEvalStatusChip(displayNode.statusCode)
@@ -152,6 +171,14 @@ const openMemberDetail = (member: any) => {
     ...member
   })
 }
+
+const portfolioGatePendingLabel = computed(() => {
+  const list = props.portfolioGatePending ?? []
+  return list
+    .map((p) => String(p?.fullName ?? '').trim())
+    .filter(Boolean)
+    .join(' · ')
+})
 </script>
 
 <template>
@@ -162,6 +189,19 @@ const openMemberDetail = (member: any) => {
           <i class="fas fa-users text-slate-400"></i> Team Hierarchy & Performance
         </h3>
       </div>
+    </div>
+
+    <div
+      v-if="portfolioGateLoaded && !portfolioGateOpen"
+      class="px-5 py-3 border-b border-amber-100 bg-amber-50 text-sm text-amber-950"
+    >
+      <p class="font-semibold leading-snug">
+        <i class="fas fa-user-clock mr-2 text-amber-600" aria-hidden="true" />
+        Để gửi đánh giá KPI Member lên GM từng nhân viên, toàn bộ thành viên trong team phải đã nộp kết quả KPI Member
+      </p>
+      <p v-if="portfolioGatePendingLabel" class="mt-2 text-amber-900">
+        Còn thiếu kết quả từ: <strong>{{ portfolioGatePendingLabel }}</strong>
+      </p>
     </div>
 
     <div v-if="isLoading" class="p-10 text-center text-slate-500">
@@ -183,17 +223,15 @@ const openMemberDetail = (member: any) => {
         <tr v-for="member in visibleTeamMembers" :key="member.id"
           class="transition-colors cursor-pointer group"
           :class="[
-            invalidMembers.includes(member.id) && isPmEvaluationSubject(member)
-              ? '!bg-red-50 !border-red-200 shadow-[inset_4px_0_0_0_#ef4444] hover:!bg-red-50'
-              : isPmEvaluationSubject(member)
-                ? 'bg-amber-50 hover:bg-amber-100/90'
-                : 'bg-white hover:bg-slate-50',
+            isPmEvaluationSubject(member)
+              ? 'bg-amber-50 hover:bg-amber-100/90'
+              : 'bg-white hover:bg-slate-50',
             !isPmEvaluationSubject(member) ? 'text-slate-500' : '',
           ]"
           :title="
             isPmEvaluationSubject(member)
-              ? 'Đang chờ PM đánh giá: 501 giữa kỳ (chỉ nhận xét); 601 cuối kỳ (điểm PM + nhận xét).'
-              : 'Không có KPI đang chờ PM đánh giá (501/601) — chỉ hiển thị trong org chart.'
+              ? 'Đang chờ PM đánh giá: '
+              : 'Không có KPI đang chờ PM đánh giá — chỉ hiển thị trong org chart.'
           "
           @click="openMemberDetail(member)">
 
@@ -256,18 +294,6 @@ const openMemberDetail = (member: any) => {
         </tr>
       </TransitionGroup>
     </table>
-    <div class="px-6 py-4 border-t border-slate-200 bg-slate-50 flex justify-end">
-      <button
-        @click="
-          $emit(
-            'submit-evaluations',
-            visibleTeamMembers.filter((m) => isPmEvaluationSubject(m)),
-          )
-        "
-        class="px-6 py-2.5 bg-indigo-600 text-white font-bold text-sm rounded-lg shadow-sm hover:bg-indigo-700 hover:shadow transition-all disabled:opacity-50 disabled:cursor-not-allowed">
-        Gửi toàn bộ đánh giá
-      </button>
-    </div>
   </div>
 </template>
 

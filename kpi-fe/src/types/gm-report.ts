@@ -71,11 +71,12 @@ export interface GmReportSectionAnalyticsData {
 }
 
 export interface GmReportComplianceStatus {
-  completed: number
+  /** Số member có KPI chờ duyệt điểm (501/502/601/602), đồng bộ donut với danh sách. */
   pendingApproval: number
+  /** Số member có KPI thiếu evidence (404|405). */
   missingEvidence: number
+  /** Số member (mỗi user tối đa 1) chờ duyệt + thiếu evidence; bằng độ dài `bottlenecks`. */
   total: number
-  percentComplete: number
 }
 
 export interface GmReportComplianceBottleneck {

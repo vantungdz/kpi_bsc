@@ -37,6 +37,12 @@ public class GmEvaluationHubAssignmentRow {
     private String sectionManagerFullName;
     private String memberRoleCode;
     private String memberRoleName;
-    /** Nhận xét PM tổng (user_kpi_summaries.evaluation_supervisor_comments). */
-    private String supervisorComment;
+    /** Member — user_kpi_summaries.evaluation_comments (portfolio / BSC). */
+    private String evaluationComments;
+    /** Member — user_kpi_summaries.evaluation_comments_promotion. */
+    private String evaluationCommentsPromotion;
+    /** PM tổng portfolio — evaluation_supervisor_comments. */
+    private String supervisorCommentPortfolio;
+    /** PM tổng promotion — evaluation_supervisor_comments_promotion. */
+    private String supervisorCommentPromotion;
 }

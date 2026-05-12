@@ -34,6 +34,7 @@
             km.unit_code       AS unit_code,
             unit_sc.name       AS unit_name,
             ka.status_code     AS status_code,
+            ka.created_at      AS assignment_created_at,
             ki.target_value    AS kpi_info_target_value,
             ka.target_value    AS assignment_target_value,
             ka.mid_self_score,
@@ -44,6 +45,7 @@
             kaf.feedback_note AS feedback_comment,
             ka.update_reason AS update_reason,
             (ka.created_by = #{userId}) AS created_by_current_user,
+            creator_role.created_by_role_code AS created_by_role_code,
             kaf.feedback_target_role_code AS feedback_target_role_code,
             km.calculation_rule_code AS calculation_rule_code,
             km.calculation_type_code AS calculation_type_code,
@@ -73,6 +75,22 @@
                 ORDER BY f.created_at DESC
                 LIMIT 1
             ) kaf ON TRUE
+            LEFT JOIN LATERAL (
+                SELECT UPPER(TRIM(BOTH FROM r.code)) AS created_by_role_code
+                FROM user_roles ur
+                INNER JOIN roles r ON r.id = ur.role_id AND r.deleted_at IS NULL
+                WHERE ur.user_id = ka.created_by
+                ORDER BY
+                    CASE UPPER(TRIM(BOTH FROM r.code))
+                        WHEN 'GM' THEN 1
+                        WHEN 'PM' THEN 2
+                        WHEN 'LEADER' THEN 3
+                        WHEN 'MEMBER' THEN 4
+                        ELSE 99
+                    END,
+                    r.code
+                LIMIT 1
+            ) creator_role ON TRUE
         WHERE
             ka.user_id = #{userId}
             AND ka.cycle_id = #{cycleId}
@@ -120,6 +138,7 @@
             km.unit_code       AS unit_code,
             unit_sc.name       AS unit_name,
             ka.status_code     AS status_code,
+            ka.created_at      AS assignment_created_at,
             ki.target_value    AS kpi_info_target_value,
             ka.target_value    AS assignment_target_value,
             ka.mid_self_score,
@@ -130,6 +149,7 @@
             kaf.feedback_note AS feedback_comment,
             ka.update_reason AS update_reason,
             (ka.created_by = #{userId}) AS created_by_current_user,
+            creator_role.created_by_role_code AS created_by_role_code,
             kaf.feedback_target_role_code AS feedback_target_role_code,
             km.calculation_rule_code AS calculation_rule_code,
             km.calculation_type_code AS calculation_type_code,
@@ -159,6 +179,22 @@
                 ORDER BY f.created_at DESC
                 LIMIT 1
             ) kaf ON TRUE
+            LEFT JOIN LATERAL (
+                SELECT UPPER(TRIM(BOTH FROM r.code)) AS created_by_role_code
+                FROM user_roles ur
+                INNER JOIN roles r ON r.id = ur.role_id AND r.deleted_at IS NULL
+                WHERE ur.user_id = ka.created_by
+                ORDER BY
+                    CASE UPPER(TRIM(BOTH FROM r.code))
+                        WHEN 'GM' THEN 1
+                        WHEN 'PM' THEN 2
+                        WHEN 'LEADER' THEN 3
+                        WHEN 'MEMBER' THEN 4
+                        ELSE 99
+                    END,
+                    r.code
+                LIMIT 1
+            ) creator_role ON TRUE
         WHERE
             ka.id = #{assignmentId}
             AND ka.user_id = #{userId}
@@ -338,15 +374,16 @@
     </insert>
 
     <resultMap id="PmDashboardAggregateResultMap" type="com.company.kpi.aggregate.PmDashboardAggregate">
+        <id property="pmAssignmentId" column="pm_asm_id"/>
+        <result property="kpiCreatorRoleCode" column="kpi_creator_role_code"/>
         <result property="pmFeedbackNote" column="pm_feedback_note"/>
-        <result property="childFeedbackNote" column="child_feedback_note"/>
-        <result property="childFeedbackTargetRoleCode" column="child_feedback_target_role_code"/>
         <association property="pmAssignment" javaType="com.company.kpi.entity.KpiAssignment">
             <id property="id" column="pm_asm_id"/>
             <result property="targetValue" column="pm_asm_target"/>
             <result property="midSelfScore" column="pm_mid_score"/>
             <result property="endSelfScore" column="pm_end_score"/>
             <result property="endPmScore" column="pm_end_pm_score"/>
+            <result property="endGmScore" column="pm_end_gm_score"/>
             <result property="statusCode" column="pm_status_code"/>
             <result property="evidences" column="pm_evidences"/>
             <result property="createdBy" column="pm_created_by"/>
@@ -373,23 +410,29 @@
             <result property="name" column="cat_name"/>
         </association>
 
-        <association property="childAssignment" javaType="com.company.kpi.entity.KpiAssignment">
-            <id property="id" column="child_asm_id"/>
-            <result property="targetValue" column="child_asm_target"/>
-            <result property="midSelfScore" column="child_mid_score"/>
-            <result property="endSelfScore" column="child_end_score"/>
-            <result property="endPmScore" column="child_pm_score"/>
-            <result property="statusCode" column="child_status_code"/>
-            <result property="evidences" column="child_evidences"/>
-        </association>
-        <association property="childUser" javaType="com.company.kpi.entity.User">
-            <id property="id" column="child_user_id"/>
-            <result property="fullName" column="child_full_name"/>
-        </association>
-        <association property="childJobTitle" javaType="com.company.kpi.entity.JobTitle">
-            <id property="id" column="child_jt_id"/>
-            <result property="name" column="child_jt_name"/>
-        </association>
+        <collection property="cascadeChildren" ofType="com.company.kpi.aggregate.PmPortfolioCascadeChildRow"
+                    notNullColumn="child_asm_id">
+            <result property="childFeedbackNote" column="child_feedback_note"/>
+            <result property="childFeedbackTargetRoleCode" column="child_feedback_target_role_code"/>
+            <association property="childAssignment" javaType="com.company.kpi.entity.KpiAssignment">
+                <id property="id" column="child_asm_id"/>
+                <result property="targetValue" column="child_asm_target"/>
+                <result property="midSelfScore" column="child_mid_score"/>
+                <result property="endSelfScore" column="child_end_score"/>
+                <result property="endPmScore" column="child_pm_score"/>
+                <result property="endGmScore" column="child_end_gm_score"/>
+                <result property="statusCode" column="child_status_code"/>
+                <result property="evidences" column="child_evidences"/>
+            </association>
+            <association property="childUser" javaType="com.company.kpi.entity.User">
+                <id property="id" column="child_user_id"/>
+                <result property="fullName" column="child_full_name"/>
+            </association>
+            <association property="childJobTitle" javaType="com.company.kpi.entity.JobTitle">
+                <id property="id" column="child_jt_id"/>
+                <result property="name" column="child_jt_name"/>
+            </association>
+        </collection>
     </resultMap>
 
     <select id="findPmPortfolioByPmIdAndCycleId" resultMap="PmDashboardAggregateResultMap">
@@ -399,6 +442,7 @@
             pm_ka.mid_self_score AS pm_mid_score,
             pm_ka.end_self_score AS pm_end_score,
             pm_ka.end_pm_score AS pm_end_pm_score,
+            pm_ka.end_gm_score AS pm_end_gm_score,
             pm_ka.status_code AS pm_status_code,
             pm_ka.evidences AS pm_evidences,
             pm_ka.created_by AS pm_created_by,
@@ -417,6 +461,21 @@
             km.calculation_rule_code AS master_calc_rule,
             km.calculation_type_code AS master_calc_type,
             km.unit_code AS master_unit_code,
+            (
+                SELECT cr.code
+                FROM user_roles cur
+                INNER JOIN roles cr ON cr.id = cur.role_id AND cr.deleted_at IS NULL
+                WHERE cur.user_id = km.created_by
+                ORDER BY
+                    CASE UPPER(TRIM(cr.code))
+                        WHEN 'GM' THEN 1
+                        WHEN 'PM' THEN 2
+                        WHEN 'LEADER' THEN 3
+                        WHEN 'MEMBER' THEN 4
+                        ELSE 99
+                    END
+                LIMIT 1
+            ) AS kpi_creator_role_code,
 
             kc.id AS cat_id,
             kc.name AS cat_name,
@@ -426,6 +485,7 @@
             child_ka.mid_self_score AS child_mid_score,
             child_ka.end_self_score AS child_end_score,
             child_ka.end_pm_score AS child_pm_score,
+            child_ka.end_gm_score AS child_end_gm_score,
             child_ka.status_code AS child_status_code,
             child_ka.evidences AS child_evidences,
             child_kf.feedback_note AS child_feedback_note,
@@ -524,7 +584,9 @@
             ka.evidences,
             kaf.feedback_note AS feedback_comment,
             ka.update_reason AS update_reason,
+            ka.created_at AS assignment_created_at,
             (ka.created_by = #{userId}) AS created_by_current_user,
+            creator_role.created_by_role_code AS created_by_role_code,
             CASE
                 WHEN ka.status_code = 407 THEN 'feedback'
                 WHEN ka.end_pm_score IS NOT NULL THEN 'approved'
@@ -598,6 +660,22 @@
                 ORDER BY f.created_at DESC
                 LIMIT 1
             ) kaf ON TRUE
+            LEFT JOIN LATERAL (
+                SELECT UPPER(TRIM(BOTH FROM r.code)) AS created_by_role_code
+                FROM user_roles ur
+                INNER JOIN roles r ON r.id = ur.role_id AND r.deleted_at IS NULL
+                WHERE ur.user_id = ka.created_by
+                ORDER BY
+                    CASE UPPER(TRIM(BOTH FROM r.code))
+                        WHEN 'GM' THEN 1
+                        WHEN 'PM' THEN 2
+                        WHEN 'LEADER' THEN 3
+                        WHEN 'MEMBER' THEN 4
+                        ELSE 99
+                    END,
+                    r.code
+                LIMIT 1
+            ) creator_role ON TRUE
         WHERE
             ka.user_id = #{userId, jdbcType=OTHER}
             AND ka.cycle_id = #{cycleId, jdbcType=OTHER}
@@ -641,7 +719,7 @@
           AND ka.deleted_at  IS NULL
           AND ka.user_id     IS NOT NULL
           AND ka.status_code != 603
-          AND kc.end_year_deadline &lt; NOW()
+          AND kc.end_year_end &lt; NOW()
     </select>
     <!-- ── Thêm từ StrategicKpiWriteMapper ─────────────────────────────────────── -->
     <insert id="insertKpiAssignments">
@@ -1334,7 +1412,7 @@
         LEFT JOIN users leader_u ON leader_u.id = ud.supervisor_id AND leader_u.deleted_at IS NULL
         LEFT JOIN users dept_mgr_u ON dept_mgr_u.id = d.manager_id AND dept_mgr_u.deleted_at IS NULL
         JOIN user_roles ur ON ur.user_id = u.id
-        JOIN roles r ON r.id = ur.role_id AND r.deleted_at IS NULL AND upper(r.code) = 'MEMBER'
+        JOIN roles r ON r.id = ur.role_id AND r.deleted_at IS NULL AND upper(r.code) IN ('MEMBER', 'LEADER', 'PM')
         WHERE u.deleted_at IS NULL
           AND u.is_active = TRUE
           AND NOT EXISTS (
@@ -1342,8 +1420,10 @@
               WHERE ka.user_id = u.id
                 AND ka.cycle_id = #{cycleId, jdbcType=OTHER}
                 AND ka.deleted_at IS NULL
+                AND ka.status_code != 406
+                AND ka.parent_assignment_id IS NULL
           )
-        ORDER BY u.id
+        ORDER BY u.id, d.id
     </select>
 
     <select id="listMembersWithoutKpiAssignmentForPm"
@@ -1376,7 +1456,7 @@
         LEFT JOIN users leader_u ON leader_u.id = ud.supervisor_id AND leader_u.deleted_at IS NULL
         LEFT JOIN users dept_mgr_u ON dept_mgr_u.id = d.manager_id AND dept_mgr_u.deleted_at IS NULL
         JOIN user_roles ur ON ur.user_id = u.id
-        JOIN roles r ON r.id = ur.role_id AND r.deleted_at IS NULL AND upper(r.code) = 'MEMBER'
+        JOIN roles r ON r.id = ur.role_id AND r.deleted_at IS NULL AND upper(r.code) IN ('MEMBER', 'LEADER', 'PM')
         WHERE u.deleted_at IS NULL
           AND u.is_active = TRUE
           AND NOT EXISTS (
@@ -1384,8 +1464,10 @@
               WHERE ka.user_id = u.id
                 AND ka.cycle_id = #{cycleId, jdbcType=OTHER}
                 AND ka.deleted_at IS NULL
+                AND ka.status_code != 406
+                AND ka.parent_assignment_id IS NULL
           )
-        ORDER BY u.id
+        ORDER BY u.id, d.id
     </select>
 
     <select id="existsTeamCascadeBlockingPmAccept" resultType="boolean">
@@ -1467,6 +1549,49 @@
             JOIN public.kpi_master km ON ki.master_kpi_id = km.id
             JOIN public.sys_status_codes sys ON km.type_code = sys.code
         WHERE ka.kpi_info_id = ki.id
+            AND ka.user_id IN (SELECT user_id FROM team_tree)
+            AND ka.cycle_id = #{cycleId}
+            AND ka.deleted_at IS NULL
+            <if test="onlyFromStatusCode != null">
+                AND ka.status_code = #{onlyFromStatusCode}
+                <if test="promotion">
+                    AND sys.name = 'PROMOTION'
+                </if>
+                <if test="!promotion">
+                    AND sys.name IN ('INDIVIDUAL', 'TEAM')
+                </if>
+            </if>
+            <if test="onlyFromStatusCode == null">
+                <if test="promotion">
+                    AND sys.name = 'PROMOTION'
+                </if>
+                <if test="!promotion">
+                    AND sys.name IN ('INDIVIDUAL', 'TEAM')
+                </if>
+            </if>
+    </update>
+
+    <!-- Giống updateKpiStatusesForPmManagedMembers nhưng chỉ một member (gửi đánh giá từng người / từng tab). -->
+    <update id="updateKpiStatusesForPmManagedMemberSingle">
+        WITH RECURSIVE team_tree AS (
+            SELECT ud.user_id
+            FROM user_departments ud
+            WHERE ud.supervisor_id = #{pmId, jdbcType=OTHER}
+            UNION ALL
+            SELECT ud.user_id
+            FROM user_departments ud
+            INNER JOIN team_tree tt ON ud.supervisor_id = tt.user_id
+        )
+        UPDATE kpi_assignments ka
+        SET
+            status_code = #{statusCode},
+            updated_at = CURRENT_TIMESTAMP,
+            updated_by = #{pmId}
+        FROM public.kpis_information ki
+            JOIN public.kpi_master km ON ki.master_kpi_id = km.id
+            JOIN public.sys_status_codes sys ON km.type_code = sys.code
+        WHERE ka.kpi_info_id = ki.id
+            AND ka.user_id = #{memberUserId, jdbcType=OTHER}
             AND ka.user_id IN (SELECT user_id FROM team_tree)
             AND ka.cycle_id = #{cycleId}
             AND ka.deleted_at IS NULL

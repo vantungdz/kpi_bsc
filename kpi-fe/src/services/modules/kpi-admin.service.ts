@@ -10,6 +10,7 @@ import type {
   EmailTemplate,
   Section,
   RankOption,
+  JobTitleOption,
 } from "@/mocks/admin.mock";
 
 // ── Campaigns ──────────────────────────────────────────────────────────────────
@@ -78,6 +79,13 @@ export async function apiGetRanks(): Promise<RankOption[]> {
   return http.get("/admin/ranks").then((r) => r.data?.data ?? r.data);
 }
 
+// ── Job Titles ─────────────────────────────────────────────────────────────────
+
+/** Lấy danh sách chức danh từ bảng job_titles */
+export async function apiGetJobTitles(): Promise<JobTitleOption[]> {
+  return http.get("/admin/job-titles").then((r) => r.data?.data ?? r.data);
+}
+
 // ── Employees ──────────────────────────────────────────────────────────────────
 
 export async function apiGetEmployees(): Promise<Employee[]> {
@@ -136,6 +144,7 @@ export const adminKpiService = {
 
   getSections: () => apiGetSections(),
   getRanks: () => apiGetRanks(),
+  getJobTitles: () => apiGetJobTitles(),
   getEmployees: () => apiGetEmployees(),
   createEmployee: (data: Record<string, unknown>) => apiCreateEmployee(data),
   updateEmployee: (id: string, data: Record<string, unknown>) =>

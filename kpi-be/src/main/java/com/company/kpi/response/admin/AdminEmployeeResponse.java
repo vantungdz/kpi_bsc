@@ -13,6 +13,7 @@ public class AdminEmployeeResponse {
     private String section;
     private String rank;
     private String jobTitle;
+    private String jobTitleId;
     /** Giá trị: "active" | "inactive" */
     private String status;
 }

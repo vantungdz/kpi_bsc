@@ -10,6 +10,7 @@ import type {
   EmployeeStatus,
   Section,
   RankOption,
+  JobTitleOption,
 } from "@/mocks/admin.mock";
 
 // ── State ──────────────────────────────────────────────────────────────────────
@@ -17,6 +18,7 @@ import type {
 const employees = ref<Employee[]>([]);
 const totalSections = ref(4);
 const loading = ref(false);
+const saving = ref(false);
 const searchText = ref("");
 const statusFilter = ref("all");
 const sectionFilter = ref("all");
@@ -38,7 +40,7 @@ const formCode = ref("");
 const formName = ref("");
 const formEmail = ref("");
 const formSectionId = ref("");
-const formRankCode = ref("R1");
+const formJobTitleId = ref("");
 const formStatus = ref<EmployeeStatus>("active");
 const formCodeDisabled = ref(false);
 const editingId = ref<string | null>(null);
@@ -46,17 +48,20 @@ const editingId = ref<string | null>(null);
 // Dữ liệu dropdown từ DB
 const sections = ref<Section[]>([]);
 const rankOptions = ref<RankOption[]>([]);
+const jobTitles = ref<JobTitleOption[]>([]);
 
 // ── Init ───────────────────────────────────────────────────────────────────────
 
 const init = async () => {
   loading.value = true;
   try {
-    const [empResult, secResult, rankResult] = await Promise.allSettled([
-      adminKpiService.getEmployees(),
-      adminKpiService.getSections(),
-      adminKpiService.getRanks(),
-    ]);
+    const [empResult, secResult, rankResult, jobTitleResult] =
+      await Promise.allSettled([
+        adminKpiService.getEmployees(),
+        adminKpiService.getSections(),
+        adminKpiService.getRanks(),
+        adminKpiService.getJobTitles(),
+      ]);
     if (empResult.status === "fulfilled") {
       employees.value = empResult.value ?? [];
     }
@@ -65,6 +70,9 @@ const init = async () => {
     }
     if (rankResult.status === "fulfilled") {
       rankOptions.value = rankResult.value ?? [];
+    }
+    if (jobTitleResult.status === "fulfilled") {
+      jobTitles.value = jobTitleResult.value ?? [];
     }
     totalSections.value = new Set(employees.value.map((e) => e.section)).size;
   } catch (err) {
@@ -142,7 +150,7 @@ const openCreateDrawer = () => {
   formName.value = "";
   formEmail.value = "";
   formSectionId.value = sections.value[0]?.id ?? "";
-  formRankCode.value = "R1";
+  formJobTitleId.value = jobTitles.value[0]?.id ?? "";
   formStatus.value = "active";
   formCodeDisabled.value = false;
   editingId.value = null;
@@ -156,7 +164,14 @@ const openEditDrawer = (emp: Employee) => {
   formEmail.value = emp.email;
   const matchedSection = sections.value.find((s) => s.name === emp.section);
   formSectionId.value = matchedSection?.id ?? sections.value[0]?.id ?? "";
-  formRankCode.value = emp.rank ?? "R1";
+  const byId = emp.jobTitleId
+    ? jobTitles.value.find((j) => j.id === emp.jobTitleId)
+    : undefined;
+  const byName =
+    !byId && emp.jobTitle
+      ? jobTitles.value.find((j) => j.name === emp.jobTitle)
+      : undefined;
+  formJobTitleId.value = (byId ?? byName)?.id ?? jobTitles.value[0]?.id ?? "";
   formStatus.value = emp.status;
   formCodeDisabled.value = true;
   editingId.value = emp.id;
@@ -168,27 +183,58 @@ const closeDrawer = () => {
 };
 
 const saveEmployee = async () => {
+  if (saving.value) return;
+
+  // Validate tối thiểu (frontend chỉ chặn lỗi hiển nhiên; backend vẫn là nguồn sự thật)
+  const code = formCode.value.trim();
+  const name = formName.value.trim();
+  const email = formEmail.value.trim();
+  const sectionId = formSectionId.value.trim();
+  const jobTitleId = formJobTitleId.value.trim();
+
+  if (!code || !name || !email || !sectionId || !jobTitleId) {
+    triggerToast("Vui lòng nhập đầy đủ thông tin bắt buộc (*).");
+    return;
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    triggerToast("Email không hợp lệ. Vui lòng kiểm tra lại.");
+    return;
+  }
+
   const payload = {
-    code: formCode.value,
-    name: formName.value,
-    email: formEmail.value,
-    sectionId: formSectionId.value,
-    rankCode: formRankCode.value,
+    code,
+    name,
+    email,
+    sectionId,
+    jobTitleId,
     status: formStatus.value,
   };
 
-  if (drawerMode.value === "create") {
-    await adminKpiService.createEmployee(payload);
-    employees.value = await adminKpiService.getEmployees();
-    triggerToast("Đã thêm nhân sự mới thành công!");
-  } else if (editingId.value) {
-    const updated = await adminKpiService.updateEmployee(editingId.value, payload);
-    const idx = employees.value.findIndex((e) => e.id === editingId.value);
-    if (idx > -1 && updated) employees.value[idx] = updated;
-    else employees.value = await adminKpiService.getEmployees();
-    triggerToast("Đã cập nhật thông tin nhân viên thành công!");
+  saving.value = true;
+  try {
+    if (drawerMode.value === "create") {
+      await adminKpiService.createEmployee(payload);
+      employees.value = await adminKpiService.getEmployees();
+      triggerToast("Đã thêm nhân sự mới thành công!");
+    } else if (editingId.value) {
+      const updated = await adminKpiService.updateEmployee(
+        editingId.value,
+        payload,
+      );
+      const idx = employees.value.findIndex((e) => e.id === editingId.value);
+      if (idx > -1 && updated) employees.value[idx] = updated;
+      else employees.value = await adminKpiService.getEmployees();
+      triggerToast("Đã cập nhật thông tin nhân viên thành công!");
+    }
+    closeDrawer();
+  } catch (err) {
+    console.error("[AdminEmployeePage] saveEmployee error:", err);
+    triggerToast(
+      "Lưu thông tin thất bại. Vui lòng thử lại hoặc kiểm tra log backend.",
+    );
+  } finally {
+    saving.value = false;
   }
-  closeDrawer();
 };
 
 const triggerToast = (msg: string) => {
@@ -231,7 +277,6 @@ const avatarIcon = (status: EmployeeStatus) =>
     active: "fa-user",
     inactive: "fa-user-times",
   })[status];
-
 </script>
 
 <template>
@@ -779,11 +824,7 @@ const avatarIcon = (status: EmployeeStatus) =>
                 class="w-full border border-slate-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 bg-white"
               >
                 <option value="">-- Chọn phòng ban --</option>
-                <option
-                  v-for="sec in sections"
-                  :key="sec.id"
-                  :value="sec.id"
-                >
+                <option v-for="sec in sections" :key="sec.id" :value="sec.id">
                   {{ sec.name }}
                 </option>
               </select>
@@ -792,19 +833,15 @@ const avatarIcon = (status: EmployeeStatus) =>
               <label
                 class="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1"
               >
-                Rank Level <span class="text-red-500">*</span>
+                Job Title (Chức danh) <span class="text-red-500">*</span>
               </label>
               <select
-                v-model="formRankCode"
+                v-model="formJobTitleId"
                 class="w-full border border-slate-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 bg-white font-bold text-indigo-700"
               >
-                <option value="">-- Chọn cấp bậc --</option>
-                <option
-                  v-for="r in rankOptions"
-                  :key="r.code"
-                  :value="r.code"
-                >
-                  {{ r.code }} — {{ r.name }}
+                <option value="">-- Chọn chức danh --</option>
+                <option v-for="jt in jobTitles" :key="jt.id" :value="jt.id">
+                  {{ jt.rankCode }} — {{ jt.name }}
                 </option>
               </select>
             </div>
@@ -824,6 +861,8 @@ const avatarIcon = (status: EmployeeStatus) =>
         <button
           class="px-5 py-2 text-sm font-bold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 shadow-sm transition-colors flex items-center"
           @click="saveEmployee"
+          :disabled="saving"
+          :class="saving ? 'opacity-60 cursor-not-allowed' : ''"
         >
           <i class="fas fa-save mr-2" /> Lưu Thông tin
         </button>

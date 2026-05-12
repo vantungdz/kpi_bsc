@@ -16,4 +16,10 @@ public class PmSupervisorCommentRequest {
     private UUID memberId;
 
     private String pmComment;
+
+    /**
+     * {@code true}: lưu vào {@code evaluation_supervisor_comments_promotion};
+     * {@code false}/null: cột {@code evaluation_supervisor_comments} (KPI Member / portfolio).
+     */
+    private Boolean promotion;
 }

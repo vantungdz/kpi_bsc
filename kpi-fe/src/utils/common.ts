@@ -12,12 +12,39 @@ export const generateInitials = (fullName?: string) => {
 };
 
 /**
+ * Chỉ user tạo tài khoản sau {@code mid_year_end} của chu kỳ mới thu timeline / bỏ nợ giữa kỳ
+ * (đồng bộ backend {@code lateOnboardUserForCycle} / {@code hasLateMidYearSubmitCandidate}).
+ * Thiếu {@code accountCreatedAt} từ API → không collapse (an toàn cho dữ liệu cũ).
+ */
+export function shouldCollapseKpiProcessTimelineToYearEndOnly(
+  accountCreatedAtIso: string | null | undefined,
+  midYearEndIso: string | null | undefined,
+): boolean {
+  if (!midYearEndIso) return false
+  const midEnd = new Date(midYearEndIso).getTime()
+  if (!Number.isFinite(midEnd)) return false
+  if (accountCreatedAtIso == null || accountCreatedAtIso === '') return false
+  const created = new Date(accountCreatedAtIso).getTime()
+  if (!Number.isFinite(created)) return false
+  return created > midEnd
+}
+
+export type GetSubmitButtonOptions = {
+  /**
+   * User tạo tài khoản sau mid_year_end → không còn nợ nộp giữa kỳ (chờ cuối kỳ).
+   * Khớp backend {@code lateOnboardUserForCycle}.
+   */
+  treatMidYearAsSkipped?: boolean
+}
+
+/**
  * Function returns the state of the submit button based on the current KPI cycle, the user's status code, and the current date.
  */
 export function getSubmitButtonState(
   kpiCycle: KpiCycleResponse,
   statusCode: number,
   currentDateInput: string | number | Date = new Date(),
+  opts?: GetSubmitButtonOptions,
 ): SubmitButtonState {
   const now = new Date(currentDateInput).getTime();
 
@@ -47,8 +74,10 @@ export function getSubmitButtonState(
     },
     {
       // Mid-year chỉ "done" khi đã có submission mốc giữa năm.
-      // Nếu quá hạn nhưng còn status 405 thì vẫn cho nộp trễ mid-year.
-      isDone: statusCode >= 503 && statusCode !== 601 && statusCode !== 602,
+      // Nếu quá hạn nhưng còn status 405 thì vẫn cho nộp trễ mid-year (trừ KPI giao sau hết giữa kỳ).
+      isDone:
+        Boolean(opts?.treatMidYearAsSkipped)
+        || (statusCode >= 503 && statusCode !== 601 && statusCode !== 602),
       actionType: 'MID_YEAR' as const,
       text: 'Mid-Year Review',
       startDate: kpiCycle.midYearStart,
@@ -56,7 +85,10 @@ export function getSubmitButtonState(
       errNoConfig: 'The system has not configured the mid-year review time',
       errEarly: 'It is not yet time for the mid-year review',
       errLate:  'Mid-year review period has ended',
-      bypassDateCheck: statusCode === 405 && (kpiCycle.midYearEnd ? now > new Date(kpiCycle.midYearEnd).getTime() : false),
+      bypassDateCheck:
+        !opts?.treatMidYearAsSkipped
+        && statusCode === 405
+        && (kpiCycle.midYearEnd ? now > new Date(kpiCycle.midYearEnd).getTime() : false),
       forceHide: MID_YEAR_SUBMITTED_STATUSES.includes(statusCode),
     },
     {
@@ -68,7 +100,11 @@ export function getSubmitButtonState(
       errNoConfig: 'The system has not configured the end-year review time',
       errEarly: 'It is not yet time for the end-year review',
       errLate:  'End-year review period has ended',
-      bypassDateCheck: false,
+      // Sau hết cửa sổ Year-End mà còn 405/503 — vẫn cho nộp trễ (đồng bộ mid-year sau mid_year_end).
+      bypassDateCheck:
+        (statusCode === 405 || statusCode === 503)
+        && Boolean(kpiCycle.endYearEnd)
+        && now > new Date(kpiCycle.endYearEnd as any).getTime(),
       forceHide: END_YEAR_SUBMITTED_STATUSES.includes(statusCode),
     },
   ];

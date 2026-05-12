@@ -84,7 +84,7 @@ const groupedSections = computed(() => {
       kind,
       items,
       meta,
-      sectionBadgeText: done ? `Hoàn thành ${complete}/${total}` : `Thiếu ${missing}/${total}`,
+      sectionBadgeText: done ? `Complete ${complete}/${total}` : `Missing ${missing}/${total}`,
       sectionBadgeClass: done ? meta.badgeDoneClass : meta.badgeWarnClass,
     }
   }).filter(Boolean) as {
@@ -101,17 +101,17 @@ function targetLine(item: GmModalKpiItemMock) {
   const w = item.weight
   const wPart =
     typeof w === 'number' && Number.isFinite(w) ? ` (W: ${w}%)` : ''
-  return `Mục tiêu: ${item.target}${wPart}`
+  return `Target: ${item.target}${wPart}`
 }
 
 function statusBlock(item: GmModalKpiItemMock) {
   if (item.submissionStatus === 'submitted_with_file') {
-    return { kind: 'ok' as const, label: 'Đã nộp (Có File)', icon: 'fas fa-check-circle' }
+    return { kind: 'ok' as const, label: 'Submitted (with file)', icon: 'fas fa-check-circle' }
   }
   if (item.submissionStatus === 'submitted') {
-    return { kind: 'ok' as const, label: 'Đã nộp', icon: 'fas fa-check-circle' }
+    return { kind: 'ok' as const, label: 'Submitted', icon: 'fas fa-check-circle' }
   }
-  return { kind: 'missing' as const, label: 'Thiếu Dữ Liệu', icon: 'fas fa-exclamation-circle' }
+  return { kind: 'missing' as const, label: 'Missing data', icon: 'fas fa-exclamation-circle' }
 }
 
 function asmStatusMeta(item: GmModalKpiItemMock): { label: string; badgeClass: string } {
@@ -126,10 +126,10 @@ function asmStatusMeta(item: GmModalKpiItemMock): { label: string; badgeClass: s
     return {
       label:
         code === 403
-          ? 'Chờ GM duyệt (tạo mới)'
+          ? 'Awaiting GM approval (new)'
           : code === 502
-            ? '1st Half · Chờ GM'
-            : 'Final · Chờ GM',
+            ? '1st half · Awaiting GM'
+            : 'Final · Awaiting GM',
       badgeClass: 'border-rose-200 bg-rose-50 text-rose-700',
     }
   }
@@ -137,44 +137,45 @@ function asmStatusMeta(item: GmModalKpiItemMock): { label: string; badgeClass: s
     return {
       label:
         code === 402
-          ? 'Chờ PM duyệt (tạo mới)'
+          ? 'Awaiting PM approval (new)'
           : code === 404
-            ? 'Chờ Member Accept'
+            ? 'Awaiting member acceptance'
             : code === 501
-              ? 'Đã nộp 1st Half · Chờ PM'
-              : 'Final · Chờ PM',
+              ? '1st half submitted · Awaiting PM'
+              : 'Final · Awaiting PM',
       badgeClass: 'border-amber-200 bg-amber-50 text-amber-900',
     }
   }
   if (code === 405 || code === 503 || code === 603) {
     return {
-      label: code === 405 ? 'Đang chạy' : code === 503 ? 'Đã chốt 1st Half' : 'Đã chốt sổ',
+      label: code === 405 ? 'In progress' : code === 503 ? '1st half locked' : 'Final locked',
       badgeClass: 'border-emerald-200 bg-emerald-50 text-emerald-800',
     }
   }
   if (code === 406) {
     return {
-      label: 'Từ chối',
+      label: 'Rejected',
       badgeClass: 'border-slate-300 bg-slate-100 text-slate-700',
     }
   }
   if (code === 401) {
     return {
-      label: 'Chưa kích hoạt',
+      label: 'Not activated',
       badgeClass: 'border-slate-200 bg-slate-100 text-slate-600',
     }
   }
   return {
-    label: `Mã ASM ${code}`,
+    label: `ASM code ${code}`,
     badgeClass: 'border-slate-200 bg-slate-100 text-slate-600',
   }
 }
 
-/** Phần sau «Minh chứng / ghi chú:» trong targetSummary (rollout PM/GM). */
+/** Tail after «Evidence / notes:» or legacy Vietnamese label in targetSummary (rollout PM/GM). */
 function rolloutMinhChungTail(item: GmModalKpiItemMock): string {
   const src = (item.targetSummary ?? '').trim()
-  const m = src.match(/Minh chứng\s*\/\s*ghi chú:\s*(.+)$/i)
-  const tail = m?.[1]?.trim()
+  const tail =
+    src.match(/Minh chứng\s*\/\s*ghi chú:\s*(.+)$/i)?.[1]?.trim()
+    ?? src.match(/Evidence\s*\/\s*notes?:\s*(.+)$/i)?.[1]?.trim()
   if (tail) return tail
   if (item.evidenceAttachmentUrl) return ''
   return '—'
@@ -284,6 +285,11 @@ const rolloutDeptLabel = computed(() => {
   if (!rows?.length) return ''
   return rows[0]?.profile.departmentLabel?.trim() ?? ''
 })
+
+const rolloutPersonnelCountLabel = computed(() => {
+  const n = props.pmKpiRollout?.rows.length ?? 0
+  return n === 1 ? '1 member' : `${n} members`
+})
 </script>
 
 <template>
@@ -304,12 +310,12 @@ const rolloutDeptLabel = computed(() => {
             >
               <h2 class="flex items-center gap-2 text-base font-bold text-slate-800">
                 <i class="fas fa-file-lines text-base text-indigo-500" />
-                Chi tiết thực hiện KPI (Theo Nhóm/PM)
+                KPI execution details (by group / PM)
               </h2>
               <button
                 type="button"
                 class="rounded-full p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-800"
-                aria-label="Đóng"
+                aria-label="Close"
                 @click="emit('close')"
               >
                 <i class="fas fa-times text-base" />
@@ -334,7 +340,7 @@ const rolloutDeptLabel = computed(() => {
                 <div class="mt-2.5 border-t border-slate-600/50 pt-2.5">
                   <p class="flex items-center gap-1.5 text-sm font-medium text-slate-300">
                     <i class="fas fa-user text-xs text-slate-400" />
-                    Quản lý ({{ pmKpiRollout.rollupRoleLabel || '—' }}):
+                    Manager ({{ pmKpiRollout.rollupRoleLabel || '—' }}):
                     <span class="font-bold text-white">{{ pmKpiRollout.pmName }}</span>
                   </p>
                   <p
@@ -351,12 +357,12 @@ const rolloutDeptLabel = computed(() => {
             <div class="custom-scrollbar flex-1 space-y-3 overflow-y-auto bg-gradient-to-b from-slate-100/40 to-slate-50 p-3 sm:p-4">
               <div class="flex items-center justify-between px-0.5">
                 <h3 class="text-[11px] font-extrabold uppercase tracking-[0.12em] text-slate-600">
-                  Danh sách nhân sự thực hiện
+                  Personnel performing this KPI
                 </h3>
                 <span
                   class="rounded-full border border-emerald-300/80 bg-emerald-100 px-2.5 py-1 text-[10px] font-bold text-emerald-800 shadow-sm"
                 >
-                  {{ pmKpiRollout.rows.length }} Members
+                  {{ rolloutPersonnelCountLabel }}
                 </span>
               </div>
 
@@ -407,8 +413,11 @@ const rolloutDeptLabel = computed(() => {
                       >
                         <div class="mb-2 flex items-end justify-between gap-3">
                           <div class="min-w-0">
-                            <p class="mb-1 text-[11px] font-semibold text-slate-500">
-                              Target (PM)
+                            <p
+                              class="mb-1 text-[11px] font-semibold text-slate-500"
+                              title="Target allocated to this person for this KPI (when the PM rolled it out)."
+                            >
+                              Assigned target
                             </p>
                             <p class="text-lg font-bold tabular-nums text-slate-900">
                               {{ row.item.target }}
@@ -462,7 +471,7 @@ const rolloutDeptLabel = computed(() => {
                           "
                           class="mt-3 flex items-start justify-between gap-3 border-t border-slate-200/60 pt-3 text-xs"
                         >
-                          <span class="font-semibold text-slate-500">Tỷ lệ Actual</span>
+                          <span class="font-semibold text-slate-500">Actual %</span>
                           <span
                             class="font-extrabold tabular-nums"
                             :class="rolloutMemberCardStyle(row.item).actualValueClass"
@@ -474,7 +483,7 @@ const rolloutDeptLabel = computed(() => {
 
                       <div class="space-y-3 border-t border-slate-100 pt-1">
                         <p class="text-[11px] font-extrabold uppercase tracking-[0.1em] text-slate-500">
-                          Minh chứng / ghi chú
+                          Evidence / notes
                         </p>
                         <div
                           v-if="rolloutEvidenceNoteOnly(row.item)"
@@ -486,7 +495,7 @@ const rolloutDeptLabel = computed(() => {
                           v-else
                           class="rounded-lg border border-dashed border-slate-200 bg-slate-50/80 px-3 py-2 text-xs italic text-slate-400"
                         >
-                          Không có ghi chú kèm theo.
+                          No notes attached.
                         </p>
 
                         <ul
@@ -515,7 +524,7 @@ const rolloutDeptLabel = computed(() => {
                               <div v-if="isEvidenceImageUrl(att.url)" class="overflow-hidden rounded-lg border border-slate-100 bg-slate-50">
                                 <img
                                   :src="normalizeEvidenceHref(att.url)"
-                                  :alt="att.name || 'Minh chứng'"
+                                  :alt="att.name || 'Evidence'"
                                   class="max-h-40 w-full object-contain"
                                 />
                               </div>
@@ -531,7 +540,7 @@ const rolloutDeptLabel = computed(() => {
                           class="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50/80 px-3 py-2.5 text-xs font-bold text-indigo-800 transition-colors hover:bg-indigo-100"
                         >
                           <i class="fas fa-paperclip" />
-                          Xem bằng chứng đính kèm
+                          View attached evidence
                         </a>
                       </div>
                     </div>
@@ -549,12 +558,12 @@ const rolloutDeptLabel = computed(() => {
               <span class="rounded-lg bg-violet-100 p-1.5 text-violet-600">
                 <i class="fas fa-file-alt text-sm" />
               </span>
-              Chi tiết tình trạng Nộp KPI
+              KPI submission status
             </h2>
             <button
               type="button"
               class="rounded-full p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-800"
-              aria-label="Đóng"
+              aria-label="Close"
               @click="emit('close')"
             >
               <i class="fas fa-times text-base" />
@@ -641,7 +650,7 @@ const rolloutDeptLabel = computed(() => {
                       class="mt-2 inline-flex max-w-full items-center gap-1.5 break-all text-[11px] font-bold text-indigo-600 hover:text-indigo-800 hover:underline"
                     >
                       <i class="fas fa-paperclip shrink-0 text-[10px]" />
-                      Xem bằng chứng đính kèm
+                      View attached evidence
                     </a>
                   </div>
 
@@ -663,14 +672,14 @@ const rolloutDeptLabel = computed(() => {
                           class="inline-flex items-center gap-1 rounded-full border border-rose-300 bg-white px-2.5 py-1 text-[10px] font-bold text-rose-600 shadow-sm"
                         >
                           <i class="fas fa-exclamation-circle text-[10px]" />
-                          Thiếu Dữ Liệu
+                          Missing data
                         </span>
                         <button
                           type="button"
                           class="rounded-lg bg-rose-600 px-3 py-1.5 text-[10px] font-bold text-white shadow-sm transition-colors hover:bg-rose-700"
                           @click="onRemind(item)"
                         >
-                          Gửi Remind
+                          Send reminder
                         </button>
                       </div>
                     </template>
@@ -680,7 +689,7 @@ const rolloutDeptLabel = computed(() => {
             </section>
 
             <p v-if="!groupedSections.length" class="py-12 text-center text-xs font-medium text-slate-500">
-              Chưa có dữ liệu KPI cho nhân viên này.
+              No KPI data for this employee.
             </p>
           </div>
           </template>

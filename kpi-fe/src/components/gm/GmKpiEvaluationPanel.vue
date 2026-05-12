@@ -13,11 +13,13 @@ import { useRoute } from "vue-router";
 import {
   flattenGmKpiItems,
   isGmEvalPromotionKpiGroup,
-  type GmEvalMember,
-  type GmEvalPmBranch,
-  type GmKpiGroup,
-  type GmKpiItem,
-} from "@/mocks/gmEmployeeEvaluation.mock";
+} from "@/utils/gmEmployeeEvaluation";
+import type {
+  GmEvalMember,
+  GmEvalPmBranch,
+  GmKpiGroup,
+  GmKpiItem,
+} from "@/types/gm-employee-evaluation";
 import { isReadonlyKpiYear } from "@/utils/kpi-year";
 import { gmKpiService } from "@/services/modules/kpi-gm.service";
 
@@ -56,24 +58,24 @@ const usePmTree = computed(
     Array.isArray(props.pmBranches) &&
     props.pmBranches.length > 0,
 );
-const codeColumnLabel = computed(() => (isPmList.value ? "Mã PM" : "Mã NV"));
+const codeColumnLabel = computed(() => (isPmList.value ? "PM code" : "Employee code"));
 const nameColumnLabel = computed(() =>
-  isPmList.value ? "Tên PM" : "Tên Nhân viên",
+  isPmList.value ? "PM name" : "Employee name",
 );
 const gmScoreColumnLabel = computed(() =>
-  isPmList.value ? "Điểm GM" : "Điểm PM",
+  isPmList.value ? "Supervisor Score" : "PM score",
 );
 const gmScoreDetailLabel = computed(() =>
-  isPmList.value ? "GM Score" : "PM Score",
+  isPmList.value ? "Supervisor Score" : "PM Score",
 );
 const searchPlaceholder = computed(() =>
   usePmTree.value
-    ? "Lọc theo section, PM, Leader, nhân viên hoặc mã..."
+    ? "Filter by section, PM, leader, employee, or code..."
     : isPmList.value
-      ? "Lọc theo tên PM hoặc đơn vị ..."
-      : "Lọc theo tên nhân viên ...",
+      ? "Filter by PM name or unit..."
+      : "Filter by employee name...",
 );
-const emptyFilterMessage = computed(() => "Không có nhân viên khớp bộ lọc.");
+const emptyFilterMessage = computed(() => "No people match the filter.");
 
 /** Chỉ dùng khi panel không nằm trong GM layout (không có inject năm). */
 const selectedYear = ref(2026);
@@ -95,7 +97,10 @@ const openEvidence = reactive<Record<string, boolean>>({});
 const pmScores = reactive<Record<string, Record<string, number | null>>>({});
 const gmScoreTouched = reactive<Record<string, Record<string, boolean>>>({});
 const gmKpiComments = reactive<Record<string, Record<string, string>>>({});
-const supervisorComments = reactive<Record<string, string>>({});
+const supervisorPortfolioComments = reactive<Record<string, string>>({});
+const supervisorPromotionComments = reactive<Record<string, string>>({});
+/** `${empId}:cascade` | `${empId}:promotion` */
+const supervisorCommentSubmitAttempted = reactive<Record<string, boolean>>({});
 const banner = ref<{ type: "ok" | "info"; text: string } | null>(null);
 const confirmBusy = ref(false);
 const pageLoading = ref(true);
@@ -153,8 +158,47 @@ function hubRowGmCommentEnabled(item: GmKpiItem): boolean {
   return item.hubAssignmentStatusCode === 502 || item.hubAssignmentStatusCode === 602;
 }
 
-function drawerRequiresGmFinalGrading(emp: GmEvalMember): boolean {
-  return flattenGmKpiItems(emp).some(hubRowGmScoreEnabled);
+function drawerHasAssignmentsInStatus(emp: GmEvalMember, code: 502 | 602): boolean {
+  return flattenGmKpiItems(emp).some((it) => Number(it.hubAssignmentStatusCode) === code)
+}
+
+/** Chỉ các dòng assignment đang chờ GM theo từng phase (gửi confirm hub). */
+function itemsForHubConfirmScopeForTab(
+  emp: GmEvalMember,
+  scope: 502 | 602,
+  tab: "cascade" | "promotion",
+): GmKpiItem[] {
+  const groups =
+    tab === "promotion"
+      ? emp.groups.filter((g) => isGmEvalPromotionKpiGroup(g))
+      : emp.groups.filter((g) => !isGmEvalPromotionKpiGroup(g));
+  const items = groups.flatMap((g) => g.items);
+  return items.filter(
+    (it) => Boolean(it.id) && Number(it.hubAssignmentStatusCode) === scope,
+  );
+}
+
+function drawerHasAssignmentsInStatusForTab(
+  emp: GmEvalMember,
+  code: 502 | 602,
+  tab: "cascade" | "promotion",
+): boolean {
+  return itemsForHubConfirmScopeForTab(emp, code, tab).length > 0;
+}
+
+function drawerRequiresGmFinalGradingForTab(
+  emp: GmEvalMember,
+  tab: "cascade" | "promotion",
+): boolean {
+  const groups =
+    tab === "promotion"
+      ? emp.groups.filter((g) => isGmEvalPromotionKpiGroup(g))
+      : emp.groups.filter((g) => !isGmEvalPromotionKpiGroup(g));
+  return groups.flatMap((g) => g.items).some((it) => hubRowGmScoreEnabled(it));
+}
+
+function supervisorAttemptKey(empId: string, tab: "cascade" | "promotion") {
+  return `${empId}:${tab}`;
 }
 
 function evidenceKey(empId: string, kpiId: string) {
@@ -217,20 +261,51 @@ function prefillLockedPmScores() {
   }
 }
 
+/** Cột Supervisor Score: ưu tiên nháp GM đang chọn, rồi điểm GM đã lưu, cuối cùng điểm PM khi GM chưa chấm. */
 function currentDisplayableGmScore(emp: GmEvalMember, item: GmKpiItem): number | null {
-  const persisted = item.pmScore;
-  if (persisted != null && persisted > 0) return persisted;
   if (gmScoreTouched[emp.id]?.[item.id]) {
-    const v = pmScores[emp.id]?.[item.id];
-    if (v != null && v > 0) return v;
+    const draft = pmScores[emp.id]?.[item.id];
+    if (draft != null && draft > 0) return draft;
   }
+  const persistedGm = item.pmScore;
+  if (persistedGm != null && persistedGm > 0) return persistedGm;
+  const pmOrSeed = item.pmSeedScore;
+  if (pmOrSeed != null && pmOrSeed > 0) return pmOrSeed;
   return null;
 }
 
 function initSupervisorCommentDraft(emp: GmEvalMember, reset = false) {
-  if (reset || supervisorComments[emp.id] === undefined) {
-    supervisorComments[emp.id] = String(emp.supervisorComment ?? "");
+  if (reset || supervisorPortfolioComments[emp.id] === undefined) {
+    supervisorPortfolioComments[emp.id] = String(
+      emp.supervisorCommentPortfolio ?? emp.supervisorComment ?? "",
+    );
   }
+  if (reset || supervisorPromotionComments[emp.id] === undefined) {
+    supervisorPromotionComments[emp.id] = String(
+      emp.supervisorCommentPromotion ?? "",
+    );
+  }
+  if (reset) {
+    supervisorCommentSubmitAttempted[supervisorAttemptKey(emp.id, "cascade")] =
+      false;
+    supervisorCommentSubmitAttempted[supervisorAttemptKey(emp.id, "promotion")] =
+      false;
+  }
+}
+
+/** Hiển thị viền/đỏ + thông báo lỗi khi đã bấm xác nhận cuối năm mà Supervisor Comment trống (theo tab). */
+function supervisorCommentInvalid(
+  emp: GmEvalMember,
+  tab: "cascade" | "promotion",
+): boolean {
+  if (!drawerHasAssignmentsInStatusForTab(emp, 602, tab)) return false;
+  if (!supervisorCommentSubmitAttempted[supervisorAttemptKey(emp.id, tab)])
+    return false;
+  const c =
+    tab === "promotion"
+      ? (supervisorPromotionComments[emp.id] ?? "").trim()
+      : (supervisorPortfolioComments[emp.id] ?? "").trim();
+  return !c;
 }
 
 function ensureSupervisorCommentKeys(reset = false) {
@@ -566,19 +641,19 @@ function canShowEvalActionButton(emp: GmEvalMember) {
   return isReadonly.value || emp.canScore;
 }
 
-/** Khóa nút khi không phải ASM 502/602 (chỉ áp dụng khi không ở chế độ chỉ xem). */
+/** Nút mở drawer: luôn bật khi có KPI (trừ khi đang submit hoặc chỉ xem tùy layout). */
 function evalThaoTacDisabled(emp: GmEvalMember) {
-  if (!canShowEvalActionButton(emp)) return true;
-  if (isReadonly.value) return false;
-  return !emp.gmApprovalActionEnabled;
+  return !canShowEvalActionButton(emp) || confirmBusy.value;
 }
 
 function toggleEvaluationDrawer(emp: GmEvalMember) {
-  if (evalThaoTacDisabled(emp)) return;
-  if (drawerEmpId.value !== emp.id) {
-    initGmCommentDraft(emp, false);
+  if (!canShowEvalActionButton(emp)) return;
+  if (drawerEmpId.value === emp.id) {
+    drawerEmpId.value = null;
+    return;
   }
-  drawerEmpId.value = drawerEmpId.value === emp.id ? null : emp.id;
+  initGmCommentDraft(emp, false);
+  drawerEmpId.value = emp.id;
 }
 
 function closeEvaluationDrawer() {
@@ -610,17 +685,6 @@ function evidencePanelBorder(accent: "indigo" | "emerald") {
     : "border-b-2 border-indigo-200";
 }
 
-function saveDraft(emp: GmEvalMember) {
-  if (isReadonly.value) return;
-  banner.value = {
-    type: "info",
-    text: `Đã lưu nháp (mock) cho ${emp.name} — năm ${effectiveYear.value}.`,
-  };
-  setTimeout(() => {
-    banner.value = null;
-  }, 3200);
-}
-
 function hubGmScoresComplete(emp: GmEvalMember): boolean {
   const items = flattenGmKpiItems(emp);
   if (!items.length) return false;
@@ -631,27 +695,59 @@ function hubGmScoresComplete(emp: GmEvalMember): boolean {
   });
 }
 
-async function confirmDone(emp: GmEvalMember) {
+function hubGmScoresCompleteForItems(emp: GmEvalMember, items: GmKpiItem[]): boolean {
+  if (!items.length) return false;
+  return items.every((it) => {
+    if (!hubRowGmScoreEnabled(it)) return true;
+    const v = pmScores[emp.id]?.[it.id];
+    return v != null && v >= 1 && v <= 5;
+  });
+}
+
+async function confirmDone(
+  emp: GmEvalMember,
+  scope: 502 | 602,
+  tab: "cascade" | "promotion",
+) {
   if (isReadonly.value) return;
-  const needFinal = drawerRequiresGmFinalGrading(emp);
-  const c = (supervisorComments[emp.id] ?? "").trim();
-  if (needFinal && !c) {
+  const items = itemsForHubConfirmScopeForTab(emp, scope, tab);
+  if (!items.length) {
     banner.value = {
       type: "info",
-      text: "Vui lòng nhập Supervisor Comment trước khi hoàn tất.",
+      text:
+        scope === 502
+          ? "No KPIs in (mid-year, awaiting GM) to complete review for this tab."
+          : "No KPIs in (year-end, awaiting GM) to confirm evaluation for this tab.",
     };
     setTimeout(() => {
       banner.value = null;
     }, 3200);
     return;
   }
-  const items = flattenGmKpiItems(emp).filter((it) => Boolean(it.id));
-  if (!items.length) return;
 
-  if (needFinal && !hubGmScoresComplete(emp)) {
+  const needFinal = scope === 602;
+  const c =
+    tab === "promotion"
+      ? (supervisorPromotionComments[emp.id] ?? "").trim()
+      : (supervisorPortfolioComments[emp.id] ?? "").trim();
+  if (needFinal && !c) {
+    supervisorCommentSubmitAttempted[supervisorAttemptKey(emp.id, tab)] = true;
     banner.value = {
       type: "info",
-      text: "Vui lòng nhập điểm GM (1–5) cho đủ mọi KPI cuối kỳ (602) trước khi hoàn tất.",
+      text: "Please enter a Supervisor Comment before completing year-end evaluation.",
+    };
+    setTimeout(() => {
+      banner.value = null;
+    }, 3200);
+    return;
+  }
+  if (needFinal)
+    supervisorCommentSubmitAttempted[supervisorAttemptKey(emp.id, tab)] = false;
+
+  if (needFinal && !hubGmScoresCompleteForItems(emp, items)) {
+    banner.value = {
+      type: "info",
+      text: "Please enter GM scores (1–5) for every KPI in status 602 before completing.",
     };
     setTimeout(() => {
       banner.value = null;
@@ -664,7 +760,7 @@ async function confirmDone(emp: GmEvalMember) {
     if (!cid) {
       banner.value = {
         type: "info",
-        text: "Chưa chọn chu kỳ KPI — không thể xác nhận.",
+        text: "No KPI cycle selected — cannot confirm.",
       };
       setTimeout(() => {
         banner.value = null;
@@ -675,7 +771,7 @@ async function confirmDone(emp: GmEvalMember) {
     if (!uid) {
       banner.value = {
         type: "info",
-        text: "Thiếu định danh nhân viên (evaluationUserId) — không thể xác nhận.",
+        text: "Missing employee id (evaluationUserId) — cannot confirm.",
       };
       setTimeout(() => {
         banner.value = null;
@@ -693,6 +789,7 @@ async function confirmDone(emp: GmEvalMember) {
         cycleId: cid,
         evaluationUserId: uid,
         supervisorComment: needFinal ? c : "",
+        promotion: tab === "promotion",
         lines: items.map((it) => {
           const line: {
             assignmentId: string;
@@ -716,26 +813,29 @@ async function confirmDone(emp: GmEvalMember) {
       if (res.updatedCount === 0) {
         banner.value = {
           type: "info",
-          text: "Không có assignment nào ở trạng thái 502 hoặc 602 để cập nhật.",
+          text:
+            scope === 502
+              ? "No assignments in  were updated (already processed or cycle mismatch)."
+              : "No assignments in  were updated (already processed or cycle mismatch).",
         };
       } else {
-        const tail = needFinal ? `Điểm TB ${gmScoreDetailLabel.value}: ${pmAvgInPanel(emp)}.` : "";
+        const tail = needFinal ? `Avg. ${gmScoreDetailLabel.value}: ${pmAvgInPanel(emp)}.` : "";
         banner.value = {
           type: "ok",
           text:
             res.skippedCount > 0
-              ? `Đã cập nhật ${res.updatedCount} KPI; ${res.skippedCount} bỏ qua (không đúng trạng thái/chu kỳ). ${tail}`.trim()
+              ? `Updated ${res.updatedCount} KPI(s); ${res.skippedCount} skipped (wrong status/cycle). ${tail}`.trim()
               : needFinal
-                ? `Đã xác nhận đánh giá ${res.updatedCount} KPI (602→603). ${tail}`.trim()
-                : `Đã hoàn thành review ${res.updatedCount} KPI (502→503).`.trim(),
+                ? `Confirmed year-end evaluation for ${res.updatedCount} KPI(s). ${tail}`.trim()
+                : `Completed review for ${res.updatedCount} KPI(s).`.trim(),
         };
       }
     } else {
       banner.value = {
         type: "ok",
         text: needFinal
-          ? `Xác nhận hoàn tất (mock) cho ${emp.name}. Điểm TB ${gmScoreDetailLabel.value}: ${pmAvgInPanel(emp)}.`
-          : `Hoàn thành review (mock) cho ${emp.name}.`,
+          ? `Year-end evaluation confirmed (mock) for ${emp.name}. Avg. ${gmScoreDetailLabel.value}: ${pmAvgInPanel(emp)}.`
+          : `Mid-year review completed (mock) for ${emp.name}.`,
       };
     }
     drawerEmpId.value = null;
@@ -744,7 +844,7 @@ async function confirmDone(emp: GmEvalMember) {
     banner.value = {
       type: "info",
       text:
-        e instanceof Error ? e.message : "Không xác nhận được — thử lại sau.",
+        e instanceof Error ? e.message : "Could not confirm — please try again later.",
     };
   } finally {
     confirmBusy.value = false;
@@ -762,14 +862,14 @@ async function confirmDone(emp: GmEvalMember) {
       class="flex flex-col items-center justify-center gap-3 py-20 text-slate-500 sm:py-24"
     >
       <i class="fas fa-spinner fa-spin text-2xl text-indigo-500 sm:text-3xl" />
-      <span class="text-xs font-semibold sm:text-sm">Đang tải dữ liệu...</span>
+      <span class="text-xs font-semibold sm:text-sm">Loading data...</span>
     </div>
 
     <template v-else>
       <Transition name="fade">
         <div
           v-if="banner"
-          class="fixed bottom-6 right-6 z-50 max-w-md rounded-xl border px-4 py-3 text-sm font-semibold shadow-lg"
+          class="fixed bottom-6 right-6 z-[340] max-w-md rounded-xl border px-4 py-3 text-sm font-semibold shadow-lg"
           :class="
             banner.type === 'ok'
               ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
@@ -786,9 +886,9 @@ async function confirmDone(emp: GmEvalMember) {
       >
         <i class="fas fa-lock mt-0.5 shrink-0 text-slate-500 text-[11px]" />
         <p>
-          <span class="font-bold">Chế độ chỉ xem:</span> năm
-          {{ effectiveYear }} đã khóa kỳ. Không thể chỉnh điểm PM hay ghi chú
-          supervisor.
+          <span class="font-bold">Read-only:</span> year
+          {{ effectiveYear }} is locked. You cannot edit PM scores or supervisor
+          comments.
         </p>
       </div>
 
@@ -824,9 +924,9 @@ async function confirmDone(emp: GmEvalMember) {
               v-model.number="selectedYear"
               class="cursor-pointer rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 shadow-sm outline-none focus:ring-2 focus:ring-indigo-100 sm:px-4"
             >
-              <option :value="2024">Năm: 2024</option>
-              <option :value="2025">Năm: 2025</option>
-              <option :value="2026">Năm: 2026</option>
+              <option :value="2024">Year: 2024</option>
+              <option :value="2025">Year: 2025</option>
+              <option :value="2026">Year: 2026</option>
             </select>
           </div>
         </div>
@@ -870,12 +970,12 @@ async function confirmDone(emp: GmEvalMember) {
                 </th>
                 <th class="px-3 py-2.5 text-center sm:px-4 sm:py-3">Rank</th>
                 <th class="px-3 py-2.5 text-center sm:px-4 sm:py-3">
-                  Tiến độ (Status)
+                  Progress (status)
                 </th>
                 <th
                   class="bg-slate-50/80 px-3 py-2.5 text-center sm:px-4 sm:py-3"
                 >
-                  Điểm Tự chấm
+                  Self score
                 </th>
                 <th
                   class="bg-indigo-50/40 px-3 py-2.5 text-center text-indigo-800 sm:px-4 sm:py-3"
@@ -885,7 +985,7 @@ async function confirmDone(emp: GmEvalMember) {
                 <th
                   class="w-[4.5rem] px-2 py-2.5 text-center sm:w-20 sm:px-3 sm:py-3"
                 >
-                  Thao tác
+                  Actions
                 </th>
               </tr>
             </thead>
@@ -968,11 +1068,11 @@ async function confirmDone(emp: GmEvalMember) {
                       class="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-indigo-200 bg-white text-indigo-600 shadow-sm transition-colors hover:bg-indigo-50 hover:text-indigo-800 disabled:pointer-events-none disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-50 disabled:text-slate-300 disabled:shadow-none disabled:hover:bg-slate-50"
                       :disabled="evalThaoTacDisabled(emp)"
                       :title="
-                        evalThaoTacDisabled(emp) && !isReadonly
-                          ? 'Chỉ mở khi trạng thái ASM là 502 hoặc 602'
-                          : 'Mở đánh giá KPI'
+                        confirmBusy
+                          ? 'Submitting confirmation…'
+                          : 'Open KPI evaluation'
                       "
-                      aria-label="Mở đánh giá KPI"
+                      aria-label="Open KPI evaluation"
                       @click="toggleEvaluationDrawer(emp)"
                     >
                       <i
@@ -1005,15 +1105,15 @@ async function confirmDone(emp: GmEvalMember) {
               <tr
                 class="border-b border-slate-200 bg-slate-100 text-[10px] font-bold uppercase tracking-wider text-slate-600 sm:text-[11px]"
               >
-                <th class="px-3 py-2.5 sm:px-4 sm:py-3">Nhân sự</th>
+                <th class="px-3 py-2.5 sm:px-4 sm:py-3">People</th>
                 <th class="px-3 py-2.5 text-center sm:px-4 sm:py-3">Rank</th>
                 <th class="px-3 py-2.5 text-center sm:px-4 sm:py-3">
-                  Tiến độ (Status)
+                  Progress (status)
                 </th>
                 <th
                   class="bg-slate-50/80 px-3 py-2.5 text-center sm:px-4 sm:py-3"
                 >
-                  Điểm Tự chấm
+                  Self score
                 </th>
                 <th
                   class="bg-indigo-50/40 px-3 py-2.5 text-center text-indigo-800 sm:px-4 sm:py-3"
@@ -1023,7 +1123,7 @@ async function confirmDone(emp: GmEvalMember) {
                 <th
                   class="w-[4.5rem] px-2 py-2.5 text-center sm:w-20 sm:px-3 sm:py-3"
                 >
-                  Thao tác
+                  Actions
                 </th>
               </tr>
             </thead>
@@ -1057,7 +1157,7 @@ async function confirmDone(emp: GmEvalMember) {
                       <span
                         class="text-[10px] font-semibold normal-case text-slate-500 sm:text-xs"
                       >
-                        · {{ sectionMembers(sec.branch).length }} thành viên
+                        · {{ sectionMembers(sec.branch).length }} members
                       </span>
                     </div>
                   </td>
@@ -1154,11 +1254,11 @@ async function confirmDone(emp: GmEvalMember) {
                                   class="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-indigo-200 bg-white text-indigo-600 shadow-sm transition-colors hover:bg-indigo-50 hover:text-indigo-800 disabled:pointer-events-none disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-50 disabled:text-slate-300 disabled:shadow-none disabled:hover:bg-slate-50"
                                   :disabled="evalThaoTacDisabled(emp)"
                                   :title="
-                                    evalThaoTacDisabled(emp) && !isReadonly
-                                      ? 'Chỉ mở khi trạng thái ASM là 502 hoặc 602'
-                                      : 'Mở đánh giá KPI'
+                                    confirmBusy
+                                      ? 'Submitting confirmation…'
+                                      : 'Open KPI evaluation'
                                   "
-                                  aria-label="Mở đánh giá KPI"
+                                  aria-label="Open KPI evaluation"
                                   @click="toggleEvaluationDrawer(emp)"
                                 >
                                   <i class="fas fa-clipboard-check text-xs" aria-hidden="true" />
@@ -1194,7 +1294,7 @@ async function confirmDone(emp: GmEvalMember) {
                                       v-if="pmBranchHasChildren(br)"
                                       type="button"
                                       class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-slate-200/80 sm:h-8 sm:w-8"
-                                      aria-label="Mở rộng nhóm PM"
+                                      aria-label="Expand PM group"
                                       @click.stop="
                                         togglePmBranchExpand(br.pm.id)
                                       "
@@ -1291,11 +1391,11 @@ async function confirmDone(emp: GmEvalMember) {
                                     class="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-indigo-200 bg-white text-indigo-600 shadow-sm transition-colors hover:bg-indigo-50 hover:text-indigo-800 disabled:pointer-events-none disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-50 disabled:text-slate-300 disabled:shadow-none disabled:hover:bg-slate-50"
                                     :disabled="evalThaoTacDisabled(br.pm)"
                                     :title="
-                                      evalThaoTacDisabled(br.pm) && !isReadonly
-                                        ? 'Chỉ mở khi trạng thái ASM là 502 hoặc 602'
-                                        : 'Mở đánh giá KPI'
+                                      confirmBusy
+                                        ? 'Submitting confirmation…'
+                                        : 'Open KPI evaluation'
                                     "
-                                    aria-label="Mở đánh giá KPI"
+                                    aria-label="Open KPI evaluation"
                                     @click="toggleEvaluationDrawer(br.pm)"
                                   >
                                     <i
@@ -1371,7 +1471,7 @@ async function confirmDone(emp: GmEvalMember) {
                                                       v-if="ld.members.length"
                                                       type="button"
                                                       class="ml-5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-slate-200/80 sm:ml-6 sm:h-8 sm:w-8"
-                                                      aria-label="Mở rộng nhóm Leader"
+                                                      aria-label="Expand leader group"
                                                       @click.stop="
                                                         toggleLeaderBranchExpand(
                                                           ld.leaderKey,
@@ -1512,13 +1612,11 @@ async function confirmDone(emp: GmEvalMember) {
                                                       )
                                                     "
                                                     :title="
-                                                      evalThaoTacDisabled(
-                                                        ld.sheet,
-                                                      ) && !isReadonly
-                                                        ? 'Chỉ mở khi trạng thái ASM là 502 hoặc 602'
-                                                        : 'Mở đánh giá KPI'
+                                                      confirmBusy
+                                                        ? 'Submitting confirmation…'
+                                                        : 'Open KPI evaluation'
                                                     "
-                                                    aria-label="Mở đánh giá KPI"
+                                                    aria-label="Open KPI evaluation"
                                                     @click="
                                                       toggleEvaluationDrawer(
                                                         ld.sheet,
@@ -1738,14 +1836,11 @@ async function confirmDone(emp: GmEvalMember) {
                                                                     )
                                                                   "
                                                                   :title="
-                                                                    evalThaoTacDisabled(
-                                                                      emp,
-                                                                    ) &&
-                                                                    !isReadonly
-                                                                      ? 'Chỉ mở khi trạng thái ASM là 502 hoặc 602'
-                                                                      : 'Mở đánh giá KPI'
+                                                                    confirmBusy
+                                                                      ? 'Submitting confirmation…'
+                                                                      : 'Open KPI evaluation'
                                                                   "
-                                                                  aria-label="Mở đánh giá KPI"
+                                                                  aria-label="Open KPI evaluation"
                                                                   @click="
                                                                     toggleEvaluationDrawer(
                                                                       emp,
@@ -1894,12 +1989,11 @@ async function confirmDone(emp: GmEvalMember) {
                                                     evalThaoTacDisabled(emp)
                                                   "
                                                   :title="
-                                                    evalThaoTacDisabled(emp) &&
-                                                    !isReadonly
-                                                      ? 'Chỉ mở khi trạng thái ASM là 502 hoặc 602'
-                                                      : 'Mở đánh giá KPI'
+                                                    confirmBusy
+                                                      ? 'Submitting confirmation…'
+                                                      : 'Open KPI evaluation'
                                                   "
-                                                  aria-label="Mở đánh giá KPI"
+                                                  aria-label="Open KPI evaluation"
                                                   @click="
                                                     toggleEvaluationDrawer(emp)
                                                   "
@@ -1968,7 +2062,7 @@ async function confirmDone(emp: GmEvalMember) {
                   <p
                     class="text-[10px] font-bold uppercase tracking-wider text-slate-500"
                   >
-                    Đánh giá KPI
+                    KPI evaluation
                   </p>
                   <h2
                     class="truncate text-base font-bold text-slate-900 sm:text-lg"
@@ -1979,7 +2073,7 @@ async function confirmDone(emp: GmEvalMember) {
                 <button
                   type="button"
                   class="rounded-full p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-800"
-                  aria-label="Đóng"
+                  aria-label="Close"
                   @click="closeEvaluationDrawer"
                 >
                   <i class="fas fa-times text-lg" />
@@ -2001,18 +2095,18 @@ async function confirmDone(emp: GmEvalMember) {
                           class="fas fa-list text-indigo-600"
                           aria-hidden="true"
                         />
-                        Bảng đánh giá chi tiết — {{ effectiveYear }}
+                        Detailed evaluation sheet — {{ effectiveYear }}
                       </h3>
                       <p
                         class="mt-0.5 text-[11px] font-medium text-slate-500 sm:text-xs"
                       >
-                        {{ flattenGmKpiItems(drawerEmployee).length }} hạng mục
-                        tổng cộng
+                        {{ flattenGmKpiItems(drawerEmployee).length }} line items
+                        in total
                         <span class="text-slate-400">·</span>
-                        Đang xem:
+                        Viewing:
                         {{
                           drawerEvalTab === "cascade"
-                            ? `${drawerCascadeItemCount} KPI theo khía cạnh BSC (Individual / Cascading)`
+                            ? `${drawerCascadeItemCount} KPIs by BSC perspective (Individual / Cascading)`
                             : `${drawerPromotionItemCount} KPI Promotion`
                         }}
                       </p>
@@ -2023,7 +2117,7 @@ async function confirmDone(emp: GmEvalMember) {
                       <div
                         class="flex w-full border-b border-slate-200 bg-slate-100/90 px-2 pt-2 sm:px-3 sm:pt-2.5"
                         role="tablist"
-                        aria-label="Loại KPI đánh giá"
+                        aria-label="KPI evaluation type"
                       >
                         <button
                           type="button"
@@ -2073,17 +2167,17 @@ async function confirmDone(emp: GmEvalMember) {
                               <th
                                 class="min-w-[18rem] px-4 py-3 sm:min-w-[22rem] lg:min-w-[26rem]"
                               >
-                                Hạng mục (Objectives)
+                                Objective
                               </th>
                               <th
                                 class="w-28 min-w-[7rem] px-4 py-3 text-center sm:w-32"
                               >
-                                Trọng số
+                                Weight
                               </th>
                               <th
                                 class="w-44 min-w-[11rem] px-4 py-3 text-center sm:w-52 sm:min-w-[13rem]"
                               >
-                                Bằng chứng
+                                Evidence
                               </th>
                               <th
                                 class="w-32 min-w-[8rem] px-4 py-3 text-center sm:w-36"
@@ -2096,8 +2190,9 @@ async function confirmDone(emp: GmEvalMember) {
                                 {{ gmScoreDetailLabel }}
                                 <span
                                   v-if="
-                                    drawerRequiresGmFinalGrading(
+                                    drawerRequiresGmFinalGradingForTab(
                                       drawerEmployee,
+                                      drawerEvalTab,
                                     )
                                   "
                                   class="text-rose-500"
@@ -2115,7 +2210,7 @@ async function confirmDone(emp: GmEvalMember) {
                                 colspan="6"
                                 class="px-4 py-12 text-center text-sm font-medium text-slate-500"
                               >
-                                Không có KPI trong tab này.
+                                No KPIs in this tab.
                               </td>
                             </tr>
                           </tbody>
@@ -2296,7 +2391,7 @@ async function confirmDone(emp: GmEvalMember) {
                                           />
                                           <span>{{
                                             item.evidence.attachmentLabel ??
-                                            "Xem bằng chứng đính kèm"
+                                            "View attached evidence"
                                           }}</span>
                                         </a>
                                       </p>
@@ -2394,7 +2489,7 @@ async function confirmDone(emp: GmEvalMember) {
                                         v-else
                                         class="rounded-lg border border-dashed border-slate-200 bg-slate-50/80 px-3 py-2 text-xs italic text-slate-500"
                                       >
-                                        Chưa có dữ liệu minh chứng.
+                                        No evidence data yet.
                                       </p>
                                       <div
                                         v-if="hubRowGmCommentEnabled(item)"
@@ -2403,14 +2498,14 @@ async function confirmDone(emp: GmEvalMember) {
                                         <label
                                           class="mb-2 block text-[11px] font-bold uppercase tracking-wider text-indigo-700"
                                         >
-                                          GM Comment (Theo từng KPI)
+                                          GM comment (per KPI)
                                         </label>
                                         <textarea
                                           v-model="gmKpiComments[drawerEmployee.id][item.id]"
                                           class="w-full resize-y rounded-lg border border-indigo-200 bg-white p-2.5 text-sm text-slate-800 shadow-sm outline-none focus:ring-2 focus:ring-indigo-100 disabled:bg-slate-50 disabled:text-slate-500"
                                           rows="3"
                                           :disabled="isReadonly || confirmBusy"
-                                          placeholder="Nhập nhận xét của GM cho KPI này..."
+                                          placeholder="Enter GM feedback for this KPI..."
                                         />
                                       </div>
                                     </div>
@@ -2427,7 +2522,7 @@ async function confirmDone(emp: GmEvalMember) {
                                 colspan="2"
                                 class="px-4 py-2.5 text-right text-[10px] uppercase tracking-wide text-slate-500 sm:text-[11px]"
                               >
-                                Tổng trọng số (Total Weight):
+                                Total weight:
                               </td>
                               <td
                                 class="px-4 py-2.5 text-center text-slate-800"
@@ -2445,7 +2540,7 @@ async function confirmDone(emp: GmEvalMember) {
                                 colspan="4"
                                 class="px-4 py-2.5 text-right text-[10px] font-bold uppercase leading-snug tracking-wide text-slate-600 sm:text-[11px]"
                               >
-                                Điểm TB tự chấm (Self-Avg)
+                                Self-score average
                               </td>
                               <td
                                 class="border-x border-slate-200 px-4 py-2.5 text-center"
@@ -2469,7 +2564,7 @@ async function confirmDone(emp: GmEvalMember) {
                                 colspan="5"
                                 class="px-4 py-2.5 text-right text-[10px] font-bold uppercase leading-snug tracking-wide text-indigo-900 sm:text-[11px]"
                               >
-                                Điểm trung bình ({{ gmScoreDetailLabel }})
+                                Average ({{ gmScoreDetailLabel }})
                               </td>
                               <td
                                 class="bg-indigo-100/90 px-4 py-2.5 text-center shadow-inner"
@@ -2490,12 +2585,15 @@ async function confirmDone(emp: GmEvalMember) {
                       </div>
                     </div>
 
-                    <div class="border-t border-slate-200 bg-white p-6">
+                    <div
+                      v-if="drawerEvalTab === 'cascade'"
+                      class="border-t border-slate-200 bg-white p-6"
+                    >
                       <h4
                         class="mb-4 flex items-center gap-2 text-sm font-bold text-slate-800"
                       >
                         <i class="fas fa-comment-dots text-indigo-600" />
-                        Tổng kết đánh giá &amp; xác nhận (Final Review)
+                        Evaluation summary &amp; confirmation — BSC (Individual / Cascading)
                       </h4>
                       <div
                         class="grid grid-cols-1 gap-6 md:grid-cols-2 lg:gap-8"
@@ -2509,61 +2607,265 @@ async function confirmDone(emp: GmEvalMember) {
                           <div
                             class="h-24 overflow-y-auto whitespace-pre-wrap break-words rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600"
                           >
-                            {{ drawerEmployee.employeeComment ?? "—" }}
+                            {{
+                              drawerEmployee.employeeCommentPortfolio ??
+                              drawerEmployee.employeeComment ??
+                              "—"
+                            }}
                           </div>
                         </div>
                         <div class="space-y-2">
                           <label
                             class="block text-[11px] font-bold uppercase tracking-wider text-indigo-600"
                           >
-                            {{
-                              drawerRequiresGmFinalGrading(drawerEmployee)
-                                ? "Supervisor Comment (Required)"
-                                : "Supervisor Comment (Giữa năm — không bắt buộc)"
-                            }}
+                            Supervisor Comment (portfolio)
+                            <span
+                              v-if="
+                                drawerHasAssignmentsInStatusForTab(
+                                  drawerEmployee,
+                                  602,
+                                  'cascade',
+                                )
+                              "
+                              class="text-rose-500"
+                              >*</span
+                            >
                           </label>
                           <textarea
-                            v-model="supervisorComments[drawerEmployee.id]"
-                            class="h-24 w-full resize-none rounded-lg border-2 border-indigo-200 bg-white p-3 text-sm text-slate-800 shadow-sm outline-none focus:ring-2 focus:ring-indigo-100 disabled:bg-slate-50 disabled:text-slate-500"
+                            v-model="supervisorPortfolioComments[drawerEmployee.id]"
+                            class="h-24 w-full resize-none rounded-lg border-2 bg-white p-3 text-sm text-slate-800 shadow-sm outline-none focus:ring-2 focus:ring-indigo-100 disabled:bg-slate-50 disabled:text-slate-500"
+                            :class="
+                              supervisorCommentInvalid(drawerEmployee, 'cascade')
+                                ? 'border-rose-400 focus:ring-rose-100'
+                                : 'border-indigo-200'
+                            "
                             :disabled="
                               isReadonly ||
-                              !drawerRequiresGmFinalGrading(drawerEmployee)
+                              !drawerHasAssignmentsInStatusForTab(
+                                drawerEmployee,
+                                602,
+                                'cascade',
+                              )
                             "
                             :placeholder="
-                              drawerRequiresGmFinalGrading(drawerEmployee)
-                                ? 'Nhập ý kiến nhận xét tổng thể để giải thích cho mức điểm bạn vừa chấm...'
-                                : 'Giữa năm: không cần nhận xét tại bước này.'
+                              drawerHasAssignmentsInStatusForTab(
+                                drawerEmployee,
+                                602,
+                                'cascade',
+                              )
+                                ? 'Enter an overall supervisor comment explaining the scores you assigned...'
+                                : 'Required only when there are year-end KPIs (602) awaiting GM scores on this tab.'
                             "
                           />
+                          <p
+                            v-if="supervisorCommentInvalid(drawerEmployee, 'cascade')"
+                            class="text-[11px] font-semibold text-rose-600"
+                          >
+                            Please enter a Supervisor Comment before confirming year-end evaluation.
+                          </p>
                         </div>
                       </div>
                       <div
-                        class="mt-5 flex justify-end gap-2 border-t border-slate-100 pt-3 sm:mt-6 sm:gap-2.5 sm:pt-4"
+                        class="mt-5 border-t border-slate-100 pt-3 sm:mt-6 sm:pt-4"
                       >
-                        <button
-                          type="button"
-                          class="rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-xs font-semibold text-slate-600 shadow-sm transition-colors hover:bg-slate-50 sm:px-4 sm:text-sm disabled:cursor-not-allowed disabled:opacity-50"
-                          :disabled="isReadonly || confirmBusy"
-                          @click="saveDraft(drawerEmployee)"
+                        <div
+                          class="flex flex-wrap justify-end gap-2 sm:gap-2.5"
                         >
-                          Lưu nháp
-                        </button>
-                        <button
-                          type="button"
-                          class="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3.5 py-2 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-indigo-700 sm:gap-2 sm:px-4 sm:text-sm disabled:cursor-not-allowed disabled:opacity-50"
-                          :disabled="isReadonly || confirmBusy"
-                          @click="confirmDone(drawerEmployee)"
-                        >
-                          <i
-                            class="fas fa-check-circle text-[11px] sm:text-xs"
-                            aria-hidden="true"
+                          <button
+                            v-if="
+                              drawerHasAssignmentsInStatusForTab(
+                                drawerEmployee,
+                                602,
+                                'cascade',
+                              )
+                            "
+                            type="button"
+                            class="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3.5 py-2 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-indigo-700 sm:gap-2 sm:px-4 sm:text-sm disabled:cursor-not-allowed disabled:opacity-50"
+                            :disabled="
+                              isReadonly ||
+                              confirmBusy ||
+                              !drawerHasAssignmentsInStatusForTab(
+                                drawerEmployee,
+                                602,
+                                'cascade',
+                              )
+                            "
+                            @click="confirmDone(drawerEmployee, 602, 'cascade')"
+                          >
+                            <i
+                              class="fas fa-check-circle text-[11px] sm:text-xs"
+                              aria-hidden="true"
+                            />
+                            Confirm year-end evaluation
+                          </button>
+                          <button
+                            v-else-if="
+                              drawerHasAssignmentsInStatusForTab(
+                                drawerEmployee,
+                                502,
+                                'cascade',
+                              )
+                            "
+                            type="button"
+                            class="flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3.5 py-2 text-xs font-semibold text-indigo-800 shadow-sm transition-colors hover:bg-indigo-100 sm:gap-2 sm:px-4 sm:text-sm disabled:cursor-not-allowed disabled:opacity-50"
+                            :disabled="
+                              isReadonly ||
+                              confirmBusy ||
+                              !drawerHasAssignmentsInStatusForTab(
+                                drawerEmployee,
+                                502,
+                                'cascade',
+                              )
+                            "
+                            @click="confirmDone(drawerEmployee, 502, 'cascade')"
+                          >
+                            <i
+                              class="fas fa-flag-checkered text-[11px] sm:text-xs"
+                              aria-hidden="true"
+                            />
+                            Complete review
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div
+                      v-else
+                      class="border-t border-slate-200 bg-white p-6"
+                    >
+                      <h4
+                        class="mb-4 flex items-center gap-2 text-sm font-bold text-slate-800"
+                      >
+                        <i class="fas fa-comment-dots text-indigo-600" />
+                        Evaluation summary &amp; confirmation — Promotion
+                      </h4>
+                      <div
+                        class="grid grid-cols-1 gap-6 md:grid-cols-2 lg:gap-8"
+                      >
+                        <div class="pointer-events-none space-y-2 opacity-80">
+                          <label
+                            class="block text-[11px] font-bold uppercase tracking-wider text-slate-500"
+                          >
+                            Employee's Comment — Promotion (Read-only)
+                          </label>
+                          <div
+                            class="h-24 overflow-y-auto whitespace-pre-wrap break-words rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600"
+                          >
+                            {{ drawerEmployee.employeeCommentPromotion ?? "—" }}
+                          </div>
+                        </div>
+                        <div class="space-y-2">
+                          <label
+                            class="block text-[11px] font-bold uppercase tracking-wider text-indigo-600"
+                          >
+                            Supervisor Comment (promotion)
+                            <span
+                              v-if="
+                                drawerHasAssignmentsInStatusForTab(
+                                  drawerEmployee,
+                                  602,
+                                  'promotion',
+                                )
+                              "
+                              class="text-rose-500"
+                              >*</span
+                            >
+                          </label>
+                          <textarea
+                            v-model="supervisorPromotionComments[drawerEmployee.id]"
+                            class="h-24 w-full resize-none rounded-lg border-2 bg-white p-3 text-sm text-slate-800 shadow-sm outline-none focus:ring-2 focus:ring-indigo-100 disabled:bg-slate-50 disabled:text-slate-500"
+                            :class="
+                              supervisorCommentInvalid(drawerEmployee, 'promotion')
+                                ? 'border-rose-400 focus:ring-rose-100'
+                                : 'border-indigo-200'
+                            "
+                            :disabled="
+                              isReadonly ||
+                              !drawerHasAssignmentsInStatusForTab(
+                                drawerEmployee,
+                                602,
+                                'promotion',
+                              )
+                            "
+                            :placeholder="
+                              drawerHasAssignmentsInStatusForTab(
+                                drawerEmployee,
+                                602,
+                                'promotion',
+                              )
+                                ? 'Enter an overall supervisor comment explaining the scores you assigned...'
+                                : 'Required only when there are year-end Promotion KPIs (602) awaiting GM scores.'
+                            "
                           />
-                          {{
-                            drawerRequiresGmFinalGrading(drawerEmployee)
-                              ? "Xác nhận đánh giá"
-                              : "Hoàn thành Review"
-                          }}
-                        </button>
+                          <p
+                            v-if="supervisorCommentInvalid(drawerEmployee, 'promotion')"
+                            class="text-[11px] font-semibold text-rose-600"
+                          >
+                            Please enter a Supervisor Comment before confirming year-end evaluation.
+                          </p>
+                        </div>
+                      </div>
+                      <div
+                        class="mt-5 border-t border-slate-100 pt-3 sm:mt-6 sm:pt-4"
+                      >
+                        <div
+                          class="flex flex-wrap justify-end gap-2 sm:gap-2.5"
+                        >
+                          <button
+                            v-if="
+                              drawerHasAssignmentsInStatusForTab(
+                                drawerEmployee,
+                                602,
+                                'promotion',
+                              )
+                            "
+                            type="button"
+                            class="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3.5 py-2 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-indigo-700 sm:gap-2 sm:px-4 sm:text-sm disabled:cursor-not-allowed disabled:opacity-50"
+                            :disabled="
+                              isReadonly ||
+                              confirmBusy ||
+                              !drawerHasAssignmentsInStatusForTab(
+                                drawerEmployee,
+                                602,
+                                'promotion',
+                              )
+                            "
+                            @click="confirmDone(drawerEmployee, 602, 'promotion')"
+                          >
+                            <i
+                              class="fas fa-check-circle text-[11px] sm:text-xs"
+                              aria-hidden="true"
+                            />
+                            Confirm year-end evaluation
+                          </button>
+                          <button
+                            v-else-if="
+                              drawerHasAssignmentsInStatusForTab(
+                                drawerEmployee,
+                                502,
+                                'promotion',
+                              )
+                            "
+                            type="button"
+                            class="flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3.5 py-2 text-xs font-semibold text-indigo-800 shadow-sm transition-colors hover:bg-indigo-100 sm:gap-2 sm:px-4 sm:text-sm disabled:cursor-not-allowed disabled:opacity-50"
+                            :disabled="
+                              isReadonly ||
+                              confirmBusy ||
+                              !drawerHasAssignmentsInStatusForTab(
+                                drawerEmployee,
+                                502,
+                                'promotion',
+                              )
+                            "
+                            @click="confirmDone(drawerEmployee, 502, 'promotion')"
+                          >
+                            <i
+                              class="fas fa-flag-checkered text-[11px] sm:text-xs"
+                              aria-hidden="true"
+                            />
+                            Complete review
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>

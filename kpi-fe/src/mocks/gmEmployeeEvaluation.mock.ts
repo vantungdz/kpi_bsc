@@ -5,6 +5,15 @@
  */
 
 import type { GmDepartmentMock } from '@/types/gm-workspace'
+import type {
+  GmEmployeeSheetStatus,
+  GmEvalLeaderBranch,
+  GmEvalMember,
+  GmEvalPmBranch,
+  GmEvalPmBroker,
+  GmKpiGroup,
+} from '@/types/gm-employee-evaluation'
+import { flattenGmEvalPmHubTreeForScores, gmEmployeeSheetStatusDescription } from '@/utils/gmEmployeeEvaluation'
 
 /** Section tối thiểu cho mock hub `/gm/employee-evaluation` (không phụ thuộc DB giả). */
 const GM_EVAL_SECTION_DEPARTMENTS: GmDepartmentMock[] = Array.from({ length: 10 }, (_, i) => {
@@ -35,107 +44,11 @@ const GM_EVAL_SECTION_DEPARTMENTS: GmDepartmentMock[] = Array.from({ length: 10 
   }
 })
 
-export type GmEmployeeSheetStatus = 'pending_pm' | 'self_scoring' | 'approved'
-
-/** Mô tả mock đồng bộ `sys_status_codes` (ASM) trong `init-db.sql` — dùng cho cột tiến độ khi không có API. */
-export function gmMockAsmStatusDescription(status: GmEmployeeSheetStatus): string {
-  if (status === 'pending_pm') return 'Chờ PM chấm điểm Final'
-  if (status === 'self_scoring') return 'Member đã nộp bằng chứng 1st Half, chờ PM duyệt'
-  return 'Đã chốt sổ hoàn toàn (Kết thúc vòng đời)'
-}
-
-export interface GmEvidenceTable {
-  title: string
-  icon: string
-  accent: 'indigo' | 'emerald'
-  headers: string[]
-  rows: string[][]
-  footer?: string[]
-  /** Đường dẫn tài liệu đính kèm — GM mở trong tab mới. */
-  attachmentUrl?: string
-  /** Nhãn cho `attachmentUrl` (mặc định UI: «Xem bằng chứng đính kèm»). */
-  attachmentLabel?: string
-}
-
-export interface GmKpiItem {
-  id: string
-  index: number
-  title: string
-  target: string
-  weight: number
-  evidenceButtonLabel: string
-  evidenceButtonIcon: string
-  evidenceTone: 'blue' | 'emerald'
-  selfScore: number
-  /** Điểm GM đã lưu (end_gm_score) — chỉ dùng để hiển thị cột GM trước khi chỉnh. */
-  pmScore?: number | null
-  /** Điểm PM (hoặc GM đã có) để prefill dropdown chấm điểm của GM. */
-  pmSeedScore?: number | null
-  evidence: GmEvidenceTable
-  /** Ghi chú theo từng KPI từ `kpi_assignments.evidences.gmComment` (GM có thể chỉnh sửa/ghi đè). */
-  gmComment?: string
-  /** ASM assignment từ hub API: 502 = review GM (không chấm), 602 = chấm điểm GM + comment. */
-  hubAssignmentStatusCode?: number | null
-}
-
-export interface GmKpiGroup {
-  groupTitle: string
-  items: GmKpiItem[]
-}
-
-export interface GmEvalMember {
-  id: string
-  code: string
-  name: string
-  role: string
-  initials: string
-  initialsClass: string
-  rank: string
-  status: GmEmployeeSheetStatus
-  /** `sys_status_codes.name` (ASM) — cột Tiến độ; mock dùng {@link gmMockAsmStatusDescription}. */
-  assignmentStatusDisplay?: string | null
-  /** Cột Thao tác (chấm/duyệt GM): bật khi có assignment ASM 502 hoặc 602. */
-  gmApprovalActionEnabled?: boolean
-  /** `users.id` (assignee) — API hub; mock: `GM_MOCK_HUB_EVAL_USER_UUID`. */
-  evaluationUserId?: string
-  selfScoreDisplay: string | null
-  canScore: boolean
-  projectIds: string[]
-  employeeComment?: string
-  /** Seed Supervisor Comment (lấy từ nhận xét tổng PM) để GM có thể chỉnh sửa tiếp. */
-  supervisorComment?: string
-  groups: GmKpiGroup[]
-}
-
-export interface GmEvalPmBroker {
-  id: string
-  name: string
-  unit: string
-}
-
-/** Nhánh Leader → các member (mock hub đánh giá GM). */
-export interface GmEvalLeaderBranch {
-  leaderKey: string
-  /** Bảng KPI của leader — GM mở drawer chấm giống PM/member. */
-  sheet: GmEvalMember
-  members: GmEvalMember[]
-}
-
-/** Một PM + cấu trúc PM → Leader → Member. */
-export interface GmEvalPmBranch {
-  pm: GmEvalMember
-  leaders: GmEvalLeaderBranch[]
-  directMembers: GmEvalMember[]
-  /** Id section — khớp {@link GM_EVAL_SECTION_DEPARTMENTS}. */
-  sectionId?: string
-  sectionName?: string
-}
-
 export const GM_EVAL_PM_BROKERS: GmEvalPmBroker[] = [
-  { id: 'pm-liem', name: 'Thái Văn Liêm', unit: 'Software Dev 1' },
-  { id: 'pm-nguyen-a', name: 'Nguyễn Văn A', unit: 'Software Dev 2' },
-  { id: 'pm-tran-b', name: 'Trần Thị B', unit: 'Quality Assurance' },
-  { id: 'pm-le-c', name: 'Lê Văn C', unit: 'PMO' },
+  { id: 'pm-liem', name: 'Thai Van Liem', unit: 'Software Dev 1' },
+  { id: 'pm-nguyen-a', name: 'Nguyen Van A', unit: 'Software Dev 2' },
+  { id: 'pm-tran-b', name: 'Tran Thi B', unit: 'Quality Assurance' },
+  { id: 'pm-le-c', name: 'Le Van C', unit: 'PMO' },
 ]
 
 /** UUID cố định (mock) — gửi kèm POST evaluation-hub/confirm (`evaluationUserId`). */
@@ -156,7 +69,7 @@ const GM_MOCK_HUB_EVAL_USER_UUID: Record<string, string> = {
 
 /** BSC — Financial (GM mock). */
 const gmBscFinancial: GmKpiGroup = {
-  groupTitle: '(Financial) Khía cạnh Tài chính (GM mock)',
+  groupTitle: '(Financial) Financial perspective (GM mock)',
   items: [
     {
       id: 'g-f1',
@@ -178,7 +91,7 @@ const gmBscFinancial: GmKpiGroup = {
           ['Throughput', '+8% YoY'],
         ],
         attachmentUrl: 'https://docs.google.com/spreadsheets/d/mock-financial-kpi',
-        attachmentLabel: 'Bảng theo dõi hiệu quả (mock)',
+        attachmentLabel: 'Performance tracking sheet (mock)',
       },
     },
   ],
@@ -186,7 +99,7 @@ const gmBscFinancial: GmKpiGroup = {
 
 /** BSC — Customer (GM mock). */
 const gmBscCustomer: GmKpiGroup = {
-  groupTitle: '(Customer) Khía cạnh Khách hàng (GM mock)',
+  groupTitle: '(Customer) Customer perspective (GM mock)',
   items: [
     {
       id: 'g-cu1',
@@ -205,7 +118,7 @@ const gmBscCustomer: GmKpiGroup = {
         headers: ['Source', 'Score'],
         rows: [['PM', '5']],
         attachmentUrl: 'https://forms.example/360-feedback/mock-member',
-        attachmentLabel: 'Phiếu phản hồi 360°',
+        attachmentLabel: '360° feedback form',
       },
     },
   ],
@@ -213,7 +126,7 @@ const gmBscCustomer: GmKpiGroup = {
 
 /** BSC — Internal process (GM mock). */
 const gmBscInternalProcess: GmKpiGroup = {
-  groupTitle: '(Internal process) Quy trình nội bộ (GM mock)',
+  groupTitle: '(Internal process) Internal processes (GM mock)',
   items: [
     {
       id: 'g-ip1',
@@ -235,7 +148,7 @@ const gmBscInternalProcess: GmKpiGroup = {
           ['S2', '95%', 'Minor slip'],
         ],
         attachmentUrl: 'https://drive.google.com/file/d/mock-gm-delivery-summary/view',
-        attachmentLabel: 'Báo cáo sprint (Drive)',
+        attachmentLabel: 'Sprint report (Drive)',
       },
     },
     {
@@ -255,7 +168,7 @@ const gmBscInternalProcess: GmKpiGroup = {
         headers: ['Metric', 'Value'],
         rows: [['Rework', '3%']],
         attachmentUrl: 'https://docs.google.com/spreadsheets/d/mock-quality-metrics',
-        attachmentLabel: 'Bảng metric chất lượng',
+        attachmentLabel: 'Quality metrics sheet',
       },
     },
   ],
@@ -263,7 +176,7 @@ const gmBscInternalProcess: GmKpiGroup = {
 
 /** BSC — Learning & growth (GM mock). */
 const gmBscLearningGrowth: GmKpiGroup = {
-  groupTitle: '(Learning & growth) Học hỏi & phát triển (GM mock)',
+  groupTitle: '(Learning & growth) Learning & growth (GM mock)',
   items: [
     {
       id: 'g-lg1',
@@ -282,7 +195,7 @@ const gmBscLearningGrowth: GmKpiGroup = {
         headers: ['Course', 'Status'],
         rows: [['AWS basics', 'In progress']],
         attachmentUrl: 'https://learn.example/courses/aws-basics/certificate',
-        attachmentLabel: 'Tiến độ khóa học',
+        attachmentLabel: 'Course progress',
       },
     },
     {
@@ -302,15 +215,15 @@ const gmBscLearningGrowth: GmKpiGroup = {
         headers: ['Topic', 'Link'],
         rows: [['Vue perf', 'https://wiki.example/vue']],
         attachmentUrl: 'https://wiki.example/vue',
-        attachmentLabel: 'Ghi chú & slide tech talk',
+        attachmentLabel: 'Notes & tech talk slides',
       },
     },
   ],
 }
 
-/** Tab Promotion — giữ từ khóa «Promotion» trong tiêu đề để `isGmEvalPromotionKpiGroup`. */
+/** Tab Promotion — giữ từ khóa «Promotion» trong tiêu đề (nhận diện bởi `isGmEvalPromotionKpiGroup` trong `@/utils/gmEmployeeEvaluation`). */
 const gmGroupPromotion: GmKpiGroup = {
-  groupTitle: '(Promotion) Thăng tiến & năng lực (GM mock)',
+  groupTitle: '(Promotion) Promotion & capability (GM mock)',
   items: [
     {
       id: 'g-p1',
@@ -332,7 +245,7 @@ const gmGroupPromotion: GmKpiGroup = {
           ['Impact', 'Measurable cost reduction'],
         ],
         attachmentUrl: 'https://wiki.example/promotion-readiness-mock',
-        attachmentLabel: 'Tóm tắt readiness (wiki)',
+        attachmentLabel: 'Readiness summary (wiki)',
       },
     },
     {
@@ -352,7 +265,7 @@ const gmGroupPromotion: GmKpiGroup = {
         headers: ['Area', 'Score'],
         rows: [['Values', '4.5'], ['Leadership', '4']],
         attachmentUrl: 'https://forms.example/promotion-360-mock',
-        attachmentLabel: 'Phiếu 360 Promotion',
+        attachmentLabel: 'Promotion 360 form',
       },
     },
   ],
@@ -368,11 +281,6 @@ const GM_EVAL_BSC_CASCADE_GROUPS: GmKpiGroup[] = [
 
 /** Đủ BSC + Promotion — PM hub / leader sheet / member đầy đủ. */
 const GM_EVAL_FULL_MEMBER_GROUPS: GmKpiGroup[] = [...GM_EVAL_BSC_CASCADE_GROUPS, gmGroupPromotion]
-
-/** Drawer: tab Promotion — nhận diện theo tiêu đề nhóm. */
-export function isGmEvalPromotionKpiGroup(group: GmKpiGroup): boolean {
-  return /\bpromotion\b/i.test(group.groupTitle)
-}
 
 function emptyGmGroups(): GmKpiGroup[] {
   return []
@@ -399,25 +307,25 @@ const teamLiem: GmEvalMember[] = [
     initialsClass: 'bg-indigo-100 text-indigo-700',
     rank: 'R1',
     status: 'pending_pm',
-    assignmentStatusDisplay: gmMockAsmStatusDescription('pending_pm'),
+    assignmentStatusDisplay: gmEmployeeSheetStatusDescription('pending_pm'),
     gmApprovalActionEnabled: true,
     evaluationUserId: GM_MOCK_HUB_EVAL_USER_UUID['gm-834'],
     selfScoreDisplay: '4.00',
     canScore: true,
     projectIds: ['alpha'],
-    employeeComment: 'Direct PM line (GM mock).',
+    employeeCommentPortfolio: 'Direct PM line (GM mock).',
     groups: withHubAsmDefaultOnItems(structuredClone(GM_EVAL_FULL_MEMBER_GROUPS)),
   },
   {
     id: 'gm-801',
     code: '801',
-    name: 'Lê Thị Mai',
+    name: 'Le Thi Mai',
     role: 'BA - Production',
     initials: 'LM',
     initialsClass: 'bg-rose-100 text-rose-700',
     rank: 'R2',
     status: 'pending_pm',
-    assignmentStatusDisplay: gmMockAsmStatusDescription('pending_pm'),
+    assignmentStatusDisplay: gmEmployeeSheetStatusDescription('pending_pm'),
     gmApprovalActionEnabled: true,
     selfScoreDisplay: '4.00',
     canScore: true,
@@ -427,13 +335,13 @@ const teamLiem: GmEvalMember[] = [
   {
     id: 'gm-805',
     code: '805',
-    name: 'Phạm Đức Anh',
+    name: 'Pham Duc Anh',
     role: 'Dev - Maintenance',
     initials: 'PA',
     initialsClass: 'bg-sky-100 text-sky-700',
     rank: 'R2',
     status: 'approved',
-    assignmentStatusDisplay: gmMockAsmStatusDescription('approved'),
+    assignmentStatusDisplay: gmEmployeeSheetStatusDescription('approved'),
     gmApprovalActionEnabled: false,
     evaluationUserId: GM_MOCK_HUB_EVAL_USER_UUID['gm-805'],
     selfScoreDisplay: '4.00',
@@ -444,13 +352,13 @@ const teamLiem: GmEvalMember[] = [
   {
     id: 'gm-820',
     code: '820',
-    name: 'Hoàng Minh Tuấn',
+    name: 'Hoang Minh Tuan',
     role: 'Dev - Production',
     initials: 'HT',
     initialsClass: 'bg-violet-100 text-violet-700',
     rank: 'R1',
     status: 'self_scoring',
-    assignmentStatusDisplay: gmMockAsmStatusDescription('self_scoring'),
+    assignmentStatusDisplay: gmEmployeeSheetStatusDescription('self_scoring'),
     gmApprovalActionEnabled: false,
     evaluationUserId: GM_MOCK_HUB_EVAL_USER_UUID['gm-820'],
     selfScoreDisplay: null,
@@ -481,10 +389,6 @@ const GM_EVAL_TEAM_BY_PM: Record<string, GmEvalMember[]> = {
     id: `${e.id}-lc-${i}`,
     code: `${e.code}-LC`,
   })),
-}
-
-export function flattenGmKpiItems(emp: GmEvalMember): GmKpiItem[] {
-  return emp.groups.flatMap((g) => g.items)
 }
 
 export function getGmEvalBroker(id: string): GmEvalPmBroker | undefined {
@@ -568,13 +472,13 @@ function buildGmEvalPmHubMemberForBrokerScoped(b: GmEvalPmBroker, dept: GmDepart
     initialsClass: meta.initialsClass,
     rank: meta.rank,
     status: meta.status,
-    assignmentStatusDisplay: gmMockAsmStatusDescription(meta.status),
+    assignmentStatusDisplay: gmEmployeeSheetStatusDescription(meta.status),
     gmApprovalActionEnabled: meta.gmApprovalActionEnabled,
     evaluationUserId: GM_MOCK_HUB_EVAL_USER_UUID[b.id],
     selfScoreDisplay: avgSelfScoreFromGroups(groups),
     canScore: meta.canScore,
     projectIds: [b.id],
-    employeeComment: undefined,
+    employeeCommentPortfolio: undefined,
     groups,
   }
 }
@@ -616,7 +520,7 @@ const GM_EVAL_PM_TREE_LAYOUT: Record<string, GmEvalPmTreeLayout> = {
     leaderDefs: [
       {
         key: 'pm-liem-ld1',
-        name: 'Đỗ Văn Hùng',
+        name: 'Do Van Hung',
         code: 'LD-HUONG',
         role: 'Tech Lead · Software Dev 1',
         initialsClass: 'bg-amber-100 text-amber-800',
@@ -624,7 +528,7 @@ const GM_EVAL_PM_TREE_LAYOUT: Record<string, GmEvalPmTreeLayout> = {
       },
       {
         key: 'pm-liem-ld2',
-        name: 'Trần Thị Lan',
+        name: 'Tran Thi Lan',
         code: 'LD-LAN',
         role: 'Team Lead · Software Dev 1',
         initialsClass: 'bg-amber-100 text-amber-700',
@@ -637,7 +541,7 @@ const GM_EVAL_PM_TREE_LAYOUT: Record<string, GmEvalPmTreeLayout> = {
     leaderDefs: [
       {
         key: 'pm-na-ld1',
-        name: 'Phạm Minh Tuấn',
+        name: 'Pham Minh Tuan',
         code: 'LD-TUAN',
         role: 'Engineering Lead · Software Dev 2',
         initialsClass: 'bg-amber-100 text-amber-800',
@@ -654,7 +558,7 @@ const GM_EVAL_PM_TREE_LAYOUT: Record<string, GmEvalPmTreeLayout> = {
     leaderDefs: [
       {
         key: 'pm-lc-ld1',
-        name: 'Võ Thị Hạnh',
+        name: 'Vo Thi Hanh',
         code: 'LD-HANH',
         role: 'Delivery Lead · PMO',
         initialsClass: 'bg-amber-100 text-amber-800',
@@ -790,13 +694,13 @@ function buildLeaderBranchFromDef(
     initialsClass: def.initialsClass,
     rank: meta.rank,
     status: meta.status,
-    assignmentStatusDisplay: gmMockAsmStatusDescription(meta.status),
+    assignmentStatusDisplay: gmEmployeeSheetStatusDescription(meta.status),
     gmApprovalActionEnabled: meta.gmApprovalActionEnabled,
     evaluationUserId: GM_MOCK_HUB_EVAL_USER_UUID[def.key],
     selfScoreDisplay: avgSelfScoreFromGroups(groups),
     canScore: meta.canScore,
     projectIds: [pmBrokerId],
-    employeeComment: undefined,
+    employeeCommentPortfolio: undefined,
     groups,
   }
   return {
@@ -841,20 +745,6 @@ export function getGmEvalPmHubTree(): GmEvalPmBranch[] {
       sectionName: dept.name,
     }
   })
-}
-
-/** PM + mọi member có sheet (flatten) — khởi tạo điểm GM / lọc `?pm=`. */
-export function flattenGmEvalPmHubTreeForScores(tree: GmEvalPmBranch[]): GmEvalMember[] {
-  const out: GmEvalMember[] = []
-  for (const br of tree) {
-    out.push(br.pm)
-    for (const ld of br.leaders) {
-      out.push(ld.sheet)
-      out.push(...ld.members)
-    }
-    out.push(...br.directMembers)
-  }
-  return out
 }
 
 /**

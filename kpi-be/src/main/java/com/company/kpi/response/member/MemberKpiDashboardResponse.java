@@ -19,6 +19,8 @@ import java.util.List;
 public class MemberKpiDashboardResponse {
 
     private Integer year;
+    /** ISO-8601 — {@code users.created_at}; onboard sau {@code mid_year_end} → FE thu timeline Year-End only. */
+    private String accountCreatedAt;
     /** target_setup | mid_year | year_end */
     private String phase;
     private String phaseLabel;
@@ -27,6 +29,8 @@ public class MemberKpiDashboardResponse {
     private List<String> pendingItems;
     private boolean canSubmit;
     private String evaluationComments;
+    /** Tự đánh giá member khi nộp Promotion (scope riêng). */
+    private String evaluationCommentsPromotion;
     private String evaluationSupervisorComments;
 
     @Data
@@ -101,6 +105,7 @@ public class MemberKpiDashboardResponse {
         /** Lý do cập nhật / từ chối từ luồng PM/GM (kpi_assignments.update_reason). */
         private String updateReason;
         private Boolean createdByCurrentUser;
+        private String createdByRoleCode;
         private String gmComment;
         private String certificateOutcomeNote;
         private Double selfScore;
@@ -119,6 +124,8 @@ public class MemberKpiDashboardResponse {
         private String evaluationState;
         /** Khi 407: role cần xử lý feedback — PM hoặc GM. */
         private String feedbackTargetRoleCode;
+        /** ISO-8601 — {@code kpi_assignments.created_at} (audit / hiển thị; logic skip giữa kỳ dùng {@code MemberKpiDashboardResponse#accountCreatedAt}). */
+        private String assignmentCreatedAt;
     }
 
     @Data

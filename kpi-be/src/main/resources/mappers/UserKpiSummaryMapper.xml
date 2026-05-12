@@ -11,7 +11,9 @@
             FINAL_RATING,
             CALCULATION_SNAPSHOT,
             EVALUATION_COMMENTS,
+            EVALUATION_COMMENTS_PROMOTION,
             EVALUATION_SUPERVISOR_COMMENTS,
+            EVALUATION_SUPERVISOR_COMMENTS_PROMOTION,
             EVALUATOR_ID,
             CREATED_AT,
             UPDATED_AT,
@@ -38,12 +40,25 @@
           AND DELETED_AT IS NULL
     </update>
 
+    <update id="updateEvaluationSupervisorCommentsPromotion">
+        UPDATE USER_KPI_SUMMARIES
+        SET
+            EVALUATION_SUPERVISOR_COMMENTS_PROMOTION = #{supervisorCommentValue},
+            EVALUATOR_ID = #{evaluatorId, jdbcType=OTHER},
+            UPDATED_AT = CURRENT_TIMESTAMP,
+            UPDATED_BY = #{updatedBy, jdbcType=OTHER}
+        WHERE USER_ID = #{userId, jdbcType=OTHER}
+          AND CYCLE_ID = #{cycleId, jdbcType=OTHER}
+          AND DELETED_AT IS NULL
+    </update>
+
     <insert id="insertEvaluationSupervisorComments">
         INSERT INTO USER_KPI_SUMMARIES (
             ID,
             USER_ID,
             CYCLE_ID,
             EVALUATION_SUPERVISOR_COMMENTS,
+            EVALUATION_SUPERVISOR_COMMENTS_PROMOTION,
             EVALUATOR_ID,
             CREATED_AT,
             UPDATED_AT,
@@ -53,7 +68,8 @@
             #{id, jdbcType=OTHER},
             #{userId, jdbcType=OTHER},
             #{cycleId, jdbcType=OTHER},
-            #{supervisorCommentValue},
+            #{portfolioSupervisorComment},
+            #{promotionSupervisorComment},
             #{evaluatorId, jdbcType=OTHER},
             CURRENT_TIMESTAMP,
             CURRENT_TIMESTAMP,
@@ -73,12 +89,24 @@
           AND DELETED_AT IS NULL
     </update>
 
+    <update id="updateEvaluationCommentsPromotion">
+        UPDATE USER_KPI_SUMMARIES
+        SET
+            EVALUATION_COMMENTS_PROMOTION = #{evaluationCommentValue},
+            UPDATED_AT = CURRENT_TIMESTAMP,
+            UPDATED_BY = #{updatedBy, jdbcType=OTHER}
+        WHERE USER_ID = #{userId, jdbcType=OTHER}
+          AND CYCLE_ID = #{cycleId, jdbcType=OTHER}
+          AND DELETED_AT IS NULL
+    </update>
+
     <insert id="insertEvaluationComments">
         INSERT INTO USER_KPI_SUMMARIES (
             ID,
             USER_ID,
             CYCLE_ID,
             EVALUATION_COMMENTS,
+            EVALUATION_COMMENTS_PROMOTION,
             CREATED_AT,
             UPDATED_AT,
             CREATED_BY,
@@ -88,6 +116,7 @@
             #{userId, jdbcType=OTHER},
             #{cycleId, jdbcType=OTHER},
             #{evaluationCommentValue},
+            #{evaluationCommentPromotionValue},
             CURRENT_TIMESTAMP,
             CURRENT_TIMESTAMP,
             #{createdBy, jdbcType=OTHER},

@@ -88,7 +88,7 @@ function getFinalStatusClass(status: string) {
     <!-- Loading state -->
     <div v-if="loading" class="flex items-center justify-center py-24">
       <i class="fas fa-spinner fa-spin text-blue-500 text-2xl mr-3" />
-      <span class="text-slate-500 font-medium">Đang tải dữ liệu KPI...</span>
+      <span class="text-slate-500 font-medium">Loading KPI data...</span>
     </div>
 
     <template v-else-if="dashboardData">
@@ -100,15 +100,15 @@ function getFinalStatusClass(status: string) {
         <div class="flex justify-between items-end mb-6">
           <div>
             <h2 class="text-2xl font-bold text-slate-800">KPI Overview</h2>
-            <p class="text-slate-500 text-sm mt-1">Theo dõi tiến độ triển khai KPI toàn bộ department.</p>
+            <p class="text-slate-500 text-sm mt-1">Track KPI rollout progress across every department.</p>
           </div>
           <select
             v-model="selectedYear"
             class="px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none focus:border-blue-500 shadow-sm cursor-pointer"
             @change="loadDashboard"
           >
-            <option :value="2024">Kỳ Đánh Giá 2024</option>
-            <option :value="2025">Kỳ Đánh Giá 2025</option>
+            <option :value="2024">Evaluation cycle 2024</option>
+            <option :value="2025">Evaluation cycle 2025</option>
           </select>
         </div>
 
@@ -162,7 +162,7 @@ function getFinalStatusClass(status: string) {
                   <template v-else-if="idx === currentPhaseIndex">
                     In Progress ({{ dashboardData.phaseProgressPct }}%)
                   </template>
-                  <template v-else>Chưa bắt đầu</template>
+                  <template v-else>Not started</template>
                 </p>
               </div>
             </div>
@@ -179,7 +179,7 @@ function getFinalStatusClass(status: string) {
                 <i class="fas fa-chart-bar text-indigo-600" />
                 GM's Core Targets Breakdown
               </h3>
-              <p class="text-xs text-slate-500 mt-1">Đóng góp chi tiết từng section vào mục tiêu C-Level.</p>
+              <p class="text-xs text-slate-500 mt-1">How each section contributes to C-level targets.</p>
             </div>
           </div>
 
@@ -515,7 +515,7 @@ function getFinalStatusClass(status: string) {
                   </td>
                 </tr>
                 <tr v-if="filteredMembers.length === 0">
-                  <td colspan="6" class="py-8 text-center text-slate-400 text-sm">Không tìm thấy thành viên phù hợp.</td>
+                  <td colspan="6" class="py-8 text-center text-slate-400 text-sm">No matching members found.</td>
                 </tr>
               </tbody>
             </table>

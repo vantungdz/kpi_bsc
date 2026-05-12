@@ -124,6 +124,8 @@ export interface GmDiagMemberApi {
   submissionActual?: number | string | null
   /** Raw evidences JSON text từ assignment (`kpi_assignments.evidences`). */
   evidences?: string | null
+  /** `user_kpi_summaries.evaluation_supervisor_comments` (theo assignee + chu kỳ). */
+  evaluationSupervisorComments?: string | null
   feedbackNote?: string | null
   /** BE GmDiagMemberNode: 407 + feedback active target GM. */
   feedbackAwaitingGm?: boolean

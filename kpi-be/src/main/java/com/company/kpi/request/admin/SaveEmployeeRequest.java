@@ -21,7 +21,16 @@ public class SaveEmployeeRequest {
     /** UUID của phòng ban (lấy từ dropdown /admin/sections) */
     private String sectionId;
 
-    /** Mã cấp bậc (R0, R1, R2… — lấy từ dropdown /admin/ranks) */
+    /**
+     * UUID job title (job_titles.id) — lấy từ dropdown /admin/job-titles.
+     * Ưu tiên dùng field này khi tạo/cập nhật nhân viên.
+     */
+    private String jobTitleId;
+
+    /**
+     * Mã cấp bậc (R0, R1, R2… — lấy từ dropdown /admin/ranks).
+     * Backward-compatible (khi UI cũ chưa chuyển qua jobTitleId).
+     */
     private String rankCode;
 
     /** Mật khẩu plain text (chỉ dùng khi tạo mới, backend sẽ BCrypt hash) */

@@ -177,7 +177,7 @@ public class AdminService {
                 ? passwordEncoder.encode(req.getPassword())
                 : passwordEncoder.encode("Abc@12345");
 
-        UUID jobTitleId = resolveJobTitleId(req.getRankCode());
+        UUID jobTitleId = resolveJobTitleId(req);
         boolean isActive = !"inactive".equalsIgnoreCase(req.getStatus());
 
         userMapper.insertEmployee(newId, req.getCode(), req.getEmail(),
@@ -185,7 +185,8 @@ public class AdminService {
 
         UUID deptId = toUuid(req.getSectionId());
         if (deptId != null) {
-            userDepartmentMapper.insertUserDepartment(newId, deptId, null);
+            UUID supervisorId = departmentMapper.getManagerIdByDepartmentId(deptId);
+            userDepartmentMapper.insertUserDepartment(newId, deptId, supervisorId);
         }
         userRoleMapper.assignMemberRole(newId);
 
@@ -193,7 +194,7 @@ public class AdminService {
     }
 
     public AdminEmployeeResponse updateEmployee(UUID id, SaveEmployeeRequest req) {
-        UUID jobTitleId = resolveJobTitleId(req.getRankCode());
+        UUID jobTitleId = resolveJobTitleId(req);
         boolean isActive = !"inactive".equalsIgnoreCase(req.getStatus());
 
         userMapper.updateEmployee(id, req.getName(), req.getEmail(), jobTitleId, isActive);
@@ -201,16 +202,20 @@ public class AdminService {
         UUID deptId = toUuid(req.getSectionId());
         if (deptId != null) {
             userDepartmentMapper.deletePrimaryDepartment(id);
-            userDepartmentMapper.insertUserDepartment(id, deptId, null);
+            UUID supervisorId = departmentMapper.getManagerIdByDepartmentId(deptId);
+            userDepartmentMapper.insertUserDepartment(id, deptId, supervisorId);
         }
 
         return userMapper.getEmployeeById(id);
     }
 
-    /** Tìm job_title_id từ rank code (R0, R1…) — trả về null nếu không tìm thấy */
-    private UUID resolveJobTitleId(String rankCode) {
-        if (rankCode == null || rankCode.isBlank()) return null;
-        String id = jobTitleMapper.findJobTitleIdByRankCode(rankCode);
+    /** Ưu tiên jobTitleId; fallback sang rankCode (tương thích UI cũ). */
+    private UUID resolveJobTitleId(SaveEmployeeRequest req) {
+        if (req == null) return null;
+        UUID jobTitleId = toUuid(req.getJobTitleId());
+        if (jobTitleId != null) return jobTitleId;
+        if (req.getRankCode() == null || req.getRankCode().isBlank()) return null;
+        String id = jobTitleMapper.findJobTitleIdByRankCode(req.getRankCode());
         return toUuid(id);
     }
 
@@ -236,13 +241,15 @@ public class AdminService {
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private String buildLabel(KpiCycle cycle) {
-        String statusNote = "201".equals(cycle.getStatus()) ? "(Đang diễn ra)" : "(Đã kết thúc)";
+        Integer sc = cycle.getStatusCode();
+        String statusNote = (sc != null && sc == 201) ? "(Đang diễn ra)" : "(Đã kết thúc)";
         return "Kỳ đánh giá " + cycle.getYear() + " " + statusNote;
     }
 
     /** Chuyển đổi cycle thành period string để frontend nhận dạng */
     private String derivePeriod(KpiCycle cycle, int currentYear) {
-        if (cycle.getYear() == currentYear && "201".equals(cycle.getStatus())) {
+        Integer sc = cycle.getStatusCode();
+        if (cycle.getYear() == currentYear && sc != null && sc == 201) {
             return "current";
         }
         if (cycle.getYear() > currentYear) {
@@ -254,7 +261,8 @@ public class AdminService {
     /** status_code 201 = OPEN → active; 202 = CLOSED → archived */
     private String deriveStatus(KpiCycle cycle, int currentYear) {
         if (cycle.getYear() > currentYear) return "upcoming";
-        if ("202".equals(cycle.getStatus())) return "archived";
+        Integer sc = cycle.getStatusCode();
+        if (sc != null && sc == 202) return "archived";
         return "active";
     }
 
@@ -266,7 +274,9 @@ public class AdminService {
 
         if ("current".equals(period)) {
             return cycles.stream()
-                    .filter(c -> c.getYear() == currentYear && "201".equals(c.getStatus()))
+                    .filter(c -> c.getYear() == currentYear
+                            && c.getStatusCode() != null
+                            && c.getStatusCode() == 201)
                     .map(KpiCycle::getId)
                     .findFirst().orElse(
                             cycles.stream()
