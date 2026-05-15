@@ -36,14 +36,14 @@
             kc.name AS category_name,
             sc_type.name AS kpi_type_name,
             u.id AS user_id,
-            u.full_name AS user_full_name,
+            COALESCE(kas.user_full_name, u.full_name) AS user_full_name,
             u.username AS user_username,
             r.code AS rank_code,
-            ud.supervisor_id AS assignee_supervisor_id,
-            sup.full_name AS assignee_supervisor_full_name,
-            d.id AS section_id,
-            d.name AS section_name,
-            d.manager_id AS section_manager_id,
+            COALESCE(kas.supervisor_id, ud.supervisor_id) AS assignee_supervisor_id,
+            COALESCE(kas.supervisor_full_name, sup.full_name) AS assignee_supervisor_full_name,
+            COALESCE(kas.department_id, d.id) AS section_id,
+            COALESCE(kas.department_name, d.name) AS section_name,
+            COALESCE(kas_dept.manager_id, d.manager_id) AS section_manager_id,
             mgr.full_name AS section_manager_full_name,
             (
                 SELECT r2.code
@@ -81,16 +81,22 @@
             NULLIF(TRIM(COALESCE(uks.evaluation_comments_promotion, '')), '') AS evaluation_comments_promotion,
             NULLIF(TRIM(COALESCE(uks.evaluation_supervisor_comments, '')), '') AS supervisor_comment_portfolio,
             NULLIF(TRIM(COALESCE(uks.evaluation_supervisor_comments_promotion, '')), '') AS supervisor_comment_promotion
-        FROM (
-            SELECT DISTINCT ON (ka.user_id, ka.kpi_info_id)
+        FROM users u
+        INNER JOIN user_departments ud
+                ON ud.user_id = u.id
+               AND ud.is_primary = TRUE
+        INNER JOIN departments d
+                ON ud.department_id = d.id
+               AND d.deleted_at IS NULL
+        LEFT JOIN LATERAL (
+            SELECT DISTINCT ON (ka.kpi_info_id)
                 ka.*
             FROM kpi_assignments ka
             WHERE ka.cycle_id = #{cycleId, jdbcType=OTHER}
               AND ka.deleted_at IS NULL
-              AND ka.user_id IS NOT NULL
-              AND ka.status_code IN (501, 502, 503, 601, 602, 603)
+              AND ka.user_id = u.id
+              AND ka.status_code IN (401, 402, 403, 404, 405, 406, 407, 501, 502, 503, 601, 602, 603)
             ORDER BY
-                ka.user_id,
                 ka.kpi_info_id,
                 CASE
                     WHEN COALESCE(ka.end_self_score, ka.mid_self_score) IS NOT NULL THEN 0
@@ -100,7 +106,11 @@
                 ka.status_code DESC,
                 ka.updated_at DESC,
                 ka.created_at DESC
-        ) ka
+        ) ka ON TRUE
+        LEFT JOIN kpi_assignment_snapshots kas
+               ON kas.assignment_id = ka.id
+              AND kas.cycle_id = ka.cycle_id
+        LEFT JOIN departments kas_dept ON kas_dept.id = kas.department_id AND kas_dept.deleted_at IS NULL
         LEFT JOIN LATERAL (
             SELECT AVG(COALESCE(ch.end_self_score, ch.mid_self_score)) AS avg_child_self_score
             FROM kpi_assignments ch
@@ -109,23 +119,31 @@
               AND ch.deleted_at IS NULL
               AND COALESCE(ch.end_self_score, ch.mid_self_score) IS NOT NULL
         ) child_self ON TRUE
-        INNER JOIN kpis_information ki ON ka.kpi_info_id = ki.id AND ki.deleted_at IS NULL
-        INNER JOIN kpi_master km ON ki.master_kpi_id = km.id AND km.deleted_at IS NULL
-        INNER JOIN kpi_categories kc ON km.category_id = kc.id AND kc.deleted_at IS NULL
+        LEFT JOIN kpis_information ki ON ka.kpi_info_id = ki.id AND ki.deleted_at IS NULL
+        LEFT JOIN kpi_master km ON ki.master_kpi_id = km.id AND km.deleted_at IS NULL
+        LEFT JOIN kpi_categories kc ON km.category_id = kc.id AND kc.deleted_at IS NULL
         LEFT JOIN sys_status_codes sc_type ON sc_type.code = km.type_code AND sc_type.category = 'KPI_TYPE'
         LEFT JOIN sys_status_codes asm ON asm.code = ka.status_code AND asm.category = 'ASM_STATUS'
-        INNER JOIN users u ON ka.user_id = u.id AND u.deleted_at IS NULL
-        LEFT JOIN job_titles jt ON u.job_title_id = jt.id AND jt.deleted_at IS NULL
+        LEFT JOIN job_titles jt ON jt.id = COALESCE(kas.job_title_id, u.job_title_id) AND jt.deleted_at IS NULL
         LEFT JOIN ranks r ON jt.rank_id = r.id AND r.deleted_at IS NULL
-        LEFT JOIN user_departments ud ON ud.user_id = u.id AND ud.is_primary = TRUE
         LEFT JOIN user_kpi_summaries uks
                ON uks.user_id = u.id
-              AND uks.cycle_id = ka.cycle_id
+              AND uks.cycle_id = #{cycleId, jdbcType=OTHER}
               AND uks.deleted_at IS NULL
-        INNER JOIN departments d ON ud.department_id = d.id AND d.deleted_at IS NULL
-        LEFT JOIN users mgr ON mgr.id = d.manager_id AND mgr.deleted_at IS NULL
-        LEFT JOIN users sup ON sup.id = ud.supervisor_id AND sup.deleted_at IS NULL
-        ORDER BY d.name, u.full_name, kc.name, km.code
+        LEFT JOIN users mgr ON mgr.id = COALESCE(kas_dept.manager_id, d.manager_id) AND mgr.deleted_at IS NULL
+        LEFT JOIN users sup ON sup.id = COALESCE(kas.supervisor_id, ud.supervisor_id) AND sup.deleted_at IS NULL
+        WHERE u.deleted_at IS NULL
+          AND COALESCE(u.is_active, TRUE) = TRUE
+          AND EXISTS (
+              SELECT 1
+              FROM user_roles ur_member
+              INNER JOIN roles role_member
+                      ON role_member.id = ur_member.role_id
+                     AND role_member.deleted_at IS NULL
+              WHERE ur_member.user_id = u.id
+                AND UPPER(role_member.code) IN ('PM', 'LEADER', 'MEMBER')
+          )
+        ORDER BY COALESCE(kas.department_name, d.name), COALESCE(kas.user_full_name, u.full_name), kc.name, km.code
     </select>
 
 </mapper>

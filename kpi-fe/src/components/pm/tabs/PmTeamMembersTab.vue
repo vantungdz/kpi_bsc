@@ -32,6 +32,7 @@ const emit = defineEmits(['open-member', 'pending-pm-evaluation-count'])
 
 const teamTreeRaw = ref<any[]>([])
 const isLoading = ref(false)
+const activeReviewScope = ref<'portfolio' | 'promotion'>('portfolio')
 
 const EVALUATION_STATUS_UI: Record<number, any> = {
   [KPI_STATUS.INACTIVE]: { dot: 'bg-slate-300 ring-2 ring-slate-100', chip: 'border-slate-200 bg-slate-50 text-slate-800', label: 'Inactive' },
@@ -57,17 +58,21 @@ function getEvalStatusChip(statusCode: number | null | undefined) {
   return EVALUATION_STATUS_UI[n] ?? null
 }
 
-/** Chỉ ghi đè PM comment từ cache khi đã vào đợt đánh giá (≥501); tránh nhầm draft/localStorage khi KPI còn 404… */
-const PM_COMMENT_CACHE_OVERLAY_MIN_STATUS = KPI_STATUS.FIRST_WAITING_PM_APPROVAL
+/** Chỉ overlay draft supervisor từ cache runtime khi member đang chờ PM (501/601) — không ghi đè sau GM (502+ / 603). */
+function shouldOverlaySupervisorCommentDraft(statusNum: number): boolean {
+  return (
+    statusNum === KPI_STATUS.FIRST_WAITING_PM_APPROVAL ||
+    statusNum === KPI_STATUS.SECOND_WAITING_PM_APPROVAL
+  )
+}
 
-function pmSupervisorDraftFromCache(nodeId: string): string {
+function pmSupervisorDraftFromCache(nodeId: string, scope: 'portfolio' | 'promotion'): string {
   const raw = props.commentsCache[nodeId]
   if (raw === undefined || raw === null) return ''
   if (typeof raw === 'string') return raw
   const main = String(raw.main ?? '').trim()
   const promo = String(raw.promo ?? '').trim()
-  if (main && promo) return `${main}\n${promo}`
-  return main || promo
+  return scope === 'promotion' ? promo : main
 }
 
 // Gọi API lấy danh sách Team
@@ -108,37 +113,94 @@ watch(
   { immediate: true },
 )
 
+type TeamReviewScope = 'portfolio' | 'promotion'
+
+function teamReviewScopeFields(scope: TeamReviewScope) {
+  return scope === 'promotion'
+    ? {
+        initialTab: 'promotion',
+        status: 'promotionStatusCode',
+        selfScore: 'promotionSelfScore',
+        pmScore: 'promotionPmScore',
+        pmComment: 'promotionPmComment',
+        requires: 'promotionRequiresPmEvaluation',
+      }
+    : {
+        initialTab: 'main',
+        status: 'portfolioStatusCode',
+        selfScore: 'portfolioSelfScore',
+        pmScore: 'portfolioPmScore',
+        pmComment: 'portfolioPmComment',
+        requires: 'portfolioRequiresPmEvaluation',
+      }
+}
+
+function hasTeamReviewScopeRows(node: any, fields: ReturnType<typeof teamReviewScopeFields>): boolean {
+  if (node?.[fields.status] != null || node?.[fields.requires] === true) return true
+  return Array.isArray(node?.children) && node.children.some((child: any) => hasTeamReviewScopeRows(child, fields))
+}
+
+function isWaitingGmStatus(statusCode: unknown): boolean {
+  const sc = Number(statusCode)
+  return sc === KPI_STATUS.FIRST_WAITING_GM_APPROVAL || sc === KPI_STATUS.SECOND_WAITING_GM_APPROVAL
+}
+
+function isCompletedReviewStatus(statusCode: unknown): boolean {
+  const sc = Number(statusCode)
+  return sc === KPI_STATUS.FIRST_COMPLETED || sc === KPI_STATUS.COMPLETED
+}
+
 // Convert tree structure to a flat list for table rendering, while keeping track of depth for indentation
 const visibleTeamMembers = computed(() => {
   let result: any[] = [];
-    const traverse = (node: any) => {
+  const scope = activeReviewScope.value
+  const fields = teamReviewScopeFields(scope)
+  const traverse = (node: any, parentWaitingGm = false) => {
+    if (!hasTeamReviewScopeRows(node, fields)) return
     // Clone to override pmScore with real-time cache if available
     const displayNode = { ...node }
-    /** Giữ pm_comment từ BE trước khi ghi đè bằng draft localStorage — drawer cần để tránh nhầm sau khi đổi KPI. */
+    displayNode.selfScore = node[fields.selfScore]
+    displayNode.pmScore = node[fields.pmScore]
+    displayNode.pmComment = node[fields.pmComment] ?? ''
+    displayNode.statusCode = node[fields.status]
+    displayNode.requiresPmEvaluation = node[fields.requires] === true
+    displayNode.reviewInitialTab = fields.initialTab
+    /** Giữ pm_comment từ BE trước khi ghi đè bằng draft runtime — drawer cần để tránh nhầm sau khi đổi KPI. */
     displayNode.apiPmComment = node.pmComment ?? ''
 
     if (props.kpisCache && props.kpisCache[node.id]) {
       const kpis = props.kpisCache[node.id];
-      const scoredKpis = kpis.filter((k: any) => k.pmScore != null);
+      const scopedKpis = kpis.filter((k: any) =>
+        scope === 'promotion' ? k.kpiType === 'promotion' : k.kpiType !== 'promotion',
+      )
+      const scoredKpis = scopedKpis.filter((k: any) => k.pmScore != null);
       if (scoredKpis.length > 0) {
         displayNode.pmScore = scoredKpis.reduce((sum: number, k: any) => sum + k.pmScore, 0) / scoredKpis.length;
       }
     }
 
-    const statusNum = node.statusCode != null ? Number(node.statusCode) : 0
+    const statusNum = displayNode.statusCode != null ? Number(displayNode.statusCode) : 0
     if (
       props.commentsCache &&
       props.commentsCache[node.id] !== undefined &&
-      statusNum >= PM_COMMENT_CACHE_OVERLAY_MIN_STATUS
+      shouldOverlaySupervisorCommentDraft(statusNum)
     ) {
-      displayNode.pmComment = pmSupervisorDraftFromCache(node.id)
+      displayNode.pmComment = pmSupervisorDraftFromCache(node.id, scope)
     }
 
     displayNode.statusChipUi = getEvalStatusChip(displayNode.statusCode)
 
-    result.push(displayNode);
+    const suppressCompletedChildStatus =
+      parentWaitingGm &&
+      isCompletedReviewStatus(displayNode.statusCode) &&
+      displayNode.requiresPmEvaluation !== true
+
+    if (!suppressCompletedChildStatus) {
+      result.push(displayNode);
+    }
+    const childParentWaitingGm = parentWaitingGm || isWaitingGmStatus(displayNode.statusCode)
     if (node.expanded && node.children && node.children.length > 0) {
-      node.children.forEach((child: any) => traverse(child));
+      node.children.forEach((child: any) => traverse(child, childParentWaitingGm));
     }
   };
 
@@ -191,6 +253,27 @@ const portfolioGatePendingLabel = computed(() => {
       </div>
     </div>
 
+    <div class="border-b border-slate-200 bg-white px-5 pt-3">
+      <div class="flex gap-2">
+        <button
+          type="button"
+          class="rounded-t-lg border px-4 py-2 text-xs font-bold transition-colors"
+          :class="activeReviewScope === 'portfolio' ? 'border-slate-200 border-b-white bg-white text-blue-700' : 'border-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-800'"
+          @click="activeReviewScope = 'portfolio'"
+        >
+          KPI Personal
+        </button>
+        <button
+          type="button"
+          class="rounded-t-lg border px-4 py-2 text-xs font-bold transition-colors"
+          :class="activeReviewScope === 'promotion' ? 'border-slate-200 border-b-white bg-white text-purple-700' : 'border-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-800'"
+          @click="activeReviewScope = 'promotion'"
+        >
+          KPI Promotion
+        </button>
+      </div>
+    </div>
+
     <div
       v-if="portfolioGateLoaded && !portfolioGateOpen"
       class="px-5 py-3 border-b border-amber-100 bg-amber-50 text-sm text-amber-950"
@@ -212,11 +295,11 @@ const portfolioGatePendingLabel = computed(() => {
     <table v-else class="w-full text-left">
       <thead class="bg-white border-b border-slate-200 text-[10px] font-bold uppercase tracking-wider text-slate-500">
         <tr>
-          <th class="py-4 px-5 w-1/4">Employee Name & Role</th>
-          <th class="py-4 px-5 text-center w-32">Self Score</th>
-          <th class="py-4 px-5 text-center w-32">PM Score</th>
-          <th class="py-4 px-5 min-w-[150px]">PM Comment</th>
-          <th class="py-4 px-5 text-left w-48">Status</th>
+          <th class="py-4 px-5 w-[30%]">Employee Name & Role</th>
+          <th class="py-4 px-5 text-center w-28">Self Score</th>
+          <th class="py-4 px-5 text-center w-36">Supervisor Score</th>
+          <th class="py-4 px-5 w-[28%]">Supervisor Comment</th>
+          <th class="py-4 px-5 text-center w-52">Status</th>
         </tr>
       </thead>
       <TransitionGroup name="list" tag="tbody" class="divide-y divide-slate-100 relative">
@@ -275,10 +358,10 @@ const portfolioGatePendingLabel = computed(() => {
             </div>
           </td>
 
-          <td class="py-4 px-5 text-right align-middle">
+          <td class="py-4 px-5 text-center align-middle">
             <div
               v-if="member.statusChipUi"
-              class="ml-auto inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-center shadow-sm"
+              class="inline-flex items-center justify-center gap-1.5 rounded-lg border px-2 py-1 text-center shadow-sm"
               :class="member.statusChipUi.chip">
               <span class="h-2 w-2 shrink-0 rounded-full" :class="member.statusChipUi.dot" />
               <span class="text-[10px] font-bold">{{ member.statusChipUi.label }}</span>

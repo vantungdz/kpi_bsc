@@ -12,6 +12,7 @@ import com.company.kpi.response.gm.GmDepartmentAssignedKpiResponse;
 import com.company.kpi.response.gm.GmDepartmentMemberCandidateResponse;
 import com.company.kpi.response.gm.GmDepartmentMemberResponse;
 import com.company.kpi.response.gm.GmDepartmentResponse;
+import com.company.kpi.response.gm.GmMemberResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -38,6 +39,10 @@ public class GmDepartmentService {
         List<GmDepartmentResponse> list = departmentMapper.selectAllActive();
         hydrateDepartmentPayloads(list, kpiYear);
         return list;
+    }
+
+    public List<GmMemberResponse> listMembers() {
+        return userMapper.listActiveGmMembers();
     }
 
     @Transactional
@@ -170,6 +175,25 @@ public class GmDepartmentService {
         }
         departmentMapper.deleteUserDepartment(departmentId, userId);
         applyPrimaryNormalization(userId);
+    }
+
+    @Transactional
+    public void deleteMember(UUID userId, UUID actorId) {
+        if (userId == null) {
+            throw AppException.badRequest("User id is required");
+        }
+        userMapper
+                .findById(userId)
+                .orElseThrow(() -> AppException.notFound("User not found or already deleted"));
+        if (departmentMapper.countActiveDepartmentsManagedByUser(userId) > 0) {
+            throw AppException.badRequest(
+                    "Cannot delete an employee who is manager of an active department; change manager first.");
+        }
+        departmentMapper.deleteUserDepartmentsByUser(userId);
+        int n = userMapper.softDeleteUser(userId, actorId);
+        if (n != 1) {
+            throw AppException.notFound("User not found or already deleted");
+        }
     }
 
     /**

@@ -19,11 +19,13 @@ import { pushGmNotification } from '@/composables/useGmNotifications'
 
 const emit = defineEmits<{
   (e: 'pending-count', count: number): void
+  (e: 'diagnostics-refresh'): void
   (e: 'timeline-refresh'): void
 }>()
 
 function onReloadEvaluationHub() {
   void loadEvaluationHub()
+  emit('diagnostics-refresh')
   emit('timeline-refresh')
 }
 
@@ -39,17 +41,20 @@ const pmBrokerId = computed(() => {
 const hubLoading = ref(false)
 const basePmBranches = ref<GmEvalPmBranch[]>([])
 const baseEmployees = ref<GmEvalMember[]>([])
+const activePhase = ref<string | null>(null)
 
 async function loadEvaluationHub() {
   if (useMock) {
     basePmBranches.value = getGmEvalPmHubTree()
     baseEmployees.value = getGmEvalPmHubRows()
+    activePhase.value = 'target_setup'
     return
   }
   const cid = String(selectedCycleId.value ?? '').trim()
   if (!cid) {
     basePmBranches.value = []
     baseEmployees.value = []
+    activePhase.value = null
     return
   }
   hubLoading.value = true
@@ -58,9 +63,11 @@ async function loadEvaluationHub() {
     const tree = mapGmEvaluationHubApiToPmBranches(data)
     basePmBranches.value = tree
     baseEmployees.value = flattenGmEvalPmHubTreeForScores(tree)
+    activePhase.value = data.activePhase ?? null
   } catch (e: unknown) {
     basePmBranches.value = []
     baseEmployees.value = []
+    activePhase.value = null
     pushGmNotification(e instanceof Error ? e.message : 'Could not load Evaluation tab data', {
       variant: 'error',
       durationMs: 8000,
@@ -144,6 +151,7 @@ const filterSubtitle = computed(() => {
       list-entity="pm"
       :employees="employees"
       :pm-branches="pmBranches"
+      :active-phase="activePhase"
       @reload-evaluation-hub="onReloadEvaluationHub"
     />
   </div>

@@ -146,6 +146,11 @@ const router = createRouter({
           component: () => import('@/pages/admin/AdminCampaignPage.vue'),
         },
         {
+          path: 'kpi-cycles',
+          name: 'admin-kpi-cycles',
+          component: () => import('@/pages/admin/AdminKpiCyclePage.vue'),
+        },
+        {
           path: 'employees',
           name: 'admin-employees',
           component: () => import('@/pages/admin/AdminEmployeePage.vue'),

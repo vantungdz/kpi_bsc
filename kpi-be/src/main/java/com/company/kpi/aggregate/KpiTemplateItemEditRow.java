@@ -17,6 +17,7 @@ public class KpiTemplateItemEditRow {
     private Integer unitCode;
     private Integer calculationRuleCode;
     private Integer calculationTypeCode;
+    private String defaultTargetDescription;
     private BigDecimal defaultTargetValue;
     private BigDecimal defaultWeight;
 }

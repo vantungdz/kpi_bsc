@@ -6,6 +6,7 @@ import {
   EVIDENCE_MAX_URLS,
   EVIDENCE_ACCEPT_ATTR,
   averageRatioResult,
+  averageActualResultDisplay,
 } from '@/composables/useMemberEvidenceDrawer'
 import {
   ratioLabels,
@@ -82,7 +83,7 @@ const ctx = inject(EVIDENCE_DRAWER_KEY)!
               KPI đã bị từ chối - vui lòng chỉnh sửa và submit lại.
             </p>
             <p class="mt-1.5 whitespace-pre-wrap text-rose-800">
-              {{ String(ctx.selectedDrawerItem.value?.updateReason ?? ctx.selectedDrawerItem.value?.feedbackComment ?? '').trim() }}
+              {{ "Lý do từ chối:" + " " }} <span class="font-bold text-rose-800">{{ String(ctx.selectedDrawerItem.value?.updateReason ?? ctx.selectedDrawerItem.value?.feedbackComment ?? '').trim() }}</span>
             </p>
           </div>
 
@@ -228,13 +229,13 @@ const ctx = inject(EVIDENCE_DRAWER_KEY)!
                     </div>
 
                     <div class="p-4">
-                      <div v-if="ctx.scoringRawInput.value && ctx.drawerFormMode.value === 'average'" class="mt-1.5 rounded border border-slate-200 bg-slate-50 px-3 py-2">
+                      <div v-if="ctx.scoringRawInput.value && (ctx.drawerFormMode.value === 'average' || ctx.drawerFormMode.value === 'comment')" class="mt-1.5 rounded border border-slate-200 bg-slate-50 px-3 py-2">
                           <p class="mb-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">Quy tắc chấm điểm:</p>
                           <pre class="font-mono text-[11px] leading-relaxed text-slate-600 whitespace-pre-wrap">{{ ctx.scoringRawInput.value }}</pre>
                         </div>
                       <div
                         class="space-y-4 rounded-lg p-4 mt-4"
-                        v-show="ctx.drawerFormMode.value === 'average'"
+                        v-show="ctx.drawerFormMode.value === 'average' || ctx.drawerFormMode.value === 'comment'"
                         :class="ctx.drawerFormMode.value === 'average' ? 'border border-blue-100 bg-blue-50/20' : 'border border-teal-100 bg-teal-50/30'"
                       >
                         <div
@@ -243,40 +244,32 @@ const ctx = inject(EVIDENCE_DRAWER_KEY)!
                           class="border-b bg-transparent pb-3 last:border-b-0 last:pb-0"
                           :class="ctx.drawerFormMode.value === 'average' ? 'border-blue-100/80' : 'border-teal-100/80'"
                         >
-                          <div class="grid grid-cols-1 gap-3 md:grid-cols-[1fr_1fr_1fr_auto] md:items-end">
+                          <div
+                            class="grid grid-cols-1 gap-3 md:items-end"
+                            :class="ctx.drawerFormMode.value === 'average'
+                              ? 'md:grid-cols-[1fr_1fr_1fr_auto]'
+                              : 'md:grid-cols-[minmax(0,2.2fr)_minmax(88px,0.9fr)_auto]'"
+                          >
                             <div>
-                              <label class="mb-1 block text-xs font-bold text-slate-600">Comment</label>
+                              <label class="mb-1 block text-xs font-bold text-slate-600">{{ ctx.drawerFormMode.value === 'comment' ? 'Nội dung nhận xét (Comment)' : 'Comment' }}</label>
                               <input
                                 v-model="row.comment"
                                 type="text"
                                 :readonly="ctx.evidenceDrawerReadOnly.value"
-                                placeholder="Ghi chú thêm..."
-                                class="w-full rounded border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-blue-500 read-only:bg-slate-50"
+                                :placeholder="ctx.drawerFormMode.value === 'comment' ? 'Mô tả bối cảnh, kết quả...' : 'Ghi chú thêm...'"
+                                class="w-full rounded border border-slate-300 px-3 py-2 text-sm focus:ring-1 read-only:bg-slate-50"
+                                :class="ctx.drawerFormMode.value === 'average' ? 'focus:ring-blue-500' : 'focus:ring-teal-500'"
                               />
                             </div>
-                            <div>
-                              <label class="mb-1 block text-xs font-bold text-slate-600">
-                                {{
-                                  ctx.drawerFormMode.value === 'average'
-                                    ? ratioLabels(ctx.selectedDrawerItem.value?.calculationTypeCode).plan
-                                    : 'Mục tiêu (Plan/Target)'
-                                }}
-                              </label>
+                            <div v-if="ctx.drawerFormMode.value === 'average'">
+                              <label class="mb-1 block text-xs font-bold text-slate-600">{{ ratioLabels(ctx.selectedDrawerItem.value?.calculationTypeCode).plan }}</label>
                               <input
-                                v-if="ctx.drawerFormMode.value === 'average'"
                                 v-model="row.plan"
                                 type="text"
                                 inputmode="decimal"
                                 placeholder="0"
                                 :readonly="ctx.evidenceDrawerReadOnly.value"
                                 class="w-full rounded border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-blue-500 read-only:bg-slate-50"
-                              />
-                              <textarea
-                                v-else
-                                v-model="row.plan"
-                                rows="2"
-                                :readonly="ctx.evidenceDrawerReadOnly.value"
-                                class="w-full rounded border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-teal-500 read-only:bg-slate-50"
                               />
                             </div>
                             <div>
@@ -284,24 +277,17 @@ const ctx = inject(EVIDENCE_DRAWER_KEY)!
                                 {{
                                   ctx.drawerFormMode.value === 'average'
                                     ? ratioLabels(ctx.selectedDrawerItem.value?.calculationTypeCode).actual
-                                    : 'Thực tế (Actual/Result)'
+                                    : 'Giá trị thực tế (Actual)'
                                 }}
                               </label>
                               <input
-                                v-if="ctx.drawerFormMode.value === 'average'"
                                 v-model="row.actual"
                                 type="text"
                                 inputmode="decimal"
-                                placeholder="0"
+                                :placeholder="ctx.drawerFormMode.value === 'comment' ? 'Nhập số liệu thực tế...' : '0'"
                                 :readonly="ctx.evidenceDrawerReadOnly.value"
-                                class="w-full rounded border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-blue-500 read-only:bg-slate-50"
-                              />
-                              <textarea
-                                v-else
-                                v-model="row.actual"
-                                rows="2"
-                                :readonly="ctx.evidenceDrawerReadOnly.value"
-                                class="w-full rounded border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-teal-500 read-only:bg-slate-50"
+                                class="w-full rounded border border-slate-300 px-3 py-2 text-sm focus:ring-1 read-only:bg-slate-50"
+                                :class="ctx.drawerFormMode.value === 'average' ? 'focus:ring-blue-500' : 'focus:ring-teal-500'"
                               />
                             </div>
                             <div class="flex items-end justify-end md:pb-[2px]">
@@ -334,6 +320,11 @@ const ctx = inject(EVIDENCE_DRAWER_KEY)!
                               }}
                             </span>
                           </div>
+                          <div v-else-if="ctx.drawerFormMode.value === 'comment'" class="mt-2 flex items-center gap-2">
+                            <span class="text-[10px] font-semibold text-slate-500">Kết quả tính:</span>
+                            <span class="rounded bg-teal-50 px-2 py-0.5 text-xs font-bold text-teal-700">{{ averageActualResultDisplay(ctx.generalPlanActualRows.value) ?? '—' }}</span>
+                            <span class="text-[10px] text-slate-400">(TB Actual)</span>
+                          </div>
                           <button
                             type="button"
                             class="flex items-center rounded px-4 py-1.5 text-sm font-medium text-white"
@@ -345,45 +336,6 @@ const ctx = inject(EVIDENCE_DRAWER_KEY)!
                         </div>
                       </div>
 
-                      <!-- Comment mode (CALC_RULE 803): Actual input + scoring rules hint + content textarea -->
-                      <div v-if="ctx.drawerFormMode.value === 'comment'" class="flex flex-col gap-4">
-                        <!-- Actual value input (only shown when scoring rules exist from targetDescription) -->
-                        <div v-if="ctx.scoringRulesFromItem.value.length > 0">
-                          <!-- Scoring rules hint -->
-                          <div v-if="ctx.scoringRawInput.value" class="mt-1.5 rounded border border-slate-200 bg-slate-50 px-3 py-2">
-                            <p class="mb-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">Quy tắc chấm điểm:</p>
-                            <pre class="font-mono text-[11px] leading-relaxed text-slate-600 whitespace-pre-wrap">{{ ctx.scoringRawInput.value }}</pre>
-                          </div>
-                          <label class="mb-1 block text-xs font-bold text-slate-700 mt-4">
-                            <i class="fas fa-chart-line mr-1 text-emerald-500" />
-                            Giá trị thực tế (Actual)
-                          </label>
-                          <input
-                            v-model="ctx.commentActualDraft.value"
-                            type="number"
-                            inputmode="decimal"
-                            step="any"
-                            placeholder="Nhập số liệu thực tế..."
-                            :readonly="ctx.evidenceDrawerReadOnly.value"
-                            class="w-full rounded-md border border-emerald-200 bg-white px-3 py-2 text-sm focus:ring-1 focus:ring-emerald-500 read-only:bg-slate-50"
-                          />
-
-                        </div>
-                        <!-- Content (description/comment) textarea -->
-                        <div>
-                          <label class="mb-1 block text-xs font-bold text-slate-700">
-                            <i class="fas fa-align-left mr-1 text-teal-500" />
-                            Nội dung nhận xét / diễn giải (Content)
-                          </label>
-                          <textarea
-                            v-model="ctx.contentDraft.value"
-                            rows="4"
-                            placeholder="Mô tả chi tiết bối cảnh, kết quả hoặc diễn giải thêm để PM tham chiếu khi cho điểm..."
-                            :readonly="ctx.evidenceDrawerReadOnly.value"
-                            class="w-full resize-none rounded-md border border-teal-200 bg-white px-3 py-2 text-sm focus:ring-1 focus:ring-teal-500 read-only:bg-slate-50 read-only:text-slate-700"
-                          />
-                        </div>
-                      </div>
                     </div>
                   </div>
                 </div>
@@ -704,7 +656,7 @@ const ctx = inject(EVIDENCE_DRAWER_KEY)!
                     v-if="ctx.computedEvalScore.value === null"
                     class="text-xs text-slate-400"
                   >
-                    {{ ctx.drawerFormMode.value === 'average' ? 'Nhập đủ số liệu để tính' : 'Nhập Actual để tính' }}
+                    {{ ctx.drawerFormMode.value === 'average' ? 'Nhập đủ số liệu để tính' : 'Nhập đủ Comment và Actual để tính' }}
                   </span>
                 </div>
                 <p

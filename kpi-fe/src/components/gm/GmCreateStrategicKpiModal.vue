@@ -32,12 +32,12 @@ import {
 import type { GmKpiTemplateItemRow, GmKpiTemplatePackageRow } from '@/types/gm-kpi-template'
 import type { DepartmentManagerOption } from '@/types/department-manager'
 import GmStrategicKpiTypeTag from '@/components/gm/GmStrategicKpiTypeTag.vue'
+import ScoringRulesHelpTooltip from '@/components/kpi/ScoringRulesHelpTooltip.vue'
 import { GM_BSC_LABELS, GM_BSC_ORDER, normalizeGmBscPerspective } from '@/utils/gm-bsc-diagnostics'
 import {
   buildScoringRulesPayload,
   emptyScoringRulesPayload,
   extractRawInputFromApiTargetDescription,
-  SCORING_RULES_EXAMPLE_TOOLTIP,
   validateScoringRulesDsl,
 } from '@/utils/kpiScoringRulesDsl'
 
@@ -135,7 +135,7 @@ const emit = defineEmits<{
   evaluationCyclesLoaded: [rows: GmKpiCycleOption[]]
 }>()
 
-/** «Năm đánh giá»: `GET /kpi/gm/kpi-cycles-for-evaluation` — chỉ chu kỳ có `year` ≥ năm hiện tại. */
+/** «Năm đánh giá»: `GET /kpi/gm/kpi-cycles-for-evaluation` — chu kỳ có dữ liệu KPI (gồm năm trước). */
 const evaluationCycleRows = ref<GmKpiCycleOption[]>([])
 const evaluationCyclesLoading = ref(false)
 const evaluationCyclesError = ref<string | null>(null)
@@ -642,12 +642,28 @@ function buildPayloadFromTemplateApiItem(it: GmKpiTemplateItemRow): Record<strin
     it.calculationTypeCode ?? null,
     it.calculationRuleCode ?? 802,
   )
+  let parsedTargetDesc = emptyScoringRulesPayload()
+  if (it.targetDescription) {
+    if (typeof it.targetDescription === 'string') {
+      try {
+        const parsed = JSON.parse(it.targetDescription)
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          parsedTargetDesc = parsed as any
+        }
+      } catch (e) {
+        console.warn('Failed to parse targetDescription string:', e)
+      }
+    } else if (typeof it.targetDescription === 'object') {
+      parsedTargetDesc = it.targetDescription as any
+    }
+  }
+
   const base: Record<string, unknown> = {
     cycleId: resolveDefaultFormCycleUuid(),
     typeCode,
     perspective: cid,
     kpiName: String(it.masterName ?? '').trim() || 'KPI',
-    targetDescription: emptyScoringRulesPayload(),
+    targetDescription: parsedTargetDesc,
     targetValue: it.defaultTargetValue != null ? Number(it.defaultTargetValue) : null,
     unitCode,
     weightPct: it.defaultWeight != null ? String(it.defaultWeight) : '0',
@@ -2152,19 +2168,7 @@ async function save() {
                     <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500">
                       Scoring rules <span class="text-rose-500">*</span>
                     </label>
-                    <span class="group relative inline-flex shrink-0">
-                      <button
-                        type="button"
-                        class="cursor-help rounded p-0.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-blue-600 focus-visible:outline focus-visible:ring-2 focus-visible:ring-slate-300"
-                        aria-label="Scoring rules syntax example"
-                      >
-                        <i class="fas fa-circle-question text-[12px]" aria-hidden="true" />
-                      </button>
-                      <span
-                        role="tooltip"
-                        class="pointer-events-none absolute right-0 top-full z-[110] mt-1 hidden min-w-[11rem] max-w-[20rem] whitespace-pre-line rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-left text-[10px] font-medium leading-snug text-slate-700 shadow-lg group-hover:block group-focus-within:block"
-                      >{{ SCORING_RULES_EXAMPLE_TOOLTIP }}</span>
-                    </span>
+                    <ScoringRulesHelpTooltip aria-label="Scoring rules syntax example" />
                   </div>
                   <textarea
                     v-model="description"

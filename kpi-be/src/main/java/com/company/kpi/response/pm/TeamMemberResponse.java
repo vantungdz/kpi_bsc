@@ -17,6 +17,16 @@ public class TeamMemberResponse {
     private Integer statusCode;
     /** true nếu có assignment trong kỳ đang ở cửa đánh giá PM (501 / 601). */
     private boolean requiresPmEvaluation;
+    private BigDecimal portfolioSelfScore;
+    private BigDecimal portfolioPmScore;
+    private String portfolioPmComment;
+    private Integer portfolioStatusCode;
+    private boolean portfolioRequiresPmEvaluation;
+    private BigDecimal promotionSelfScore;
+    private BigDecimal promotionPmScore;
+    private String promotionPmComment;
+    private Integer promotionStatusCode;
+    private boolean promotionRequiresPmEvaluation;
     private boolean expanded = true;
     private int depth;
     private UUID supervisorId;

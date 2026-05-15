@@ -51,7 +51,9 @@ public class StrategicKpiService {
     private final KpisInformationMapper kpisInformationMapper;
     private final KpiAssignmentMapper kpiAssignmentMapper;
     private final UserMapper userMapper;
+    private final UserKpiSummaryMapper userKpiSummaryMapper;
     private final KpiScoringRulesService kpiScoringRulesService;
+    private final KpiAssignmentSnapshotService kpiAssignmentSnapshotService;
 
     // ── CREATE ────────────────────────────────────────────────────────────────
 
@@ -131,6 +133,7 @@ public class StrategicKpiService {
 
         if (!rows.isEmpty()) {
             kpiAssignmentMapper.insertKpiAssignments(rows);
+            kpiAssignmentSnapshotService.createSnapshotsForInsertRows(rows, actorId);
         }
 
         GmKpiCategoryResponse cat = kpiCategoryMapper.findActiveById(req.getPerspective()).orElse(null);
@@ -240,9 +243,19 @@ public class StrategicKpiService {
 
             if (!rows.isEmpty()) {
                 kpiAssignmentMapper.insertKpiAssignments(rows);
+                kpiAssignmentSnapshotService.createSnapshotsForInsertRows(rows, actorId);
             }
         } else {
             syncAssignments(kpiInformationId, existing.getCycleId(), desired, type, req, targetNum, actorId, role);
+        }
+
+        if (Constant.ROLE_PM.equals(role)) {
+            kpiAssignmentMapper.resubmitRejectedSelfCreatedAssignments(
+                    kpiInformationId,
+                    existing.getCycleId(),
+                    actorId,
+                    Constants.AssignStatus.REJECTED,
+                    Constants.AssignStatus.WAITING_GM_APPROVAL);
         }
 
         int assignmentCount = kpiAssignmentMapper.listAssignmentUserTargets(kpiInformationId, existing.getCycleId())
@@ -321,13 +334,17 @@ public class StrategicKpiService {
                 .isImportant(Boolean.TRUE.equals(row.getIsImportant()));
 
         // TEAM: danh sách PM do GM giao — chỉ khi xem full KPI (không lọc theo parent
-        // PM).
+        // PM). Chỉ lấy assignment gốc (parent_assignment_id null): tránh dòng con PM tự
+        // assign cùng user_id ghi đè target GM→PM trong drawer edit.
         if (row.getTypeCode() != null
                 && row.getTypeCode() == TYPE_TEAM
                 && parentAssignmentId == null) {
             LinkedHashSet<UUID> pmOrder = new LinkedHashSet<>();
             Map<String, Object> pmTargets = new LinkedHashMap<>();
             for (KpiAssignmentUserTargetRow a : assigns) {
+                if (a.getParentAssignmentId() != null) {
+                    continue;
+                }
                 if (a.getUserId() != null) {
                     pmOrder.add(a.getUserId());
                     if (a.getTargetValue() != null) {
@@ -404,6 +421,9 @@ public class StrategicKpiService {
             return false;
         }
         if (type == TYPE_TEAM && row.getParentAssignmentId() != null) {
+            if (Constant.ROLE_PM.equals(role)) {
+                return !desiredSet.contains(row.getUserId());
+            }
             KpiAssignmentUserTargetRow parent = rowsByAssignmentId.get(row.getParentAssignmentId());
             UUID parentPmUserId = parent != null ? parent.getUserId() : null;
             if (parentPmUserId != null && desiredSet.contains(parentPmUserId)) {
@@ -430,19 +450,27 @@ public class StrategicKpiService {
                         KpiAssignmentUserTargetRow::getUserId, KpiAssignmentUserTargetRow::getId, (a, b) -> a));
 
         LinkedHashSet<UUID> desiredSet = new LinkedHashSet<>(desired);
+        LinkedHashSet<UUID> rowsToSoftDelete = new LinkedHashSet<>();
 
         for (KpiAssignmentUserTargetRow row : currentRows) {
             if (row.getUserId() == null)
                 continue;
             if (shouldSoftDeleteStrategicAssignmentRow(row, desiredSet, type, role, actorId, rowsByAssignmentId)) {
+                rowsToSoftDelete.add(row.getId());
                 kpiAssignmentMapper.softDeleteKpiAssignmentById(row.getId(), cycleId, actorId);
             }
         }
 
+        Map<UUID, UUID> activeAssignmentIdByUser = currentRows.stream()
+                .filter(r -> r.getUserId() != null)
+                .filter(r -> r.getId() != null && !rowsToSoftDelete.contains(r.getId()))
+                .collect(Collectors.toMap(
+                        KpiAssignmentUserTargetRow::getUserId, KpiAssignmentUserTargetRow::getId, (a, b) -> a));
+
         for (UUID uid : desired) {
             // Update child assignments
             BigDecimal rowTarget = teamTarget(type, uid, req, targetNum);
-            UUID aid = assignmentIdByUser.get(uid);
+            UUID aid = activeAssignmentIdByUser.get(uid);
             if (aid != null) {
                 kpiAssignmentMapper.updateKpiAssignmentTarget(aid, cycleId, rowTarget, actorId);
             }
@@ -481,14 +509,16 @@ public class StrategicKpiService {
                         .createdBy(actorId)
                         .build());
                 kpiAssignmentMapper.insertKpiAssignments(pmRow);
+                kpiAssignmentSnapshotService.createSnapshotsForInsertRows(pmRow, actorId);
             }
         }
 
-        List<UUID> newIds = desired.stream().filter(uid -> !assignmentIdByUser.containsKey(uid)).toList();
+        List<UUID> newIds = desired.stream().filter(uid -> !activeAssignmentIdByUser.containsKey(uid)).toList();
         List<KpiAssignmentInsertRow> newRows = buildAssignmentRows(newIds, type, req, kpiInfoId, cycleId, targetNum,
                 actorId, role, parentAssignmentId);
         if (!newRows.isEmpty()) {
             kpiAssignmentMapper.insertKpiAssignments(newRows);
+            kpiAssignmentSnapshotService.createSnapshotsForInsertRows(newRows, actorId);
         }
     }
 
@@ -729,6 +759,12 @@ public class StrategicKpiService {
             if (parentAssignment == null || parentAssignment.getUserId() == null) {
                 throw AppException.badRequest("Parent assignment not found in this cycle.");
             }
+            int submittedChildren = kpiAssignmentMapper.countChildAssignmentsSubmittedActualForPmReview(
+                    req.getParentAssignmentId(), req.getCycleId(), userId);
+            if (submittedChildren > 0) {
+                throw AppException.badRequest(
+                        "Không thể lưu phân bổ vì member đã gửi actual cho PM duyệt.");
+            }
 
             // Phần target chưa phân không tự gán cho PM khi lưu — chỉ khi PM có trong
             // payload (vd. bấm «Assign to me» trên FE).
@@ -790,6 +826,7 @@ public class StrategicKpiService {
         // 4. Batch Insert vào Database
         if (!rowsToInsert.isEmpty()) {
             kpiAssignmentMapper.insertKpiAssignmentsWithEntity(rowsToInsert);
+            kpiAssignmentSnapshotService.createSnapshotsForAssignmentEntities(rowsToInsert, userId);
         }
     }
 
@@ -800,8 +837,10 @@ public class StrategicKpiService {
                 && request.getOnlyFromStatusCode() != null
                 && request.getOnlyFromStatusCode() == Constants.AssignStatus.PENDING_ACCEPTANCE
                 && request.getStatusCode() != null
-                && request.getStatusCode() == Constants.AssignStatus.ACCEPTED
+                && (request.getStatusCode() == Constants.AssignStatus.ACCEPTED
+                    || request.getStatusCode() == Constants.AssignStatus.WAITING_GM_APPROVAL)
                 && !request.isPromotion()
+                && !userMapper.userHasRoleCode(currentUserId, "GM")
                 && kpiAssignmentMapper.existsTeamCascadeBlockingPmAccept(currentUserId, request.getCycleId())) {
             throw AppException.badRequest(
                     "Vui lòng phân bổ ít nhất một thành viên cho mỗi KPI Team và chờ họ xác nhận trước khi chấp nhận KPI.");
@@ -833,6 +872,26 @@ public class StrategicKpiService {
             }
         }
 
+        // PM Personal Send Review must submit only PM-owned assignments, but Team KPI members
+        // still have to be sent to GM first for the same phase.
+        if (!Boolean.TRUE.equals(request.getBulkForManagedMembers())
+                && !request.isPromotion()
+                && request.getStatusCode() != null
+                && (request.getStatusCode() == 502 || request.getStatusCode() == 602)) {
+            int waitingGmStatus = request.getStatusCode();
+            int completedStatus = waitingGmStatus == 502 ? 503 : 603;
+            int blockingTeamMembers = kpiAssignmentMapper.countBlockingPmTeamMemberReviewsForSendReview(
+                    currentUserId,
+                    request.getCycleId(),
+                    waitingGmStatus,
+                    completedStatus);
+            if (blockingTeamMembers > 0) {
+                throw AppException.badRequest(waitingGmStatus == 502
+                        ? "Vui lòng gửi toàn bộ KPI Team của member lên GM duyệt giữa kỳ trước (trạng thái 502)."
+                        : "Vui lòng gửi toàn bộ KPI Team của member lên GM duyệt cuối kỳ trước (trạng thái 602).");
+            }
+        }
+
         int updatedCount;
         if (Boolean.TRUE.equals(request.getBulkForManagedMembers())) {
             if (request.getManagedMemberUserId() != null) {
@@ -843,14 +902,6 @@ public class StrategicKpiService {
                         request.getStatusCode(),
                         request.isPromotion(),
                         request.getOnlyFromStatusCode());
-                Integer nextStatus = request.getStatusCode();
-                if (!request.isPromotion() && nextStatus != null && (nextStatus == 502 || nextStatus == 602)) {
-                    updatedCount += kpiAssignmentMapper.syncPmTeamParentStatusesFromManagedChildren(
-                            currentUserId,
-                            request.getCycleId(),
-                            nextStatus,
-                            currentUserId);
-                }
             } else {
                 updatedCount = kpiAssignmentMapper.updateKpiStatusesForPmManagedMembers(
                         currentUserId,
@@ -864,18 +915,6 @@ public class StrategicKpiService {
                         request.getStatusCode(),
                         true,
                         request.getOnlyFromStatusCode());
-
-                // Team KPI của chính PM không nằm trong cây managed members.
-                // Đồng bộ parent Team assignment lên 502/602 để GM Evaluation Hub nhìn thấy
-                // dòng PM.
-                Integer nextStatus = request.getStatusCode();
-                if (request.isPromotion() == false && nextStatus != null && (nextStatus == 502 || nextStatus == 602)) {
-                    updatedCount += kpiAssignmentMapper.syncPmTeamParentStatusesFromManagedChildren(
-                            currentUserId,
-                            request.getCycleId(),
-                            nextStatus,
-                            currentUserId);
-                }
             }
         } else {
             updatedCount = kpiAssignmentMapper.updateKpiStatuses(
@@ -883,13 +922,57 @@ public class StrategicKpiService {
                     request.getCycleId(),
                     request.getStatusCode(),
                     request.isPromotion(),
-                    request.getOnlyFromStatusCode());
+                    request.getOnlyFromStatusCode(),
+                    request.getIncludeManagedDepartmentAssignments());
         }
 
         if (updatedCount == 0) {
             throw AppException.badRequest("Don't find KPI to update.");
         }
 
+        persistSendReviewCommentIfNeeded(request, currentUserId);
+
         return updatedCount;
+    }
+
+    private void persistSendReviewCommentIfNeeded(UpdateKpiStatusRequest request, UUID currentUserId) {
+        Integer nextStatus = request.getStatusCode();
+        if (nextStatus == null || (nextStatus != 502 && nextStatus != 602)) {
+            return;
+        }
+        if (request.getEvaluationComments() == null) {
+            return;
+        }
+        String comment = Objects.toString(request.getEvaluationComments(), "").trim();
+        boolean promotion = request.isPromotion();
+        if (promotion) {
+            int updated = userKpiSummaryMapper.updateEvaluationCommentsPromotion(
+                    currentUserId, request.getCycleId(), comment, currentUserId);
+            if (updated > 0) {
+                return;
+            }
+            userKpiSummaryMapper.insertEvaluationComments(
+                    UUID.randomUUID(),
+                    currentUserId,
+                    request.getCycleId(),
+                    null,
+                    comment,
+                    currentUserId,
+                    currentUserId);
+        } else {
+            int updated = userKpiSummaryMapper.updateEvaluationComments(
+                    currentUserId, request.getCycleId(), comment, currentUserId);
+            if (updated > 0) {
+                return;
+            }
+            userKpiSummaryMapper.insertEvaluationComments(
+                    UUID.randomUUID(),
+                    currentUserId,
+                    request.getCycleId(),
+                    comment,
+                    null,
+                    currentUserId,
+                    currentUserId);
+        }
     }
 }

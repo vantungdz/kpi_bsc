@@ -22,6 +22,7 @@ export interface GmKpiTemplateItemRow {
   unitCode: number
   calculationRuleCode: number
   calculationTypeCode: number | null
+  targetDescription: string | null
   defaultTargetValue: number | null
   defaultWeight: number | null
 }
@@ -51,6 +52,8 @@ export interface GmCreateKpiTemplateItemBody {
   typeCode: number
   unitCode: number
   calculationMethod: string
+  cycleYear?: number | null
+  targetDescription?: unknown
   defaultTargetValue?: number | null
   defaultWeight: number
 }
@@ -62,6 +65,8 @@ export interface GmUpdateKpiTemplateItemBody {
   typeCode?: number | null
   unitCode?: number | null
   calculationMethod?: string | null
+  cycleYear?: number | null
+  targetDescription?: unknown
   defaultTargetValue?: number | null
   defaultWeight?: number | null
 }

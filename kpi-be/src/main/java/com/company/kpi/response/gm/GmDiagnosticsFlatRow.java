@@ -68,6 +68,8 @@ public class GmDiagnosticsFlatRow {
     private BigDecimal endSelfScore;
     private BigDecimal endPmScore;
     private BigDecimal endGmScore;
+    /** Target GM giao trực tiếp cho department/PM slice gốc. */
+    private BigDecimal sectionAssignedTargetValue;
     private BigDecimal memberTargetValue;
     private String evidences;
     private String feedbackNote;

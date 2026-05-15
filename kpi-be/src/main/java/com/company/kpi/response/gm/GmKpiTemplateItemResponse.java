@@ -22,6 +22,7 @@ public class GmKpiTemplateItemResponse {
     private Integer unitCode;
     private Integer calculationRuleCode;
     private Integer calculationTypeCode;
+    private String targetDescription;
     private BigDecimal defaultTargetValue;
     private BigDecimal defaultWeight;
 }

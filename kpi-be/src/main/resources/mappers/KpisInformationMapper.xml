@@ -73,6 +73,27 @@
           AND km.deleted_at IS NULL
     </select>
 
+    <select id="selectSelfCreatedKpiInfoForPmDelete" resultType="com.company.kpi.aggregate.KpiInfoForDeleteRow">
+        SELECT
+            ki.id AS kpi_information_id,
+            ki.cycle_id,
+            ki.master_kpi_id,
+            km.is_global
+        FROM kpi_assignments ka
+        INNER JOIN kpis_information ki ON ki.id = ka.kpi_info_id
+        INNER JOIN kpi_master km ON km.id = ki.master_kpi_id
+        WHERE ka.id = #{assignmentId}
+          AND ka.user_id = #{pmId}
+          AND ka.created_by = #{pmId}
+          AND ka.status_code IN (402, 403, 404, 406)
+          AND ka.deleted_at IS NULL
+          AND ki.created_by = #{pmId}
+          AND ki.deleted_at IS NULL
+          AND km.created_by = #{pmId}
+          AND km.type_code IN (101, 102, 103)
+          AND km.deleted_at IS NULL
+    </select>
+
     <update id="softDeleteKpisInformationById">
         UPDATE kpis_information
         SET deleted_at = CURRENT_TIMESTAMP,
@@ -157,8 +178,8 @@
             ki.target_value AS catalog_target_value,
             ki.target_description AS kpi_target_description,
             ki.is_important,
-            d.id AS section_id,
-            d.name AS section_name,
+            COALESCE(kas_a.department_id, kas_u.department_id, ud.department_id) AS section_id,
+            COALESCE(kas_a.department_name, kas_u.department_name, d.name) AS section_name,
             mgr.id AS section_manager_id,
             mgr.full_name AS section_manager_name,
             (
@@ -227,8 +248,8 @@
                     r.code
                 LIMIT 1
             ) AS member_role_name,
-            ldr.id AS leader_id,
-            ldr.full_name AS leader_name,
+            COALESCE(kas_a.supervisor_id, kas_u.supervisor_id, ud.supervisor_id) AS leader_id,
+            COALESCE(kas_a.supervisor_full_name, kas_u.supervisor_full_name, ldr.full_name) AS leader_name,
             (
                 SELECT r.code
                 FROM user_roles ur
@@ -261,7 +282,7 @@
                     r.code
                 LIMIT 1
             ) AS leader_role_name,
-            jt.name AS member_rank,
+            COALESCE(kas_a.job_title_name, kas_u.job_title_name, jt.name) AS member_rank,
             ka.id AS assignment_id,
             ka.parent_assignment_id AS parentAssignmentId,
             ka.status_code,
@@ -269,6 +290,17 @@
             ka.end_self_score,
             ka.end_pm_score,
             ka.end_gm_score,
+            (
+                SELECT root.target_value
+                FROM kpi_assignments root
+                WHERE root.cycle_id = ki.cycle_id
+                  AND root.kpi_info_id = ki.id
+                  AND root.user_id = mgr.id
+                  AND root.parent_assignment_id IS NULL
+                  AND root.deleted_at IS NULL
+                ORDER BY root.created_at DESC
+                LIMIT 1
+            ) AS section_assigned_target_value,
             ka.target_value AS member_target_value,
             ka.evidences::text AS evidences,
             kf.feedback_note,
@@ -328,10 +360,27 @@
                 AND uks.deleted_at IS NULL
             LEFT JOIN user_departments ud ON ud.user_id = u.id
                 AND ud.is_primary = TRUE
-            LEFT JOIN departments d ON d.id = ud.department_id
+            LEFT JOIN kpi_assignment_snapshots kas_a ON kas_a.assignment_id = ka.id
+                AND kas_a.cycle_id = ki.cycle_id
+            LEFT JOIN (
+                SELECT DISTINCT ON (user_id, cycle_id)
+                    user_id,
+                    cycle_id,
+                    department_id,
+                    department_name,
+                    job_title_name,
+                    supervisor_id,
+                    supervisor_full_name
+                FROM kpi_assignment_snapshots
+                WHERE cycle_id = #{cycleId}
+                ORDER BY user_id, cycle_id, created_at ASC
+            ) kas_u ON kas_u.user_id = u.id
+                AND kas_u.cycle_id = ki.cycle_id
+            LEFT JOIN departments d ON d.id = COALESCE(kas_a.department_id, kas_u.department_id, ud.department_id)
                 AND d.deleted_at IS NULL
             LEFT JOIN users mgr ON mgr.id = d.manager_id
-            LEFT JOIN users ldr ON ldr.id = ud.supervisor_id
+            LEFT JOIN users ldr ON ldr.id = COALESCE(kas_a.supervisor_id, kas_u.supervisor_id, ud.supervisor_id)
+                AND ldr.deleted_at IS NULL
             LEFT JOIN job_titles jt ON jt.id = u.job_title_id
                 AND jt.deleted_at IS NULL
         WHERE
@@ -340,7 +389,7 @@
         ORDER BY
             km.code NULLS LAST,
             km.name,
-            d.name,
+            COALESCE(kas_a.department_name, kas_u.department_name, d.name),
             u.full_name
     </select>
 </mapper>

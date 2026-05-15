@@ -203,7 +203,9 @@ export interface MemberKpiDashboard {
   pendingItems: string[]
   canSubmit: boolean
   evaluationComments?: string | null
+  evaluationCommentsPromotion?: string | null
   evaluationSupervisorComments?: string | null
+  evaluationSupervisorCommentsPromotion?: string | null
 }
 
 /** GET /kpi/member/form-meta — tạo KPI cá nhân */
@@ -259,6 +261,10 @@ export interface PmKpiDashboard {
   phase: EvalPhase
   teamMembers: PmTeamMember[]
   mySheet: KpiSheet
+  /** PM dashboard init thực tế trả kèm chu kỳ KPI theo năm. */
+  kpiCycle?: KpiCycleResponse
+  /** `sys_status_codes` (ASM_STATUS) — nhãn cột Status theo `description`. */
+  asmStatuses?: SysStatusCode[]
 }
 
 export interface PmTeamMember {

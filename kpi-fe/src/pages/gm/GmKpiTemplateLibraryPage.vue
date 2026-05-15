@@ -198,7 +198,9 @@ async function loadTemplateSuitesFromApi() {
   templateSuitesLoading.value = true
   try {
     const packs = await gmKpiService.getKpiTemplates()
-    const itemLists = await Promise.all(packs.map((p) => gmKpiService.getKpiTemplateItems(p.id)))
+    const itemLists = await Promise.all(
+      packs.map((p) => gmKpiService.getKpiTemplateItems(p.id, cycleIdForKpiDraft.value)),
+    )
     const map = new Map<string, GmKpiTemplateItemRow[]>()
     packs.forEach((p, i) => {
       map.set(p.id, itemLists[i] ?? [])

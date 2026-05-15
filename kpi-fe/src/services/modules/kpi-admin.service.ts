@@ -2,7 +2,9 @@
  * kpi-admin.service.ts
  * API calls cho Admin module
  */
+import type { AxiosResponse } from "axios";
 import http from "@/services/api";
+import type { ApiResponse } from "@/types/api";
 import type {
   Campaign,
   EmployeeProgress,
@@ -11,12 +13,76 @@ import type {
   Section,
   RankOption,
   JobTitleOption,
+  AdminKpiCycle,
 } from "@/mocks/admin.mock";
+
+/** Chuẩn hóa list từ BaseResponse hoặc mảng thô. */
+function unwrapList<T>(response: AxiosResponse<unknown>): T[] {
+  const body = response.data;
+  if (Array.isArray(body)) return body as T[];
+  if (body && typeof body === "object" && "data" in body) {
+    const inner = (body as ApiResponse<T[]>).data;
+    return Array.isArray(inner) ? inner : [];
+  }
+  return [];
+}
+
+// ── KPI cycles (kỳ đánh giá / kpi_cycles) ─────────────────────────────────────
+
+export interface CreateAdminKpiCycleBody {
+  year: number;
+  name: string;
+  goalSettingStartDate: string;
+  goalSettingEndDate: string;
+  midYearStartDate: string;
+  midYearEndDate: string;
+  endYearStartDate: string;
+  endYearEndDate: string;
+  activateImmediately?: boolean;
+}
+
+export type KpiCyclePhaseKey = "goal_setting" | "mid_year" | "end_year";
+
+export interface UpdateKpiCyclePhaseDatesBody {
+  phase: KpiCyclePhaseKey;
+  startDate: string;
+  endDate: string;
+}
+
+export async function apiGetKpiCycles(): Promise<AdminKpiCycle[]> {
+  return http.get("/admin/kpi-cycles").then((r) => r.data?.data ?? r.data);
+}
+
+export async function apiCreateKpiCycle(
+  data: CreateAdminKpiCycleBody,
+): Promise<AdminKpiCycle> {
+  return http
+    .post("/admin/kpi-cycles", data)
+    .then((r) => r.data?.data ?? r.data);
+}
+
+export async function apiPatchKpiCycleStatus(
+  id: string,
+  statusCode: 201 | 202,
+): Promise<AdminKpiCycle> {
+  return http
+    .patch(`/admin/kpi-cycles/${id}`, { statusCode })
+    .then((r) => r.data?.data ?? r.data);
+}
+
+export async function apiPutKpiCyclePhaseDates(
+  id: string,
+  data: UpdateKpiCyclePhaseDatesBody,
+): Promise<AdminKpiCycle> {
+  return http
+    .put(`/admin/kpi-cycles/${id}/phase-dates`, data)
+    .then((r) => r.data?.data ?? r.data);
+}
 
 // ── Campaigns ──────────────────────────────────────────────────────────────────
 
 export async function apiGetCampaigns(): Promise<Campaign[]> {
-  return http.get("/admin/campaigns").then((r) => r.data?.data ?? r.data);
+  return http.get("/admin/campaigns").then(unwrapList<Campaign>);
 }
 
 /**
@@ -28,48 +94,67 @@ export async function apiGetEmployeeProgress(
 ): Promise<EmployeeProgress[]> {
   return http
     .get("/admin/campaigns/progress", { params: { period } })
-    .then((r) => r.data?.data ?? r.data);
+    .then(unwrapList<EmployeeProgress>);
 }
 
+export type NotifyPhase = "goal_setting" | "mid_year" | "end_year";
+export type NotifyRecipientType = "all" | "individual" | "department";
+
+export type CampaignNotifyOptions = {
+  message?: string;
+  emailTemplateId?: string;
+  phase?: NotifyPhase;
+  recipientType?: NotifyRecipientType;
+  employeeIds?: string[];
+  departmentIds?: string[];
+};
+
 /**
- * Gửi thông báo KPI cho toàn bộ nhân viên.
- * type = "all" → backend gửi mass mail đến toàn công ty.
+ * Gửi thông báo KPI (toàn công ty hoặc nhóm đã chọn).
  */
 export async function apiSendMassMail(
   campaignId: string,
   message?: string,
+  options?: CampaignNotifyOptions,
 ): Promise<void> {
-  return http
-    .post(`/admin/campaigns/${campaignId}/notify`, {
-      type: "all",
-      message: message ?? "",
-    })
-    .then(() => {});
+  const msg = options?.message ?? message ?? "";
+  const body: Record<string, unknown> = {
+    type: "all",
+    message: msg,
+    recipientType: options?.recipientType ?? "all",
+  };
+  if (options?.phase) body.phase = options.phase;
+  if (options?.emailTemplateId) body.emailTemplateId = options.emailTemplateId;
+  if (options?.employeeIds?.length) body.employeeIds = options.employeeIds;
+  if (options?.departmentIds?.length) body.departmentIds = options.departmentIds;
+  return http.post(`/admin/campaigns/${campaignId}/notify`, body).then(() => {});
 }
 
 /**
- * Gửi email nhắc nhở cá nhân (Remind) cho một nhân viên cụ thể.
- * type = "single" → backend chỉ gửi cho employeeId đó.
+ * Gửi email nhắc nhở một nhân viên.
  */
 export async function apiSendRemind(
   campaignId: string,
   employeeId: string,
   message?: string,
+  options?: Pick<CampaignNotifyOptions, "message" | "emailTemplateId" | "phase">,
 ): Promise<void> {
-  return http
-    .post(`/admin/campaigns/${campaignId}/notify`, {
-      type: "single",
-      employeeId,
-      message: message ?? "",
-    })
-    .then(() => {});
+  const msg = options?.message ?? message ?? "";
+  const body: Record<string, unknown> = {
+    type: "single",
+    employeeId,
+    message: msg,
+  };
+  if (options?.emailTemplateId) body.emailTemplateId = options.emailTemplateId;
+  if (options?.phase) body.phase = options.phase;
+  return http.post(`/admin/campaigns/${campaignId}/notify`, body).then(() => {});
 }
 
 // ── Sections (Departments) ─────────────────────────────────────────────────────
 
 /** Lấy danh sách phòng ban từ bảng departments */
 export async function apiGetSections(): Promise<Section[]> {
-  return http.get("/admin/sections").then((r) => r.data?.data ?? r.data);
+  return http.get("/admin/sections").then(unwrapList<Section>);
 }
 
 // ── Ranks ──────────────────────────────────────────────────────────────────────
@@ -89,7 +174,7 @@ export async function apiGetJobTitles(): Promise<JobTitleOption[]> {
 // ── Employees ──────────────────────────────────────────────────────────────────
 
 export async function apiGetEmployees(): Promise<Employee[]> {
-  return http.get("/admin/employees").then((r) => r.data?.data ?? r.data);
+  return http.get("/admin/employees").then(unwrapList<Employee>);
 }
 
 export async function apiCreateEmployee(
@@ -112,7 +197,7 @@ export async function apiUpdateEmployee(
 // ── Email Templates ────────────────────────────────────────────────────────────
 
 export async function apiGetEmailTemplates(): Promise<EmailTemplate[]> {
-  return http.get("/admin/email-templates").then((r) => r.data?.data ?? r.data);
+  return http.get("/admin/email-templates").then(unwrapList<EmailTemplate>);
 }
 
 export async function apiCreateEmailTemplate(
@@ -132,15 +217,33 @@ export async function apiUpdateEmailTemplate(
     .then((r) => r.data?.data ?? r.data);
 }
 
+export async function apiDeleteEmailTemplate(id: string): Promise<void> {
+  return http.delete(`/admin/email-templates/${id}`).then(() => {});
+}
+
 // ── Facade ─────────────────────────────────────────────────────────────────────
 
 export const adminKpiService = {
+  getKpiCycles: () => apiGetKpiCycles(),
+  createKpiCycle: (data: CreateAdminKpiCycleBody) => apiCreateKpiCycle(data),
+  patchKpiCycleStatus: (id: string, statusCode: 201 | 202) =>
+    apiPatchKpiCycleStatus(id, statusCode),
+  updateKpiCyclePhaseDates: (id: string, data: UpdateKpiCyclePhaseDatesBody) =>
+    apiPutKpiCyclePhaseDates(id, data),
+
   getCampaigns: () => apiGetCampaigns(),
   getEmployeeProgress: (period: string) => apiGetEmployeeProgress(period),
-  sendMassMail: (campaignId: string, message?: string) =>
-    apiSendMassMail(campaignId, message),
-  sendRemind: (campaignId: string, employeeId: string, message?: string) =>
-    apiSendRemind(campaignId, employeeId, message),
+  sendMassMail: (
+    campaignId: string,
+    message?: string,
+    options?: CampaignNotifyOptions,
+  ) => apiSendMassMail(campaignId, message, options),
+  sendRemind: (
+    campaignId: string,
+    employeeId: string,
+    message?: string,
+    options?: Pick<CampaignNotifyOptions, "message" | "emailTemplateId" | "phase">,
+  ) => apiSendRemind(campaignId, employeeId, message, options),
 
   getSections: () => apiGetSections(),
   getRanks: () => apiGetRanks(),
@@ -155,4 +258,5 @@ export const adminKpiService = {
     apiCreateEmailTemplate(data),
   updateEmailTemplate: (id: string, data: Partial<EmailTemplate>) =>
     apiUpdateEmailTemplate(id, data),
+  deleteEmailTemplate: (id: string) => apiDeleteEmailTemplate(id),
 };

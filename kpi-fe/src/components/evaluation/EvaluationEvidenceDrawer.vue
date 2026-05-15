@@ -3,9 +3,14 @@ import { ref, watch, computed, onUnmounted } from 'vue'
 import { useToast } from 'vue-toastification'
 import type { KpiItem } from '@/types/kpi'
 import {
+  averageActualNumeric,
+  averageActualResultDisplay,
+  planActualRowPartiallyFilled,
+  requiredPlanActualFields,
+} from '@/composables/useMemberEvidenceDrawer'
+import {
   resolveFormMode,
   ratioLabels,
-  computeRatioPreview,
   parsePmPortfolioEvidenceString,
   normalizeDetailSelfScore,
   normalizeCalculationRuleCode,
@@ -18,6 +23,7 @@ import {
 } from '@/utils/memberKpiHelpers'
 import type { EvidenceFormMode } from '@/utils/memberKpiHelpers'
 import {
+  extractRawInputFromApiTargetDescription,
   parseScoringRulesFromTargetDescriptionStored,
   resolveScoringScoreForMetric,
 } from '@/utils/kpiScoringRulesDsl'
@@ -30,6 +36,7 @@ const props = defineProps<{
    * cạnh Hủy/Lưu — chỉ đọc (`disabled`).
    */
   selfScoreFooterReadonly?: boolean
+  readonly?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -45,6 +52,7 @@ const emit = defineEmits<{
 }>()
 
 const toast = useToast()
+const isReadOnly = computed(() => props.readonly === true)
 
 type PlanRow = { id: string; plan: string; actual: string; comment: string }
 
@@ -59,9 +67,6 @@ function newPlanRow(): PlanRow {
 
 const selfScoreDraft = ref<number | null>(null)
 const evidenceNoteDraft = ref('')
-const contentDraft = ref('')
-/** CALC_RULE 803: kết quả thực tế (Actual) — bắt buộc khi lưu. */
-const commentActualDraft = ref('')
 const planRows = ref<PlanRow[]>([newPlanRow()])
 const pendingEvidenceFiles = ref<{ id: string; file: File }[]>([])
 const pendingEvidenceUrls = ref<{ id: string; url: string; name?: string }[]>([])
@@ -117,6 +122,21 @@ const scoringRulesNormalized = computed(() => {
   }
 })
 
+const scoringRawInput = computed(() => {
+  const item = props.item
+  if (!item) return ''
+  const candidates = [
+    item.targetDescription ?? '',
+    item.target ?? '',
+    item.description ?? '',
+  ]
+  for (const candidate of candidates) {
+    const raw = extractRawInputFromApiTargetDescription(candidate)
+    if ((raw ?? '').trim()) return raw
+  }
+  return ''
+})
+
 function averageMetric802FromPlanRows(
   rows: PlanRow[],
   calculationTypeCode: number | null | undefined,
@@ -147,7 +167,7 @@ const previewResolvedScore = computed((): number | null => {
   const rule = normalizeCalculationRuleCode(k.calculationRuleCode)
   let metric: number | null = null
   if (rule === CALC_RULE_COMMENT && isCommentRule803.value) {
-    metric = parseNumericFromField(commentActualDraft.value)
+    metric = averageActualNumeric(planRows.value)
   } else if (rule === CALC_RULE_AVERAGE) {
     metric = averageMetric802FromPlanRows(planRows.value, k.calculationTypeCode)
   }
@@ -159,6 +179,19 @@ const footerSelfScoreDisplayed = computed(() => {
   if (p != null) return p
   return selfScoreDraft.value
 })
+
+const averageRatioPreview = computed(() => {
+  const k = itemAsKpi.value
+  if (!k || drawerFormMode.value !== 'average') {
+    return null
+  }
+  const value = averageMetric802FromPlanRows(planRows.value, k.calculationTypeCode)
+  return value == null ? null : `${value.toFixed(1)}%`
+})
+
+const averageActualResult = computed(() =>
+  averageActualResultDisplay(planRows.value),
+)
 
 /** Chuỗi JSON evidences: ưu tiên `evidences`, fallback `actualResult`; object (axios đã parse JSON) → stringify. */
 function evidenceJsonRawFromItem(it: Record<string, unknown>): string {
@@ -182,49 +215,41 @@ function evidenceJsonRawFromItem(it: Record<string, unknown>): string {
 function hydrateFromItem() {
   const it = props.item
   if (!it) return
-  commentActualDraft.value = ''
   selfScoreDraft.value = normalizeDetailSelfScore(it.selfScore)
   const rawEvidence = evidenceJsonRawFromItem(it)
   const parsed = parsePmPortfolioEvidenceString(rawEvidence)
   evidenceNoteDraft.value = parsed.note
 
-  const rule803 = normalizeCalculationRuleCode(it.calculationRuleCode) === CALC_RULE_COMMENT
-  if (rule803 && rawEvidence.trim().startsWith('{')) {
+  let legacyActual = ''
+  let legacyContent = parsed.content
+  if (rawEvidence.trim().startsWith('{')) {
     try {
       const o = JSON.parse(rawEvidence.trim()) as Record<string, unknown>
-      if (typeof o.actual === 'string') commentActualDraft.value = o.actual
+      if (typeof o.actual === 'string') legacyActual = o.actual.trim()
+      if (typeof o.content === 'string' && o.content.trim()) legacyContent = o.content.trim()
     } catch {
       /* ignore */
     }
   }
 
-  if (drawerFormMode.value === 'comment') {
-    const fromRows = parsed.rows.length
-      ? parsed.rows
-          .map((r) =>
-            [r.plan, r.actual, r.comment].filter((x) => String(x).trim()).join('\n'),
-          )
-          .filter(Boolean)
-          .join('\n\n')
-      : ''
-    contentDraft.value = parsed.content.trim()
-      ? parsed.content
-      : fromRows || parsed.legacyPlain || ''
-    planRows.value = [newPlanRow()]
+  const formMode = drawerFormMode.value
+  if (parsed.rows.length > 0) {
+    planRows.value = parsed.rows.map((r, i) => ({
+      id: `r-${i}-${Math.random().toString(36).slice(2, 7)}`,
+      plan: r.plan,
+      actual: r.actual,
+      comment: r.comment || r.content || '',
+    }))
+  } else if (formMode === 'comment' && (legacyActual || legacyContent)) {
+    planRows.value = [{
+      ...newPlanRow(),
+      actual: legacyActual,
+      comment: legacyContent,
+    }]
+  } else if (parsed.legacyPlain) {
+    planRows.value = [{ ...newPlanRow(), actual: parsed.legacyPlain }]
   } else {
-    contentDraft.value = parsed.content
-    if (parsed.rows.length > 0) {
-      planRows.value = parsed.rows.map((r, i) => ({
-        id: `r-${i}-${Math.random().toString(36).slice(2, 7)}`,
-        plan: r.plan,
-        actual: r.actual,
-        comment: r.comment,
-      }))
-    } else if (parsed.legacyPlain) {
-      planRows.value = [{ ...newPlanRow(), actual: parsed.legacyPlain }]
-    } else {
-      planRows.value = [newPlanRow()]
-    }
+    planRows.value = [newPlanRow()]
   }
 
   pendingEvidenceFiles.value = []
@@ -283,42 +308,67 @@ onUnmounted(() => {
 function buildSerializedActual(): string {
   const mode = drawerFormMode.value
   const note = evidenceNoteDraft.value.trim()
-  const content = contentDraft.value.trim()
-
-  if (mode === 'comment') {
-    const o: Record<string, unknown> = {}
-    const k = itemAsKpi.value
-    const rule803 = k && normalizeCalculationRuleCode(k.calculationRuleCode) === CALC_RULE_COMMENT
-    if (rule803) {
-      const act = String(commentActualDraft.value ?? '').trim()
-      if (act) o.actual = act
-    }
-    if (content) o.content = content
-    if (note) o.note = note
-    return Object.keys(o).length ? JSON.stringify(o) : ''
-  }
 
   const mapped = planRows.value.map(({ plan, actual, comment }) => ({
     plan: plan.trim(),
     actual: actual.trim(),
     ...(comment.trim() ? { comment: comment.trim() } : {}),
   }))
-  const rows = mapped.filter((r) => r.plan || r.actual || ('comment' in r && r.comment))
+  const rows = mapped.filter((r) =>
+    mode === 'comment' ? Boolean(r.actual || r.comment) : Boolean(r.plan || r.actual),
+  )
 
   const o: Record<string, unknown> = {}
   if (rows.length) o.planActualRecords = rows
+  if (mode === 'average') {
+    const k = itemAsKpi.value
+    const value = k ? averageMetric802FromPlanRows(planRows.value, k.calculationTypeCode) : null
+    if (value != null) o.result = `${value.toFixed(1)}%`
+  } else if (mode === 'comment') {
+    const avgDisplay = averageActualResultDisplay(planRows.value)
+    if (avgDisplay != null) {
+      o.actual = avgDisplay
+      o.result = avgDisplay
+    }
+  }
   if (note) o.note = note
   return Object.keys(o).length ? JSON.stringify(o) : ''
 }
 
 const handleSave = () => {
-  if (
-    drawerFormMode.value === 'comment' &&
-    isCommentRule803.value &&
-    !String(commentActualDraft.value ?? '').trim()
-  ) {
-    toast.warning('Vui lòng nhập Actual (bắt buộc với KPI dạng 803 — nhận xét / văn bản).')
+  if (isReadOnly.value) {
+    toast.warning('KPI đã được gửi duyệt, chỉ được xem thông tin.')
     return
+  }
+  if (drawerFormMode.value === 'average') {
+    const fields = requiredPlanActualFields('average')
+    const hasIncomplete = planRows.value.some(r => planActualRowPartiallyFilled(r, fields))
+    if (hasIncomplete) {
+      toast.warning('Mỗi dòng phải nhập đủ 3 trường: Comment, Plan và Actual.')
+      return
+    }
+    const hasAnyCompleteRow = planRows.value.some(r =>
+      fields.every(f => String(r[f] ?? '').trim().length > 0),
+    )
+    if (!hasAnyCompleteRow) {
+      toast.warning('Vui lòng nhập đủ Comment, Plan và Actual cho ít nhất 1 dòng trước khi lưu.')
+      return
+    }
+  }
+  if (drawerFormMode.value === 'comment') {
+    const fields = requiredPlanActualFields('comment')
+    const hasIncomplete = planRows.value.some(r => planActualRowPartiallyFilled(r, fields))
+    if (hasIncomplete) {
+      toast.warning('Mỗi dòng phải nhập đủ Comment và Actual.')
+      return
+    }
+    const hasAnyCompleteRow = planRows.value.some(r =>
+      fields.every(f => String(r[f] ?? '').trim().length > 0),
+    )
+    if (!hasAnyCompleteRow) {
+      toast.warning('Vui lòng nhập đủ Comment và Actual cho ít nhất 1 dòng trước khi lưu.')
+      return
+    }
   }
   emit('save', {
     id: props.item?.id != null ? String(props.item.id) : undefined,
@@ -358,6 +408,16 @@ function removeUrl(id: string) {
 }
 
 function addPlanRow() {
+  const fields = requiredPlanActualFields(drawerFormMode.value)
+  const hasIncomplete = planRows.value.some(r => planActualRowPartiallyFilled(r, fields))
+  if (hasIncomplete) {
+    toast.warning(
+      drawerFormMode.value === 'comment'
+        ? 'Vui lòng nhập đủ Comment và Actual trước khi thêm dòng mới.'
+        : 'Vui lòng nhập đủ Comment, Plan và Actual trước khi thêm dòng mới.',
+    )
+    return
+  }
   planRows.value.push(newPlanRow())
 }
 
@@ -429,20 +489,35 @@ const selfScoreInFooter = computed(() => !!props.selfScoreFooterReadonly)
             </div>
           </div>
 
-          <div class="min-h-0 flex-1 space-y-6 overflow-y-auto p-6">
-            <!-- Average (số liệu + tỉ lệ) -->
+          <fieldset
+            class="min-h-0 flex-1 space-y-6 overflow-y-auto border-0 p-6 disabled:opacity-80"
+            :disabled="isReadOnly"
+          >
+            <!-- 802 / 803: nhiều record Plan+Actual hoặc Comment+Actual -->
             <div
-              v-if="drawerFormMode === 'average'"
+              v-if="drawerFormMode === 'average' || drawerFormMode === 'comment'"
               class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"
             >
               <div
-                class="flex items-center justify-between border-b border-blue-100 bg-blue-50/50 px-4 py-3"
+                class="flex items-center justify-between border-b px-4 py-3"
+                :class="drawerFormMode === 'average' ? 'border-blue-100 bg-blue-50/50' : 'border-teal-100 bg-teal-50/50'"
               >
-                <h4 class="flex items-center text-sm font-bold text-blue-800">
-                  <i class="fas fa-calculator mr-2 text-blue-600" />
-                  Khai báo số liệu (Auto tỉ lệ)
+                <h4
+                  class="flex items-center text-sm font-bold"
+                  :class="drawerFormMode === 'average' ? 'text-blue-800' : 'text-teal-800'"
+                >
+                  <i
+                    class="mr-2"
+                    :class="drawerFormMode === 'average' ? 'fas fa-calculator text-blue-600' : 'fas fa-comment-dots text-teal-600'"
+                  />
+                  {{
+                    drawerFormMode === 'average'
+                      ? 'Khai báo số liệu (Auto tỉ lệ)'
+                      : 'Khai báo Mục tiêu / Kết quả'
+                  }}
                 </h4>
                 <span
+                  v-if="drawerFormMode === 'average'"
                   class="rounded bg-blue-100 px-2 py-0.5 text-[10px] font-bold text-blue-700"
                   >{{ calcTypeLabel.formula }}</span
                 >
@@ -465,146 +540,78 @@ const selfScoreInFooter = computed(() => !!props.selfScoreFooterReadonly)
                 </div>
 
                 <div
-                  v-for="(row, rowIdx) in planRows"
-                  :key="row.id"
-                  class="rounded-lg border border-blue-100/80 bg-white p-3 shadow-sm"
+                  v-if="scoringRawInput"
+                  class="mt-1.5 rounded border border-slate-200 bg-slate-50 px-3 py-2"
                 >
-                  <div class="mb-2 flex items-center justify-between gap-2">
-                    <span class="text-[10px] font-bold uppercase tracking-wider text-blue-800"
-                      >Record {{ rowIdx + 1 }}</span
+                  <p class="mb-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    Quy tắc chấm điểm:
+                  </p>
+                  <pre class="whitespace-pre-wrap font-mono text-[11px] leading-relaxed text-slate-600">{{ scoringRawInput }}</pre>
+                </div>
+                <div
+                  class="space-y-4 rounded-lg p-4"
+                  :class="drawerFormMode === 'average' ? 'border border-blue-100 bg-blue-50/20' : 'border border-teal-100 bg-teal-50/30'"
+                >
+                  <div
+                    v-for="row in planRows"
+                    :key="row.id"
+                    class="border-b bg-transparent pb-3 last:border-b-0 last:pb-0"
+                    :class="drawerFormMode === 'average' ? 'border-blue-100/80' : 'border-teal-100/80'"
+                  >
+                    <div
+                      class="grid grid-cols-1 gap-3 md:items-end"
+                      :class="drawerFormMode === 'average'
+                        ? 'md:grid-cols-[1fr_1fr_1fr_auto]'
+                        : 'md:grid-cols-[minmax(0,2.2fr)_minmax(88px,0.9fr)_auto]'"
                     >
-                    <button
-                      v-if="planRows.length > 1"
-                      type="button"
-                      class="rounded p-1 text-xs text-slate-400 hover:bg-rose-50 hover:text-rose-600"
-                      title="Xóa dòng"
-                      @click="removePlanRow(row.id)"
-                    >
-                      <i class="fas fa-trash-alt" />
+                      <div>
+                        <label class="mb-1 block text-xs font-bold text-slate-600">
+                          {{ drawerFormMode === 'comment' ? 'Nội dung nhận xét (Comment)' : 'Comment' }}
+                        </label>
+                        <input
+                          v-model="row.comment"
+                          type="text"
+                          :placeholder="drawerFormMode === 'comment' ? 'Mô tả bối cảnh, kết quả...' : 'Ghi chú thêm…'"
+                          class="w-full rounded border border-slate-300 px-3 py-2 text-sm focus:ring-1"
+                          :class="drawerFormMode === 'average' ? 'focus:ring-blue-500' : 'focus:ring-teal-500'"
+                        />
+                      </div>
+                      <div v-if="drawerFormMode === 'average'" class="contents">
+                        <div>
+                          <label class="mb-1 block text-xs font-bold text-slate-600">{{ calcTypeLabel.plan }}</label>
+                          <input v-model="row.plan" type="text" inputmode="decimal" placeholder="0" class="w-full rounded border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-blue-500" />
+                        </div>
+                        <div>
+                          <label class="mb-1 block text-xs font-bold text-slate-600">{{ calcTypeLabel.actual }}</label>
+                          <input v-model="row.actual" type="text" inputmode="decimal" placeholder="0" class="w-full rounded border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-blue-500" />
+                        </div>
+                      </div>
+                      <div v-else>
+                        <label class="mb-1 block text-xs font-bold text-slate-600">Giá trị thực tế (Actual)</label>
+                        <input v-model="row.actual" type="text" inputmode="decimal" placeholder="Nhập số liệu thực tế..." class="w-full rounded border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-teal-500" />
+                      </div>
+                      <div class="flex items-end justify-end md:pb-[2px]">
+                        <button v-if="planRows.length > 1" type="button" class="rounded p-2 text-xs text-slate-400 hover:bg-rose-50 hover:text-rose-600" title="Xóa dòng" @click="removePlanRow(row.id)">
+                          <i class="fas fa-trash-alt" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="flex items-center justify-between">
+                    <div v-if="drawerFormMode === 'average' && averageRatioPreview" class="mt-2 flex items-center gap-2">
+                      <span class="text-[10px] font-semibold text-slate-500">Kết quả tính:</span>
+                      <span class="rounded bg-blue-50 px-2 py-0.5 text-xs font-bold text-blue-700">{{ averageRatioPreview }}</span>
+                    </div>
+                    <div v-else-if="drawerFormMode === 'comment'" class="mt-2 flex items-center gap-2">
+                      <span class="text-[10px] font-semibold text-slate-500">Kết quả tính:</span>
+                      <span class="rounded bg-teal-50 px-2 py-0.5 text-xs font-bold text-teal-700">{{ averageActualResult ?? '—' }}</span>
+                      <span class="text-[10px] text-slate-400">(TB Actual)</span>
+                    </div>
+                    <div v-else />
+                    <button type="button" class="flex items-center rounded px-4 py-1.5 text-sm font-medium text-white" :class="drawerFormMode === 'average' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-teal-600 hover:bg-teal-700'" @click="addPlanRow">
+                      <i class="fas fa-plus mr-1" /> Thêm Record
                     </button>
                   </div>
-                  <div class="space-y-3">
-                    <div>
-                      <label class="mb-1 block text-xs font-bold text-slate-600">Comment</label>
-                      <textarea
-                        v-model="row.comment"
-                        rows="2"
-                        placeholder="Ghi chú thêm…"
-                        class="w-full rounded border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-blue-500"
-                      />
-                    </div>
-                    <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
-                      <div>
-                        <label class="mb-1 block text-xs font-bold text-slate-600">{{
-                          calcTypeLabel.plan
-                        }}</label>
-                        <input
-                          v-model="row.plan"
-                          type="text"
-                          inputmode="decimal"
-                          placeholder="0"
-                          class="w-full rounded border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-blue-500"
-                        />
-                      </div>
-                      <div>
-                        <label class="mb-1 block text-xs font-bold text-slate-600">{{
-                          calcTypeLabel.actual
-                        }}</label>
-                        <input
-                          v-model="row.actual"
-                          type="text"
-                          inputmode="decimal"
-                          placeholder="0"
-                          class="w-full rounded border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-blue-500"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                  <div
-                    v-if="item.calculationTypeCode != null"
-                    class="mt-2 flex items-center gap-2"
-                  >
-                    <span class="text-[10px] font-semibold text-slate-500">Kết quả tính:</span>
-                    <span class="rounded bg-blue-50 px-2 py-0.5 text-xs font-bold text-blue-700">
-                      {{
-                        computeRatioPreview(
-                          row.plan,
-                          row.actual,
-                          Number(item.calculationTypeCode),
-                        ) ?? '—'
-                      }}
-                    </span>
-                  </div>
-                </div>
-
-                <div class="flex justify-end">
-                  <button
-                    type="button"
-                    class="flex items-center rounded bg-blue-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
-                    @click="addPlanRow"
-                  >
-                    <i class="fas fa-plus mr-1" /> Thêm Record
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <!-- Comment (803): mục tiêu / kết quả — chỉ Content + Self Score, không Record/Plan/Actual -->
-            <div
-              v-else
-              class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"
-            >
-              <div class="flex items-center border-b border-emerald-100 bg-emerald-50/60 px-4 py-3">
-                <h4 class="text-sm font-bold text-emerald-900">
-                  <i class="fas fa-envelope-open-text mr-2 text-emerald-600" />
-                  Khai báo Mục tiêu / Kết quả
-                </h4>
-              </div>
-              <div class="space-y-4 p-4">
-                <div
-                  v-if="!selfScoreInFooter"
-                  class="flex items-center gap-4 border-b border-slate-100 pb-4"
-                >
-                  <label class="text-xs font-bold uppercase tracking-wider text-slate-600"
-                    >Self Score:</label
-                  >
-                  <select
-                    v-model="selfScoreDraft"
-                    class="w-32 cursor-pointer rounded-md border border-slate-300 px-3 py-2 text-sm font-bold text-slate-800 shadow-sm outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-                  >
-                    <option :value="null">-</option>
-                    <option v-for="n in 5" :key="n" :value="n">{{ n }}</option>
-                  </select>
-                </div>
-
-                <div v-if="isCommentRule803" class="space-y-2">
-                  <label class="mb-1 flex items-center gap-1.5 text-xs font-bold text-slate-700">
-                    <i class="fas fa-chart-line text-emerald-600" aria-hidden="true" />
-                    Actual
-                    <span class="font-extrabold text-rose-600">*</span>
-                  </label>
-                  <input
-                    v-model="commentActualDraft"
-                    type="text"
-                    name="kpi-comment-actual"
-                    autocomplete="off"
-                    placeholder="Nhập kết quả thực tế / chỉ số Actual (bắt buộc)…"
-                    required
-                    class="w-full rounded-md border-2 border-emerald-200/90 bg-white px-3 py-2.5 text-sm font-medium text-slate-800 shadow-sm placeholder:text-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-400"
-                  />
-                </div>
-
-                <div>
-                  <label class="mb-2 block text-xs font-bold text-slate-700">
-                    <i class="fas fa-list-ul mr-1 text-emerald-600" />
-                    Nội dung nhận xét / diễn giải (Content)
-                  </label>
-                  <textarea
-                    v-model="contentDraft"
-                    rows="8"
-                    placeholder="Mô tả chi tiết bối cảnh, kết quả hoặc diễn giải thêm để PM tham chiếu khi cho điểm..."
-                    class="w-full resize-y rounded-md border-2 border-emerald-200/90 bg-white px-3 py-3 text-sm leading-relaxed text-slate-800 shadow-sm focus:border-emerald-400 focus:outline-none focus:ring-1 focus:ring-emerald-400"
-                  />
                 </div>
               </div>
             </div>
@@ -789,7 +796,7 @@ const selfScoreInFooter = computed(() => !!props.selfScoreFooterReadonly)
                 />
               </div>
             </div>
-          </div>
+          </fieldset>
 
           <div
             class="flex flex-col gap-3 border-t border-slate-200 bg-white p-4 sm:flex-row sm:items-center sm:gap-4"
@@ -819,7 +826,9 @@ const selfScoreInFooter = computed(() => !!props.selfScoreFooterReadonly)
               </button>
               <button
                 type="button"
-                class="flex items-center rounded-lg bg-slate-800 px-5 py-2 text-sm font-bold text-white hover:bg-slate-900"
+                class="flex items-center rounded-lg bg-slate-800 px-5 py-2 text-sm font-bold text-white hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
+                :disabled="isReadOnly"
+                :title="isReadOnly ? 'KPI đã được gửi duyệt, chỉ được xem thông tin.' : undefined"
                 @click="handleSave"
               >
                 <i class="fas fa-save mr-2" />Lưu thay đổi

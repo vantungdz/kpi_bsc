@@ -5,7 +5,6 @@ import com.company.kpi.response.gm.GmKpiCycleOptionResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
-import java.time.Year;
 import java.util.List;
 
 @Service
@@ -19,9 +18,10 @@ public class GmKpiCycleService {
     }
 
     /**
-     * Chu kỳ có {@code year} ≥ năm dương lịch hiện tại (theo máy chủ) — form «Năm đánh giá» / header GM.
+     * Chu kỳ đã có dữ liệu KPI (thư viện, giao việc hoặc chốt sổ) — dropdown «Năm» header GM / đánh giá.
+     * Bao gồm các năm trước để GM xem lịch sử (năm &lt; hiện tại → read-only ở FE).
      */
     public List<GmKpiCycleOptionResponse> listCyclesForEvaluationFromCurrentYear() {
-        return kpiCycleMapper.listCyclesFromMinYear(Year.now().getValue());
+        return kpiCycleMapper.listActiveCyclesWithKpisInformation();
     }
 }

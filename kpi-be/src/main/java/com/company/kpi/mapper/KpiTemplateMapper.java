@@ -18,7 +18,8 @@ public interface KpiTemplateMapper {
 
     int countActiveTemplateById(@Param("id") UUID id);
 
-    List<GmKpiTemplateItemResponse> listItemsByTemplateId(@Param("templateId") UUID templateId);
+    List<GmKpiTemplateItemResponse> listItemsByTemplateId(
+            @Param("templateId") UUID templateId, @Param("year") int year);
 
     KpiTemplateEntityRow selectActiveTemplateEntityById(@Param("id") UUID id);
 
@@ -46,6 +47,7 @@ public interface KpiTemplateMapper {
             @Param("id") UUID id,
             @Param("templateId") UUID templateId,
             @Param("masterKpiId") UUID masterKpiId,
+            @Param("defaultTargetDescription") String defaultTargetDescription,
             @Param("defaultTargetValue") BigDecimal defaultTargetValue,
             @Param("defaultWeight") BigDecimal defaultWeight);
 
@@ -53,11 +55,12 @@ public interface KpiTemplateMapper {
             @Param("templateId") UUID templateId, @Param("itemId") UUID itemId);
 
     GmKpiTemplateItemResponse selectTemplateItemResponse(
-            @Param("templateId") UUID templateId, @Param("itemId") UUID itemId);
+            @Param("templateId") UUID templateId, @Param("itemId") UUID itemId, @Param("year") int year);
 
     int updateTemplateItemDefaults(
             @Param("templateId") UUID templateId,
             @Param("itemId") UUID itemId,
+            @Param("defaultTargetDescription") String defaultTargetDescription,
             @Param("defaultTargetValue") BigDecimal defaultTargetValue,
             @Param("defaultWeight") BigDecimal defaultWeight);
 

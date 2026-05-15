@@ -4,51 +4,139 @@
  * Trang Quản lý Chiến dịch Đánh giá KPI — chuyển đổi từ a1.html
  */
 import { ref, computed } from "vue";
+import { isAxiosError } from "axios";
 import { adminKpiService } from "@/services/modules/kpi-admin.service";
 import type {
   Campaign,
   CampaignPeriod,
+  Employee,
   EmployeeProgress,
+  EmailTemplate,
+  Section,
 } from "@/mocks/admin.mock";
+import type {
+  NotifyPhase,
+  NotifyRecipientType,
+} from "@/services/modules/kpi-admin.service";
 
-type MailMode = "mass" | "single";
+const PHASE_OPTIONS: { value: NotifyPhase; label: string }[] = [
+  { value: "goal_setting", label: "Thiết lập mục tiêu (Setting)" },
+  { value: "mid_year", label: "Đánh giá 1H (1st Half)" },
+  { value: "end_year", label: "Đánh giá 2H (2nd Half)" },
+];
+
+const RECIPIENT_OPTIONS: { value: NotifyRecipientType; label: string }[] = [
+  { value: "all", label: "Toàn công ty" },
+  { value: "individual", label: "Cá nhân" },
+  { value: "department", label: "Bộ phận" },
+];
 
 // ── State ──────────────────────────────────────────────────────────────────────
 
 const campaigns = ref<Campaign[]>([]);
 const employeeProgress = ref<EmployeeProgress[]>([]);
+const allEmployees = ref<Employee[]>([]);
+const sections = ref<Section[]>([]);
 const selectedPeriod = ref<CampaignPeriod>("current");
-const startDate = ref("");
-const endDate = ref("");
 const searchText = ref("");
 const statusFilter = ref("all");
 const selectedRows = ref<Set<string>>(new Set());
-const showMassMailModal = ref(false);
 const showRemindModal = ref(false);
 const remindTarget = ref("");
 const remindTargetId = ref("");
 const remindTargetEmail = ref("");
 const remindReason = ref("");
-const mailMode = ref<MailMode>("mass");
 const isSending = ref(false);
 const toastMsg = ref("");
 const showToast = ref(false);
 const loading = ref(false);
+const emailTemplates = ref<EmailTemplate[]>([]);
+const announceResourcesLoading = ref(false);
+const announceLoadError = ref("");
+
+/** Phát hành thông báo — form chính */
+const notifyPhase = ref<NotifyPhase>("goal_setting");
+const notifyTemplateId = ref("");
+const notifyRecipientScope = ref<NotifyRecipientType>("all");
+const announceMemberIds = ref<Set<string>>(new Set());
+const announceDeptIds = ref<Set<string>>(new Set());
+const announceMemberSearch = ref("");
 
 // ── Init ───────────────────────────────────────────────────────────────────────
 
+function loadErrorMessage(err: unknown, fallback: string): string {
+  if (isAxiosError(err)) {
+    const msg = err.response?.data;
+    if (msg && typeof msg === "object" && "message" in msg) {
+      const m = (msg as { message?: unknown }).message;
+      if (typeof m === "string" && m.trim()) return m.trim();
+    }
+    if (typeof err.message === "string" && err.message.trim()) return err.message;
+  }
+  if (err instanceof Error && err.message.trim()) return err.message;
+  return fallback;
+}
+
+const loadAnnounceResources = async () => {
+  announceResourcesLoading.value = true;
+  announceLoadError.value = "";
+  const errors: string[] = [];
+  const [tplRes, empRes, sectionRes] = await Promise.allSettled([
+    adminKpiService.getEmailTemplates(),
+    adminKpiService.getEmployees(),
+    adminKpiService.getSections(),
+  ]);
+  if (tplRes.status === "fulfilled") {
+    emailTemplates.value = tplRes.value ?? [];
+    pickDefaultTemplate();
+  } else {
+    errors.push(
+      `mẫu email: ${loadErrorMessage(tplRes.reason, "không tải được")}`,
+    );
+  }
+  if (empRes.status === "fulfilled") {
+    allEmployees.value = empRes.value ?? [];
+  } else {
+    errors.push(
+      `nhân viên: ${loadErrorMessage(empRes.reason, "không tải được")}`,
+    );
+  }
+  if (sectionRes.status === "fulfilled") {
+    sections.value = sectionRes.value ?? [];
+  } else {
+    errors.push(
+      `bộ phận: ${loadErrorMessage(sectionRes.reason, "không tải được")}`,
+    );
+  }
+  if (errors.length > 0) {
+    announceLoadError.value = errors.join("; ");
+    triggerToast(`Không tải đủ dữ liệu phát hành (${announceLoadError.value}).`);
+  }
+  announceResourcesLoading.value = false;
+};
+
 const init = async () => {
   loading.value = true;
-  try {
-    const [campaignRes, progressRes] = await Promise.all([
-      adminKpiService.getCampaigns(),
-      adminKpiService.getEmployeeProgress(selectedPeriod.value),
-    ]);
-    campaigns.value = campaignRes;
-    employeeProgress.value = progressRes;
-  } finally {
-    loading.value = false;
+  const [campaignRes, progressRes] = await Promise.allSettled([
+    adminKpiService.getCampaigns(),
+    adminKpiService.getEmployeeProgress(selectedPeriod.value),
+  ]);
+  if (campaignRes.status === "fulfilled") {
+    campaigns.value = campaignRes.value ?? [];
+  } else {
+    triggerToast(
+      loadErrorMessage(campaignRes.reason, "Không tải được danh sách chiến dịch."),
+    );
   }
+  if (progressRes.status === "fulfilled") {
+    employeeProgress.value = progressRes.value ?? [];
+  } else {
+    triggerToast(
+      loadErrorMessage(progressRes.reason, "Không tải được tiến độ nhân viên."),
+    );
+  }
+  loading.value = false;
+  await loadAnnounceResources();
 };
 init();
 
@@ -89,13 +177,70 @@ const filteredProgress = computed(() => {
 
 const checkedCount = computed(() => selectedRows.value.size);
 
+const activeEmailTemplates = computed(() =>
+  emailTemplates.value.filter((t) => t.status === "active"),
+);
+
+const templateOptionsForAnnounce = computed(() => {
+  const active = emailTemplates.value.filter((t) => t.status === "active");
+  const inactive = emailTemplates.value.filter((t) => t.status !== "active");
+  return [...active, ...inactive];
+});
+
+const allSelectableChecked = computed(
+  () =>
+    selectableRows.value.length > 0 &&
+    selectableRows.value.every((id) => selectedRows.value.has(id)),
+);
+
 const selectableRows = computed(() =>
   filteredProgress.value
     .filter((r) => r.status !== "completed")
     .map((r) => r.id),
 );
 
-// ── Methods ────────────────────────────────────────────────────────────────────
+const selectedNotifyTemplate = computed(() =>
+  activeEmailTemplates.value.find((t) => t.id === notifyTemplateId.value),
+);
+
+const activeEmployeesForAnnounce = computed(() =>
+  allEmployees.value.filter((e) => e.status === "active"),
+);
+
+const filteredAnnounceMembers = computed(() => {
+  const q = announceMemberSearch.value.trim().toLowerCase();
+  if (!q) return activeEmployeesForAnnounce.value;
+  return activeEmployeesForAnnounce.value.filter(
+    (e) =>
+      e.name.toLowerCase().includes(q) ||
+      e.email.toLowerCase().includes(q) ||
+      e.code.toLowerCase().includes(q),
+  );
+});
+
+const allMembersSelected = computed(
+  () =>
+    filteredAnnounceMembers.value.length > 0 &&
+    filteredAnnounceMembers.value.every((e) =>
+      announceMemberIds.value.has(e.id),
+    ),
+);
+
+const allDeptsSelected = computed(
+  () =>
+    sections.value.length > 0 &&
+    sections.value.every((s) => announceDeptIds.value.has(s.id)),
+);
+
+const announceRecipientSummary = computed(() => {
+  if (notifyRecipientScope.value === "all") {
+    return `Toàn công ty (${activeEmployeesForAnnounce.value.length} nhân viên active)`;
+  }
+  if (notifyRecipientScope.value === "individual") {
+    return `${announceMemberIds.value.size} nhân viên đã chọn`;
+  }
+  return `${announceDeptIds.value.size} bộ phận đã chọn`;
+});
 
 const handlePeriodChange = async () => {
   selectedRows.value.clear();
@@ -126,18 +271,85 @@ const toggleRow = (id: string, completed: boolean) => {
   }
 };
 
-const openMassMailModal = () => {
-  if (!startDate.value || !endDate.value) {
-    alert("Vui lòng chọn Từ ngày và Đến ngày trước khi gửi thông báo.");
+function pickDefaultTemplate() {
+  const first = activeEmailTemplates.value[0];
+  notifyTemplateId.value = first?.id ?? "";
+}
+
+const onRecipientScopeChange = () => {
+  announceMemberIds.value.clear();
+  announceDeptIds.value.clear();
+};
+
+const toggleAnnounceMember = (id: string) => {
+  if (announceMemberIds.value.has(id)) announceMemberIds.value.delete(id);
+  else announceMemberIds.value.add(id);
+};
+
+const toggleAllAnnounceMembers = (checked: boolean) => {
+  if (checked) {
+    filteredAnnounceMembers.value.forEach((e) =>
+      announceMemberIds.value.add(e.id),
+    );
+  } else {
+    filteredAnnounceMembers.value.forEach((e) =>
+      announceMemberIds.value.delete(e.id),
+    );
+  }
+};
+
+const toggleAnnounceDept = (id: string) => {
+  if (announceDeptIds.value.has(id)) announceDeptIds.value.delete(id);
+  else announceDeptIds.value.add(id);
+};
+
+const toggleAllAnnounceDepts = (checked: boolean) => {
+  if (checked) sections.value.forEach((s) => announceDeptIds.value.add(s.id));
+  else announceDeptIds.value.clear();
+};
+
+const sendAnnouncement = async () => {
+  if (!currentCampaign.value?.id) {
+    alert("Không xác định được chiến dịch hiện tại.");
     return;
   }
-  mailMode.value = "mass";
-  showMassMailModal.value = true;
+  if (!notifyPhase.value) {
+    alert("Vui lòng chọn giai đoạn đánh giá.");
+    return;
+  }
+  if (notifyRecipientScope.value === "individual" && announceMemberIds.value.size === 0) {
+    alert("Vui lòng chọn ít nhất một nhân viên.");
+    return;
+  }
+  if (notifyRecipientScope.value === "department" && announceDeptIds.value.size === 0) {
+    alert("Vui lòng chọn ít nhất một bộ phận.");
+    return;
+  }
+
+  isSending.value = true;
+  try {
+    const opts = {
+      phase: notifyPhase.value,
+      recipientType: notifyRecipientScope.value,
+      emailTemplateId: notifyTemplateId.value || undefined,
+      employeeIds:
+        notifyRecipientScope.value === "individual"
+          ? [...announceMemberIds.value]
+          : undefined,
+      departmentIds:
+        notifyRecipientScope.value === "department"
+          ? [...announceDeptIds.value]
+          : undefined,
+    };
+    await adminKpiService.sendMassMail(currentCampaign.value.id, "", opts);
+    triggerToast(`Đã gửi thông báo KPI (${announceRecipientSummary.value}).`);
+  } finally {
+    isSending.value = false;
+  }
 };
 
 /** Mở modal remind cho một nhân viên cụ thể */
 const openSingleRemindModal = (row: EmployeeProgress) => {
-  mailMode.value = "single";
   remindTarget.value = row.name;
   remindTargetId.value = row.id;
   remindTargetEmail.value = row.email;
@@ -146,28 +358,20 @@ const openSingleRemindModal = (row: EmployeeProgress) => {
 };
 
 const closeModals = () => {
-  showMassMailModal.value = false;
   showRemindModal.value = false;
 };
 
-/** Thực thi gửi email — phân biệt mass mail vs single remind */
-const executeSendMail = async (customMsg: string) => {
+const executeRemindMail = async () => {
   if (isSending.value) return;
   isSending.value = true;
   closeModals();
-
   try {
     const campaignId = currentCampaign.value?.id ?? "";
-
-    if (mailMode.value === "single") {
-      await adminKpiService.sendRemind(campaignId, remindTargetId.value, customMsg);
-      triggerToast(`Đã gửi email nhắc nhở đến ${remindTarget.value} thành công!`);
-    } else {
-      await adminKpiService.sendMassMail(campaignId, customMsg);
-      triggerToast("Đã gửi thông báo đánh giá KPI đến toàn bộ nhân viên thành công!");
-    }
-
-    selectedRows.value.clear();
+    await adminKpiService.sendRemind(campaignId, remindTargetId.value, "", {
+      phase: notifyPhase.value,
+      emailTemplateId: notifyTemplateId.value || undefined,
+    });
+    triggerToast(`Đã gửi email nhắc nhở đến ${remindTarget.value}.`);
   } finally {
     isSending.value = false;
   }
@@ -285,50 +489,121 @@ const remindBtnLabel = (status: string) =>
                   Phát hành Thông báo Đánh giá KPI
                 </h2>
                 <p class="text-sm text-slate-500">
-                  Thiết lập thời gian và gửi Email hàng loạt yêu cầu toàn bộ
-                  nhân viên thực hiện đánh giá.
+                  Chọn giai đoạn, mẫu email và đối tượng nhận để phát hành thông báo
+                  đánh giá KPI.
                 </p>
               </div>
             </div>
 
-            <div
-              class="flex items-end space-x-6 bg-slate-50 p-4 rounded-lg border border-slate-200"
-            >
-              <div class="flex-1">
-                <label
-                  class="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider"
-                >
-                  Từ ngày (Start Date) <span class="text-red-500">*</span>
-                </label>
-                <input
-                  v-model="startDate"
-                  type="date"
-                  class="w-full border border-slate-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 font-medium text-slate-700"
-                />
+            <div class="space-y-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
+              <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
+                <div>
+                  <label class="mb-1.5 block text-xs font-bold uppercase tracking-wider text-slate-600">Giai đoạn <span class="text-red-500">*</span></label>
+                  <select v-model="notifyPhase" class="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 focus:ring-2 focus:ring-indigo-500">
+                    <option v-for="p in PHASE_OPTIONS" :key="p.value" :value="p.value">{{ p.label }}</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="mb-1.5 block text-xs font-bold uppercase tracking-wider text-slate-600">Mẫu email</label>
+                  <select
+                    v-model="notifyTemplateId"
+                    class="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 focus:ring-2 focus:ring-indigo-500"
+                    :disabled="announceResourcesLoading"
+                  >
+                    <option value="">Mặc định hệ thống</option>
+                    <option
+                      v-for="t in templateOptionsForAnnounce"
+                      :key="t.id"
+                      :value="t.id"
+                      :disabled="t.status !== 'active'"
+                    >
+                      {{ t.name }}{{ t.status !== "active" ? " (đã tắt)" : "" }}
+                    </option>
+                  </select>
+                  <p v-if="announceResourcesLoading" class="mt-1 text-xs text-slate-400">Đang tải mẫu email…</p>
+                  <p v-else-if="emailTemplates.length === 0" class="mt-1 text-xs text-amber-600">
+                    Chưa có mẫu email. Tạo tại Quản lý mẫu email hoặc chạy migration V4.
+                  </p>
+                </div>
+                <div>
+                  <label class="mb-1.5 block text-xs font-bold uppercase tracking-wider text-slate-600">Người nhận <span class="text-red-500">*</span></label>
+                  <select v-model="notifyRecipientScope" class="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 focus:ring-2 focus:ring-indigo-500" @change="onRecipientScopeChange">
+                    <option v-for="r in RECIPIENT_OPTIONS" :key="r.value" :value="r.value">{{ r.label }}</option>
+                  </select>
+                </div>
               </div>
-              <div class="flex-1">
-                <label
-                  class="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider"
-                >
-                  Đến ngày (Deadline) <span class="text-red-500">*</span>
-                </label>
-                <input
-                  v-model="endDate"
-                  type="date"
-                  class="w-full border border-slate-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 font-medium text-slate-700"
-                />
-              </div>
-              <div class="w-64">
+
+              <div
+                v-if="announceLoadError"
+                class="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800"
+              >
+                {{ announceLoadError }}
                 <button
-                  class="w-full bg-indigo-600 text-white text-sm font-bold px-5 py-2.5 rounded-md hover:bg-indigo-700 shadow-sm transition-colors flex items-center justify-center"
-                  @click="openMassMailModal"
+                  type="button"
+                  class="ml-2 font-semibold text-amber-900 underline"
+                  @click="loadAnnounceResources"
                 >
-                  <i class="fas fa-envelope mr-2" /> Gửi Mail Toàn công ty
+                  Thử lại
+                </button>
+              </div>
+
+              <div v-if="notifyRecipientScope === 'individual'" class="rounded-md border border-slate-200 bg-white p-3">
+                <div class="mb-2 flex items-center justify-between">
+                  <span class="text-xs font-bold uppercase text-slate-500">Chọn nhân viên</span>
+                  <label class="flex items-center gap-2 text-xs text-slate-600">
+                    <input type="checkbox" class="rounded border-slate-300 text-indigo-600" :checked="allMembersSelected" :disabled="announceResourcesLoading || filteredAnnounceMembers.length === 0" @change="toggleAllAnnounceMembers(($event.target as HTMLInputElement).checked)">
+                    Chọn tất cả (đang lọc)
+                  </label>
+                </div>
+                <input v-model="announceMemberSearch" type="text" placeholder="Tìm tên, email, mã NV..." class="mb-2 w-full rounded border border-slate-300 px-3 py-1.5 text-sm focus:ring-1 focus:ring-indigo-500" :disabled="announceResourcesLoading">
+                <div class="max-h-48 min-h-[4rem] space-y-1 overflow-y-auto">
+                  <p v-if="announceResourcesLoading" class="py-4 text-center text-sm text-slate-400">Đang tải danh sách nhân viên…</p>
+                  <p v-else-if="filteredAnnounceMembers.length === 0" class="py-4 text-center text-sm text-slate-500">
+                    {{ activeEmployeesForAnnounce.length === 0 ? "Không có nhân viên active." : "Không tìm thấy nhân viên phù hợp." }}
+                  </p>
+                  <label v-for="emp in filteredAnnounceMembers" :key="emp.id" class="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-slate-50">
+                    <input type="checkbox" class="rounded border-slate-300 text-indigo-600" :checked="announceMemberIds.has(emp.id)" @change="toggleAnnounceMember(emp.id)">
+                    <span class="font-medium text-slate-800">{{ emp.name }}</span>
+                    <span class="text-xs text-slate-400">{{ emp.email }}</span>
+                  </label>
+                </div>
+              </div>
+
+              <div v-else-if="notifyRecipientScope === 'department'" class="rounded-md border border-slate-200 bg-white p-3">
+                <div class="mb-2 flex items-center justify-between">
+                  <span class="text-xs font-bold uppercase text-slate-500">Chọn bộ phận</span>
+                  <label class="flex items-center gap-2 text-xs text-slate-600">
+                    <input type="checkbox" class="rounded border-slate-300 text-indigo-600" :checked="allDeptsSelected" :disabled="announceResourcesLoading || sections.length === 0" @change="toggleAllAnnounceDepts(($event.target as HTMLInputElement).checked)">
+                    Chọn tất cả
+                  </label>
+                </div>
+                <div class="max-h-48 min-h-[4rem] space-y-1 overflow-y-auto">
+                  <p v-if="announceResourcesLoading" class="py-4 text-center text-sm text-slate-400">Đang tải danh sách bộ phận…</p>
+                  <p v-else-if="sections.length === 0" class="py-4 text-center text-sm text-slate-500">Không có bộ phận nào.</p>
+                  <label v-for="sec in sections" :key="sec.id" class="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-slate-50">
+                    <input type="checkbox" class="rounded border-slate-300 text-indigo-600" :checked="announceDeptIds.has(sec.id)" @change="toggleAnnounceDept(sec.id)">
+                    <span class="font-medium text-slate-800">{{ sec.name }}</span>
+                  </label>
+                </div>
+              </div>
+
+              <div v-else class="rounded-md border border-indigo-100 bg-indigo-50/50 px-3 py-2 text-sm text-indigo-800">
+                <i class="fas fa-users mr-2" />
+                Email sẽ gửi tới toàn bộ nhân viên đang active trong hệ thống.
+              </div>
+
+              <div class="rounded-md border border-slate-200 bg-white p-3 text-sm text-slate-600">
+                <span class="text-xs font-bold uppercase text-slate-400">Tóm tắt: </span>{{ announceRecipientSummary }}
+              </div>
+
+              <div class="flex justify-end">
+                <button type="button" class="flex items-center rounded-md bg-indigo-600 px-5 py-2.5 text-sm font-bold text-white shadow-sm transition-colors hover:bg-indigo-700 disabled:opacity-60" :disabled="isSending" @click="sendAnnouncement">
+                  <i :class="isSending ? 'fas fa-spinner fa-spin' : 'fas fa-paper-plane'" class="mr-2" />
+                  {{ isSending ? 'Đang gửi...' : 'Gửi thông báo' }}
                 </button>
               </div>
             </div>
           </div>
-
           <!-- Archived Campaign -->
           <div v-else class="flex items-center space-x-4">
             <div
@@ -466,6 +741,16 @@ const remindBtnLabel = (status: string) =>
                 <option value="not_started">Chưa đánh giá</option>
                 <option value="pending">Chờ PM Duyệt</option>
               </select>
+
+              <button
+                v-if="isActive && checkedCount > 0"
+                type="button"
+                class="flex items-center rounded border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-sm font-bold text-indigo-700 transition-colors hover:bg-indigo-100"
+                @click="openSelectedMassMailModal"
+              >
+                <i class="fas fa-envelope-open-text mr-1.5 text-xs" />
+                Gửi mail ({{ checkedCount }} đã chọn)
+              </button>
             </div>
           </div>
 
@@ -478,6 +763,15 @@ const remindBtnLabel = (status: string) =>
                 class="sticky top-0 z-10 border-b border-slate-200 bg-white shadow-sm"
               >
                 <tr class="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                  <th v-if="isActive" class="w-10 p-4 text-center">
+                    <input
+                      type="checkbox"
+                      class="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                      :checked="allSelectableChecked"
+                      :disabled="selectableRows.length === 0"
+                      @change="toggleAll(($event.target as HTMLInputElement).checked)"
+                    >
+                  </th>
                   <th class="w-[25%] p-4">Nhân viên / Email</th>
                   <th class="w-[20%] p-4">Phòng ban (Section)</th>
                   <th class="w-[20%] p-4 text-center">Trạng thái (Status)</th>
@@ -513,6 +807,15 @@ const remindBtnLabel = (status: string) =>
                 class="hover:bg-slate-50 transition-colors group"
                 :class="row.status === 'overdue' ? 'bg-red-50/10' : ''"
               >
+                <td v-if="isActive" class="p-4 text-center">
+                  <input
+                    v-if="row.status !== 'completed'"
+                    type="checkbox"
+                    class="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                    :checked="selectedRows.has(row.id)"
+                    @change="toggleRow(row.id, row.status === 'completed')"
+                  >
+                </td>
                 <td
                   class="p-4"
                   :class="row.status === 'completed' ? 'opacity-75' : ''"
@@ -636,99 +939,6 @@ const remindBtnLabel = (status: string) =>
     </main>
   </div>
 
-  <!-- ── MODAL: MASS EMAIL ANNOUNCEMENT ──────────────────────────────────────── -->
-  <Transition name="modal">
-    <div
-      v-if="showMassMailModal"
-      class="fixed inset-0 z-50 flex items-center justify-center"
-    >
-      <div
-        class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
-        @click="closeModals"
-      />
-      <div
-        class="bg-white rounded-xl shadow-2xl w-full max-w-2xl z-10 overflow-hidden flex flex-col"
-      >
-        <div
-          class="px-6 py-4 border-b border-slate-200 flex justify-between items-center bg-indigo-600 text-white"
-        >
-          <h3 class="font-bold text-lg flex items-center">
-            <i class="fas fa-bullhorn mr-2" /> Xác nhận gửi Thông báo Đánh giá
-          </h3>
-          <button class="text-indigo-200 hover:text-white" @click="closeModals">
-            <i class="fas fa-times" />
-          </button>
-        </div>
-        <div class="p-6 bg-slate-50 flex-1">
-          <div class="mb-4">
-            <span
-              class="text-xs font-bold text-slate-500 uppercase tracking-wider"
-              >Người nhận:</span
-            >
-            <div
-              class="mt-1 font-semibold text-slate-800 bg-white p-2 rounded border border-slate-200 flex items-center"
-            >
-              <i class="fas fa-users mr-2 text-indigo-500" /> Tất cả nhân viên
-              ({{ currentStats.total }} người)
-            </div>
-          </div>
-          <div>
-            <span
-              class="text-xs font-bold text-slate-500 uppercase tracking-wider"
-              >Nội dung Email (Preview):</span
-            >
-            <div
-              class="mt-1 bg-white p-4 rounded border border-slate-200 text-sm text-slate-700 leading-relaxed shadow-inner"
-            >
-              <p class="font-bold mb-2">
-                Subject: [Thông báo] Yêu cầu thực hiện Đánh giá KPI ({{
-                  currentCampaign?.label
-                }})
-              </p>
-              <hr class="mb-2" />
-              <p>Kính gửi toàn thể Cán bộ Nhân viên,</p>
-              <p class="mt-2">
-                Hệ thống Đánh giá KPI cho kỳ hiện tại đã chính thức được mở.
-              </p>
-              <p class="mt-2">Thời gian tự đánh giá:</p>
-              <ul
-                class="list-disc list-inside ml-4 mt-1 font-semibold text-indigo-700"
-              >
-                <li>Bắt đầu: {{ startDate }}</li>
-                <li>Hạn chót: {{ endDate }}</li>
-              </ul>
-              <p class="mt-2">
-                Vui lòng đăng nhập vào hệ thống và hoàn thành trước hạn chót.
-              </p>
-              <p class="mt-4 italic text-slate-500">
-                Trân trọng,<br />HR &amp; Admin Team
-              </p>
-            </div>
-          </div>
-        </div>
-        <div
-          class="px-6 py-4 border-t border-slate-200 bg-white flex justify-end space-x-3"
-        >
-          <button
-            class="px-4 py-2 text-sm font-medium text-slate-600 bg-white border border-slate-300 rounded-md hover:bg-slate-50"
-            @click="closeModals"
-          >
-            Hủy
-          </button>
-          <button
-            class="px-4 py-2 text-sm font-bold text-white bg-indigo-600 rounded-md hover:bg-indigo-700 shadow-sm flex items-center disabled:opacity-60 disabled:cursor-not-allowed"
-            :disabled="isSending"
-            @click="executeSendMail('')"
-          >
-            <i v-if="isSending" class="fas fa-spinner fa-spin mr-2" />
-            <i v-else class="fas fa-paper-plane mr-2" />
-            {{ isSending ? "Đang gửi..." : "Xác nhận Gửi" }}
-          </button>
-        </div>
-      </div>
-    </div>
-  </Transition>
-
   <!-- ── MODAL: REMIND ──────────────────────────────────────────────────────── -->
   <Transition name="modal">
     <div
@@ -757,6 +967,16 @@ const remindBtnLabel = (status: string) =>
           </button>
         </div>
         <div class="p-6 space-y-4">
+          <div>
+            <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-500">Mẫu email</label>
+            <select
+              v-model="notifyTemplateId"
+              class="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 focus:ring-2 focus:ring-orange-500"
+            >
+              <option value="">Mặc định hệ thống</option>
+              <option v-for="t in activeEmailTemplates" :key="t.id" :value="t.id">{{ t.name }}</option>
+            </select>
+          </div>
           <!-- Người nhận -->
           <div>
             <p class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
@@ -797,7 +1017,7 @@ const remindBtnLabel = (status: string) =>
           <button
             class="px-4 py-2 text-sm font-bold text-white bg-orange-500 rounded-md hover:bg-orange-600 shadow-sm flex items-center disabled:opacity-60 disabled:cursor-not-allowed"
             :disabled="isSending"
-            @click="executeSendMail('')"
+            @click="executeRemindMail()"
           >
             <i v-if="isSending" class="fas fa-spinner fa-spin mr-2" />
             <i v-else class="fas fa-paper-plane mr-2" />

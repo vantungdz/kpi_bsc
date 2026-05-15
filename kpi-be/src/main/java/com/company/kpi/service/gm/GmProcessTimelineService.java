@@ -20,6 +20,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -153,8 +154,7 @@ public class GmProcessTimelineService {
             if (gid == null) {
                 continue;
             }
-            getOrCreateGroup(groups, gid).putBySubjectKey(
-                    row.getAssignmentId(),
+            getOrCreateGroup(groups, gid).putAssignmentDetail(
                     buildAssignmentDetail(row, bottleneckForSetting(code), reasonForSetting(code)));
         }
 
@@ -168,37 +168,57 @@ public class GmProcessTimelineService {
         Map<String, MutableGroup> groups = new LinkedHashMap<>();
 
         for (GmTimelineIssueRow row : notSubmitted) {
-            getOrCreateGroup(groups, ID_KPI_NOT_SUBMITTED).putBySubjectKey(
-                    row.getAssignmentId(),
+            getOrCreateGroup(groups, ID_KPI_NOT_SUBMITTED).putAssignmentDetail(
                     buildAssignmentDetail(row, "Member",
                             "Đang trong kỳ Mid-Year nhưng chưa nộp evidence"));
         }
 
+        Set<String> midCompletedSubjects = completedSubjectKeys(allRows, STATUS_MID_COMPLETED);
         for (GmTimelineIssueRow row : allRows) {
             int code = row.getStatusCode();
             if (code != STATUS_MID_WAITING_PM && code != STATUS_MID_WAITING_GM) {
                 continue;
             }
+            if (code == STATUS_MID_WAITING_GM && midCompletedSubjects.contains(timelineIssueRowSubjectKey(row))) {
+                continue;
+            }
             // 501 + thiếu evidence → chỉ nhóm missing_evidence (tránh double-count với pending PM).
             if (code == STATUS_MID_WAITING_PM && row.getEvidences() == null) {
-                getOrCreateGroup(groups, ID_MISSING_EVIDENCE).putBySubjectKey(
-                        row.getAssignmentId(),
+                getOrCreateGroup(groups, ID_MISSING_EVIDENCE).putAssignmentDetail(
                         buildAssignmentDetail(row, "Member",
                                 "Đã nộp nhưng thiếu file đính kèm / evidence"));
                 continue;
             }
             if (code == STATUS_MID_WAITING_PM) {
-                getOrCreateGroup(groups, ID_PENDING_PM).putBySubjectKey(
-                        row.getAssignmentId(),
+                getOrCreateGroup(groups, ID_PENDING_PM).putAssignmentDetail(
                         buildAssignmentDetail(row, "PM", "PM chưa review evidence giữa kỳ"));
             } else {
-                getOrCreateGroup(groups, ID_PENDING_GM).putBySubjectKey(
-                        row.getAssignmentId(),
+                getOrCreateGroup(groups, ID_PENDING_GM).putAssignmentDetail(
                         buildAssignmentDetail(row, "GM", "GM chưa chốt điểm giữa kỳ"));
             }
         }
 
         return finalizePhase(orderedGroups(groups, MID_GROUP_ORDER), "Mid-Year Review");
+    }
+
+    private static Set<String> completedSubjectKeys(List<GmTimelineIssueRow> rows, int completedStatus) {
+        Set<String> keys = new HashSet<>();
+        for (GmTimelineIssueRow row : rows) {
+            if (row != null && row.getStatusCode() == completedStatus) {
+                keys.add(timelineIssueRowSubjectKey(row));
+            }
+        }
+        return keys;
+    }
+
+    private static String timelineIssueRowSubjectKey(GmTimelineIssueRow row) {
+        String assignee = row.getUserId() != null
+                ? row.getUserId().toString()
+                : String.valueOf(row.getMemberName()).trim().toLowerCase(Locale.ROOT);
+        String kpi = row.getMasterKpiId() != null
+                ? row.getMasterKpiId().toString()
+                : String.valueOf(row.getKpiName()).trim().toLowerCase(Locale.ROOT);
+        return assignee + "|" + kpi;
     }
 
     private GmTimelinePhaseData buildYearEndPhase(
@@ -208,8 +228,7 @@ public class GmProcessTimelineService {
         Map<String, MutableGroup> groups = new LinkedHashMap<>();
 
         for (GmTimelineIssueRow row : notSubmitted) {
-            getOrCreateGroup(groups, ID_KPI_NOT_SUBMITTED).putBySubjectKey(
-                    row.getAssignmentId(),
+            getOrCreateGroup(groups, ID_KPI_NOT_SUBMITTED).putAssignmentDetail(
                     buildAssignmentDetail(row, "Member",
                             "Đang trong kỳ Year-End nhưng chưa nộp evidence"));
         }
@@ -220,12 +239,10 @@ public class GmProcessTimelineService {
                 continue;
             }
             if (code == STATUS_END_WAITING_PM) {
-                getOrCreateGroup(groups, ID_PENDING_PM).putBySubjectKey(
-                        row.getAssignmentId(),
+                getOrCreateGroup(groups, ID_PENDING_PM).putAssignmentDetail(
                         buildAssignmentDetail(row, "PM", "PM chưa chấm điểm Final"));
             } else {
-                getOrCreateGroup(groups, ID_PENDING_GM).putBySubjectKey(
-                        row.getAssignmentId(),
+                getOrCreateGroup(groups, ID_PENDING_GM).putAssignmentDetail(
                         buildAssignmentDetail(row, "GM", "GM chưa chốt điểm Final"));
             }
         }
@@ -391,7 +408,7 @@ public class GmProcessTimelineService {
             GmTimelineDepartmentGroupDto d = new GmTimelineDepartmentGroupDto();
             String dk = en.getKey();
             d.setDepartmentName(dk.isEmpty() ? null : dk);
-            d.setAffectedEmployees(slice.size());
+            d.setAffectedEmployees(distinctAssigneeCount(slice));
             d.setEmployees(new ArrayList<>(nestCascadeInDeptSlice(slice)));
             deptDtos.add(d);
         }
@@ -421,7 +438,7 @@ public class GmProcessTimelineService {
         GmTimelineKpiGroupDto dto = new GmTimelineKpiGroupDto();
         dto.setMasterKpiId(masterId);
         dto.setKpiName(kpiName);
-        dto.setAffectedEmployees(kpiItems.size());
+        dto.setAffectedEmployees(distinctAssigneeCount(kpiItems));
         dto.setAffectedDepartments(distinctDepts.size());
         dto.setBlockerSummary(blockerSummaryForIssue(issueGroupId));
         dto.setPmName(null);
@@ -436,6 +453,51 @@ public class GmProcessTimelineService {
             return "";
         }
         return d.trim();
+    }
+
+    private static String timelineIssueSubjectKey(GmTimelineIssueDetailDto e) {
+        if (e.getSubjectUserId() == null) {
+            UUID assignmentId = e.getAssignmentId();
+            return assignmentId == null ? UUID.randomUUID().toString() : "assignment:" + assignmentId;
+        }
+        return "user:" + e.getSubjectUserId()
+                + "|kpi:" + kpiBucketKey(e)
+                + "|dept:" + deptBucketKey(e);
+    }
+
+    private static GmTimelineIssueDetailDto chooseTimelineIssueDetail(
+            GmTimelineIssueDetailDto existing,
+            GmTimelineIssueDetailDto candidate) {
+        if (existing == null) {
+            return candidate;
+        }
+        if (candidate == null) {
+            return existing;
+        }
+        boolean existingRoot = existing.getParentAssignmentId() == null;
+        boolean candidateRoot = candidate.getParentAssignmentId() == null;
+        if (candidateRoot && !existingRoot) {
+            return candidate;
+        }
+        if (existing.getAssignmentId() == null && candidate.getAssignmentId() != null) {
+            return candidate;
+        }
+        return existing;
+    }
+
+    private static int distinctAssigneeCount(List<GmTimelineIssueDetailDto> items) {
+        Set<String> keys = new LinkedHashSet<>();
+        for (GmTimelineIssueDetailDto item : items) {
+            if (item.getSubjectUserId() != null) {
+                keys.add("u:" + item.getSubjectUserId());
+                continue;
+            }
+            String member = item.getMember();
+            if (member != null && !member.isBlank()) {
+                keys.add("name:" + member.trim().toLowerCase(Locale.ROOT));
+            }
+        }
+        return keys.size();
     }
 
     /**
@@ -502,7 +564,7 @@ public class GmProcessTimelineService {
 
     private static final class MutableGroup {
         private final String id;
-        private final LinkedHashMap<UUID, GmTimelineIssueDetailDto> bySubjectKey = new LinkedHashMap<>();
+        private final LinkedHashMap<String, GmTimelineIssueDetailDto> bySubjectKey = new LinkedHashMap<>();
 
         private MutableGroup(String id) {
             this.id = id;
@@ -512,7 +574,17 @@ public class GmProcessTimelineService {
             if (key == null) {
                 return;
             }
-            bySubjectKey.put(key, detail);
+            bySubjectKey.put("id:" + key, detail);
+        }
+
+        void putAssignmentDetail(GmTimelineIssueDetailDto detail) {
+            if (detail == null) {
+                return;
+            }
+            bySubjectKey.merge(
+                    timelineIssueSubjectKey(detail),
+                    detail,
+                    GmProcessTimelineService::chooseTimelineIssueDetail);
         }
 
         boolean isEmpty() {
@@ -543,7 +615,7 @@ public class GmProcessTimelineService {
             dto.setSeverity(meta.severity());
             dto.setBlockedRole(meta.blockedRole());
             dto.setIconClass(meta.iconClass());
-            dto.setAffectedEmployees(employees.size());
+            dto.setAffectedEmployees(distinctAssigneeCount(employees));
             dto.setAffectedKpis((int) distinctKpi);
             dto.setAffectedDepartments((int) distinctDept);
             dto.setEmployees(employees);

@@ -100,6 +100,65 @@
             U.FULL_NAME ASC
     </select>
 
+    <select id="listActiveGmMembers" resultType="com.company.kpi.response.gm.GmMemberResponse">
+        SELECT
+            U.ID AS USER_ID,
+            U.FULL_NAME AS FULL_NAME,
+            U.EMAIL,
+            R.CODE AS RANK_CODE,
+            (
+                SELECT R0.CODE
+                FROM USER_ROLES UR0
+                INNER JOIN ROLES R0 ON R0.ID = UR0.ROLE_ID
+                    AND R0.DELETED_AT IS NULL
+                WHERE UR0.USER_ID = U.ID
+                ORDER BY
+                    CASE R0.CODE
+                        WHEN 'ADMIN' THEN 0
+                        WHEN 'GM' THEN 1
+                        WHEN 'PM' THEN 2
+                        WHEN 'LEADER' THEN 3
+                        WHEN 'MEMBER' THEN 4
+                        ELSE 99
+                    END,
+                    R0.CODE
+                LIMIT 1
+            ) AS ROLE_CODE,
+            MIN(CAST(D.ID AS VARCHAR)) AS DEPARTMENT_ID,
+            STRING_AGG(DISTINCT D.NAME, ', ' ORDER BY D.NAME) AS DEPARTMENT_NAME,
+            EXISTS (
+                SELECT 1
+                FROM DEPARTMENTS MD
+                WHERE MD.DELETED_AT IS NULL
+                  AND MD.MANAGER_ID = U.ID
+            ) AS DEPARTMENT_MANAGER,
+            (
+                SELECT STRING_AGG(MD.NAME, ', ' ORDER BY MD.NAME)
+                FROM DEPARTMENTS MD
+                WHERE MD.DELETED_AT IS NULL
+                  AND MD.MANAGER_ID = U.ID
+            ) AS MANAGING_DEPARTMENT_NAME
+        FROM
+            USERS U
+            LEFT JOIN JOB_TITLES JT ON JT.ID = U.JOB_TITLE_ID
+                AND JT.DELETED_AT IS NULL
+            LEFT JOIN RANKS R ON R.ID = JT.RANK_ID
+                AND R.DELETED_AT IS NULL
+            LEFT JOIN USER_DEPARTMENTS UD ON UD.USER_ID = U.ID
+            LEFT JOIN DEPARTMENTS D ON D.ID = UD.DEPARTMENT_ID
+                AND D.DELETED_AT IS NULL
+        WHERE
+            U.DELETED_AT IS NULL
+            AND COALESCE(U.IS_ACTIVE, TRUE) = TRUE
+        GROUP BY
+            U.ID,
+            U.FULL_NAME,
+            U.EMAIL,
+            R.CODE
+        ORDER BY
+            U.FULL_NAME ASC
+    </select>
+
 
     <resultMap id="PmMemberFlatResultMap" type="com.company.kpi.aggregate.PmMemberOptionAggregate">
         <id property="id" column="u_id"/>
@@ -290,6 +349,7 @@
             u.full_name                                                           AS name,
             u.email                                                               AS email,
             COALESCE(d.name, 'N/A')                                               AS section,
+            CAST(d.id AS VARCHAR)                                                 AS sectionId,
             COALESCE(rk.code, 'N/A')                                              AS rank,
             COALESCE(jt.name, 'N/A')                                              AS jobTitle,
             CAST(jt.id AS VARCHAR)                                                AS jobTitleId,
@@ -311,6 +371,20 @@
         ORDER BY u.full_name
     </select>
 
+    <select id="getActiveEmployeeIdsByDepartmentIds" resultType="java.util.UUID">
+        SELECT DISTINCT u.id
+        FROM users u
+        JOIN user_departments ud ON u.id = ud.user_id
+        JOIN user_roles ur ON u.id = ur.user_id
+        JOIN roles r ON ur.role_id = r.id AND r.code != 'ADMIN'
+        WHERE u.is_active = TRUE
+          AND u.deleted_at IS NULL
+          AND ud.department_id IN
+        <foreach collection="departmentIds" item="deptId" open="(" separator="," close=")">
+            #{deptId, jdbcType=OTHER, typeHandler=com.company.kpi.common.mybatis.UUIDTypeHandler}
+        </foreach>
+    </select>
+
     <select id="getEmployeeById"
             resultType="com.company.kpi.response.admin.AdminEmployeeResponse">
         SELECT
@@ -319,6 +393,7 @@
             u.full_name                                                           AS name,
             u.email                                                               AS email,
             COALESCE(d.name, 'N/A')                                               AS section,
+            CAST(d.id AS VARCHAR)                                                 AS sectionId,
             COALESCE(rk.code, 'N/A')                                              AS rank,
             COALESCE(jt.name, 'N/A')                                              AS jobTitle,
             CAST(jt.id AS VARCHAR)                                                AS jobTitleId,
@@ -350,6 +425,14 @@
             is_active    = #{isActive},
             updated_at   = NOW()
         WHERE id = #{id} AND deleted_at IS NULL
+    </update>
+    <update id="softDeleteUser">
+        UPDATE users
+        SET is_active  = FALSE,
+            deleted_at = NOW(),
+            updated_at = NOW()
+        WHERE id = #{id}
+          AND deleted_at IS NULL
     </update>
     <!-- ── Thêm từ StrategicKpiWriteMapper ─────────────────────────────────────── -->
     <select id="listExistingActiveUserIds" resultType="java.util.UUID">
@@ -385,6 +468,16 @@
         <result property="pmComment" column="pm_comment"/>
         <result property="minStatusCode" column="min_status_code"/>
         <result property="requiresPmEvaluation" column="requires_pm_evaluation"/>
+        <result property="portfolioSelfScore" column="portfolio_self_score"/>
+        <result property="portfolioPmScore" column="portfolio_pm_score"/>
+        <result property="portfolioPmComment" column="portfolio_pm_comment"/>
+        <result property="portfolioStatusCode" column="portfolio_status_code"/>
+        <result property="portfolioRequiresPmEvaluation" column="portfolio_requires_pm_evaluation"/>
+        <result property="promotionSelfScore" column="promotion_self_score"/>
+        <result property="promotionPmScore" column="promotion_pm_score"/>
+        <result property="promotionPmComment" column="promotion_pm_comment"/>
+        <result property="promotionStatusCode" column="promotion_status_code"/>
+        <result property="promotionRequiresPmEvaluation" column="promotion_requires_pm_evaluation"/>
         
         <association property="jobTitle" javaType="com.company.kpi.entity.JobTitle" autoMapping="true">
             <id property="id" column="job_title_id"/>
@@ -393,16 +486,43 @@
     </resultMap>
 
     <select id="findTeamHierarchyBySupervisor" resultMap="UserTeamHierarchyResultMap">
-        WITH RECURSIVE team_tree AS (
+        WITH RECURSIVE team_tree_raw AS (
+            SELECT
+                ud.user_id,
+                CASE
+                    WHEN ud.supervisor_id = #{pmId} THEN ud.supervisor_id
+                    ELSE #{pmId}
+                END AS supervisor_id
+            FROM user_departments ud
+            INNER JOIN departments d
+                    ON d.id = ud.department_id
+                   AND d.deleted_at IS NULL
+                   AND d.manager_id = #{pmId}
+            WHERE ud.is_primary = TRUE
+              AND ud.user_id &lt;&gt; #{pmId}
+
+            UNION
+
             SELECT ud.user_id, ud.supervisor_id
             FROM user_departments ud
             WHERE ud.supervisor_id = #{pmId}
+              AND ud.user_id &lt;&gt; #{pmId}
             
-            UNION ALL
+            UNION
             
             SELECT ud.user_id, ud.supervisor_id
             FROM user_departments ud
-            INNER JOIN team_tree tt ON ud.supervisor_id = tt.user_id
+            INNER JOIN team_tree_raw tt ON ud.supervisor_id = tt.user_id
+            WHERE ud.user_id &lt;&gt; #{pmId}
+        ),
+        team_tree AS (
+            SELECT DISTINCT ON (user_id)
+                user_id,
+                supervisor_id
+            FROM team_tree_raw
+            ORDER BY
+                user_id,
+                CASE WHEN supervisor_id = #{pmId} THEN 0 ELSE 1 END
         )
         SELECT 
             u.id AS user_id,
@@ -412,6 +532,18 @@
             tt.supervisor_id,
             AVG(COALESCE(ka.end_self_score, ka.mid_self_score)) AS self_score,
             AVG(ka.end_pm_score) AS pm_score,
+            AVG(COALESCE(ka.end_self_score, ka.mid_self_score)) FILTER (
+                WHERE UPPER(TRIM(sc.name)) IN ('INDIVIDUAL', 'TEAM')
+            ) AS portfolio_self_score,
+            AVG(ka.end_pm_score) FILTER (
+                WHERE UPPER(TRIM(sc.name)) IN ('INDIVIDUAL', 'TEAM')
+            ) AS portfolio_pm_score,
+            AVG(COALESCE(ka.end_self_score, ka.mid_self_score)) FILTER (
+                WHERE UPPER(TRIM(sc.name)) = 'PROMOTION'
+            ) AS promotion_self_score,
+            AVG(ka.end_pm_score) FILTER (
+                WHERE UPPER(TRIM(sc.name)) = 'PROMOTION'
+            ) AS promotion_pm_score,
             <!-- user_kpi_summaries là /user+cycle: không hiển thị khi còn KPI ở giai đoạn giao/chấp nhận (404…) để tránh nhầm nhận xét từ KPI khác -->
             CASE
                 WHEN MIN(ka.status_code) IS NOT NULL AND MIN(ka.status_code) >= 501 THEN
@@ -427,12 +559,37 @@
                     )
                 ELSE NULL
             END AS pm_comment,
+            CASE
+                WHEN MIN(ka.status_code) FILTER (WHERE UPPER(TRIM(sc.name)) IN ('INDIVIDUAL', 'TEAM')) IS NOT NULL
+                     AND MIN(ka.status_code) FILTER (WHERE UPPER(TRIM(sc.name)) IN ('INDIVIDUAL', 'TEAM')) >= 501 THEN
+                    NULLIF(TRIM(COALESCE(MAX(uks.evaluation_supervisor_comments), '')), '')
+                ELSE NULL
+            END AS portfolio_pm_comment,
+            CASE
+                WHEN MIN(ka.status_code) FILTER (WHERE UPPER(TRIM(sc.name)) = 'PROMOTION') IS NOT NULL
+                     AND MIN(ka.status_code) FILTER (WHERE UPPER(TRIM(sc.name)) = 'PROMOTION') >= 501 THEN
+                    NULLIF(TRIM(COALESCE(MAX(uks.evaluation_supervisor_comments_promotion), '')), '')
+                ELSE NULL
+            END AS promotion_pm_comment,
             MIN(ka.status_code) AS min_status_code,
-            (COUNT(*) FILTER (WHERE ka.status_code IN (501, 601))) > 0 AS requires_pm_evaluation
+            MIN(ka.status_code) FILTER (WHERE UPPER(TRIM(sc.name)) IN ('INDIVIDUAL', 'TEAM')) AS portfolio_status_code,
+            MIN(ka.status_code) FILTER (WHERE UPPER(TRIM(sc.name)) = 'PROMOTION') AS promotion_status_code,
+            (COUNT(*) FILTER (WHERE ka.status_code IN (501, 601))) > 0 AS requires_pm_evaluation,
+            (COUNT(*) FILTER (
+                WHERE ka.status_code IN (501, 601)
+                  AND UPPER(TRIM(sc.name)) IN ('INDIVIDUAL', 'TEAM')
+            )) > 0 AS portfolio_requires_pm_evaluation,
+            (COUNT(*) FILTER (
+                WHERE ka.status_code IN (501, 601)
+                  AND UPPER(TRIM(sc.name)) = 'PROMOTION'
+            )) > 0 AS promotion_requires_pm_evaluation
         FROM team_tree tt
         JOIN users u ON u.id = tt.user_id
         LEFT JOIN job_titles jt ON u.job_title_id = jt.id
         LEFT JOIN kpi_assignments ka ON ka.user_id = u.id AND ka.cycle_id = #{cycleId} AND ka.deleted_at IS NULL
+        LEFT JOIN kpis_information ki ON ka.kpi_info_id = ki.id AND ki.deleted_at IS NULL
+        LEFT JOIN kpi_master km ON ki.master_kpi_id = km.id AND km.deleted_at IS NULL
+        LEFT JOIN sys_status_codes sc ON sc.code = km.type_code AND sc.category = 'KPI_TYPE'
         LEFT JOIN user_kpi_summaries uks ON uks.user_id = u.id AND uks.cycle_id = #{cycleId} AND uks.deleted_at IS NULL
         WHERE u.deleted_at IS NULL
         GROUP BY u.id, u.full_name, jt.id, jt.name, tt.supervisor_id

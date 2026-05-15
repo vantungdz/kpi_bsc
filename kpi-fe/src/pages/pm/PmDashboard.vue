@@ -47,19 +47,6 @@ type PmSupervisorDraft = { main: string; promo: string }
 const memberComments = ref<Record<string, PmSupervisorDraft>>({})
 const memberKpisCache = ref<Record<string, any[]>>({})
 
-function normalizePmSupervisorDraft(raw: unknown): PmSupervisorDraft {
-  if (raw == null) return { main: '', promo: '' }
-  if (typeof raw === 'string') return { main: raw, promo: '' }
-  if (typeof raw === 'object') {
-    const o = raw as Record<string, unknown>
-    return {
-      main: String(o.main ?? ''),
-      promo: String(o.promo ?? ''),
-    }
-  }
-  return { main: '', promo: '' }
-}
-
 // Control refresh of PM Portfolio tab after actions in drawers
 const personalKpiKey = ref(0)
 const approvalYear = new Date().getFullYear()
@@ -431,30 +418,13 @@ watch(teamReviewReloadNonce, () => {
   void loadPmPortfolioEvaluationGate()
 })
 
-const initLocalStorage = () => {
-  const savedComments = localStorage.getItem('pm_eval_comments')
-  if (savedComments) {
-    try {
-      const parsed = JSON.parse(savedComments) as Record<string, unknown>
-      const next: Record<string, PmSupervisorDraft> = {}
-      if (parsed && typeof parsed === 'object') {
-        for (const [k, v] of Object.entries(parsed)) {
-          next[k] = normalizePmSupervisorDraft(v)
-        }
-      }
-      memberComments.value = next
-    } catch {
-      /* ignore */
-    }
-  }
-  const savedKpis = localStorage.getItem('pm_eval_kpis')
-  if (savedKpis) {
-    try { memberKpisCache.value = JSON.parse(savedKpis) } catch(e) {}
-  }
+const clearPmEvaluationStorage = () => {
+  localStorage.removeItem('pm_eval_comments')
+  localStorage.removeItem('pm_eval_kpis')
 }
 
 onMounted(() => {
-  initLocalStorage()
+  clearPmEvaluationStorage()
   void loadProcessTimeline()
   void loadApprovalRequests()
   void loadTeamReviewPendingCount()
@@ -482,6 +452,26 @@ function onDrawerRejectAll(payload: { rows: PmRequestUiRow[]; reason: string }) 
   void submitApprovalDecisionBatch(payload.rows, false, payload.reason)
 }
 
+function pendingApprovalRowsForUserIds(userIds: string[]): PmRequestUiRow[] {
+  const set = new Set(userIds.map((id) => String(id).trim()).filter(Boolean))
+  return approvalRawItems.value
+    .filter((r) => set.has(String(r.userId ?? '').trim()))
+    .map(mapApprovalToUi)
+    .filter((r) => r.status === 'PENDING')
+}
+
+function onApproveSelectedMembers(userIds: string[]) {
+  void submitApprovalDecisionBatch(pendingApprovalRowsForUserIds(userIds), true)
+}
+
+function onRejectSelectedMembers(payload: { userIds: string[]; reason: string }) {
+  void submitApprovalDecisionBatch(
+    pendingApprovalRowsForUserIds(payload.userIds),
+    false,
+    payload.reason,
+  )
+}
+
 /** KPI của member thay đổi (vd xóa KPI) — bỏ draft localStorage tránh nhầm Supervisor Comment. */
 function discardMemberEvalDraft(memberId: string) {
   if (!memberId) return
@@ -491,8 +481,7 @@ function discardMemberEvalDraft(memberId: string) {
   const nextKpis = { ...memberKpisCache.value }
   delete nextKpis[memberId]
   memberKpisCache.value = nextKpis
-  localStorage.setItem('pm_eval_comments', JSON.stringify(memberComments.value))
-  localStorage.setItem('pm_eval_kpis', JSON.stringify(memberKpisCache.value))
+  clearPmEvaluationStorage()
 }
 
 const rightPanelVisible = ref(false)
@@ -545,22 +534,7 @@ const handleMemberEvalSubmitted = (payload: {
 }) => {
   const mid = String(payload.memberId ?? activeItem.value?.id ?? '')
   if (!mid) return
-  const prev = memberComments.value[mid] ?? { main: '', promo: '' }
-  memberComments.value = {
-    ...memberComments.value,
-    [mid]: {
-      main: String(payload.comments?.main ?? prev.main),
-      promo: String(payload.comments?.promo ?? prev.promo),
-    },
-  }
-  memberKpisCache.value = { ...memberKpisCache.value, [mid]: payload.kpis }
-
-  try {
-    localStorage.setItem('pm_eval_comments', JSON.stringify(memberComments.value))
-    localStorage.setItem('pm_eval_kpis', JSON.stringify(memberKpisCache.value))
-  } catch {
-    /* ignore */
-  }
+  discardMemberEvalDraft(mid)
 
   teamReviewReloadNonce.value += 1
   personalKpiKey.value += 1
@@ -680,7 +654,7 @@ const handleRefresh = () => {
           class="px-5 py-3 text-sm font-bold rounded-t-xl transition-all flex items-center gap-2 relative -bottom-[1px]" 
           :class="activeTab === 'personal' ? 'bg-white text-blue-700 border border-slate-200 border-b-white z-10' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-200/50 border border-transparent'"
         >
-          <i class="fas fa-list-alt text-base"></i> KPI Portfolio
+          <i class="fas fa-list-alt text-base"></i> KPI Personal
           <span
             v-if="pmFeedbackPendingByScope.portfolio > 0"
             class="flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-bold text-white shadow-sm ml-1">
@@ -755,7 +729,10 @@ const handleRefresh = () => {
           v-if="activeTab === 'requests'"
           :members="approvalMemberSummaries"
           :loading="approvalLoading"
+          :action-busy="approvalSubmitting"
           @open-member="openMemberApprovalDrawer"
+          @approve-selected="onApproveSelectedMembers"
+          @reject-selected="onRejectSelectedMembers"
         />
       </div>
     </div>
@@ -779,6 +756,7 @@ const handleRefresh = () => {
           : { main: '', promo: '' }
       "
       :cached-kpis="activeItem ? memberKpisCache[activeItem.id] : undefined"
+      :initial-tab="activeItem?.reviewInitialTab === 'promotion' ? 'promotion' : 'main'"
       @close="closePanel"
       @save="handleMemberEvalSubmitted"
       @discard-draft="discardMemberEvalDraft"

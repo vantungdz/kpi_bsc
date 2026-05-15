@@ -23,6 +23,7 @@
     import com.company.kpi.response.member.MemberKpiDashboardResponse.MemberKpiItemPayload;
     import com.company.kpi.response.member.MemberKpiDashboardResponse.MemberKpiSheetPayload;
     import com.company.kpi.response.pm.KpiSheetResponse;
+    import com.company.kpi.service.kpi.KpiAssignmentSnapshotService;
     import com.company.kpi.service.kpi.KpiScoringRulesService;
     import com.fasterxml.jackson.databind.JsonNode;
     import com.fasterxml.jackson.databind.ObjectMapper;
@@ -107,6 +108,7 @@
         // private final ReferenceDataMapper referenceDataMapper;
         private final ObjectMapper objectMapper;
         private final KpiScoringRulesService kpiScoringRulesService;
+        private final KpiAssignmentSnapshotService kpiAssignmentSnapshotService;
 
         // /** Form tạo KPI: {@code kpi_categories} + CALC_RULE 801–804 từ {@code sys_status_codes}. */
         // public MemberKpiFormMetaResponse getFormMeta() {
@@ -151,6 +153,7 @@
                     .evaluationComments(summary != null ? summary.getEvaluationComments() : null)
                     .evaluationCommentsPromotion(summary != null ? summary.getEvaluationCommentsPromotion() : null)
                     .evaluationSupervisorComments(summary != null ? summary.getEvaluationSupervisorComments() : null)
+                    .evaluationSupervisorCommentsPromotion(summary != null ? summary.getEvaluationSupervisorCommentsPromotion() : null)
                     .build();
         }
 
@@ -365,7 +368,7 @@
                 return;
             }
 
-            kpiAssignmentMapper.updateKpiStatuses(userId, cycle.getId(), ASM_ACCEPTED, promotionSubmit, ASM_PENDING_ACCEPTANCE);
+            kpiAssignmentMapper.updateKpiStatuses(userId, cycle.getId(), ASM_ACCEPTED, promotionSubmit, ASM_PENDING_ACCEPTANCE, false);
             List<MemberKpiAssignmentDTO> rows = kpiAssignmentMapper.findDetailsByUserAndCycle(userId, cycle.getId());
             List<MemberKpiAssignmentDTO> scopedRows = filterRowsBySubmitType(rows, promotionSubmit);
             if (Constant.END_YEAR_PHASE.equals(submitPhase)) {
@@ -376,14 +379,14 @@
                     throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Incomplete KPI rows: " + pending.size());
                 }
             if (Constant.MID_YEAR_PHASE.equals(submitPhase)) {
-                    int n = kpiAssignmentMapper.updateKpiStatuses(userId, cycle.getId(), 501, promotionSubmit, ASM_ACCEPTED);
+                    int n = kpiAssignmentMapper.updateKpiStatuses(userId, cycle.getId(), 501, promotionSubmit, ASM_ACCEPTED, false);
                     if (n == 0) {
                         throw new ResponseStatusException(
                                 HttpStatus.BAD_REQUEST, "No mid-year assignments eligible to submit");
                     }
             } else if (Constant.END_YEAR_PHASE.equals(submitPhase)) {
-                    int n405 = kpiAssignmentMapper.updateKpiStatuses(userId, cycle.getId(), 601, promotionSubmit, ASM_ACCEPTED);
-                    int n503 = kpiAssignmentMapper.updateKpiStatuses(userId, cycle.getId(), 601, promotionSubmit, 503);
+                    int n405 = kpiAssignmentMapper.updateKpiStatuses(userId, cycle.getId(), 601, promotionSubmit, ASM_ACCEPTED, false);
+                    int n503 = kpiAssignmentMapper.updateKpiStatuses(userId, cycle.getId(), 601, promotionSubmit, 503, false);
                     int n = n405 + n503;
                     if (n == 0) {
                         throw new ResponseStatusException(
@@ -438,8 +441,8 @@
                             HttpStatus.BAD_REQUEST, "Không có KPI cá nhân ở trạng thái 405 để nộp giữa kỳ");
                 }
                 validateGmPersonalMidYearReady(targets);
-                int nIndiv = kpiAssignmentMapper.updateKpiStatuses(userId, cycleId, ASM_GM_FIRST_HALF_DONE, false, ASM_ACCEPTED);
-                int nPromo = kpiAssignmentMapper.updateKpiStatuses(userId, cycleId, ASM_GM_FIRST_HALF_DONE, true, ASM_ACCEPTED);
+                int nIndiv = kpiAssignmentMapper.updateKpiStatuses(userId, cycleId, ASM_GM_FIRST_HALF_DONE, false, ASM_ACCEPTED, false);
+                int nPromo = kpiAssignmentMapper.updateKpiStatuses(userId, cycleId, ASM_GM_FIRST_HALF_DONE, true, ASM_ACCEPTED, false);
                 if (nIndiv + nPromo == 0) {
                     throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Không cập nhật được trạng thái giữa kỳ");
                 }
@@ -464,9 +467,9 @@
                 }
                 validateGmPersonalEndYearReady(targets);
                 int nIndiv =
-                        kpiAssignmentMapper.updateKpiStatuses(userId, cycleId, ASM_CYCLE_COMPLETED, false, ASM_GM_FIRST_HALF_DONE);
+                        kpiAssignmentMapper.updateKpiStatuses(userId, cycleId, ASM_CYCLE_COMPLETED, false, ASM_GM_FIRST_HALF_DONE, false);
                 int nPromo =
-                        kpiAssignmentMapper.updateKpiStatuses(userId, cycleId, ASM_CYCLE_COMPLETED, true, ASM_GM_FIRST_HALF_DONE);
+                        kpiAssignmentMapper.updateKpiStatuses(userId, cycleId, ASM_CYCLE_COMPLETED, true, ASM_GM_FIRST_HALF_DONE, false);
                 if (nIndiv + nPromo == 0) {
                     throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Không cập nhật được trạng thái cuối kỳ");
                 }
@@ -607,6 +610,7 @@
             if (ka != 1) {
                 throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Không thể tạo kpi_assignments");
             }
+            kpiAssignmentSnapshotService.createSnapshotForAssignment(assignmentId, userId);
             return assignmentId;
         }
 
@@ -644,7 +648,9 @@
                     .pendingItems(List.of())
                     .canSubmit(false)
                     .evaluationComments(null)
+                    .evaluationCommentsPromotion(null)
                     .evaluationSupervisorComments(null)
+                    .evaluationSupervisorCommentsPromotion(null)
                     .build();
         }
 

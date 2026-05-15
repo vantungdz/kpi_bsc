@@ -159,7 +159,7 @@ export function getSubmitButtonState(
 }
 
 /**
- * PM tab KPI Portfolio — một nút theo trạng thái (tab PM gộp thêm điều kiện KPI Team: mọi member được phân bổ phải đã Accept trước khi PM Accept):
+ * PM tab KPI Personal — một nút theo trạng thái (tab PM gộp thêm điều kiện KPI Team: mọi member được phân bổ phải đã Accept trước khi PM Accept):
  * - **404**: "Accept KPI" — luôn bật (không khóa theo cửa sổ Goal setting); bấm → 405.
  * - **405 / 503**: "Send Review" — luôn bật; trong cửa sổ Year-end → 602, Mid-year → 502; ngoài cửa sổ → mặc định 502 (tooltip giải thích).
  * - Khác: nút hiển thị nhưng tắt (nhãn Accept KPI nếu chưa tới 404, Send Review nếu đã qua 405 hoặc 503).

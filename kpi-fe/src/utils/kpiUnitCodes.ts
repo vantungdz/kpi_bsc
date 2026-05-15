@@ -80,17 +80,17 @@ function kpiUnitSuffixForTable(unitCode: unknown): string {
     case KPI_UNIT_CODE.MM:
       return ' MM'
     case KPI_UNIT_CODE.POINT:
-      return ' POINT'
+      return ' Point'
     case KPI_UNIT_CODE.PRODUCT:
-      return ' PRODUCT'
+      return ' Product'
     case KPI_UNIT_CODE.PROJECT:
-      return ' PROJECT'
+      return ' Project'
     case KPI_UNIT_CODE.CERTIFICATION:
-      return ' CERTIFICATION'
+      return ' Certification'
     case KPI_UNIT_CODE.ARTICLE:
-      return ' ARTICLE'
+      return ' Article'
     case KPI_UNIT_CODE.PERSON:
-      return ' PERSON'
+      return ' Person'
     default:
       return ` ${kpiUnitCodeToFormUnit(n)}`
   }

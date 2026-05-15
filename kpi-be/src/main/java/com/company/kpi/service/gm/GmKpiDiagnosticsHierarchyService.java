@@ -517,10 +517,10 @@ public class GmKpiDiagnosticsHierarchyService {
         boolean suppressSupervisorMetrics = shouldSuppressSupervisorMetrics(kpiTypeCode);
         if (secRows.stream().allMatch(r -> r.getAssignmentId() == null)) {
             String sectionTargetLabel =
-                    suppressSupervisorMetrics ? "—" : formatPmSectionTargetFromRows(secRows, kpiFirst);
+                    formatPmSectionTargetFromRows(secRows, kpiFirst);
             return GmDiagPmNode.builder()
                     .id("diag-pm-unassigned-" + kpiInfoId)
-                    .name("Chưa giao")
+                    .name("")
                     .ownerUserId(null)
                     .ownerRoleCode(null)
                     .ownerRoleLabel(null)
@@ -544,7 +544,7 @@ public class GmKpiDiagnosticsHierarchyService {
 
         /** Target hiển thị trên dòng PM/đơn vị: từ {@code kpi_assignments.target_value} (flat), không dùng catalog KPI. */
         String sectionTargetLabel =
-                suppressSupervisorMetrics ? "—" : formatPmSectionTargetFromRows(secRows, kpiFirst);
+                formatPmSectionTargetFromRows(secRows, kpiFirst);
 
         boolean anyLeaderNames = secRows.stream()
                 .anyMatch(r -> r.getLeaderName() != null && !r.getLeaderName().isBlank());
@@ -574,7 +574,7 @@ public class GmKpiDiagnosticsHierarchyService {
         }
 
         var rollup = rollupFromMembers(pmMembers, sectionTargetLabel);
-        String pmActualLabel = suppressSupervisorMetrics ? "—" : rollup.actual();
+        String pmActualLabel = rollup.actual();
         String pmStatus = rollup.status();
 
         // 102: Không gộp tên assignee vào cùng PM
@@ -1090,17 +1090,10 @@ public class GmKpiDiagnosticsHierarchyService {
             return formatKpiTarget(kpiFirst);
         }
         Integer tc = kpiFirst.getTypeCode();
-        UUID sectionManagerId = secRows.get(0).getSectionManagerId();
-        if (tc != null && tc == KPI_TYPE_TEAM_CASCADING && sectionManagerId != null) {
+        if (tc != null && tc == KPI_TYPE_TEAM_CASCADING) {
             for (GmDiagnosticsFlatRow r : secRows) {
-                if (r.getMemberTargetValue() == null) {
-                    continue;
-                }
-                if (r.getParentAssignmentId() != null) {
-                    continue;
-                }
-                if (r.getMemberId() != null && sectionManagerId.equals(r.getMemberId())) {
-                    return r.getMemberTargetValue().stripTrailingZeros().toPlainString();
+                if (r.getSectionAssignedTargetValue() != null) {
+                    return r.getSectionAssignedTargetValue().stripTrailingZeros().toPlainString();
                 }
             }
         }

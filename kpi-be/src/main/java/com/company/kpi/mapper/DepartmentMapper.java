@@ -61,6 +61,11 @@ public interface DepartmentMapper {
     /** Xóa mọi membership của user trừ phòng {@code keepDepartmentId} (dùng khi “chuyển” sang phòng mới). */
     int deleteUserDepartmentsExcept(@Param("userId") UUID userId, @Param("keepDepartmentId") UUID keepDepartmentId);
 
+    /** Xóa toàn bộ membership của user khi xóa nhân viên khỏi hệ thống. */
+    int deleteUserDepartmentsByUser(@Param("userId") UUID userId);
+
+    int countActiveDepartmentsManagedByUser(@Param("userId") UUID userId);
+
     /** Phòng active mà user đang là {@code MANAGER_ID}, ngoại trừ một phòng (thường là phòng đích). */
     List<UUID> selectActiveDepartmentIdsManagedByUserExcept(
             @Param("userId") UUID userId, @Param("excludeDepartmentId") UUID excludeDepartmentId);

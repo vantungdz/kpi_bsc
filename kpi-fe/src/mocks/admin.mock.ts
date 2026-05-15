@@ -48,6 +48,8 @@ export interface Employee {
   email: string;
   /** Tên phòng ban (hiển thị trong bảng) */
   section: string;
+  /** UUID phòng ban primary */
+  sectionId?: string;
   /** Mã cấp bậc, ví dụ: R1, R2 (hiển thị trong bảng) */
   rank: string;
   /** Chức danh (chỉ hiển thị trong bảng, không edit) */
@@ -144,9 +146,25 @@ export interface EmailTemplate {
   subject: string;
   body: string;
   status: TemplateStatus;
-  mode: TemplateMode;
-  group: TemplateGroup;
+  /** Giữ tương thích API; UI admin không còn dùng. */
+  mode?: TemplateMode;
+  group?: TemplateGroup;
   updatedAt: string;
+}
+
+/** Admin — bảng kpi_cycles (khớp AdminKpiCycleResponse backend). */
+export interface AdminKpiCycle {
+  id: string;
+  year: number;
+  name: string;
+  goalSettingStart: string;
+  goalSettingEnd: string;
+  midYearStart: string;
+  midYearEnd: string;
+  endYearStart: string;
+  endYearEnd: string;
+  /** 201 OPEN, 202 CLOSED */
+  statusCode: number;
 }
 
 // ── Campaign Data ──────────────────────────────────────────────────────────────
@@ -226,6 +244,34 @@ export const MOCK_CAMPAIGNS: Campaign[] = [
       notStarted: 0,
       overdue: 0,
     },
+  },
+];
+
+/** Mock kpi_cycles — cùng id/ngày với V3__sample_data.sql (SECTION 10). */
+export const MOCK_KPI_CYCLES: AdminKpiCycle[] = [
+  {
+    id: "c2000000-0000-0000-0000-000000000001",
+    year: 2026,
+    name: "Năm 2026",
+    goalSettingStart: "2026-02-01T23:59:59+07:00",
+    goalSettingEnd: "2026-02-28T23:59:59+07:00",
+    midYearStart: "2026-07-01T23:59:59+07:00",
+    midYearEnd: "2026-07-15T23:59:59+07:00",
+    endYearStart: "2026-12-01T23:59:59+07:00",
+    endYearEnd: "2026-12-20T23:59:59+07:00",
+    statusCode: 201,
+  },
+  {
+    id: "c2000000-0000-0000-0000-000000000002",
+    year: 2025,
+    name: "Năm 2025",
+    goalSettingStart: "2025-02-01T23:59:59+07:00",
+    goalSettingEnd: "2025-02-28T23:59:59+07:00",
+    midYearStart: "2025-07-01T23:59:59+07:00",
+    midYearEnd: "2025-07-15T23:59:59+07:00",
+    endYearStart: "2025-12-01T23:59:59+07:00",
+    endYearEnd: "2025-12-20T23:59:59+07:00",
+    statusCode: 202,
   },
 ];
 
@@ -325,6 +371,7 @@ export const MOCK_EMPLOYEES: Employee[] = [
     name: "Nguyễn Văn Thắng",
     email: "nguyen.gm@company.vn",
     section: "Section 1",
+    sectionId: "f1000000-0000-0000-0000-000000000001",
     rank: "R0",
     jobTitle: "General Manager",
     status: "active",
@@ -335,6 +382,7 @@ export const MOCK_EMPLOYEES: Employee[] = [
     name: "Trần Quang Minh",
     email: "tran.pm@company.vn",
     section: "Section 2",
+    sectionId: "f1000000-0000-0000-0000-000000000002",
     rank: "R4",
     jobTitle: "Project Manager",
     status: "active",
@@ -345,6 +393,7 @@ export const MOCK_EMPLOYEES: Employee[] = [
     name: "Trần Đăng Huy",
     email: "tran.leader@company.vn",
     section: "Section 3",
+    sectionId: "f1000000-0000-0000-0000-000000000003",
     rank: "R4",
     jobTitle: "Technical Lead",
     status: "active",
@@ -355,6 +404,7 @@ export const MOCK_EMPLOYEES: Employee[] = [
     name: "Nguyễn Thị Lan",
     email: "nguyen.leader2@company.vn",
     section: "Section 4",
+    sectionId: "f1000000-0000-0000-0000-000000000004",
     rank: "R3",
     jobTitle: "Senior Developer",
     status: "active",
@@ -365,6 +415,7 @@ export const MOCK_EMPLOYEES: Employee[] = [
     name: "Nguyễn Quang Huy",
     email: "huy.nguyen@company.vn",
     section: "Section 3",
+    sectionId: "f1000000-0000-0000-0000-000000000003",
     rank: "R1",
     jobTitle: "Junior Developer",
     status: "active",
@@ -375,6 +426,7 @@ export const MOCK_EMPLOYEES: Employee[] = [
     name: "Trần Văn Phước",
     email: "phuoc.tran@company.vn",
     section: "Section 3",
+    sectionId: "f1000000-0000-0000-0000-000000000003",
     rank: "R2",
     jobTitle: "Mid-Level Developer",
     status: "active",
@@ -385,6 +437,7 @@ export const MOCK_EMPLOYEES: Employee[] = [
     name: "Lê Thị Mai",
     email: "mai.le@company.vn",
     section: "Section 3",
+    sectionId: "f1000000-0000-0000-0000-000000000003",
     rank: "R2",
     jobTitle: "Mid-Level QA Engineer",
     status: "active",
@@ -395,6 +448,7 @@ export const MOCK_EMPLOYEES: Employee[] = [
     name: "Phạm Đức Anh",
     email: "anh.pham@company.vn",
     section: "Section 3",
+    sectionId: "f1000000-0000-0000-0000-000000000003",
     rank: "R2",
     jobTitle: "Mid-Level Business Analyst",
     status: "active",
@@ -405,6 +459,7 @@ export const MOCK_EMPLOYEES: Employee[] = [
     name: "Vũ Minh Tuấn",
     email: "tuan.vu@company.vn",
     section: "Section 4",
+    sectionId: "f1000000-0000-0000-0000-000000000004",
     rank: "R1",
     jobTitle: "Junior Developer",
     status: "active",
@@ -415,6 +470,7 @@ export const MOCK_EMPLOYEES: Employee[] = [
     name: "Đặng Thị Hoa",
     email: "hoa.dang@company.vn",
     section: "Section 4",
+    sectionId: "f1000000-0000-0000-0000-000000000004",
     rank: "R2",
     jobTitle: "Mid-Level Developer",
     status: "inactive",

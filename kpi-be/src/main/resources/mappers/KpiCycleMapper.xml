@@ -149,4 +149,108 @@
         ORDER BY year DESC
     </select>
 
+    <select id="selectAllCyclesForAdmin" resultMap="KpiCycleResultMap">
+        SELECT
+            id,
+            year,
+            name,
+            goal_setting_start,
+            goal_setting_end,
+            mid_year_start,
+            mid_year_end,
+            end_year_start,
+            end_year_end,
+            status_code,
+            created_at,
+            updated_at,
+            created_by,
+            updated_by,
+            deleted_at
+        FROM kpi_cycles
+        WHERE deleted_at IS NULL
+        ORDER BY year DESC
+    </select>
+
+    <insert id="insertKpiCycle">
+        INSERT INTO kpi_cycles (
+            id,
+            year,
+            name,
+            goal_setting_start,
+            goal_setting_end,
+            mid_year_start,
+            mid_year_end,
+            end_year_start,
+            end_year_end,
+            status_code,
+            created_at,
+            updated_at,
+            created_by,
+            updated_by
+        ) VALUES (
+            #{id},
+            #{year},
+            #{name},
+            ((#{goalSettingStartDate}::date + time '16:59:59') AT TIME ZONE 'UTC'),
+            ((#{goalSettingEndDate}::date + time '16:59:59') AT TIME ZONE 'UTC'),
+            ((#{midYearStartDate}::date + time '16:59:59') AT TIME ZONE 'UTC'),
+            ((#{midYearEndDate}::date + time '16:59:59') AT TIME ZONE 'UTC'),
+            ((#{endYearStartDate}::date + time '16:59:59') AT TIME ZONE 'UTC'),
+            ((#{endYearEndDate}::date + time '16:59:59') AT TIME ZONE 'UTC'),
+            #{statusCode},
+            CURRENT_TIMESTAMP,
+            CURRENT_TIMESTAMP,
+            #{createdBy},
+            #{updatedBy}
+        )
+    </insert>
+
+    <update id="updateCycleStatus">
+        UPDATE kpi_cycles
+        SET
+            status_code = #{statusCode},
+            updated_at = CURRENT_TIMESTAMP,
+            updated_by = #{updatedBy}
+        WHERE deleted_at IS NULL
+          AND id = #{id}
+    </update>
+
+    <select id="countOpenCycles" resultType="int">
+        SELECT COUNT(*)::int
+        FROM kpi_cycles
+        WHERE deleted_at IS NULL
+          AND status_code = 201
+    </select>
+
+    <select id="countOtherOpenCycles" resultType="int">
+        SELECT COUNT(*)::int
+        FROM kpi_cycles
+        WHERE deleted_at IS NULL
+          AND status_code = 201
+          AND id != #{excludeId}
+    </select>
+
+    <update id="updateCyclePhaseDates">
+        UPDATE kpi_cycles
+        SET
+        <choose>
+            <when test="phase == 'goal_setting'">
+                goal_setting_start = ((#{startDate}::date + time '16:59:59') AT TIME ZONE 'UTC'),
+                goal_setting_end = ((#{endDate}::date + time '16:59:59') AT TIME ZONE 'UTC'),
+            </when>
+            <when test="phase == 'mid_year'">
+                mid_year_start = ((#{startDate}::date + time '16:59:59') AT TIME ZONE 'UTC'),
+                mid_year_end = ((#{endDate}::date + time '16:59:59') AT TIME ZONE 'UTC'),
+            </when>
+            <when test="phase == 'end_year'">
+                end_year_start = ((#{startDate}::date + time '16:59:59') AT TIME ZONE 'UTC'),
+                end_year_end = ((#{endDate}::date + time '16:59:59') AT TIME ZONE 'UTC'),
+            </when>
+        </choose>
+        updated_at = CURRENT_TIMESTAMP,
+        updated_by = #{updatedBy}
+        WHERE id = #{id}
+          AND deleted_at IS NULL
+    </update>
+
 </mapper>

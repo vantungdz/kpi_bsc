@@ -32,6 +32,8 @@ public class MemberKpiDashboardResponse {
     /** Tự đánh giá member khi nộp Promotion (scope riêng). */
     private String evaluationCommentsPromotion;
     private String evaluationSupervisorComments;
+    /** Nhận xét supervisor cho tab Promotion. */
+    private String evaluationSupervisorCommentsPromotion;
 
     @Data
     @Builder

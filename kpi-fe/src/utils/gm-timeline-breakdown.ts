@@ -36,6 +36,19 @@ function distinctKpiCount(items: GmTimelineIssueDetail[]): number {
   ).size
 }
 
+export function distinctAssigneeCount(items: GmTimelineIssueDetail[]): number {
+  return new Set(
+    items
+      .map((i) => {
+        const uid = String(i.subjectUserId ?? '').trim()
+        if (uid) return `u:${uid}`
+        const name = String(i.member ?? '').trim().toLowerCase()
+        return name ? `name:${name}` : ''
+      })
+      .filter(Boolean),
+  ).size
+}
+
 function blockerSummaryFromIssueId(issueId: string): string {
   switch (issueId) {
     case 'pending_acceptance':
@@ -110,7 +123,7 @@ export function buildTimelineKpiGroupsFromEmployees(group: GmTimelineIssueGroup)
     const departments: GmTimelineDepartmentGroup[] = [...byDept.entries()]
       .map(([name, em]) => ({
         departmentName: name === '__none__' ? null : name,
-        affectedEmployees: em.length,
+        affectedEmployees: distinctAssigneeCount(em),
         employees: nestCascadeInDeptSlice([...em]),
       }))
       .sort((a, b) => b.affectedEmployees - a.affectedEmployees)
@@ -127,7 +140,7 @@ export function buildTimelineKpiGroupsFromEmployees(group: GmTimelineIssueGroup)
     out.push({
       masterKpiId,
       kpiName,
-      affectedEmployees: kpiItems.length,
+      affectedEmployees: distinctAssigneeCount(kpiItems),
       affectedDepartments: distinctDepts.size,
       blockerSummary: blockerSummaryFromIssueId(group.id),
       pmName: null,
@@ -209,7 +222,7 @@ export function buildTimelineBreakdownGroupsFromEmployees(
       departmentName: b.departmentName ?? null,
       pmName: b.pmName ?? null,
       leaderName: b.leaderName ?? null,
-      affectedEmployees: items.length,
+      affectedEmployees: distinctAssigneeCount(items),
       affectedKpis: distinctKpiCount(items),
       employees: [...items],
     })

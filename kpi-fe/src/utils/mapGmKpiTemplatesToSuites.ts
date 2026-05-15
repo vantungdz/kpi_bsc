@@ -43,6 +43,7 @@ export function mapTemplateApiDataToSuites(
           templateItemId: it.templateItemId,
           masterKpiId: it.masterKpiId,
           kpiName: it.masterName,
+          targetDescription: it.targetDescription,
           targetValue: tvNum,
           unitCode: it.unitCode,
           weightPct: String(it.defaultWeight ?? ''),

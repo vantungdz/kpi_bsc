@@ -18,6 +18,7 @@ import type {
   GmEvaluationHubApiResponse,
   GmEvaluationHubConfirmBody,
   GmEvaluationHubConfirmResult,
+  GmEvaluationHubUnlockBody,
 } from "@/types/gm-evaluation-hub-api";
 import type { GmKpiCycleOption } from "@/types/gm-kpi-cycle";
 import type { GmCreateStrategicKpiResponseData } from "@/types/gm-strategic-kpi-create";
@@ -36,6 +37,7 @@ import type {
   GmCreateDepartmentBody,
   GmDepartmentApiRow,
   GmDepartmentMemberCandidateApiRow,
+  GmMemberApiRow,
   GmUpdateDepartmentBody,
 } from "@/types/gm-department-api";
 import type { GmKpiDashboard, KpiSection, KpiSectionMember } from "@/types/kpi";
@@ -151,6 +153,13 @@ export async function apiDeleteGmMember(userId: string): Promise<void> {
   await http.delete<ApiResponse<null>>(`/kpi/gm/members/${uid}`)
 }
 
+/** GET /kpi/gm/members — danh sách user active, không phụ thuộc phòng ban. */
+export async function apiListGmMembers(): Promise<GmMemberApiRow[]> {
+  return http
+    .get<ApiResponse<GmMemberApiRow[]>>("/kpi/gm/members")
+    .then((r) => r.data.data)
+}
+
 /** GET /kpi/gm/departments — danh sách phòng ban; `year` lọc KPI team theo năm chu kỳ. */
 export async function apiListGmDepartments(
   year?: number,
@@ -233,7 +242,7 @@ export async function apiGetGmKpiCyclesWithKpis(): Promise<GmKpiCycleOption[]> {
     .then((r) => r.data.data);
 }
 
-/** GET /kpi/gm/kpi-cycles-for-evaluation — `year` ≥ năm hiện tại (dropdown năm đánh giá / header). */
+/** GET /kpi/gm/kpi-cycles-for-evaluation — chu kỳ có dữ liệu KPI, gồm cả năm trước (dropdown header GM). */
 export async function apiGetGmKpiCyclesForEvaluation(): Promise<
   GmKpiCycleOption[]
 > {
@@ -264,6 +273,16 @@ export async function apiPostGmEvaluationHubConfirm(
     .post<
       ApiResponse<GmEvaluationHubConfirmResult>
     >("/kpi/gm/evaluation-hub/confirm", body)
+    .then((r) => r.data.data);
+}
+
+export async function apiPostGmEvaluationHubUnlock(
+  body: GmEvaluationHubUnlockBody,
+): Promise<GmEvaluationHubConfirmResult> {
+  return http
+    .post<
+      ApiResponse<GmEvaluationHubConfirmResult>
+    >("/kpi/gm/evaluation-hub/unlock", body)
     .then((r) => r.data.data);
 }
 
@@ -349,12 +368,14 @@ export async function apiGetGmKpiTemplates(): Promise<
 /** GET /kpi/gm/kpi-templates/:id/items — mục trong gói + master. */
 export async function apiGetGmKpiTemplateItems(
   templateId: string,
+  year?: number | string,
 ): Promise<GmKpiTemplateItemRow[]> {
   const id = encodeURIComponent(templateId.trim());
+  const y = year != null ? Number.parseInt(String(year).trim(), 10) : undefined
   return http
     .get<
       ApiResponse<GmKpiTemplateItemRow[]>
-    >(`/kpi/gm/kpi-templates/${id}/items`)
+    >(`/kpi/gm/kpi-templates/${id}/items`, { params: Number.isFinite(y) ? { year: y } : {} })
     .then((r) => r.data.data);
 }
 
@@ -553,6 +574,7 @@ export const gmKpiService = {
   removeDepartmentMember: (departmentId: string, userId: string) =>
     apiRemoveGmDepartmentMember(departmentId, userId),
   deleteMember: (userId: string) => apiDeleteGmMember(userId),
+  listMembers: () => apiListGmMembers(),
   getMemberKpiAssignments: (userId: string, cycleId: string) =>
     apiGetMemberKpiAssignments(userId, cycleId),
   copyKpisToMember: (targetUserId: string, cycleId: string, items: GmCopyKpiItemPayload[]) =>
@@ -580,8 +602,8 @@ export const gmKpiService = {
     body: Record<string, unknown>,
   ) => apiUpdateGmStrategicKpi(kpiInformationId, body),
   getKpiTemplates: () => apiGetGmKpiTemplates(),
-  getKpiTemplateItems: (templateId: string) =>
-    apiGetGmKpiTemplateItems(templateId),
+  getKpiTemplateItems: (templateId: string, year?: number | string) =>
+    apiGetGmKpiTemplateItems(templateId, year),
   createKpiTemplate: (body: GmCreateKpiTemplateBody) =>
     apiCreateGmKpiTemplate(body),
   updateKpiTemplate: (templateId: string, body: GmUpdateKpiTemplateBody) =>
@@ -602,6 +624,8 @@ export const gmKpiService = {
     apiGetGmEvaluationHubAssignments(cycleId),
   confirmEvaluationHub: (body: GmEvaluationHubConfirmBody) =>
     apiPostGmEvaluationHubConfirm(body),
+  unlockEvaluationHub: (body: GmEvaluationHubUnlockBody) =>
+    apiPostGmEvaluationHubUnlock(body),
   getApprovedKpiQueue: (cycleId: string) => apiGetGmApprovedKpiQueue(cycleId),
   decideApprovedKpiQueue: (body: GmApprovedKpiDecisionBody) =>
     apiPostGmApprovedKpiDecision(body),

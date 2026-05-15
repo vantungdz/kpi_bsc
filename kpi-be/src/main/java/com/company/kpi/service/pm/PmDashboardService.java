@@ -8,6 +8,9 @@ import com.company.kpi.common.Constants;
 import com.company.kpi.common.exception.AppException;
 import com.company.kpi.mapper.KpiAssignmentMapper;
 import com.company.kpi.mapper.KpiCycleMapper;
+import com.company.kpi.mapper.KpiMasterMapper;
+import com.company.kpi.mapper.KpisInformationMapper;
+import com.company.kpi.mapper.SysStatusCodeMapper;
 import com.company.kpi.mapper.UserKpiSummaryMapper;
 import com.company.kpi.mapper.UserMapper;
 import com.company.kpi.request.kpi.AssignMemberRequest;
@@ -34,7 +37,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -44,6 +49,7 @@ import java.util.UUID;
 
 import com.company.kpi.entity.KpiAssignment;
 import com.company.kpi.entity.KpisInformation;
+import com.company.kpi.entity.SysStatusCode;
 import com.company.kpi.entity.UserKpiSummary;
 
 @Service
@@ -74,6 +80,82 @@ public class PmDashboardService {
         return a.getEndPmScore();
     }
 
+    private static boolean isPromotionKpi(KpiAssignmentDetailAggregate detail) {
+        return detail != null
+                && detail.getKpiMaster() != null
+                && Objects.equals(detail.getKpiMaster().getTypeCode(), 103);
+    }
+
+    private static BigDecimal effectiveSelfScore(KpiAssignmentDetailAggregate detail) {
+        if (detail == null) {
+            return null;
+        }
+        return detail.getEndSelfScore() != null ? detail.getEndSelfScore() : detail.getMidSelfScore();
+    }
+
+    private static BigDecimal averageMemberScore(
+            List<KpiAssignmentDetailAggregate> details,
+            boolean promotion,
+            boolean supervisorScore) {
+        if (details == null || details.isEmpty()) {
+            return null;
+        }
+        BigDecimal sum = BigDecimal.ZERO;
+        int count = 0;
+        for (KpiAssignmentDetailAggregate detail : details) {
+            if (isPromotionKpi(detail) != promotion) {
+                continue;
+            }
+            BigDecimal score = supervisorScore ? supervisorPortfolioScore(detail) : effectiveSelfScore(detail);
+            if (score == null) {
+                continue;
+            }
+            sum = sum.add(score);
+            count++;
+        }
+        return count == 0 ? null : sum.divide(BigDecimal.valueOf(count), 6, RoundingMode.HALF_UP);
+    }
+
+    private static BigDecimal averageAllMemberScore(
+            List<KpiAssignmentDetailAggregate> details,
+            boolean supervisorScore) {
+        if (details == null || details.isEmpty()) {
+            return null;
+        }
+        BigDecimal sum = BigDecimal.ZERO;
+        int count = 0;
+        for (KpiAssignmentDetailAggregate detail : details) {
+            BigDecimal score = supervisorScore ? supervisorPortfolioScore(detail) : effectiveSelfScore(detail);
+            if (score == null) {
+                continue;
+            }
+            sum = sum.add(score);
+            count++;
+        }
+        return count == 0 ? null : sum.divide(BigDecimal.valueOf(count), 6, RoundingMode.HALF_UP);
+    }
+
+    private static Integer effectiveMemberStatus(List<KpiAssignmentDetailAggregate> details, Boolean promotion) {
+        if (details == null || details.isEmpty()) {
+            return null;
+        }
+        List<Integer> statuses = details.stream()
+                .filter(detail -> promotion == null || isPromotionKpi(detail) == promotion)
+                .map(KpiAssignmentDetailAggregate::getStatusCode)
+                .filter(Objects::nonNull)
+                .toList();
+        if (statuses.isEmpty()) {
+            return null;
+        }
+        int[] priority = {602, 601, 502, 501, 404, 405, 503, 603};
+        for (int code : priority) {
+            if (statuses.contains(code)) {
+                return code;
+            }
+        }
+        return statuses.stream().min(Integer::compareTo).orElse(null);
+    }
+
     /** Trích {@code gmComment} từ JSON evidences assignment (GM đánh giá cuối kỳ). */
     private static String gmCommentFromEvidencesJson(String evidences) {
         if (evidences == null) {
@@ -97,6 +179,9 @@ public class PmDashboardService {
 
     private final KpiCycleMapper kpiCycleMapper;
     private final KpiAssignmentMapper kpiAssignmentMapper;
+    private final KpisInformationMapper kpisInformationMapper;
+    private final KpiMasterMapper kpiMasterMapper;
+    private final SysStatusCodeMapper sysStatusCodeMapper;
     private final UserMapper userMapper;
     private final UserKpiSummaryMapper userKpiSummaryMapper;
     private final GmProcessTimelineService gmProcessTimelineService;
@@ -119,8 +204,12 @@ public class PmDashboardService {
         }
 
         UUID cycleId = cycleOpt.get().getId();
+        UserKpiSummary summary = userKpiSummaryMapper.findByUserIdAndCycleId(pmId, cycleId).orElse(null);
 
         List<PmDashboardAggregate> aggregates = kpiAssignmentMapper.findPmPortfolioByPmIdAndCycleId(pmId, cycleId);
+
+        List<SysStatusCode> asmStatuses =
+                sysStatusCodeMapper.findByCategories(Arrays.asList("ASM_STATUS"));
 
         // Map dùng PM_Assignment_ID làm key
         Map<UUID, PmDashboardResponse.KpiGroupDto> kpiGroupMap = new LinkedHashMap<>();
@@ -207,7 +296,10 @@ public class PmDashboardService {
                 .orElse(null);
         return PmDashboardResponse.builder()
             .kpis(new ArrayList<>(kpiGroupMap.values()))
+            .asmStatuses(asmStatuses != null ? asmStatuses : List.of())
             .kpiCycle(cycleResponse)
+            .evaluationCommentsPortfolio(summary != null ? summary.getEvaluationComments() : null)
+            .evaluationCommentsPromotion(summary != null ? summary.getEvaluationCommentsPromotion() : null)
             .build();
     }
 
@@ -224,16 +316,39 @@ public class PmDashboardService {
         List<TeamMemberResponse> roots = new ArrayList<>();
 
         for (UserTeamHierarchyAggregate agg : aggregates) {
+            List<KpiAssignmentDetailAggregate> memberDetails =
+                    kpiAssignmentMapper.findKpiDetailsByUserAndCycle(agg.getId(), cycleId);
+            BigDecimal portfolioSelfScore = averageMemberScore(memberDetails, false, false);
+            BigDecimal portfolioPmScore = averageMemberScore(memberDetails, false, true);
+            BigDecimal promotionSelfScore = averageMemberScore(memberDetails, true, false);
+            BigDecimal promotionPmScore = averageMemberScore(memberDetails, true, true);
+            BigDecimal allSelfScore = averageAllMemberScore(memberDetails, false);
+            BigDecimal allPmScore = averageAllMemberScore(memberDetails, true);
+            Integer allStatusCode = effectiveMemberStatus(memberDetails, null);
+            Integer portfolioStatusCode = effectiveMemberStatus(memberDetails, false);
+            Integer promotionStatusCode = effectiveMemberStatus(memberDetails, true);
+
             TeamMemberResponse res = new TeamMemberResponse();
             res.setId(agg.getId());
             res.setName(agg.getFullName());
             res.setRole(agg.getJobTitle() != null ? agg.getJobTitle().getName() : "");
             res.setSupervisorId(agg.getSupervisorId());
-            res.setSelfScore(agg.getSelfScore());
-            res.setPmScore(agg.getPmScore());
+            res.setSelfScore(allSelfScore);
+            res.setPmScore(allPmScore);
+            // Luôn trả nhận xét supervisor từ DB (PM hoặc GM sau hub); FE chỉ overlay draft khi còn chờ PM (501/601).
             res.setPmComment(agg.getPmComment());
-            res.setStatusCode(agg.getMinStatusCode()); // Pass raw code
+            res.setStatusCode(allStatusCode); // Pass raw code
             res.setRequiresPmEvaluation(Boolean.TRUE.equals(agg.getRequiresPmEvaluation()));
+            res.setPortfolioSelfScore(portfolioSelfScore);
+            res.setPortfolioPmScore(portfolioPmScore);
+            res.setPortfolioPmComment(agg.getPortfolioPmComment());
+            res.setPortfolioStatusCode(portfolioStatusCode);
+            res.setPortfolioRequiresPmEvaluation(Boolean.TRUE.equals(agg.getPortfolioRequiresPmEvaluation()));
+            res.setPromotionSelfScore(promotionSelfScore);
+            res.setPromotionPmScore(promotionPmScore);
+            res.setPromotionPmComment(agg.getPromotionPmComment());
+            res.setPromotionStatusCode(promotionStatusCode);
+            res.setPromotionRequiresPmEvaluation(Boolean.TRUE.equals(agg.getPromotionRequiresPmEvaluation()));
             res.setExpanded(true);
             
             lookupMap.put(res.getId(), res);
@@ -300,12 +415,15 @@ public class PmDashboardService {
                 res.setTarget(agg.getKpisInformation().getTargetDescription());
             }
             res.setWeight(agg.getKpisInformation().getWeight());
-            res.setSelfScore(agg.getEndSelfScore() != null ? agg.getEndSelfScore() : agg.getMidSelfScore());
-            res.setPmScore(agg.getEndPmScore());
-            res.setPmComment(agg.getPmComment());
+            res.setSelfScore(effectiveSelfScore(agg));
+            res.setPmScore(supervisorPortfolioScore(agg));
+            // Nhận xét PM/GM theo KPI lưu trong evidences.gmComment — đọc sau giải mã evidences (SQL ->> trên DB thất bại khi JSON mã hóa).
+            res.setPmComment(gmCommentFromEvidencesJson(agg.getEvidences()));
             res.setStatusCode(agg.getStatusCode());
             res.setKpiTypeCode(agg.getKpiMaster().getTypeCode());
             res.setCalcRuleCode(agg.getKpiMaster().getCalculationRuleCode());
+            res.setUnitCode(agg.getKpiMaster().getUnitCode());
+            res.setUnitName(agg.getUnitName());
             res.setEvidences(agg.getEvidences());
             result.add(res);
         }
@@ -539,11 +657,15 @@ public class PmDashboardService {
             throw AppException.badRequest("Member không thuộc team do PM quản lý trong chu kỳ này.");
         }
         UserKpiSummary s = userKpiSummaryMapper.findByUserIdAndCycleId(memberId, cycleId).orElse(null);
+        String supP = s != null ? s.getEvaluationSupervisorComments() : null;
+        String supPr = s != null ? s.getEvaluationSupervisorCommentsPromotion() : null;
         return PmMemberReviewMetaResponse.builder()
                 .evaluationCommentsPortfolio(s != null ? s.getEvaluationComments() : null)
                 .evaluationCommentsPromotion(s != null ? s.getEvaluationCommentsPromotion() : null)
-                .supervisorCommentsPortfolio(s != null ? s.getEvaluationSupervisorComments() : null)
-                .supervisorCommentsPromotion(s != null ? s.getEvaluationSupervisorCommentsPromotion() : null)
+                // Luôn trả về nhận xét supervisor đã lưu (PM hoặc GM sau hub 602) — FE tự ẩn khi còn KPI
+                // chờ PM (501/601) để PM nhập mới, tránh mất nội dung GM sau khi duyệt xong.
+                .supervisorCommentsPortfolio(supP)
+                .supervisorCommentsPromotion(supPr)
                 .build();
     }
 
@@ -565,10 +687,25 @@ public class PmDashboardService {
 
     @Transactional
     public void deleteSelfCreatedPmKpi(UUID assignmentId, UUID pmId) {
-        int n = kpiAssignmentMapper.softDeleteSelfCreatedAssignment(assignmentId, pmId);
-        if (n == 0) {
+        var row = kpisInformationMapper.selectSelfCreatedKpiInfoForPmDelete(assignmentId, pmId);
+        if (row == null) {
             throw AppException.badRequest(
                     "KPI không thể xóa (chỉ cho phép KPI tự tạo ở trạng thái chờ duyệt/chờ xác nhận/từ chối)");
+        }
+
+        kpiAssignmentMapper.softDeleteAssignmentsForKpiInformation(
+                row.getKpiInformationId(),
+                row.getCycleId(),
+                pmId);
+
+        int updatedInfo = kpisInformationMapper.softDeleteKpisInformationById(row.getKpiInformationId(), pmId);
+        if (updatedInfo < 1) {
+            throw AppException.badRequest("KPI không thể xóa hoặc đã được xóa trước đó.");
+        }
+
+        int remaining = kpisInformationMapper.countActiveKpisInformationByMasterKpiId(row.getMasterKpiId());
+        if (remaining == 0) {
+            kpiMasterMapper.softDeleteKpiMasterById(row.getMasterKpiId(), pmId);
         }
     }
 }

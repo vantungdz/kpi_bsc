@@ -8,6 +8,7 @@ import com.company.kpi.request.gm.CreateKpiTemplateItemRequest;
 import com.company.kpi.request.gm.CreateKpiTemplateRequest;
 import com.company.kpi.request.gm.GmApprovedKpiDecisionRequest;
 import com.company.kpi.request.gm.GmEvaluationHubConfirmRequest;
+import com.company.kpi.request.gm.GmEvaluationHubUnlockRequest;
 import com.company.kpi.request.gm.GmPersonalEvaluationSubmitRequest;
 import com.company.kpi.request.gm.UpdateDepartmentRequest;
 import com.company.kpi.request.gm.UpdateKpiTemplateItemRequest;
@@ -25,6 +26,7 @@ import com.company.kpi.response.gm.GmKpiCycleOptionResponse;
 import com.company.kpi.response.gm.GmKpiDashboardResponse;
 import com.company.kpi.response.gm.GmKpiTemplateItemResponse;
 import com.company.kpi.response.gm.GmKpiTemplatePackageResponse;
+import com.company.kpi.response.gm.GmMemberResponse;
 import com.company.kpi.response.gm.GmProcessTimelineResponse;
 import com.company.kpi.response.gm.KpiSectionMemberResponse;
 import com.company.kpi.response.member.MemberKpiAssignmentDTO;
@@ -55,7 +57,7 @@ import java.util.UUID;
  *   GET /api/v1/kpi/gm/diagnostics-hierarchy?year=2026 — catalog + cây diagnostics trong một payload
  *   GET /api/v1/kpi/gm/kpi-categories — danh sách {@code kpi_categories} (dropdown tạo KPI)
  *   GET /api/v1/kpi/gm/kpi-cycles-with-kpis — chu kỳ {@code kpi_cycles} có KPI (kpis_information / kpi_assignments / user_kpi_summaries)
- *   GET /api/v1/kpi/gm/kpi-cycles-for-evaluation — chu kỳ {@code year} ≥ năm hiện tại (dropdown năm đánh giá)
+ *   GET /api/v1/kpi/gm/kpi-cycles-for-evaluation — chu kỳ có dữ liệu KPI (dropdown năm đánh giá / header GM)
  *   GET /api/v1/kpi/gm/evaluation-hub/assignments?cycleId= — tab đánh giá: assignments ASM 501/502/503/601/602/603
  *   POST /api/v1/kpi/gm/evaluation-hub/confirm — GM xác nhận drawer: 502→503, 602→603
  *   GET /api/v1/kpi/gm/approved-kpi-queue?cycleId= — KPI cá nhân ASM 401/402/403
@@ -148,6 +150,19 @@ public class GmKpiController extends BaseController {
         return ResponseEntity.ok(BaseResponse.ok(null, "Member removed from department."));
     }
 
+    @GetMapping("/members")
+    public ResponseEntity<BaseResponse<List<GmMemberResponse>>> listMembers() {
+        return success(gmDepartmentService.listMembers());
+    }
+
+    @DeleteMapping("/members/{userId}")
+    public ResponseEntity<BaseResponse<Void>> deleteMember(
+            @PathVariable UUID userId, Authentication authentication) {
+        UUID gmUserId = UUID.fromString((String) authentication.getPrincipal());
+        gmDepartmentService.deleteMember(userId, gmUserId);
+        return ResponseEntity.ok(BaseResponse.ok(null, "Member has been deleted."));
+    }
+
     /** Gói mẫu KPI — {@code kpi_templates}. */
     @GetMapping("/kpi-templates")
     public ResponseEntity<BaseResponse<List<GmKpiTemplatePackageResponse>>> listKpiTemplates() {
@@ -157,8 +172,9 @@ public class GmKpiController extends BaseController {
     /** KPI trong một gói — {@code kpi_template_items} + {@code kpi_master}. */
     @GetMapping("/kpi-templates/{templateId}/items")
     public ResponseEntity<BaseResponse<List<GmKpiTemplateItemResponse>>> listKpiTemplateItems(
-            @PathVariable UUID templateId) {
-        return success(gmKpiTemplateService.listItems(templateId));
+            @PathVariable UUID templateId,
+            @RequestParam(name = "year", required = false) Integer year) {
+        return success(gmKpiTemplateService.listItems(templateId, year));
     }
 
     /** Tạo gói mẫu KPI — {@code kpi_templates}. */
@@ -243,7 +259,7 @@ public class GmKpiController extends BaseController {
         return success(gmKpiCycleService.listCyclesWithKpisInformation());
     }
 
-    /** Chu kỳ trong DB có {@code year} ≥ năm hiện tại — không hiển thị năm quá khứ. */
+    /** Chu kỳ đã có dữ liệu KPI — gồm cả năm trước để GM xem lịch sử đánh giá. */
     @GetMapping("/kpi-cycles-for-evaluation")
     @PreAuthorize("hasAnyRole('GM','LEADER','PM','MEMBER')")
     public ResponseEntity<BaseResponse<List<GmKpiCycleOptionResponse>>> listKpiCyclesForEvaluation() {
@@ -268,6 +284,13 @@ public class GmKpiController extends BaseController {
             @Valid @RequestBody GmEvaluationHubConfirmRequest body, Authentication authentication) {
         UUID gmUserId = UUID.fromString((String) authentication.getPrincipal());
         return success(gmEvaluationHubService.confirmGmEvaluation(body, gmUserId));
+    }
+
+    @PostMapping("/evaluation-hub/unlock")
+    public ResponseEntity<BaseResponse<GmEvaluationHubConfirmResponse>> unlockEvaluationHubKpis(
+            @Valid @RequestBody GmEvaluationHubUnlockRequest body, Authentication authentication) {
+        UUID gmUserId = UUID.fromString((String) authentication.getPrincipal());
+        return success(gmEvaluationHubService.unlockAcceptedKpis(body, gmUserId));
     }
 
     /** Tab Approved KPI: assignment cá nhân 401 / 402 / 403. Feedback 407 xử lý ở Strategic diagnostics. */

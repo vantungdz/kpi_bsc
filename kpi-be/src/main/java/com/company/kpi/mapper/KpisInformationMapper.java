@@ -32,6 +32,10 @@ public interface KpisInformationMapper {
 
     KpiInfoForDeleteRow selectKpiInfoForDelete(@Param("kpiInfoId") UUID kpiInfoId);
 
+    KpiInfoForDeleteRow selectSelfCreatedKpiInfoForPmDelete(
+            @Param("assignmentId") UUID assignmentId,
+            @Param("pmId") UUID pmId);
+
     int softDeleteKpisInformationById(
             @Param("kpiInfoId") UUID kpiInfoId,
             @Param("updatedBy") UUID updatedBy);

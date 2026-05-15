@@ -171,6 +171,14 @@ export function formatPmPortfolioActualCell(
       if (bits.length) {
         return displayMode === 'mean' ? meanPercentFromRatioPreviewStrings(bits) : bits.join(' · ')
       }
+      const numericActuals = rows
+        .map((r) => parseNumericFromField(String(r.actual ?? '')))
+        .filter((n): n is number => n != null)
+      if (numericActuals.length && !bits.length) {
+        const avg = numericActuals.reduce((a, c) => a + c, 0) / numericActuals.length
+        const avgStr = Number.isInteger(avg) ? String(avg) : avg.toFixed(2)
+        return displayMode === 'mean' ? avgStr : avgStr
+      }
       const texts = rows
         .map((r) => String(r.actual ?? r.plan ?? '').trim())
         .filter(Boolean)

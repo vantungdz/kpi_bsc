@@ -2,11 +2,17 @@ package com.company.kpi.service;
 
 import org.springframework.stereotype.Component;
 
+import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 /**
  * Xây dựng nội dung HTML cho các loại email thông báo KPI.
  */
 @Component
 public class EmailTemplateBuilder {
+
+    private static final Pattern PLACEHOLDER = Pattern.compile("\\{\\{([^}]+)}}");
 
     /**
      * Template thông báo mở kỳ đánh giá — gửi hàng loạt (mass mail).
@@ -78,5 +84,52 @@ public class EmailTemplateBuilder {
                     status != null ? status : "chưa hoàn thành",
                     campaignLabel != null ? campaignLabel : "hiện tại"
                 );
+    }
+
+    /**
+     * Thay thế các biến dạng {@code {{Key}}} trong chuỗi mẫu (subject/body).
+     * Các key không có trong {@code vars} được giữ nguyên hoặc thay bằng chuỗi rỗng nếu {@code removeUnknown}.
+     */
+    public String applyPlaceholders(String template, Map<String, String> vars, boolean removeUnknown) {
+        if (template == null) {
+            return "";
+        }
+        Matcher m = PLACEHOLDER.matcher(template);
+        StringBuffer sb = new StringBuffer();
+        while (m.find()) {
+            String key = m.group(1).trim();
+            String val = vars != null ? vars.get(key) : null;
+            if (val == null) {
+                val = removeUnknown ? "" : m.group(0);
+            }
+            m.appendReplacement(sb, Matcher.quoteReplacement(val));
+        }
+        m.appendTail(sb);
+        return sb.toString();
+    }
+
+    public String escapeHtml(String text) {
+        if (text == null) {
+            return "";
+        }
+        return text
+                .replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace("\"", "&quot;");
+    }
+
+    /** Nội dung text thuần → HTML đơn giản (xuống dòng → {@code <br/>}). */
+    public String plainTextToHtmlEmail(String plain) {
+        String esc = escapeHtml(plain);
+        return """
+                <!DOCTYPE html>
+                <html lang="vi">
+                <head><meta charset="UTF-8"/></head>
+                <body style="font-family:Arial,sans-serif;color:#1e293b;line-height:1.6;max-width:640px;margin:auto;padding:24px">
+                %s
+                </body>
+                </html>
+                """.formatted(esc.replace("\r\n", "\n").replace("\n", "<br/>\n"));
     }
 }

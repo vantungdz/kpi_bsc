@@ -37,6 +37,7 @@ export interface GmKpiItem {
   gmComment?: string
   /** ASM assignment từ hub API: 502 = review GM (không chấm), 602 = chấm điểm GM + comment. */
   hubAssignmentStatusCode?: number | null
+  assignmentStatusDisplay?: string | null
 }
 
 export interface GmKpiGroup {

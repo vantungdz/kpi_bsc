@@ -6,7 +6,7 @@ defineProps({
   managerTitle: { type: String, default: 'Quản lý nhận xét' },
   /** Anchor cho scroll validation (vd PM có 2 tab Portfolio / Promotion). */
   employeeCommentSectionId: { type: String, default: 'pm-portfolio-my-comment' },
-  /** Viền đỏ (validation) cho ô My Comment */
+  /** Viền đỏ (validation) cho ô Employee's Comment */
   employeeHighlightError: { type: Boolean, default: false },
 
   // Cờ điều khiển ai được quyền nhập liệu

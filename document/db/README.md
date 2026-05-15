@@ -308,7 +308,7 @@ Hệ thống được chia thành 6 cụm logic chính. Dữ liệu sẽ chảy 
 | id                 | UUID (PK) | ID          |
 | cycle_id           | UUID (FK) | Năm         |
 | master_kpi_id      | UUID (FK) | KPI         |
-| target_description | TEXT      | Mô tả       |
+| target_description | JSONB     | Mô tả       |
 | target_value       | NUMERIC   | Target      |
 | weight             | NUMERIC   | Weight      |
 | is_system_created  | BOOLEAN   | System tạo  |

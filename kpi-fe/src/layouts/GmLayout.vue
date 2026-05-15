@@ -33,6 +33,7 @@ import type { GmKpiCycleOption } from '@/types/gm-kpi-cycle'
 import { mapGmApprovedKpiQueueItemsToHierarchyRows } from '@/utils/mapGmApprovedKpiQueueToHierarchy'
 import { mapGmDiagnosticsApiKpisToHierarchyRows } from '@/utils/mapGmDiagnosticsApiToHierarchy'
 import { mapStrategicKpiCreatePayloadToApi } from '@/utils/mapStrategicKpiCreatePayloadToApi'
+import { isReadonlyKpiYear } from '@/utils/kpi-year'
 import { getApiErrorMessage } from '@/utils/apiErrorMessage'
 import { mergeLeaderKpiInfoResponsesToGmPersonalRows } from '@/utils/mapLeaderPersonalKpiToGmPersonalRows'
 import {
@@ -139,7 +140,7 @@ const headerConfig = computed(() => {
   return { category: 'GM Workspace', title: 'KPI Management' }
 })
 
-/** Chu kỳ từ `GET /kpi/gm/kpi-cycles-for-evaluation` (`year` ≥ năm hiện tại). */
+/** Chu kỳ từ `GET /kpi/gm/kpi-cycles-for-evaluation` (các năm đã có dữ liệu KPI, kể cả năm trước). */
 const gmHeaderCycleRows = ref<GmKpiCycleOption[]>([])
 
 const gmSelectableCycleOptions = computed(() =>
@@ -163,6 +164,8 @@ function cycleYearFromCycleId(cycleId: string): number {
 
 /** Đồng bộ `GmKpiEvaluationPanel` / template — năm dương lịch suy ra từ chu kỳ đang chọn. */
 const gmEvaluationYear = computed(() => cycleYearFromCycleId(selectedCycleId.value))
+/** Năm chu kỳ đã khóa — chỉ xem diagnostics / timeline, không sửa KPI chiến lược. */
+const gmCycleReadonly = computed(() => isReadonlyKpiYear(gmEvaluationYear.value))
 provide('gmEvaluationYear', gmEvaluationYear)
 /** UUID `kpi_cycles.id` — tab Đánh giá gọi API hub theo chu kỳ đang chọn. */
 provide('gmSelectedCycleId', selectedCycleId)
@@ -447,6 +450,14 @@ async function loadApprovedKpiQueueFromApi() {
   }
 }
 
+async function refreshGmApprovedKpiWorkspaceAfterDecision() {
+  await Promise.all([
+    loadApprovedKpiQueueFromApi(),
+    loadStrategicDiagnosticsFromApi(),
+  ])
+  void loadProcessTimeline()
+}
+
 /** Trang Organization — sau đổi thành viên / phòng ban, gọi để bảng Strategic KPIs diagnostics đồng bộ không cần F5. */
 provide('gmRequestStrategicDiagnosticsReload', () => {
   void loadStrategicDiagnosticsFromApi()
@@ -715,6 +726,10 @@ async function onStrategicKpiSaved(payload: Record<string, unknown> | Record<str
 }
 
 function onDiagnosticsEditKpi(kpi: GmHierarchyKpi) {
+  if (gmCycleReadonly.value) {
+    showGmToast('Chế độ chỉ xem — không thể sửa KPI cho năm chu kỳ đã khóa.', 5000, 'info')
+    return
+  }
   pendingGmFeedbackEdit.value = null
   strategicKpiEditTarget.value = kpi
   showCreateStrategicKpiModal.value = true
@@ -737,6 +752,10 @@ function closeDeleteKpiModal() {
 }
 
 function onDiagnosticsDeleteKpi(kpi: GmHierarchyKpi) {
+  if (gmCycleReadonly.value) {
+    showGmToast('Chế độ chỉ xem — không thể xóa KPI cho năm chu kỳ đã khóa.', 5000, 'info')
+    return
+  }
   deleteKpiTarget.value = kpi
   deleteKpiModalOpen.value = true
 }
@@ -858,8 +877,7 @@ async function onApproveInactiveKpi(kpi: GmHierarchyKpi) {
   if (!useMockHub && aid) {
     try {
       await gmKpiService.decideApprovedKpiQueue({ cycleId: cid, assignmentId: aid, approve: true })
-      await loadApprovedKpiQueueFromApi()
-      void loadProcessTimeline()
+      await refreshGmApprovedKpiWorkspaceAfterDecision()
       showGmToast(
         isFeedbackRow
           ? `Đã xử lý feedback và trả KPI về chờ chấp nhận — «${title}».`
@@ -902,8 +920,7 @@ async function onApproveAllGmApprovedQueue(kpis: GmHierarchyKpi[]) {
       }
     }
     if (ok > 0) {
-      await loadApprovedKpiQueueFromApi()
-      void loadProcessTimeline()
+      await refreshGmApprovedKpiWorkspaceAfterDecision()
       showGmToast(
         ok === targets.length
           ? `Đã duyệt ${ok} KPI`
@@ -941,8 +958,7 @@ async function onRejectAllGmApprovedQueue(payload: { kpis: GmHierarchyKpi[]; rea
       }
     }
     if (ok > 0) {
-      await loadApprovedKpiQueueFromApi()
-      void loadProcessTimeline()
+      await refreshGmApprovedKpiWorkspaceAfterDecision()
       showGmToast(
         ok === targets.length
           ? `Đã từ chối ${ok} KPI (406).`
@@ -977,8 +993,7 @@ async function onRejectInactiveKpi(payload: { kpi: GmHierarchyKpi; reason: strin
         approve: false,
         rejectReason,
       })
-      await loadApprovedKpiQueueFromApi()
-      void loadProcessTimeline()
+      await refreshGmApprovedKpiWorkspaceAfterDecision()
       showGmToast(
         isFeedbackRow
           ? `Đã đóng feedback và trả KPI về chờ chấp nhận — «${title}».`
@@ -1138,7 +1153,7 @@ function closeModal() { showKpiModal.value = false; selectedMember.value = null 
                   class="fas fa-chevron-down pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400" />
               </div>
             </div>
-            <button v-if="!isGmEvaluationRoute && !isGmSettingsRoute" type="button"
+            <button v-if="!isGmEvaluationRoute && !isGmSettingsRoute && !gmCycleReadonly" type="button"
               class="flex shrink-0 items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:bg-blue-700"
               @click="openCreateStrategicKpiDrawer">
               <i class="fas fa-plus text-xs" />
@@ -1257,6 +1272,7 @@ function closeModal() { showKpiModal.value = false; selectedMember.value = null 
                       ref="gmDiagnosticsTableRef"
                       :rows="diagnosticsHierarchyRows"
                       :kpi-cycle="gmDiagnosticsCycle"
+                      :readonly="gmCycleReadonly"
                       @edit-kpi="onDiagnosticsEditKpi"
                       @delete-kpi="onDiagnosticsDeleteKpi"
                       @resolve-feedback="onResolveDiagnosticsFeedback"
@@ -1265,6 +1281,7 @@ function closeModal() { showKpiModal.value = false; selectedMember.value = null 
                   <div v-show="dashboardWorkspaceTab === 'pm-eval'" class="p-3 sm:p-4 lg:p-5">
                     <GmPmEvaluationWorkspace
                       @pending-count="onGmPmEvaluationPendingCount"
+                      @diagnostics-refresh="loadStrategicDiagnosticsFromApi"
                       @timeline-refresh="loadProcessTimeline"
                     />
                   </div>
@@ -1310,6 +1327,7 @@ function closeModal() { showKpiModal.value = false; selectedMember.value = null 
                 ref="gmDiagnosticsTableRef"
                 :rows="diagnosticsHierarchyRows"
                 :kpi-cycle="gmDiagnosticsCycle"
+                :readonly="gmCycleReadonly"
                 @edit-kpi="onDiagnosticsEditKpi"
                 @delete-kpi="onDiagnosticsDeleteKpi"
                 @resolve-feedback="onResolveDiagnosticsFeedback"

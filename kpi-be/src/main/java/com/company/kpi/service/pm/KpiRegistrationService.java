@@ -17,6 +17,7 @@ import com.company.kpi.mapper.KpisInformationMapper;
 import com.company.kpi.mapper.SysStatusCodeMapper;
 import com.company.kpi.request.pm.KpiRegistrationRequest;
 import com.company.kpi.response.pm.KpiRegistrationInitResponse;
+import com.company.kpi.service.kpi.KpiAssignmentSnapshotService;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -40,13 +41,15 @@ public class KpiRegistrationService {
     private final SysStatusCodeMapper sysStatusCodeMapper;
     private final KpiCategoryMapper categoryMapper;
     private final UserMapper userMapper;
+    private final KpiAssignmentSnapshotService kpiAssignmentSnapshotService;
     
     // Inject các mapper thông qua constructor (Lombok @RequiredArgsConstructor cũng được)
 
     public KpiRegistrationService(KpiCycleMapper cycleMapper, KpiMasterMapper masterMapper,
                                   KpisInformationMapper infoMapper, KpiAssignmentMapper assignmentMapper,
                                   SysStatusCodeMapper sysStatusCodeMapper, KpiCategoryMapper categoryMapper,
-                                  UserMapper userMapper) {
+                                  UserMapper userMapper,
+                                  KpiAssignmentSnapshotService kpiAssignmentSnapshotService) {
         this.cycleMapper = cycleMapper;
         this.masterMapper = masterMapper;
         this.infoMapper = infoMapper;
@@ -54,6 +57,7 @@ public class KpiRegistrationService {
         this.sysStatusCodeMapper = sysStatusCodeMapper;
         this.categoryMapper = categoryMapper;
         this.userMapper = userMapper;
+        this.kpiAssignmentSnapshotService = kpiAssignmentSnapshotService;
     }
 
     public KpiRegistrationInitResponse getInitData(UUID currentUserId) {
@@ -170,5 +174,6 @@ public class KpiRegistrationService {
         assignment.setCreatedBy(currentUserId);
         
         assignmentMapper.insert(assignment);
+        kpiAssignmentSnapshotService.createSnapshotForAssignment(assignment.getId(), currentUserId);
     }
 }

@@ -11,6 +11,8 @@ public class AdminEmployeeResponse {
     private String name;
     private String email;
     private String section;
+    /** UUID phòng ban primary (departments.id) */
+    private String sectionId;
     private String rank;
     private String jobTitle;
     private String jobTitleId;

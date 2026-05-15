@@ -12,7 +12,7 @@ import { mockAdapter } from './mock-adapter'
 const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true'
 
 const http = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL ?? '/api',
+  baseURL: import.meta.env.VITE_API_BASE_URL ?? '/api/v1',
   timeout: 10_000,
   headers: { 'Content-Type': 'application/json' },
   adapter: USE_MOCK ? mockAdapter : undefined,
@@ -34,7 +34,7 @@ function drainRefreshQueue(token: string) {
 }
 
 const httpRefresh = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL ?? '/api',
+  baseURL: import.meta.env.VITE_API_BASE_URL ?? '/api/v1',
   timeout: 10_000,
   headers: { 'Content-Type': 'application/json' },
   adapter: USE_MOCK ? mockAdapter : undefined,

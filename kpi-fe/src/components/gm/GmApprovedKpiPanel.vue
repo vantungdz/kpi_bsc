@@ -135,6 +135,69 @@ const memberSummaries = computed<GmApprovedMemberSummary[]>(() => {
 
 const selectedMember = ref<GmApprovedMemberSummary | null>(null)
 
+/** Checkbox trên bảng member — duyệt/từ chối hàng loạt không cần mở drawer. */
+const selectedMemberKeys = ref<Set<string>>(new Set())
+
+function actionableKpisForMember(m: GmApprovedMemberSummary): GmHierarchyKpi[] {
+  return m.kpis.filter((k) => Number(k.assignmentStatusCode) === 403)
+}
+
+const selectableMemberSummaries = computed(() =>
+  memberSummaries.value.filter((m) => actionableKpisForMember(m).length > 0),
+)
+
+const selectedActionableKpis = computed(() => {
+  const keys = selectedMemberKeys.value
+  const out: GmHierarchyKpi[] = []
+  for (const m of memberSummaries.value) {
+    if (!keys.has(m.memberKey)) continue
+    out.push(...actionableKpisForMember(m))
+  }
+  return out
+})
+
+const selectedMemberCount = computed(() => selectedMemberKeys.value.size)
+
+const isAllMembersSelected = computed(() => {
+  const keys = selectableMemberSummaries.value.map((m) => m.memberKey)
+  return keys.length > 0 && keys.every((k) => selectedMemberKeys.value.has(k))
+})
+
+const isSomeMembersSelected = computed(() => {
+  const keys = selectableMemberSummaries.value.map((m) => m.memberKey)
+  return keys.some((k) => selectedMemberKeys.value.has(k)) && !isAllMembersSelected.value
+})
+
+function syncSelectedMemberKeys() {
+  const valid = new Set(memberSummaries.value.map((m) => m.memberKey))
+  const next = new Set<string>()
+  for (const k of selectedMemberKeys.value) {
+    if (valid.has(k)) next.add(k)
+  }
+  selectedMemberKeys.value = next
+}
+
+watch(memberSummaries, syncSelectedMemberKeys)
+
+function toggleMemberSelection(memberKey: string, event?: Event) {
+  event?.stopPropagation()
+  const next = new Set(selectedMemberKeys.value)
+  if (next.has(memberKey)) next.delete(memberKey)
+  else next.add(memberKey)
+  selectedMemberKeys.value = next
+}
+
+function toggleSelectAllMembers(event?: Event) {
+  event?.stopPropagation()
+  if (isAllMembersSelected.value) {
+    selectedMemberKeys.value = new Set()
+    return
+  }
+  selectedMemberKeys.value = new Set(selectableMemberSummaries.value.map((m) => m.memberKey))
+}
+
+const rejectAllMode = ref<'drawer' | 'list'>('drawer')
+
 const drawerKpisSorted = computed(() => {
   const kpis = selectedMember.value?.kpis ?? []
   return [...kpis].sort((a, b) => {
@@ -252,13 +315,34 @@ function onApprove(kpi: GmHierarchyKpi) {
   emit('approve-kpi', kpi)
 }
 
+const rejectAllTargets = computed(() =>
+  rejectAllMode.value === 'list' ? selectedActionableKpis.value : actionableGmKpis.value,
+)
+
 function onApproveAll() {
   if (!actionableGmKpis.value.length || props.actionBusy) return
   emit('approve-all-kpis', [...actionableGmKpis.value])
 }
 
+function onApproveSelectedMembers() {
+  if (!selectedActionableKpis.value.length || props.actionBusy) return
+  emit('approve-all-kpis', [...selectedActionableKpis.value])
+  selectedMemberKeys.value = new Set()
+}
+
 function openRejectAllDialog() {
   if (!actionableGmKpis.value.length || props.actionBusy) return
+  rejectAllMode.value = 'drawer'
+  selectedKpiDetail.value = null
+  closeRejectReasonDialog()
+  rejectAllReason.value = ''
+  rejectAllError.value = ''
+  rejectAllDialogOpen.value = true
+}
+
+function openListRejectDialog() {
+  if (!selectedActionableKpis.value.length || props.actionBusy) return
+  rejectAllMode.value = 'list'
   selectedKpiDetail.value = null
   closeRejectReasonDialog()
   rejectAllReason.value = ''
@@ -273,16 +357,20 @@ function closeRejectAllDialog() {
 }
 
 function confirmRejectAll() {
-  if (!actionableGmKpis.value.length || props.actionBusy) return
+  const targets = rejectAllTargets.value
+  if (!targets.length || props.actionBusy) return
   const r = rejectAllReason.value.trim()
   if (!r) {
     rejectAllError.value = 'Please enter a rejection reason.'
     return
   }
   rejectAllError.value = ''
-  emit('reject-all-kpis', { kpis: [...actionableGmKpis.value], reason: r })
+  emit('reject-all-kpis', { kpis: [...targets], reason: r })
   rejectAllDialogOpen.value = false
   rejectAllReason.value = ''
+  if (rejectAllMode.value === 'list') {
+    selectedMemberKeys.value = new Set()
+  }
 }
 
 function gmApprovedActionsEnabled(kpi: GmHierarchyKpi): boolean {
@@ -410,7 +498,30 @@ watch(drawerKpisSorted, (kpis) => {
           </span>
           Approved KPI
         </h3>
-        <div class="flex shrink-0 items-center gap-2">
+        <div class="flex shrink-0 flex-wrap items-center justify-end gap-2">
+          <template v-if="selectedMemberCount > 0">
+            <span class="text-[11px] font-semibold text-slate-500">
+              {{ selectedMemberCount }} selected
+            </span>
+            <button
+              type="button"
+              :disabled="actionBusy"
+              class="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-800 shadow-sm hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
+              @click.stop="onApproveSelectedMembers"
+            >
+              <i class="fas fa-check text-[11px]" aria-hidden="true" />
+              Approve
+            </button>
+            <button
+              type="button"
+              :disabled="actionBusy"
+              class="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-800 shadow-sm hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-50"
+              @click.stop="openListRejectDialog"
+            >
+              <i class="fas fa-times text-[11px]" aria-hidden="true" />
+              Reject
+            </button>
+          </template>
           <button
             type="button"
             class="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-sm transition-colors hover:border-slate-300 hover:bg-slate-50 hover:text-slate-700"
@@ -443,7 +554,18 @@ watch(drawerKpisSorted, (kpis) => {
         <table class="w-full min-w-[520px] table-fixed border-collapse text-left">
           <thead>
             <tr class="border-b border-slate-200 bg-white">
-              <th class="py-3.5 pl-5 pr-3 text-[11px] font-bold uppercase tracking-wide text-slate-500">
+              <th class="w-10 py-3.5 pl-5 pr-1">
+                <input
+                  type="checkbox"
+                  class="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                  :checked="isAllMembersSelected"
+                  :indeterminate="isSomeMembersSelected"
+                  :disabled="!selectableMemberSummaries.length || actionBusy"
+                  aria-label="Select all members"
+                  @click.stop="toggleSelectAllMembers"
+                />
+              </th>
+              <th class="py-3.5 pl-2 pr-3 text-[11px] font-bold uppercase tracking-wide text-slate-500">
                 Member
               </th>
               <th
@@ -470,7 +592,17 @@ watch(drawerKpisSorted, (kpis) => {
               class="cursor-pointer bg-white transition-colors hover:bg-slate-50/90"
               @click="openDrawer(m)"
             >
-              <td class="py-4 pl-5 pr-3 align-middle">
+              <td class="py-4 pl-5 pr-1 align-middle">
+                <input
+                  type="checkbox"
+                  class="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                  :checked="selectedMemberKeys.has(m.memberKey)"
+                  :disabled="!actionableKpisForMember(m).length || actionBusy"
+                  :aria-label="`Select ${m.displayName}`"
+                  @click.stop="toggleMemberSelection(m.memberKey, $event)"
+                />
+              </td>
+              <td class="py-4 pl-2 pr-3 align-middle">
                 <div class="flex min-w-0 items-center gap-3">
                   <div
                     class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-sky-200 bg-sky-50 text-[13px] font-bold uppercase tracking-tight text-sky-800 shadow-sm"
@@ -655,6 +787,7 @@ watch(drawerKpisSorted, (kpis) => {
                   </button>
                 </div>
 
+                <!-- Per-KPI approve/reject actions are intentionally hidden for now.
                 <div v-if="gmApprovedActionsEnabled(kpi)" class="mt-3 flex justify-end gap-2 border-t border-slate-100 pt-3">
                   <button
                     type="button"
@@ -673,6 +806,7 @@ watch(drawerKpisSorted, (kpis) => {
                     Approve
                   </button>
                 </div>
+                -->
               </div>
             </div>
 
@@ -803,6 +937,7 @@ watch(drawerKpisSorted, (kpis) => {
                     >
                       Close
                     </button>
+                    <!-- Per-KPI detail modal approve/reject actions are intentionally hidden for now.
                     <template v-if="gmApprovedActionsEnabled(selectedKpiDetail)">
                       <button
                         type="button"
@@ -821,6 +956,7 @@ watch(drawerKpisSorted, (kpis) => {
                         Approve
                       </button>
                     </template>
+                    -->
                   </div>
                 </div>
               </div>
@@ -888,8 +1024,13 @@ watch(drawerKpisSorted, (kpis) => {
                   </div>
                   <p class="mb-3 text-sm text-slate-600">
                     You are about to reject
-                    <strong>{{ actionableGmKpis.length }}</strong>
-                    KPI(s) awaiting GM approval for this member. Enter a reason that applies to all of them.
+                    <strong>{{ rejectAllTargets.length }}</strong>
+                    KPI(s) awaiting GM approval
+                    <template v-if="rejectAllMode === 'list'">
+                      for {{ selectedMemberCount }} selected member(s).
+                    </template>
+                    <template v-else> for this member.</template>
+                    Enter a reason that applies to all of them.
                   </p>
                   <label class="mb-1 block text-sm font-semibold text-slate-700">
                     Rejection reason <span class="text-rose-500">*</span>

@@ -31,6 +31,10 @@ public class CreateKpiTemplateItemRequest {
     @NotBlank
     private String calculationMethod;
 
+    private Integer cycleYear;
+
+    private Object targetDescription;
+
     private BigDecimal defaultTargetValue;
 
     @NotNull

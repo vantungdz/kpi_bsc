@@ -18,5 +18,7 @@ public class MemberKpiDetailResponse {
     private Integer statusCode;
     private Integer kpiTypeCode;
     private Integer calcRuleCode;
+    private Integer unitCode;
+    private String unitName;
     private String evidences;
 }

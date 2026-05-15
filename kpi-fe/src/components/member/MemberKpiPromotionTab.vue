@@ -138,6 +138,12 @@ function statusTooltip(item: KpiItem): string {
   return item.assignmentStatusName ?? ''
 }
 
+function hasRejectedReason(item: KpiItem): boolean {
+  const status = Number(item.statusCode ?? 0)
+  const reason = String(item.updateReason ?? item.feedbackComment ?? '').trim()
+  return status === 406 && reason.length > 0
+}
+
 // function formatTargetDisplay(item: KpiItem): string {
 //   const raw = item.assignmentTargetValue ?? item.kpiTemplateTargetValue
 //   if (raw == null) return '-'
@@ -193,7 +199,7 @@ const hasPromotionAssignments = computed(() => props.promotionItemsFlat.length >
   <div v-else>
     <div class="overflow-x-auto">
     <table class="w-full text-left">
-      <thead class="border-b border-slate-200 bg-white">
+      <thead class="border-b border-slate-200 bg-slate-200">
         <tr class="text-[11px] font-bold uppercase tracking-wider text-slate-500">
           <th class="w-12 px-5 py-4 text-center">STT</th>
           <th class="min-w-[200px] px-5 py-4">Hạng Mục (Objectives)</th>
@@ -205,15 +211,15 @@ const hasPromotionAssignments = computed(() => props.promotionItemsFlat.length >
               Actual Result
             </span>
           </th>
-          <th class="w-28 bg-sky-50/90 px-5 py-4 text-center text-slate-600">Self Score</th>
+          <th class="w-28 px-5 py-4 text-center ">Self Score</th>
           <th class="w-28 px-5 py-4 text-center">Final Score</th>
           <th class="w-28 px-5 py-4 text-right">Thao tác</th>
         </tr>
       </thead>
       <tbody class="divide-y divide-slate-100">
         <template v-for="section in sections" :key="'p-' + section.key">
-          <tr class="bg-amber-100 border-y border-amber-100">
-            <td colspan="9" class="py-2 px-5 text-xs font-bold text-amber-800 uppercase tracking-wider">
+          <tr class="border-y border-slate-200 bg-slate-50">
+            <td colspan="9" class="py-2 px-5 text-xs font-bold text-slate-800 uppercase tracking-wider">
               {{ section.headerLabel }}
             </td>
           </tr>
@@ -247,6 +253,15 @@ const hasPromotionAssignments = computed(() => props.promotionItemsFlat.length >
               >
                 <span class="line-clamp-3 text-center" :class="statusPhaseClass(item.statusCode)">{{ item.assignmentStatusName ?? '—' }}</span>
               </span>
+              <span
+                  v-if="hasRejectedReason(item)"
+                  :title="statusTooltip(item)"
+                  class="ml-1 mt-1 inline-flex max-w-full items-start gap-1 text-left text-[10px] font-medium text-orange-700 cursor-pointer hover:bg-orange-100 rounded"
+                >
+                  <span class="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-orange-300 text-[10px] font-bold leading-none text-orange-700">
+                    ?
+                  </span>
+               </span>
             </td>
 
             <td class="max-w-xs px-5 py-4 align-middle">
@@ -290,7 +305,7 @@ const hasPromotionAssignments = computed(() => props.promotionItemsFlat.length >
                 <p 
                   class="font-medium text-sm display-inline-flex items-center gap-1"
                   :class="scoreColorClass(item.pmScore)">
-                  {{ item.pmScore !== null ? item.pmScore : '-' }}
+                  {{ item.pmScore ?? '-' }}
                 </p>
                 <span
                   v-if="finalScoreTooltip(item)"

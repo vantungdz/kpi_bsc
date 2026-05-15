@@ -222,6 +222,18 @@
           AND DEPARTMENT_ID != #{keepDepartmentId}
     </delete>
 
+    <delete id="deleteUserDepartmentsByUser">
+        DELETE FROM USER_DEPARTMENTS
+        WHERE USER_ID = #{userId}
+    </delete>
+
+    <select id="countActiveDepartmentsManagedByUser" resultType="int">
+        SELECT COUNT(*)
+        FROM DEPARTMENTS
+        WHERE DELETED_AT IS NULL
+          AND MANAGER_ID = #{userId}
+    </select>
+
     <select id="selectActiveDepartmentIdsManagedByUserExcept" resultType="java.util.UUID">
         SELECT D.ID
         FROM DEPARTMENTS D

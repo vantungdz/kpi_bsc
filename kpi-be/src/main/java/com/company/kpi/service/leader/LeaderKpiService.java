@@ -77,10 +77,19 @@ public class LeaderKpiService {
             Optional<UserKpiSummary> optionalUserKpiSummary = userKpiSummaryMapper.findByUserIdAndCycleId(userId, cycle.getId());
             kpiSummary = new LeaderKpiSummary();
             UserKpiSummary userKpiSummary = optionalUserKpiSummary.orElse(new UserKpiSummary());
+            boolean promotionView = KpiType.PROMOTION.equals(type);
 
             kpiSummary.setFinalScore(Optional.ofNullable(userKpiSummary.getFinalScore()).orElse(BigDecimal.ZERO));
-            kpiSummary.setEvaluationComments(Optional.ofNullable(userKpiSummary.getEvaluationComments()).orElse(StringUtils.EMPTY));
-            kpiSummary.setEvaluationSupervisorComments(Optional.ofNullable(userKpiSummary.getEvaluationSupervisorComments()).orElse(StringUtils.EMPTY));
+            kpiSummary.setEvaluationComments(
+                    Optional.ofNullable(promotionView
+                                    ? userKpiSummary.getEvaluationCommentsPromotion()
+                                    : userKpiSummary.getEvaluationComments())
+                            .orElse(StringUtils.EMPTY));
+            kpiSummary.setEvaluationSupervisorComments(
+                    Optional.ofNullable(promotionView
+                                    ? userKpiSummary.getEvaluationSupervisorCommentsPromotion()
+                                    : userKpiSummary.getEvaluationSupervisorComments())
+                            .orElse(StringUtils.EMPTY));
         }
 
         LeaderKpiCycleInfo leaderKpiCycleInfo = modelMapper.map(cycle, LeaderKpiCycleInfo.class);

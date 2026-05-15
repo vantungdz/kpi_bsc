@@ -30,4 +30,7 @@ public interface EmailTemplateMapper {
                              @Param("sendMode") String sendMode,
                              @Param("templateGroup") String templateGroup,
                              @Param("updatedBy") UUID updatedBy);
+
+    /** Xóa mềm mẫu email (deleted_at). */
+    int softDeleteEmailTemplate(@Param("id") UUID id, @Param("updatedBy") UUID updatedBy);
 }

@@ -105,6 +105,45 @@ const hasAnyLeaderKpi = computed(() => {
   return personalCount + promotionCount > 0
 })
 
+const leaderMergedAssignmentStatusCodes = computed(() =>
+  [
+    ...(summaryData.value?.categories ?? []).flatMap(c => c.assignments ?? []),
+    ...(promotionSummaryData.value?.categories ?? []).flatMap(c => c.assignments ?? []),
+  ]
+    .map(a => Number(a.statusCode))
+    .filter(code => Number.isFinite(code)),
+)
+
+function isPhaseCompletedByStatuses(statusCodes: number[], allowedStatuses: ReadonlySet<number>): boolean {
+  if (!statusCodes.length) return false
+  return statusCodes.every(code => allowedStatuses.has(code))
+}
+
+const TARGET_SETUP_DONE_STATUSES = new Set([405, 501, 502, 503, 601, 602, 603])
+const MID_YEAR_DONE_STATUSES = new Set([503, 601, 602, 603])
+const YEAR_END_DONE_STATUSES = new Set([603])
+
+const leaderTimelineTargetSetupCompleted = computed(() =>
+  isPhaseCompletedByStatuses(
+    leaderMergedAssignmentStatusCodes.value,
+    TARGET_SETUP_DONE_STATUSES,
+  ),
+)
+
+const leaderTimelineMidYearCompleted = computed(() =>
+  isPhaseCompletedByStatuses(
+    leaderMergedAssignmentStatusCodes.value,
+    MID_YEAR_DONE_STATUSES,
+  ),
+)
+
+const leaderTimelineYearEndCompleted = computed(() =>
+  isPhaseCompletedByStatuses(
+    leaderMergedAssignmentStatusCodes.value,
+    YEAR_END_DONE_STATUSES,
+  ),
+)
+
 /** Timeline chỉ Year-End khi đúng case onboard sau giữa kỳ (có kiểm tra goal_setting_end + ASM giữa kỳ). */
 const leaderTimelineYearEndOnly = computed(() => {
   const data = activeTab.value === 'promotion' ? promotionSummaryData.value : summaryData.value
@@ -146,6 +185,14 @@ const leaderCycleFinalScore = computed((): number | null => {
   const n = Number(fs)
   return Number.isFinite(n) ? n : null
 })
+
+const leaderFallbackSelfWeightedAvg = computed(() =>
+  activeTab.value === 'promotion' ? averagePromotion.value : average.value,
+)
+
+const leaderSummaryWeightedAvg = computed(
+  () => leaderManagerWeightedAvg.value ?? leaderFallbackSelfWeightedAvg.value,
+)
 
 /** Tab personal/promotion: mọi KPI 603; tab team: cả hai sheet đều 603. */
 const leaderTimelineEvaluationFullyComplete = computed(() => {
@@ -225,10 +272,36 @@ function hasPendingActionInSummary(
   return false
 }
 
-const kpiDeadlineBanner = computed((): KpiDeadlineBannerVm | null => {
-  if (activeTab.value === 'team') return null
-  const currentSummary = activeTab.value === 'promotion' ? promotionSummaryData.value : summaryData.value
-  let phase = derivePhaseFromAssignments(currentSummary) ?? leaderActiveEvalPhase.value
+type LeaderBannerTarget = Extract<LeaderTab, 'personal' | 'promotion'> | null
+type LeaderBannerPickResult = { banner: KpiDeadlineBannerVm | null; targetTab: LeaderBannerTarget }
+
+function pickGlobalDeadlineBanner(
+  promotionBanner: KpiDeadlineBannerVm | null,
+  personalBanner: KpiDeadlineBannerVm | null,
+): LeaderBannerPickResult {
+  const bothOverdue = promotionBanner?.kind === 'overdue' && personalBanner?.kind === 'overdue'
+  if (bothOverdue) {
+    return {
+      banner: {
+        ...promotionBanner,
+        title: 'Bạn có KPI đang quá hạn tự đánh giá',
+        subtitle: 'Vui lòng hoàn tất tự đánh giá KPI Personal và KPI thăng tiến sớm nhất để PM/HR xử lý.',
+      },
+      targetTab: 'promotion',
+    }
+  }
+  if (promotionBanner?.kind === 'overdue') return { banner: promotionBanner, targetTab: 'promotion' }
+  if (personalBanner?.kind === 'overdue') return { banner: personalBanner, targetTab: 'personal' }
+  if (promotionBanner) return { banner: promotionBanner, targetTab: 'promotion' }
+  if (personalBanner) return { banner: personalBanner, targetTab: 'personal' }
+  return { banner: null, targetTab: null }
+}
+
+function buildLeaderDeadlineBanner(
+  data: LeaderKpiInformationResponse | null,
+  subjectLabel: string,
+): KpiDeadlineBannerVm | null {
+  let phase = derivePhaseFromAssignments(data) ?? leaderActiveEvalPhase.value
   const cycle = cycleData.value
   if (cycle && phase === 'year_end') {
     const now = Date.now()
@@ -236,22 +309,32 @@ const kpiDeadlineBanner = computed((): KpiDeadlineBannerVm | null => {
     const midEnd = cycle.midYearEnd ? new Date(cycle.midYearEnd).getTime() : null
     const beforeEndYearWindow = endStart != null && now < endStart
     const afterMidYearDeadline = midEnd != null && now > midEnd
-    const hasMidYearPending = (currentSummary?.categories ?? [])
+    const hasMidYearPending = (data?.categories ?? [])
       .flatMap(c => c.assignments ?? [])
       .some(a => Number(a.statusCode) === 405)
     if (beforeEndYearWindow && afterMidYearDeadline && hasMidYearPending) {
       phase = 'mid_year'
     }
   }
-  const hasPendingAction = hasPendingActionInSummary(currentSummary, phase)
-  const subject = activeTab.value === 'promotion' ? 'KPI thăng tiến' : 'KPI'
   return buildKpiDeadlineBanner({
     cycle,
     phase,
-    subjectLabel: subject,
+    subjectLabel,
     warningDays: 3,
-    hasPendingAction,
+    hasPendingAction: hasPendingActionInSummary(data, phase),
   })
+}
+
+const kpiDeadlineBanner = computed((): KpiDeadlineBannerVm | null => {
+  const promotionBanner = buildLeaderDeadlineBanner(promotionSummaryData.value, 'KPI thăng tiến')
+  const personalBanner = buildLeaderDeadlineBanner(summaryData.value, 'KPI')
+  return pickGlobalDeadlineBanner(promotionBanner, personalBanner).banner
+})
+
+const kpiDeadlineBannerTargetTab = computed<LeaderBannerTarget>(() => {
+  const promotionBanner = buildLeaderDeadlineBanner(promotionSummaryData.value, 'KPI thăng tiến')
+  const personalBanner = buildLeaderDeadlineBanner(summaryData.value, 'KPI')
+  return pickGlobalDeadlineBanner(promotionBanner, personalBanner).targetTab
 })
 
 function onLeaderStatusChanged() {
@@ -263,6 +346,12 @@ function scrollToLeaderKpiSection() {
     behavior: 'smooth',
     block: 'start',
   })
+}
+
+function handleDeadlineBannerCtaClick() {
+  const target = kpiDeadlineBannerTargetTab.value
+  if (target) activeTab.value = target
+  scrollToLeaderKpiSection()
 }
 </script>
 
@@ -296,7 +385,7 @@ function scrollToLeaderKpiSection() {
     <MemberKpiDeadlineBanner
       v-if="kpiDeadlineBanner"
       :banner="kpiDeadlineBanner"
-      @cta-click="scrollToLeaderKpiSection"
+      @cta-click="handleDeadlineBannerCtaClick"
     />
 
     <!-- Top action bar -->
@@ -321,6 +410,9 @@ function scrollToLeaderKpiSection() {
       :year="selectedYear"
       :year-end-only="leaderTimelineYearEndOnly"
       :evaluation-fully-completed="leaderTimelineEvaluationFullyComplete"
+      :target-setup-completed="leaderTimelineTargetSetupCompleted"
+      :mid-year-completed="leaderTimelineMidYearCompleted"
+      :year-end-completed="leaderTimelineYearEndCompleted"
     />
 
     <!-- Summary cards (Tình trạng bằng chứng + Avg Self Score) -->
@@ -356,11 +448,15 @@ function scrollToLeaderKpiSection() {
         </div>
         <div class="z-10 min-w-0">
           <p class="mb-1 text-xs font-bold uppercase tracking-wider text-slate-500">
-            Avg Self Score (Personal, có trọng số)
+            {{
+              leaderManagerWeightedAvg !== null
+                ? `Điểm trung bình (Average score) của Final Score (${activeTab === 'promotion' ? 'Promotion' : 'Personal'}, có trọng số)`
+                : `Điểm trung bình (Average score) của Self Score (${activeTab === 'promotion' ? 'Promotion' : 'Personal'}, có trọng số)`
+            }}
           </p>
           <div class="flex items-baseline gap-2">
             <p class="text-2xl font-bold text-violet-700">
-              {{ (activeTab === 'promotion' ? averagePromotion : average ?? 0).toFixed(2) }}
+              {{ (leaderSummaryWeightedAvg ?? 0).toFixed(2) }}
             </p>
             <p class="text-[10px] font-semibold text-violet-500">/ 5.0</p>
           </div>

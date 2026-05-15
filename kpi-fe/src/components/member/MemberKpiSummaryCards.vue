@@ -7,6 +7,8 @@ defineProps<{
   evidenceTotalCount: number
   personalSelfWeightedAvg: number | null
   personalSelfPromotionAvg: number | null
+  personalFinalWeightedAvg?: number | null
+  promotionFinalWeightedAvg?: number | null
   activeTab: 'personal' | 'promotion'
 }>()
 
@@ -55,12 +57,12 @@ defineEmits<{
         <p class="text-2xl font-bold text-slate-800">
           {{ evidenceCount }}
           <span class="text-sm font-bold text-slate-400">/ {{ evidenceTotalCount }}</span>
-          <p
+          <span
             v-if="evidenceCount < evidenceTotalCount"
             class="mt-0.5 text-[11px] font-semibold text-orange-500"
           >
             Cần bổ sung {{ evidenceTotalCount - evidenceCount }} mục
-          </p>
+          </span>
         </p>
        
       </div>
@@ -75,7 +77,13 @@ defineEmits<{
       </div>
       <div class="z-10 min-w-0">
         <p class="mb-1 text-xs font-bold uppercase tracking-wider text-slate-500">
-          Avg Self Score ({{ activeTab === 'promotion' ? 'Promotion' : 'Personal' }}, có trọng số)
+          {{
+            (activeTab === 'promotion'
+              ? promotionFinalWeightedAvg !== null && promotionFinalWeightedAvg !== undefined
+              : personalFinalWeightedAvg !== null && personalFinalWeightedAvg !== undefined)
+              ? `Điểm trung bình (Average score) của Final Score (${activeTab === 'promotion' ? 'Promotion' : 'Personal'}, có trọng số)`
+              : `Điểm trung bình (Average score) của Self Score (${activeTab === 'promotion' ? 'Promotion' : 'Personal'}, có trọng số)`
+          }}
         </p>
         <div class="flex items-baseline gap-2">
           <p class="text-2xl font-bold text-violet-700">

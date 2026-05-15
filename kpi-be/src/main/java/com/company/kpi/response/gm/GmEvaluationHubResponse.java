@@ -12,5 +12,6 @@ public class GmEvaluationHubResponse {
     private UUID cycleId;
     private Integer year;
     private String cycleName;
+    private String activePhase;
     private List<GmEvaluationHubAssignmentResponse> assignments;
 }

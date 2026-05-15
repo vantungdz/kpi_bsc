@@ -50,12 +50,16 @@ async function loadDashboard() {
     ])
     if (dashboardRs.status === 'fulfilled') {
       dashboardData.value = dashboardRs.value
-      employeeComment.value = String(dashboardRs.value?.evaluationComments ?? '')
-      supervisorComment.value = String(dashboardRs.value?.evaluationSupervisorComments ?? '')
+      personalEmployeeComment.value = String(dashboardRs.value?.evaluationComments ?? '')
+      promotionEmployeeComment.value = String(dashboardRs.value?.evaluationCommentsPromotion ?? '')
+      personalSupervisorComment.value = String(dashboardRs.value?.evaluationSupervisorComments ?? '')
+      promotionSupervisorComment.value = String(dashboardRs.value?.evaluationSupervisorCommentsPromotion ?? '')
     } else {
       dashboardData.value = null
-      employeeComment.value = ''
-      supervisorComment.value = ''
+      personalEmployeeComment.value = ''
+      promotionEmployeeComment.value = ''
+      personalSupervisorComment.value = ''
+      promotionSupervisorComment.value = ''
     }
     cycleData.value = cycleRs.status === 'fulfilled' ? cycleRs.value : null
   } finally {
@@ -101,8 +105,10 @@ function promotionLabelFromActionType(actionType: 'GOAL_SETTING' | 'MID_YEAR' | 
 // Tách state submit riêng cho từng loại KPI
 const submittingPersonal = ref(false)
 const submittingPromotion = ref(false)
-const employeeComment = ref('')
-const supervisorComment = ref('')
+const personalEmployeeComment = ref('')
+const promotionEmployeeComment = ref('')
+const personalSupervisorComment = ref('')
+const promotionSupervisorComment = ref('')
 const showDeleteConfirmModal = ref(false)
 const pendingDeleteItem = ref<KpiItem | null>(null)
 
@@ -245,6 +251,11 @@ function hasPendingApprovalStatus(items: KpiItem[]): boolean {
   return items.some(i => pendingStatuses.has(Number(i.statusCode ?? 0)))
 }
 
+function hasCompletedEvaluationStatus(items: KpiItem[]): boolean {
+  if (!items.length) return false
+  return items.every(i => Number(i.statusCode ?? 0) === 603)
+}
+
 const canSubmitPersonal = computed(
   () => isCurrentYear.value && personalItemsFlat.value.length > 0 && personalButtonState.value.show,
 )
@@ -322,12 +333,21 @@ const promotionSelfWeightedAvg = computed((): number | null => {
 })
 
 const promotionPmWeightedAvg = computed((): number | null => {
-  const rows = promotionItemsFlat.value.filter(i => i.pmScore !== null)
+  const rows = promotionItemsFlat.value.filter(i => i.pmScore != null)
   if (!rows.length) return null
   let num = 0, den = 0
   for (const i of rows) { num += (i.pmScore ?? 0) * i.weight; den += i.weight }
   return den ? num / den : null
 })
+
+const personalPmWeightedAvg = computed((): number | null => {
+  const rows = personalItemsFlat.value.filter(i => i.pmScore != null)
+  if (!rows.length) return null
+  let num = 0, den = 0
+  for (const i of rows) { num += (i.pmScore ?? 0) * i.weight; den += i.weight }
+  return den ? num / den : null
+})
+
 
 const personalSelfWeightedAvg = computed((): number | null => {
   const items = sheet.value?.items.filter(i => i.group !== 'P') ?? []
@@ -337,6 +357,13 @@ const personalSelfWeightedAvg = computed((): number | null => {
   for (const i of rows) { num += (i.selfScore ?? 0) * i.weight; den += i.weight }
   return den ? num / den : null
 })
+
+const personalSummaryWeightedAvg = computed(
+  () => personalPmWeightedAvg.value ?? personalSelfWeightedAvg.value,
+)
+const promotionSummaryWeightedAvg = computed(
+  () => promotionPmWeightedAvg.value ?? promotionSelfWeightedAvg.value,
+)
 
 const personalEvidenceTotalCount = computed(() => personalItemsFlat.value.length)
 const promotionEvidenceTotalCount = computed(() => promotionItemsFlat.value.length)
@@ -371,6 +398,31 @@ const memberKpiStatusCounts = computed(() => {
 type MemberKpiMainTab = 'personal' | 'promotion'
 const memberKpiMainTab = ref<MemberKpiMainTab>('personal')
 
+const TARGET_SETUP_DONE_STATUSES = new Set([405, 501, 502, 503, 601, 602, 603])
+const MID_YEAR_DONE_STATUSES = new Set([503, 601, 602, 603])
+const YEAR_END_DONE_STATUSES = new Set([603])
+
+function memberPhaseCompletedByStatuses(allowedStatuses: ReadonlySet<number>): boolean {
+  const allItems = sheet.value?.items ?? []
+  const statusCodes = allItems
+    .map(i => Number(i.statusCode ?? 0))
+    .filter(code => Number.isFinite(code))
+  if (!statusCodes.length) return false
+  return statusCodes.every(code => allowedStatuses.has(code))
+}
+
+const memberTimelineTargetSetupCompleted = computed(() =>
+  memberPhaseCompletedByStatuses(TARGET_SETUP_DONE_STATUSES),
+)
+
+const memberTimelineMidYearCompleted = computed(() => {
+  return memberPhaseCompletedByStatuses(MID_YEAR_DONE_STATUSES)
+})
+
+const memberTimelineYearEndCompleted = computed(() => {
+  return memberPhaseCompletedByStatuses(YEAR_END_DONE_STATUSES)
+})
+
 const activeMemberSheetItemsForComments = computed(() =>
   memberKpiMainTab.value === 'promotion' ? promotionItemsFlat.value : personalItemsFlat.value,
 )
@@ -378,7 +430,8 @@ const activeMemberSheetItemsForComments = computed(() =>
 const isEmployeeCommentReadonly = computed(
   () =>
     !isCurrentYear.value
-    || hasPendingApprovalStatus(activeMemberSheetItemsForComments.value),
+    || hasPendingApprovalStatus(activeMemberSheetItemsForComments.value)
+    || hasCompletedEvaluationStatus(activeMemberSheetItemsForComments.value),
 )
 
 function memberKpiTabButtonClass(tab: MemberKpiMainTab) {
@@ -393,23 +446,72 @@ function memberKpiTabIconClass(tab: MemberKpiMainTab) {
 }
 
 // ── Deadline banner (from cycle in DB) ────────────────────────────────────────
+type MemberBannerTarget = MemberKpiMainTab | null
+type MemberBannerPickResult = { banner: KpiDeadlineBannerVm | null; targetTab: MemberBannerTarget }
+
+function pickGlobalDeadlineBanner(
+  promotionBanner: KpiDeadlineBannerVm | null,
+  personalBanner: KpiDeadlineBannerVm | null,
+): MemberBannerPickResult {
+  const bothOverdue = promotionBanner?.kind === 'overdue' && personalBanner?.kind === 'overdue'
+  if (bothOverdue) {
+    return {
+      banner: {
+        ...promotionBanner,
+        title: 'Bạn có KPI đang quá hạn tự đánh giá',
+        subtitle: 'Vui lòng hoàn tất tự đánh giá KPI Personal và KPI thăng tiến sớm nhất để PM/HR xử lý.',
+      },
+      targetTab: 'promotion',
+    }
+  }
+  if (promotionBanner?.kind === 'overdue') return { banner: promotionBanner, targetTab: 'promotion' }
+  if (personalBanner?.kind === 'overdue') return { banner: personalBanner, targetTab: 'personal' }
+  if (promotionBanner) return { banner: promotionBanner, targetTab: 'promotion' }
+  if (personalBanner) return { banner: personalBanner, targetTab: 'personal' }
+  return { banner: null, targetTab: null }
+}
+
 const kpiDeadlineBanner = computed((): KpiDeadlineBannerVm | null => {
-  const activeActionType = memberKpiMainTab.value === 'promotion'
-    ? promotionButtonState.value.actionType
-    : personalButtonState.value.actionType
-  const phase = phaseFromActionType(activeActionType)
-  const activeItems = memberKpiMainTab.value === 'promotion'
-    ? promotionItemsFlat.value
-    : personalItemsFlat.value
-  const hasPendingAction = hasPendingActionByType(activeItems, activeActionType)
-  const subject = memberKpiMainTab.value === 'promotion' ? 'KPI thăng tiến' : 'KPI'
-  return buildKpiDeadlineBanner({
+  const personalActionType = personalButtonState.value.actionType
+  const promotionActionType = promotionButtonState.value.actionType
+
+  const personalBanner = buildKpiDeadlineBanner({
     cycle: cycleData.value,
-    phase,
-    subjectLabel: subject,
+    phase: phaseFromActionType(personalActionType),
+    subjectLabel: 'KPI',
     warningDays: 3,
-    hasPendingAction,
+    hasPendingAction: hasPendingActionByType(personalItemsFlat.value, personalActionType),
   })
+
+  const promotionBanner = buildKpiDeadlineBanner({
+    cycle: cycleData.value,
+    phase: phaseFromActionType(promotionActionType),
+    subjectLabel: 'KPI thăng tiến',
+    warningDays: 3,
+    hasPendingAction: hasPendingActionByType(promotionItemsFlat.value, promotionActionType),
+  })
+
+  return pickGlobalDeadlineBanner(promotionBanner, personalBanner).banner
+})
+
+const kpiDeadlineBannerTargetTab = computed<MemberBannerTarget>(() => {
+  const personalActionType = personalButtonState.value.actionType
+  const promotionActionType = promotionButtonState.value.actionType
+  const personalBanner = buildKpiDeadlineBanner({
+    cycle: cycleData.value,
+    phase: phaseFromActionType(personalActionType),
+    subjectLabel: 'KPI',
+    warningDays: 3,
+    hasPendingAction: hasPendingActionByType(personalItemsFlat.value, personalActionType),
+  })
+  const promotionBanner = buildKpiDeadlineBanner({
+    cycle: cycleData.value,
+    phase: phaseFromActionType(promotionActionType),
+    subjectLabel: 'KPI thăng tiến',
+    warningDays: 3,
+    hasPendingAction: hasPendingActionByType(promotionItemsFlat.value, promotionActionType),
+  })
+  return pickGlobalDeadlineBanner(promotionBanner, personalBanner).targetTab
 })
 
 function scrollToKpiSelfEvalSection() {
@@ -417,6 +519,12 @@ function scrollToKpiSelfEvalSection() {
     behavior: 'smooth',
     block: 'start',
   })
+}
+
+function handleDeadlineBannerCtaClick() {
+  const target = kpiDeadlineBannerTargetTab.value
+  if (target) memberKpiMainTab.value = target
+  scrollToKpiSelfEvalSection()
 }
 
 // ── Actions ───────────────────────────────────────────────────────────────────
@@ -462,7 +570,7 @@ async function handlePersonalSubmit() {
   submittingPersonal.value = true
   try {
     await submitByType('INDIVIDUAL', personalAssignmentIds.value)
-    await memberKpiService.submit(selectedYear.value, 'INDIVIDUAL', employeeComment.value)
+    await memberKpiService.submit(selectedYear.value, 'INDIVIDUAL', personalEmployeeComment.value)
     await loadDashboard()
     toast.success('Personal KPI đã được nộp thành công')
   } catch (e: unknown) {
@@ -479,7 +587,7 @@ async function handlePromotionSubmit() {
   submittingPromotion.value = true
   try {
     await submitByType('PROMOTION', promotionAssignmentIds.value)
-    await memberKpiService.submit(selectedYear.value, 'PROMOTION', employeeComment.value)
+    await memberKpiService.submit(selectedYear.value, 'PROMOTION', promotionEmployeeComment.value)
     await loadDashboard()
     toast.success('Promotion KPI đã được nộp thành công')
   } catch (e: unknown) {
@@ -530,7 +638,7 @@ async function confirmDeleteSelfCreatedKpi() {
       <MemberKpiDeadlineBanner
         v-if="kpiDeadlineBanner"
         :banner="kpiDeadlineBanner"
-        @cta-click="scrollToKpiSelfEvalSection"
+        @cta-click="handleDeadlineBannerCtaClick"
       />
 
       <!-- Top action bar -->
@@ -559,6 +667,9 @@ async function confirmDeleteSelfCreatedKpi() {
         :year="selectedYear"
         :year-end-only="timelineYearEndOnly"
         :evaluation-fully-completed="memberEvaluationFullyComplete"
+        :target-setup-completed="memberTimelineTargetSetupCompleted"
+        :mid-year-completed="memberTimelineMidYearCompleted"
+        :year-end-completed="memberTimelineYearEndCompleted"
       />
 
       <!-- Summary cards -->
@@ -566,8 +677,10 @@ async function confirmDeleteSelfCreatedKpi() {
         :status-counts="memberKpiStatusCounts"
         :evidence-count="activeEvidenceCount"
         :evidence-total-count="activeEvidenceTotalCount"
-        :personal-self-weighted-avg="personalSelfWeightedAvg"
-        :personal-self-promotion-avg="promotionSelfWeightedAvg"
+        :personal-self-weighted-avg="personalSummaryWeightedAvg"
+        :personal-self-promotion-avg="promotionSummaryWeightedAvg"
+        :personal-final-weighted-avg="personalPmWeightedAvg"
+        :promotion-final-weighted-avg="promotionPmWeightedAvg"
         :active-tab="memberKpiMainTab"
         @scroll-to-eval="scrollToKpiSelfEvalSection"
       />
@@ -620,8 +733,8 @@ async function confirmDeleteSelfCreatedKpi() {
               :sections="personalGroupedSections"
               :personal-self-weighted-avg="personalSelfWeightedAvg"
               :is-current-year="isCurrentYear"
-              :employee-comment="employeeComment"
-              :supervisor-comment="supervisorComment"
+              :employee-comment="personalEmployeeComment"
+              :supervisor-comment="personalSupervisorComment"
               :employee-comment-readonly="isEmployeeCommentReadonly"
               :submitting="submittingPersonal"
               :can-submit="canSubmitPersonal"
@@ -631,7 +744,7 @@ async function confirmDeleteSelfCreatedKpi() {
               @open-edit-self-created="openRejectedSelfCreatedEditor"
               @open-feedback="evidenceCtx.openFeedbackPanel"
               @delete-self-created="handleDeleteSelfCreatedKpi"
-              @update-employee-comment="employeeComment = $event"
+              @update-employee-comment="personalEmployeeComment = $event"
               @submit="handlePersonalSubmit"
             />
           </template>
@@ -645,8 +758,8 @@ async function confirmDeleteSelfCreatedKpi() {
               :promotion-self-weighted-avg="promotionSelfWeightedAvg"
               :promotion-pm-weighted-avg="promotionPmWeightedAvg"
               :is-current-year="isCurrentYear"
-              :employee-comment="employeeComment"
-              :supervisor-comment="supervisorComment"
+              :employee-comment="promotionEmployeeComment"
+              :supervisor-comment="promotionSupervisorComment"
               :employee-comment-readonly="isEmployeeCommentReadonly"
               :submitting="submittingPromotion"
               :can-submit="canSubmitPromotion"
@@ -656,7 +769,7 @@ async function confirmDeleteSelfCreatedKpi() {
               @open-edit-self-created="openRejectedSelfCreatedEditor"
               @open-feedback="evidenceCtx.openFeedbackPanel"
               @delete-self-created="handleDeleteSelfCreatedKpi"
-              @update-employee-comment="employeeComment = $event"
+              @update-employee-comment="promotionEmployeeComment = $event"
               @submit="handlePromotionSubmit"
             />
           </template>

@@ -6,6 +6,19 @@ export interface GmDepartmentMemberApiRow {
   rankCode: string | null
 }
 
+/** Một nhân viên active trong hệ thống — không phụ thuộc membership phòng ban. */
+export interface GmMemberApiRow {
+  userId: string
+  fullName: string
+  email: string | null
+  rankCode: string | null
+  roleCode: string | null
+  departmentId: string | null
+  departmentName: string | null
+  departmentManager: boolean | null
+  managingDepartmentName: string | null
+}
+
 /** KPI team giao cho phòng — đồng bộ `GmDepartmentAssignedKpiResponse`. */
 export interface GmDepartmentAssignedKpiApiRow {
   assignmentId: string

@@ -58,8 +58,9 @@ import {
   MOCK_DEPARTMENTS,
   MOCK_RANK_OPTIONS,
   MOCK_JOB_TITLES,
+  MOCK_KPI_CYCLES,
 } from "@/mocks/admin.mock";
-import type { Employee, EmailTemplate } from "@/mocks/admin.mock";
+import type { Employee, EmailTemplate, AdminKpiCycle } from "@/mocks/admin.mock";
 
 function sleep(ms: number) {
   return new Promise<void>((r) => setTimeout(r, ms));
@@ -918,26 +919,13 @@ const routes: Route[] = [
     },
   },
 
-  // ── GET /kpi/gm/kpi-cycles-for-evaluation — year >= năm hiện tại ───────────
+  // ── GET /kpi/gm/kpi-cycles-for-evaluation — mọi chu kỳ có dữ liệu KPI (kể cả năm trước) ─
   {
     method: "get",
     test: (p) => p === "/kpi/gm/kpi-cycles-for-evaluation",
     handler: async (cfg) => {
       await sleep(120);
-      const y0 = new Date().getFullYear();
-      const filtered = MOCK_GM_KPI_CYCLES_WITH_KPIS.filter((c) => c.year >= y0);
-      const rows =
-        filtered.length > 0
-          ? filtered
-          : [
-              {
-                id: "c2000000-0000-0000-0000-000000000001",
-                year: y0,
-                name: `Năm ${y0}`,
-                statusCode: 201,
-              },
-            ];
-      return ok<GmKpiCycleOption[]>(cfg, rows);
+      return ok<GmKpiCycleOption[]>(cfg, [...MOCK_GM_KPI_CYCLES_WITH_KPIS]);
     },
   },
 
@@ -1629,9 +1617,161 @@ const routes: Route[] = [
 // ── In-memory stores for Admin module (simulate persistence in mock mode) ──────
 let mockEmployeeStore: Employee[] = [...MOCK_EMPLOYEES];
 let mockTemplateStore: EmailTemplate[] = [...MOCK_EMAIL_TEMPLATES];
+let mockKpiCycleStore: AdminKpiCycle[] = [...MOCK_KPI_CYCLES];
 
 // ── Admin Routes ───────────────────────────────────────────────────────────────
 const adminRoutes: typeof routes = [
+  // GET /admin/kpi-cycles
+  {
+    method: "get",
+    test: (p) => p === "/admin/kpi-cycles",
+    handler: async (cfg) => {
+      await sleep(220);
+      const sorted = [...mockKpiCycleStore].sort((a, b) => b.year - a.year);
+      return ok(cfg, sorted);
+    },
+  },
+
+  // POST /admin/kpi-cycles
+  {
+    method: "post",
+    test: (p) => p === "/admin/kpi-cycles",
+    handler: async (cfg) => {
+      await sleep(400);
+      const body = parseBody<{
+        year: number;
+        name: string;
+        goalSettingStartDate: string;
+        goalSettingEndDate: string;
+        midYearStartDate: string;
+        midYearEndDate: string;
+        endYearStartDate: string;
+        endYearEndDate: string;
+        activateImmediately?: boolean;
+      }>(cfg);
+      const y = Number(body.year);
+      if (mockKpiCycleStore.some((c) => c.year === y)) {
+        fail(cfg, 400, `Năm đánh giá ${y} đã tồn tại.`);
+      }
+      const activate = Boolean(body.activateImmediately);
+      if (activate && mockKpiCycleStore.some((c) => c.statusCode === 201)) {
+        fail(
+          cfg,
+          400,
+          "Đang có một năm đánh giá đang mở (201). Không thể kích hoạt năm mới ngay lập tức. Vui lòng đóng kỳ hiện tại trước, hoặc tạo năm mới ở trạng thái đóng rồi mở sau.",
+        );
+      }
+      const id = crypto.randomUUID();
+      const isoAt = (d: string) => `${d}T16:59:59.000Z`;
+      const row: AdminKpiCycle = {
+        id,
+        year: y,
+        name: String(body.name ?? "").trim() || `Năm ${y}`,
+        goalSettingStart: isoAt(body.goalSettingStartDate),
+        goalSettingEnd: isoAt(body.goalSettingEndDate),
+        midYearStart: isoAt(body.midYearStartDate),
+        midYearEnd: isoAt(body.midYearEndDate),
+        endYearStart: isoAt(body.endYearStartDate),
+        endYearEnd: isoAt(body.endYearEndDate),
+        statusCode: activate ? 201 : 202,
+      };
+      mockKpiCycleStore = [...mockKpiCycleStore, row];
+      return created(cfg, row);
+    },
+  },
+
+  // PATCH /admin/kpi-cycles/:id — đổi status_code 201 / 202
+  {
+    method: "patch",
+    test: (p) => /^\/admin\/kpi-cycles\/[^/]+$/.test(p),
+    handler: async (cfg, path) => {
+      await sleep(280);
+      const id = path.split("/")[3];
+      const body = parseBody<{ statusCode: number }>(cfg);
+      const sc = Number(body.statusCode);
+      if (sc !== 201 && sc !== 202) {
+        fail(cfg, 400, "status_code chỉ được là 201 (mở) hoặc 202 (đóng).");
+      }
+      const idx = mockKpiCycleStore.findIndex((c) => c.id === id);
+      if (idx < 0) {
+        fail(cfg, 404, "Không tìm thấy kỳ đánh giá.");
+      }
+      const cur = mockKpiCycleStore[idx]!;
+      if (sc === 201) {
+        if (cur.statusCode === 201) {
+          return ok(cfg, { ...cur });
+        }
+        if (mockKpiCycleStore.some((c) => c.id !== id && c.statusCode === 201)) {
+          fail(
+            cfg,
+            400,
+            "Đã có một năm đánh giá đang mở (201). Vui lòng đóng năm đó trước khi mở năm khác.",
+          );
+        }
+        mockKpiCycleStore = mockKpiCycleStore.map((c, i) =>
+          i === idx ? { ...c, statusCode: 201 } : c,
+        );
+      } else {
+        if (cur.statusCode === 202) {
+          return ok(cfg, { ...cur });
+        }
+        mockKpiCycleStore = mockKpiCycleStore.map((c, i) =>
+          i === idx ? { ...c, statusCode: 202 } : c,
+        );
+      }
+      const updated = mockKpiCycleStore[idx]!;
+      return ok(cfg, { ...updated });
+    },
+  },
+
+  // PUT /admin/kpi-cycles/:id/phase-dates — cập nhật ngày theo giai đoạn
+  {
+    method: "put",
+    test: (p) => /^\/admin\/kpi-cycles\/[^/]+\/phase-dates$/.test(p),
+    handler: async (cfg, path) => {
+      await sleep(300);
+      const id = path.split("/")[3];
+      const body = parseBody<{
+        phase: string;
+        startDate: string;
+        endDate: string;
+      }>(cfg);
+      const ph = String(body.phase ?? "")
+        .trim()
+        .toLowerCase();
+      if (!["goal_setting", "mid_year", "end_year"].includes(ph)) {
+        fail(cfg, 400, "phase phải là goal_setting, mid_year hoặc end_year.");
+      }
+      if (!body.startDate || !body.endDate) {
+        fail(cfg, 400, "Vui lòng nhập đầy đủ ngày bắt đầu và kết thúc.");
+      }
+      if (new Date(body.startDate) > new Date(body.endDate)) {
+        fail(cfg, 400, "Ngày bắt đầu không được sau ngày kết thúc.");
+      }
+      const idx = mockKpiCycleStore.findIndex((c) => c.id === id);
+      if (idx < 0) {
+        fail(cfg, 404, "Không tìm thấy kỳ đánh giá.");
+      }
+      const isoAt = (d: string) => `${d}T16:59:59.000Z`;
+      const cur = mockKpiCycleStore[idx]!;
+      const next: AdminKpiCycle = { ...cur };
+      if (ph === "goal_setting") {
+        next.goalSettingStart = isoAt(body.startDate);
+        next.goalSettingEnd = isoAt(body.endDate);
+      } else if (ph === "mid_year") {
+        next.midYearStart = isoAt(body.startDate);
+        next.midYearEnd = isoAt(body.endDate);
+      } else {
+        next.endYearStart = isoAt(body.startDate);
+        next.endYearEnd = isoAt(body.endDate);
+      }
+      mockKpiCycleStore = mockKpiCycleStore.map((c, i) =>
+        i === idx ? next : c,
+      );
+      return ok(cfg, next);
+    },
+  },
+
   // GET /admin/sections — danh sách phòng ban từ departments
   {
     method: "get",
@@ -1695,11 +1835,13 @@ const adminRoutes: typeof routes = [
       await sleep(600);
       const body = cfg.data ? JSON.parse(cfg.data as string) : {};
       const type: string = body.type ?? "all";
+      const templateId = body.emailTemplateId ?? "";
+      const phase = body.phase ?? "";
       if (type === "single") {
         const empId: string = body.employeeId ?? "";
         const target = MOCK_EMPLOYEES.find((e) => e.id === empId);
         console.info(
-          `[Mock] Remind email → ${target ? target.email : empId}: "${body.message ?? ""}"`,
+          `[Mock] Remind email → ${target ? target.email : empId} phase=${phase} template=${templateId}`,
         );
         return ok(cfg, {
           sent: true,
@@ -1707,13 +1849,38 @@ const adminRoutes: typeof routes = [
           recipient: target?.email ?? empId,
         });
       }
+      const recipientType: string = body.recipientType ?? "all";
+      const empIds: string[] = Array.isArray(body.employeeIds)
+        ? body.employeeIds.map(String)
+        : [];
+      const deptIds: string[] = Array.isArray(body.departmentIds)
+        ? body.departmentIds.map(String)
+        : [];
+      if (recipientType === "individual" && empIds.length > 0) {
+        console.info(
+          `[Mock] Individual mail → ${empIds.length} NV phase=${phase} template=${templateId}`,
+        );
+        return ok(cfg, { sent: true, recipientType, count: empIds.length });
+      }
+      if (recipientType === "department" && deptIds.length > 0) {
+        const count = MOCK_EMPLOYEES.filter(
+          (e) =>
+            e.status === "active" &&
+            e.sectionId &&
+            deptIds.includes(e.sectionId),
+        ).length;
+        console.info(
+          `[Mock] Department mail → ${count} NV (${deptIds.length} phòng) phase=${phase}`,
+        );
+        return ok(cfg, { sent: true, recipientType, count });
+      }
       const emails = MOCK_EMPLOYEES.filter((e) => e.status === "active").map(
         (e) => e.email,
       );
       console.info(
-        `[Mock] Mass mail → ${emails.length} nhân viên: "${body.message ?? ""}"`,
+        `[Mock] Company mail → ${emails.length} NV phase=${phase} template=${templateId}`,
       );
-      return ok(cfg, { sent: true, type: "all", count: emails.length });
+      return ok(cfg, { sent: true, recipientType: "all", count: emails.length });
     },
   },
 
@@ -1809,8 +1976,20 @@ const adminRoutes: typeof routes = [
     test: (p) => p === "/admin/email-templates",
     handler: async (cfg) => {
       await sleep(400);
-      const body = parseBody<Omit<EmailTemplate, "id">>(cfg);
-      const newTpl: EmailTemplate = { id: `tpl-${Date.now()}`, ...body };
+      const body = parseBody<Record<string, unknown>>(cfg);
+      const newTpl: EmailTemplate = {
+        id: `tpl-${Date.now()}`,
+        name: String(body.name ?? ""),
+        subject: String(body.subject ?? ""),
+        body: String(body.body ?? ""),
+        status:
+          body.status === "inactive"
+            ? "inactive"
+            : ("active" as EmailTemplate["status"]),
+        mode: (body.mode as EmailTemplate["mode"]) ?? "manual",
+        group: (body.group as EmailTemplate["group"]) ?? "launch",
+        updatedAt: "Vừa xong",
+      };
       mockTemplateStore = [...mockTemplateStore, newTpl];
       return ok(cfg, newTpl);
     },
@@ -1828,6 +2007,22 @@ const adminRoutes: typeof routes = [
         t.id === id ? { ...t, ...body } : t,
       );
       return ok(cfg, mockTemplateStore.find((t) => t.id === id) ?? body);
+    },
+  },
+
+  // DELETE /admin/email-templates/:id
+  {
+    method: "delete",
+    test: (p) => /^\/admin\/email-templates\/[^/]+$/.test(p),
+    handler: async (cfg, path) => {
+      await sleep(280);
+      const id = path.split("/")[3];
+      const before = mockTemplateStore.length;
+      mockTemplateStore = mockTemplateStore.filter((t) => t.id !== id);
+      if (mockTemplateStore.length === before) {
+        fail(cfg, 404, "Không tìm thấy mẫu email hoặc đã bị xóa.");
+      }
+      return ok(cfg, null);
     },
   },
 ];

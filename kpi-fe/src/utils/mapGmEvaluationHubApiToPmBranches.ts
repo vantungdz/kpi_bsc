@@ -140,6 +140,65 @@ function appendPlanActualRecords(rows: string[][], arr: unknown) {
   })
 }
 
+function planActualEvidenceRowsFromObject(o: Record<string, unknown>): string[][] {
+  const rows: string[][] = []
+  const records = o.planActualRecords
+  if (!Array.isArray(records) || records.length === 0) return rows
+
+  records.forEach((rec) => {
+    if (!rec || typeof rec !== 'object' || Array.isArray(rec)) {
+      const fallback = evidenceJsonCell(rec).trim()
+      if (fallback) rows.push([fallback, '', ''])
+      return
+    }
+    const r = rec as Record<string, unknown>
+    const content = evidenceJsonCell(r.content ?? r.comment ?? r.note ?? '').trim()
+    const plan = evidenceJsonCell(r.plan ?? r.total ?? '').trim()
+    const actual = evidenceJsonCell(r.actual ?? r.completed ?? '').trim()
+    rows.push([content, plan, actual])
+  })
+
+  const contentNorm =
+    typeof o.content === 'string'
+      ? o.content.trim()
+      : typeof o.text === 'string'
+        ? o.text.trim()
+        : ''
+  if (contentNorm) rows.push([contentNorm, '', ''])
+
+  const noteNorm = typeof o.note === 'string' ? o.note.trim() : ''
+  if (noteNorm) rows.push([noteNorm, '', ''])
+
+  const appendAttachmentRows = (arr: unknown, groupLabel: string) => {
+    if (!Array.isArray(arr) || arr.length === 0) return
+    arr.forEach((item, i) => {
+      if (typeof item === 'string') {
+        const s = item.trim()
+        if (s) rows.push([`${groupLabel} #${i + 1}`, '', s])
+        return
+      }
+      if (item && typeof item === 'object' && !Array.isArray(item)) {
+        const it = item as Record<string, unknown>
+        const nameRaw = it.name ?? it.fileName ?? it.label
+        const name =
+          typeof nameRaw === 'string' && nameRaw.trim()
+            ? nameRaw.trim()
+            : `${groupLabel} #${i + 1}`
+        const urlRaw = it.url ?? it.href ?? it.path
+        const url = typeof urlRaw === 'string' && urlRaw.trim() ? urlRaw.trim() : ''
+        rows.push([name, '', url || evidenceJsonCell(item)])
+        return
+      }
+      rows.push([`${groupLabel} #${i + 1}`, '', evidenceJsonCell(item)])
+    })
+  }
+  appendAttachmentRows(o.evd, 'Evidence files')
+  appendAttachmentRows(o.files, 'File')
+  appendAttachmentRows(o.urls, 'URL')
+
+  return rows
+}
+
 function parseEvidenceObject(raw: string): Record<string, unknown> | null {
   if (!raw || (!raw.startsWith('{') && !raw.startsWith('['))) return null
   try {
@@ -231,6 +290,16 @@ function evidenceFromRow(row: GmEvaluationHubAssignmentApiRow): GmEvidenceTable 
       }
       if (j && typeof j === 'object') {
         const o = j as Record<string, unknown>
+        const planActualRows = planActualEvidenceRowsFromObject(o)
+        if (planActualRows.length > 0) {
+          return {
+            title: 'Evidence',
+            icon: 'fas fa-paperclip',
+            accent: 'emerald',
+            headers: ['Content', 'Plan', 'Actual'],
+            rows: planActualRows,
+          }
+        }
         const rows = evidenceRowsFromObject(o)
         return {
           title: 'Evidence',
@@ -286,6 +355,7 @@ function toKpiItem(row: GmEvaluationHubAssignmentApiRow, index: number): GmKpiIt
       typeof row.statusCode === 'number' && Number.isFinite(row.statusCode)
         ? row.statusCode
         : null,
+    assignmentStatusDisplay: asmProgressLabel(row) || null,
   }
 }
 
@@ -308,6 +378,10 @@ function isPromotionAssignmentRow(row: GmEvaluationHubAssignmentApiRow): boolean
   return /\bpromotion\b/i.test(String(row.kpiTypeName ?? '').trim())
 }
 
+function isRealAssignmentRow(row: GmEvaluationHubAssignmentApiRow): boolean {
+  return Boolean(String(row.assignmentId ?? '').trim())
+}
+
 function avgSelfFromItems(items: GmKpiItem[]): string | null {
   if (!items.length) return null
   const s = items.reduce((a, i) => a + i.selfScore, 0) / items.length
@@ -323,8 +397,9 @@ function buildUserMember(
   rankFallback: string,
 ): GmEvalMember {
   const safeName = displayName.trim() || userId
-  const promotionRows = rows.filter(isPromotionAssignmentRow)
-  const nonPromotionRows = rows.filter((r) => !isPromotionAssignmentRow(r))
+  const assignmentRows = rows.filter(isRealAssignmentRow)
+  const promotionRows = assignmentRows.filter(isPromotionAssignmentRow)
+  const nonPromotionRows = assignmentRows.filter((r) => !isPromotionAssignmentRow(r))
   const groups: GmKpiGroup[] = []
 
   if (nonPromotionRows.length > 0) {

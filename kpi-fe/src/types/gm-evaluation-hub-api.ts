@@ -1,7 +1,7 @@
 /** GET /kpi/gm/evaluation-hub/assignments?cycleId= — tab đánh giá GM. */
 
 export interface GmEvaluationHubAssignmentApiRow {
-  assignmentId: string
+  assignmentId: string | null
   statusCode: number | null
   assignmentStatusName: string | null
   /** `sys_status_codes.description` (ASM); ưu tiên cho cột Tiến độ. */
@@ -43,6 +43,7 @@ export interface GmEvaluationHubApiResponse {
   cycleId: string
   year: number | null
   cycleName: string | null
+  activePhase?: string | null
   assignments: GmEvaluationHubAssignmentApiRow[]
 }
 
@@ -67,4 +68,10 @@ export interface GmEvaluationHubConfirmBody {
 export interface GmEvaluationHubConfirmResult {
   updatedCount: number
   skippedCount: number
+}
+
+export interface GmEvaluationHubUnlockBody {
+  cycleId: string
+  evaluationUserId: string
+  promotion?: boolean
 }

@@ -253,6 +253,7 @@ function weightDisplayShort(weightLabel: string): string {
                 </button>
               </div>
 
+              <!-- Per-KPI approve/reject actions are intentionally hidden for now.
               <div v-if="req.status === 'PENDING'" class="mt-3 flex justify-end gap-2 border-t border-slate-100 pt-3">
                 <button
                   type="button"
@@ -271,6 +272,7 @@ function weightDisplayShort(weightLabel: string): string {
                   Duyệt
                 </button>
               </div>
+              -->
             </div>
           </div>
 
@@ -397,7 +399,7 @@ function weightDisplayShort(weightLabel: string): string {
                   >
                     Đóng
                   </button>
-                  <button
+                  <!-- <button
                     v-if="selectedKpi.status === 'PENDING'"
                     type="button"
                     :disabled="actionBusy"
@@ -406,8 +408,8 @@ function weightDisplayShort(weightLabel: string): string {
                   >
                     <i class="fas fa-circle-xmark text-sm leading-none" />
                     Từ chối
-                  </button>
-                  <button
+                  </button> -->
+                  <!-- <button
                     v-if="selectedKpi.status === 'PENDING'"
                     type="button"
                     :disabled="actionBusy"
@@ -416,7 +418,7 @@ function weightDisplayShort(weightLabel: string): string {
                   >
                     <i class="fas fa-circle-check text-sm leading-none" />
                     Duyệt (Approved)
-                  </button>
+                  </button> -->
                 </div>
               </div>
             </div>

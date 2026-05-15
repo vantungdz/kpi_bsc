@@ -15,7 +15,7 @@
             TO_CHAR(updated_at, 'DD/MM/YYYY HH24:MI')  AS updatedAt
         FROM email_templates
         WHERE deleted_at IS NULL
-        ORDER BY template_group, name
+        ORDER BY updated_at DESC NULLS LAST, name
     </select>
 
     <select id="getEmailTemplateById"
@@ -47,5 +47,14 @@
             updated_by     = #{updatedBy, jdbcType=OTHER, typeHandler=com.company.kpi.common.mybatis.UUIDTypeHandler},
             updated_at     = NOW()
         WHERE id = #{id} AND deleted_at IS NULL
+    </update>
+
+    <update id="softDeleteEmailTemplate">
+        UPDATE email_templates
+        SET deleted_at = NOW(),
+            updated_at = NOW(),
+            updated_by = #{updatedBy, jdbcType=OTHER, typeHandler=com.company.kpi.common.mybatis.UUIDTypeHandler}
+        WHERE id = #{id}
+          AND deleted_at IS NULL
     </update>
 </mapper>

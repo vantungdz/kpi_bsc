@@ -6,6 +6,7 @@ import com.company.kpi.request.gm.GmCopyKpisRequest;
 import com.company.kpi.response.member.MemberKpiAssignmentDTO;
 import com.company.kpi.response.gm.GmKpiDashboardResponse;
 import com.company.kpi.response.gm.KpiSectionMemberResponse;
+import com.company.kpi.service.kpi.KpiAssignmentSnapshotService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -24,6 +25,7 @@ import java.util.UUID;
 public class GmKpiService {
 
     private final KpiAssignmentMapper kpiAssignmentMapper;
+    private final KpiAssignmentSnapshotService kpiAssignmentSnapshotService;
 
     public GmKpiDashboardResponse getDashboard(Integer year) {
         // TODO: query database and build response
@@ -56,6 +58,7 @@ public class GmKpiService {
 
         if (!rows.isEmpty()) {
             kpiAssignmentMapper.insertKpiAssignments(rows);
+            kpiAssignmentSnapshotService.createSnapshotsForInsertRows(rows, gmUserId);
         }
     }
 }

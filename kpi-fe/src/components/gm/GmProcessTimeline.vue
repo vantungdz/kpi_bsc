@@ -10,10 +10,12 @@ import type {
 } from '@/types/gm-workspace'
 import {
   buildTimelineBreakdownGroupsFromEmployees,
+  distinctAssigneeCount,
   kpiGroupKey,
   resolveTimelineKpiGroups,
 } from '@/utils/gm-timeline-breakdown'
 import { gmTimelinePhaseHasOpenIssues } from '@/utils/gm-timeline-phase'
+import { isReadonlyKpiYear } from '@/utils/kpi-year'
 import GmProcessTimelineTrack from '@/components/gm/GmProcessTimelineTrack.vue'
 import GmTimelineDrawerAssigneeTreeItem from '@/components/gm/GmTimelineDrawerAssigneeTreeItem.vue'
 import { gmDrawerEmployeeRowKey } from '@/utils/gm-drawer-assignee-keys'
@@ -123,7 +125,7 @@ function issueGroupsForPhase(phase: GmMidYearIssuesData | null | undefined): GmT
       title: b.title,
       severity: b.id === 'missing_evidence' || b.id === 'unassigned_members' ? 'warning' : 'warning',
       blockedRole: 'Member',
-      affectedEmployees: b.items.length,
+      affectedEmployees: distinctAssigneeCount(b.items),
       affectedKpis: new Set(b.items.map((i) => i.kpi).filter(Boolean)).size,
       affectedDepartments: 0,
       iconClass: b.iconClass,
@@ -146,8 +148,16 @@ type IssuePopoverRow = {
 
 type PhaseStatus = 'upcoming' | 'active' | 'complete'
 
+/** Năm chu kỳ đã kết thúc (năm lịch < năm hiện tại) — timeline chỉ xem, không hiện issues vận hành. */
+const isHistoricalCycle = computed(() => {
+  const y = Number(props.year)
+  return Number.isFinite(y) && isReadonlyKpiYear(y)
+})
+
 /** Xác định status dựa trên start/end dates từ DB, và activePhase flag từ backend. */
 const phaseStatuses = computed((): PhaseStatus[] => {
+  if (isHistoricalCycle.value) return ['complete', 'complete', 'complete']
+
   const now = dayjs()
   const ap = cycleData.value.activePhase === 'end_year' ? 'year_end' : cycleData.value.activePhase
 
@@ -190,24 +200,38 @@ const midYearStatus = computed(() => phaseStatuses.value[1]!)
 const yearEndStatus = computed(() => phaseStatuses.value[2]!)
 
 const showSettingViewIssues = computed(
-  () => settingStatus.value !== 'upcoming' && gmTimelinePhaseHasOpenIssues(props.settingIssues),
+  () =>
+    !isHistoricalCycle.value &&
+    settingStatus.value !== 'upcoming' &&
+    gmTimelinePhaseHasOpenIssues(props.settingIssues),
 )
 
 /**
  * Theo lịch Jan–Mar đã qua thì `complete`, nhưng mock ~80% + issues → **không** coi là xong (không tick node).
  */
 function effectivePhaseStatus(idx: number): PhaseStatus {
+  if (isHistoricalCycle.value) return 'complete'
   const s = phaseStatuses.value[idx]!
-  if (idx === 0 && s === 'complete' && showSettingViewIssues.value) return 'active'
+  if (s === 'complete') {
+    if (idx === 0 && showSettingViewIssues.value) return 'active'
+    if (idx === 1 && showMidViewIssues.value) return 'active'
+    if (idx === 2 && showYearEndViewIssues.value) return 'active'
+  }
   return s
 }
 
 const showMidViewIssues = computed(
-  () => midYearStatus.value !== 'upcoming' && gmTimelinePhaseHasOpenIssues(props.midYearIssues),
+  () =>
+    !isHistoricalCycle.value &&
+    midYearStatus.value !== 'upcoming' &&
+    gmTimelinePhaseHasOpenIssues(props.midYearIssues),
 )
 
 const showYearEndViewIssues = computed(
-  () => yearEndStatus.value !== 'upcoming' && gmTimelinePhaseHasOpenIssues(props.yearEndIssues),
+  () =>
+    !isHistoricalCycle.value &&
+    yearEndStatus.value !== 'upcoming' &&
+    gmTimelinePhaseHasOpenIssues(props.yearEndIssues),
 )
 
 const issuePopoverRows = computed((): IssuePopoverRow[] => {
@@ -840,7 +864,7 @@ onUnmounted(() => {
               <template v-else>
                 <div class="flex items-center justify-center gap-1 text-emerald-700">
                   <i class="fas fa-check text-[15px]" />
-                  <span class="text-[13px] font-semibold leading-snug">Mid-Year complete</span>
+                  <span class="text-[13px] font-semibold leading-snug">100% Complete</span>
                 </div>
               </template>
               <div v-if="showMidViewIssues" ref="midIssuesPopoverRoot"
@@ -918,7 +942,7 @@ onUnmounted(() => {
               <template v-else>
                 <div class="flex items-center justify-center gap-1 text-emerald-600">
                   <i class="fas fa-check text-[15px]" />
-                  <span class="text-[13px] font-semibold">Complete</span>
+                  <span class="text-[13px] font-semibold">100% Complete</span>
                 </div>
               </template>
               <div v-if="showYearEndViewIssues" ref="yearEndIssuesPopoverRoot"

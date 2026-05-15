@@ -31,11 +31,13 @@ const props = withDefaults(
     listEntity?: "member" | "pm";
     /** Khi có dữ liệu: bảng hub hiển thị dạng PM → Leader → Member (expand). */
     pmBranches?: GmEvalPmBranch[] | null;
+    activePhase?: string | null;
   }>(),
   {
     contextSubtitle: "",
     listEntity: "member",
     pmBranches: null,
+    activePhase: null,
   },
 );
 
@@ -86,6 +88,7 @@ const effectiveYear = computed(() =>
 const nameFilter = ref("");
 const listFilter = ref<"all" | "pending">("all");
 const drawerEmpId = ref<string | null>(null);
+const tableEvalTab = ref<"cascade" | "promotion">("cascade");
 /** Tab nội dung drawer: KPI individual/cascading vs Promotion. */
 const drawerEvalTab = ref<"cascade" | "promotion">("cascade");
 /** Expand PM / Leader trong chế độ cây hub. */
@@ -103,6 +106,8 @@ const supervisorPromotionComments = reactive<Record<string, string>>({});
 const supervisorCommentSubmitAttempted = reactive<Record<string, boolean>>({});
 const banner = ref<{ type: "ok" | "info"; text: string } | null>(null);
 const confirmBusy = ref(false);
+const unlockBusy = ref(false);
+const unlockConfirmTarget = ref<{ emp: GmEvalMember; tab: "cascade" | "promotion" } | null>(null);
 const pageLoading = ref(true);
 
 const isReadonly = computed(() => isReadonlyKpiYear(effectiveYear.value));
@@ -142,6 +147,40 @@ function hasKpis(emp: GmEvalMember) {
   return flattenGmKpiItems(emp).length > 0;
 }
 
+function groupsForEvalTab(emp: GmEvalMember, tab: "cascade" | "promotion") {
+  return tab === "promotion"
+    ? emp.groups.filter((g) => isGmEvalPromotionKpiGroup(g))
+    : emp.groups.filter((g) => !isGmEvalPromotionKpiGroup(g));
+}
+
+function itemsForEvalTab(emp: GmEvalMember, tab: "cascade" | "promotion") {
+  return groupsForEvalTab(emp, tab).flatMap((g) => g.items);
+}
+
+function hasKpisForEvalTab(emp: GmEvalMember, tab: "cascade" | "promotion") {
+  return itemsForEvalTab(emp, tab).length > 0;
+}
+
+function hasGmEvaluationActionForTab(emp: GmEvalMember, tab: "cascade" | "promotion") {
+  return itemsForEvalTab(emp, tab).some((item) => {
+    const code = Number(item.hubAssignmentStatusCode);
+    return code === 502 || code === 602;
+  });
+}
+
+const GM_UNLOCK_DISABLED_STATUS_CODES = new Set([401, 402, 403, 404, 407, 603]);
+
+function hasUnlockButtonForTab(emp: GmEvalMember, tab: "cascade" | "promotion") {
+  return hasKpisForEvalTab(emp, tab);
+}
+
+function hasUnlockableKpisForTab(emp: GmEvalMember, tab: "cascade" | "promotion") {
+  return itemsForEvalTab(emp, tab).some((item) => {
+    const code = Number(item.hubAssignmentStatusCode);
+    return Number.isFinite(code) && !GM_UNLOCK_DISABLED_STATUS_CODES.has(code);
+  });
+}
+
 /** ASM 602: GM chấm điểm + bắt buộc comment; 502 chỉ review. */
 function hubRowGmScoreEnabled(item: GmKpiItem): boolean {
   return item.hubAssignmentStatusCode === 602;
@@ -169,9 +208,7 @@ function itemsForHubConfirmScopeForTab(
   tab: "cascade" | "promotion",
 ): GmKpiItem[] {
   const groups =
-    tab === "promotion"
-      ? emp.groups.filter((g) => isGmEvalPromotionKpiGroup(g))
-      : emp.groups.filter((g) => !isGmEvalPromotionKpiGroup(g));
+    groupsForEvalTab(emp, tab);
   const items = groups.flatMap((g) => g.items);
   return items.filter(
     (it) => Boolean(it.id) && Number(it.hubAssignmentStatusCode) === scope,
@@ -191,9 +228,7 @@ function drawerRequiresGmFinalGradingForTab(
   tab: "cascade" | "promotion",
 ): boolean {
   const groups =
-    tab === "promotion"
-      ? emp.groups.filter((g) => isGmEvalPromotionKpiGroup(g))
-      : emp.groups.filter((g) => !isGmEvalPromotionKpiGroup(g));
+    groupsForEvalTab(emp, tab);
   return groups.flatMap((g) => g.items).some((it) => hubRowGmScoreEnabled(it));
 }
 
@@ -418,6 +453,25 @@ function pmPreviewClass(emp: GmEvalMember) {
   return "text-indigo-700 font-bold";
 }
 
+function selfPreviewTextForTab(emp: GmEvalMember, tab = tableEvalTab.value) {
+  const groups = groupsForEvalTab(emp, tab);
+  if (!flattenGmKpiItemsFromGroups(groups).length) return "";
+  return selfAvgForGroupList(emp, groups);
+}
+
+function pmPreviewTextForTab(emp: GmEvalMember, tab = tableEvalTab.value) {
+  const groups = groupsForEvalTab(emp, tab);
+  return pmAvgForGroupList(emp, groups);
+}
+
+function pmPreviewClassForTab(emp: GmEvalMember, tab = tableEvalTab.value) {
+  const items = itemsForEvalTab(emp, tab);
+  if (!items.length) return "text-slate-300 font-medium";
+  const { filledPmSlots } = scaledWeightedAvgItems(emp, items, "pm");
+  if (filledPmSlots === 0) return "text-slate-300 font-medium";
+  return "text-indigo-700 font-bold";
+}
+
 function selfAvgInPanel(emp: GmEvalMember) {
   return formatAvg(scaledWeightedAvg(emp, "self").value);
 }
@@ -455,15 +509,47 @@ function flattenPmBranchSheetHolders(br: GmEvalPmBranch): GmEvalMember[] {
 }
 
 function isAwaitingGmEvaluation(emp: GmEvalMember): boolean {
-  if (!hasKpis(emp)) return false;
+  if (!hasKpisForEvalTab(emp, tableEvalTab.value)) return false;
   const visibleStatus = new Set([502, 503, 602, 603]);
   return flattenGmKpiItems(emp).some((item) =>
     visibleStatus.has(Number(item.hubAssignmentStatusCode)),
   );
 }
 
+function scopedSheetStatus(emp: GmEvalMember, tab = tableEvalTab.value): GmEvalMember["status"] {
+  const codes = itemsForEvalTab(emp, tab)
+    .map((item) => Number(item.hubAssignmentStatusCode))
+    .filter((code) => Number.isFinite(code));
+  if (!codes.length) return "self_scoring";
+  if (codes.some((code) => code === 502 || code === 602)) return "pending_pm";
+  if (codes.every((code) => code >= 601)) return "approved";
+  return "self_scoring";
+}
+
+function statusBadgeClassForTab(emp: GmEvalMember, tab = tableEvalTab.value) {
+  return statusBadgeClass({ ...emp, status: scopedSheetStatus(emp, tab) });
+}
+
+function assignmentProgressLabelForTab(emp: GmEvalMember, tab = tableEvalTab.value): string {
+  if (!hasKpisForEvalTab(emp, tab)) return "No KPIs";
+  const labels = [
+    ...new Set(
+      itemsForEvalTab(emp, tab)
+        .map((item) => String(item.assignmentStatusDisplay ?? "").trim())
+        .filter(Boolean),
+    ),
+  ];
+  if (!labels.length) return "—";
+  if (labels.length === 1) return labels[0]!;
+  return labels.sort((a, b) => a.localeCompare(b)).join(" · ");
+}
+
+function isAwaitingGmEvaluationForTab(emp: GmEvalMember, tab = tableEvalTab.value): boolean {
+  return hasGmEvaluationActionForTab(emp, tab);
+}
+
 function sectionMembers(br: GmEvalPmBranch): GmEvalMember[] {
-  return flattenPmBranchSheetHolders(br).filter(isAwaitingGmEvaluation);
+  return flattenPmBranchSheetHolders(br);
 }
 
 function pmBranchHasChildren(br: GmEvalPmBranch) {
@@ -489,7 +575,9 @@ function pmBranchMatchesSearch(br: GmEvalPmBranch, q: string): boolean {
 }
 
 function pmBranchHasPending(br: GmEvalPmBranch): boolean {
-  return sectionMembers(br).length > 0;
+  return flattenPmBranchSheetHolders(br).some((emp) =>
+    isAwaitingGmEvaluationForTab(emp, tableEvalTab.value),
+  );
 }
 
 const displayedPmBranches = computed(() => {
@@ -542,7 +630,7 @@ const filteredEmployees = computed(() => {
   }
   const q = nameFilter.value.trim().toLowerCase();
   return employees.value.filter((emp) => {
-    if (listFilter.value === "pending" && emp.status !== "pending_pm")
+    if (listFilter.value === "pending" && !isAwaitingGmEvaluationForTab(emp, tableEvalTab.value))
       return false;
     if (q) {
       const hay = `${emp.name} ${emp.role}`.toLowerCase();
@@ -580,6 +668,14 @@ const pendingCount = computed(
   () => employees.value.filter((e) => e.status === "pending_pm").length,
 );
 
+const cascadePendingCount = computed(() =>
+  employees.value.filter((e) => isAwaitingGmEvaluationForTab(e, "cascade")).length,
+);
+
+const promotionPendingCount = computed(() =>
+  employees.value.filter((e) => isAwaitingGmEvaluationForTab(e, "promotion")).length,
+);
+
 /** Nhân viên/PM đang mở drawer đánh giá (phải còn trong danh sách sau lọc). */
 const drawerEmployee = computed(() => {
   const id = drawerEmpId.value;
@@ -588,7 +684,7 @@ const drawerEmployee = computed(() => {
 });
 
 watch(drawerEmpId, () => {
-  drawerEvalTab.value = "cascade";
+  drawerEvalTab.value = tableEvalTab.value;
 });
 
 const drawerCascadeGroups = computed((): GmKpiGroup[] => {
@@ -641,18 +737,38 @@ function canShowEvalActionButton(emp: GmEvalMember) {
   return isReadonly.value || emp.canScore;
 }
 
-/** Nút mở drawer: luôn bật khi có KPI (trừ khi đang submit hoặc chỉ xem tùy layout). */
+/** Nút mở drawer trên bảng: luôn bật khi có KPI (GM xem lại); chỉ chặn khi busy unlock/confirm. */
 function evalThaoTacDisabled(emp: GmEvalMember) {
-  return !canShowEvalActionButton(emp) || confirmBusy.value;
+  return !canShowEvalActionButton(emp) || confirmBusy.value || unlockBusy.value;
 }
 
-function toggleEvaluationDrawer(emp: GmEvalMember) {
+/** Ẩn nút confirm hub trong drawer khi không còn KPI chờ GM hoặc chế độ chỉ xem. */
+function drawerHubShowYearEndConfirm(
+  emp: GmEvalMember | null | undefined,
+  tab: "cascade" | "promotion",
+): boolean {
+  if (!emp || isReadonly.value) return false;
+  if (!isAwaitingGmEvaluationForTab(emp, tab)) return false;
+  return drawerHasAssignmentsInStatusForTab(emp, 602, tab);
+}
+
+function drawerHubShowMidYearConfirm(
+  emp: GmEvalMember | null | undefined,
+  tab: "cascade" | "promotion",
+): boolean {
+  if (!emp || isReadonly.value) return false;
+  if (!isAwaitingGmEvaluationForTab(emp, tab)) return false;
+  return drawerHasAssignmentsInStatusForTab(emp, 502, tab);
+}
+
+function toggleEvaluationDrawer(emp: GmEvalMember, tab = tableEvalTab.value) {
   if (!canShowEvalActionButton(emp)) return;
   if (drawerEmpId.value === emp.id) {
     drawerEmpId.value = null;
     return;
   }
   initGmCommentDraft(emp, false);
+  drawerEvalTab.value = tab;
   drawerEmpId.value = emp.id;
 }
 
@@ -660,7 +776,69 @@ function closeEvaluationDrawer() {
   drawerEmpId.value = null;
 }
 
-watch([nameFilter, listFilter], () => {
+function openUnlockConfirm(emp: GmEvalMember, tab = tableEvalTab.value) {
+  if (isReadonly.value || confirmBusy.value || unlockBusy.value) return;
+  if (!hasUnlockableKpisForTab(emp, tab)) return;
+  unlockConfirmTarget.value = { emp, tab };
+}
+
+function unlockActionDisabled(emp: GmEvalMember, tab = tableEvalTab.value) {
+  return isReadonly.value || confirmBusy.value || unlockBusy.value || !hasUnlockableKpisForTab(emp, tab);
+}
+
+function closeUnlockConfirm() {
+  if (unlockBusy.value) return;
+  unlockConfirmTarget.value = null;
+}
+
+async function confirmUnlockKpis() {
+  const target = unlockConfirmTarget.value;
+  if (!target) return;
+  const cid = String(selectedCycleId.value ?? "").trim();
+  const uid = String(target.emp.evaluationUserId ?? "").trim();
+  if (!cid || !uid) {
+    banner.value = {
+      type: "info",
+      text: !cid
+        ? "No KPI cycle selected — cannot unlock."
+        : "Missing employee id (evaluationUserId) — cannot unlock.",
+    };
+    setTimeout(() => {
+      banner.value = null;
+    }, 3200);
+    return;
+  }
+  unlockBusy.value = true;
+  try {
+    if (!useMockHub) {
+      const res = await gmKpiService.unlockEvaluationHub({
+        cycleId: cid,
+        evaluationUserId: uid,
+        promotion: target.tab === "promotion",
+      });
+      banner.value = {
+        type: "ok",
+        text: `Unlocked ${res.updatedCount} KPI(s).`,
+      };
+    } else {
+      banner.value = {
+        type: "ok",
+        text: `Unlocked KPI(s) for ${target.emp.name}.`,
+      };
+    }
+    unlockConfirmTarget.value = null;
+    emit("reloadEvaluationHub");
+  } catch (e: unknown) {
+    banner.value = {
+      type: "info",
+      text: e instanceof Error ? e.message : "Could not unlock KPI — please try again later.",
+    };
+  } finally {
+    unlockBusy.value = false;
+  }
+}
+
+watch([nameFilter, listFilter, tableEvalTab], () => {
   const ex = drawerEmpId.value;
   if (ex && !filteredEmployees.value.some((e) => e.id === ex))
     drawerEmpId.value = null;
@@ -710,6 +888,7 @@ async function confirmDone(
   tab: "cascade" | "promotion",
 ) {
   if (isReadonly.value) return;
+  if (!isAwaitingGmEvaluationForTab(emp, tab)) return;
   const items = itemsForHubConfirmScopeForTab(emp, scope, tab);
   if (!items.length) {
     banner.value = {
@@ -951,6 +1130,43 @@ async function confirmDone(
           </div>
         </div>
 
+        <div class="flex gap-2 border-b border-slate-200 bg-white px-4 pt-3 sm:px-5">
+          <button
+            type="button"
+            class="relative rounded-t-lg border px-4 py-2 text-xs font-bold transition-colors"
+            :class="
+              tableEvalTab === 'cascade'
+                ? 'border-slate-200 border-b-white bg-white text-blue-700'
+                : 'border-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-800'
+            "
+            @click="tableEvalTab = 'cascade'"
+          >
+            KPI Personal
+            <span
+              v-if="cascadePendingCount > 0"
+              class="ml-2 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-bold text-white"
+              >{{ cascadePendingCount }}</span
+            >
+          </button>
+          <button
+            type="button"
+            class="relative rounded-t-lg border px-4 py-2 text-xs font-bold transition-colors"
+            :class="
+              tableEvalTab === 'promotion'
+                ? 'border-slate-200 border-b-white bg-white text-purple-700'
+                : 'border-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-800'
+            "
+            @click="tableEvalTab = 'promotion'"
+          >
+            KPI Promotion
+            <span
+              v-if="promotionPendingCount > 0"
+              class="ml-2 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-bold text-white"
+              >{{ promotionPendingCount }}</span
+            >
+          </button>
+        </div>
+
         <div class="overflow-x-auto">
           <table
             v-if="!usePmTree"
@@ -992,12 +1208,15 @@ async function confirmDone(
             <tbody class="divide-y divide-slate-200 text-xs sm:text-sm">
               <template v-for="emp in filteredEmployees" :key="emp.id">
                 <tr
-                  class="hover:bg-slate-50/80 transition-colors group"
-                  :class="
+                  class="transition-colors group"
+                  :class="[
+                    isAwaitingGmEvaluationForTab(emp)
+                      ? 'bg-amber-50 hover:bg-amber-100/80'
+                      : 'bg-white hover:bg-slate-50/80',
                     drawerEmpId === emp.id
-                      ? 'bg-slate-100/80 border-l-4 border-indigo-500'
-                      : ''
-                  "
+                      ? 'border-l-4 border-indigo-500'
+                      : '',
+                  ]"
                 >
                   <td
                     class="px-3 py-2.5 font-bold text-slate-400 sm:px-4 sm:py-3"
@@ -1029,26 +1248,32 @@ async function confirmDone(
                     </span>
                   </td>
                   <td class="px-3 py-2.5 text-center sm:px-4 sm:py-3">
-                    <span :class="statusBadgeClass(emp)">
+                    <template v-if="!hasKpisForEvalTab(emp, tableEvalTab)">
                       <span
-                        v-if="emp.status === 'pending_pm'"
+                        class="inline-block text-xs font-medium italic text-slate-500 sm:text-sm"
+                        >{{ assignmentProgressLabelForTab(emp) }}</span
+                      >
+                    </template>
+                    <span v-else :class="statusBadgeClassForTab(emp)">
+                      <span
+                        v-if="scopedSheetStatus(emp) === 'pending_pm'"
                         class="w-1.5 h-1.5 bg-rose-500 rounded-full animate-pulse"
                       />
                       <i
-                        v-else-if="emp.status === 'self_scoring'"
+                        v-else-if="scopedSheetStatus(emp) === 'self_scoring'"
                         class="fas fa-pen text-[10px]"
                       />
                       <i v-else class="fas fa-check text-[10px]" />
-                      {{ assignmentProgressLabel(emp) }}
+                      {{ assignmentProgressLabelForTab(emp) }}
                     </span>
                   </td>
                   <td
                     class="bg-slate-50/80 px-3 py-2.5 text-center sm:px-4 sm:py-3"
                   >
                     <span
-                      v-if="emp.selfScoreDisplay"
+                      v-if="selfPreviewTextForTab(emp)"
                       class="font-bold text-slate-700"
-                      >{{ emp.selfScoreDisplay }}</span
+                      >{{ selfPreviewTextForTab(emp) }}</span
                     >
                     <span v-else class="font-medium italic text-slate-400"
                       >-</span
@@ -1057,13 +1282,24 @@ async function confirmDone(
                   <td
                     class="bg-indigo-50/40 px-3 py-2.5 text-center sm:px-4 sm:py-3"
                   >
-                    <span :class="pmPreviewClass(emp)">{{
-                      pmPreviewText(emp)
+                    <span :class="pmPreviewClassForTab(emp)">{{
+                      pmPreviewTextForTab(emp)
                     }}</span>
                   </td>
                   <td class="px-2 py-2.5 text-center sm:px-3" @click.stop>
+                    <div class="flex items-center justify-center gap-1.5">
+                      <button
+                        v-if="hasUnlockButtonForTab(emp, tableEvalTab)"
+                        type="button"
+                        class="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-amber-200 bg-white text-amber-600 shadow-sm transition-colors hover:bg-amber-50 hover:text-amber-800 disabled:pointer-events-none disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-50 disabled:text-slate-300 disabled:shadow-none disabled:hover:bg-slate-50"
+                        :disabled="unlockActionDisabled(emp, tableEvalTab)"
+                        title="Unlock KPI"
+                        aria-label="Unlock KPI"
+                        @click="openUnlockConfirm(emp, tableEvalTab)"
+                      >
+                        <i class="fas fa-unlock text-xs" aria-hidden="true" />
+                      </button>
                     <button
-                      v-if="canShowEvalActionButton(emp)"
                       type="button"
                       class="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-indigo-200 bg-white text-indigo-600 shadow-sm transition-colors hover:bg-indigo-50 hover:text-indigo-800 disabled:pointer-events-none disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-50 disabled:text-slate-300 disabled:shadow-none disabled:hover:bg-slate-50"
                       :disabled="evalThaoTacDisabled(emp)"
@@ -1073,16 +1309,14 @@ async function confirmDone(
                           : 'Open KPI evaluation'
                       "
                       aria-label="Open KPI evaluation"
-                      @click="toggleEvaluationDrawer(emp)"
+                      @click="toggleEvaluationDrawer(emp, tableEvalTab)"
                     >
                       <i
                         class="fas fa-clipboard-check text-xs"
                         aria-hidden="true"
                       />
                     </button>
-                    <span v-else class="text-[11px] font-medium text-slate-300"
-                      >—</span
-                    >
+                    </div>
                   </td>
                 </tr>
               </template>
@@ -1188,12 +1422,15 @@ async function confirmDone(
                             <tr
                               v-for="emp in sectionMembers(sec.branch)"
                               :key="`${sec.sectionId}:${emp.id}`"
-                              class="hover:bg-slate-50/80 transition-colors group"
-                              :class="
+                              class="transition-colors group"
+                              :class="[
+                                isAwaitingGmEvaluationForTab(emp)
+                                  ? 'bg-amber-50 hover:bg-amber-100/80'
+                                  : 'bg-white hover:bg-slate-50/80',
                                 drawerEmpId === emp.id
-                                  ? 'bg-slate-100/80 border-l-4 border-indigo-500'
-                                  : ''
-                              "
+                                  ? 'border-l-4 border-indigo-500'
+                                  : '',
+                              ]"
                             >
                               <td class="px-3 py-2.5 sm:px-4 sm:py-3">
                                 <div class="flex items-center gap-1.5 pl-1 sm:pl-2">
@@ -1225,31 +1462,48 @@ async function confirmDone(
                                 </span>
                               </td>
                               <td class="px-3 py-2.5 text-center sm:px-4 sm:py-3">
-                                <span :class="statusBadgeClass(emp)">
+                                <template v-if="!hasKpisForEvalTab(emp, tableEvalTab)">
                                   <span
-                                    v-if="emp.status === 'pending_pm'"
+                                    class="inline-block text-xs font-medium italic text-slate-500 sm:text-sm"
+                                    >{{ assignmentProgressLabelForTab(emp) }}</span
+                                  >
+                                </template>
+                                <span v-else :class="statusBadgeClassForTab(emp)">
+                                  <span
+                                    v-if="scopedSheetStatus(emp) === 'pending_pm'"
                                     class="h-1.5 w-1.5 shrink-0 rounded-full bg-rose-500 animate-pulse"
                                   />
                                   <i
-                                    v-else-if="emp.status === 'self_scoring'"
+                                    v-else-if="scopedSheetStatus(emp) === 'self_scoring'"
                                     class="fas fa-pen text-[10px]"
                                   />
                                   <i v-else class="fas fa-check text-[10px]" />
-                                  {{ assignmentProgressLabel(emp) }}
+                                  {{ assignmentProgressLabelForTab(emp) }}
                                 </span>
                               </td>
                               <td class="bg-slate-50/80 px-3 py-2.5 text-center sm:px-4 sm:py-3">
-                                <span v-if="emp.selfScoreDisplay" class="font-bold text-slate-700">{{
-                                  emp.selfScoreDisplay
+                                <span v-if="selfPreviewTextForTab(emp)" class="font-bold text-slate-700">{{
+                                  selfPreviewTextForTab(emp)
                                 }}</span>
                                 <span v-else class="font-medium italic text-slate-400">-</span>
                               </td>
                               <td class="bg-indigo-50/40 px-3 py-2.5 text-center sm:px-4 sm:py-3">
-                                <span :class="pmPreviewClass(emp)">{{ pmPreviewText(emp) }}</span>
+                                <span :class="pmPreviewClassForTab(emp)">{{ pmPreviewTextForTab(emp) }}</span>
                               </td>
                               <td class="px-2 py-2.5 text-center sm:px-3" @click.stop>
+                                <div class="flex items-center justify-center gap-1.5">
                                 <button
-                                  v-if="canShowEvalActionButton(emp)"
+                                  v-if="hasUnlockButtonForTab(emp, tableEvalTab)"
+                                  type="button"
+                                  class="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-amber-200 bg-white text-amber-600 shadow-sm transition-colors hover:bg-amber-50 hover:text-amber-800 disabled:pointer-events-none disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-50 disabled:text-slate-300 disabled:shadow-none disabled:hover:bg-slate-50"
+                                  :disabled="unlockActionDisabled(emp, tableEvalTab)"
+                                  title="Unlock KPI"
+                                  aria-label="Unlock KPI"
+                                  @click="openUnlockConfirm(emp, tableEvalTab)"
+                                >
+                                  <i class="fas fa-unlock text-xs" aria-hidden="true" />
+                                </button>
+                                <button
                                   type="button"
                                   class="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-indigo-200 bg-white text-indigo-600 shadow-sm transition-colors hover:bg-indigo-50 hover:text-indigo-800 disabled:pointer-events-none disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-50 disabled:text-slate-300 disabled:shadow-none disabled:hover:bg-slate-50"
                                   :disabled="evalThaoTacDisabled(emp)"
@@ -1259,11 +1513,11 @@ async function confirmDone(
                                       : 'Open KPI evaluation'
                                   "
                                   aria-label="Open KPI evaluation"
-                                  @click="toggleEvaluationDrawer(emp)"
+                                  @click="toggleEvaluationDrawer(emp, tableEvalTab)"
                                 >
                                   <i class="fas fa-clipboard-check text-xs" aria-hidden="true" />
                                 </button>
-                                <span v-else class="text-[11px] font-medium text-slate-300">—</span>
+                                </div>
                               </td>
                             </tr>
                             <template v-if="false">
@@ -2043,6 +2297,47 @@ async function confirmDone(
       </div>
 
       <Teleport to="body">
+        <Transition name="fade">
+          <div
+            v-if="unlockConfirmTarget"
+            class="fixed inset-0 z-[300] flex items-center justify-center p-4"
+            role="dialog"
+            aria-modal="true"
+          >
+            <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" @click="closeUnlockConfirm" />
+            <div class="relative w-full max-w-md rounded-xl border border-slate-200 bg-white p-6 shadow-2xl">
+              <h3 class="text-lg font-bold text-slate-900">Xác nhận mở khóa KPI</h3>
+              <p class="mt-3 text-sm text-slate-700">
+                Bạn có chắc chắn muốn mở khóa toàn bộ KPI của
+                <span class="font-bold">{{ unlockConfirmTarget.emp.name }}</span>
+                này không?
+              </p>
+              <div class="mt-6 flex justify-end gap-3">
+                <button
+                  type="button"
+                  :disabled="unlockBusy"
+                  class="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                  @click="closeUnlockConfirm"
+                >
+                  Không
+                </button>
+                <button
+                  type="button"
+                  :disabled="unlockBusy"
+                  class="inline-flex items-center gap-2 rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  @click="confirmUnlockKpis"
+                >
+                  <i v-if="unlockBusy" class="fas fa-spinner fa-spin text-xs" aria-hidden="true" />
+                  <i v-else class="fas fa-lock-open text-xs" aria-hidden="true" />
+                  Có
+                </button>
+              </div>
+            </div>
+          </div>
+        </Transition>
+      </Teleport>
+
+      <Teleport to="body">
         <Transition name="gm-eval-drawer">
           <div
             v-if="drawerEmployee && hasKpis(drawerEmployee)"
@@ -2492,8 +2787,10 @@ async function confirmDone(
                                         No evidence data yet.
                                       </p>
                                       <div
-                                        v-if="hubRowGmCommentEnabled(item)"
                                         class="mt-4 rounded-lg border border-indigo-200 bg-indigo-50/40 p-3"
+                                        :class="{
+                                          'opacity-80': !hubRowGmCommentEnabled(item),
+                                        }"
                                       >
                                         <label
                                           class="mb-2 block text-[11px] font-bold uppercase tracking-wider text-indigo-700"
@@ -2504,7 +2801,11 @@ async function confirmDone(
                                           v-model="gmKpiComments[drawerEmployee.id][item.id]"
                                           class="w-full resize-y rounded-lg border border-indigo-200 bg-white p-2.5 text-sm text-slate-800 shadow-sm outline-none focus:ring-2 focus:ring-indigo-100 disabled:bg-slate-50 disabled:text-slate-500"
                                           rows="3"
-                                          :disabled="isReadonly || confirmBusy"
+                                          :disabled="
+                                            isReadonly ||
+                                            confirmBusy ||
+                                            !hubRowGmCommentEnabled(item)
+                                          "
                                           placeholder="Enter GM feedback for this KPI..."
                                         />
                                       </div>
@@ -2666,6 +2967,16 @@ async function confirmDone(
                         </div>
                       </div>
                       <div
+                        v-if="
+                          drawerHubShowYearEndConfirm(
+                            drawerEmployee,
+                            'cascade',
+                          ) ||
+                          drawerHubShowMidYearConfirm(
+                            drawerEmployee,
+                            'cascade',
+                          )
+                        "
                         class="mt-5 border-t border-slate-100 pt-3 sm:mt-6 sm:pt-4"
                       >
                         <div
@@ -2673,23 +2984,14 @@ async function confirmDone(
                         >
                           <button
                             v-if="
-                              drawerHasAssignmentsInStatusForTab(
+                              drawerHubShowYearEndConfirm(
                                 drawerEmployee,
-                                602,
                                 'cascade',
                               )
                             "
                             type="button"
                             class="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3.5 py-2 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-indigo-700 sm:gap-2 sm:px-4 sm:text-sm disabled:cursor-not-allowed disabled:opacity-50"
-                            :disabled="
-                              isReadonly ||
-                              confirmBusy ||
-                              !drawerHasAssignmentsInStatusForTab(
-                                drawerEmployee,
-                                602,
-                                'cascade',
-                              )
-                            "
+                            :disabled="confirmBusy"
                             @click="confirmDone(drawerEmployee, 602, 'cascade')"
                           >
                             <i
@@ -2699,24 +3001,15 @@ async function confirmDone(
                             Confirm year-end evaluation
                           </button>
                           <button
-                            v-else-if="
-                              drawerHasAssignmentsInStatusForTab(
+                            v-if="
+                              drawerHubShowMidYearConfirm(
                                 drawerEmployee,
-                                502,
                                 'cascade',
                               )
                             "
                             type="button"
                             class="flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3.5 py-2 text-xs font-semibold text-indigo-800 shadow-sm transition-colors hover:bg-indigo-100 sm:gap-2 sm:px-4 sm:text-sm disabled:cursor-not-allowed disabled:opacity-50"
-                            :disabled="
-                              isReadonly ||
-                              confirmBusy ||
-                              !drawerHasAssignmentsInStatusForTab(
-                                drawerEmployee,
-                                502,
-                                'cascade',
-                              )
-                            "
+                            :disabled="confirmBusy"
                             @click="confirmDone(drawerEmployee, 502, 'cascade')"
                           >
                             <i
@@ -2806,6 +3099,16 @@ async function confirmDone(
                         </div>
                       </div>
                       <div
+                        v-if="
+                          drawerHubShowYearEndConfirm(
+                            drawerEmployee,
+                            'promotion',
+                          ) ||
+                          drawerHubShowMidYearConfirm(
+                            drawerEmployee,
+                            'promotion',
+                          )
+                        "
                         class="mt-5 border-t border-slate-100 pt-3 sm:mt-6 sm:pt-4"
                       >
                         <div
@@ -2813,23 +3116,14 @@ async function confirmDone(
                         >
                           <button
                             v-if="
-                              drawerHasAssignmentsInStatusForTab(
+                              drawerHubShowYearEndConfirm(
                                 drawerEmployee,
-                                602,
                                 'promotion',
                               )
                             "
                             type="button"
                             class="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3.5 py-2 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-indigo-700 sm:gap-2 sm:px-4 sm:text-sm disabled:cursor-not-allowed disabled:opacity-50"
-                            :disabled="
-                              isReadonly ||
-                              confirmBusy ||
-                              !drawerHasAssignmentsInStatusForTab(
-                                drawerEmployee,
-                                602,
-                                'promotion',
-                              )
-                            "
+                            :disabled="confirmBusy"
                             @click="confirmDone(drawerEmployee, 602, 'promotion')"
                           >
                             <i
@@ -2839,24 +3133,15 @@ async function confirmDone(
                             Confirm year-end evaluation
                           </button>
                           <button
-                            v-else-if="
-                              drawerHasAssignmentsInStatusForTab(
+                            v-if="
+                              drawerHubShowMidYearConfirm(
                                 drawerEmployee,
-                                502,
                                 'promotion',
                               )
                             "
                             type="button"
                             class="flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3.5 py-2 text-xs font-semibold text-indigo-800 shadow-sm transition-colors hover:bg-indigo-100 sm:gap-2 sm:px-4 sm:text-sm disabled:cursor-not-allowed disabled:opacity-50"
-                            :disabled="
-                              isReadonly ||
-                              confirmBusy ||
-                              !drawerHasAssignmentsInStatusForTab(
-                                drawerEmployee,
-                                502,
-                                'promotion',
-                              )
-                            "
+                            :disabled="confirmBusy"
                             @click="confirmDone(drawerEmployee, 502, 'promotion')"
                           >
                             <i

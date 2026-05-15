@@ -56,6 +56,20 @@ function newPlanActualRow(): PlanActualDraftRow {
   }
 }
 
+export type PlanActualField = 'comment' | 'plan' | 'actual'
+
+export function requiredPlanActualFields(mode: EvidenceFormMode): PlanActualField[] {
+  return mode === 'comment' ? ['comment', 'actual'] : ['comment', 'plan', 'actual']
+}
+
+export function planActualRowPartiallyFilled(
+  row: Pick<PlanActualDraftRow, PlanActualField>,
+  fields: PlanActualField[],
+): boolean {
+  const vals = fields.map(f => String(row[f] ?? '').trim())
+  return vals.some(v => v.length > 0) && vals.some(v => v.length === 0)
+}
+
 function newWaTimeRow(): WaTimeDraftRow {
   return {
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
@@ -174,6 +188,25 @@ export function averageRatioResult(
   if (!values.length) return undefined
   const avg = values.reduce((sum, x) => sum + x, 0) / values.length
   return `${avg.toFixed(1)}%`
+}
+
+/** CALC_RULE 803 — trung bình cộng các giá trị Actual (số) trên nhiều record. */
+export function averageActualNumeric(
+  rows: Array<{ actual: string }>,
+): number | null {
+  const values = rows
+    .map(r => parseNumericFromField(String(r.actual ?? '')))
+    .filter((n): n is number => n != null)
+  if (!values.length) return null
+  return values.reduce((sum, x) => sum + x, 0) / values.length
+}
+
+export function averageActualResultDisplay(
+  rows: Array<{ actual: string }>,
+): string | undefined {
+  const avg = averageActualNumeric(rows)
+  if (avg == null) return undefined
+  return Number.isInteger(avg) ? String(avg) : avg.toFixed(2)
 }
 
 function normalizeEvidenceUrlInput(raw: string): string {
@@ -327,7 +360,7 @@ export function useMemberEvidenceDrawer() {
     return ''
   })
 
-  // Auto-computed score from commentActualDraft + scoringRulesFromItem (comment mode only)
+  // Auto-computed score from scoring rules + metric (TB % cho 802, TB Actual cho 803)
   const computedEvalScore = computed((): number | null => {
     const metric = autoScoreMetric.value
     if (metric == null) return null
@@ -339,10 +372,7 @@ export function useMemberEvidenceDrawer() {
   // Metric used to map score from DSL rules
   const autoScoreMetric = computed((): number | null => {
     if (drawerFormMode.value === 'comment') {
-      const actual = String(commentActualDraft.value ?? '').trim()
-      if (!actual) return null
-      const v = Number.parseFloat(actual)
-      return Number.isFinite(v) ? v : null
+      return averageActualNumeric(generalPlanActualRows.value)
     }
     if (drawerFormMode.value === 'average') {
       const item = selectedDrawerItem.value
@@ -391,7 +421,6 @@ export function useMemberEvidenceDrawer() {
     const hasEvidenceDraft =
       evidenceNoteDraft.value.trim().length > 0
       || contentDraft.value.trim().length > 0
-      || String(commentActualDraft.value ?? '').trim().length > 0
       || memberFeedbackDraft.value.trim().length > 0
       || leaderFeedbackDraft.value.trim().length > 0
       || certificateOutcomeDraft.value.trim().length > 0
@@ -578,12 +607,16 @@ export function useMemberEvidenceDrawer() {
   }
 
   function addGeneralPlanActualRow() {
+    const fields = requiredPlanActualFields(drawerFormMode.value)
     const hasIncomplete = generalPlanActualRows.value.some(r =>
-      [r.comment, r.plan, r.actual].some(v => String(v ?? '').trim().length > 0)
-      && [r.comment, r.plan, r.actual].some(v => String(v ?? '').trim().length === 0),
+      planActualRowPartiallyFilled(r, fields),
     )
     if (hasIncomplete) {
-      toast.warning('Vui lòng nhập đủ Comment, Plan và Actual trước khi thêm dòng mới.')
+      toast.warning(
+        drawerFormMode.value === 'comment'
+          ? 'Vui lòng nhập đủ Comment và Actual trước khi thêm dòng mới.'
+          : 'Vui lòng nhập đủ Comment, Plan và Actual trước khi thêm dòng mới.',
+      )
       return
     }
     generalPlanActualRows.value.push(newPlanActualRow())
@@ -642,7 +675,7 @@ export function useMemberEvidenceDrawer() {
     leaderFeedbackDraft.value = p.leaderFeedback || item.leaderFeedback || ''
     gmCommentDraft.value = p.gmComment || item.gmComment || ''
     contentDraft.value = p.content
-    commentActualDraft.value = p.actual || ''
+    commentActualDraft.value = ''
 
     const persistedRows =
       p.planActualRecords.length ? p.planActualRecords
@@ -656,14 +689,24 @@ export function useMemberEvidenceDrawer() {
           }))
         : null
 
-    generalPlanActualRows.value = persistedRows?.length
-      ? persistedRows.map((r, i) => ({
-          id: `${item.id}-p-${i}`,
-          plan: r.plan,
-          actual: r.actual,
-          comment: r.comment ?? '',
-        }))
-      : [newPlanActualRow()]
+    const formMode = resolveFormMode(item)
+    if (persistedRows?.length) {
+      generalPlanActualRows.value = persistedRows.map((r, i) => ({
+        id: `${item.id}-p-${i}`,
+        plan: r.plan ?? '',
+        actual: r.actual ?? '',
+        comment: r.comment ?? '',
+      }))
+    } else if (formMode === 'comment' && (p.actual || p.content)) {
+      generalPlanActualRows.value = [{
+        id: `${item.id}-legacy`,
+        plan: '',
+        actual: p.actual || '',
+        comment: p.content || '',
+      }]
+    } else {
+      generalPlanActualRows.value = [newPlanActualRow()]
+    }
 
     pendingEvidenceUrls.value = urlPairsToPendingUrls(p.urlPairs, `${item.id}-u`)
     evidencePanelOpen.value = true
@@ -720,7 +763,11 @@ export function useMemberEvidenceDrawer() {
         actual: actual.trim(),
         ...(comment.trim() ? { comment: comment.trim() } : {}),
       }))
-      .filter(r => r.plan || r.actual)
+      .filter(r =>
+        mode === 'comment'
+          ? Boolean(r.actual || r.comment)
+          : Boolean(r.plan || r.actual),
+      )
 
     const out: Record<string, unknown> = {}
     if (rows.length) out.planActualRecords = rows
@@ -730,6 +777,12 @@ export function useMemberEvidenceDrawer() {
         .map(r => computeRatioPreview(r.plan, r.actual, calcTypeCode) ?? r.actual)
         .filter(Boolean)
       if (results.length) out.result = averageRatioResult(rows, calcTypeCode)
+    } else if (mode === 'comment') {
+      const avgDisplay = averageActualResultDisplay(generalPlanActualRows.value)
+      if (avgDisplay != null) {
+        out.actual = avgDisplay
+        out.result = avgDisplay
+      }
     } else {
       const actuals = rows.map(r => r.actual).filter(Boolean)
       if (actuals.length) out.result = actuals.join('')
@@ -739,17 +792,6 @@ export function useMemberEvidenceDrawer() {
     if (note) out.note = note
     const gmComment = gmCommentDraft.value.trim()
     if (gmComment) out.gmComment = gmComment
-
-    if (mode === 'comment') {
-      const content = contentDraft.value.trim()
-      if (content) out.content = content
-      // Persist the actual value entered for CALC_RULE 803
-      const actualVal = String(commentActualDraft.value ?? '').trim()
-      if (actualVal) {
-        out.actual = actualVal
-        out.result = actualVal  // surface in the Actual Result column
-      }
-    }
 
     const filePairs = pendingEvidenceUrls.value
       .map(u => ({ url: u.url, name: (u.name ?? '').trim() }))
@@ -825,6 +867,23 @@ export function useMemberEvidenceDrawer() {
         return
       }
     }
+    if (drawerFormMode.value === 'comment') {
+      const hasIncomplete = generalPlanActualRows.value.some(r =>
+        [r.comment, r.actual].some(v => String(v ?? '').trim().length > 0)
+        && [r.comment, r.actual].some(v => String(v ?? '').trim().length === 0),
+      )
+      if (hasIncomplete) {
+        toast.warning('Mỗi dòng phải nhập đủ Comment và Actual.')
+        return
+      }
+      const hasAnyCompleteRow = generalPlanActualRows.value.some(r =>
+        [r.comment, r.actual].every(v => String(v ?? '').trim().length > 0),
+      )
+      if (!hasAnyCompleteRow) {
+        toast.warning('Vui lòng nhập đủ Comment và Actual cho ít nhất 1 dòng trước khi lưu.')
+        return
+      }
+    }
     saving.value = true
     try {
       const payloadObj = buildDrawerEvidencesPayload(item)
@@ -863,8 +922,11 @@ export function useMemberEvidenceDrawer() {
         item.result = noteTrim || undefined
       } else {
         const calcTypeCode = item.calculationTypeCode
-        if (resolveFormMode(item) === 'average') {
+        const formMode = resolveFormMode(item)
+        if (formMode === 'average') {
           item.result = averageRatioResult(rows, calcTypeCode)
+        } else if (formMode === 'comment') {
+          item.result = averageActualResultDisplay(generalPlanActualRows.value)
         } else {
           item.result = rows.map(r => r.actual).filter(Boolean).join(' | ') || undefined
         }

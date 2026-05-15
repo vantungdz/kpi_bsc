@@ -16,6 +16,8 @@ public class UpdateKpiTemplateItemRequest {
     private Integer typeCode;
     private Integer unitCode;
     private String calculationMethod;
+    private Integer cycleYear;
+    private Object targetDescription;
     private BigDecimal defaultTargetValue;
     private BigDecimal defaultWeight;
 }

@@ -200,8 +200,8 @@ function actualPreview(raw: string | null | undefined): string {
         </thead>
         <tbody class="divide-y divide-slate-100">
           <template v-for="(category, catIndex) in data.categories" :key="`p-${catIndex}`">
-            <tr class="bg-amber-100 border-y border-amber-100">
-              <td colspan="8" class="px-4 py-2 text-xs font-bold uppercase tracking-wider text-amber-800">
+            <tr class="bg-slate-50 border-y border-slate-200">
+              <td colspan="8" class="px-4 py-2 text-xs font-bold uppercase tracking-wider text-slate-800">
                 {{ category.name }}
               </td>
             </tr>

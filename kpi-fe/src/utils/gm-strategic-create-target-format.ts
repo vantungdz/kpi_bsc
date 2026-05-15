@@ -4,7 +4,7 @@ export function formatStrategicCreateTargetDisplay(targetValue: string, unit: st
   if (!t) return '—'
   switch (unit) {
     case 'percent':
-    case 'PERCENT':
+    case 'Percent':
       return /%$/.test(t) ? t : `${t}%`
     case 'currency':
       return t.startsWith('$') ? t : `$${t}`
@@ -15,12 +15,12 @@ export function formatStrategicCreateTargetDisplay(targetValue: string, unit: st
     case 'text':
       return t
     case 'MM':
-    case 'POINT':
-    case 'PRODUCT':
-    case 'PROJECT':
-    case 'CERTIFICATION':
-    case 'ARTICLE':
-    case 'PERSON':
+    case 'Point':
+    case 'Product':
+    case 'Project':
+    case 'Certification':
+    case 'Article':
+    case 'Person':
       return `${t} ${unit}`.trim()
     default:
       return t

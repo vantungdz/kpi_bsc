@@ -3,6 +3,12 @@ import { computed, ref, watch } from 'vue'
 import { useToast } from 'vue-toastification'
 import type { EvidenceFormCase } from '@/types/kpi'
 import {
+  averageActualNumeric,
+  averageActualResultDisplay,
+  planActualRowPartiallyFilled,
+  requiredPlanActualFields,
+} from '@/composables/useMemberEvidenceDrawer'
+import {
   resolveFormMode,
   ratioLabels,
   computeRatioPreview,
@@ -41,7 +47,6 @@ const leaderFeedbackDraft = ref('')
 const gmCommentDraft = ref('')
 const certificateOutcomeDraft = ref('')
 const contentDraft = ref('')
-const commentActualDraft = ref('')  // actual value input for CALC_RULE 803
 const evidenceUrlDraft = ref('')
 const evidenceUrlHint = ref('')
 const evidenceUploadHint = ref('')
@@ -201,12 +206,13 @@ const scoringRawInput = computed(() => {
   return extractRawInputFromApiTargetDescription(target)
 })
 
+const averageActualResult = computed(() =>
+  averageActualResultDisplay(generalPlanActualRows.value),
+)
+
 const autoScoreMetric = computed((): number | null => {
   if (drawerFormMode.value === 'comment') {
-    const actual = String(commentActualDraft.value ?? '').trim()
-    if (!actual) return null
-    const v = Number.parseFloat(actual)
-    return Number.isFinite(v) ? v : null
+    return averageActualNumeric(generalPlanActualRows.value)
   }
   if (drawerFormMode.value === 'average') {
     const calcTypeCode = props.item?.calculationTypeCode ?? null
@@ -282,6 +288,9 @@ function initForm() {
   try {
     const parsed = JSON.parse(jsonSource)
 
+    const formMode = resolveFormMode({
+      calculationRuleCode: it.calculationRuleCode ?? null,
+    } as any)
     if (parsed.planActualRecords?.length) {
       generalPlanActualRows.value = parsed.planActualRecords.map((r: any, i: number) => ({
         id: `p-${i}`,
@@ -289,6 +298,13 @@ function initForm() {
         plan: r.plan || '',
         actual: r.actual || '',
       }))
+    } else if (formMode === 'comment' && (parsed.actual || parsed.content)) {
+      generalPlanActualRows.value = [{
+        id: 'p-legacy',
+        plan: '',
+        actual: String(parsed.actual ?? ''),
+        comment: String(parsed.content ?? ''),
+      }]
     } else {
       generalPlanActualRows.value = [{ id: 'p-0', comment: '', plan: '', actual: '' }]
     }
@@ -305,7 +321,6 @@ function initForm() {
     }
 
     if (parsed.content) contentDraft.value = parsed.content
-    commentActualDraft.value = String(parsed.actual ?? '')
     leaderFeedbackDraft.value = String(it.feedbackComment ?? parsed.leaderFeedback ?? '')
     gmCommentDraft.value = String(parsed.gmComment ?? '')
 
@@ -321,7 +336,6 @@ function initForm() {
     waTimeRows.value = [{ id: 'w-0', month: '1', spent: '', standard: '' }]
     pendingEvidenceUrls.value = []
     contentDraft.value = ''
-    commentActualDraft.value = ''
     leaderFeedbackDraft.value = ''
     gmCommentDraft.value = ''
   }
@@ -436,12 +450,16 @@ function onUrlKeydown(e: KeyboardEvent) {
 
 // ── Plan/Actual row management ────────────────────────────────────────────────
 function addPlanRow() {
+  const fields = requiredPlanActualFields(drawerFormMode.value)
   const hasIncomplete = generalPlanActualRows.value.some(r =>
-    [r.comment, r.plan, r.actual].some(v => String(v ?? '').trim().length > 0)
-    && [r.comment, r.plan, r.actual].some(v => String(v ?? '').trim().length === 0),
+    planActualRowPartiallyFilled(r, fields),
   )
   if (hasIncomplete) {
-    toast.warning('Vui lòng nhập đủ Comment, Plan và Actual trước khi thêm dòng mới.')
+    toast.warning(
+      drawerFormMode.value === 'comment'
+        ? 'Vui lòng nhập đủ Comment và Actual trước khi thêm dòng mới.'
+        : 'Vui lòng nhập đủ Comment, Plan và Actual trước khi thêm dòng mới.',
+    )
     return
   }
   generalPlanActualRows.value.push({ id: Date.now().toString(), comment: '', plan: '', actual: '' })
@@ -471,19 +489,36 @@ async function handleSave() {
     return
   }
   if (drawerFormMode.value === 'average') {
+    const fields = requiredPlanActualFields('average')
     const hasIncomplete = generalPlanActualRows.value.some(r =>
-      [r.comment, r.plan, r.actual].some(v => String(v ?? '').trim().length > 0)
-      && [r.comment, r.plan, r.actual].some(v => String(v ?? '').trim().length === 0),
+      planActualRowPartiallyFilled(r, fields),
     )
     if (hasIncomplete) {
       toast.warning('Mỗi dòng phải nhập đủ 3 trường: Comment, Plan và Actual.')
       return
     }
     const hasAnyCompleteRow = generalPlanActualRows.value.some(r =>
-      [r.comment, r.plan, r.actual].every(v => String(v ?? '').trim().length > 0),
+      fields.every(f => String(r[f] ?? '').trim().length > 0),
     )
     if (!hasAnyCompleteRow) {
       toast.warning('Vui lòng nhập đủ Comment, Plan và Actual cho ít nhất 1 dòng trước khi lưu.')
+      return
+    }
+  }
+  if (drawerFormMode.value === 'comment') {
+    const fields = requiredPlanActualFields('comment')
+    const hasIncomplete = generalPlanActualRows.value.some(r =>
+      planActualRowPartiallyFilled(r, fields),
+    )
+    if (hasIncomplete) {
+      toast.warning('Mỗi dòng phải nhập đủ Comment và Actual.')
+      return
+    }
+    const hasAnyCompleteRow = generalPlanActualRows.value.some(r =>
+      fields.every(f => String(r[f] ?? '').trim().length > 0),
+    )
+    if (!hasAnyCompleteRow) {
+      toast.warning('Vui lòng nhập đủ Comment và Actual cho ít nhất 1 dòng trước khi lưu.')
       return
     }
   }
@@ -494,6 +529,8 @@ async function handleSave() {
     let actualResult: string | null = null
     if (averageRatioResult.value) {
       actualResult = averageRatioResult.value
+    } else if (averageActualResult.value) {
+      actualResult = averageActualResult.value
     } else if (drawerCase.value === 'monthly') {
       const totalSpent = waTimeRows.value.reduce((sum, r) => sum + (parseFloat(r.spent) || 0), 0)
       if (totalSpent > 0) actualResult = `${totalSpent}h`
@@ -514,21 +551,30 @@ async function handleSave() {
         : Math.min(5, Math.max(1, Math.round(Number(detailSelfScore.value))))
     const effectiveScore = feedbackOnly ? null : (autoScore !== null ? autoScore : normalizedScore)
 
-    // For comment mode with actual value, use it as actualResult too
-    const actualValTrimmed = String(commentActualDraft.value ?? '').trim()
-    if (!actualResult && actualValTrimmed) actualResult = actualValTrimmed
+    const planRows = generalPlanActualRows.value
+      .map(({ plan, actual, comment }) => ({
+        plan: plan.trim(),
+        actual: actual.trim(),
+        ...(comment.trim() ? { comment: comment.trim() } : {}),
+      }))
+      .filter(r =>
+        drawerFormMode.value === 'comment'
+          ? Boolean(r.actual || r.comment)
+          : Boolean(r.plan || r.actual),
+      )
 
     const evidencesObj: Record<string, unknown> = {
       note: evidenceNoteDraft.value,
       gmComment: gmCommentDraft.value,
       content: contentDraft.value,
       files: pendingEvidenceUrls.value.map(u => ({ url: u.url, name: u.name })),
-      planActualRecords: generalPlanActualRows.value.filter(r => r.plan || r.actual || r.comment),
+      planActualRecords: planRows,
       waTimeRecords: waTimeRows.value.filter(r => r.spent || r.standard),
     }
-    if (actualValTrimmed) {
-      evidencesObj.actual = actualValTrimmed
-      evidencesObj.result = actualValTrimmed
+    if (drawerFormMode.value === 'comment' && averageActualResult.value) {
+      evidencesObj.actual = averageActualResult.value
+      evidencesObj.result = averageActualResult.value
+      if (!actualResult) actualResult = averageActualResult.value
     }
 
     const payload = {
@@ -609,7 +655,7 @@ async function handleSave() {
               KPI đã bị từ chối - vui lòng chỉnh sửa và submit lại.
             </p>
             <p class="mt-1.5 whitespace-pre-wrap text-rose-800">
-              {{ rejectedReasonNote }}
+              {{ "Lý do từ chối:" + " " }} <span class="font-bold text-rose-800">{{ rejectedReasonNote }}</span>
             </p>
           </div>
 
@@ -748,18 +794,31 @@ async function handleSave() {
                     </div>
                   </div>
 
-                  <!-- General: Plan/Actual records - ONLY for average mode (calculationRuleCode = 802) -->
+                  <!-- General: Plan/Actual records (802) hoặc Comment+Actual (803) -->
                   <div
-                    v-else-if="drawerFormMode === 'average'"
+                    v-else-if="drawerFormMode === 'average' || drawerFormMode === 'comment'"
                     class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"
                   >
-                    <div class="flex items-center justify-between border-b border-blue-100 bg-blue-50/50 px-4 py-3">
-                      <h4 class="flex items-center text-sm font-bold text-blue-800">
-                        <i class="fas fa-calculator mr-2 text-blue-600" />
-                        Khai báo Số liệu (Auto tính tỉ lệ)
+                    <div
+                      class="flex items-center justify-between border-b px-4 py-3"
+                      :class="drawerFormMode === 'average' ? 'border-blue-100 bg-blue-50/50' : 'border-teal-100 bg-teal-50/50'"
+                    >
+                      <h4
+                        class="flex items-center text-sm font-bold"
+                        :class="drawerFormMode === 'average' ? 'text-blue-800' : 'text-teal-800'"
+                      >
+                        <i
+                          class="mr-2"
+                          :class="drawerFormMode === 'average' ? 'fas fa-calculator text-blue-600' : 'fas fa-comment-dots text-teal-600'"
+                        />
+                        {{
+                          drawerFormMode === 'average'
+                            ? 'Khai báo Số liệu (Auto tính tỉ lệ)'
+                            : 'Khai báo Mục tiêu / Kết quả'
+                        }}
                       </h4>
                       <span
-                        v-if="item"
+                        v-if="drawerFormMode === 'average' && item"
                         class="rounded bg-blue-100 px-2 py-0.5 text-[10px] font-bold text-blue-700"
                       >
                         {{ ratioLabels(item.calculationTypeCode).formula }}
@@ -771,24 +830,36 @@ async function handleSave() {
                           <p class="mb-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">Quy tắc chấm điểm:</p>
                           <pre class="font-mono text-[11px] leading-relaxed text-slate-600 whitespace-pre-wrap">{{ scoringRawInput }}</pre>
                       </div>
-                      <div class="space-y-4 rounded-lg border border-blue-100 bg-blue-50/20 p-4 mt-4">
+                      <div
+                        class="space-y-4 rounded-lg p-4 mt-4"
+                        :class="drawerFormMode === 'average' ? 'border border-blue-100 bg-blue-50/20' : 'border border-teal-100 bg-teal-50/30'"
+                      >
                         <div
                           v-for="row in generalPlanActualRows"
                           :key="row.id"
-                          class="border-b border-blue-100/80 bg-transparent pb-3 last:border-b-0 last:pb-0"
+                          class="border-b bg-transparent pb-3 last:border-b-0 last:pb-0"
+                          :class="drawerFormMode === 'average' ? 'border-blue-100/80' : 'border-teal-100/80'"
                         >
-                          <div class="grid grid-cols-1 gap-3 md:grid-cols-[1fr_1fr_1fr_auto] md:items-end">
+                          <div
+                            class="grid grid-cols-1 gap-3 md:items-end"
+                            :class="drawerFormMode === 'average'
+                              ? 'md:grid-cols-[1fr_1fr_1fr_auto]'
+                              : 'md:grid-cols-[minmax(0,2.2fr)_minmax(88px,0.9fr)_auto]'"
+                          >
                             <div>
-                              <label class="mb-1 block text-xs font-bold text-slate-600">Comment</label>
+                              <label class="mb-1 block text-xs font-bold text-slate-600">
+                                {{ drawerFormMode === 'comment' ? 'Nội dung nhận xét (Comment)' : 'Comment' }}
+                              </label>
                               <input
                                 v-model="row.comment"
                                 type="text"
                                 :readonly="isReadOnly"
-                                placeholder="Ghi chú thêm..."
-                                class="w-full rounded border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-blue-500 read-only:bg-slate-50"
+                                :placeholder="drawerFormMode === 'comment' ? 'Mô tả bối cảnh, kết quả...' : 'Ghi chú thêm...'"
+                                class="w-full rounded border border-slate-300 px-3 py-2 text-sm focus:ring-1 read-only:bg-slate-50"
+                                :class="drawerFormMode === 'average' ? 'focus:ring-blue-500' : 'focus:ring-teal-500'"
                               />
                             </div>
-                            <div>
+                            <div v-if="drawerFormMode === 'average'">
                               <label class="mb-1 block text-xs font-bold text-slate-600">
                                 {{ ratioLabels(item?.calculationTypeCode).plan }}
                               </label>
@@ -803,15 +874,20 @@ async function handleSave() {
                             </div>
                             <div>
                               <label class="mb-1 block text-xs font-bold text-slate-600">
-                                {{ ratioLabels(item?.calculationTypeCode).actual }}
+                                {{
+                                  drawerFormMode === 'average'
+                                    ? ratioLabels(item?.calculationTypeCode).actual
+                                    : 'Giá trị thực tế (Actual)'
+                                }}
                               </label>
                               <input
                                 v-model="row.actual"
                                 type="text"
                                 inputmode="decimal"
-                                placeholder="0"
+                                :placeholder="drawerFormMode === 'comment' ? 'Nhập số liệu thực tế...' : '0'"
                                 :readonly="isReadOnly"
-                                class="w-full rounded border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-blue-500 read-only:bg-slate-50"
+                                class="w-full rounded border border-slate-300 px-3 py-2 text-sm focus:ring-1 read-only:bg-slate-50"
+                                :class="drawerFormMode === 'average' ? 'focus:ring-blue-500' : 'focus:ring-teal-500'"
                               />
                             </div>
                             <div class="flex items-end justify-end md:pb-[2px]">
@@ -829,16 +905,30 @@ async function handleSave() {
                         </div>
 
                         <div v-if="!isReadOnly" class="flex items-center justify-between">
-                          <div v-if="averageRatioResult" class="flex items-center gap-2">
+                          <div
+                            v-if="drawerFormMode === 'average' && averageRatioResult"
+                            class="flex items-center gap-2"
+                          >
                             <span class="text-[10px] font-semibold text-slate-500">Kết quả tính:</span>
                             <span class="rounded bg-blue-50 px-2 py-0.5 text-xs font-bold text-blue-700">
                               {{ averageRatioResult }}
                             </span>
                           </div>
+                          <div
+                            v-else-if="drawerFormMode === 'comment'"
+                            class="flex items-center gap-2"
+                          >
+                            <span class="text-[10px] font-semibold text-slate-500">Kết quả tính:</span>
+                            <span class="rounded bg-teal-50 px-2 py-0.5 text-xs font-bold text-teal-700">
+                              {{ averageActualResult ?? '—' }}
+                            </span>
+                            <span class="text-[10px] text-slate-400">(TB Actual)</span>
+                          </div>
                           <div v-else />
                           <button
                             type="button"
-                            class="flex items-center rounded bg-blue-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
+                            class="flex items-center rounded px-4 py-1.5 text-sm font-medium text-white"
+                            :class="drawerFormMode === 'average' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-teal-600 hover:bg-teal-700'"
                             @click="addPlanRow"
                           >
                             <i class="fas fa-plus mr-1" /> Thêm Record
@@ -848,54 +938,6 @@ async function handleSave() {
                     </div>
                   </div>
 
-                  <!-- Comment mode (calculationRuleCode = 803): Actual input + content textarea -->
-                  <div
-                    v-else
-                    class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"
-                  >
-                    <div class="flex items-center border-b border-teal-100 bg-teal-50/50 px-4 py-3">
-                      <h4 class="flex items-center text-sm font-bold text-teal-800">
-                        <i class="fas fa-align-left mr-2 text-teal-600" />
-                        Khai báo Mục tiêu / Kết quả
-                      </h4>
-                    </div>
-                    <div class="flex flex-col gap-4 p-4">
-                      <!-- Actual value input (shown when scoring rules are available) -->
-                      <div v-if="scoringRulesFromItem.length > 0">
-                        <div v-if="scoringRawInput" class="mt-1.5 rounded border border-slate-200 bg-slate-50 px-3 py-2">
-                          <p class="mb-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">Quy tắc chấm điểm:</p>
-                          <pre class="font-mono text-[11px] leading-relaxed text-slate-600 whitespace-pre-wrap">{{ scoringRawInput }}</pre>
-                        </div>
-                        <label class="mb-1 block text-xs font-bold text-slate-700 mt-4">
-                          <i class="fas fa-chart-line mr-1 text-emerald-500" />
-                          Giá trị thực tế (Actual)
-                        </label>
-                        <input
-                          v-model="commentActualDraft"
-                          type="number"
-                          inputmode="decimal"
-                          step="any"
-                          placeholder="Nhập số liệu thực tế..."
-                          :readonly="isReadOnly"
-                          class="w-full rounded-md border border-emerald-200 bg-white px-3 py-2 text-sm focus:ring-1 focus:ring-emerald-500 read-only:bg-slate-50"
-                        />
-                      </div>
-                      <!-- Content / description textarea -->
-                      <div>
-                        <label class="mb-1 block text-xs font-bold text-slate-700">
-                          <i class="fas fa-align-left mr-1 text-teal-500" />
-                          Nội dung nhận xét / diễn giải (Content)
-                        </label>
-                        <textarea
-                          v-model="contentDraft"
-                          rows="5"
-                          placeholder="Mô tả chi tiết bối cảnh, kết quả hoặc diễn giải thêm để PM tham chiếu khi cho điểm..."
-                          :readonly="isReadOnly"
-                          class="w-full resize-none rounded-md border border-teal-200 bg-white px-3 py-2 text-sm focus:ring-1 focus:ring-teal-500 read-only:bg-slate-50 read-only:text-slate-700"
-                        />
-                      </div>
-                    </div>
-                  </div>
                 </div>
 
                 <!-- Attachment hub -->
@@ -1230,7 +1272,7 @@ async function handleSave() {
                   </span>
                   <span class="text-xs text-slate-500">/ 5</span>
                   <span v-if="computedEvalScore === null" class="text-xs text-slate-400">
-                    {{ drawerFormMode === 'average' ? 'Nhập đủ số liệu để tính' : 'Nhập Actual để tính' }}
+                    {{ drawerFormMode === 'average' ? 'Nhập đủ số liệu để tính' : 'Nhập đủ Comment và Actual để tính' }}
                   </span>
                 </div>
                 <p

@@ -21,4 +21,14 @@ public class UserTeamHierarchyAggregate extends User {
     private Integer minStatusCode;
     /** Có assignment trong kỳ đang chờ PM đánh giá (501 giữa kỳ / 601 cuối kỳ). */
     private Boolean requiresPmEvaluation;
+    private BigDecimal portfolioSelfScore;
+    private BigDecimal portfolioPmScore;
+    private String portfolioPmComment;
+    private Integer portfolioStatusCode;
+    private Boolean portfolioRequiresPmEvaluation;
+    private BigDecimal promotionSelfScore;
+    private BigDecimal promotionPmScore;
+    private String promotionPmComment;
+    private Integer promotionStatusCode;
+    private Boolean promotionRequiresPmEvaluation;
 }

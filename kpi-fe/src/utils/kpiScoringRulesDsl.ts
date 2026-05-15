@@ -214,6 +214,20 @@ export type KpiScoringRulesApiShape = {
   rules?: Array<Record<string, unknown>>
 }
 
+/** Chuỗi quy tắc chấm điểm để hiển thị (tooltip / readonly) từ `targetDescription` API. */
+export function formatScoringRulesDisplayText(targetDescription: unknown): string {
+  const fromApi = extractRawInputFromApiTargetDescription(targetDescription)
+  if (fromApi.trim()) return fromApi.trim()
+  const raw = typeof targetDescription === 'string' ? targetDescription.trim() : ''
+  if (!raw) return ''
+  try {
+    JSON.parse(raw)
+    return ''
+  } catch {
+    return raw
+  }
+}
+
 export function extractRawInputFromApiTargetDescription(data: unknown): string {
   if (data == null) return ''
   if (typeof data === 'string') {

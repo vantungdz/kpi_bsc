@@ -32,6 +32,7 @@
             km.unit_code AS unit_code,
             km.calculation_rule_code AS calculation_rule_code,
             km.calculation_type_code AS calculation_type_code,
+            ti.default_target_description::text AS target_description,
             ti.default_target_value AS default_target_value,
             ti.default_weight AS default_weight
         FROM kpi_template_items ti
@@ -90,8 +91,22 @@
     </delete>
 
     <insert id="insertTemplateItem">
-        INSERT INTO kpi_template_items (id, template_id, master_kpi_id, default_target_value, default_weight)
-        VALUES (#{id}, #{templateId}, #{masterKpiId}, #{defaultTargetValue}, #{defaultWeight})
+        INSERT INTO kpi_template_items (
+            id,
+            template_id,
+            master_kpi_id,
+            default_target_description,
+            default_target_value,
+            default_weight
+        )
+        VALUES (
+            #{id},
+            #{templateId},
+            #{masterKpiId},
+            #{defaultTargetDescription}::jsonb,
+            #{defaultTargetValue},
+            #{defaultWeight}
+        )
     </insert>
 
     <select id="selectTemplateItemEditRow" resultType="com.company.kpi.aggregate.KpiTemplateItemEditRow">
@@ -105,6 +120,7 @@
             km.unit_code AS unit_code,
             km.calculation_rule_code AS calculation_rule_code,
             km.calculation_type_code AS calculation_type_code,
+            ti.default_target_description AS default_target_description,
             ti.default_target_value AS default_target_value,
             ti.default_weight AS default_weight
         FROM kpi_template_items ti
@@ -127,6 +143,7 @@
             km.unit_code AS unit_code,
             km.calculation_rule_code AS calculation_rule_code,
             km.calculation_type_code AS calculation_type_code,
+            ti.default_target_description::text AS target_description,
             ti.default_target_value AS default_target_value,
             ti.default_weight AS default_weight
         FROM kpi_template_items ti
@@ -139,7 +156,8 @@
 
     <update id="updateTemplateItemDefaults">
         UPDATE kpi_template_items
-        SET default_target_value = #{defaultTargetValue},
+        SET default_target_description = #{defaultTargetDescription}::jsonb,
+            default_target_value = #{defaultTargetValue},
             default_weight = #{defaultWeight}
         WHERE id = #{itemId}
           AND template_id = #{templateId}
@@ -172,4 +190,3 @@
           AND deleted_at IS NULL
     </select>
 </mapper>
-

@@ -27,12 +27,16 @@ function resolveWeightNumber(payload: Record<string, unknown>): number {
 }
 
 function resolveTargetValue(payload: Record<string, unknown>): number | null {
-  const kind = strategicKpiKindFromCreatePayload(payload)
-  if (kind !== 'cascading') return null
   const tv = payload.targetValue
   if (tv === null || tv === undefined || tv === '') return null
   if (typeof tv === 'number' && Number.isFinite(tv)) return tv
   const n = Number.parseFloat(String(tv).trim())
+  return Number.isFinite(n) ? n : null
+}
+
+function resolveCycleYear(payload: Record<string, unknown>): number | null {
+  const raw = payload.cycleId ?? payload.cycleYear
+  const n = Number.parseInt(String(raw ?? '').trim(), 10)
   return Number.isFinite(n) ? n : null
 }
 
@@ -59,6 +63,8 @@ export function mapDraftPayloadToCreateTemplateItemBody(
     unitCode,
     calculationMethod:
       String(payload.calculationMethod ?? 'mean_actual_plan').trim() || 'mean_actual_plan',
+    cycleYear: resolveCycleYear(payload),
+    targetDescription: payload.targetDescription ?? null,
     defaultTargetValue: resolveTargetValue(payload),
     defaultWeight,
   }
@@ -87,6 +93,8 @@ export function mapDraftPayloadToUpdateTemplateItemBody(
     unitCode,
     calculationMethod:
       String(payload.calculationMethod ?? 'mean_actual_plan').trim() || 'mean_actual_plan',
+    cycleYear: resolveCycleYear(payload),
+    targetDescription: payload.targetDescription ?? null,
     defaultTargetValue: resolveTargetValue(payload),
     defaultWeight,
   }

@@ -18,6 +18,7 @@ import com.company.kpi.aggregate.UserTeamHierarchyAggregate;
 import com.company.kpi.response.pm.PmPortfolioGatePendingMemberResponse;
 import com.company.kpi.response.admin.AdminEmployeeProgressResponse;
 import com.company.kpi.response.admin.AdminEmployeeResponse;
+import com.company.kpi.response.gm.GmMemberResponse;
 import com.company.kpi.response.reference.DepartmentManagerOptionResponse;
 import com.company.kpi.response.reference.MemberByRankOptionResponse;
 
@@ -79,6 +80,8 @@ public interface UserMapper {
      */
     List<MemberByRankOptionResponse> listActiveUsersForPromotionAssignment();
 
+    List<GmMemberResponse> listActiveGmMembers();
+
     int countTotalActiveEmployees();
 
     List<AdminEmployeeProgressResponse> getEmployeeProgressByCycleId(@Param("cycleId") UUID cycleId);
@@ -88,6 +91,9 @@ public interface UserMapper {
     List<String> getAllActiveEmployeeEmails();
 
     List<AdminEmployeeResponse> getEmployees();
+
+    /** Nhân viên active (không ADMIN) thuộc ít nhất một phòng ban trong danh sách. */
+    List<UUID> getActiveEmployeeIdsByDepartmentIds(@Param("departmentIds") List<UUID> departmentIds);
 
     void insertEmployee(
             @Param("id") UUID id,
@@ -105,11 +111,24 @@ public interface UserMapper {
             @Param("jobTitleId") UUID jobTitleId,
             @Param("isActive") boolean isActive);
 
+    int softDeleteUser(@Param("id") UUID id, @Param("actorId") UUID actorId);
+
     List<UUID> listExistingActiveUserIds(@Param("userIds") List<UUID> userIds);
 
     List<UserJobTitlePair> listUserJobTitlesByIds(@Param("userIds") List<UUID> userIds);
 
     List<UserTeamHierarchyAggregate> findTeamHierarchyBySupervisor(@Param("pmId") UUID pmId, @Param("cycleId") UUID cycleId);
+
+    @Select("""
+            SELECT EXISTS (
+                SELECT 1
+                FROM user_roles ur
+                INNER JOIN roles r ON r.id = ur.role_id AND r.deleted_at IS NULL
+                WHERE ur.user_id = #{userId}
+                  AND UPPER(TRIM(r.code)) = UPPER(TRIM(#{roleCode}))
+            )
+            """)
+    boolean userHasRoleCode(@Param("userId") UUID userId, @Param("roleCode") String roleCode);
 
     /**
      * Member dưới PM còn KPI individual/team (không promotion) với {@code status_code} dưới 501

@@ -8,6 +8,7 @@ const { user, logout } = useAuth()
 
 const navItems = [
   { name: 'Chiến dịch Đánh giá', icon: 'fas fa-bullhorn',  to: '/admin/campaigns'       },
+  { name: 'Quản lý kỳ đánh giá', icon: 'fas fa-calendar-alt', to: '/admin/kpi-cycles' },
   { name: 'Danh sách Nhân sự',   icon: 'fas fa-users',     to: '/admin/employees'       },
   { name: 'Mẫu Email',           icon: 'fas fa-envelope',  to: '/admin/email-templates' },
 ]

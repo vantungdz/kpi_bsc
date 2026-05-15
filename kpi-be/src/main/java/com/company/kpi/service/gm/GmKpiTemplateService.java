@@ -1,7 +1,10 @@
 package com.company.kpi.service.gm;
 
 import com.company.kpi.common.exception.AppException;
+import com.company.kpi.entity.KpiCycle;
+import com.company.kpi.entity.KpisInformation;
 import com.company.kpi.mapper.KpiCategoryMapper;
+import com.company.kpi.mapper.KpiCycleMapper;
 import com.company.kpi.mapper.KpiTemplateMapper;
 import com.company.kpi.mapper.KpiMasterMapper;
 import com.company.kpi.mapper.KpisInformationMapper;
@@ -15,12 +18,15 @@ import com.company.kpi.request.gm.UpdateKpiTemplateItemRequest;
 import com.company.kpi.request.gm.UpdateKpiTemplateRequest;
 import com.company.kpi.response.gm.GmKpiTemplateItemResponse;
 import com.company.kpi.response.gm.GmKpiTemplatePackageResponse;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Year;
 import java.util.List;
 import java.util.UUID;
 
@@ -38,14 +44,16 @@ public class GmKpiTemplateService {
     private final KpisInformationMapper kpisInformationMapper;
     private final KpiAssignmentMapper kpiAssignmentMapper;
     private final UserMapper userMapper;
+    private final ObjectMapper objectMapper;
+    private final KpiCycleMapper kpiCycleMapper;
 
     public List<GmKpiTemplatePackageResponse> listPackages() {
         return kpiTemplateMapper.listActiveTemplates();
     }
 
-    public List<GmKpiTemplateItemResponse> listItems(UUID templateId) {
+    public List<GmKpiTemplateItemResponse> listItems(UUID templateId, Integer year) {
         assertActiveTemplate(templateId);
-        return kpiTemplateMapper.listItemsByTemplateId(templateId);
+        return kpiTemplateMapper.listItemsByTemplateId(templateId, resolveCycleYear(year));
     }
 
     @Transactional
@@ -125,6 +133,7 @@ public class GmKpiTemplateService {
         CalcCodes calc = CalcCodes.fromPersisted(req.getCalculationMethod());
         BigDecimal weight = normalizeWeight(req.getDefaultWeight());
         BigDecimal targetNum = normalizeTargetValue(req.getDefaultTargetValue());
+        String targetDescription = serializeTargetDescription(req.getTargetDescription());
 
         UUID masterId = UUID.randomUUID();
         UUID itemId = UUID.randomUUID();
@@ -138,8 +147,9 @@ public class GmKpiTemplateService {
                 req.getUnitCode(),
                 false,
                 gmUserId);
-        kpiTemplateMapper.insertTemplateItem(itemId, templateId, masterId, targetNum, weight);
-        GmKpiTemplateItemResponse row = kpiTemplateMapper.selectTemplateItemResponse(templateId, itemId);
+        kpiTemplateMapper.insertTemplateItem(itemId, templateId, masterId, targetDescription, targetNum, weight);
+        GmKpiTemplateItemResponse row =
+                kpiTemplateMapper.selectTemplateItemResponse(templateId, itemId, resolveCycleYear(req.getCycleYear()));
         if (row == null) {
             throw AppException.badRequest("Failed to load created template item.");
         }
@@ -185,14 +195,16 @@ public class GmKpiTemplateService {
                 req.getDefaultTargetValue() != null
                         ? normalizeTargetValue(req.getDefaultTargetValue())
                         : row.getDefaultTargetValue();
+        String targetDescription = serializeTargetDescription(req.getTargetDescription());
 
         int um = kpiMasterMapper.updateKpiMasterStrategic(
                 row.getMasterKpiId(), name, categoryId, type, rule, typeCode, unit, gmUserId);
         if (um < 1) {
             throw AppException.notFound("kpi_master not found: " + row.getMasterKpiId());
         }
-        kpiTemplateMapper.updateTemplateItemDefaults(templateId, itemId, target, weight);
-        GmKpiTemplateItemResponse out = kpiTemplateMapper.selectTemplateItemResponse(templateId, itemId);
+        kpiTemplateMapper.updateTemplateItemDefaults(templateId, itemId, targetDescription, target, weight);
+        GmKpiTemplateItemResponse out =
+                kpiTemplateMapper.selectTemplateItemResponse(templateId, itemId, resolveCycleYear(req.getCycleYear()));
         if (out == null) {
             throw AppException.badRequest("Failed to load updated template item.");
         }
@@ -277,6 +289,27 @@ public class GmKpiTemplateService {
         }
         return raw.setScale(4, RoundingMode.HALF_UP);
     }
+
+    private String serializeTargetDescription(Object targetDescription) {
+        if (targetDescription == null) {
+            return null;
+        }
+        if (targetDescription instanceof String s) {
+            String trimmed = s.trim();
+            return trimmed.isEmpty() ? null : trimmed;
+        }
+        try {
+            return objectMapper.writeValueAsString(targetDescription);
+        } catch (JsonProcessingException e) {
+            throw AppException.badRequest("Invalid targetDescription payload.");
+        }
+    }
+
+    private int resolveCycleYear(Integer year) {
+        return year != null ? year : Year.now().getValue();
+    }
+
+
 
     /** Đồng bềE{@code kpi-fe} persisted calculation keys ↁE(rule, type). */
     private record CalcCodes(int ruleCode, Integer typeCode) {

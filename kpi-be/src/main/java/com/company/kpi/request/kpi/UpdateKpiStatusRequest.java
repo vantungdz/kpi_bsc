@@ -30,8 +30,17 @@ public class UpdateKpiStatusRequest {
     private Integer onlyFromStatusCode;
 
     /**
+     * Khi true: ngoài assignment có {@code user_id = currentUserId}, cho phép cập nhật assignment
+     * cấp phòng ban có {@code department_id} thuộc PM hiện tại quản lý.
+     */
+    private Boolean includeManagedDepartmentAssignments;
+
+    /**
      * Khi {@link #bulkForManagedMembers} = true: chỉ cập nhật assignment của member này
      * (gửi đánh giá từng nhân viên / từng tab). Null = toàn team như trước.
      */
     private UUID managedMemberUserId;
+
+    /** Self comment of the current user when submitting Send Review. */
+    private String evaluationComments;
 }

@@ -245,6 +245,7 @@ CREATE TABLE kpi_template_items (
     master_kpi_id UUID REFERENCES kpi_master(id),
     default_target_value NUMERIC(10,2),
     default_weight NUMERIC(5,2),
+    default_target_description JSONB,
     UNIQUE(template_id, master_kpi_id)
 );
 
@@ -254,7 +255,7 @@ CREATE TABLE kpis_information (
     cycle_id UUID REFERENCES kpi_cycles(id) NOT NULL, 
     master_kpi_id UUID REFERENCES kpi_master(id) NOT NULL,
     
-    target_description TEXT,
+    target_description JSONB,
     target_value NUMERIC(10,2),   
     weight NUMERIC(5,2),          
     is_important BOOLEAN DEFAULT FALSE,
@@ -312,6 +313,54 @@ CREATE TABLE kpi_assignments (
         (user_id IS NULL AND department_id IS NOT NULL)
     )
 ) PARTITION BY LIST (cycle_id);
+
+-- ============================================================================
+-- MODULE 4.1: SNAPSHOT LỊCH SỬ THÔNG TIN USER/DEPARTMENT KHI ASSIGN KPI
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS kpi_assignment_snapshots (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+
+    assignment_id UUID NOT NULL,
+    cycle_id UUID NOT NULL,
+
+    user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+    department_id UUID REFERENCES departments(id) ON DELETE SET NULL,
+    job_title_id UUID REFERENCES job_titles(id) ON DELETE SET NULL,
+    supervisor_id UUID REFERENCES users(id) ON DELETE SET NULL,
+
+    user_full_name VARCHAR(200),
+    user_email VARCHAR(255),
+
+    department_name VARCHAR(255),
+    job_title_name VARCHAR(255),
+
+    supervisor_full_name VARCHAR(200),
+    supervisor_email VARCHAR(255),
+
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+
+    CONSTRAINT fk_kpi_assignment_snapshot_assignment
+        FOREIGN KEY (assignment_id, cycle_id)
+        REFERENCES kpi_assignments(id, cycle_id)
+        ON DELETE CASCADE,
+
+    CONSTRAINT uq_kpi_assignment_snapshot_assignment
+        UNIQUE (assignment_id, cycle_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_kpi_assignment_snapshots_assignment
+ON kpi_assignment_snapshots (assignment_id, cycle_id);
+
+CREATE INDEX IF NOT EXISTS idx_kpi_assignment_snapshots_user
+ON kpi_assignment_snapshots (user_id);
+
+CREATE INDEX IF NOT EXISTS idx_kpi_assignment_snapshots_department
+ON kpi_assignment_snapshots (department_id);
+
+CREATE INDEX IF NOT EXISTS idx_kpi_assignment_snapshots_cycle
+ON kpi_assignment_snapshots (cycle_id);
 
 CREATE TABLE IF NOT EXISTS kpi_assignment_feedbacks (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

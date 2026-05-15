@@ -22,9 +22,11 @@ import {
   CALC_RULE_AVERAGE,
   CALC_RULE_COMMENT,
   formatPmPortfolioActualCell,
+  normalizeCalculationRuleCode,
   parseNumericFromField,
 } from '@/utils/memberKpiHelpers'
 import type { KpiCycleResponse } from '@/types/shared/kpi-cycle.type'
+import { KPI_STATUS } from '@/config/constants'
 
 const props = withDefaults(
   defineProps<{
@@ -32,8 +34,10 @@ const props = withDefaults(
     rows?: GmHierarchyKpi[]
     /** KPI Cycle info để xác định phase mid-year (tính tiến độ điều chỉnh cho CALC_RULE 803). */
     kpiCycle?: KpiCycleResponse | null
+    /** Năm chu kỳ đã khóa (năm < năm hiện tại) — không cho sửa/xóa KPI chiến lược. */
+    readonly?: boolean
   }>(),
-  { rows: () => [], kpiCycle: null },
+  { rows: () => [], kpiCycle: null, readonly: false },
 )
 
 const emit = defineEmits<{
@@ -43,10 +47,12 @@ const emit = defineEmits<{
 }>()
 
 function onEditKpiClick(kpi: GmHierarchyKpi) {
+  if (props.readonly) return
   emit('edit-kpi', kpi)
 }
 
 function onDeleteKpiClick(kpi: GmHierarchyKpi) {
+  if (props.readonly) return
   emit('delete-kpi', kpi)
 }
 
@@ -170,7 +176,7 @@ function resolvePendingFeedback(assignmentId: string, approve: boolean) {
 }
 
 /** Trạng thái KPI đã chọn (rỗng = tất cả). */
-const filterStatuses = ref<GmHierarchyStatus[]>([])
+const filterStatuses = ref<number[]>([])
 /** `''` = tất cả; `yes` = chỉ KPI quan trọng; `no` = không gắn sao. */
 const filterImportant = ref<'' | 'yes' | 'no'>('')
 /** Nhãn khối (`pmManagedSectionLabel`) — KPI có ít nhất một PM thuộc một trong các khối đã chọn. */
@@ -181,7 +187,7 @@ const filterMembers = ref<string[]>([])
 const draftSections = ref<string[]>([])
 const draftMembers = ref<string[]>([])
 const draftImportant = ref<'' | 'yes' | 'no'>('')
-const draftStatuses = ref<GmHierarchyStatus[]>([])
+const draftStatuses = ref<number[]>([])
 
 const FILTER_PANEL_WIDTH = 320
 const FILTER_PANEL_GAP = 8
@@ -256,7 +262,6 @@ function resetAllDiagnosticFilters() {
   filterPopoverOpen.value = false
   expandedKpis.value = new Set()
   expandedPms.value = new Set()
-  expandedLeaders.value = new Set()
 }
 
 const appliedFilterCount = computed(() => {
@@ -275,6 +280,114 @@ function kpiStatusLabel(status: GmHierarchyStatus) {
   return 'Behind plan / Not met'
 }
 
+function normalizeAsmStatusCode(code: unknown): number | null {
+  const n = typeof code === 'number' ? code : Number(code)
+  return Number.isFinite(n) && n > 0 ? Math.round(n) : null
+}
+
+function minAsmStatusCode(codes: Array<number | null | undefined>): number | null {
+  const valid = codes
+    .map(normalizeAsmStatusCode)
+    .filter((n): n is number => n != null)
+  if (valid.includes(KPI_STATUS.FEEDBACK_IN_PROGRESS)) {
+    return KPI_STATUS.FEEDBACK_IN_PROGRESS
+  }
+  return valid.length > 0 ? Math.min(...valid) : null
+}
+
+function memberAsmStatusCode(member: GmHierarchyMember | null | undefined): number | null {
+  return normalizeAsmStatusCode(member?.assignmentStatusCode)
+}
+
+function pmAsmStatusCode(pm: GmHierarchyPm | null | undefined): number | null {
+  if (!pm) return null
+  return minAsmStatusCode(allMembersUnderPm(pm).map(memberAsmStatusCode))
+}
+
+function kpiAsmStatusCode(kpi: GmHierarchyKpi | null | undefined): number | null {
+  return minAsmStatusCode((kpi?.pmOwners ?? []).map(pmAsmStatusCode))
+}
+
+function asmStatusLabel(code: number | null | undefined): string {
+  switch (normalizeAsmStatusCode(code)) {
+    case KPI_STATUS.INACTIVE:
+      return 'KPI mới tạo'
+    case KPI_STATUS.WAITING_PM_APPROVAL:
+      return 'Chờ PM duyệt KPI'
+    case KPI_STATUS.WAITING_GM_APPROVAL:
+      return 'Chờ GM duyệt KPI'
+    case KPI_STATUS.PENDING_ACCEPTANCE:
+      return 'Chờ Member bấm Accept'
+    case KPI_STATUS.ACCEPTED:
+      return 'Đang chạy'
+    case KPI_STATUS.REJECTED:
+      return 'Bị từ chối'
+    case KPI_STATUS.FEEDBACK_IN_PROGRESS:
+      return 'Đang xử lý feedback'
+    case KPI_STATUS.FIRST_WAITING_PM_APPROVAL:
+      return 'Chờ PM duyệt giữa kỳ'
+    case KPI_STATUS.FIRST_WAITING_GM_APPROVAL:
+      return 'Chờ GM chốt giữa kỳ'
+    case KPI_STATUS.FIRST_COMPLETED:
+      return 'Đã chốt giữa kỳ'
+    case KPI_STATUS.SECOND_WAITING_PM_APPROVAL:
+      return 'Chờ PM duyệt cuối kỳ'
+    case KPI_STATUS.SECOND_WAITING_GM_APPROVAL:
+      return 'Chờ GM chốt cuối kỳ'
+    case KPI_STATUS.COMPLETED:
+      return 'Hoàn tất'
+    default:
+      return 'Chưa assign'
+  }
+}
+
+function asmStatusPillClass(code: number | null | undefined): string {
+  switch (normalizeAsmStatusCode(code)) {
+    case KPI_STATUS.INACTIVE:
+      return 'border-slate-200 bg-slate-50 text-slate-700'
+    case KPI_STATUS.REJECTED:
+      return 'border-rose-200 bg-rose-50 text-rose-700'
+    case KPI_STATUS.FEEDBACK_IN_PROGRESS:
+      return 'border-violet-200 bg-violet-50 text-violet-700'
+    case KPI_STATUS.ACCEPTED:
+      return 'border-blue-200 bg-blue-50 text-blue-700'
+    case KPI_STATUS.FIRST_COMPLETED:
+    case KPI_STATUS.COMPLETED:
+      return 'border-emerald-200 bg-emerald-50 text-emerald-700'
+    case KPI_STATUS.WAITING_PM_APPROVAL:
+    case KPI_STATUS.WAITING_GM_APPROVAL:
+    case KPI_STATUS.PENDING_ACCEPTANCE:
+    case KPI_STATUS.FIRST_WAITING_PM_APPROVAL:
+    case KPI_STATUS.FIRST_WAITING_GM_APPROVAL:
+    case KPI_STATUS.SECOND_WAITING_PM_APPROVAL:
+    case KPI_STATUS.SECOND_WAITING_GM_APPROVAL:
+      return 'border-amber-200 bg-amber-50 text-amber-700'
+    default:
+      return 'border-slate-200 bg-slate-50 text-slate-500'
+  }
+}
+
+function asmStatusIconClass(code: number | null | undefined): string {
+  switch (normalizeAsmStatusCode(code)) {
+    case KPI_STATUS.REJECTED:
+      return 'fa-times-circle'
+    case KPI_STATUS.FIRST_COMPLETED:
+    case KPI_STATUS.COMPLETED:
+      return 'fa-check-circle'
+    case KPI_STATUS.FEEDBACK_IN_PROGRESS:
+      return 'fa-comment-dots'
+    case KPI_STATUS.INACTIVE:
+      return 'fa-circle'
+    default:
+      return normalizeAsmStatusCode(code) == null ? 'fa-minus-circle' : 'fa-clock'
+  }
+}
+
+function asmStatusTitle(code: number | null | undefined): string {
+  const normalized = normalizeAsmStatusCode(code)
+  return normalized == null ? 'Chưa có assignment/status_code' : `${asmStatusLabel(normalized)} (${normalized})`
+}
+
 type DiagnosticChipKey = 'section' | 'member' | 'important' | 'status'
 
 const activeFilterChips = computed(() => {
@@ -291,7 +404,7 @@ const activeFilterChips = computed(() => {
     chips.push({ key: 'important', label: 'Not starred' })
   }
   if (filterStatuses.value.length > 0) {
-    const st = filterStatuses.value.map((s) => kpiStatusLabel(s)).join(', ')
+    const st = filterStatuses.value.map((s) => asmStatusLabel(s)).join(', ')
     chips.push({ key: 'status', label: `Status: ${st}` })
   }
   return chips
@@ -333,40 +446,9 @@ watch(filterPopoverOpen, (open) => {
   }
 })
 
-/** Mặc định thu gọn — user mở KPI / PM / Leader khi cần. */
+/** Mặc định thu gọn — user mở KPI và từng khối phòng khi cần. */
 const expandedKpis = ref(new Set<string>())
 const expandedPms = ref(new Set<string>())
-const expandedLeaders = ref(new Set<string>())
-
-/** PM có rollout theo supervisor — BE trả `leaders[]`; UI hiển thị phẳng (LEADER rồi MEMBER) dưới PM. */
-function pmUsesLeaderTree(pm: GmHierarchyPm): boolean {
-  return Array.isArray(pm.leaders) && pm.leaders.length > 0
-}
-
-/** Hiển thị phẳng dưới PM: dòng LEADER chỉ khi supervisor được giao KPI (`leaderOwnRow`), sau đó các MEMBER (không lồng expandable). */
-type GmPmLeaderFlatRow =
-  | { kind: 'leader'; leader: GmHierarchyLeader }
-  | { kind: 'member'; leader: GmHierarchyLeader; member: GmHierarchyMember }
-
-function pmLeadersFlattened(pm: GmHierarchyPm): GmPmLeaderFlatRow[] {
-  if (!pm.leaders?.length) return []
-  const out: GmPmLeaderFlatRow[] = []
-  for (const leader of pm.leaders) {
-    if (leader.leaderOwnRow) {
-      out.push({ kind: 'leader', leader })
-    }
-    for (const member of leader.members) {
-      out.push({ kind: 'member', leader, member })
-    }
-  }
-  return out
-}
-
-function pmLeaderFlatRowKey(row: GmPmLeaderFlatRow): string {
-  return row.kind === 'leader'
-    ? `flat-l-${row.leader.id}`
-    : `flat-m-${row.leader.id}-${row.member.id}`
-}
 
 function allMembersUnderPm(pm: GmHierarchyPm): GmHierarchyMember[] {
   const fromLeaders =
@@ -383,41 +465,8 @@ function allMembersUnderPm(pm: GmHierarchyPm): GmHierarchyMember[] {
   })
 }
 
-function pmSelfMember(pm: GmHierarchyPm): GmHierarchyMember | null {
-  const ownerUserId = String(pm.ownerUserId ?? '').trim()
-  if (!ownerUserId) return null
-  return pm.members.find((member) => String(member.id ?? '').trim() === ownerUserId) ?? null
-}
-
-function pmDirectReportMembers(pm: GmHierarchyPm): GmHierarchyMember[] {
-  const selfMember = pmSelfMember(pm)
-  if (!selfMember) return pm.members
-  return pm.members.filter((member) => String(member.id ?? '').trim() !== String(selfMember.id ?? '').trim())
-}
-
-function pmSelfBranchHasChildren(pm: GmHierarchyPm): boolean {
-  return pmDirectReportMembers(pm).length > 0 || (pm.leaders?.length ?? 0) > 0
-}
-
 function pmHasRollout(pm: GmHierarchyPm): boolean {
   return allMembersUnderPm(pm).length > 0
-}
-
-/** Một assignee là đúng manager phòng — ẩn dải tóm tắt tên+tag lặp lại ngay dưới dòng khối. */
-function pmRolloutSelfOnlyRedundantSummaryBand(pm: GmHierarchyPm): boolean {
-  if (pmUsesLeaderTree(pm)) return false
-  const ou = pm.ownerUserId
-  if (!ou || pm.members.length !== 1) return false
-  return String(pm.members[0]?.id) === String(ou)
-}
-
-function leaderExpandKey(pmId: string, leaderId: string) {
-  return `${pmId}::${leaderId}`
-}
-
-/** Chỉ dùng cho nhánh PM kiêm assignee (mở danh sách rollout dưới self). */
-function togglePmSelfRollout(pmId: string, selfMemberId: string) {
-  toggleSet(expandedLeaders, leaderExpandKey(pmId, `self-${selfMemberId}`))
 }
 
 function toggleSet(setRef: typeof expandedKpis, id: string) {
@@ -527,54 +576,72 @@ function memberTargetNumericForProgress(member: GmHierarchyMember): number | nul
   return target != null && Number.isFinite(target) ? target : null
 }
 
+/** Roll-up Actual ở node cha (PM / KPI): CALC_RULE 803 → tổng; 802 và rule khác → trung bình. */
+function diagnosticsRollupActualIsSum(kpi: GmHierarchyKpi): boolean {
+  return normalizeCalculationRuleCode(kpi.calculationRuleCode) === CALC_RULE_COMMENT
+}
+
 function sumNumericOrNull(values: number[]): number | null {
   if (!values.length) return null
   return values.reduce((a, b) => a + b, 0)
 }
 
-/** Actual node Leader = tổng actual các node con trực tiếp của leader. */
-function computeLeaderDirectTotalActualNumeric(
-  leader: GmHierarchyLeader,
-  kpi: GmHierarchyKpi,
-): number | null {
-  const nums: number[] = []
-  if (leader.leaderOwnRow) {
-    const own = memberActualNumericForProgress(leader.leaderOwnRow, kpi)
-    if (own != null && Number.isFinite(own)) nums.push(own)
-  }
-  for (const member of leader.members) {
-    const v = memberActualNumericForProgress(member, kpi)
-    if (v != null && Number.isFinite(v)) nums.push(v)
-  }
-  return sumNumericOrNull(nums)
+function averageNumericOrNull(values: number[]): number | null {
+  if (!values.length) return null
+  return values.reduce((a, b) => a + b, 0) / values.length
 }
 
-/** Actual node PM = tổng actual các node con trực tiếp của PM. */
+function formatAverageNumber(n: number): string {
+  return formatActualNumber(Math.round(n * 10) / 10)
+}
+
+function pmNonCascadingAverageTargetRaw(pm: GmHierarchyPm): string {
+  const targets = allMembersUnderPm(pm)
+    .map(memberTargetNumericForProgress)
+    .filter((v): v is number => v != null && Number.isFinite(v))
+  const avg = averageNumericOrNull(targets)
+  return avg == null ? diagnosticsTableCellText(pm.target) : formatAverageNumber(avg)
+}
+
+function pmNonCascadingAverageActualRaw(pm: GmHierarchyPm, kpi: GmHierarchyKpi): string {
+  const actuals = allMembersUnderPm(pm)
+    .map((m) => memberActualNumericForProgress(m, kpi))
+    .filter((v): v is number => v != null && Number.isFinite(v))
+  const avg = averageNumericOrNull(actuals)
+  return avg == null ? diagnosticsTableCellText(pm.actual) : formatAverageNumber(avg)
+}
+
+function pmTargetDisplayRaw(pm: GmHierarchyPm, kpi: GmHierarchyKpi): string {
+  return kpi.kpiType === 'cascading'
+    ? diagnosticsTableCellText(pm.target)
+    : pmNonCascadingAverageTargetRaw(pm)
+}
+
+function pmTargetWithUnit(pm: GmHierarchyPm, kpi: GmHierarchyKpi): string {
+  return diagnosticsTargetWithUnit(kpi, pmTargetDisplayRaw(pm, kpi))
+}
+
+/** CALC_RULE 803: Actual khối phòng = tổng Actual các assignee hiển thị (một tầng, gồm PM nếu tự assign). */
 function computePmDirectTotalActualNumeric(pm: GmHierarchyPm, kpi: GmHierarchyKpi): number | null {
   const nums: number[] = []
-  // Nếu PM có self-row, node PM chỉ cộng các con trực tiếp bên dưới self-row (không cộng lại chính PM).
-  const directMembers = pmSelfMember(pm) ? pmDirectReportMembers(pm) : pm.members
-  for (const member of directMembers) {
+  for (const member of allMembersUnderPm(pm)) {
     const v = memberActualNumericForProgress(member, kpi)
-    if (v != null && Number.isFinite(v)) nums.push(v)
-  }
-  for (const leader of pm.leaders ?? []) {
-    const v = computeLeaderDirectTotalActualNumeric(leader, kpi)
     if (v != null && Number.isFinite(v)) nums.push(v)
   }
   return sumNumericOrNull(nums)
 }
 
 function pmActualDisplayRaw(pm: GmHierarchyPm, kpi: GmHierarchyKpi): string {
-  if (kpi.kpiType === 'cascading') {
+  if (diagnosticsRollupActualIsSum(kpi)) {
     const total = computePmDirectTotalActualNumeric(pm, kpi)
     if (total != null) return formatActualNumber(total)
+    return diagnosticsTableCellText(pm.actual)
   }
-  return diagnosticsTableCellText(pm.actual)
+  return pmNonCascadingAverageActualRaw(pm, kpi)
 }
 
 function pmActualNumericForProgress(pm: GmHierarchyPm, kpi: GmHierarchyKpi): number | null {
-  if (kpi.kpiType === 'cascading') {
+  if (diagnosticsRollupActualIsSum(kpi)) {
     const total = computePmDirectTotalActualNumeric(pm, kpi)
     if (total != null) return total
   }
@@ -586,8 +653,14 @@ function kpiActualDisplayRaw(kpi: GmHierarchyKpi): string {
   const directPmActuals = kpi.pmOwners
     .map((pm) => pmActualNumericForProgress(pm, kpi))
     .filter((v): v is number => v != null && Number.isFinite(v))
-  const total = sumNumericOrNull(directPmActuals)
-  if (total != null) return formatActualNumber(total)
+  if (diagnosticsRollupActualIsSum(kpi)) {
+    const total = sumNumericOrNull(directPmActuals)
+    if (total != null) return formatActualNumber(total)
+    return diagnosticsTableCellText(kpi.actual)
+  }
+  /** CALC_RULE 802 (và rule khác): Actual node KPI = TB Actual các node department (con trực tiếp). */
+  const avg = averageNumericOrNull(directPmActuals)
+  if (avg != null) return formatAverageNumber(avg)
   return diagnosticsTableCellText(kpi.actual)
 }
 
@@ -595,8 +668,13 @@ function kpiActualNumericForProgress(kpi: GmHierarchyKpi): number | null {
   const directPmActuals = kpi.pmOwners
     .map((pm) => pmActualNumericForProgress(pm, kpi))
     .filter((v): v is number => v != null && Number.isFinite(v))
-  const total = sumNumericOrNull(directPmActuals)
-  if (total != null) return total
+  if (diagnosticsRollupActualIsSum(kpi)) {
+    const total = sumNumericOrNull(directPmActuals)
+    if (total != null) return total
+  } else {
+    const avg = averageNumericOrNull(directPmActuals)
+    if (avg != null) return avg
+  }
   const fallback = parseNumericFromField(kpiActualDisplayRaw(kpi))
   return fallback != null && Number.isFinite(fallback) ? fallback : null
 }
@@ -631,59 +709,35 @@ function pmActualWithUnit(pm: GmHierarchyPm, kpi: GmHierarchyKpi): string {
   return diagnosticsActualWithUnit(kpi, pmActualDisplayRaw(pm, kpi))
 }
 
-/**
- * Dòng PM self-assignment: với KPI Team thì hiển thị cùng roll-up của node PM
- * để nhất quán với dòng section cha; các KPI khác giữ theo actual cá nhân PM.
- */
-function pmSelfRowActualWithUnit(pm: GmHierarchyPm, kpi: GmHierarchyKpi): string {
-  const self = pmSelfMember(pm)
-  if (!self) return '-'
-  if (kpi.kpiType === 'cascading') return pmActualWithUnit(pm, kpi)
-  return memberActualWithUnit(self, kpi)
+function memberScoreNumeric(member: GmHierarchyMember): number | null {
+  const raw = memberTableScoreDisplay(member)
+  const n = Number(String(raw).trim().replace(',', '.'))
+  return Number.isFinite(n) ? n : null
 }
 
-function pmSelfRowActualBelowTarget(pm: GmHierarchyPm, kpi: GmHierarchyKpi): boolean {
-  const self = pmSelfMember(pm)
-  if (!self) return false
-  if (kpi.kpiType === 'cascading') {
-    return actualBelowTarget(pmActualDisplayRaw(pm, kpi), pm.target)
-  }
-  return actualBelowTarget(memberActualDisplayRaw(self, kpi), self.target)
+function averageScoreDisplay(members: GmHierarchyMember[]): string {
+  const nums = members
+    .map(memberScoreNumeric)
+    .filter((n): n is number => n != null && Number.isFinite(n))
+  if (!nums.length) return '-'
+  const avg = nums.reduce((sum, n) => sum + n, 0) / nums.length
+  return (Math.round(avg * 10) / 10).toFixed(1)
 }
 
-function pmSelfRowCompletionValue(pm: GmHierarchyPm, kpi: GmHierarchyKpi): number | null {
-  const self = pmSelfMember(pm)
-  if (!self) return null
-  if (kpi.kpiType === 'cascading') return pmCompletionPct(pm, kpi)
-  return memberCompletionPct(self, kpi)
+function pmSectionScoreDisplayForKpi(pm: GmHierarchyPm, _kpi: GmHierarchyKpi): string {
+  return averageScoreDisplay(allMembersUnderPm(pm))
 }
 
-function pmSelfRowProgressPct(pm: GmHierarchyPm, kpi: GmHierarchyKpi): string {
-  const pct = pmSelfRowCompletionValue(pm, kpi)
-  if (pct == null) return '-'
-  return formatCompletionPct(pct)
+function pmSectionScoreClassForKpi(pm: GmHierarchyPm, kpi: GmHierarchyKpi): string {
+  return pmSectionScoreDisplayForKpi(pm, kpi) === '-' ? 'text-slate-400' : 'text-slate-700'
 }
 
-function pmSelfRowProgressTextClass(pm: GmHierarchyPm, kpi: GmHierarchyKpi): string {
-  const pct = pmSelfRowCompletionValue(pm, kpi)
-  if (pct == null) return 'text-slate-400'
-  return completionPctTextClass(pct)
+function kpiScoreDisplay(kpi: GmHierarchyKpi): string {
+  return averageScoreDisplay(kpi.pmOwners.flatMap((pm) => allMembersUnderPm(pm)))
 }
 
-/** Score dòng section (PM): ưu tiên cùng điểm với dòng PM self nếu có. */
-function pmSectionScoreDisplay(pm: GmHierarchyPm): string {
-  const self = pmSelfMember(pm)
-  if (!self) return '-'
-  return memberTableScoreDisplay(self)
-}
-
-function pmSectionScoreClass(pm: GmHierarchyPm): string {
-  const self = pmSelfMember(pm)
-  if (!self) return 'text-slate-400'
-  const st = memberStatusForUi(self)
-  if (st === 'danger') return 'text-red-600'
-  if (st === 'warning') return 'text-yellow-600'
-  return 'text-green-600'
+function kpiScoreClass(kpi: GmHierarchyKpi): string {
+  return kpiScoreDisplay(kpi) === '-' ? 'text-slate-400' : 'text-slate-700'
 }
 
 function kpiActualWithUnit(kpi: GmHierarchyKpi): string {
@@ -741,6 +795,58 @@ function memberDrawerActualProgressPct(member: GmHierarchyMember, kpi: GmHierarc
 
 function actualBelowTarget(actual: string, target: string) {
   return parseNumPct(actual) < parseNumPct(target)
+}
+
+function diagnosticsActualTextClass(actual: string, target: string): string {
+  const actualNum = parseNumericFromField(String(actual ?? ''))
+  const targetNum = parseNumericFromField(String(target ?? ''))
+  if (actualNum == null || !Number.isFinite(actualNum) || targetNum == null || !Number.isFinite(targetNum) || targetNum <= 0) {
+    return 'text-slate-400'
+  }
+  return actualNum < targetNum ? 'text-red-600' : 'text-green-600'
+}
+
+/**
+ * Xanh/đỏ cột Actual khi đã có actual & target số (node KPI / Department).
+ * Mid-year + CALC_RULE 803: ngưỡng = target/2 — đồng bộ với member và cột % tiến độ.
+ */
+function diagnosticsActualColorClassFromNumeric(
+  actualNum: number | null,
+  targetFull: number | null,
+  kpi: GmHierarchyKpi,
+): string | null {
+  if (actualNum == null || !Number.isFinite(actualNum)) return null
+  if (targetFull == null || !Number.isFinite(targetFull) || targetFull <= 0) return null
+  const isMidYear803 =
+    isMidYearPhase.value &&
+    Number(kpi.calculationRuleCode) === CALC_RULE_COMMENT &&
+    targetFull > 0
+  const threshold = isMidYear803 ? targetFull / 2 : targetFull
+  return actualNum < threshold ? 'text-red-600' : 'text-green-600'
+}
+
+function kpiRowDiagnosticsActualColorClass(kpi: GmHierarchyKpi): string {
+  const fromNum = diagnosticsActualColorClassFromNumeric(
+    kpiActualNumericForProgress(kpi),
+    kpiTargetNumericForProgress(kpi),
+    kpi,
+  )
+  if (fromNum != null) return fromNum
+  return diagnosticsActualTextClass(kpiActualDisplayRaw(kpi), kpi.target)
+}
+
+function pmRowDiagnosticsActualColorClass(pm: GmHierarchyPm, kpi: GmHierarchyKpi): string {
+  const targetFull =
+    kpi.kpiType === 'cascading'
+      ? pmTargetNumericForProgress(pm)
+      : parseNumericFromField(pmTargetDisplayRaw(pm, kpi))
+  const fromNum = diagnosticsActualColorClassFromNumeric(
+    pmActualNumericForProgress(pm, kpi),
+    targetFull,
+    kpi,
+  )
+  if (fromNum != null) return fromNum
+  return diagnosticsActualTextClass(pmActualDisplayRaw(pm, kpi), pmTargetDisplayRaw(pm, kpi))
 }
 
 /**
@@ -865,6 +971,8 @@ function memberCompletionPct(member: GmHierarchyMember, kpi: GmHierarchyKpi): nu
 /** Individual/Promotion: còn member có chỉ tiêu số để roll-up % tiến độ trên node KPI. */
 function kpiHasNonCascadingRollupMembers(kpi: GmHierarchyKpi): boolean {
   if (kpi.kpiType === 'cascading') return false
+  const ownTarget = kpiTargetNumericForProgress(kpi)
+  if (ownTarget != null && ownTarget > 0) return true
   return kpi.pmOwners.some((pm) =>
     allMembersUnderPm(pm).some((m) => {
       const t = memberTargetNumericForProgress(m)
@@ -876,6 +984,8 @@ function kpiHasNonCascadingRollupMembers(kpi: GmHierarchyKpi): boolean {
 /** Individual/Promotion: member dưới PM có target số — hiển thị % tiến độ trên node PM (khối). */
 function pmHasNonCascadingRollupMembers(pm: GmHierarchyPm, kpi: GmHierarchyKpi): boolean {
   if (kpi.kpiType === 'cascading') return false
+  const ownTarget = parseNumericFromField(pmTargetDisplayRaw(pm, kpi))
+  if (ownTarget != null && ownTarget > 0) return true
   return allMembersUnderPm(pm).some((m) => {
     const t = memberTargetNumericForProgress(m)
     return t != null && t > 0
@@ -894,7 +1004,9 @@ function kpiNonCascadingRollupCompletionPct(kpi: GmHierarchyKpi): number {
       if (t != null && t > 0) parts.push(memberCompletionPct(m, kpi))
     }
   }
-  if (!parts.length) return 0
+  if (!parts.length) {
+    return completionPctFromActualTarget(kpiActualNumericForProgress(kpi), kpiTargetNumericForProgress(kpi))
+  }
   return parts.reduce((a, b) => a + b, 0) / parts.length
 }
 
@@ -904,7 +1016,10 @@ function pmNonCascadingRollupCompletionPct(pm: GmHierarchyPm, kpi: GmHierarchyKp
     const t = memberTargetNumericForProgress(m)
     if (t != null && t > 0) parts.push(memberCompletionPct(m, kpi))
   }
-  if (!parts.length) return 0
+  if (!parts.length) {
+    const target = parseNumericFromField(pmTargetDisplayRaw(pm, kpi))
+    return completionPctFromActualTarget(pmActualNumericForProgress(pm, kpi), target)
+  }
   return parts.reduce((a, b) => a + b, 0) / parts.length
 }
 
@@ -925,13 +1040,14 @@ function groupNonCascadingRollupCompletionPct(rows: GmHierarchyKpi[]): number | 
 }
 
 /**
- * Tiến độ PM: tính theo Actual/Target của dòng PM.
- * Với Team KPI, Actual PM được tổng hợp từ trung bình actual member.
+ * Tiến độ khối phòng: (Actual / Target) × 100 — Actual roll-up theo CALC_RULE (803 = tổng assignee).
  * Mid-year + CALC_RULE 803: cùng target/2 như member.
  */
 function pmCompletionPct(pm: GmHierarchyPm, kpi: GmHierarchyKpi): number {
   const actual = pmActualNumericForProgress(pm, kpi)
-  const targetFull = pmTargetNumericForProgress(pm)
+  const targetFull = kpi.kpiType === 'cascading'
+    ? pmTargetNumericForProgress(pm)
+    : parseNumericFromField(pmTargetDisplayRaw(pm, kpi))
   if (targetFull == null || targetFull <= 0) {
     const t = parseNumericFromField(String(pm.target ?? ''))
     return completionPctFromActualTarget(actual, t)
@@ -1048,7 +1164,10 @@ function pmStatusForUiMidYear(pm: GmHierarchyPm, kpi: GmHierarchyKpi): GmHierarc
   if (fromProgress != null) return fromProgress
 
   const base = pm.status
-  const targetFull = pmTargetNumericForProgress(pm)
+  const targetFull =
+    kpi.kpiType === 'cascading'
+      ? pmTargetNumericForProgress(pm)
+      : parseNumericFromField(pmTargetDisplayRaw(pm, kpi)) ?? pmTargetNumericForProgress(pm)
   const actualNum = pmActualNumericForProgress(pm, kpi)
 
   const isMidYear803 =
@@ -1149,7 +1268,7 @@ function rollupRoleBadgeFromCode(code: string | null | undefined): {
 }
 
 function pmRollupRoleBadge(pm: GmHierarchyPm): { label: string; badgeClass: string } | null {
-  if (String(pm.id ?? '').includes('diag-pm-unassigned')) {
+  if (isUnassignedPmNode(pm)) {
     return null
   }
   const fromCode = rollupRoleBadgeFromCode(pm.ownerRoleCode)
@@ -1167,7 +1286,7 @@ function pmRollupShortRoleForLabel(pm: GmHierarchyPm): string {
 }
 
 function pmRollupOwnerSubtitle(pm: GmHierarchyPm): string {
-  if (String(pm.id ?? '').includes('diag-pm-unassigned')) return 'Unassigned'
+  if (isUnassignedPmNode(pm)) return ''
   const ct = String(pm.ownerRoleCode ?? '').toUpperCase()
   if (ct === 'TEAM') return 'Team assignment'
   if (ct) return `${ct} owner`
@@ -1175,11 +1294,15 @@ function pmRollupOwnerSubtitle(pm: GmHierarchyPm): string {
 }
 
 function pmRollupOwnerSrOnly(pm: GmHierarchyPm): string {
-  if (String(pm.id ?? '').includes('diag-pm-unassigned')) return 'Unassigned status'
+  if (isUnassignedPmNode(pm)) return 'Unassigned status'
   const ct = String(pm.ownerRoleCode ?? '').toUpperCase()
   if (ct === 'TEAM') return 'Team KPI row — assignees listed below'
   if (ct) return `${ct} group owner`
   return 'Section manager for group'
+}
+
+function isUnassignedPmNode(pm: GmHierarchyPm | null | undefined): boolean {
+  return String(pm?.id ?? '').includes('diag-pm-unassigned')
 }
 
 function leaderRollupRoleBadge(leader: GmHierarchyLeader): { label: string; badgeClass: string } | null {
@@ -1213,7 +1336,21 @@ const diagnosticsMemberOptions = computed(() => {
   return [...set].sort((a, b) => a.localeCompare(b, 'vi'))
 })
 
-const STATUS_FILTER_OPTIONS: GmHierarchyStatus[] = ['success', 'warning', 'danger']
+const STATUS_FILTER_OPTIONS: number[] = [
+  KPI_STATUS.INACTIVE,
+  KPI_STATUS.WAITING_PM_APPROVAL,
+  KPI_STATUS.WAITING_GM_APPROVAL,
+  KPI_STATUS.PENDING_ACCEPTANCE,
+  KPI_STATUS.ACCEPTED,
+  KPI_STATUS.REJECTED,
+  KPI_STATUS.FEEDBACK_IN_PROGRESS,
+  KPI_STATUS.FIRST_WAITING_PM_APPROVAL,
+  KPI_STATUS.FIRST_WAITING_GM_APPROVAL,
+  KPI_STATUS.FIRST_COMPLETED,
+  KPI_STATUS.SECOND_WAITING_PM_APPROVAL,
+  KPI_STATUS.SECOND_WAITING_GM_APPROVAL,
+  KPI_STATUS.COMPLETED,
+]
 
 function toggleDraftSection(section: string) {
   const cur = draftSections.value
@@ -1227,7 +1364,7 @@ function toggleDraftMember(name: string) {
   draftMembers.value = i === -1 ? [...cur, name] : cur.filter((s) => s !== name)
 }
 
-function toggleDraftStatus(st: GmHierarchyStatus) {
+function toggleDraftStatus(st: number) {
   const cur = draftStatuses.value
   const i = cur.indexOf(st)
   draftStatuses.value = i === -1 ? [...cur, st] : cur.filter((s) => s !== st)
@@ -1236,7 +1373,10 @@ function toggleDraftStatus(st: GmHierarchyStatus) {
 function kpiMatchesToolbarFilters(kpi: GmHierarchyKpi): boolean {
   if (filterImportant.value === 'yes' && kpi.isImportant !== true) return false
   if (filterImportant.value === 'no' && kpi.isImportant === true) return false
-  if (filterStatuses.value.length > 0 && !filterStatuses.value.includes(kpiStatusForUiMidYear(kpi))) return false
+  if (filterStatuses.value.length > 0) {
+    const code = kpiAsmStatusCode(kpi)
+    if (code == null || !filterStatuses.value.includes(code)) return false
+  }
   if (filterSections.value.length > 0) {
     const secSet = new Set(filterSections.value.map((s) => s.trim()).filter(Boolean))
     const ok = kpi.pmOwners.some((pm) => secSet.has(pmManagedSectionLabel(pm)))
@@ -1273,28 +1413,28 @@ function projectKpiRowForToolbarFilters(kpi: GmHierarchyKpi): GmHierarchyKpi {
   if (memSet.size > 0) {
     pms = pms
       .map((pm) => {
-        if (pmUsesLeaderTree(pm)) {
-          const nextLeaders: GmHierarchyLeader[] = pm.leaders!.map((ldr) => ({
+        const hit = (name: string | null | undefined) => memSet.has(String(name ?? '').trim())
+        const members = pm.members.filter((m) => hit(m.name))
+        const hadLeaders = Boolean(pm.leaders && pm.leaders.length > 0)
+        let leaders = pm.leaders
+        if (hadLeaders && pm.leaders) {
+          const mapped = pm.leaders.map((ldr) => ({
             ...ldr,
-            members: ldr.members.filter((m) => memSet.has(String(m.name ?? '').trim())),
+            members: ldr.members.filter((m) => hit(m.name)),
+            leaderOwnRow:
+              ldr.leaderOwnRow != null && hit(ldr.leaderOwnRow.name) ? ldr.leaderOwnRow : undefined,
           }))
-          const leaders = nextLeaders.filter(
-            (ldr) =>
-              ldr.members.length > 0 ||
-              (ldr.leaderOwnRow != null &&
-                memSet.has(String(ldr.leaderOwnRow.name ?? '').trim())),
-          )
-          const members = pm.members.filter((m) => memSet.has(String(m.name ?? '').trim()))
-          if (leaders.length === 0 && members.length === 0) return null
-          return {
-            ...pm,
-            leaders: leaders.length > 0 ? leaders : undefined,
-            members,
-          }
+          const filtered = mapped.filter((ldr) => ldr.members.length > 0 || ldr.leaderOwnRow != null)
+          leaders = filtered.length > 0 ? filtered : undefined
         }
-        const membersOnly = pm.members.filter((m) => memSet.has(String(m.name ?? '').trim()))
-        if (membersOnly.length === 0) return null
-        return { ...pm, members: membersOnly }
+        const hasRollout =
+          members.length > 0 || Boolean(leaders && leaders.length > 0)
+        if (!hasRollout) return null
+        const result: GmHierarchyPm = { ...pm, members }
+        if (hadLeaders) {
+          result.leaders = leaders
+        }
+        return result
       })
       .filter((pm): pm is GmHierarchyPm => pm != null)
   }
@@ -1366,7 +1506,6 @@ watch([filterStatuses, filterImportant, filterSections, filterMembers], () => {
   }
   const kpiIds = new Set<string>()
   const pmIds = new Set<string>()
-  const leaderKeys = new Set<string>()
   for (const k of props.rows) {
     if (!kpiMatchesToolbarFilters(k)) continue
     for (const pm of k.pmOwners) {
@@ -1375,27 +1514,10 @@ watch([filterStatuses, filterImportant, filterSections, filterMembers], () => {
         continue
       kpiIds.add(k.id)
       if (pmHasRollout(pm)) pmIds.add(pm.id)
-      if (memSet.size > 0 && pmSelfMember(pm)) {
-        const sm = pmSelfMember(pm)!
-        const hit = (name: string | null | undefined) => memSet.has(String(name ?? '').trim())
-        const underSelf =
-          pmDirectReportMembers(pm).some((m) => hit(m.name)) ||
-          (pm.leaders?.some(
-            (l) =>
-              hit(l.name) ||
-              l.members.some((mm) => hit(mm.name)) ||
-              (l.leaderOwnRow != null && hit(l.leaderOwnRow.name)),
-          ) ??
-            false)
-        if (underSelf) {
-          leaderKeys.add(leaderExpandKey(pm.id, `self-${sm.id}`))
-        }
-      }
     }
   }
   expandedKpis.value = kpiIds
   expandedPms.value = pmIds
-  expandedLeaders.value = leaderKeys
 })
 
 function badgeClass(status: GmHierarchyStatus) {
@@ -1433,21 +1555,8 @@ function memberDrawerDepartmentLabel(pm: GmHierarchyPm, _kpi: GmHierarchyKpi) {
   return undefined
 }
 
-/**
- * Drawer «Personnel performing this KPI»: không lặp dòng slice GM→PM (assignee = `ownerUserId`)
- * khi đã có rollout xuống người khác — header đã hiện PM. Nếu chỉ còn slice đó thì vẫn giữ 1 dòng
- * để drawer không trống (PM tự giữ KPI).
- */
-function rolloutMembersForDrawer(pm: GmHierarchyPm): GmHierarchyMember[] {
-  const base = allMembersUnderPm(pm)
-  const ownerId = String(pm.ownerUserId ?? '').trim()
-  if (!ownerId) return base
-
-  const withoutOwnerSlice = base.filter((m) => String(m.id ?? '').trim() !== ownerId)
-  if (withoutOwnerSlice.length === 0) {
-    return base
-  }
-  return withoutOwnerSlice
+function rolloutMembersForDrawer(pm: GmHierarchyPm, kpi: GmHierarchyKpi): GmHierarchyMember[] {
+  return allMembersUnderPm(pm)
 }
 
 function parseWeightPct(weight: string): number {
@@ -1465,7 +1574,8 @@ function diagnosticsWeightDisplay(w: string | null | undefined): string {
 
 /**
  * Pill cột Target — đổi màu theo `targetBalance` (so tổng target con vs target cha).
- * Dòng LEADER (supervisor) không dùng quy tắc «tổng member» → gọi với `undefined` để pill xám trung tính.
+ * Dùng cho node KPI (`kpi.targetBalance`) và node department (`pm.targetBalance`).
+ * Dòng assignee (MEMBER / PM / LEADER) dưới department: `diagnosticsAssigneeTargetPillClass()`.
  */
 function diagnosticsTargetPillClass(balance: GmHierarchyTargetBalance | null | undefined): string {
   const base =
@@ -1482,6 +1592,11 @@ function diagnosticsTargetTitle(balance: GmHierarchyTargetBalance | null | undef
   if (balance === 'excess') return 'Allocated targets sum above the parent target (excess).'
   if (balance === 'ok') return 'Allocated targets match the parent target (balanced).'
   return undefined
+}
+
+/** Cột Target trên dòng assignee: pill xám — không short/excess/ok (Member và PM giống nhau). */
+function diagnosticsAssigneeTargetPillClass(): string {
+  return diagnosticsTargetPillClass(undefined)
 }
 
 function submissionFromMemberStatus(s: GmHierarchyStatus): GmKpiSubmissionStatus {
@@ -1525,7 +1640,7 @@ function memberRowToModalItem(member: GmHierarchyMember, kpi: GmHierarchyKpi): G
 }
 
 function openPmKpiDrawer(pm: GmHierarchyPm, kpi: GmHierarchyKpi) {
-  const rolloutMembers = rolloutMembersForDrawer(pm)
+  const rolloutMembers = rolloutMembersForDrawer(pm, kpi)
   if (!rolloutMembers.length) return
   drawerPmKpiRollout.value = {
     pmName: pm.name,
@@ -1680,7 +1795,7 @@ export default {
                       <input type="checkbox"
                         class="h-3.5 w-3.5 shrink-0 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                         :checked="draftStatuses.includes(st)" @change="toggleDraftStatus(st)" />
-                      <span>{{ kpiStatusLabel(st) }}</span>
+                      <span>{{ asmStatusLabel(st) }}</span>
                     </label>
                   </div>
                 </div>
@@ -1727,7 +1842,7 @@ export default {
           <!-- 4+1+2+2+1+2+2+1 - Thêm cột Actual nằm giữa Target và Tiến độ -->
           <div
             class="sticky top-0 z-10 grid grid-cols-15 gap-2 border-b border-slate-200 bg-slate-100 px-3 py-2 text-xs font-bold uppercase tracking-wider text-slate-600 sm:gap-3">
-            <div class="col-span-4 pl-6">KPI target &amp; PM / Leader / Member</div>
+            <div class="col-span-4 pl-6">KPI target &amp; Department / Member</div>
             <div class="col-span-1 text-center">Weight</div>
             <div class="col-span-2 text-center">Target</div>
             <div class="col-span-2 text-center">Actual</div>
@@ -1751,12 +1866,6 @@ export default {
                 <span
                   class="rounded-md border border-slate-200/80 bg-white px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-slate-600">{{
                     group.rows.length }} KPI</span>
-                <span
-                  v-if="groupNonCascadingRollupCompletionPct(group.rows) != null"
-                  class="ml-2 inline-flex items-center rounded-md border border-emerald-200/90 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold tabular-nums text-emerald-900"
-                  title="Avg completion (Individual/Promotion): mean % for members with a numeric target in this group.">
-                  Avg {{ formatCompletionPct(groupNonCascadingRollupCompletionPct(group.rows)!) }}
-                </span>
               </button>
             </div>
             <div :id="sectionDomId(group.key)"
@@ -1796,14 +1905,13 @@ export default {
                           diagnosticsWeightDisplay(kpi.weight) }}</span>
                       </div>
                       <div class="col-span-2 flex justify-center text-center">
-                        <span v-if="kpi.kpiType === 'cascading'"
+                        <span
                           :class="diagnosticsTargetPillClass(kpi.targetBalance)"
                           :title="diagnosticsTargetTitle(kpi.targetBalance)">{{ diagnosticsTargetWithUnit(kpi, kpi.target) }}</span>
-                        <span v-else class="text-slate-400 font-bold">-</span>
                       </div>
                       <div class="col-span-2 text-center text-sm font-bold tabular-nums"
-                        :class="kpi.kpiType === 'cascading' ? (actualBelowTarget(kpiActualDisplayRaw(kpi), kpi.target) ? 'text-red-600' : 'text-green-600') : 'text-slate-400'">
-                        {{ kpi.kpiType === 'cascading' ? kpiActualWithUnit(kpi) : '-' }}
+                        :class="kpiRowDiagnosticsActualColorClass(kpi)">
+                        {{ kpiActualWithUnit(kpi) }}
                       </div>
                       <div
                         class="col-span-1 text-center text-xs font-bold tabular-nums"
@@ -1829,41 +1937,49 @@ export default {
                               : '-'
                         }}
                       </div>
-                      <div class="col-span-2 text-center text-xs font-bold tabular-nums text-slate-400">
-                        -
+                      <div class="col-span-2 text-center text-xs font-bold tabular-nums" :class="kpiScoreClass(kpi)">
+                        {{ kpiScoreDisplay(kpi) }}
                       </div>
                       <div class="col-span-2 flex justify-center">
-                        <span v-if="kpi.kpiType === 'cascading'"
+                        <span
                           class="inline-flex max-w-full cursor-default items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold leading-tight"
-                          :class="badgeClass(kpiStatusForUiMidYear(kpi))" :title="diagnosticsReasonTooltip(kpi.blockerSummary)">
-                          <i class="fas shrink-0 text-[11px]" :class="kpiStatusForUiMidYear(kpi) === 'success'
-                              ? 'fa-check-circle'
-                              : kpiStatusForUiMidYear(kpi) === 'warning'
-                                ? 'fa-exclamation-circle'
-                                : 'fa-times-circle'
-                            " />
-                          <span class="truncate">{{ kpiStatusLabel(kpiStatusForUiMidYear(kpi)) }}</span>
-                        </span>
-                        <span v-else
-                          class="inline-flex max-w-full cursor-default items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-0.5 text-[11px] font-bold text-blue-700 shadow-sm">
-                          {{ kpiNonCascadingSummary(kpi) }}
+                          :class="asmStatusPillClass(kpiAsmStatusCode(kpi))"
+                          :title="asmStatusTitle(kpiAsmStatusCode(kpi))">
+                          <i class="fas shrink-0 text-[11px]" :class="asmStatusIconClass(kpiAsmStatusCode(kpi))" />
+                          <span class="truncate">{{ asmStatusLabel(kpiAsmStatusCode(kpi)) }}</span>
                         </span>
                       </div>
                       <div class="col-span-1 flex flex-wrap items-center justify-center gap-1" @click.stop>
                         <button type="button"
-                          class="rounded border border-slate-200 bg-white px-1.5 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-600 shadow-sm transition-colors hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-800"
-                          title="Edit KPI" aria-label="Edit KPI" @click="onEditKpiClick(kpi)">
+                          class="rounded border border-slate-200 bg-white px-1.5 py-1 text-[10px] font-bold uppercase tracking-wide shadow-sm transition-colors"
+                          :class="
+                            readonly
+                              ? 'cursor-not-allowed text-slate-400 opacity-50'
+                              : 'text-slate-600 hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-800'
+                          "
+                          :disabled="readonly"
+                          :title="readonly ? 'Chế độ chỉ xem — năm chu kỳ đã khóa' : 'Edit KPI'"
+                          aria-label="Edit KPI"
+                          @click="onEditKpiClick(kpi)">
                           <i class="fas fa-pen text-[9px]" aria-hidden="true" />
                         </button>
                         <button type="button"
-                          class="rounded border border-slate-200 bg-white px-1.5 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-600 shadow-sm transition-colors hover:border-rose-200 hover:bg-rose-50 hover:text-rose-800"
-                          title="Delete KPI" aria-label="Delete KPI" @click="onDeleteKpiClick(kpi)">
+                          class="rounded border border-slate-200 bg-white px-1.5 py-1 text-[10px] font-bold uppercase tracking-wide shadow-sm transition-colors"
+                          :class="
+                            readonly
+                              ? 'cursor-not-allowed text-slate-400 opacity-50'
+                              : 'text-slate-600 hover:border-rose-200 hover:bg-rose-50 hover:text-rose-800'
+                          "
+                          :disabled="readonly"
+                          :title="readonly ? 'Chế độ chỉ xem — năm chu kỳ đã khóa' : 'Delete KPI'"
+                          aria-label="Delete KPI"
+                          @click="onDeleteKpiClick(kpi)">
                           <i class="fas fa-trash text-[9px]" aria-hidden="true" />
                         </button>
                       </div>
                     </div>
 
-                    <!-- Team: KPI → department → PM → member. Individual/Promotion: KPI → department → member. -->
+                    <!-- Team / Individual / Promotion: KPI → department (khối) → assignee. -->
                     <div v-if="kpi.pmOwners.length > 0"
                       class="grid overflow-hidden transition-[grid-template-rows] duration-300 ease-in-out motion-reduce:transition-none"
                       :class="expandedKpis.has(kpi.id) ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'">
@@ -1893,7 +2009,7 @@ export default {
                                     <div class="truncate text-xs font-bold text-slate-800">
                                       {{ pmManagedSectionLabel(pm) }}
                                     </div>
-                                    <div v-if="kpi.kpiType === 'cascading' && !pmHasRollout(pm)"
+                                    <div v-if="kpi.kpiType === 'cascading' && !pmHasRollout(pm) && !isUnassignedPmNode(pm)"
                                       class="mt-0.5 truncate text-xs font-medium text-slate-500">
                                       {{ pmRollupOwnerSubtitle(pm) }}: {{ pm.name }}
                                     </div>
@@ -1906,14 +2022,13 @@ export default {
                                     }}</span>
                                 </div>
                                 <div class="col-span-2 flex justify-center text-center">
-                                  <span v-if="kpi.kpiType === 'cascading'"
+                                  <span
                                     :class="diagnosticsTargetPillClass(pm.targetBalance)"
-                                    :title="diagnosticsTargetTitle(pm.targetBalance)">{{ diagnosticsTargetWithUnit(kpi, pm.target) }}</span>
-                                  <span v-else class="text-slate-400 font-bold">-</span>
+                                    :title="diagnosticsTargetTitle(pm.targetBalance)">{{ pmTargetWithUnit(pm, kpi) }}</span>
                                 </div>
                                 <div class="col-span-2 text-center text-xs font-bold tabular-nums"
-                                  :class="kpi.kpiType === 'cascading' ? (actualBelowTarget(pmActualDisplayRaw(pm, kpi), pm.target) ? 'text-red-600' : 'text-green-600') : 'text-slate-400'">
-                                  {{ kpi.kpiType === 'cascading' ? pmActualWithUnit(pm, kpi) : '-' }}
+                                  :class="pmRowDiagnosticsActualColorClass(pm, kpi)">
+                                  {{ pmActualWithUnit(pm, kpi) }}
                                 </div>
                                 <div
                                   class="col-span-1 text-center text-xs font-bold tabular-nums"
@@ -1940,24 +2055,16 @@ export default {
                                   }}
                                 </div>
                                 <div class="col-span-2 text-center text-xs font-bold tabular-nums"
-                                  :class="kpi.kpiType === 'cascading' ? pmSectionScoreClass(pm) : 'text-slate-400'">
-                                  {{ kpi.kpiType === 'cascading' ? pmSectionScoreDisplay(pm) : '-' }}
+                                  :class="pmSectionScoreClassForKpi(pm, kpi)">
+                                  {{ pmSectionScoreDisplayForKpi(pm, kpi) }}
                                 </div>
                                 <div class="col-span-2 flex justify-center">
-                                  <span v-if="kpi.kpiType === 'cascading'"
+                                  <span
                                     class="inline-flex max-w-full cursor-default items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold leading-tight"
-                                    :class="badgeClass(pmStatusForUiMidYear(pm, kpi))" :title="diagnosticsReasonTooltip(pm.blockerSummary)">
-                                    <i class="fas shrink-0 text-[11px]" :class="pmStatusForUiMidYear(pm, kpi) === 'success'
-                                        ? 'fa-check-circle'
-                                        : pmStatusForUiMidYear(pm, kpi) === 'warning'
-                                          ? 'fa-exclamation-circle'
-                                          : 'fa-times-circle'
-                                      " />
-                                    <span class="truncate">{{ kpiStatusLabel(pmStatusForUiMidYear(pm, kpi)) }}</span>
-                                  </span>
-                                  <span v-else
-                                    class="inline-flex max-w-full cursor-default items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-0.5 text-[11px] font-bold text-blue-700 shadow-sm">
-                                    {{ pmNonCascadingSummary(pm, kpi) }}
+                                    :class="asmStatusPillClass(pmAsmStatusCode(pm))"
+                                    :title="asmStatusTitle(pmAsmStatusCode(pm))">
+                                    <i class="fas shrink-0 text-[11px]" :class="asmStatusIconClass(pmAsmStatusCode(pm))" />
+                                    <span class="truncate">{{ asmStatusLabel(pmAsmStatusCode(pm)) }}</span>
                                   </span>
                                 </div>
                                 <div class="col-span-1 flex justify-center pr-0.5">
@@ -1974,726 +2081,72 @@ export default {
                                 :class="expandedPms.has(pm.id) ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'">
                                 <div class="min-h-0">
                                   <div class="border-y border-slate-100 bg-slate-50/50 py-1">
-                                    <template v-if="kpi.kpiType === 'cascading'">
-
-                                    <template v-if="pmSelfMember(pm)">
-                                      <div class="border-b border-slate-100/80 last:border-b-0">
+                                    <div v-for="member in allMembersUnderPm(pm)" :key="`${pm.id}::${String(member.id ?? '').trim() || member.name}`"
+                                      class="grid grid-cols-15 items-center gap-2 border-l-2 border-slate-200/70 px-3 py-1.5 transition-colors hover:bg-white sm:gap-3">
+                                      <div class="col-span-4 flex items-center pl-14">
                                         <div
-                                          class="grid grid-cols-15 items-center gap-2 border-l-2 border-indigo-200/70 bg-indigo-50/35 px-3 py-1.5 sm:gap-3"
-                                          :class="pmSelfBranchHasChildren(pm) ? 'cursor-pointer hover:bg-indigo-50/70' : ''"
-                                          @click="pmSelfBranchHasChildren(pm) && pmSelfMember(pm) && togglePmSelfRollout(pm.id, String(pmSelfMember(pm)!.id))">
-                                          <div class="col-span-4 flex min-w-0 items-center pl-16">
-                                            <button type="button" class="mr-1 shrink-0 p-1 text-slate-400"
-                                              :disabled="!pmSelfBranchHasChildren(pm)"
-                                              :aria-expanded="pmSelfBranchHasChildren(pm) ? expandedLeaders.has(leaderExpandKey(pm.id, `self-${pmSelfMember(pm)?.id}`)) : undefined"
-                                              @click.stop="pmSelfBranchHasChildren(pm) && pmSelfMember(pm) && togglePmSelfRollout(pm.id, String(pmSelfMember(pm)!.id))">
-                                              <i v-if="pmSelfBranchHasChildren(pm)"
-                                                class="fas fa-chevron-right text-[11px] transition-transform duration-300 ease-out motion-reduce:transition-none"
-                                                :class="expandedLeaders.has(leaderExpandKey(pm.id, `self-${pmSelfMember(pm)?.id}`)) ? 'rotate-90' : 'rotate-0'" />
-                                              <span v-else class="inline-block h-3.5 w-3.5" />
-                                            </button>
-                                            <div
-                                              class="mr-2 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-indigo-200 bg-white shadow-sm">
-                                              <i class="fas fa-user text-[10px] text-indigo-600" aria-hidden="true" />
-                                            </div>
-                                            <div class="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                                              <span class="truncate text-xs font-semibold text-slate-800">{{ pmSelfMember(pm)?.name }}</span>
-                                              <template v-for="mb in [pmSelfMember(pm) ? memberRollupRoleBadge(pmSelfMember(pm)!) : null]" :key="`mbr-self-${pm.id}`">
-                                                <span v-if="mb"
-                                                  class="shrink-0 rounded border px-1.5 py-px text-[9px] font-bold uppercase tracking-wide"
-                                                  :class="mb.badgeClass">{{ mb.label }}</span>
-                                              </template>
-                                            </div>
-                                          </div>
-                                          <div class="col-span-1 text-center">
-                                            <span
-                                              class="inline-block min-w-[2.25rem] rounded-md bg-slate-100 px-1.5 py-1 text-xs font-semibold tabular-nums text-slate-700">{{
-                                                pmSelfMember(pm) ? diagnosticsWeightDisplay(pmSelfMember(pm)!.weight) : '-'
-                                              }}</span>
-                                          </div>
-                                          <div class="col-span-2 flex justify-center text-center">
-                                            <span
-                                              :class="diagnosticsTargetPillClass(pmSelfMember(pm)?.targetBalance)"
-                                              :title="diagnosticsTargetTitle(pmSelfMember(pm)?.targetBalance)">{{
-                                                pmSelfMember(pm) ? memberTableTargetDisplayWithUnit(pmSelfMember(pm)!, kpi) : '-'
-                                              }}</span>
-                                          </div>
-                                          <div class="col-span-2 text-center text-xs font-bold tabular-nums"
-                                            :class="pmSelfRowActualBelowTarget(pm, kpi) ? 'text-red-600' : 'text-green-600'">
-                                            {{ pmSelfRowActualWithUnit(pm, kpi) }}
-                                          </div>
-                                          <div
-                                            class="col-span-1 text-center text-xs font-bold tabular-nums"
-                                            :class="pmSelfRowProgressTextClass(pm, kpi)"
-                                            :title="pmSelfMember(pm) ? 'Completion: (Actual / Target) × 100, capped at 100%.' : undefined">
-                                            {{ pmSelfRowProgressPct(pm, kpi) }}
-                                          </div>
-                                          <div class="col-span-2 text-center text-xs font-bold tabular-nums"
-                                            :class="memberStatusForUi(pmSelfMember(pm)) === 'danger' ? 'text-red-600' : memberStatusForUi(pmSelfMember(pm)) === 'warning' ? 'text-yellow-600' : 'text-green-600'"
-                                            :title="pmSelfMember(pm) ? memberDiagnosticsScoreTooltip(pmSelfMember(pm)!) : undefined">
-                                            {{ pmSelfMember(pm) ? memberTableScoreDisplay(pmSelfMember(pm)!) : '-' }}
-                                          </div>
-                                          <div class="col-span-2 flex justify-center items-center text-xs font-semibold">
-                                            <span
-                                              class="inline-flex max-w-full cursor-default items-center gap-1 truncate rounded px-0.5 py-0.5"
-                                              :title="diagnosticsReasonTooltip(pmSelfMember(pm)?.blocker ?? '')">
-                                              <template
-                                                v-if="pmSelfMember(pm) && memberStatusForUiMidYear(pmSelfMember(pm)!, kpi) === 'danger'">
-                                                <span class="inline-flex items-center text-red-600">
-                                                  <i class="fas fa-times-circle mr-1 shrink-0 text-[11px]" />
-                                                  {{ memberDiagnosticsStatusLabelMidYear(pmSelfMember(pm)!, kpi) }}
-                                                </span>
-                                              </template>
-                                              <template
-                                                v-else-if="pmSelfMember(pm) && memberStatusForUiMidYear(pmSelfMember(pm)!, kpi) === 'warning'">
-                                                <span class="inline-flex items-center text-yellow-700">
-                                                  <i class="fas fa-exclamation-circle mr-1 shrink-0 text-[11px]" />
-                                                  {{ memberDiagnosticsStatusLabelMidYear(pmSelfMember(pm)!, kpi) }}
-                                                </span>
-                                              </template>
-                                              <template v-else-if="pmSelfMember(pm)">
-                                                <span class="inline-flex items-center text-green-600">
-                                                  <i class="fas fa-check-circle mr-1 shrink-0 text-[11px]" />
-                                                  {{ memberDiagnosticsStatusLabelMidYear(pmSelfMember(pm)!, kpi) }}
-                                                </span>
-                                              </template>
-                                              <template v-else>
-                                                <span>-</span>
-                                              </template>
-                                            </span>
-                                          </div>
-                                          <div class="col-span-1 flex justify-center">
-                                            <button
-                                              v-if="pmSelfMember(pm) && isMemberFeedbackPendingForGm(pmSelfMember(pm)!)"
-                                              type="button"
-                                              class="rounded border border-violet-200 bg-violet-50 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-violet-700 shadow-sm transition-colors hover:border-violet-300 hover:bg-violet-100"
-                                              @click.stop="openFeedbackDrawerForMember(kpi, pmSelfMember(pm)!)">
-                                              Feedback
-                                            </button>
-                                            <span v-else class="text-xs text-slate-200">-</span>
-                                          </div>
+                                          class="mr-2 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white">
+                                          <i class="fas fa-user text-[10px] text-slate-400" />
                                         </div>
-
-                                        <div v-if="pmSelfBranchHasChildren(pm)"
-                                          class="grid overflow-hidden transition-[grid-template-rows] duration-300 ease-in-out motion-reduce:transition-none"
-                                          :class="expandedLeaders.has(leaderExpandKey(pm.id, `self-${pmSelfMember(pm)?.id}`)) ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'">
-                                          <div class="min-h-0">
-                                            <div v-for="member in pmDirectReportMembers(pm)" :key="member.id"
-                                              class="grid grid-cols-15 items-center gap-2 border-l-2 border-indigo-200/60 px-3 py-1.5 pl-2 transition-colors hover:bg-white sm:gap-3">
-                                              <div class="col-span-4 flex items-center pl-20">
-                                                <span class="mr-1 inline-block h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                                                <div
-                                                  class="mr-2 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white">
-                                                  <i class="fas fa-user text-[10px] text-slate-400" />
-                                                </div>
-                                                <div class="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                                                  <span class="text-xs font-semibold text-slate-700">{{ member.name }}</span>
-                                                  <template v-for="mb in [memberRollupRoleBadge(member)]" :key="`mbr-self-child-${member.id}`">
-                                                    <span v-if="mb"
-                                                      class="shrink-0 rounded border px-1.5 py-px text-[9px] font-bold uppercase tracking-wide"
-                                                      :class="mb.badgeClass">{{ mb.label }}</span>
-                                                  </template>
-                                                </div>
-                                              </div>
-                                              <div class="col-span-1 text-center">
-                                                <span
-                                                  class="inline-block min-w-[2.25rem] rounded-md bg-slate-100 px-1.5 py-1 text-xs font-semibold tabular-nums text-slate-700">{{
-                                                    diagnosticsWeightDisplay(member.weight)
-                                                  }}</span>
-                                              </div>
-                                              <div class="col-span-2 flex justify-center text-center">
-                                                <span
-                                                  :class="diagnosticsTargetPillClass(member.targetBalance)"
-                                                  :title="diagnosticsTargetTitle(member.targetBalance)">{{
-                                                    memberTableTargetDisplayWithUnit(member, kpi)
-                                                  }}</span>
-                                              </div>
-                                              <div class="col-span-2 text-center text-xs font-bold tabular-nums"
-                                                :class="memberActualColorClass(member, kpi)">
-                                                {{ memberActualWithUnit(member, kpi) }}
-                                              </div>
-                                              <div
-                                                class="col-span-1 text-center text-xs font-bold tabular-nums"
-                                                :class="diagnosticsMemberProgressTextClass(member, kpi)"
-                                                title="Completion: (Actual / Target) × 100, capped at 100%.">
-                                                {{ diagnosticsMemberProgressPct(member, kpi) }}
-                                              </div>
-                                              <div class="col-span-2 text-center text-xs font-bold tabular-nums" :class="memberStatusForUiMidYear(member, kpi) === 'danger'
-                                                  ? 'text-red-600'
-                                                  : memberStatusForUiMidYear(member, kpi) === 'warning'
-                                                    ? 'text-yellow-600'
-                                                    : 'text-green-600'
-                                                " :title="memberDiagnosticsScoreTooltip(member)">
-                                                {{ memberTableScoreDisplay(member) }}
-                                              </div>
-                                              <div class="col-span-2 flex justify-center items-center text-xs font-semibold">
-                                                <span
-                                                  class="inline-flex max-w-full cursor-default items-center gap-1 truncate rounded px-0.5 py-0.5"
-                                                  :title="diagnosticsReasonTooltip(member.blocker)">
-                                                  <template v-if="memberStatusForUiMidYear(member, kpi) === 'danger'">
-                                                    <span class="inline-flex items-center text-red-600">
-                                                      <i class="fas fa-times-circle mr-1 shrink-0 text-[11px]" />
-                                                      {{ memberDiagnosticsStatusLabelMidYear(member, kpi) }}
-                                                    </span>
-                                                  </template>
-                                                  <template v-else-if="memberStatusForUiMidYear(member, kpi) === 'warning'">
-                                                    <span class="inline-flex items-center text-yellow-700">
-                                                      <i class="fas fa-exclamation-circle mr-1 shrink-0 text-[11px]" />
-                                                      {{ memberDiagnosticsStatusLabelMidYear(member, kpi) }}
-                                                    </span>
-                                                  </template>
-                                                  <template v-else>
-                                                    <span class="inline-flex items-center text-green-600">
-                                                      <i class="fas fa-check-circle mr-1 shrink-0 text-[11px]" />
-                                                      {{ memberDiagnosticsStatusLabelMidYear(member, kpi) }}
-                                                    </span>
-                                                  </template>
-                                                </span>
-                                              </div>
-                                              <div class="col-span-1 flex justify-center">
-                                                <button
-                                                  v-if="isMemberFeedbackPendingForGm(member)"
-                                                  type="button"
-                                                  class="rounded border border-violet-200 bg-violet-50 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-violet-700 shadow-sm transition-colors hover:border-violet-300 hover:bg-violet-100"
-                                                  @click.stop="openFeedbackDrawerForMember(kpi, member)">
-                                                  Feedback
-                                                </button>
-                                                <span v-else class="text-xs text-slate-200">-</span>
-                                              </div>
-                                            </div>
-
-                                            <template v-if="pmUsesLeaderTree(pm)">
-                                              <div
-                                                v-for="row in pmLeadersFlattened(pm)"
-                                                :key="pmLeaderFlatRowKey(row)"
-                                                class="border-b border-slate-100/80 last:border-b-0">
-                                                <div
-                                                  v-if="row.kind === 'leader'"
-                                                  class="grid grid-cols-15 items-center gap-2 border-l-2 border-violet-200/60 bg-violet-50/35 px-3 py-1.5 pl-2 sm:gap-3">
-                                                  <div class="col-span-4 flex min-w-0 items-center pl-20">
-                                                    <span class="mr-1 inline-block h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                                                    <div
-                                                      class="mr-2 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-violet-200 bg-white shadow-sm">
-                                                      <i class="fas fa-user text-[10px] text-violet-600" aria-hidden="true" />
-                                                    </div>
-                                                    <div class="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                                                      <span class="truncate text-xs font-semibold text-slate-800">{{ row.leader.name }}</span>
-                                                      <template v-for="lb in [leaderRollupRoleBadge(row.leader)]"
-                                                        :key="`lrb-self-${row.leader.id}`">
-                                                        <span v-if="lb"
-                                                          class="shrink-0 rounded border px-1.5 py-px text-[9px] font-bold uppercase tracking-wide"
-                                                          :class="lb.badgeClass">{{ lb.label }}</span>
-                                                      </template>
-                                                    </div>
-                                                  </div>
-                                                  <div class="col-span-1 text-center">
-                                                    <span
-                                                      class="inline-block min-w-[2.25rem] rounded-md bg-slate-100 px-1.5 py-1 text-xs font-semibold tabular-nums text-slate-700">{{
-                                                        diagnosticsWeightDisplay(row.leader.weight)
-                                                      }}</span>
-                                                  </div>
-                                                  <div class="col-span-2 flex justify-center text-center">
-                                                    <span
-                                                      :class="diagnosticsTargetPillClass(row.leader.leaderOwnRow!.targetBalance)"
-                                                      :title="diagnosticsTargetTitle(row.leader.leaderOwnRow!.targetBalance)">{{
-                                                        memberTableTargetDisplayWithUnit(row.leader.leaderOwnRow!, kpi)
-                                                      }}</span>
-                                                  </div>
-                                                  <div class="col-span-2 text-center text-xs font-bold tabular-nums"
-                                                    :class="memberActualColorClass(row.leader.leaderOwnRow!, kpi)">
-                                                    {{ memberActualWithUnit(row.leader.leaderOwnRow!, kpi) }}
-                                                  </div>
-                                                  <div
-                                                    class="col-span-1 text-center text-xs font-bold tabular-nums"
-                                                    :class="diagnosticsMemberProgressTextClass(row.leader.leaderOwnRow!, kpi)"
-                                                    title="Completion: (Actual / Target) × 100, capped at 100%.">
-                                                    {{ diagnosticsMemberProgressPct(row.leader.leaderOwnRow!, kpi) }}
-                                                  </div>
-                                                  <div class="col-span-2 text-center text-xs font-bold tabular-nums" :class="memberStatusForUiMidYear(row.leader.leaderOwnRow!, kpi) === 'danger'
-                                                      ? 'text-red-600'
-                                                      : memberStatusForUiMidYear(row.leader.leaderOwnRow!, kpi) === 'warning'
-                                                        ? 'text-yellow-600'
-                                                        : 'text-green-600'
-                                                    " :title="memberDiagnosticsScoreTooltip(row.leader.leaderOwnRow!)">
-                                                    {{ memberTableScoreDisplay(row.leader.leaderOwnRow!) }}
-                                                  </div>
-                                                  <div class="col-span-2 flex justify-center items-center text-xs font-semibold">
-                                                    <span
-                                                      class="inline-flex max-w-full cursor-default items-center gap-1 truncate rounded px-0.5 py-0.5"
-                                                      :title="diagnosticsReasonTooltip(row.leader.leaderOwnRow!.blocker)">
-                                                      <template v-if="memberStatusForUiMidYear(row.leader.leaderOwnRow!, kpi) === 'danger'">
-                                                        <span class="inline-flex items-center text-red-600">
-                                                          <i class="fas fa-times-circle mr-1 shrink-0 text-[11px]" />
-                                                          {{ memberDiagnosticsStatusLabelMidYear(row.leader.leaderOwnRow!, kpi) }}
-                                                        </span>
-                                                      </template>
-                                                      <template v-else-if="memberStatusForUiMidYear(row.leader.leaderOwnRow!, kpi) === 'warning'">
-                                                        <span class="inline-flex items-center text-yellow-700">
-                                                          <i class="fas fa-exclamation-circle mr-1 shrink-0 text-[11px]" />
-                                                          {{ memberDiagnosticsStatusLabelMidYear(row.leader.leaderOwnRow!, kpi) }}
-                                                        </span>
-                                                      </template>
-                                                      <template v-else>
-                                                        <span class="inline-flex items-center text-green-600">
-                                                          <i class="fas fa-check-circle mr-1 shrink-0 text-[11px]" />
-                                                          {{ memberDiagnosticsStatusLabelMidYear(row.leader.leaderOwnRow!, kpi) }}
-                                                        </span>
-                                                      </template>
-                                                    </span>
-                                                  </div>
-                                                  <div class="col-span-1 flex justify-center">
-                                                    <button
-                                                      v-if="isMemberFeedbackPendingForGm(row.leader.leaderOwnRow!)"
-                                                      type="button"
-                                                      class="rounded border border-violet-200 bg-violet-50 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-violet-700 shadow-sm transition-colors hover:border-violet-300 hover:bg-violet-100"
-                                                      @click.stop="openFeedbackDrawerForMember(kpi, row.leader.leaderOwnRow!)">
-                                                      Feedback
-                                                    </button>
-                                                    <span v-else class="text-xs text-slate-200">-</span>
-                                                  </div>
-                                                </div>
-                                                <div
-                                                  v-else
-                                                  class="grid grid-cols-15 items-center gap-2 border-l-2 border-violet-200/60 px-3 py-1.5 pl-2 transition-colors hover:bg-white sm:gap-3">
-                                                  <div class="col-span-4 flex items-center pl-20">
-                                                    <span class="mr-1 inline-block h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                                                    <div
-                                                      class="mr-2 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white">
-                                                      <i class="fas fa-user text-[10px] text-slate-400" />
-                                                    </div>
-                                                    <div class="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                                                      <span class="text-xs font-semibold text-slate-700">{{ row.member.name }}</span>
-                                                      <template v-for="mb in [memberRollupRoleBadge(row.member)]"
-                                                        :key="`mbr-l-self-${row.member.id}`">
-                                                        <span v-if="mb"
-                                                          class="shrink-0 rounded border px-1.5 py-px text-[9px] font-bold uppercase tracking-wide"
-                                                          :class="mb.badgeClass">{{ mb.label }}</span>
-                                                      </template>
-                                                    </div>
-                                                  </div>
-                                                  <div class="col-span-1 text-center">
-                                                    <span
-                                                      class="inline-block min-w-[2.25rem] rounded-md bg-slate-100 px-1.5 py-1 text-xs font-semibold tabular-nums text-slate-700">{{
-                                                        diagnosticsWeightDisplay(row.member.weight)
-                                                      }}</span>
-                                                  </div>
-                                                  <div class="col-span-2 flex justify-center text-center">
-                                                    <span
-                                                      :class="diagnosticsTargetPillClass(row.member.targetBalance)"
-                                                      :title="diagnosticsTargetTitle(row.member.targetBalance)">{{
-                                                        memberTableTargetDisplayWithUnit(row.member, kpi)
-                                                      }}</span>
-                                                  </div>
-                                                  <div class="col-span-2 text-center text-xs font-bold tabular-nums"
-                                                    :class="memberActualColorClass(row.member, kpi)">
-                                                    {{ memberActualWithUnit(row.member, kpi) }}
-                                                  </div>
-                                                  <div
-                                                    class="col-span-1 text-center text-xs font-bold tabular-nums"
-                                                    :class="diagnosticsMemberProgressTextClass(row.member, kpi)"
-                                                    title="Completion: (Actual / Target) × 100, capped at 100%.">
-                                                    {{ diagnosticsMemberProgressPct(row.member, kpi) }}
-                                                  </div>
-                                                  <div class="col-span-2 text-center text-xs font-bold tabular-nums" :class="memberStatusForUiMidYear(row.member, kpi) === 'danger'
-                                                      ? 'text-red-600'
-                                                      : memberStatusForUiMidYear(row.member, kpi) === 'warning'
-                                                        ? 'text-yellow-600'
-                                                        : 'text-green-600'
-                                                    " :title="memberDiagnosticsScoreTooltip(row.member)">
-                                                    {{ memberTableScoreDisplay(row.member) }}
-                                                  </div>
-                                                  <div class="col-span-2 flex justify-center items-center text-xs font-semibold">
-                                                    <span
-                                                      class="inline-flex max-w-full cursor-default items-center gap-1 truncate rounded px-0.5 py-0.5"
-                                                      :title="diagnosticsReasonTooltip(row.member.blocker)">
-                                                      <template v-if="memberStatusForUiMidYear(row.member, kpi) === 'danger'">
-                                                        <span class="inline-flex items-center text-red-600">
-                                                          <i class="fas fa-times-circle mr-1 shrink-0 text-[11px]" />
-                                                          {{ memberDiagnosticsStatusLabelMidYear(row.member, kpi) }}
-                                                        </span>
-                                                      </template>
-                                                      <template v-else-if="memberStatusForUiMidYear(row.member, kpi) === 'warning'">
-                                                        <span class="inline-flex items-center text-yellow-700">
-                                                          <i class="fas fa-exclamation-circle mr-1 shrink-0 text-[11px]" />
-                                                          {{ memberDiagnosticsStatusLabelMidYear(row.member, kpi) }}
-                                                        </span>
-                                                      </template>
-                                                      <template v-else>
-                                                        <span class="inline-flex items-center text-green-600">
-                                                          <i class="fas fa-check-circle mr-1 shrink-0 text-[11px]" />
-                                                          {{ memberDiagnosticsStatusLabelMidYear(row.member, kpi) }}
-                                                        </span>
-                                                      </template>
-                                                    </span>
-                                                  </div>
-                                                  <div class="col-span-1 flex justify-center">
-                                                    <button
-                                                      v-if="isMemberFeedbackPendingForGm(row.member)"
-                                                      type="button"
-                                                      class="rounded border border-violet-200 bg-violet-50 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-violet-700 shadow-sm transition-colors hover:border-violet-300 hover:bg-violet-100"
-                                                      @click.stop="openFeedbackDrawerForMember(kpi, row.member)">
-                                                      Feedback
-                                                    </button>
-                                                    <span v-else class="text-xs text-slate-200">-</span>
-                                                  </div>
-                                                </div>
-                                              </div>
-                                            </template>
-                                          </div>
+                                        <div class="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                                          <span class="text-xs font-semibold text-slate-700">{{ member.name }}</span>
+                                          <template v-for="mb in [memberRollupRoleBadge(member)]"
+                                            :key="`mbr-diag-${pm.id}-${member.id}`">
+                                            <span v-if="mb"
+                                              class="shrink-0 rounded border px-1.5 py-px text-[9px] font-bold uppercase tracking-wide"
+                                              :class="mb.badgeClass">{{ mb.label }}</span>
+                                          </template>
                                         </div>
                                       </div>
-                                    </template>
-
-                                    <template v-if="!pmSelfMember(pm) && pm.members.length > 0">
-                                      <div v-for="member in pm.members" :key="member.id"
-                                        class="grid grid-cols-15 items-center gap-2 px-3 py-1.5 transition-colors hover:bg-white sm:gap-3"
-                                        :class="pmUsesLeaderTree(pm) ? 'border-l-2 border-violet-200/60' : ''">
-                                        <div class="col-span-4 flex items-center pl-14">
-                                          <div
-                                            class="mr-2 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white">
-                                            <i class="fas fa-user text-[10px] text-slate-400" />
-                                          </div>
-                                          <div class="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                                            <span class="text-xs font-semibold text-slate-700">{{ member.name }}</span>
-                                            <template v-for="mb in [memberRollupRoleBadge(member)]"
-                                              :key="`mbr-${member.id}`">
-                                              <span v-if="mb"
-                                                class="shrink-0 rounded border px-1.5 py-px text-[9px] font-bold uppercase tracking-wide"
-                                                :class="mb.badgeClass">{{ mb.label }}</span>
-                                            </template>
-                                          </div>
-                                        </div>
-                                        <div class="col-span-1 text-center">
-                                          <span
-                                            class="inline-block min-w-[2.25rem] rounded-md bg-slate-100 px-1.5 py-1 text-xs font-semibold tabular-nums text-slate-700">{{
-                                              diagnosticsWeightDisplay(member.weight)
-                                            }}</span>
-                                        </div>
-                                        <div class="col-span-2 flex justify-center text-center">
-                                          <span
-                                            :class="diagnosticsTargetPillClass(member.targetBalance)"
-                                            :title="diagnosticsTargetTitle(member.targetBalance)">{{
-                                              memberTableTargetDisplayWithUnit(member, kpi)
-                                            }}</span>
-                                        </div>
-                                        <div class="col-span-2 text-center text-xs font-bold tabular-nums"
-                                          :class="memberActualColorClass(member, kpi)">
-                                          {{ memberActualWithUnit(member, kpi) }}
-                                        </div>
-                                        <div
-                                          class="col-span-1 text-center text-xs font-bold tabular-nums"
-                                          :class="diagnosticsMemberProgressTextClass(member, kpi)"
-                                          title="Completion: (Actual / Target) × 100, capped at 100%.">
-                                          {{ diagnosticsMemberProgressPct(member, kpi) }}
-                                        </div>
-                                        <div class="col-span-2 text-center text-xs font-bold tabular-nums" :class="memberStatusForUiMidYear(member, kpi) === 'danger'
-                                            ? 'text-red-600'
-                                            : memberStatusForUiMidYear(member, kpi) === 'warning'
-                                              ? 'text-yellow-600'
-                                              : 'text-green-600'
-                                          " :title="memberDiagnosticsScoreTooltip(member)">
-                                          {{ memberTableScoreDisplay(member) }}
-                                        </div>
-                                        <div class="col-span-2 flex justify-center items-center text-xs font-semibold">
-                                          <span
-                                            class="inline-flex max-w-full cursor-default items-center gap-1 truncate rounded px-0.5 py-0.5"
-                                            :title="diagnosticsReasonTooltip(member.blocker)">
-                                            <template v-if="memberStatusForUiMidYear(member, kpi) === 'danger'">
-                                              <span class="inline-flex items-center text-red-600">
-                                                <i class="fas fa-times-circle mr-1 shrink-0 text-[11px]" />
-                                                {{ memberDiagnosticsStatusLabelMidYear(member, kpi) }}
-                                              </span>
-                                            </template>
-                                            <template v-else-if="memberStatusForUiMidYear(member, kpi) === 'warning'">
-                                              <span class="inline-flex items-center text-yellow-700">
-                                                <i class="fas fa-exclamation-circle mr-1 shrink-0 text-[11px]" />
-                                                {{ memberDiagnosticsStatusLabelMidYear(member, kpi) }}
-                                              </span>
-                                            </template>
-                                            <template v-else>
-                                              <span class="inline-flex items-center text-green-600">
-                                                <i class="fas fa-check-circle mr-1 shrink-0 text-[11px]" />
-                                                {{ memberDiagnosticsStatusLabelMidYear(member, kpi) }}
-                                              </span>
-                                            </template>
-                                          </span>
-                                        </div>
-                                        <div class="col-span-1 flex justify-center">
-                                          <button
-                                            v-if="isMemberFeedbackPendingForGm(member)"
-                                            type="button"
-                                            class="rounded border border-violet-200 bg-violet-50 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-violet-700 shadow-sm transition-colors hover:border-violet-300 hover:bg-violet-100"
-                                            @click.stop="openFeedbackDrawerForMember(kpi, member)">
-                                            Feedback
-                                          </button>
-                                          <span v-else class="text-xs text-slate-200">-</span>
-                                        </div>
+                                      <div class="col-span-1 text-center">
+                                        <span
+                                          class="inline-block min-w-[2.25rem] rounded-md bg-slate-100 px-1.5 py-1 text-xs font-semibold tabular-nums text-slate-700">{{
+                                            diagnosticsWeightDisplay(member.weight)
+                                          }}</span>
                                       </div>
-                                    </template>
-
-                                    <template v-if="!pmSelfMember(pm) && pmUsesLeaderTree(pm)">
+                                      <div class="col-span-2 flex justify-center text-center">
+                                        <span :class="diagnosticsAssigneeTargetPillClass()">{{
+                                          memberTableTargetDisplayWithUnit(member, kpi)
+                                        }}</span>
+                                      </div>
+                                      <div class="col-span-2 text-center text-xs font-bold tabular-nums"
+                                        :class="memberActualColorClass(member, kpi)">
+                                        {{ memberActualWithUnit(member, kpi) }}
+                                      </div>
                                       <div
-                                        v-for="row in pmLeadersFlattened(pm)"
-                                        :key="pmLeaderFlatRowKey(row)"
-                                        class="border-b border-slate-100/80 last:border-b-0">
-                                        <div
-                                          v-if="row.kind === 'leader'"
-                                          class="grid grid-cols-15 items-center gap-2 border-l-2 border-violet-200/60 bg-violet-50/35 px-3 py-1.5 sm:gap-3">
-                                          <div class="col-span-4 flex min-w-0 items-center pl-14">
-                                            <span class="mr-1 inline-block h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                                            <div
-                                              class="mr-2 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-violet-200 bg-white shadow-sm">
-                                              <i class="fas fa-user text-[10px] text-violet-600" aria-hidden="true" />
-                                            </div>
-                                            <div class="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                                              <span class="truncate text-xs font-semibold text-slate-800">{{ row.leader.name }}</span>
-                                              <template v-for="lb in [leaderRollupRoleBadge(row.leader)]"
-                                                :key="`lrb-${row.leader.id}`">
-                                                <span v-if="lb"
-                                                  class="shrink-0 rounded border px-1.5 py-px text-[9px] font-bold uppercase tracking-wide"
-                                                  :class="lb.badgeClass">{{ lb.label }}</span>
-                                              </template>
-                                            </div>
-                                          </div>
-                                          <div class="col-span-1 text-center">
-                                            <span
-                                              class="inline-block min-w-[2.25rem] rounded-md bg-slate-100 px-1.5 py-1 text-xs font-semibold tabular-nums text-slate-700">{{
-                                                diagnosticsWeightDisplay(row.leader.weight)
-                                              }}</span>
-                                          </div>
-                                          <div class="col-span-2 flex justify-center text-center">
-                                            <span
-                                              :class="diagnosticsTargetPillClass(row.leader.leaderOwnRow!.targetBalance)"
-                                              :title="diagnosticsTargetTitle(row.leader.leaderOwnRow!.targetBalance)">{{
-                                                memberTableTargetDisplayWithUnit(row.leader.leaderOwnRow!, kpi)
-                                              }}</span>
-                                          </div>
-                                          <div class="col-span-2 text-center text-xs font-bold tabular-nums"
-                                            :class="memberActualColorClass(row.leader.leaderOwnRow!, kpi)">
-                                            {{ memberActualWithUnit(row.leader.leaderOwnRow!, kpi) }}
-                                          </div>
-                                          <div
-                                            class="col-span-1 text-center text-xs font-bold tabular-nums"
-                                            :class="diagnosticsMemberProgressTextClass(row.leader.leaderOwnRow!, kpi)"
-                                            title="Completion: (Actual / Target) × 100, capped at 100%.">
-                                            {{ diagnosticsMemberProgressPct(row.leader.leaderOwnRow!, kpi) }}
-                                          </div>
-                                          <div class="col-span-2 text-center text-xs font-bold tabular-nums" :class="memberStatusForUiMidYear(row.leader.leaderOwnRow!, kpi) === 'danger'
-                                              ? 'text-red-600'
-                                              : memberStatusForUiMidYear(row.leader.leaderOwnRow!, kpi) === 'warning'
-                                                ? 'text-yellow-600'
-                                                : 'text-green-600'
-                                            " :title="memberDiagnosticsScoreTooltip(row.leader.leaderOwnRow!)">
-                                            {{ memberTableScoreDisplay(row.leader.leaderOwnRow!) }}
-                                          </div>
-                                          <div class="col-span-2 flex justify-center items-center text-xs font-semibold">
-                                            <span
-                                              class="inline-flex max-w-full cursor-default items-center gap-1 truncate rounded px-0.5 py-0.5"
-                                              :title="diagnosticsReasonTooltip(row.leader.leaderOwnRow!.blocker)">
-                                              <template v-if="memberStatusForUiMidYear(row.leader.leaderOwnRow!, kpi) === 'danger'">
-                                                <span class="inline-flex items-center text-red-600">
-                                                  <i class="fas fa-times-circle mr-1 shrink-0 text-[11px]" />
-                                                  {{ memberDiagnosticsStatusLabelMidYear(row.leader.leaderOwnRow!, kpi) }}
-                                                </span>
-                                              </template>
-                                              <template v-else-if="memberStatusForUiMidYear(row.leader.leaderOwnRow!, kpi) === 'warning'">
-                                                <span class="inline-flex items-center text-yellow-700">
-                                                  <i class="fas fa-exclamation-circle mr-1 shrink-0 text-[11px]" />
-                                                  {{ memberDiagnosticsStatusLabelMidYear(row.leader.leaderOwnRow!, kpi) }}
-                                                </span>
-                                              </template>
-                                              <template v-else>
-                                                <span class="inline-flex items-center text-green-600">
-                                                  <i class="fas fa-check-circle mr-1 shrink-0 text-[11px]" />
-                                                  {{ memberDiagnosticsStatusLabelMidYear(row.leader.leaderOwnRow!, kpi) }}
-                                                </span>
-                                              </template>
-                                            </span>
-                                          </div>
-                                          <div class="col-span-1 flex justify-center">
-                                            <button
-                                              v-if="isMemberFeedbackPendingForGm(row.leader.leaderOwnRow!)"
-                                              type="button"
-                                              class="rounded border border-violet-200 bg-violet-50 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-violet-700 shadow-sm transition-colors hover:border-violet-300 hover:bg-violet-100"
-                                              @click.stop="openFeedbackDrawerForMember(kpi, row.leader.leaderOwnRow!)">
-                                              Feedback
-                                            </button>
-                                            <span v-else class="text-xs text-slate-200">-</span>
-                                          </div>
-                                        </div>
-                                        <div
-                                          v-else
-                                          class="grid grid-cols-15 items-center gap-2 border-l-2 border-violet-200/60 px-3 py-1.5 transition-colors hover:bg-white sm:gap-3">
-                                          <div class="col-span-4 flex items-center pl-14">
-                                            <span class="mr-1 inline-block h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                                            <div
-                                              class="mr-2 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white">
-                                              <i class="fas fa-user text-[10px] text-slate-400" />
-                                            </div>
-                                            <div class="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                                              <span class="text-xs font-semibold text-slate-700">{{ row.member.name }}</span>
-                                              <template v-for="mb in [memberRollupRoleBadge(row.member)]"
-                                                :key="`mbr-l-${row.member.id}`">
-                                                <span v-if="mb"
-                                                  class="shrink-0 rounded border px-1.5 py-px text-[9px] font-bold uppercase tracking-wide"
-                                                  :class="mb.badgeClass">{{ mb.label }}</span>
-                                              </template>
-                                            </div>
-                                          </div>
-                                          <div class="col-span-1 text-center">
-                                            <span
-                                              class="inline-block min-w-[2.25rem] rounded-md bg-slate-100 px-1.5 py-1 text-xs font-semibold tabular-nums text-slate-700">{{
-                                                diagnosticsWeightDisplay(row.member.weight)
-                                              }}</span>
-                                          </div>
-                                          <div class="col-span-2 flex justify-center text-center">
-                                            <span
-                                              :class="diagnosticsTargetPillClass(row.member.targetBalance)"
-                                              :title="diagnosticsTargetTitle(row.member.targetBalance)">{{
-                                                memberTableTargetDisplayWithUnit(row.member, kpi)
-                                              }}</span>
-                                          </div>
-                                          <div class="col-span-2 text-center text-xs font-bold tabular-nums"
-                                            :class="memberActualColorClass(row.member, kpi)">
-                                            {{ memberActualWithUnit(row.member, kpi) }}
-                                          </div>
-                                          <div
-                                            class="col-span-1 text-center text-xs font-bold tabular-nums"
-                                            :class="diagnosticsMemberProgressTextClass(row.member, kpi)"
-                                            title="Completion: (Actual / Target) × 100, capped at 100%.">
-                                            {{ diagnosticsMemberProgressPct(row.member, kpi) }}
-                                          </div>
-                                          <div class="col-span-2 text-center text-xs font-bold tabular-nums" :class="memberStatusForUiMidYear(row.member, kpi) === 'danger'
-                                              ? 'text-red-600'
-                                              : memberStatusForUiMidYear(row.member, kpi) === 'warning'
-                                                ? 'text-yellow-600'
-                                                : 'text-green-600'
-                                            " :title="memberDiagnosticsScoreTooltip(row.member)">
-                                            {{ memberTableScoreDisplay(row.member) }}
-                                          </div>
-                                          <div class="col-span-2 flex justify-center items-center text-xs font-semibold">
-                                            <span
-                                              class="inline-flex max-w-full cursor-default items-center gap-1 truncate rounded px-0.5 py-0.5"
-                                              :title="diagnosticsReasonTooltip(row.member.blocker)">
-                                              <template v-if="memberStatusForUiMidYear(row.member, kpi) === 'danger'">
-                                                <span class="inline-flex items-center text-red-600">
-                                                  <i class="fas fa-times-circle mr-1 shrink-0 text-[11px]" />
-                                                  {{ memberDiagnosticsStatusLabelMidYear(row.member, kpi) }}
-                                                </span>
-                                              </template>
-                                              <template v-else-if="memberStatusForUiMidYear(row.member, kpi) === 'warning'">
-                                                <span class="inline-flex items-center text-yellow-700">
-                                                  <i class="fas fa-exclamation-circle mr-1 shrink-0 text-[11px]" />
-                                                  {{ memberDiagnosticsStatusLabelMidYear(row.member, kpi) }}
-                                                </span>
-                                              </template>
-                                              <template v-else>
-                                                <span class="inline-flex items-center text-green-600">
-                                                  <i class="fas fa-check-circle mr-1 shrink-0 text-[11px]" />
-                                                  {{ memberDiagnosticsStatusLabelMidYear(row.member, kpi) }}
-                                                </span>
-                                              </template>
-                                            </span>
-                                          </div>
-                                          <div class="col-span-1 flex justify-center">
-                                            <button
-                                              v-if="isMemberFeedbackPendingForGm(row.member)"
-                                              type="button"
-                                              class="rounded border border-violet-200 bg-violet-50 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-violet-700 shadow-sm transition-colors hover:border-violet-300 hover:bg-violet-100"
-                                              @click.stop="openFeedbackDrawerForMember(kpi, row.member)">
-                                              Feedback
-                                            </button>
-                                            <span v-else class="text-xs text-slate-200">-</span>
-                                          </div>
-                                        </div>
+                                        class="col-span-1 text-center text-xs font-bold tabular-nums"
+                                        :class="diagnosticsMemberProgressTextClass(member, kpi)"
+                                        title="Completion: (Actual / Target) × 100, capped at 100%.">
+                                        {{ diagnosticsMemberProgressPct(member, kpi) }}
                                       </div>
-                                    </template>
-                                    </template>
-                                    <template v-else>
-                                      <div v-for="member in allMembersUnderPm(pm)" :key="`${pm.id}::${String(member.id ?? '').trim() || member.name}`"
-                                        class="grid grid-cols-15 items-center gap-2 border-l-2 border-slate-200/70 px-3 py-1.5 transition-colors hover:bg-white sm:gap-3">
-                                        <div class="col-span-4 flex items-center pl-14">
-                                          <div
-                                            class="mr-2 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white">
-                                            <i class="fas fa-user text-[10px] text-slate-400" />
-                                          </div>
-                                          <div class="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                                            <span class="text-xs font-semibold text-slate-700">{{ member.name }}</span>
-                                            <template v-for="mb in [memberRollupRoleBadge(member)]"
-                                              :key="`mbr-indiv-${pm.id}-${member.id}`">
-                                              <span v-if="mb"
-                                                class="shrink-0 rounded border px-1.5 py-px text-[9px] font-bold uppercase tracking-wide"
-                                                :class="mb.badgeClass">{{ mb.label }}</span>
-                                            </template>
-                                          </div>
-                                        </div>
-                                        <div class="col-span-1 text-center">
-                                          <span
-                                            class="inline-block min-w-[2.25rem] rounded-md bg-slate-100 px-1.5 py-1 text-xs font-semibold tabular-nums text-slate-700">{{
-                                              diagnosticsWeightDisplay(member.weight)
-                                            }}</span>
-                                        </div>
-                                        <div class="col-span-2 flex justify-center text-center">
-                                          <span
-                                            :class="diagnosticsTargetPillClass(member.targetBalance)"
-                                            :title="diagnosticsTargetTitle(member.targetBalance)">{{
-                                              memberTableTargetDisplayWithUnit(member, kpi)
-                                            }}</span>
-                                        </div>
-                                        <div class="col-span-2 text-center text-xs font-bold tabular-nums"
-                                          :class="memberActualColorClass(member, kpi)">
-                                          {{ memberActualWithUnit(member, kpi) }}
-                                        </div>
-                                        <div
-                                          class="col-span-1 text-center text-xs font-bold tabular-nums"
-                                          :class="diagnosticsMemberProgressTextClass(member, kpi)"
-                                          title="Completion: (Actual / Target) × 100, capped at 100%.">
-                                          {{ diagnosticsMemberProgressPct(member, kpi) }}
-                                        </div>
-                                        <div class="col-span-2 text-center text-xs font-bold tabular-nums" :class="memberStatusForUiMidYear(member, kpi) === 'danger'
-                                            ? 'text-red-600'
-                                            : memberStatusForUiMidYear(member, kpi) === 'warning'
-                                              ? 'text-yellow-600'
-                                              : 'text-green-600'
-                                          " :title="memberDiagnosticsScoreTooltip(member)">
-                                          {{ memberTableScoreDisplay(member) }}
-                                        </div>
-                                        <div class="col-span-2 flex justify-center items-center text-xs font-semibold">
-                                          <span
-                                            class="inline-flex max-w-full cursor-default items-center gap-1 truncate rounded px-0.5 py-0.5"
-                                            :title="diagnosticsReasonTooltip(member.blocker)">
-                                            <template v-if="memberStatusForUiMidYear(member, kpi) === 'danger'">
-                                              <span class="inline-flex items-center text-red-600">
-                                                <i class="fas fa-times-circle mr-1 shrink-0 text-[11px]" />
-                                                {{ memberDiagnosticsStatusLabelMidYear(member, kpi) }}
-                                              </span>
-                                            </template>
-                                            <template v-else-if="memberStatusForUiMidYear(member, kpi) === 'warning'">
-                                              <span class="inline-flex items-center text-yellow-700">
-                                                <i class="fas fa-exclamation-circle mr-1 shrink-0 text-[11px]" />
-                                                {{ memberDiagnosticsStatusLabelMidYear(member, kpi) }}
-                                              </span>
-                                            </template>
-                                            <template v-else>
-                                              <span class="inline-flex items-center text-green-600">
-                                                <i class="fas fa-check-circle mr-1 shrink-0 text-[11px]" />
-                                                {{ memberDiagnosticsStatusLabelMidYear(member, kpi) }}
-                                              </span>
-                                            </template>
-                                          </span>
-                                        </div>
-                                        <div class="col-span-1 flex justify-center">
-                                          <button
-                                            v-if="isMemberFeedbackPendingForGm(member)"
-                                            type="button"
-                                            class="rounded border border-violet-200 bg-violet-50 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-violet-700 shadow-sm transition-colors hover:border-violet-300 hover:bg-violet-100"
-                                            @click.stop="openFeedbackDrawerForMember(kpi, member)">
-                                            Feedback
-                                          </button>
-                                          <span v-else class="text-xs text-slate-200">-</span>
-                                        </div>
+                                      <div class="col-span-2 text-center text-xs font-bold tabular-nums" :class="memberStatusForUiMidYear(member, kpi) === 'danger'
+                                          ? 'text-red-600'
+                                          : memberStatusForUiMidYear(member, kpi) === 'warning'
+                                            ? 'text-yellow-600'
+                                            : 'text-green-600'
+                                        " :title="memberDiagnosticsScoreTooltip(member)">
+                                        {{ memberTableScoreDisplay(member) }}
                                       </div>
-                                    </template>
+                                      <div class="col-span-2 flex justify-center items-center text-xs font-semibold">
+                                        <span
+                                          class="inline-flex max-w-full cursor-default items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold leading-tight"
+                                          :class="asmStatusPillClass(memberAsmStatusCode(member))"
+                                          :title="asmStatusTitle(memberAsmStatusCode(member))">
+                                          <i class="fas shrink-0 text-[11px]" :class="asmStatusIconClass(memberAsmStatusCode(member))" />
+                                          <span class="truncate">{{ asmStatusLabel(memberAsmStatusCode(member)) }}</span>
+                                        </span>
+                                      </div>
+                                      <div class="col-span-1 flex justify-center">
+                                        <button
+                                          v-if="isMemberFeedbackPendingForGm(member)"
+                                          type="button"
+                                          class="rounded border border-violet-200 bg-violet-50 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-violet-700 shadow-sm transition-colors hover:border-violet-300 hover:bg-violet-100"
+                                          @click.stop="openFeedbackDrawerForMember(kpi, member)">
+                                          Feedback
+                                        </button>
+                                        <span v-else class="text-xs text-slate-200">-</span>
+                                      </div>
+                                    </div>
                                   </div>
                                 </div>
                               </div>

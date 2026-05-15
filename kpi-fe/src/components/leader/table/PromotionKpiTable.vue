@@ -88,6 +88,13 @@ function openEvidence(assign: any, mode: 'detail' | 'feedback' = 'detail') {
   isDrawerOpen.value = true;
 }
 
+function feedbackPendingStatusDesc(assign: any): string {
+  const createdByRole = String(assign?.createdByRoleCode ?? '').trim().toUpperCase()
+  return createdByRole === 'GM'
+    ? 'Chờ GM kiểm tra feedback'
+    : 'Chờ PM kiểm tra feedback'
+}
+
 async function onEvidenceSaved(payload: any) {
   if (!selectedKpi.value) { isDrawerOpen.value = false; return; }
   const assignId = selectedKpi.value.assignmentId;
@@ -95,7 +102,7 @@ async function onEvidenceSaved(payload: any) {
     try {
       await memberKpiService.submitFeedback(assignId, String(payload.feedbackComment ?? '').trim())
       selectedKpi.value.statusCode = 407
-      selectedKpi.value.statusDesc = 'Chờ PM kiểm tra feedback'
+      selectedKpi.value.statusDesc = feedbackPendingStatusDesc(selectedKpi.value)
       selectedKpi.value.feedbackComment = String(payload.feedbackComment ?? '').trim()
       isDrawerOpen.value = false
       emit('refresh-summary')
@@ -202,8 +209,11 @@ const hasRejectedAssignments = computed(() => {
 const isEmployeeCommentReadonly = computed(() => {
   if (props.isReadonly) return true
   const all = apiData.value?.categories?.flatMap(c => c.assignments) ?? []
+  if (!all.length) return false
   const pendingStatuses = new Set([402, 403, 501, 502, 601, 602])
-  return all.some(a => pendingStatuses.has(Number(a.statusCode ?? 0)))
+  const hasPendingApproval = all.some(a => pendingStatuses.has(Number(a.statusCode ?? 0)))
+  const evaluationCompleted = all.every(a => Number(a.statusCode ?? 0) === 603)
+  return hasPendingApproval || evaluationCompleted
 })
 
 const buttonState = computed(() => {
@@ -304,6 +314,9 @@ function statusDescForUi(assign: any): string {
   if (isOverdueEval(assign)) {
     return String(assign?.evaluationState ?? '').trim() || 'Đã quá hạn tự đánh giá KPI'
   }
+  if (Number(assign?.statusCode ?? 0) === 407) {
+    return feedbackPendingStatusDesc(assign)
+  }
   return assign?.statusDesc ?? '—'
 }
 
@@ -399,6 +412,12 @@ function statusTooltip(assign: any): string {
   const reason = String(assign?.updateReason ?? assign?.feedbackComment ?? '').trim()
   if (status === 406 && reason) return `Lý do từ chối:\n${reason}`
   return statusDescForUi(assign)
+}
+
+function hasRejectedReason(assign: any): boolean {
+  const status = Number(assign?.statusCode ?? 0)
+  const reason = String(assign?.updateReason ?? assign?.feedbackComment ?? '').trim()
+  return status === 406 && reason.length > 0
 }
 
 async function handleDeleteSelfCreated(assign: any) {
@@ -515,7 +534,7 @@ function parseActualResultFromEvidences(
 
       <div v-else class="overflow-x-auto">
         <table class="w-full text-left border-collapse text-sm">
-          <thead class="border-b border-slate-200 bg-white">
+          <thead class="border-b border-slate-200 bg-slate-200">
           <tr class="text-[11px] font-bold uppercase tracking-wider text-slate-500">
             <th class="w-12 px-5 py-4 text-center">STT</th>
             <th class="min-w-[200px] px-5 py-4">Hạng Mục (Objectives)</th>
@@ -527,7 +546,7 @@ function parseActualResultFromEvidences(
                 Actual Result
               </span>
             </th>
-            <th class="w-28 px-5 py-4 text-center text-slate-600">Self Score</th>
+            <th class="w-28 px-5 py-4 text-center ">Self Score</th>
             <th class="w-28 px-5 py-4 text-center">Final Score</th>
             <th class="w-28 px-5 py-4 text-right">Thao tác</th>
           </tr>
@@ -536,8 +555,8 @@ function parseActualResultFromEvidences(
           <tbody class="divide-y divide-slate-100">
 
           <template v-for="(category, catIndex) in apiData?.categories" :key="'cat-' + catIndex">
-            <tr class="bg-amber-100 border-y border-amber-100">
-              <td colspan="9" class="py-2 px-5 text-xs font-bold text-amber-800 uppercase tracking-wider">
+            <tr class="bg-slate-50 border-y border-slate-200">
+              <td colspan="9" class="py-2 px-5 text-xs font-bold text-slate-800 uppercase tracking-wider">
                 {{ category.name }}
               </td>
             </tr>
@@ -560,10 +579,19 @@ function parseActualResultFromEvidences(
                 <span
                   class="inline-flex max-w-full flex-col items-center gap-0.5 rounded-lg border px-2 py-1.5 text-[10px] font-semibold leading-tight"
                   :class="statusBadgeClass(statusCodeForUi(assign))"
-                :title="statusTooltip(assign)"
+                  :title="statusTooltip(assign)"
                 >
                   <span class="line-clamp-3 text-center" :class="statusTextClass(assign)">{{ statusDescForUi(assign) }}</span>
                 </span>
+                <span
+                    v-if="hasRejectedReason(assign)"
+                    :title="statusTooltip(assign)"
+                    class="ml-1 mt-1 inline-flex max-w-full items-start gap-1 text-left text-[10px] font-medium text-orange-700 cursor-pointer hover:bg-orange-100 rounded"
+                  >
+                    <span class="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-orange-300 text-[10px] font-bold leading-none text-orange-700">
+                      ?
+                    </span>
+                  </span>
               </td>
 
               <td class="max-w-xs py-4 px-5 align-middle">

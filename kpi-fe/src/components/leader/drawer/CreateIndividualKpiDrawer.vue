@@ -8,10 +8,10 @@ import {useKpiCalculationReference} from '@/composables/useKpiCalculationReferen
 import {useKpiUnitOptions} from '@/composables/useKpiUnitOptions'
 import {persistedCalculationMethodFromTypeAndRule} from '@/utils/kpiCalculationCodes'
 import {kpiFormUnitToUnitCode} from '@/utils/kpiUnitCodes'
+import ScoringRulesHelpTooltip from '@/components/kpi/ScoringRulesHelpTooltip.vue'
 import {
   buildScoringRulesPayload,
   extractRawInputFromApiTargetDescription,
-  SCORING_RULES_EXAMPLE_TOOLTIP,
   validateScoringRulesDsl,
 } from '@/utils/kpiScoringRulesDsl'
 
@@ -479,19 +479,7 @@ async function save() {
                     <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500">
                       Quy tắc chấm điểm <span class="text-rose-500">*</span>
                     </label>
-                    <span class="group relative inline-flex shrink-0">
-                      <button
-                        type="button"
-                        class="cursor-help rounded p-0.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-blue-600 focus-visible:outline focus-visible:ring-2 focus-visible:ring-slate-300"
-                        aria-label="Ví dụ cú pháp quy tắc chấm điểm"
-                      >
-                        <i class="fas fa-circle-question text-[12px]" aria-hidden="true" />
-                      </button>
-                      <span
-                        role="tooltip"
-                        class="pointer-events-none absolute right-0 top-full z-[110] mt-1 hidden min-w-[11rem] max-w-[20rem] whitespace-pre-line rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-left text-[10px] font-medium leading-snug text-slate-700 shadow-lg group-hover:block group-focus-within:block"
-                      >{{ SCORING_RULES_EXAMPLE_TOOLTIP }}</span>
-                    </span>
+                    <ScoringRulesHelpTooltip aria-label="Ví dụ cú pháp quy tắc chấm điểm" />
                   </div>
                   <textarea
                     v-model="description"

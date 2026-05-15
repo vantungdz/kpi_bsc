@@ -13,4 +13,5 @@ public class KpiAssignmentDetailAggregate extends KpiAssignment {
     private KpisInformation kpisInformation;
     private KpiMaster kpiMaster;
     private KpiCategory kpiCategory;
+    private String unitName;
 }

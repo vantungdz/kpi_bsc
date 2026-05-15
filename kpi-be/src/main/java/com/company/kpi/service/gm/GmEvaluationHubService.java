@@ -1,6 +1,7 @@
 package com.company.kpi.service.gm;
 
 import com.company.kpi.common.exception.AppException;
+import com.company.kpi.common.constant.Constant;
 import com.company.kpi.entity.KpiCycle;
 import com.company.kpi.entity.UserKpiSummary;
 import com.company.kpi.mapper.GmEvaluationHubMapper;
@@ -9,6 +10,7 @@ import com.company.kpi.mapper.KpiCycleMapper;
 import com.company.kpi.mapper.UserKpiSummaryMapper;
 import com.company.kpi.request.gm.GmEvaluationHubConfirmLine;
 import com.company.kpi.request.gm.GmEvaluationHubConfirmRequest;
+import com.company.kpi.request.gm.GmEvaluationHubUnlockRequest;
 import com.company.kpi.aggregate.GmEvaluationHubAssignmentRow;
 import com.company.kpi.response.gm.GmEvaluationHubAssignmentResponse;
 import com.company.kpi.response.gm.GmEvaluationHubConfirmResponse;
@@ -18,6 +20,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.OffsetDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Optional;
@@ -50,7 +53,26 @@ public class GmEvaluationHubService {
         out.setCycleId(cycle.getId());
         out.setYear(cycle.getYear());
         out.setCycleName(cycle.getName());
+        out.setActivePhase(activePhase(cycle));
         out.setAssignments(assignments);
+        return out;
+    }
+
+    @Transactional
+    public GmEvaluationHubConfirmResponse unlockAcceptedKpis(GmEvaluationHubUnlockRequest req, UUID gmUserId) {
+        KpiCycle cycle = kpiCycleMapper.findById(req.getCycleId())
+                .orElseThrow(() -> AppException.notFound("KPI cycle not found: " + req.getCycleId()));
+        int updated = kpiAssignmentMapper.unlockGmEvaluationHubAcceptedAssignments(
+                req.getCycleId(),
+                req.getEvaluationUserId(),
+                Boolean.TRUE.equals(req.getPromotion()),
+                gmUserId);
+        if (updated <= 0) {
+            throw AppException.badRequest("Không có KPI phù hợp để mở khóa.");
+        }
+        GmEvaluationHubConfirmResponse out = new GmEvaluationHubConfirmResponse();
+        out.setUpdatedCount(updated);
+        out.setSkippedCount(0);
         return out;
     }
 
@@ -196,5 +218,35 @@ public class GmEvaluationHubService {
         a.setSupervisorCommentPortfolio(r.getSupervisorCommentPortfolio());
         a.setSupervisorCommentPromotion(r.getSupervisorCommentPromotion());
         return a;
+    }
+
+    private static String activePhase(KpiCycle cycle) {
+        OffsetDateTime now = OffsetDateTime.now();
+        if (isWithinWindow(now, cycle.getEndYearStart(), cycle.getEndYearEnd())) {
+            return Constant.END_YEAR_PHASE;
+        }
+        if (isWithinWindow(now, cycle.getMidYearStart(), cycle.getMidYearEnd())) {
+            return Constant.MID_YEAR_PHASE;
+        }
+        if (isWithinWindow(now, cycle.getGoalSettingStart(), cycle.getGoalSettingEnd())) {
+            return Constant.TARGET_SETUP_PHASE;
+        }
+        if (cycle.getEndYearEnd() != null && now.isAfter(cycle.getEndYearEnd())) {
+            return Constant.END_YEAR_PHASE;
+        }
+        if (cycle.getMidYearEnd() != null && now.isAfter(cycle.getMidYearEnd())) {
+            return Constant.END_YEAR_PHASE;
+        }
+        if (cycle.getGoalSettingEnd() != null && now.isAfter(cycle.getGoalSettingEnd())) {
+            return Constant.MID_YEAR_PHASE;
+        }
+        return Constant.TARGET_SETUP_PHASE;
+    }
+
+    private static boolean isWithinWindow(OffsetDateTime now, OffsetDateTime start, OffsetDateTime end) {
+        if (start == null || end == null) {
+            return false;
+        }
+        return !now.isBefore(start) && !now.isAfter(end);
     }
 }

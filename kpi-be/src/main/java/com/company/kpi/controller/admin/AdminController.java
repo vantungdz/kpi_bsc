@@ -2,9 +2,13 @@ package com.company.kpi.controller.admin;
 
 import com.company.kpi.common.dto.BaseResponse;
 import com.company.kpi.controller.base.BaseController;
+import com.company.kpi.request.admin.CreateAdminKpiCycleRequest;
 import com.company.kpi.request.admin.NotifyRequest;
+import com.company.kpi.request.admin.PatchAdminKpiCycleStatusRequest;
 import com.company.kpi.request.admin.SaveEmailTemplateRequest;
 import com.company.kpi.request.admin.SaveEmployeeRequest;
+import com.company.kpi.request.admin.UpdateAdminKpiCyclePhaseDatesRequest;
+import com.company.kpi.response.admin.AdminKpiCycleResponse;
 import com.company.kpi.response.admin.AdminCampaignResponse;
 import com.company.kpi.response.admin.AdminEmailTemplateResponse;
 import com.company.kpi.response.admin.AdminEmployeeProgressResponse;
@@ -13,6 +17,7 @@ import com.company.kpi.response.admin.AdminJobTitleResponse;
 import com.company.kpi.response.admin.AdminRankResponse;
 import com.company.kpi.response.admin.AdminSectionResponse;
 import com.company.kpi.service.admin.AdminService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -24,6 +29,10 @@ import java.util.UUID;
 
 /**
  * Admin endpoints:
+ *   GET  /api/v1/admin/kpi-cycles
+ *   POST /api/v1/admin/kpi-cycles
+ *   PATCH /api/v1/admin/kpi-cycles/{id}
+ *   PUT  /api/v1/admin/kpi-cycles/{id}/phase-dates
  *   GET  /api/v1/admin/campaigns
  *   GET  /api/v1/admin/campaigns/progress?period=current
  *   POST /api/v1/admin/campaigns/{id}/notify
@@ -33,6 +42,7 @@ import java.util.UUID;
  *   GET  /api/v1/admin/email-templates
  *   POST /api/v1/admin/email-templates
  *   PUT  /api/v1/admin/email-templates/{id}
+ *   DELETE /api/v1/admin/email-templates/{id}
  */
 @RestController
 @RequestMapping("/v1/admin")
@@ -41,6 +51,39 @@ import java.util.UUID;
 public class AdminController extends BaseController {
 
     private final AdminService adminService;
+
+    // ── KPI cycles (kỳ đánh giá) ─────────────────────────────────────────────
+
+    @GetMapping("/kpi-cycles")
+    public ResponseEntity<BaseResponse<List<AdminKpiCycleResponse>>> listKpiCycles() {
+        return success(adminService.listKpiCyclesForAdmin());
+    }
+
+    @PostMapping("/kpi-cycles")
+    public ResponseEntity<BaseResponse<AdminKpiCycleResponse>> createKpiCycle(
+            @Valid @RequestBody CreateAdminKpiCycleRequest req,
+            Authentication auth) {
+        UUID userId = toUUID(auth.getName());
+        return created(adminService.createKpiCycle(req, userId));
+    }
+
+    @PatchMapping("/kpi-cycles/{id}")
+    public ResponseEntity<BaseResponse<AdminKpiCycleResponse>> patchKpiCycleStatus(
+            @PathVariable UUID id,
+            @Valid @RequestBody PatchAdminKpiCycleStatusRequest req,
+            Authentication auth) {
+        UUID userId = toUUID(auth.getName());
+        return success(adminService.updateKpiCycleStatus(id, req.getStatusCode(), userId));
+    }
+
+    @PutMapping("/kpi-cycles/{id}/phase-dates")
+    public ResponseEntity<BaseResponse<AdminKpiCycleResponse>> putKpiCyclePhaseDates(
+            @PathVariable UUID id,
+            @Valid @RequestBody UpdateAdminKpiCyclePhaseDatesRequest req,
+            Authentication auth) {
+        UUID userId = toUUID(auth.getName());
+        return success(adminService.updateKpiCyclePhaseDates(id, req, userId));
+    }
 
     // ── Campaigns ─────────────────────────────────────────────────────────────
 
@@ -57,7 +100,7 @@ public class AdminController extends BaseController {
 
     /**
      * Gửi email thông báo / nhắc nhở trong một chiến dịch.
-     * Body: { type: "all" | "single", employeeId?: UUID, message?: string }
+     * Body: type, employeeId?, employeeIds?, emailTemplateId?, message?
      */
     @PostMapping("/campaigns/{id}/notify")
     public ResponseEntity<BaseResponse<Void>> sendNotify(
@@ -126,6 +169,15 @@ public class AdminController extends BaseController {
             Authentication auth) {
         UUID userId = toUUID(auth.getName());
         return success(adminService.updateEmailTemplate(id, req, userId));
+    }
+
+    @DeleteMapping("/email-templates/{id}")
+    public ResponseEntity<BaseResponse<Void>> deleteEmailTemplate(
+            @PathVariable UUID id,
+            Authentication auth) {
+        UUID userId = toUUID(auth.getName());
+        adminService.deleteEmailTemplate(id, userId);
+        return success();
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

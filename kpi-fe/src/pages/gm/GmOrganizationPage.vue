@@ -8,12 +8,14 @@ import {
   apiDeleteGmMember,
   apiListGmDepartmentMemberCandidates,
   apiListGmDepartments,
+  apiListGmMembers,
   apiRemoveGmDepartmentMember,
   apiUpdateGmDepartment,
 } from '@/services/modules/kpi-gm.service'
 import type {
   GmDepartmentApiRow,
   GmDepartmentMemberCandidateApiRow,
+  GmMemberApiRow,
 } from '@/types/gm-department-api'
 import type { GmDepartmentMock, GmMemberDetailMock } from '@/types/gm-workspace'
 import type { DepartmentManagerOption } from '@/types/department-manager'
@@ -104,6 +106,14 @@ function formatManagerRoleCode(code: string | null | undefined): string {
 
 /** Phòng ban từ API `GET /kpi/gm/departments`. */
 const departmentsLocal = ref<GmDepartmentMock[]>([])
+type GmEmployeeRow = GmMemberDetailMock & {
+  deptName: string
+  roleCode: string
+  isDepartmentManager: boolean
+  managingDepartmentName: string
+}
+
+const employeesLocal = ref<GmEmployeeRow[]>([])
 
 const listLoading = ref(false)
 const listError = ref<string | null>(null)
@@ -112,14 +122,60 @@ async function loadDepartments() {
   listLoading.value = true
   listError.value = null
   try {
-    const rows = await apiListGmDepartments(new Date().getFullYear())
+    const [rows, members] = await Promise.all([
+      apiListGmDepartments(new Date().getFullYear()),
+      apiListGmMembers(),
+    ])
     departmentsLocal.value = rows.map(mapGmDepartmentApiRowToWorkspaceMock)
+    employeesLocal.value = members.map(mapGmMemberApiRowToEmployee)
   } catch (e: unknown) {
-    listError.value = e instanceof Error ? e.message : 'Không tải được danh sách phòng ban'
+    listError.value = e instanceof Error ? e.message : 'Không tải được dữ liệu tổ chức'
     departmentsLocal.value = []
+    employeesLocal.value = []
   } finally {
     listLoading.value = false
   }
+}
+
+function mapGmMemberApiRowToEmployee(
+  row: GmMemberApiRow,
+): GmEmployeeRow {
+  const deptName = row.departmentName?.trim() || 'Chưa gán'
+  const roleCode = row.roleCode?.trim().toUpperCase() || ''
+  return {
+    id: row.userId,
+    name: row.fullName?.trim() || '—',
+    ownerRoleCode: roleCode || null,
+    rank: row.rankCode?.trim() || '',
+    leader: '',
+    status: '',
+    rootCause: '',
+    dueIn: null,
+    priority: '',
+    scoreSelf: '',
+    scoreMgr: '',
+    deptId: row.departmentId?.trim() || '',
+    deptName,
+    roleCode,
+    isDepartmentManager: row.departmentManager === true,
+    managingDepartmentName: row.managingDepartmentName?.trim() || '',
+    relatedKpi: '',
+    relatedKpiType: 'individual',
+  }
+}
+
+function employeeSearchText(m: GmEmployeeRow): string {
+  return [
+    m.name,
+    m.rank,
+    m.deptName,
+    m.roleCode,
+    m.isDepartmentManager ? 'manager quản lý' : '',
+    m.managingDepartmentName,
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase()
 }
 
 const memberCountByDept = computed(() => {
@@ -687,33 +743,22 @@ async function onSubmit() {
 type OrgPageTab = 'departments' | 'employees'
 const activeTab = ref<OrgPageTab>('departments')
 
-/** Danh sách tất cả nhân viên gầp phẳng từ mọi phòng ban. */
-const allMembers = computed((): Array<GmMemberDetailMock & { deptName: string }> => {
-  const result: Array<GmMemberDetailMock & { deptName: string }> = []
-  for (const d of departmentsLocal.value) {
-    for (const m of d.staffDetails ?? []) {
-      result.push({ ...m, deptName: d.name })
-    }
-  }
-  return result
-})
+/** Danh sách tất cả nhân viên active, không phụ thuộc membership phòng ban. */
+const allMembers = computed(() => employeesLocal.value)
 
 const employeeSearch = ref('')
 const filteredEmployees = computed(() => {
   const q = employeeSearch.value.trim().toLowerCase()
   if (!q) return allMembers.value
-  return allMembers.value.filter((m) => {
-    const hay = `${m.name} ${m.rank ?? ''} ${m.deptName}`.toLowerCase()
-    return hay.includes(q)
-  })
+  return allMembers.value.filter((m) => employeeSearchText(m).includes(q))
 })
 
 /** Xóa member từ tab Nhân viên — xóa hoàn toàn khỏi hệ thống (hard delete). */
 const deleteEmployeeModalOpen = ref(false)
-const deleteEmployeeTarget = ref<(GmMemberDetailMock & { deptName: string }) | null>(null)
+const deleteEmployeeTarget = ref<GmEmployeeRow | null>(null)
 const deletingEmployee = ref(false)
 
-function onEmployeeTabRemoveMember(emp: GmMemberDetailMock & { deptName: string }) {
+function onEmployeeTabRemoveMember(emp: GmEmployeeRow) {
   const isManager = departmentsLocal.value.some((d) => d.managerUserId === emp.id)
   if (isManager) {
     showPageToast('Không thể xóa nhân viên đang là Quản lý của một phòng ban.', 'error')
@@ -747,9 +792,9 @@ async function confirmDeleteEmployee() {
 
 /** Logic Copy KPI */
 const copyKpiDrawerOpen = ref(false)
-const copyKpiTargetMember = ref<(GmMemberDetailMock & { deptName: string }) | null>(null)
+const copyKpiTargetMember = ref<GmEmployeeRow | null>(null)
 
-function openCopyKpiDrawer(emp: GmMemberDetailMock & { deptName: string }) {
+function openCopyKpiDrawer(emp: GmEmployeeRow) {
   copyKpiTargetMember.value = emp
   copyKpiDrawerOpen.value = true
 }
@@ -804,7 +849,7 @@ function openCopyKpiDrawer(emp: GmMemberDetailMock & { deptName: string }) {
       </div>
 
       <!-- Tab: Phòng ban -->
-      <template v-if="activeTab === 'departments'">
+      <div v-if="activeTab === 'departments'" key="departments-tab">
 
       <!-- Tìm kiếm — canh phải -->
       <div v-if="sections.length > 0" class="flex justify-end">
@@ -969,11 +1014,11 @@ function openCopyKpiDrawer(emp: GmMemberDetailMock & { deptName: string }) {
         </div>
       </div>
 
-      </template>
+      </div>
       <!-- /Tab Phòng ban -->
 
       <!-- Tab: Danh sách Nhân viên -->
-      <template v-if="activeTab === 'employees'">
+      <div v-else key="employees-tab">
         <!-- Thanh tìm kiếm -->
         <div class="relative">
           <i class="fas fa-search pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-400" aria-hidden="true" />
@@ -993,6 +1038,7 @@ function openCopyKpiDrawer(emp: GmMemberDetailMock & { deptName: string }) {
                 <th class="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500">Họ tên</th>
                 <th class="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500">Phòng ban</th>
                 <th class="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500">Rank</th>
+                <th class="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500">Vai trò</th>
                 <th class="px-4 py-3 text-center text-[11px] font-bold uppercase tracking-wider text-slate-500">Thao tác</th>
               </tr>
             </thead>
@@ -1010,7 +1056,12 @@ function openCopyKpiDrawer(emp: GmMemberDetailMock & { deptName: string }) {
                     >
                       {{ memberInitial(emp.name) }}
                     </div>
-                    <span class="font-semibold text-slate-800">{{ emp.name }}</span>
+                    <div class="min-w-0">
+                      <p class="font-semibold text-slate-800">{{ emp.name }}</p>
+                      <p v-if="emp.isDepartmentManager && emp.managingDepartmentName" class="mt-0.5 truncate text-[11px] font-medium text-emerald-700">
+                        Quản lý: {{ emp.managingDepartmentName }}
+                      </p>
+                    </div>
                   </div>
                 </td>
                 <td class="px-4 py-3">
@@ -1022,6 +1073,33 @@ function openCopyKpiDrawer(emp: GmMemberDetailMock & { deptName: string }) {
                 <td class="px-4 py-3">
                   <span v-if="emp.rank" class="inline-flex items-center rounded-md bg-amber-50 px-2 py-0.5 text-xs font-bold text-amber-700">Rank {{ emp.rank }}</span>
                   <span v-else class="text-slate-400">—</span>
+                </td>
+                <td class="px-4 py-3">
+                  <div class="flex flex-wrap items-center gap-1.5">
+                    <span
+                      v-if="emp.roleCode === 'ADMIN'"
+                      class="inline-flex items-center gap-1 rounded-md border border-violet-200 bg-violet-50 px-2 py-0.5 text-[11px] font-bold text-violet-700"
+                      title="Tài khoản quản trị hệ thống"
+                    >
+                      <i class="fas fa-shield-halved text-[10px]" aria-hidden="true" />
+                      Admin
+                    </span>
+                    <span
+                      v-if="emp.isDepartmentManager"
+                      class="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700"
+                      :title="emp.managingDepartmentName ? `Manager của ${emp.managingDepartmentName}` : 'Manager của department'"
+                    >
+                      <i class="fas fa-user-tie text-[10px]" aria-hidden="true" />
+                      Manager
+                    </span>
+                    <span
+                      v-if="emp.roleCode && emp.roleCode !== 'ADMIN'"
+                      class="inline-flex items-center rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-600"
+                    >
+                      {{ emp.roleCode }}
+                    </span>
+                    <span v-if="!emp.roleCode && !emp.isDepartmentManager" class="text-slate-400">—</span>
+                  </div>
                 </td>
                 <td class="px-4 py-3">
                   <div class="flex items-center justify-center gap-2">
@@ -1039,7 +1117,7 @@ function openCopyKpiDrawer(emp: GmMemberDetailMock & { deptName: string }) {
                     <button
                       type="button"
                       class="inline-flex items-center gap-1 rounded-md border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-[11px] font-semibold text-rose-700 transition-colors hover:bg-rose-100 hover:text-rose-900"
-                      title="Xóa nhân viên khỏi phòng ban"
+                      title="Xóa nhân viên khỏi hệ thống"
                       @click.stop="onEmployeeTabRemoveMember(emp)"
                     >
                       <i class="fas fa-user-minus text-[10px]" aria-hidden="true" />
@@ -1062,7 +1140,7 @@ function openCopyKpiDrawer(emp: GmMemberDetailMock & { deptName: string }) {
             {{ employeeSearch ? 'Không tìm thấy nhân viên khớp tìm kiếm' : 'Chưa có nhân viên nào trong hệ thống' }}
           </p>
         </div>
-      </template>
+      </div>
       <!-- /Tab Nhân viên -->
 
     </div>

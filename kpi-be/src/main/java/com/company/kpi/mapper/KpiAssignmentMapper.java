@@ -111,6 +111,11 @@ public interface KpiAssignmentMapper {
             @Param("assignmentId") UUID assignmentId,
             @Param("cycleId") UUID cycleId);
 
+    int countChildAssignmentsSubmittedActualForPmReview(
+            @Param("parentAssignmentId") UUID parentAssignmentId,
+            @Param("cycleId") UUID cycleId,
+            @Param("pmId") UUID pmId);
+
     List<KpiAssignmentUserTargetRow> listAssignmentUserTargetsByDepartment(
             @Param("kpiInfoId") UUID kpiInfoId,
             @Param("cycleId") UUID cycleId,
@@ -137,6 +142,13 @@ public interface KpiAssignmentMapper {
             @Param("targetValue") BigDecimal targetValue,
             @Param("updatedBy") UUID updatedBy);
 
+    int resubmitRejectedSelfCreatedAssignments(
+            @Param("kpiInfoId") UUID kpiInfoId,
+            @Param("cycleId") UUID cycleId,
+            @Param("actorId") UUID actorId,
+            @Param("rejectedStatus") int rejectedStatus,
+            @Param("waitingGmStatus") int waitingGmStatus);
+
     void insertKpiAssignmentsWithEntity(@Param("rows") List<KpiAssignment> rows);
     /** Trạng thái ASM hiện tại của assignment (chu kỳ + assignee) — null nếu không tìm thấy. */
     Integer selectHubConfirmStatus(
@@ -151,11 +163,22 @@ public interface KpiAssignmentMapper {
             @Param("evaluationUserId") UUID evaluationUserId,
             @Param("updatedBy") UUID updatedBy);
 
+    int cascadeGmEvaluationHubTeamSliceReview502(
+            @Param("sourceAssignmentId") UUID sourceAssignmentId,
+            @Param("cycleId") UUID cycleId,
+            @Param("updatedBy") UUID updatedBy);
+
     /** Cuối năm: ghi {@code end_gm_score}, 602→603. */
     int updateGmEvaluationHubConfirmGrade602(
             @Param("assignmentId") UUID assignmentId,
             @Param("cycleId") UUID cycleId,
             @Param("evaluationUserId") UUID evaluationUserId,
+            @Param("endGmScore") BigDecimal endGmScore,
+            @Param("updatedBy") UUID updatedBy);
+
+    int cascadeGmEvaluationHubTeamSliceGrade602(
+            @Param("sourceAssignmentId") UUID sourceAssignmentId,
+            @Param("cycleId") UUID cycleId,
             @Param("endGmScore") BigDecimal endGmScore,
             @Param("updatedBy") UUID updatedBy);
 
@@ -165,6 +188,12 @@ public interface KpiAssignmentMapper {
             @Param("cycleId") UUID cycleId,
             @Param("evaluationUserId") UUID evaluationUserId,
             @Param("gmComment") String gmComment,
+            @Param("updatedBy") UUID updatedBy);
+
+    int unlockGmEvaluationHubAcceptedAssignments(
+            @Param("cycleId") UUID cycleId,
+            @Param("evaluationUserId") UUID evaluationUserId,
+            @Param("promotion") boolean promotion,
             @Param("updatedBy") UUID updatedBy);
 
     List<GmApprovedKpiQueueItemResponse> listGmApprovedKpiQueue(@Param("cycleId") UUID cycleId);
@@ -184,6 +213,11 @@ public interface KpiAssignmentMapper {
             @Param("parentAssignmentId") UUID parentAssignmentId,
             @Param("cycleId") UUID cycleId,
             @Param("newStatus") int newStatus,
+            @Param("updatedBy") UUID updatedBy);
+
+    int activateSelfAssignedPmChildAssignments(
+            @Param("parentAssignmentId") UUID parentAssignmentId,
+            @Param("cycleId") UUID cycleId,
             @Param("updatedBy") UUID updatedBy);
 
     /** PM gửi feedback lên GM: assignment do PM sở hữu, 404→407. */
@@ -251,13 +285,24 @@ public interface KpiAssignmentMapper {
         @Param("cycleId") UUID cycleId,
         @Param("statusCode") Integer statusCode,
         @Param("promotion") Boolean promotion,
-        @Param("onlyFromStatusCode") Integer onlyFromStatusCode
+        @Param("onlyFromStatusCode") Integer onlyFromStatusCode,
+        @Param("includeManagedDepartmentAssignments") Boolean includeManagedDepartmentAssignments
     );
 
     /**
      * PM Accept KPI (404→405): chặn nếu còn KPI Team (cascade) chưa có con hoặc còn assignment con chưa đạt 405.
      */
     boolean existsTeamCascadeBlockingPmAccept(@Param("pmId") UUID pmId, @Param("cycleId") UUID cycleId);
+
+    /**
+     * PM Personal Send Review: all member Team child assignments must already be sent to GM
+     * for the corresponding phase before PM submits PM-owned KPIs.
+     */
+    int countBlockingPmTeamMemberReviewsForSendReview(
+            @Param("pmId") UUID pmId,
+            @Param("cycleId") UUID cycleId,
+            @Param("waitingGmStatus") Integer waitingGmStatus,
+            @Param("completedStatus") Integer completedStatus);
 
     /**
      * Giống {@link #updateKpiStatuses} nhưng áp dụng cho mọi assignment của user thuộc cây dưới PM (recursive {@code user_departments.supervisor_id}).

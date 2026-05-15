@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+import com.company.kpi.entity.SysStatusCode;
 import com.company.kpi.response.common.KpiCycleResponse;
 
 @Getter
@@ -16,8 +17,16 @@ public class PmDashboardResponse {
     @Builder.Default
     private List<KpiGroupDto> kpis = new ArrayList<>();
 
+    /** {@code sys_status_codes} category {@code ASM_STATUS} — nhãn trạng thái assignment theo {@code description}. */
+    @Builder.Default
+    private List<SysStatusCode> asmStatuses = new ArrayList<>();
+
     @Builder.Default
     private KpiCycleResponse kpiCycle = null;
+
+    private String evaluationCommentsPortfolio;
+    private String evaluationCommentsPromotion;
+
     @Getter
     @Builder
     public static class KpiGroupDto {
