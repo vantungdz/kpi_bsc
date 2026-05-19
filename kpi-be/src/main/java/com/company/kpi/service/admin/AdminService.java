@@ -179,6 +179,22 @@ public class AdminService {
                 .orElseThrow(() -> AppException.notFound("Không tìm thấy kỳ đánh giá."));
     }
 
+    @Transactional
+    public void deleteKpiCycle(UUID id, UUID actorId) {
+        KpiCycle cycle = kpiCycleMapper.findById(id)
+                .orElseThrow(() -> AppException.notFound("Không tìm thấy kỳ đánh giá."));
+        int currentYear = java.time.Year.now(VIETNAM).getValue();
+        Integer cycleYear = cycle.getYear();
+        if (cycleYear == null || cycleYear <= currentYear) {
+            throw AppException.badRequest(
+                    "Chỉ được xóa năm đánh giá lớn hơn năm hiện tại (" + currentYear + ").");
+        }
+        int updated = kpiCycleMapper.softDeleteKpiCycle(id, actorId);
+        if (updated == 0) {
+            throw AppException.notFound("Không tìm thấy kỳ đánh giá hoặc đã bị xóa.");
+        }
+    }
+
     private void ensureKpiAssignmentsPartition(UUID cycleId) {
         String suffix = cycleId.toString().replace("-", "");
         String physical = "kpi_assignments_" + suffix;

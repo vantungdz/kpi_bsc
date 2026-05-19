@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.company.kpi.mapper.PerformanceRatingScaleMapper">
+
+  <sql id="cycleSummarySelect">
+    SELECT
+      c.id::text                                    AS cycleId,
+      c.year                                        AS year,
+      c.name                                        AS name,
+      c.status_code                                 AS statusCode,
+      (c.status_code = 201)                         AS editable,
+      COUNT(l.id)::int                              AS levelCount
+    FROM kpi_cycles c
+    LEFT JOIN performance_rating_levels l
+      ON l.cycle_id = c.id AND l.deleted_at IS NULL
+    WHERE c.deleted_at IS NULL
+  </sql>
+
+  <select id="listCycleSummaries"
+          resultType="com.company.kpi.response.gm.GmRatingScaleSummaryResponse">
+    <include refid="cycleSummarySelect"/>
+    GROUP BY c.id, c.year, c.name, c.status_code
+    ORDER BY c.year DESC
+  </select>
+
+  <select id="findCycleSummaryByYear"
+          resultType="com.company.kpi.response.gm.GmRatingScaleSummaryResponse">
+    <include refid="cycleSummarySelect"/>
+      AND c.year = #{year}
+    GROUP BY c.id, c.year, c.name, c.status_code
+  </select>
+
+  <select id="findCycleSummaryByCycleId"
+          resultType="com.company.kpi.response.gm.GmRatingScaleSummaryResponse">
+    <include refid="cycleSummarySelect"/>
+      AND c.id = #{cycleId, jdbcType=OTHER, typeHandler=com.company.kpi.common.mybatis.UUIDTypeHandler}
+    GROUP BY c.id, c.year, c.name, c.status_code
+  </select>
+
+  <select id="listLevelsByCycleId"
+          resultType="com.company.kpi.response.gm.GmRatingScaleLevelResponse">
+    SELECT
+      id::text              AS id,
+      cycle_id::text        AS cycleId,
+      sort_order            AS sortOrder,
+      level_code            AS levelCode,
+      label                 AS label,
+      min_score             AS minScore,
+      max_score             AS maxScore,
+      pitch                 AS pitch,
+      color_hex             AS colorHex,
+      is_top_tier           AS topTier
+    FROM performance_rating_levels
+    WHERE cycle_id = #{cycleId, jdbcType=OTHER, typeHandler=com.company.kpi.common.mybatis.UUIDTypeHandler}
+      AND deleted_at IS NULL
+    ORDER BY sort_order ASC, level_code ASC
+  </select>
+
+  <select id="listLevelsByYear"
+          resultType="com.company.kpi.response.gm.GmRatingScaleLevelResponse">
+    SELECT
+      l.id::text              AS id,
+      l.cycle_id::text        AS cycleId,
+      l.sort_order            AS sortOrder,
+      l.level_code            AS levelCode,
+      l.label                 AS label,
+      l.min_score             AS minScore,
+      l.max_score             AS maxScore,
+      l.pitch                 AS pitch,
+      l.color_hex             AS colorHex,
+      l.is_top_tier           AS topTier
+    FROM performance_rating_levels l
+    INNER JOIN kpi_cycles c
+      ON c.id = l.cycle_id AND c.deleted_at IS NULL
+    WHERE c.year = #{year}
+      AND l.deleted_at IS NULL
+    ORDER BY l.sort_order ASC, l.level_code ASC
+  </select>
+
+  <select id="countLevelsByCycleId" resultType="int">
+    SELECT COUNT(*)::int
+    FROM performance_rating_levels
+    WHERE cycle_id = #{cycleId, jdbcType=OTHER, typeHandler=com.company.kpi.common.mybatis.UUIDTypeHandler}
+      AND deleted_at IS NULL
+  </select>
+
+  <select id="findStatusCodeByCycleId" resultType="int">
+    SELECT status_code
+    FROM kpi_cycles
+    WHERE id = #{cycleId, jdbcType=OTHER, typeHandler=com.company.kpi.common.mybatis.UUIDTypeHandler}
+      AND deleted_at IS NULL
+  </select>
+
+  <insert id="insertLevel">
+    INSERT INTO performance_rating_levels (
+      id, cycle_id, sort_order, level_code, label,
+      min_score, max_score, pitch, color_hex, is_top_tier,
+      created_by, updated_by
+    ) VALUES (
+      #{id, jdbcType=OTHER, typeHandler=com.company.kpi.common.mybatis.UUIDTypeHandler},
+      #{cycleId, jdbcType=OTHER, typeHandler=com.company.kpi.common.mybatis.UUIDTypeHandler},
+      #{sortOrder},
+      #{levelCode},
+      #{label},
+      #{minScore},
+      #{maxScore},
+      #{pitch},
+      #{colorHex},
+      #{topTier},
+      #{actorId, jdbcType=OTHER, typeHandler=com.company.kpi.common.mybatis.UUIDTypeHandler},
+      #{actorId, jdbcType=OTHER, typeHandler=com.company.kpi.common.mybatis.UUIDTypeHandler}
+    )
+  </insert>
+
+  <update id="updateLevel">
+    UPDATE performance_rating_levels
+    SET sort_order  = #{sortOrder},
+        level_code  = #{levelCode},
+        label       = #{label},
+        min_score   = #{minScore},
+        max_score   = #{maxScore},
+        pitch       = #{pitch},
+        color_hex   = #{colorHex},
+        is_top_tier = #{topTier},
+        updated_by  = #{actorId, jdbcType=OTHER, typeHandler=com.company.kpi.common.mybatis.UUIDTypeHandler},
+        updated_at  = NOW()
+    WHERE id = #{id, jdbcType=OTHER, typeHandler=com.company.kpi.common.mybatis.UUIDTypeHandler}
+      AND deleted_at IS NULL
+  </update>
+
+  <update id="softDeleteLevel">
+    UPDATE performance_rating_levels
+    SET deleted_at = NOW(),
+        updated_at = NOW(),
+        updated_by = #{actorId, jdbcType=OTHER, typeHandler=com.company.kpi.common.mybatis.UUIDTypeHandler}
+    WHERE id = #{id, jdbcType=OTHER, typeHandler=com.company.kpi.common.mybatis.UUIDTypeHandler}
+      AND deleted_at IS NULL
+  </update>
+
+</mapper>

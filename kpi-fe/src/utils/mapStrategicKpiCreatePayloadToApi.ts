@@ -52,8 +52,10 @@ export function mapStrategicKpiCreatePayloadToApi(
     }
   }
 
+  const cycleId = String(payload.cycleId ?? '').trim()
+
   const body: Record<string, unknown> = {
-    cycleId: payload.cycleId,
+    cycleId: cycleId || null,
     typeCode,
     perspective: payload.perspective,
     kpiName: String(payload.kpiName ?? '').trim(),

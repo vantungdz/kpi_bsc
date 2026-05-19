@@ -23,6 +23,9 @@ public class GmTimelineIssueRow {
     /** {@code kpi_master.id} */
     private UUID masterKpiId;
 
+    /** {@code kpi_master.type_code} */
+    private Integer typeCode;
+
     /** {@code kpi_master.name} */
     private String kpiName;
 

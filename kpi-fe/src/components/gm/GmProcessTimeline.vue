@@ -52,12 +52,18 @@ const cycleData = ref<{
 
 const cycleLoading = ref(true)
 
+function resolvedTimelineYear(): number {
+  return props.year ?? new Date().getFullYear()
+}
+
 watch(
-  () => props.year ?? new Date().getFullYear(),
+  () => resolvedTimelineYear(),
   async (newYear) => {
+    const expectedYear = newYear
     cycleLoading.value = true
     try {
-      const res = await kpiCycleService.getKpiCycleByYear(newYear)
+      const res = await kpiCycleService.getKpiCycleByYear(expectedYear)
+      if (resolvedTimelineYear() !== expectedYear) return
       cycleData.value = {
         activePhase: res.activePhase,
         goalSettingStart: res.goalSettingStart,
@@ -68,6 +74,7 @@ watch(
         endYearEnd: res.endYearEnd,
       }
     } catch {
+      if (resolvedTimelineYear() !== expectedYear) return
       cycleData.value = {
         activePhase: null,
         goalSettingStart: null,
@@ -78,7 +85,9 @@ watch(
         endYearEnd: null,
       }
     } finally {
-      cycleLoading.value = false
+      if (resolvedTimelineYear() === expectedYear) {
+        cycleLoading.value = false
+      }
     }
   },
   { immediate: true },
@@ -569,23 +578,10 @@ function openIssueDrawer(id: string) {
   if (!ph) return
   drawerIssuesPhase.value = ph
   activeIssueGroupId.value = id
+  expandedBreakdownKeys.value = {}
+  expandedEmployeeRowKey.value = null
   issuesPopoverPhase.value = null
   drawerOpen.value = true
-  nextTick(() => {
-    const g = drawerIssueGroups.value.find((x) => x.id === id)
-    if (!g) return
-    if (id === 'unassigned_members') {
-      const depts = buildTimelineBreakdownGroupsFromEmployees(g.employees)
-      const keys: Record<string, boolean> = {}
-      for (const d of depts) keys[d.groupKey] = true
-      expandedBreakdownKeys.value = keys
-      return
-    }
-    const kpis = resolveTimelineKpiGroups(g)
-    const keys: Record<string, boolean> = {}
-    for (const kg of kpis) keys[kpiGroupKey(kg)] = true
-    expandedBreakdownKeys.value = keys
-  })
 }
 
 function closeIssueDrawer() {

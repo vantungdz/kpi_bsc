@@ -27,6 +27,8 @@ public class GmDiagMemberNode {
     private String performanceLabel;
     private String blocker;
     private String rank;
+    /** {@code ranks.code} của assignee, ví dụ R1/R2/R3. */
+    private String rankCode;
     private String leader;
     /** {@code roles.code} của assignee (ưu tiên GM → PM → LEADER → MEMBER). */
     private String ownerRoleCode;

@@ -3,8 +3,8 @@ import { ref, watch, computed, onUnmounted } from 'vue'
 import { useToast } from 'vue-toastification'
 import type { KpiItem } from '@/types/kpi'
 import {
-  averageActualNumeric,
-  averageActualResultDisplay,
+  recordStyleMetricNumeric,
+  recordStyleResultDisplay,
   planActualRowPartiallyFilled,
   requiredPlanActualFields,
 } from '@/composables/useMemberEvidenceDrawer'
@@ -13,9 +13,7 @@ import {
   ratioLabels,
   parsePmPortfolioEvidenceString,
   normalizeDetailSelfScore,
-  normalizeCalculationRuleCode,
-  CALC_RULE_COMMENT,
-  CALC_RULE_AVERAGE,
+  isRecordStyleFormMode,
   parseNumericFromField,
   CALC_TYPE_PLAN_OVER_ACTUAL,
   normalizeEvidenceHref,
@@ -107,13 +105,6 @@ const drawerFormMode = computed<EvidenceFormMode>(() => {
   return resolveFormMode(k)
 })
 
-/** Chỉ KPI CALC_RULE = 803 (COMMENT) mới bắt buộc ô Actual riêng ngoài Content. */
-const isCommentRule803 = computed(() => {
-  const k = itemAsKpi.value
-  if (!k) return false
-  return normalizeCalculationRuleCode(k.calculationRuleCode) === CALC_RULE_COMMENT
-})
-
 const scoringRulesNormalized = computed(() => {
   try {
     return parseScoringRulesFromTargetDescriptionStored(props.item?.targetDescription ?? null)
@@ -164,14 +155,75 @@ const previewResolvedScore = computed((): number | null => {
   if (!rules.length) return null
   const k = itemAsKpi.value
   if (!k) return null
-  const rule = normalizeCalculationRuleCode(k.calculationRuleCode)
-  let metric: number | null = null
-  if (rule === CALC_RULE_COMMENT && isCommentRule803.value) {
-    metric = averageActualNumeric(planRows.value)
-  } else if (rule === CALC_RULE_AVERAGE) {
-    metric = averageMetric802FromPlanRows(planRows.value, k.calculationTypeCode)
+  if (isRecordStyleFormMode(drawerFormMode.value)) {
+    const metric = recordStyleMetricNumeric(drawerFormMode.value, planRows.value)
+    return resolveScoringScoreForMetric(metric, rules)
   }
-  return resolveScoringScoreForMetric(metric, rules)
+  if (drawerFormMode.value === 'average') {
+    const metric = averageMetric802FromPlanRows(planRows.value, k.calculationTypeCode)
+    return resolveScoringScoreForMetric(metric, rules)
+  }
+  return null
+})
+
+function computeFiniteMaxMetricFromRules(
+  rules: Array<
+    | { score: number; operator: '<' | '<=' | '>' | '>=' | '='; value: number }
+    | { score: number; min: number; max: number; loOpen?: boolean; hiOpen?: boolean }
+  >,
+): number | null {
+  if (!rules.length) return null
+  let hasUnboundedUpper = false
+  let maxUpper: number | null = null
+  for (const rule of rules) {
+    let upper: number | null = null
+    if ('min' in rule && 'max' in rule) {
+      upper = Number.isFinite(rule.max) ? rule.max : null
+    } else {
+      if (rule.operator === '>' || rule.operator === '>=') {
+        hasUnboundedUpper = true
+        continue
+      }
+      upper = Number.isFinite(rule.value) ? rule.value : null
+    }
+    if (upper != null) {
+      maxUpper = maxUpper == null ? upper : Math.max(maxUpper, upper)
+    }
+  }
+  if (hasUnboundedUpper) return null
+  return maxUpper
+}
+
+const autoScoreMetric = computed((): number | null => {
+  const k = itemAsKpi.value
+  if (!k) return null
+  if (isRecordStyleFormMode(drawerFormMode.value)) {
+    return recordStyleMetricNumeric(drawerFormMode.value, planRows.value)
+  }
+  if (drawerFormMode.value === 'average') {
+    return averageMetric802FromPlanRows(planRows.value, k.calculationTypeCode)
+  }
+  return null
+})
+
+const maxMetricAllowedByRules = computed(() =>
+  computeFiniteMaxMetricFromRules(scoringRulesNormalized.value as Array<
+    | { score: number; operator: '<' | '<=' | '>' | '>=' | '='; value: number }
+    | { score: number; min: number; max: number; loOpen?: boolean; hiOpen?: boolean }
+  >),
+)
+
+const exceedsMaxMetricRule = computed(() => {
+  const metric = autoScoreMetric.value
+  const maxAllowed = maxMetricAllowedByRules.value
+  if (metric == null || maxAllowed == null) return false
+  return metric > maxAllowed
+})
+
+const metricOutOfDslRule = computed(() => {
+  if (!scoringRulesNormalized.value.length) return false
+  if (autoScoreMetric.value == null) return false
+  return previewResolvedScore.value == null || exceedsMaxMetricRule.value
 })
 
 const footerSelfScoreDisplayed = computed(() => {
@@ -188,10 +240,6 @@ const averageRatioPreview = computed(() => {
   const value = averageMetric802FromPlanRows(planRows.value, k.calculationTypeCode)
   return value == null ? null : `${value.toFixed(1)}%`
 })
-
-const averageActualResult = computed(() =>
-  averageActualResultDisplay(planRows.value),
-)
 
 /** Chuỗi JSON evidences: ưu tiên `evidences`, fallback `actualResult`; object (axios đã parse JSON) → stringify. */
 function evidenceJsonRawFromItem(it: Record<string, unknown>): string {
@@ -240,7 +288,7 @@ function hydrateFromItem() {
       actual: r.actual,
       comment: r.comment || r.content || '',
     }))
-  } else if (formMode === 'comment' && (legacyActual || legacyContent)) {
+  } else if (isRecordStyleFormMode(formMode) && (legacyActual || legacyContent)) {
     planRows.value = [{
       ...newPlanRow(),
       actual: legacyActual,
@@ -315,7 +363,7 @@ function buildSerializedActual(): string {
     ...(comment.trim() ? { comment: comment.trim() } : {}),
   }))
   const rows = mapped.filter((r) =>
-    mode === 'comment' ? Boolean(r.actual || r.comment) : Boolean(r.plan || r.actual),
+    isRecordStyleFormMode(mode) ? Boolean(r.actual || r.comment) : Boolean(r.plan || r.actual),
   )
 
   const o: Record<string, unknown> = {}
@@ -324,11 +372,11 @@ function buildSerializedActual(): string {
     const k = itemAsKpi.value
     const value = k ? averageMetric802FromPlanRows(planRows.value, k.calculationTypeCode) : null
     if (value != null) o.result = `${value.toFixed(1)}%`
-  } else if (mode === 'comment') {
-    const avgDisplay = averageActualResultDisplay(planRows.value)
-    if (avgDisplay != null) {
-      o.actual = avgDisplay
-      o.result = avgDisplay
+  } else if (isRecordStyleFormMode(mode)) {
+    const metricDisplay = recordStyleResultDisplay(mode, planRows.value)
+    if (metricDisplay != null) {
+      o.actual = metricDisplay
+      o.result = metricDisplay
     }
   }
   if (note) o.note = note
@@ -355,8 +403,8 @@ const handleSave = () => {
       return
     }
   }
-  if (drawerFormMode.value === 'comment') {
-    const fields = requiredPlanActualFields('comment')
+  if (isRecordStyleFormMode(drawerFormMode.value)) {
+    const fields = requiredPlanActualFields(drawerFormMode.value)
     const hasIncomplete = planRows.value.some(r => planActualRowPartiallyFilled(r, fields))
     if (hasIncomplete) {
       toast.warning('Mỗi dòng phải nhập đủ Comment và Actual.')
@@ -412,7 +460,7 @@ function addPlanRow() {
   const hasIncomplete = planRows.value.some(r => planActualRowPartiallyFilled(r, fields))
   if (hasIncomplete) {
     toast.warning(
-      drawerFormMode.value === 'comment'
+      isRecordStyleFormMode(drawerFormMode.value)
         ? 'Vui lòng nhập đủ Comment và Actual trước khi thêm dòng mới.'
         : 'Vui lòng nhập đủ Comment, Plan và Actual trước khi thêm dòng mới.',
     )
@@ -433,7 +481,7 @@ const calcTypeLabel = computed(() =>
 )
 
 const attachmentSectionTitle = computed(() =>
-  drawerFormMode.value === 'comment'
+  isRecordStyleFormMode(drawerFormMode.value)
     ? 'Tài liệu Minh chứng Đính kèm (Bổ trợ)'
     : 'Minh chứng Đính kèm',
 )
@@ -441,6 +489,20 @@ const attachmentSectionTitle = computed(() =>
 const hasEvidenceAttachments = computed(
   () => pendingEvidenceFiles.value.length > 0 || pendingEvidenceUrls.value.length > 0,
 )
+
+ 
+const canSaveEvidence = computed(() => {
+  if (isReadOnly.value) return false
+  if (metricOutOfDslRule.value) return false
+  return true
+})
+
+const saveDisabledReason = computed(() => {
+  if (metricOutOfDslRule.value) {
+    return 'Giá trị Actual/Kết quả tính đang vượt mức tối đa của Quy tắc chấm điểm.'
+  }
+  return undefined
+})
 
 const selfScoreInFooter = computed(() => !!props.selfScoreFooterReadonly)
 </script>
@@ -495,7 +557,7 @@ const selfScoreInFooter = computed(() => !!props.selfScoreFooterReadonly)
           >
             <!-- 802 / 803: nhiều record Plan+Actual hoặc Comment+Actual -->
             <div
-              v-if="drawerFormMode === 'average' || drawerFormMode === 'comment'"
+              v-if="drawerFormMode === 'average' || isRecordStyleFormMode(drawerFormMode)"
               class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"
             >
               <div
@@ -566,12 +628,12 @@ const selfScoreInFooter = computed(() => !!props.selfScoreFooterReadonly)
                     >
                       <div>
                         <label class="mb-1 block text-xs font-bold text-slate-600">
-                          {{ drawerFormMode === 'comment' ? 'Nội dung nhận xét (Comment)' : 'Comment' }}
+                          {{ isRecordStyleFormMode(drawerFormMode) ? 'Nội dung nhận xét (Comment)' : 'Comment' }}
                         </label>
                         <input
                           v-model="row.comment"
                           type="text"
-                          :placeholder="drawerFormMode === 'comment' ? 'Mô tả bối cảnh, kết quả...' : 'Ghi chú thêm…'"
+                          :placeholder="isRecordStyleFormMode(drawerFormMode) ? 'Mô tả bối cảnh, kết quả...' : 'Ghi chú thêm…'"
                           class="w-full rounded border border-slate-300 px-3 py-2 text-sm focus:ring-1"
                           :class="drawerFormMode === 'average' ? 'focus:ring-blue-500' : 'focus:ring-teal-500'"
                         />
@@ -602,10 +664,14 @@ const selfScoreInFooter = computed(() => !!props.selfScoreFooterReadonly)
                       <span class="text-[10px] font-semibold text-slate-500">Kết quả tính:</span>
                       <span class="rounded bg-blue-50 px-2 py-0.5 text-xs font-bold text-blue-700">{{ averageRatioPreview }}</span>
                     </div>
-                    <div v-else-if="drawerFormMode === 'comment'" class="mt-2 flex items-center gap-2">
+                    <div v-else-if="isRecordStyleFormMode(drawerFormMode)" class="mt-2 flex items-center gap-2">
                       <span class="text-[10px] font-semibold text-slate-500">Kết quả tính:</span>
-                      <span class="rounded bg-teal-50 px-2 py-0.5 text-xs font-bold text-teal-700">{{ averageActualResult ?? '—' }}</span>
-                      <span class="text-[10px] text-slate-400">(TB Actual)</span>
+                      <span class="rounded bg-teal-50 px-2 py-0.5 text-xs font-bold text-teal-700">
+                        {{ recordStyleResultDisplay(drawerFormMode, planRows) ?? '—' }}
+                      </span>
+                      <span class="text-[10px] text-slate-400">
+                        {{ drawerFormMode === 'sum' ? '(Tổng Actual)' : '(TB Actual)' }}
+                      </span>
                     </div>
                     <div v-else />
                     <button type="button" class="flex items-center rounded px-4 py-1.5 text-sm font-medium text-white" :class="drawerFormMode === 'average' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-teal-600 hover:bg-teal-700'" @click="addPlanRow">
@@ -799,13 +865,13 @@ const selfScoreInFooter = computed(() => !!props.selfScoreFooterReadonly)
           </fieldset>
 
           <div
-            class="flex flex-col gap-3 border-t border-slate-200 bg-white p-4 sm:flex-row sm:items-center sm:gap-4"
-            :class="selfScoreInFooter ? 'sm:justify-between' : 'sm:justify-end'"
+            class="flex flex-col gap-3 border-t border-slate-200 bg-white p-4 sm:flex-row sm:items-end sm:justify-between sm:gap-4"
           >
-            <div
-              v-if="selfScoreInFooter"
-              class="flex flex-wrap items-center gap-2 sm:min-w-0"
-            >
+            <div class="min-w-0">
+              <div
+                v-if="selfScoreInFooter"
+                class="flex flex-wrap items-center gap-2 sm:min-w-0"
+              >
               <span class="shrink-0 text-xs font-bold uppercase tracking-wider text-slate-600"
                 >Self Score</span
               >
@@ -815,23 +881,31 @@ const selfScoreInFooter = computed(() => !!props.selfScoreFooterReadonly)
               >
                 {{ footerSelfScoreDisplayed != null ? footerSelfScoreDisplayed : '—' }}
               </span>
+              </div>
+              <p
+                v-if="!canSaveEvidence && saveDisabledReason"
+                class="mt-2 text-xs font-medium text-rose-600"
+              >
+                {{ saveDisabledReason }}
+              </p>
             </div>
+           
             <div class="flex justify-end gap-3 sm:ml-auto">
               <button
                 type="button"
-                class="rounded-lg border border-slate-300 px-5 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+                class="inline-flex min-w-[82px] items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-sm transition-colors hover:bg-slate-50"
                 @click="emit('close')"
               >
                 Hủy bỏ
               </button>
               <button
                 type="button"
-                class="flex items-center rounded-lg bg-slate-800 px-5 py-2 text-sm font-bold text-white hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
-                :disabled="isReadOnly"
-                :title="isReadOnly ? 'KPI đã được gửi duyệt, chỉ được xem thông tin.' : undefined"
+                class="inline-flex min-w-[114px] items-center justify-center rounded-xl bg-slate-800 px-4 py-2 text-sm font-bold text-white shadow-sm transition-colors hover:bg-slate-900 disabled:cursor-not-allowed disabled:bg-slate-400 disabled:text-slate-100"
+                :disabled="!canSaveEvidence"
+                :title="saveDisabledReason"
                 @click="handleSave"
               >
-                <i class="fas fa-save mr-2" />Lưu thay đổi
+                <i class="fas fa-save mr-2" />Lưu Evidence
               </button>
             </div>
           </div>

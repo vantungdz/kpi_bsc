@@ -96,15 +96,15 @@ const isActive = (path: string) => route.path.startsWith(path);
 
       <div class="p-4 border-t border-slate-200">
         <button
-          class="w-full flex items-center gap-2.5 px-3 py-2 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors text-xs font-medium"
+          class="w-full flex items-center gap-2.5 px-3 py-2 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors text-xs font-medium cursor-pointer"
           @click="logout"
         >
           <span
-            class="w-7 h-7 rounded-lg bg-slate-100 flex items-center justify-center shrink-0"
+            class="w-7 h-7 rounded-lg bg-slate-100 flex items-center justify-center shrink-0 text-slate-400"
           >
             <i class="fas fa-sign-out-alt text-xs" />
           </span>
-          Đăng xuất
+          Sign out
         </button>
       </div>
     </aside>

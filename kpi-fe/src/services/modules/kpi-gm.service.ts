@@ -41,6 +41,90 @@ import type {
   GmUpdateDepartmentBody,
 } from "@/types/gm-department-api";
 import type { GmKpiDashboard, KpiSection, KpiSectionMember } from "@/types/kpi";
+import type {
+  CreateGmRatingScaleBody,
+  GmRatingScaleCycleStatus,
+  GmRatingScaleDetail,
+  GmRatingScaleLevel,
+  GmRatingScaleSummary,
+  PatchGmRatingScaleCycleStatusBody,
+  SaveGmRatingScaleLevelBody,
+} from "@/types/gm-rating-scale";
+
+/** GET /kpi/gm/rating-scales */
+export async function apiListGmRatingScales(): Promise<GmRatingScaleSummary[]> {
+  return http
+    .get<ApiResponse<GmRatingScaleSummary[]>>("/kpi/gm/rating-scales")
+    .then((r) => r.data.data ?? []);
+}
+
+/** GET /kpi/gm/rating-scales/years/{year} */
+export async function apiGetGmRatingScaleByYear(
+  year: number,
+): Promise<GmRatingScaleDetail> {
+  return http
+    .get<ApiResponse<GmRatingScaleDetail>>(`/kpi/gm/rating-scales/years/${year}`)
+    .then((r) => r.data.data!);
+}
+
+/** PATCH /kpi/gm/rating-scales/cycles/{cycleId}/status */
+export async function apiPatchGmRatingScaleCycleStatus(
+  cycleId: string,
+  body: PatchGmRatingScaleCycleStatusBody,
+): Promise<GmRatingScaleCycleStatus> {
+  return http
+    .patch<ApiResponse<GmRatingScaleCycleStatus>>(
+      `/kpi/gm/rating-scales/cycles/${cycleId}/status`,
+      body,
+    )
+    .then((r) => r.data.data!);
+}
+
+/** POST /kpi/gm/rating-scales */
+export async function apiCreateGmRatingScale(
+  body: CreateGmRatingScaleBody,
+): Promise<GmRatingScaleDetail> {
+  return http
+    .post<ApiResponse<GmRatingScaleDetail>>("/kpi/gm/rating-scales", body)
+    .then((r) => r.data.data!);
+}
+
+/** POST /kpi/gm/rating-scales/cycles/{cycleId}/levels */
+export async function apiAddGmRatingScaleLevel(
+  cycleId: string,
+  body: SaveGmRatingScaleLevelBody,
+): Promise<GmRatingScaleLevel> {
+  return http
+    .post<ApiResponse<GmRatingScaleLevel>>(
+      `/kpi/gm/rating-scales/cycles/${cycleId}/levels`,
+      body,
+    )
+    .then((r) => r.data.data!);
+}
+
+/** PUT /kpi/gm/rating-scales/cycles/{cycleId}/levels/{levelId} */
+export async function apiUpdateGmRatingScaleLevel(
+  cycleId: string,
+  levelId: string,
+  body: SaveGmRatingScaleLevelBody,
+): Promise<GmRatingScaleLevel> {
+  return http
+    .put<ApiResponse<GmRatingScaleLevel>>(
+      `/kpi/gm/rating-scales/cycles/${cycleId}/levels/${levelId}`,
+      body,
+    )
+    .then((r) => r.data.data!);
+}
+
+/** DELETE /kpi/gm/rating-scales/cycles/{cycleId}/levels/{levelId} */
+export async function apiDeleteGmRatingScaleLevel(
+  cycleId: string,
+  levelId: string,
+): Promise<void> {
+  await http.delete(
+    `/kpi/gm/rating-scales/cycles/${cycleId}/levels/${levelId}`,
+  );
+}
 
 /** GET /api/kpi/gm/dashboard?year=2025 */
 export async function apiGetGmKpiDashboard(
@@ -242,7 +326,14 @@ export async function apiGetGmKpiCyclesWithKpis(): Promise<GmKpiCycleOption[]> {
     .then((r) => r.data.data);
 }
 
-/** GET /kpi/gm/kpi-cycles-for-evaluation — chu kỳ có dữ liệu KPI, gồm cả năm trước (dropdown header GM). */
+/** GET /common/kpi-cycles — mọi chu kỳ trong `kpi_cycles` (dropdown header GM). */
+export async function apiGetGmKpiCyclesForHeader(): Promise<GmKpiCycleOption[]> {
+  return http
+    .get<ApiResponse<GmKpiCycleOption[]>>("/common/kpi-cycles")
+    .then((r) => r.data.data);
+}
+
+/** GET /kpi/gm/kpi-cycles-for-evaluation — chu kỳ kpi_cycles, year ≥ hiện tại (dropdown Evaluation year). */
 export async function apiGetGmKpiCyclesForEvaluation(): Promise<
   GmKpiCycleOption[]
 > {
@@ -488,9 +579,11 @@ export async function apiGetGmProcessTimeline(
 /** POST /kpi/gm/personal-evaluation/submit — GM khóa đợt KPI cá nhân: 405→503 (giữa kỳ) / 503→603 (cuối kỳ). */
 export async function apiPostGmPersonalEvaluationSubmit(
   cycleId: string,
+  promotion = false,
 ): Promise<void> {
   await http.post<ApiResponse<unknown>>("/kpi/gm/personal-evaluation/submit", {
     cycleId: cycleId.trim(),
+    promotion,
   });
 }
 
@@ -590,6 +683,7 @@ export const gmKpiService = {
   getDiagnosticsHierarchy: (year: number) => apiGetGmDiagnosticsHierarchy(year),
   getKpiCategories: () => apiGetGmKpiCategories(),
   getKpiCyclesWithKpis: () => apiGetGmKpiCyclesWithKpis(),
+  getKpiCyclesForHeader: () => apiGetGmKpiCyclesForHeader(),
   getKpiCyclesForEvaluation: () => apiGetGmKpiCyclesForEvaluation(),
   createStrategicKpi: (body: Record<string, unknown>) =>
     apiCreateGmStrategicKpi(body),
@@ -630,8 +724,8 @@ export const gmKpiService = {
   decideApprovedKpiQueue: (body: GmApprovedKpiDecisionBody) =>
     apiPostGmApprovedKpiDecision(body),
   getProcessTimeline: (cycleId: string) => apiGetGmProcessTimeline(cycleId),
-  submitPersonalEvaluation: (cycleId: string) =>
-    apiPostGmPersonalEvaluationSubmit(cycleId),
+  submitPersonalEvaluation: (cycleId: string, promotion = false) =>
+    apiPostGmPersonalEvaluationSubmit(cycleId, promotion),
   getReportLevelDistribution: (params: {
     year: number;
     compareYears?: number[];
@@ -642,4 +736,21 @@ export const gmKpiService = {
   getReportSectionAnalytics: (year: number) =>
     apiGetGmReportSectionAnalytics(year),
   getReportCompliance: (year: number) => apiGetGmReportCompliance(year),
+  listRatingScales: () => apiListGmRatingScales(),
+  getRatingScaleByYear: (year: number) => apiGetGmRatingScaleByYear(year),
+  patchRatingScaleCycleStatus: (
+    cycleId: string,
+    body: PatchGmRatingScaleCycleStatusBody,
+  ) => apiPatchGmRatingScaleCycleStatus(cycleId, body),
+  createRatingScale: (body: CreateGmRatingScaleBody) =>
+    apiCreateGmRatingScale(body),
+  addRatingScaleLevel: (cycleId: string, body: SaveGmRatingScaleLevelBody) =>
+    apiAddGmRatingScaleLevel(cycleId, body),
+  updateRatingScaleLevel: (
+    cycleId: string,
+    levelId: string,
+    body: SaveGmRatingScaleLevelBody,
+  ) => apiUpdateGmRatingScaleLevel(cycleId, levelId, body),
+  deleteRatingScaleLevel: (cycleId: string, levelId: string) =>
+    apiDeleteGmRatingScaleLevel(cycleId, levelId),
 };

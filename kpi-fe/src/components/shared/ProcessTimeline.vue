@@ -512,7 +512,7 @@ onUnmounted(() => {
         <div
             v-if="showExpandedTimeline && yearEndOnly"
             key="tl-year-end-only-stack"
-            class="relative mx-auto w-full max-w-3xl pb-1 pt-0"
+            class="relative mx-auto w-full pb-1 pt-0"
         >
           <div class="relative z-[2] min-h-[2.75rem] w-full">
             <div

@@ -19,7 +19,6 @@ import java.util.UUID;
 @Data
 public class CreateStrategicKpiRequest {
 
-    @NotNull
     private UUID cycleId;
 
     /** {@code sys_status_codes} KPI_TYPE: 101 INDIVIDUAL, 102 TEAM (cascading), 103 PROMOTION. */

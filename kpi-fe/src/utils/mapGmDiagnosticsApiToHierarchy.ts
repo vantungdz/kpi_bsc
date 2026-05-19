@@ -17,6 +17,21 @@ import type {
 } from '@/types/gm-workspace'
 import { normalizeGmBscPerspective } from '@/utils/gm-bsc-diagnostics'
 import { normalizeStrategicKpiKind } from '@/utils/gm-strategic-kpi-kind'
+import { extractRawInputFromApiTargetDescription } from '@/utils/kpiScoringRulesDsl'
+
+/** Chuỗi quy tắc từ `target_description` (JSON có rawInput hoặc text thuần). */
+function scoringRulesFromTargetDescription(td: string | null | undefined): string | undefined {
+  const raw = String(td ?? '').trim()
+  if (!raw) return undefined
+  const fromJson = extractRawInputFromApiTargetDescription(raw).trim()
+  if (fromJson) return fromJson
+  try {
+    JSON.parse(raw)
+    return undefined
+  } catch {
+    return raw
+  }
+}
 
 function asStatus(s: string | undefined | null): GmHierarchyStatus {
   if (s === 'success' || s === 'warning' || s === 'danger') return s
@@ -61,6 +76,7 @@ function mapMember(m: GmDiagMemberApi): GmHierarchyMember {
       typeof m.feedbackAwaitingGm === 'boolean' ? m.feedbackAwaitingGm : undefined,
     blocker: m.blocker ?? '—',
     rank: m.rank ?? undefined,
+    rankCode: m.rankCode ?? undefined,
     leader: m.leader ?? undefined,
   }
 }
@@ -90,6 +106,11 @@ function mapPm(p: GmDiagPmApi): GmHierarchyPm {
       : undefined
   return {
     id: p.id,
+    assignmentId: p.assignmentId ?? undefined,
+    assignmentStatusCode:
+      typeof p.assignmentStatusCode === 'number' && Number.isFinite(p.assignmentStatusCode)
+        ? p.assignmentStatusCode
+        : undefined,
     name: p.name,
     ownerUserId: p.ownerUserId ?? undefined,
     ownerRoleCode: p.ownerRoleCode ?? undefined,
@@ -101,6 +122,9 @@ function mapPm(p: GmDiagPmApi): GmHierarchyPm {
     actual: p.actual,
     status: asStatus(p.status),
     blockerSummary: p.blockerSummary,
+    feedbackNote: p.feedbackNote ?? undefined,
+    feedbackAwaitingGm:
+      typeof p.feedbackAwaitingGm === 'boolean' ? p.feedbackAwaitingGm : undefined,
     members: (p.members ?? []).map(mapMember),
     leaders,
   }
@@ -120,6 +144,7 @@ export function mapGmDiagnosticsApiKpisToHierarchyRows(kpis: GmDiagKpiApi[] | nu
       name: k.name,
       weight: k.weight,
       target: k.target,
+      scoringRulesText: scoringRulesFromTargetDescription(k.targetDescription) ?? undefined,
       targetBalance: mapTargetBalance(k.targetBalance),
       actual: k.actual,
       status: asStatus(k.status),

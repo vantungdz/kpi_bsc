@@ -132,6 +132,21 @@
             c.year ASC
     </select>
 
+    <!-- Dropdown «Năm» header GM: mọi chu kỳ trong bảng kpi_cycles (chưa xóa mềm). -->
+    <select id="listAllCyclesForDropdown" resultType="com.company.kpi.response.gm.GmKpiCycleOptionResponse">
+        SELECT
+            c.id,
+            c.year,
+            c.name,
+            c.status_code AS statusCode
+        FROM
+            kpi_cycles c
+        WHERE
+            c.deleted_at IS NULL
+        ORDER BY
+            c.year DESC
+    </select>
+
     <!-- ── Thêm từ AdminMapper ─────────────────────────────────────────────────── -->
     <select id="getCycles" resultMap="KpiCycleResultMap">
         SELECT
@@ -249,6 +264,16 @@
         </choose>
         updated_at = CURRENT_TIMESTAMP,
         updated_by = #{updatedBy}
+        WHERE id = #{id}
+          AND deleted_at IS NULL
+    </update>
+
+    <update id="softDeleteKpiCycle">
+        UPDATE kpi_cycles
+        SET
+            deleted_at = CURRENT_TIMESTAMP,
+            updated_at = CURRENT_TIMESTAMP,
+            updated_by = #{updatedBy}
         WHERE id = #{id}
           AND deleted_at IS NULL
     </update>

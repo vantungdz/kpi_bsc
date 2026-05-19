@@ -33,6 +33,8 @@ export interface GmDiagKpiApi {
   name: string
   weight: string
   target: string
+  /** `kpis_information.target_description` — quy tắc chấm điểm (JSON DSL). */
+  targetDescription?: string | null
   /** `short` | `ok` | `excess` — so với tổng target assignment. */
   targetBalance?: string | null
   actual: string
@@ -62,6 +64,8 @@ export interface GmDiagKpiApi {
 
 export interface GmDiagPmApi {
   id: string
+  assignmentId?: string | null
+  assignmentStatusCode?: number | null
   name: string
   /** UUID manager phòng (section) — trùng `members[0].id` khi chỉ có assignee là manager. */
   ownerUserId?: string | null
@@ -76,6 +80,8 @@ export interface GmDiagPmApi {
   actual: string
   status: string
   blockerSummary: string
+  feedbackNote?: string | null
+  feedbackAwaitingGm?: boolean
   members: GmDiagMemberApi[]
   leaders?: GmDiagLeaderApi[] | null
 }
@@ -131,5 +137,6 @@ export interface GmDiagMemberApi {
   feedbackAwaitingGm?: boolean
   blocker: string
   rank?: string | null
+  rankCode?: string | null
   leader?: string | null
 }

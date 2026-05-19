@@ -52,6 +52,11 @@ const router = createRouter({
           component: () => import('@/pages/gm/GmKpiTemplateLibraryPage.vue'),
         },
         {
+          path: 'settings/rating-scale',
+          name: 'gm-rating-scale',
+          component: () => import('@/pages/gm/GmRatingScalePage.vue'),
+        },
+        {
           path: 'reports',
           name: 'gm-reports',
           component: () => import('@/pages/gm/GmReportsPage.vue'),

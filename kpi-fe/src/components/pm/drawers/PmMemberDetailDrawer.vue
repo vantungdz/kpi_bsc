@@ -10,13 +10,16 @@ import {
   parsePmPortfolioEvidenceString,
   normalizeEvidenceHref,
   isEvidenceImageUrl,
-  CALC_RULE_AVERAGE,
+  isRecordStyleCalcRule,
+  pmPortfolioActualDisplayMode,
 } from '@/utils/memberKpiHelpers'
 import { formatKpiTargetWithUnit } from '@/utils/kpiUnitCodes'
 
 const props = defineProps({
   open: { type: Boolean, default: false },
   member: { type: Object, default: null },
+  year: { type: [Number, String], default: () => new Date().getFullYear() },
+  readonlyYear: { type: Boolean, default: false },
   /** Đã load xong API “cổng” portfolio — tab KPI Member chờ gate trước khi bật Gửi đánh giá. */
   portfolioGateLoaded: { type: Boolean, default: false },
   /** true = mọi member đã nộp individual/team ≥501 cho PM. */
@@ -37,6 +40,14 @@ const activeTab = ref<'main' | 'promotion'>('main')
 const memberKpis = ref<any[]>([])
 const isLoadingKpis = ref(false)
 const reviewMeta = ref<PmMemberReviewMeta | null>(null)
+
+function selectedYearValue(): number {
+  const propYear = Number(props.year)
+  if (Number.isFinite(propYear) && propYear > 0) return propYear
+  const memberYear = Number(props.member?.year)
+  if (Number.isFinite(memberYear) && memberYear > 0) return memberYear
+  return new Date().getFullYear()
+}
 
 const reviewCommentsMain = ref({
   memberComment: '',
@@ -87,19 +98,29 @@ watch(
     const promoHasPendingPm = memberKpis.value.some(
       (k) => k.kpiType === 'promotion' && isPmPendingAssignmentStatus(k.statusCode),
     )
+    const mainHasFinalPendingPm = memberKpis.value.some(
+      (k) => k.kpiType !== 'promotion' && Number(k.statusCode) === KPI_STATUS.SECOND_WAITING_PM_APPROVAL,
+    )
+    const promoHasFinalPendingPm = memberKpis.value.some(
+      (k) => k.kpiType === 'promotion' && Number(k.statusCode) === KPI_STATUS.SECOND_WAITING_PM_APPROVAL,
+    )
 
     // Chỉ dùng draft supervisor khi tab còn KPI chờ PM — tránh draft PM cũ ghi đè nhận xét GM/DB sau khi duyệt xong.
     if (mainHasPendingPm && draftMain) {
       reviewCommentsMain.value.pmComment = String(props.cachedSupervisorComments?.main ?? '')
     } else if (mainHasPendingPm) {
-      reviewCommentsMain.value.pmComment = ''
+      reviewCommentsMain.value.pmComment = mainHasFinalPendingPm
+        ? String(metaLoaded?.supervisorCommentsPortfolio ?? '')
+        : ''
     } else {
       reviewCommentsMain.value.pmComment = String(metaLoaded?.supervisorCommentsPortfolio ?? '')
     }
     if (promoHasPendingPm && draftPromo) {
       reviewCommentsPromo.value.pmComment = String(props.cachedSupervisorComments?.promo ?? '')
     } else if (promoHasPendingPm) {
-      reviewCommentsPromo.value.pmComment = ''
+      reviewCommentsPromo.value.pmComment = promoHasFinalPendingPm
+        ? String(metaLoaded?.supervisorCommentsPromotion ?? '')
+        : ''
     } else {
       reviewCommentsPromo.value.pmComment = String(metaLoaded?.supervisorCommentsPromotion ?? '')
     }
@@ -128,7 +149,7 @@ async function fetchMemberKpis() {
   isLoadingKpis.value = true
   memberKpis.value = []
   try {
-    const year = props.member.year ? Number(props.member.year) : new Date().getFullYear()
+    const year = selectedYearValue()
     const data = await pmKpiService.getMemberKpiDetails(props.member.id, year)
     memberKpis.value = (data ?? []).map((item: any) => {
       const parsedEvidences = parsePmPortfolioEvidenceString(item.evidences)
@@ -148,7 +169,7 @@ async function fetchMemberKpis() {
             formatPmPortfolioActualCell(
               item.evidences,
               item.calcRuleCode,
-              Number(item.calcRuleCode) === CALC_RULE_AVERAGE ? 'mean' : 'list',
+              pmPortfolioActualDisplayMode(item.calcRuleCode),
             ) || '-',
             item.unitCode,
           ),
@@ -179,7 +200,7 @@ async function fetchMemberKpis() {
 async function fetchReviewMeta() {
   if (!props.member?.id) return
   try {
-    const year = props.member.year ? Number(props.member.year) : new Date().getFullYear()
+    const year = selectedYearValue()
     reviewMeta.value = await pmKpiService.getMemberReviewMeta(String(props.member.id), year)
   } catch (err) {
     console.error('Failed to fetch PM review meta:', err)
@@ -187,8 +208,15 @@ async function fetchReviewMeta() {
   }
 }
 
-const mainKpis = computed(() => memberKpis.value.filter((k) => k.kpiType !== 'promotion'))
-const promoKpis = computed(() => memberKpis.value.filter(k => k.kpiType === 'promotion'))
+function compareKpiNameEn(a: any, b: any): number {
+  return String(a?.name ?? '').localeCompare(String(b?.name ?? ''), 'en', {
+    sensitivity: 'base',
+    numeric: true,
+  })
+}
+
+const mainKpis = computed(() => memberKpis.value.filter((k) => k.kpiType !== 'promotion').sort(compareKpiNameEn))
+const promoKpis = computed(() => memberKpis.value.filter(k => k.kpiType === 'promotion').sort(compareKpiNameEn))
 
 function formatActualWithUnit(actual: unknown, unitCode: unknown): string {
   return formatKpiTargetWithUnit(String(actual ?? '').trim() || '-', unitCode as number | null | undefined)
@@ -209,11 +237,13 @@ const currentGroupedKpis = computed(() => {
 
   const allGroups = [...new Set(sourceList.map(k => k.group))].sort()
   return allGroups.map(key => ({
-    key, label: groupLabels[key] ?? key, items: groups[key] || []
+    key, label: groupLabels[key] ?? key, items: [...(groups[key] || [])].sort(compareKpiNameEn)
   })).filter(g => g.items.length > 0)
 })
 
 // Trọng số & tổng có trọng số — đồng bộ KPI Personal (PmPersonalKpiTab)
+const hasCurrentTabKpis = computed(() => currentGroupedKpis.value.length > 0)
+
 const totalWeight = computed(() => {
   const list = activeTab.value === 'promotion' ? promoKpis.value : mainKpis.value
   return list.reduce((s, k) => s + (Number(k.weight) || 0), 0)
@@ -383,6 +413,7 @@ function statusClass(statusCode: unknown): string {
 
 const saving = ref(false)
 function openUnlockConfirm() {
+  if (props.readonlyYear) return
   if (saving.value || unlocking.value || !canUnlockActiveTab.value) return
   unlockTabAtPrompt.value = activeTab.value
   unlockConfirmOpen.value = true
@@ -409,7 +440,7 @@ async function confirmUnlockForActiveTab() {
 
   unlocking.value = true
   try {
-    const year = props.member.year ? Number(props.member.year) : new Date().getFullYear()
+    const year = selectedYearValue()
     const initData = await pmKpiService.getInitialization(String(year))
     const cycleId = String(initData?.kpiCycle?.id ?? '').trim()
     if (!cycleId) {
@@ -439,6 +470,7 @@ async function confirmUnlockForActiveTab() {
 }
 
 const sendEvaluationForActiveTab = async () => {
+  if (props.readonlyYear) return
   if (!props.member?.id) return
   const tab = activeTab.value
   const isPromo = tab === 'promotion'
@@ -492,7 +524,7 @@ const sendEvaluationForActiveTab = async () => {
 
   saving.value = true
   try {
-    const year = props.member.year ? Number(props.member.year) : new Date().getFullYear()
+    const year = selectedYearValue()
     const memberId = String(props.member.id)
     const requests: Promise<unknown>[] = rows.map((item) =>
       pmKpiService.saveMemberKpiComment({
@@ -585,7 +617,7 @@ const sendEvaluationForActiveTab = async () => {
                       {{ member.role || member.rank }}
                     </span>
                     <span class="text-xs text-slate-400">•</span>
-                    <span class="text-xs text-slate-500 font-medium">Kỳ đánh giá: {{ member.year || new Date().getFullYear() }}</span>
+                    <span class="text-xs text-slate-500 font-medium">Kỳ đánh giá: {{ selectedYearValue() }}</span>
                   </div>
                 </div>
               </div>
@@ -614,8 +646,8 @@ const sendEvaluationForActiveTab = async () => {
                     <th class="px-4 py-3 font-semibold text-center w-40">THỰC TẾ (ACTUAL)</th>
                     <th class="px-4 py-3 font-semibold text-center w-20">TRỌNG SỐ (W)</th>
                     <th class="px-4 py-3 font-semibold text-center w-32">EVIDENCE</th>
-                    <th class="px-4 py-3 font-semibold text-center w-32">SELF</th>
-                    <th class="px-4 py-3 font-semibold text-center w-32">SUPERVISOR SCORE</th>
+                    <th class="px-4 py-3 font-semibold text-center w-32">SELF SCORE</th>
+                    <th class="px-4 py-3 font-semibold text-center w-32">FINAL SCORE</th>
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100">
@@ -669,7 +701,7 @@ const sendEvaluationForActiveTab = async () => {
 
                         <td class="px-4 py-4 text-center">
                           <select v-model="item.pmScore" @click.stop
-                            :disabled="Number(item.statusCode) !== KPI_STATUS.SECOND_WAITING_PM_APPROVAL"
+                            :disabled="props.readonlyYear || Number(item.statusCode) !== KPI_STATUS.SECOND_WAITING_PM_APPROVAL"
                             class="w-14 rounded border border-slate-300 bg-white px-1 py-1 text-xs font-bold text-slate-800 outline-none focus:border-blue-500 shadow-sm cursor-pointer text-center disabled:opacity-50 disabled:bg-slate-50 disabled:cursor-not-allowed">
                             <option :value="null">-</option>
                             <option v-for="n in 5" :key="n" :value="n">{{ n }}</option>
@@ -688,11 +720,11 @@ const sendEvaluationForActiveTab = async () => {
                                   class="bg-indigo-50 text-indigo-800 uppercase tracking-wider text-[10px] font-bold">
                                   <tr>
                                     <th class="px-3 py-2.5 text-center"
-                                      :class="item.calcMode !== 'sum' ? 'w-3/5' : 'w-2/3'">Content</th>
-                                    <th v-if="item.calcMode !== 'sum'"
+                                      :class="!isRecordStyleCalcRule(item.calcRuleCode) ? 'w-3/5' : 'w-2/3'">Content</th>
+                                    <th v-if="!isRecordStyleCalcRule(item.calcRuleCode)"
                                       class="px-3 py-2.5 text-center w-1/5 border-l border-indigo-100/60">Plan</th>
                                     <th class="px-3 py-2.5 text-center border-l border-indigo-100/60"
-                                      :class="item.calcMode !== 'sum' ? 'w-1/5' : 'w-1/3'">Actual</th>
+                                      :class="!isRecordStyleCalcRule(item.calcRuleCode) ? 'w-1/5' : 'w-1/3'">Actual</th>
                                   </tr>
                                 </thead>
                                 <tbody class="divide-y divide-slate-100">
@@ -700,7 +732,7 @@ const sendEvaluationForActiveTab = async () => {
                                     class="hover:bg-slate-50 transition-colors">
                                     <td class="px-3 py-2.5 font-medium text-slate-800 leading-snug">{{ ev.content || ev.comment }}
                                     </td>
-                                    <td v-if="item.calcMode !== 'sum'"
+                                    <td v-if="!isRecordStyleCalcRule(item.calcRuleCode)"
                                       class="px-3 py-2.5 text-center text-slate-600 border-l border-slate-100">{{
                                         ev.plan }}</td>
                                     <td
@@ -708,12 +740,12 @@ const sendEvaluationForActiveTab = async () => {
                                       {{ formatActualWithUnit(ev.actual, item.unitCode) }}</td>
                                   </tr>
                                   <tr v-if="(!item.evidenceData || item.evidenceData.length === 0) && !item.evidenceContent">
-                                    <td :colspan="item.calcMode === 'sum' ? 2 : 3"
+                                    <td :colspan="isRecordStyleCalcRule(item.calcRuleCode) ? 2 : 3"
                                       class="px-3 py-3 text-center text-slate-400 font-medium italic">Không có dữ liệu
                                       khai báo chi tiết.</td>
                                   </tr>
                                   <tr v-if="item.evidenceContent">
-                                    <td :colspan="item.calcMode === 'sum' ? 2 : 3" class="px-4 py-3 text-slate-700 whitespace-pre-wrap bg-yellow-50/30 border-t border-yellow-100">
+                                    <td :colspan="isRecordStyleCalcRule(item.calcRuleCode) ? 2 : 3" class="px-4 py-3 text-slate-700 whitespace-pre-wrap bg-yellow-50/30 border-t border-yellow-100">
                                       <p class="font-bold text-[10px] uppercase text-yellow-700/70 mb-1">Nội dung nhận xét / diễn giải:</p>
                                       {{ item.evidenceContent }}
                                     </td>
@@ -758,7 +790,7 @@ const sendEvaluationForActiveTab = async () => {
                               </p>
                               <textarea
                                 v-model="item.pmComment"
-                                :disabled="!isPmPendingAssignmentStatus(item.statusCode)"
+                                :disabled="props.readonlyYear || !isPmPendingAssignmentStatus(item.statusCode)"
                                 class="w-full px-3 py-2.5 text-sm font-normal text-slate-700 bg-white border border-slate-300 rounded-lg shadow-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 disabled:opacity-50 disabled:bg-slate-50 disabled:cursor-not-allowed resize-vertical"
                                 rows="4"
                                 placeholder="Nhập nhận xét / đánh giá cho KPI này..."
@@ -775,7 +807,7 @@ const sendEvaluationForActiveTab = async () => {
                             <p class="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-3">Supervisor's Comment</p>
                             <textarea
                               v-model="item.pmComment"
-                              :disabled="!isPmPendingAssignmentStatus(item.statusCode)"
+                              :disabled="props.readonlyYear || !isPmPendingAssignmentStatus(item.statusCode)"
                               class="w-full px-3 py-2.5 text-sm font-normal text-slate-700 bg-white border border-slate-300 rounded-lg shadow-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 disabled:opacity-50 disabled:bg-slate-50 disabled:cursor-not-allowed resize-vertical"
                               rows="4"
                               placeholder="Nhập nhận xét / đánh giá cho KPI này..."
@@ -788,12 +820,11 @@ const sendEvaluationForActiveTab = async () => {
                   </template>
 
                   <tr v-if="currentGroupedKpis.length === 0">
-                    <td colspan="8" class="py-8 text-center text-sm font-medium text-slate-500">Chưa có dữ liệu KPI cho
-                      mục này.</td>
+                    <td colspan="8" class="py-8 text-center text-sm font-medium text-slate-500">No KPI Evaluation</td>
                   </tr>
                 </tbody>
 
-                <tbody class="border-t-2 border-slate-200">
+                <tbody v-if="hasCurrentTabKpis" class="border-t-2 border-slate-200">
                   <tr class="bg-slate-50">
                     <td colspan="4" class="px-4 py-3 text-right font-bold text-slate-600 text-xs tracking-wider">
                       TỔNG CỘNG (TOTAL SCORE):
@@ -816,7 +847,7 @@ const sendEvaluationForActiveTab = async () => {
             </div>
 
             <div
-              v-if="activeTab === 'main' && portfolioGateLoaded && !portfolioGateOpen"
+              v-if="hasCurrentTabKpis && activeTab === 'main' && portfolioGateLoaded && !portfolioGateOpen"
               class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950 mb-3"
             >
               <i class="fas fa-user-clock mr-2 text-amber-600" aria-hidden="true" />
@@ -824,24 +855,24 @@ const sendEvaluationForActiveTab = async () => {
               <strong>Team Hierarchy & Performance</strong>.
             </div>
 
-            <div v-if="activeTab === 'main'" class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+            <div v-if="hasCurrentTabKpis && activeTab === 'main'" class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
               <EvaluationCommentBlock
                 v-model:employeeComment="reviewCommentsMain.memberComment"
                 v-model:managerComment="reviewCommentsMain.pmComment"
                 employeeTitle="Employee's Comment"
                 managerTitle="Supervisor Comment"
                 :employeeReadonly="true"
-                :managerReadonly="!canEvaluateMainTab"
+                :managerReadonly="props.readonlyYear || !canEvaluateMainTab"
               />
             </div>
-            <div v-if="activeTab === 'promotion'" class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+            <div v-if="hasCurrentTabKpis && activeTab === 'promotion'" class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
               <EvaluationCommentBlock
                 v-model:employeeComment="reviewCommentsPromo.memberComment"
                 v-model:managerComment="reviewCommentsPromo.pmComment"
                 employeeTitle="Employee's Comment (Promotion)"
                 managerTitle="Supervisor Comment (Promotion)"
                 :employeeReadonly="true"
-                :managerReadonly="!canEvaluatePromotionTab"
+                :managerReadonly="props.readonlyYear || !canEvaluatePromotionTab"
               />
             </div>
 
@@ -856,13 +887,13 @@ const sendEvaluationForActiveTab = async () => {
             <button
               v-if="canUnlockActiveTab"
               @click="openUnlockConfirm"
-              :disabled="saving || unlocking"
+              :disabled="props.readonlyYear || saving || unlocking"
               class="px-5 py-2.5 text-sm font-semibold text-amber-800 bg-amber-50 border border-amber-200 rounded-xl hover:bg-amber-100 transition-colors flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed">
               <i v-if="unlocking" class="fas fa-spinner fa-spin" />
               <i v-else class="fas fa-lock-open" />
               {{ unlocking ? 'Đang mở khóa...' : 'Unlock' }}
             </button>
-            <button @click="sendEvaluationForActiveTab" :disabled="saving || !canSubmitPmEvaluationToGm"
+            <button @click="sendEvaluationForActiveTab" :disabled="props.readonlyYear || saving || !canSubmitPmEvaluationToGm"
               class="px-6 py-2.5 text-sm font-semibold text-white bg-slate-900 rounded-xl hover:bg-indigo-600 hover:shadow-lg transition-all flex items-center gap-2 focus:ring-4 focus:ring-indigo-500/20 disabled:opacity-60 disabled:cursor-not-allowed">
               <i v-if="saving" class="fas fa-spinner fa-spin" />
               <i v-else class="fas fa-paper-plane" />

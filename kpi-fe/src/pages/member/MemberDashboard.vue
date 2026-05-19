@@ -35,7 +35,9 @@ const toast = useToast()
 const loading = ref(true)
 const dashboardData = ref<MemberKpiDashboard | null>(null)
 const cycleData = ref<KpiCycleResponse | null>(null)
+const currentYear = new Date().getFullYear()
 const selectedYear = ref(new Date().getFullYear())
+const availableYears = ref<{ value: number; label: string }[]>([])
 const memberExtraSheetItems = ref<KpiItem[]>([])
 const showCreateIndividualKpiDrawer = ref(false)
 const editingRejectedSelfCreatedItem = ref<KpiItem | null>(null)
@@ -70,8 +72,29 @@ async function loadDashboard() {
 onMounted(() => {
   const qy = Number(route.query.year)
   if (Number.isFinite(qy)) selectedYear.value = qy
-  loadDashboard()
+  loadAvailableYears().finally(loadDashboard)
 })
+
+async function loadAvailableYears() {
+  try {
+    const rows = await kpiCycleService.getKpiCyclesForDropdown()
+    const years = rows
+      .map(row => Number(row.year))
+      .filter(year => Number.isFinite(year))
+      .sort((a, b) => b - a)
+      .map(year => ({ value: year, label: `Year: ${year}` }))
+    availableYears.value = years
+    if (years.length > 0 && !years.some(y => y.value === selectedYear.value)) {
+      selectedYear.value = years[0].value
+    }
+  } catch {
+    availableYears.value = [
+      { value: 2026, label: 'Year: 2026' },
+      { value: 2025, label: 'Year: 2025' },
+      { value: 2024, label: 'Year: 2024' },
+    ]
+  }
+}
 
 // ── Computed ─────────────────────────────────────────────────────────────────
 const sheet = computed(() => {
@@ -86,20 +109,20 @@ const sheet = computed(() => {
   }
 })
 
-const isCurrentYear = computed(() => selectedYear.value === new Date().getFullYear())
+const isCurrentYear = computed(() => selectedYear.value === currentYear)
 
 function labelFromActionType(actionType: 'GOAL_SETTING' | 'MID_YEAR' | 'END_YEAR' | 'COMPLETED'): string {
-  if (actionType === 'GOAL_SETTING') return 'Nộp mục tiêu KPI (Goal Setting)'
-  if (actionType === 'MID_YEAR') return 'Nộp KPI giữa năm (Mid-Year)'
-  if (actionType === 'END_YEAR') return 'Nộp KPI cuối năm (End-Year)'
-  return 'Nộp đánh giá KPI'
+  if (actionType === 'GOAL_SETTING') return 'Submit KPI Goals (Goal Setting)'
+  if (actionType === 'MID_YEAR') return 'Submit Mid-Year KPI (Mid-Year)'
+  if (actionType === 'END_YEAR') return 'Submit Year-End KPI (End-Year)'
+  return 'Submit KPI Evaluation'
 }
 
 function promotionLabelFromActionType(actionType: 'GOAL_SETTING' | 'MID_YEAR' | 'END_YEAR' | 'COMPLETED'): string {
-  if (actionType === 'GOAL_SETTING') return 'Nộp KPI Đề Xuất Thăng Tiến'
-  if (actionType === 'MID_YEAR') return 'Nộp KPI Thăng Tiến Giữa Năm'
-  if (actionType === 'END_YEAR') return 'Nộp KPI Thăng Tiến Cuối Năm'
-  return 'Nộp KPI Thăng Tiến'
+  if (actionType === 'GOAL_SETTING') return 'Submit Promotion KPI'
+  if (actionType === 'MID_YEAR') return 'Submit Mid-Year Promotion KPI'
+  if (actionType === 'END_YEAR') return 'Submit Year-End Promotion KPI'
+  return 'Submit Promotion KPI'
 }
 
 // Tách state submit riêng cho từng loại KPI
@@ -280,11 +303,11 @@ const isPromotionSubmitDisabled = computed(
 
 // ── KPI grouping ──────────────────────────────────────────────────────────────
 const legacySheetGroupLabels: Record<string, string> = {
-  A: '(A) Hiệu suất, Cải tiến, Năng lực chuyên môn (Operational)',
-  B: '(B) Mục tiêu đào tạo, chia sẻ & nâng cấp bản thân',
-  C: '(C) Mục tiêu cấp quản lý (Management)',
-  P: '(P) Định hướng thăng tiến - Promotion KPI (Direct Assignment)',
-  I: '(I) Individual KPI (tự tạo)',
+  A: '(A) Performance, Improvement, Professional Competency (Operational)',
+  B: '(B) Training, Knowledge Sharing & Self-Development Goals',
+  C: '(C) Management-Level Goals (Management)',
+  P: '(P) Promotion Direction - Promotion KPI (Direct Assignment)',
+  I: '(I) Individual KPI (Self-created)',
 }
 
 type KpiCategorySection = { key: string; headerLabel: string; items: KpiItem[] }
@@ -296,7 +319,7 @@ function groupKpiItemsByCategory(items: KpiItem[]): KpiCategorySection[] {
     const headerLabel =
       (item.categoryName && item.categoryName.trim()) ||
       legacySheetGroupLabels[item.group] ||
-      `Nhóm ${item.group}`
+      `Group ${item.group}`
     const cur = map.get(key)
     if (!cur) map.set(key, { headerLabel, items: [item] })
     else cur.items.push(item)
@@ -458,8 +481,8 @@ function pickGlobalDeadlineBanner(
     return {
       banner: {
         ...promotionBanner,
-        title: 'Bạn có KPI đang quá hạn tự đánh giá',
-        subtitle: 'Vui lòng hoàn tất tự đánh giá KPI Personal và KPI thăng tiến sớm nhất để PM/HR xử lý.',
+        title: 'You have KPIs with overdue self-evaluations',
+        subtitle: 'Please complete your Personal KPI and Promotion KPI self-evaluations as soon as possible for PM/HR to process.',
       },
       targetTab: 'promotion',
     }
@@ -486,7 +509,7 @@ const kpiDeadlineBanner = computed((): KpiDeadlineBannerVm | null => {
   const promotionBanner = buildKpiDeadlineBanner({
     cycle: cycleData.value,
     phase: phaseFromActionType(promotionActionType),
-    subjectLabel: 'KPI thăng tiến',
+    subjectLabel: 'Promotion KPI',
     warningDays: 3,
     hasPendingAction: hasPendingActionByType(promotionItemsFlat.value, promotionActionType),
   })
@@ -507,7 +530,7 @@ const kpiDeadlineBannerTargetTab = computed<MemberBannerTarget>(() => {
   const promotionBanner = buildKpiDeadlineBanner({
     cycle: cycleData.value,
     phase: phaseFromActionType(promotionActionType),
-    subjectLabel: 'KPI thăng tiến',
+    subjectLabel: 'Promotion KPI',
     warningDays: 3,
     hasPendingAction: hasPendingActionByType(promotionItemsFlat.value, promotionActionType),
   })
@@ -551,7 +574,7 @@ function apiSubmitErrorMessage(err: unknown): string {
     if (m != null && String(m).trim() !== '') return String(m)
   }
   if (err instanceof Error) return err.message
-  return 'Cập nhật KPI thất bại, vui lòng thử lại'
+  return 'Failed to update KPI, please try again'
 }
 
 const memberKpiDraftStore = useMemberKpiDraftStore()
@@ -572,7 +595,7 @@ async function handlePersonalSubmit() {
     await submitByType('INDIVIDUAL', personalAssignmentIds.value)
     await memberKpiService.submit(selectedYear.value, 'INDIVIDUAL', personalEmployeeComment.value)
     await loadDashboard()
-    toast.success('Personal KPI đã được nộp thành công')
+    toast.success('Personal KPI submitted successfully')
   } catch (e: unknown) {
     toast.error(apiSubmitErrorMessage(e))
   } finally {
@@ -589,7 +612,7 @@ async function handlePromotionSubmit() {
     await submitByType('PROMOTION', promotionAssignmentIds.value)
     await memberKpiService.submit(selectedYear.value, 'PROMOTION', promotionEmployeeComment.value)
     await loadDashboard()
-    toast.success('Promotion KPI đã được nộp thành công')
+    toast.success('Promotion KPI submitted successfully')
   } catch (e: unknown) {
     toast.error(apiSubmitErrorMessage(e))
   } finally {
@@ -614,7 +637,7 @@ async function confirmDeleteSelfCreatedKpi() {
   try {
     await memberKpiService.deleteSelfCreatedKpi(item.id)
     await loadDashboard()
-    toast.success('Đã xóa KPI tự tạo')
+    toast.success('Self-created KPI deleted')
   } catch (e: unknown) {
     toast.error(apiSubmitErrorMessage(e))
   } finally {
@@ -629,7 +652,7 @@ async function confirmDeleteSelfCreatedKpi() {
     <!-- Loading -->
     <div v-if="loading" class="flex items-center justify-center py-24">
       <i class="fas fa-spinner fa-spin text-blue-500 text-2xl mr-3" />
-      <span class="text-slate-500 font-medium">Đang tải dữ liệu KPI...</span>
+      <span class="text-slate-500 font-medium">Loading KPI data...</span>
     </div>
 
     <template v-else-if="dashboardData && sheet">
@@ -646,7 +669,7 @@ async function confirmDeleteSelfCreatedKpi() {
         <div>
           <h2 class="text-2xl font-bold text-slate-900 tracking-tight">Member Dashboard</h2>
           <p class="text-slate-500 text-sm mt-1">
-            Theo dõi mục tiêu cá nhân, cập nhật bằng chứng và đánh giá hiệu suất.
+            Track personal goals, update evidence, and evaluate performance.
           </p>
         </div>
         <div class="flex gap-3">
@@ -655,9 +678,9 @@ async function confirmDeleteSelfCreatedKpi() {
             class="px-4 py-2 bg-white border border-slate-200 rounded-lg text-sm font-bold text-slate-700 shadow-sm outline-none cursor-pointer focus:ring-2 focus:ring-blue-100"
             @change="loadDashboard"
           >
-            <option :value="2024">Năm: 2024</option>
-            <option :value="2025">Năm: 2025</option>
-            <option :value="2026">Năm: 2026</option>
+            <option v-for="y in availableYears" :key="y.value" :value="y.value">
+              {{ y.label }}
+            </option>
           </select>
         </div>
       </div>
@@ -715,13 +738,13 @@ async function confirmDeleteSelfCreatedKpi() {
             @click="openCreateIndividualDrawer"
           >
             <i class="fas fa-plus text-xs" aria-hidden="true" />
-            Tạo KPI
+            Create KPI
           </button>
         </div>
 
         <MemberCreateIndividualKpiDrawer
           v-model="showCreateIndividualKpiDrawer"
-          :cycle-id="String(selectedYear)"
+          :cycle-id="String(currentYear)"
           :edit-item="editingRejectedSelfCreatedItem"
           @saved="onMemberIndividualKpiSaved"
         />
@@ -790,14 +813,14 @@ async function confirmDeleteSelfCreatedKpi() {
       >
         <div class="w-full max-w-md rounded-xl border border-slate-200 bg-white shadow-2xl">
           <div class="border-b border-slate-100 px-5 py-4">
-            <h3 class="text-base font-bold text-slate-800">Xác nhận xóa KPI</h3>
+            <h3 class="text-base font-bold text-slate-800">Confirm KPI Deletion</h3>
             <p class="mt-1 text-xs text-slate-500">
-              KPI tự tạo sẽ bị xóa khỏi danh sách hiện tại.
+              The self-created KPI will be removed from the current list.
             </p>
           </div>
           <div class="px-5 py-4 text-sm text-slate-700">
             <p>
-              Bạn có chắc muốn xóa KPI:
+              Are you sure you want to delete KPI:
               <span class="font-semibold text-slate-900">
                 {{ pendingDeleteItem?.code }} {{ pendingDeleteItem?.name }}
               </span>
@@ -810,14 +833,14 @@ async function confirmDeleteSelfCreatedKpi() {
               class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"
               @click="cancelDeleteSelfCreatedKpi"
             >
-              Hủy
+              Cancel
             </button>
             <button
               type="button"
               class="rounded-lg bg-rose-600 px-3 py-2 text-xs font-semibold text-white hover:bg-rose-700"
               @click="confirmDeleteSelfCreatedKpi"
             >
-              Xóa KPI
+              Delete KPI
             </button>
           </div>
         </div>

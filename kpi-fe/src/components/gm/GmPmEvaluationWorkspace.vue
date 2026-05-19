@@ -44,27 +44,36 @@ const baseEmployees = ref<GmEvalMember[]>([])
 const activePhase = ref<string | null>(null)
 
 async function loadEvaluationHub() {
-  if (useMock) {
-    basePmBranches.value = getGmEvalPmHubTree()
-    baseEmployees.value = getGmEvalPmHubRows()
-    activePhase.value = 'target_setup'
-    return
-  }
-  const cid = String(selectedCycleId.value ?? '').trim()
-  if (!cid) {
+  const expectedCycleId = String(selectedCycleId.value ?? '').trim()
+  if (!expectedCycleId) {
     basePmBranches.value = []
     baseEmployees.value = []
     activePhase.value = null
     return
   }
+
+  basePmBranches.value = []
+  baseEmployees.value = []
+  activePhase.value = null
+
+  if (useMock) {
+    if (String(selectedCycleId.value ?? '').trim() !== expectedCycleId) return
+    basePmBranches.value = getGmEvalPmHubTree()
+    baseEmployees.value = getGmEvalPmHubRows()
+    activePhase.value = 'target_setup'
+    return
+  }
+
   hubLoading.value = true
   try {
-    const data = await gmKpiService.getEvaluationHubAssignments(cid)
+    const data = await gmKpiService.getEvaluationHubAssignments(expectedCycleId)
+    if (String(selectedCycleId.value ?? '').trim() !== expectedCycleId) return
     const tree = mapGmEvaluationHubApiToPmBranches(data)
     basePmBranches.value = tree
     baseEmployees.value = flattenGmEvalPmHubTreeForScores(tree)
     activePhase.value = data.activePhase ?? null
   } catch (e: unknown) {
+    if (String(selectedCycleId.value ?? '').trim() !== expectedCycleId) return
     basePmBranches.value = []
     baseEmployees.value = []
     activePhase.value = null
@@ -73,7 +82,9 @@ async function loadEvaluationHub() {
       durationMs: 8000,
     })
   } finally {
-    hubLoading.value = false
+    if (String(selectedCycleId.value ?? '').trim() === expectedCycleId) {
+      hubLoading.value = false
+    }
   }
 }
 

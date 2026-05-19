@@ -21,6 +21,18 @@ export interface GmEvaluationHubAssignmentApiRow {
   userFullName: string | null
   userUsername: string | null
   rankCode: string | null
+  /**
+   * Preferred explicit calc identifiers from BE.
+   * - `calculationRuleCode` should be source of truth for FE rendering rules.
+   * - `calculationMethod` is fallback when rule code is absent.
+   */
+  calculationRuleCode?: number | string | null
+  calculationTypeCode?: number | string | null
+  calculationMethod?: string | null
+  /** Backward-compat aliases that may exist in legacy payloads. */
+  calcRuleCode?: number | string | null
+  calculation_rule_code?: number | string | null
+  calculation_method?: string | null
   assigneeSupervisorId: string | null
   assigneeSupervisorFullName: string | null
   sectionId: string

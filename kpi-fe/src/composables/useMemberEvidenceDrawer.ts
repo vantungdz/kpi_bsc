@@ -21,9 +21,31 @@ import {
   computeRatioPreview,
   normalizeDetailSelfScore,
   isMonthlyWorkAmountCase,
+  isRecordStyleFormMode,
   parseNumericFromField,
+  averageActualNumeric,
+  averageActualResultDisplay,
+  sumActualNumeric,
+  sumActualResultDisplay,
+  recordStyleMetricNumeric,
+  recordStyleResultDisplay,
+  planActualRowPartiallyFilled,
+  requiredPlanActualFields,
   WA_MONTH_OPTIONS,
   type EvidenceFormMode,
+  type PlanActualField,
+} from '@/utils/memberKpiHelpers'
+
+export {
+  averageActualNumeric,
+  averageActualResultDisplay,
+  sumActualNumeric,
+  sumActualResultDisplay,
+  recordStyleMetricNumeric,
+  recordStyleResultDisplay,
+  requiredPlanActualFields,
+  planActualRowPartiallyFilled,
+  type PlanActualField,
 } from '@/utils/memberKpiHelpers'
 import {
   parseRulesFromTargetDescription,
@@ -54,20 +76,6 @@ function newPlanActualRow(): PlanActualDraftRow {
     actual: '',
     comment: '',
   }
-}
-
-export type PlanActualField = 'comment' | 'plan' | 'actual'
-
-export function requiredPlanActualFields(mode: EvidenceFormMode): PlanActualField[] {
-  return mode === 'comment' ? ['comment', 'actual'] : ['comment', 'plan', 'actual']
-}
-
-export function planActualRowPartiallyFilled(
-  row: Pick<PlanActualDraftRow, PlanActualField>,
-  fields: PlanActualField[],
-): boolean {
-  const vals = fields.map(f => String(row[f] ?? '').trim())
-  return vals.some(v => v.length > 0) && vals.some(v => v.length === 0)
 }
 
 function newWaTimeRow(): WaTimeDraftRow {
@@ -188,25 +196,6 @@ export function averageRatioResult(
   if (!values.length) return undefined
   const avg = values.reduce((sum, x) => sum + x, 0) / values.length
   return `${avg.toFixed(1)}%`
-}
-
-/** CALC_RULE 803 — trung bình cộng các giá trị Actual (số) trên nhiều record. */
-export function averageActualNumeric(
-  rows: Array<{ actual: string }>,
-): number | null {
-  const values = rows
-    .map(r => parseNumericFromField(String(r.actual ?? '')))
-    .filter((n): n is number => n != null)
-  if (!values.length) return null
-  return values.reduce((sum, x) => sum + x, 0) / values.length
-}
-
-export function averageActualResultDisplay(
-  rows: Array<{ actual: string }>,
-): string | undefined {
-  const avg = averageActualNumeric(rows)
-  if (avg == null) return undefined
-  return Number.isInteger(avg) ? String(avg) : avg.toFixed(2)
 }
 
 function normalizeEvidenceUrlInput(raw: string): string {
@@ -360,7 +349,7 @@ export function useMemberEvidenceDrawer() {
     return ''
   })
 
-  // Auto-computed score from scoring rules + metric (TB % cho 802, TB Actual cho 803)
+  // Auto-computed score from scoring rules + metric (TB % cho 802, TB/tổng Actual cho 803/801)
   const computedEvalScore = computed((): number | null => {
     const metric = autoScoreMetric.value
     if (metric == null) return null
@@ -371,8 +360,8 @@ export function useMemberEvidenceDrawer() {
 
   // Metric used to map score from DSL rules
   const autoScoreMetric = computed((): number | null => {
-    if (drawerFormMode.value === 'comment') {
-      return averageActualNumeric(generalPlanActualRows.value)
+    if (isRecordStyleFormMode(drawerFormMode.value)) {
+      return recordStyleMetricNumeric(drawerFormMode.value, generalPlanActualRows.value)
     }
     if (drawerFormMode.value === 'average') {
       const item = selectedDrawerItem.value
@@ -400,7 +389,7 @@ export function useMemberEvidenceDrawer() {
   })
 
   const hasDslScoringRules = computed(() =>
-    (drawerFormMode.value === 'comment' || drawerFormMode.value === 'average')
+    (isRecordStyleFormMode(drawerFormMode.value) || drawerFormMode.value === 'average')
     && scoringRulesFromItem.value.length > 0,
   )
 
@@ -458,9 +447,9 @@ export function useMemberEvidenceDrawer() {
   )
 
   const attachmentHubTitle = computed(() => {
-    if (isUploadOnlyDrawer.value) return 'Chứng chỉ / Bằng cấp Đính kèm'
-    if (drawerCase.value === 'category_b') return 'Minh chứng & Đính kèm'
-    return 'Tài liệu Minh chứng Đính kèm (Bổ trợ)'
+    if (isUploadOnlyDrawer.value) return 'Attached Certificates / Qualifications'
+    if (drawerCase.value === 'category_b') return 'Evidence & Attachments'
+    return 'Supporting Evidence Attachments'
   })
 
   const hasEvidenceAttachments = computed(
@@ -525,7 +514,7 @@ export function useMemberEvidenceDrawer() {
 
     let slot = EVIDENCE_MAX_FILES - pendingEvidenceFiles.value.length
     if (slot <= 0) {
-      evidenceUploadHint.value = `Đã đủ ${EVIDENCE_MAX_FILES} file. Xóa bớt để thêm file mới.`
+      evidenceUploadHint.value = `Maximum ${EVIDENCE_MAX_FILES} files reached. Remove some files to add new ones.`
       return
     }
 
@@ -550,9 +539,9 @@ export function useMemberEvidenceDrawer() {
 
     const parts: string[] = []
     if (rejected.length)
-      parts.push(`Loại file không hỗ trợ (chỉ PDF, Word, Excel, CSV, JPG, PNG): ${rejected.join(', ')}`)
+      parts.push(`Unsupported file types (only PDF, Word, Excel, CSV, JPG, PNG): ${rejected.join(', ')}`)
     if (truncated)
-      parts.push(`Chỉ được tối đa ${EVIDENCE_MAX_FILES} file; một số file chưa được thêm.`)
+      parts.push(`Maximum ${EVIDENCE_MAX_FILES} files allowed; some files were not added.`)
     if (parts.length) evidenceUploadHint.value = parts.join(' ')
   }
 
@@ -560,7 +549,7 @@ export function useMemberEvidenceDrawer() {
     pendingEvidenceFiles.value = pendingEvidenceFiles.value.filter(f => f.id !== id)
     if (pendingEvidenceFiles.value.length < EVIDENCE_MAX_FILES) {
       const h = evidenceUploadHint.value
-      if (h.includes('Đã đủ') || h.includes('chưa được thêm') || h.includes('Một số file'))
+      if (h.includes('Maximum') || h.includes('were not added') || h.includes('Some files'))
         evidenceUploadHint.value = ''
     }
   }
@@ -569,19 +558,19 @@ export function useMemberEvidenceDrawer() {
     evidenceUrlHint.value = ''
     const normalized = normalizeEvidenceUrlInput(evidenceUrlDraft.value)
     if (!normalized) {
-      evidenceUrlHint.value = 'Nhập URL (http hoặc https).'
+      evidenceUrlHint.value = 'Enter a URL (http or https).'
       return
     }
     if (!isValidEvidenceHttpUrl(normalized)) {
-      evidenceUrlHint.value = 'URL không hợp lệ. Ví dụ: https://drive.google.com/...'
+      evidenceUrlHint.value = 'Invalid URL. Example: https://drive.google.com/...'
       return
     }
     if (pendingEvidenceUrls.value.length >= EVIDENCE_MAX_URLS) {
-      evidenceUrlHint.value = `Tối đa ${EVIDENCE_MAX_URLS} URL. Xóa bớt để thêm.`
+      evidenceUrlHint.value = `Maximum ${EVIDENCE_MAX_URLS} URLs. Remove some to add more.`
       return
     }
     if (pendingEvidenceUrls.value.some(x => x.url === normalized)) {
-      evidenceUrlHint.value = 'URL này đã có trong danh sách.'
+      evidenceUrlHint.value = 'This URL is already in the list.'
       return
     }
     pendingEvidenceUrls.value.push({
@@ -595,7 +584,7 @@ export function useMemberEvidenceDrawer() {
     pendingEvidenceUrls.value = pendingEvidenceUrls.value.filter(u => u.id !== id)
     if (pendingEvidenceUrls.value.length < EVIDENCE_MAX_URLS) {
       const h = evidenceUrlHint.value
-      if (h.includes('Tối đa') || h.includes('đã có trong danh sách')) evidenceUrlHint.value = ''
+      if (h.includes('Maximum') || h.includes('already in the list')) evidenceUrlHint.value = ''
     }
   }
 
@@ -613,9 +602,9 @@ export function useMemberEvidenceDrawer() {
     )
     if (hasIncomplete) {
       toast.warning(
-        drawerFormMode.value === 'comment'
-          ? 'Vui lòng nhập đủ Comment và Actual trước khi thêm dòng mới.'
-          : 'Vui lòng nhập đủ Comment, Plan và Actual trước khi thêm dòng mới.',
+        isRecordStyleFormMode(drawerFormMode.value)
+          ? 'Please fill in Comment and Actual before adding a new row.'
+          : 'Please fill in Comment, Plan, and Actual before adding a new row.',
       )
       return
     }
@@ -697,7 +686,7 @@ export function useMemberEvidenceDrawer() {
         actual: r.actual ?? '',
         comment: r.comment ?? '',
       }))
-    } else if (formMode === 'comment' && (p.actual || p.content)) {
+    } else if (isRecordStyleFormMode(formMode) && (p.actual || p.content)) {
       generalPlanActualRows.value = [{
         id: `${item.id}-legacy`,
         plan: '',
@@ -764,7 +753,7 @@ export function useMemberEvidenceDrawer() {
         ...(comment.trim() ? { comment: comment.trim() } : {}),
       }))
       .filter(r =>
-        mode === 'comment'
+        isRecordStyleFormMode(mode)
           ? Boolean(r.actual || r.comment)
           : Boolean(r.plan || r.actual),
       )
@@ -777,11 +766,11 @@ export function useMemberEvidenceDrawer() {
         .map(r => computeRatioPreview(r.plan, r.actual, calcTypeCode) ?? r.actual)
         .filter(Boolean)
       if (results.length) out.result = averageRatioResult(rows, calcTypeCode)
-    } else if (mode === 'comment') {
-      const avgDisplay = averageActualResultDisplay(generalPlanActualRows.value)
-      if (avgDisplay != null) {
-        out.actual = avgDisplay
-        out.result = avgDisplay
+    } else if (isRecordStyleFormMode(mode)) {
+      const metricDisplay = recordStyleResultDisplay(mode, generalPlanActualRows.value)
+      if (metricDisplay != null) {
+        out.actual = metricDisplay
+        out.result = metricDisplay
       }
     } else {
       const actuals = rows.map(r => r.actual).filter(Boolean)
@@ -820,14 +809,14 @@ export function useMemberEvidenceDrawer() {
         item.assignmentStatusName =
           rs?.assignmentStatusName ??
           (String(rs?.feedbackTargetRoleCode ?? '').toUpperCase() === 'GM'
-            ? 'Chờ GM kiểm tra feedback'
-            : 'Chờ PM kiểm tra feedback')
+            ? 'Waiting for GM feedback review'
+            : 'Waiting for PM feedback review')
         item.feedbackComment = feedbackComment
         item.memberFeedback = feedbackComment
         closeEvidencePanel()
       } catch (error) {
         console.error('Failed to submit member feedback', error)
-        toast.error('Gửi feedback thất bại')
+        toast.error('Failed to send feedback')
       } finally {
         saving.value = false
       }
@@ -847,7 +836,7 @@ export function useMemberEvidenceDrawer() {
       ? normalizeDetailSelfScore(item.selfScore)
       : (autoScore !== null ? autoScore : normalizedScore)
     if (!isFeedbackOnly && metricOutOfDslRule.value) {
-      toast.warning('Giá trị Actual/Kết quả tính vượt mức tối đa trong Quy tắc chấm điểm.')
+      toast.warning('Actual/computed result exceeds the maximum allowed in scoring rules.')
       return
     }
     if (drawerFormMode.value === 'average') {
@@ -856,31 +845,31 @@ export function useMemberEvidenceDrawer() {
         && [r.comment, r.plan, r.actual].some(v => String(v ?? '').trim().length === 0),
       )
       if (hasIncomplete) {
-        toast.warning('Mỗi dòng phải nhập đủ 3 trường: Comment, Plan và Actual.')
+        toast.warning('Each row must include all 3 fields: Comment, Plan, and Actual.')
         return
       }
       const hasAnyCompleteRow = generalPlanActualRows.value.some(r =>
         [r.comment, r.plan, r.actual].every(v => String(v ?? '').trim().length > 0),
       )
       if (!hasAnyCompleteRow) {
-        toast.warning('Vui lòng nhập đủ Comment, Plan và Actual cho ít nhất 1 dòng trước khi lưu.')
+        toast.warning('Please fill in Comment, Plan, and Actual for at least one row before saving.')
         return
       }
     }
-    if (drawerFormMode.value === 'comment') {
+    if (isRecordStyleFormMode(drawerFormMode.value)) {
+      const fields = requiredPlanActualFields(drawerFormMode.value)
       const hasIncomplete = generalPlanActualRows.value.some(r =>
-        [r.comment, r.actual].some(v => String(v ?? '').trim().length > 0)
-        && [r.comment, r.actual].some(v => String(v ?? '').trim().length === 0),
+        planActualRowPartiallyFilled(r, fields),
       )
       if (hasIncomplete) {
-        toast.warning('Mỗi dòng phải nhập đủ Comment và Actual.')
+        toast.warning('Each row must include Comment and Actual.')
         return
       }
       const hasAnyCompleteRow = generalPlanActualRows.value.some(r =>
-        [r.comment, r.actual].every(v => String(v ?? '').trim().length > 0),
+        fields.every(f => String(r[f] ?? '').trim().length > 0),
       )
       if (!hasAnyCompleteRow) {
-        toast.warning('Vui lòng nhập đủ Comment và Actual cho ít nhất 1 dòng trước khi lưu.')
+        toast.warning('Please fill in Comment and Actual for at least one row before saving.')
         return
       }
     }
@@ -899,7 +888,7 @@ export function useMemberEvidenceDrawer() {
         })
       } catch (error) {
         console.error('Failed to save member evidence', error)
-        toast.error('Lưu evidence thất bại')
+        toast.error('Failed to save evidence')
         return
       }
 
@@ -925,8 +914,8 @@ export function useMemberEvidenceDrawer() {
         const formMode = resolveFormMode(item)
         if (formMode === 'average') {
           item.result = averageRatioResult(rows, calcTypeCode)
-        } else if (formMode === 'comment') {
-          item.result = averageActualResultDisplay(generalPlanActualRows.value)
+        } else if (isRecordStyleFormMode(formMode)) {
+          item.result = recordStyleResultDisplay(formMode, generalPlanActualRows.value)
         } else {
           item.result = rows.map(r => r.actual).filter(Boolean).join(' | ') || undefined
         }

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import {onMounted, ref} from "vue";
+import {computed, onMounted, ref, watch} from "vue";
 import {leaderKpiService} from "@/services/modules/kpi-leader.service";
 import type {LeaderKpiInformationResponse} from "@/types/kpi";
 import MemberPerformanceTab from "@/components/leader/tab/MemberPerformanceTab.vue";
@@ -14,20 +14,34 @@ const props = defineProps<{
 // ==========================================
 const loading = ref(true);
 const members = ref<LeaderMember[]>([]);
+const sortedMembers = computed(() =>
+  [...members.value].sort((a, b) => {
+    const aName = String(a.fullName ?? '').trim()
+    const bName = String(b.fullName ?? '').trim()
+    if (aName && bName && aName !== bName) {
+      return aName.localeCompare(bName, 'vi')
+    }
+    return String(a.email ?? '').localeCompare(String(b.email ?? ''), 'vi')
+  }),
+)
 
 async function fetchMembers() {
   loading.value = true;
   try {
-    const response = await leaderKpiService.getMemberList();
+    const response = await leaderKpiService.getMemberList(props.year);
     members.value = response.members || [];
   } catch (error) {
-    console.error("Lỗi khi lấy danh sách Team Member:", error);
+    console.error("Failed to fetch Team Members:", error);
   } finally {
     loading.value = false;
   }
 }
 
 onMounted(() => {
+  fetchMembers();
+});
+
+watch(() => props.year, () => {
   fetchMembers();
 });
 
@@ -55,7 +69,7 @@ async function handleMemberClick(member: LeaderMember) {
     individualData.value = indData;
     promotionData.value = proData;
   } catch (error) {
-    console.error("Lỗi fetch member KPI:", error);
+    console.error("Failed to fetch member KPI:", error);
     individualData.value = null;
     promotionData.value = null;
   } finally {
@@ -92,28 +106,28 @@ function getTeamMemberInitials(name?: string) {
     <div class="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-5 py-4">
       <h3 class="flex items-center gap-2 text-lg font-bold text-slate-800">
         <i class="fas fa-users text-slate-400" />
-        Danh sách Team Members
+        Team Members List
       </h3>
       <span class="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-bold text-slate-600">
-        {{ members.length }} members
+        {{ sortedMembers.length }} members
       </span>
     </div>
 
     <table class="w-full border-collapse text-left text-sm">
       <thead>
       <tr class="border-b border-slate-200 bg-white text-xs font-bold uppercase tracking-wider text-slate-500">
-        <th class="px-5 py-3">Thành viên</th>
-        <th class="px-5 py-3">Vai trò</th>
-        <th class="px-5 py-3">Cấp bậc</th>
-        <th class="px-5 py-3 text-center">Điểm</th>
+        <th class="px-5 py-3">Member</th>
+        <th class="px-5 py-3">Role</th>
+        <th class="px-5 py-3">Level</th>
+        <th class="px-5 py-3 text-center">Score</th>
       </tr>
       </thead>
       <tbody class="divide-y divide-slate-100">
-      <tr v-if="members.length === 0 && !loading">
-        <td colspan="4" class="p-8 text-center text-slate-500">Chưa có thành viên nào trong nhóm.</td>
+      <tr v-if="sortedMembers.length === 0 && !loading">
+        <td colspan="4" class="p-8 text-center text-slate-500">No members in this team yet.</td>
       </tr>
 
-      <tr v-for="member in members" :key="member.memberId"
+      <tr v-for="member in sortedMembers" :key="member.memberId"
           class="group cursor-pointer transition-colors hover:bg-slate-50/80"
           @click="handleMemberClick(member)">
         <td class="px-5 py-4">
@@ -155,7 +169,7 @@ function getTeamMemberInitials(name?: string) {
                 {{ getTeamMemberInitials(selectedMember.fullName) }}
               </div>
               <div class="min-w-0">
-                <p class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Chi tiết KPI thành viên</p>
+                <p class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Member KPI Details</p>
                 <h2 class="mt-0.5 text-base font-bold text-slate-900 truncate">
                   {{ selectedMember.fullName }}
                 </h2>
@@ -204,7 +218,7 @@ function getTeamMemberInitials(name?: string) {
             <button type="button"
                     class="rounded-lg border border-slate-300 bg-white px-5 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50"
                     @click="closeDrawer">
-              Đóng
+              Close
             </button>
           </div>
         </aside>

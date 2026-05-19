@@ -22,6 +22,8 @@ export interface GmReportTopPerformer {
 
 export interface GmReportLevelDistributionData {
   levels: GmReportLevelDef[]
+  /** Năm nguồn khung mức (mới nhất trong các năm đang chọn). */
+  scaleYear?: number
   years: GmReportYearSeries[]
   topPerformers: GmReportTopPerformer[]
   totalCount: number

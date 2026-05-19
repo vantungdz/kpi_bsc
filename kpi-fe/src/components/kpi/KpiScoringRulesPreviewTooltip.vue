@@ -84,7 +84,7 @@ onUnmounted(() => {
 <template>
   <span
     v-if="hasContent"
-    class="inline-flex shrink-0"
+    class="inline-flex shrink-0 mt-[-5px]"
     @mouseenter="showTooltip"
     @mouseleave="hideTooltip"
     @focusin="showTooltip"
@@ -93,11 +93,13 @@ onUnmounted(() => {
     <button
       ref="triggerRef"
       type="button"
-      class="cursor-help rounded p-0.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-blue-600 focus-visible:outline focus-visible:ring-2 focus-visible:ring-slate-300"
+      class="cursor-help rounded p-0.5 text-slate-400 transition-colors focus-visible:outline focus-visible:ring-2 focus-visible:ring-slate-300"
       aria-label="Quy tắc chấm điểm"
       @click.stop
     >
-      <i class="fas fa-circle-question text-[12px]" aria-hidden="true" />
+      <span class="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-slate-300 text-[10px] font-bold leading-none text-slate-700 cursor-pointer">
+        ?
+      </span>
     </button>
     <Teleport to="body">
       <div

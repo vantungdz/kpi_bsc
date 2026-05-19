@@ -2,6 +2,8 @@ package com.company.kpi.service.gm;
 
 import com.company.kpi.aggregate.report.GmReportAssignmentRow;
 import com.company.kpi.mapper.GmReportMapper;
+import com.company.kpi.mapper.PerformanceRatingScaleMapper;
+import com.company.kpi.response.gm.GmRatingScaleLevelResponse;
 import com.company.kpi.response.gm.report.GmReportComplianceResponse;
 import com.company.kpi.response.gm.report.GmReportLevelDistributionResponse;
 import com.company.kpi.response.gm.report.GmReportSectionAnalyticsResponse;
@@ -15,6 +17,7 @@ import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -27,35 +30,40 @@ import java.util.stream.Collectors;
 /**
  * Tổng hợp dữ liệu cho 4 báo cáo GM trên trang Reports.
  *
- * Mặc định lấy điểm theo ưu tiên: end_gm_score → end_pm_score → end_self_score → mid_self_score.
- * Score đã được {@code SensitiveDataMybatisInterceptor} giải mã trước khi vào service.
+ * <p>Khung mức điểm lấy từ {@code performance_rating_levels} theo năm chu kỳ; nếu thiếu dữ liệu
+ * thì fallback cấu hình mặc định (tương thích trước khi có DB).
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class GmReportService {
 
-    private static final List<LevelDef> LEVEL_DEFS = List.of(
-            new LevelDef("NA", "<= 2.59 (N/A)", new BigDecimal("0"), new BigDecimal("2.59"), new BigDecimal("0")),
-            new LevelDef("D", "2.60-2.99 (D)", new BigDecimal("2.60"), new BigDecimal("2.99"), new BigDecimal("0.5")),
-            new LevelDef("C2", "3.00-3.10 (C2)", new BigDecimal("3.00"), new BigDecimal("3.10"), new BigDecimal("3.9")),
-            new LevelDef("C1", "3.11-3.20 (C1)", new BigDecimal("3.11"), new BigDecimal("3.20"), new BigDecimal("5")),
-            new LevelDef("B2", "3.21-3.30 (B2)", new BigDecimal("3.21"), new BigDecimal("3.30"), new BigDecimal("6.7")),
-            new LevelDef("B1", "3.31-3.40 (B1)", new BigDecimal("3.31"), new BigDecimal("3.40"), new BigDecimal("8.4")),
-            new LevelDef("A2", "3.41-3.50 (A2)", new BigDecimal("3.41"), new BigDecimal("3.50"), new BigDecimal("9.5")),
-            new LevelDef("A1", "3.51-3.60 (A1)", new BigDecimal("3.51"), new BigDecimal("3.60"), new BigDecimal("11")),
-            new LevelDef("O1", ">= 3.61 (O1)", new BigDecimal("3.61"), new BigDecimal("999"), new BigDecimal("12.5"))
+    private static final BigDecimal FALLBACK_TOP_THRESHOLD = new BigDecimal("3.41");
+
+    private static final List<LevelDef> FALLBACK_LEVEL_DEFS = List.of(
+            new LevelDef("NA", "<= 2.59 (N/A)", new BigDecimal("0"), new BigDecimal("2.59"), new BigDecimal("0"), false),
+            new LevelDef("D", "2.60-2.99 (D)", new BigDecimal("2.60"), new BigDecimal("2.99"), new BigDecimal("0.5"), false),
+            new LevelDef("C2", "3.00-3.10 (C2)", new BigDecimal("3.00"), new BigDecimal("3.10"), new BigDecimal("3.9"), false),
+            new LevelDef("C1", "3.11-3.20 (C1)", new BigDecimal("3.11"), new BigDecimal("3.20"), new BigDecimal("5"), false),
+            new LevelDef("B2", "3.21-3.30 (B2)", new BigDecimal("3.21"), new BigDecimal("3.30"), new BigDecimal("6.7"), false),
+            new LevelDef("B1", "3.31-3.40 (B1)", new BigDecimal("3.31"), new BigDecimal("3.40"), new BigDecimal("8.4"), false),
+            new LevelDef("A2", "3.41-3.50 (A2)", new BigDecimal("3.41"), new BigDecimal("3.50"), new BigDecimal("9.5"), true),
+            new LevelDef("A1", "3.51-3.60 (A1)", new BigDecimal("3.51"), new BigDecimal("3.60"), new BigDecimal("11"), true),
+            new LevelDef("O1", ">= 3.61 (O1)", new BigDecimal("3.61"), null, new BigDecimal("12.5"), true)
     );
 
     private final GmReportMapper gmReportMapper;
+    private final PerformanceRatingScaleMapper performanceRatingScaleMapper;
 
     public GmReportLevelDistributionResponse getLevelDistribution(
             int primaryYear, List<Integer> compareYears, String sectionId) {
 
         List<Integer> years = mergeYears(primaryYear, compareYears);
+        int scaleYear = newestYear(years);
+        List<LevelDef> scale = resolveScaleForYear(scaleYear);
+
         List<GmReportAssignmentRow> rows = safeList(gmReportMapper.listAssignmentsByYears(years));
 
-        // Lọc theo section nếu có
         if (sectionId != null && !"all".equalsIgnoreCase(sectionId) && !sectionId.isBlank()) {
             UUID sid = parseUuidSafely(sectionId);
             rows = rows.stream()
@@ -63,47 +71,47 @@ public class GmReportService {
                     .collect(Collectors.toList());
         }
 
-        // Gom theo year + user → 1 score / user / year
         Map<Integer, Map<UUID, BigDecimal>> scoreByYearByUser = scoresByYearAndUser(rows);
 
-        // Build counts
         List<GmReportLevelDistributionResponse.YearSeries> yearSeriesList = new ArrayList<>();
         for (Integer y : years) {
             Map<UUID, BigDecimal> userMap = scoreByYearByUser.getOrDefault(y, Map.of());
-            List<Integer> counts = bucketize(userMap.values());
+            List<Integer> counts = bucketize(userMap.values(), scale);
             GmReportLevelDistributionResponse.YearSeries ys = new GmReportLevelDistributionResponse.YearSeries();
             ys.setYear(y);
             ys.setCounts(counts);
             yearSeriesList.add(ys);
         }
 
-        // Top performers (năm chính, ≥ A2)
-        List<GmReportLevelDistributionResponse.TopPerformer> tops = topPerformers(rows, primaryYear);
+        int detailYear = newestYear(years);
+        List<GmReportLevelDistributionResponse.TopPerformer> tops =
+                topPerformers(rows, detailYear, scale);
 
         GmReportLevelDistributionResponse out = new GmReportLevelDistributionResponse();
-        out.setLevels(buildLevelDefs());
+        out.setLevels(buildLevelDefs(scale));
+        out.setScaleYear(scaleYear);
         out.setYears(yearSeriesList);
         out.setTopPerformers(tops);
-        out.setTotalCount(scoreByYearByUser.getOrDefault(primaryYear, Map.of()).size());
+        out.setTotalCount(scoreByYearByUser.getOrDefault(detailYear, Map.of()).size());
         return out;
     }
 
     public GmReportSectionBellCurveResponse getSectionBellCurve(int year) {
+        List<LevelDef> scale = resolveScaleForYear(year);
+        List<String> labels = scale.stream().map(LevelDef::label).toList();
+        BigDecimal topThreshold = topTierMinThreshold(scale);
+
         List<GmReportAssignmentRow> rows = safeList(gmReportMapper.listAssignmentsByYears(List.of(year)));
         Map<UUID, BigDecimal> scoreByUserAll = perUserScore(rows);
 
-        List<String> labels = LEVEL_DEFS.stream().map(LevelDef::label).toList();
-
         List<GmReportSectionBellCurveResponse.SectionSeries> seriesList = new ArrayList<>();
 
-        // Toàn công ty
         GmReportSectionBellCurveResponse.SectionSeries allSeries = new GmReportSectionBellCurveResponse.SectionSeries();
         allSeries.setId("all");
         allSeries.setLabel("Toàn Công Ty");
-        allSeries.setCounts(bucketize(scoreByUserAll.values()));
+        allSeries.setCounts(bucketize(scoreByUserAll.values(), scale));
         seriesList.add(allSeries);
 
-        // Theo từng section
         Map<UUID, List<GmReportAssignmentRow>> bySection = rows.stream()
                 .filter(r -> r.getSectionId() != null)
                 .collect(Collectors.groupingBy(GmReportAssignmentRow::getSectionId));
@@ -120,18 +128,17 @@ public class GmReportService {
             GmReportSectionBellCurveResponse.SectionSeries s = new GmReportSectionBellCurveResponse.SectionSeries();
             s.setId(e.getKey().toString());
             s.setLabel(sectionNames.getOrDefault(e.getKey(), "Section"));
-            s.setCounts(bucketize(scoreByUser.values()));
+            s.setCounts(bucketize(scoreByUser.values(), scale));
             seriesList.add(s);
         }
 
-        // Summary
         GmReportSectionBellCurveResponse.Summary summary = new GmReportSectionBellCurveResponse.Summary();
         summary.setAvgCompany(avg(scoreByUserAll.values()));
         summary.setTotalCount(scoreByUserAll.size());
         summary.setBestSectionName(bestSection(seriesList, true));
         summary.setWorstSectionName(bestSection(seriesList, false));
         long topCount = scoreByUserAll.values().stream()
-                .filter(v -> v != null && v.compareTo(new BigDecimal("3.41")) >= 0)
+                .filter(v -> v != null && v.compareTo(topThreshold) >= 0)
                 .count();
         summary.setTopGroupCount((int) topCount);
         BigDecimal topPercent = scoreByUserAll.isEmpty()
@@ -150,7 +157,6 @@ public class GmReportService {
     public GmReportSectionAnalyticsResponse getSectionAnalytics(int year) {
         List<GmReportAssignmentRow> rows = safeList(gmReportMapper.listAssignmentsByYears(List.of(year)));
 
-        // Avg điểm theo section (per user → per section)
         Map<UUID, List<GmReportAssignmentRow>> bySection = rows.stream()
                 .filter(r -> r.getSectionId() != null)
                 .collect(Collectors.groupingBy(GmReportAssignmentRow::getSectionId));
@@ -162,16 +168,15 @@ public class GmReportService {
         }
         List<GmReportSectionAnalyticsResponse.SectionScore> sectionAvgs = new ArrayList<>();
         for (Map.Entry<UUID, List<GmReportAssignmentRow>> e : bySection.entrySet()) {
-            BigDecimal avg = avg(perUserScore(e.getValue()).values());
+            BigDecimal avgScore = avg(perUserScore(e.getValue()).values());
             GmReportSectionAnalyticsResponse.SectionScore ss = new GmReportSectionAnalyticsResponse.SectionScore();
             ss.setSectionId(e.getKey().toString());
             ss.setSectionName(sectionNames.getOrDefault(e.getKey(), "Section"));
-            ss.setAverageScore(avg == null ? BigDecimal.ZERO : avg);
+            ss.setAverageScore(avgScore == null ? BigDecimal.ZERO : avgScore);
             sectionAvgs.add(ss);
         }
         sectionAvgs.sort((a, b) -> b.getAverageScore().compareTo(a.getAverageScore()));
 
-        // Radar: dimensions = top KPI categories
         List<String> dimensions = rows.stream()
                 .map(GmReportAssignmentRow::getCategoryName)
                 .filter(n -> n != null && !n.isBlank())
@@ -252,6 +257,45 @@ public class GmReportService {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
+    // Rating scale resolution
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private List<LevelDef> resolveScaleForYear(int year) {
+        List<GmRatingScaleLevelResponse> rows = performanceRatingScaleMapper.listLevelsByYear(year);
+        if (rows == null || rows.isEmpty()) {
+            log.debug("Reports: no rating scale for year {}, using fallback LEVEL_DEFS", year);
+            return FALLBACK_LEVEL_DEFS;
+        }
+        List<LevelDef> scale = new ArrayList<>();
+        for (GmRatingScaleLevelResponse row : rows) {
+            scale.add(toLevelDef(row));
+        }
+        return scale;
+    }
+
+    private static LevelDef toLevelDef(GmRatingScaleLevelResponse row) {
+        return new LevelDef(
+                row.getLevelCode(),
+                row.getLabel(),
+                row.getMinScore(),
+                row.getMaxScore(),
+                row.getPitch() != null ? row.getPitch() : BigDecimal.ZERO,
+                Boolean.TRUE.equals(row.getTopTier()));
+    }
+
+    private static int newestYear(List<Integer> years) {
+        return years.stream().max(Comparator.naturalOrder()).orElse(years.isEmpty() ? 0 : years.get(0));
+    }
+
+    private static BigDecimal topTierMinThreshold(List<LevelDef> scale) {
+        return scale.stream()
+                .filter(LevelDef::topTier)
+                .map(LevelDef::min)
+                .min(Comparator.naturalOrder())
+                .orElse(FALLBACK_TOP_THRESHOLD);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
     // Helpers
     // ─────────────────────────────────────────────────────────────────────────
 
@@ -274,7 +318,6 @@ public class GmReportService {
         try { return UUID.fromString(id); } catch (Exception ignore) { return null; }
     }
 
-    /** Final score per user/year — ưu tiên endGm > endPm > endSelf > midSelf. */
     private static Map<Integer, Map<UUID, BigDecimal>> scoresByYearAndUser(List<GmReportAssignmentRow> rows) {
         Map<Integer, Map<UUID, List<BigDecimal>>> bucket = new HashMap<>();
         for (GmReportAssignmentRow r : rows) {
@@ -332,29 +375,29 @@ public class GmReportService {
         return sum.divide(new BigDecimal(cnt), 2, RoundingMode.HALF_UP);
     }
 
-    private static List<Integer> bucketize(java.util.Collection<BigDecimal> userScores) {
-        Integer[] counts = new Integer[LEVEL_DEFS.size()];
+    private static List<Integer> bucketize(java.util.Collection<BigDecimal> userScores, List<LevelDef> scale) {
+        Integer[] counts = new Integer[scale.size()];
         Arrays.fill(counts, 0);
         if (userScores == null) return Arrays.asList(counts);
         for (BigDecimal s : userScores) {
             if (s == null) continue;
-            int bucket = bucketIndex(s);
+            int bucket = bucketIndex(s, scale);
             counts[bucket] = counts[bucket] + 1;
         }
         return Arrays.asList(counts);
     }
 
-    private static int bucketIndex(BigDecimal s) {
-        for (int i = LEVEL_DEFS.size() - 1; i >= 0; i--) {
-            LevelDef d = LEVEL_DEFS.get(i);
+    private static int bucketIndex(BigDecimal s, List<LevelDef> scale) {
+        for (int i = scale.size() - 1; i >= 0; i--) {
+            LevelDef d = scale.get(i);
             if (s.compareTo(d.min()) >= 0) return i;
         }
         return 0;
     }
 
-    private static List<GmReportLevelDistributionResponse.LevelDef> buildLevelDefs() {
+    private static List<GmReportLevelDistributionResponse.LevelDef> buildLevelDefs(List<LevelDef> scale) {
         List<GmReportLevelDistributionResponse.LevelDef> out = new ArrayList<>();
-        for (LevelDef d : LEVEL_DEFS) {
+        for (LevelDef d : scale) {
             GmReportLevelDistributionResponse.LevelDef ld = new GmReportLevelDistributionResponse.LevelDef();
             ld.setCode(d.code());
             ld.setLabel(d.label());
@@ -367,7 +410,8 @@ public class GmReportService {
     }
 
     private static List<GmReportLevelDistributionResponse.TopPerformer> topPerformers(
-            List<GmReportAssignmentRow> rows, int year) {
+            List<GmReportAssignmentRow> rows, int year, List<LevelDef> scale) {
+        BigDecimal topThreshold = topTierMinThreshold(scale);
         Map<UUID, BigDecimal> scoreByUser = perUserScore(
                 rows.stream().filter(r -> r.getYear() != null && r.getYear() == year).toList());
         Map<UUID, GmReportAssignmentRow> sample = new HashMap<>();
@@ -378,7 +422,7 @@ public class GmReportService {
         }
         List<GmReportLevelDistributionResponse.TopPerformer> out = new ArrayList<>();
         scoreByUser.entrySet().stream()
-                .filter(e -> e.getValue() != null && e.getValue().compareTo(new BigDecimal("3.41")) >= 0)
+                .filter(e -> e.getValue() != null && e.getValue().compareTo(topThreshold) >= 0)
                 .sorted((a, b) -> b.getValue().compareTo(a.getValue()))
                 .limit(10)
                 .forEach(e -> {
@@ -389,7 +433,7 @@ public class GmReportService {
                     t.setFullName(ref.getUserFullName());
                     t.setRoleCode(ref.getUserRoleCode());
                     t.setSectionName(ref.getSectionName());
-                    t.setLevelCode(LEVEL_DEFS.get(bucketIndex(e.getValue())).code());
+                    t.setLevelCode(scale.get(bucketIndex(e.getValue(), scale)).code());
                     t.setScore(e.getValue());
                     out.add(t);
                 });
@@ -397,7 +441,6 @@ public class GmReportService {
     }
 
     private static String bestSection(List<GmReportSectionBellCurveResponse.SectionSeries> series, boolean best) {
-        // Tính trọng tâm chuông trên các series không phải "all"
         String selected = null;
         BigDecimal bestVal = null;
         for (GmReportSectionBellCurveResponse.SectionSeries s : series) {
@@ -421,7 +464,6 @@ public class GmReportService {
         for (int i = 0; i < counts.size(); i++) {
             int c = counts.get(i);
             total += c;
-            // dùng index làm trọng số (NA=0..O1=8) — đại diện vị trí trên trục đánh giá.
             sum = sum.add(BigDecimal.valueOf((long) c * i));
         }
         if (total == 0) return null;
@@ -437,7 +479,6 @@ public class GmReportService {
             BigDecimal score = pickScore(r);
             String dim = r.getCategoryName();
             if (score == null || dim == null) continue;
-            // chuẩn hóa 0..100 cho radar (max score ~5)
             BigDecimal pct = score.multiply(BigDecimal.valueOf(20))
                     .min(BigDecimal.valueOf(100))
                     .max(BigDecimal.ZERO);
@@ -445,8 +486,8 @@ public class GmReportService {
         }
         List<BigDecimal> data = new ArrayList<>();
         for (String d : dimensions) {
-            BigDecimal avg = avg(bucket.getOrDefault(d, Collections.emptyList()));
-            data.add(avg == null ? BigDecimal.ZERO : avg);
+            BigDecimal avgScore = avg(bucket.getOrDefault(d, Collections.emptyList()));
+            data.add(avgScore == null ? BigDecimal.ZERO : avgScore);
         }
         GmReportSectionAnalyticsResponse.RadarSeries s = new GmReportSectionAnalyticsResponse.RadarSeries();
         s.setSectionId(sectionId);
@@ -455,5 +496,11 @@ public class GmReportService {
         return s;
     }
 
-    private record LevelDef(String code, String label, BigDecimal min, BigDecimal max, BigDecimal pitch) {}
+    private record LevelDef(
+            String code,
+            String label,
+            BigDecimal min,
+            BigDecimal max,
+            BigDecimal pitch,
+            boolean topTier) {}
 }

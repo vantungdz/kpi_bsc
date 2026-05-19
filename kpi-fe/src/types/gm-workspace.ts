@@ -3,6 +3,8 @@
  * để có thể xóa file mock khi toàn bộ dữ liệu lấy từ API.
  */
 
+import type { GmEvidenceTable } from './gm-employee-evaluation'
+
 /** Loại KPI chiến lược — đồng bộ form tạo & tag UI toàn GM workspace. */
 export type GmStrategicKpiKind = "cascading" | "individual" | "promotion";
 
@@ -92,12 +94,20 @@ export interface GmEvidenceAttachmentPair {
   name: string;
 }
 
+export interface GmEvidencePlanActualRow {
+  plan: string;
+  actual: string;
+  comment: string;
+  content: string;
+}
+
 export interface GmModalKpiItemMock {
   code: string;
   obj: string;
   weight: number;
   target: string;
   actual: string;
+  calcRuleCode?: number | null;
   isFail: boolean;
   rootCause: string;
   score: string;
@@ -110,6 +120,12 @@ export interface GmModalKpiItemMock {
   evidenceAttachmentUrl?: string | null;
   /** Ghi chú / content hiển thị trong drawer rollout (PM Portfolio…). */
   evidenceNoteDisplay?: string | null;
+  /** Bảng Evidence từ `evidences` (đồng bộ Detailed evaluation sheet). */
+  rolloutEvidence?: GmEvidenceTable | null;
+  /** `planActualRecords` đã parse — hiển thị giống PM Team Review. */
+  evidenceData?: GmEvidencePlanActualRow[];
+  /** `content` / `note` / text legacy trong evidences — tách khỏi bảng actual. */
+  evidenceContent?: string;
   evidenceAttachments?: GmEvidenceAttachmentPair[];
 }
 
@@ -280,6 +296,7 @@ export interface GmHierarchyMember {
   performanceLabel?: string | null;
   blocker: string;
   rank?: string;
+  rankCode?: string;
   leader?: string;
   submissionTarget?: number;
   submissionActual?: number;
@@ -294,6 +311,8 @@ export interface GmHierarchyMember {
 
 export interface GmHierarchyPm {
   id: string;
+  assignmentId?: string | null;
+  assignmentStatusCode?: number | null;
   name: string;
   /** UUID user manager phòng — so với member.id để gọn UI khi chỉ có 1 assignee là manager. */
   ownerUserId?: string | null;
@@ -309,6 +328,8 @@ export interface GmHierarchyPm {
   actual: string;
   status: GmHierarchyStatus;
   blockerSummary: string;
+  feedbackNote?: string | null;
+  feedbackAwaitingGm?: boolean;
   members: GmHierarchyMember[];
   leaders?: GmHierarchyLeader[];
 }

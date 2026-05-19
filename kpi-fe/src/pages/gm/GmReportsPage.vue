@@ -295,7 +295,9 @@ function renderScoreChart() {
     return {
       label: `Năm ${y.year}`,
       data: y.counts,
-      backgroundColor: LEVEL_COLORS.map((c) => rgba(c, op)),
+      backgroundColor: ld.levels.map((_, i) =>
+        rgba(LEVEL_COLORS[i % LEVEL_COLORS.length]!, op),
+      ),
       borderWidth: 0,
       borderRadius: 4,
     };
@@ -724,10 +726,10 @@ function levelCountForDetailYear(idx: number): number {
               Chi Tiết Mức Đánh Giá (Levels)
             </h3>
             <span class="text-xs font-medium text-slate-500">
-              <template v-if="levelDetailYear != null"
-                >Kỳ {{ levelDetailYear }}:
-                {{ levelData?.totalCount ?? 0 }} NS</template
-              >
+              <template v-if="levelDetailYear != null">
+                Khung {{ levelData?.scaleYear ?? levelDetailYear }} · Kỳ
+                {{ levelDetailYear }}: {{ levelData?.totalCount ?? 0 }} NS
+              </template>
               <template v-else>Chọn ít nhất một năm để xem báo cáo</template>
             </span>
           </div>

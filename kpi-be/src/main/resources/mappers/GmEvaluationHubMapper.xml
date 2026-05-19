@@ -5,7 +5,7 @@
     <!--
       GM đánh giá hub: assignments trong chu kỳ, ASM 501/502/503/601/602/603.
       Rank: ranks.code qua users.job_title_id → job_titles.rank_id.
-      Section: user_departments is_primary → departments.
+      Section: current cycle uses user_departments; historical cycles use kpi_assignment_snapshots.
     -->
     <select id="listAssignmentsForEvaluationHub"
             resultType="com.company.kpi.aggregate.GmEvaluationHubAssignmentRow">
@@ -33,6 +33,8 @@
             ki.weight,
             km.code AS master_code,
             km.name AS master_name,
+            km.calculation_rule_code AS calculation_rule_code,
+            km.calculation_type_code AS calculation_type_code,
             kc.name AS category_name,
             sc_type.name AS kpi_type_name,
             u.id AS user_id,
@@ -82,6 +84,9 @@
             NULLIF(TRIM(COALESCE(uks.evaluation_supervisor_comments, '')), '') AS supervisor_comment_portfolio,
             NULLIF(TRIM(COALESCE(uks.evaluation_supervisor_comments_promotion, '')), '') AS supervisor_comment_promotion
         FROM users u
+        INNER JOIN kpi_cycles cyc
+                ON cyc.id = #{cycleId, jdbcType=OTHER}
+               AND cyc.deleted_at IS NULL
         INNER JOIN user_departments ud
                 ON ud.user_id = u.id
                AND ud.is_primary = TRUE
@@ -110,6 +115,7 @@
         LEFT JOIN kpi_assignment_snapshots kas
                ON kas.assignment_id = ka.id
               AND kas.cycle_id = ka.cycle_id
+              AND cyc.year &lt; EXTRACT(YEAR FROM CURRENT_DATE)::int
         LEFT JOIN departments kas_dept ON kas_dept.id = kas.department_id AND kas_dept.deleted_at IS NULL
         LEFT JOIN LATERAL (
             SELECT AVG(COALESCE(ch.end_self_score, ch.mid_self_score)) AS avg_child_self_score

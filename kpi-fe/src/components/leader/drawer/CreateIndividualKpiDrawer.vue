@@ -112,8 +112,8 @@ async function loadFormMeta() {
     ])
     realCycleId.value = cycleData.id // Lưu trữ UUID của cycle
   } catch (err: any) {
-    console.error('Lỗi khi lấy thông tin chu kỳ KPI:', err)
-    errorCycle.value = 'Không lấy được thông tin chu kỳ KPI năm nay.'
+    console.error('Failed to get KPI cycle information:', err)
+    errorCycle.value = 'Unable to retrieve KPI cycle information for this year.'
     realCycleId.value = ''
   } finally {
     loadingCycle.value = false
@@ -203,49 +203,49 @@ function validateForm(): boolean {
   const err: Record<string, string> = {}
 
   if (!realCycleId.value) {
-    err.apiError = 'Không tìm thấy ID của chu kỳ đánh giá hợp lệ. Vui lòng thử lại sau.'
+    err.apiError = 'No valid evaluation cycle ID found. Please try again later.'
   }
 
   if (!kpiName.value.trim()) {
-    err.kpiName = 'Vui lòng nhập tên KPI.'
+    err.kpiName = 'Please enter KPI name.'
   }
 
   const tvRaw = targetInput.value
   const tvStr = String(tvRaw ?? '').trim()
   if (tvStr === '' || Number.isNaN(Number(tvRaw))) {
-    err.targetInput = 'Nhập mục tiêu (số).'
+    err.targetInput = 'Please enter a numeric target.'
   } else if (Number(tvRaw) < 0) {
-    err.targetInput = 'Mục tiêu phải >= 0.'
+    err.targetInput = 'Target must be >= 0.'
   }
 
   const wStr = String(weightInput.value).trim()
   const wNum = Number.parseFloat(wStr)
   if (!wStr) {
-    err.weightInput = 'Nhập trọng số (W).'
+    err.weightInput = 'Please enter weight (W).'
   } else if (!Number.isFinite(wNum) || wNum <= 0 || wNum > 100) {
-    err.weightInput = 'Trọng số phải lớn hơn 0 và tối đa 100.'
+    err.weightInput = 'Weight must be greater than 0 and at most 100.'
   }
 
   if (!categoryId.value.trim()) {
-    err.categoryId = 'Chọn Perspective (nhóm KPI).'
+    err.categoryId = 'Please select a Perspective (KPI group).'
   }
 
   const ruleOpts = calcRulesWithTypes.value
   if (!ruleOpts.some((row) => row.code === calculationRuleCode.value)) {
-    err.calculationMethod = 'Chọn quy tắc tính toán.'
+    err.calculationMethod = 'Please select a calculation rule.'
   } else {
     const types = typesForSelectedRule.value
     if (types.length > 0) {
       const tc = calculationTypeCode.value
       if (tc == null || !types.some((t) => t.code === tc)) {
-        err.calculationMethod = 'Chọn chiều tính toán.'
+        err.calculationMethod = 'Please select a calculation direction.'
       }
     }
   }
 
   const scoringTrim = description.value.trim()
   if (!scoringTrim) {
-    err.scoringRules = 'Vui lòng nhập quy tắc chấm điểm (đủ các mức 1–5 theo cú pháp).'
+    err.scoringRules = 'Please enter scoring rules (all levels 1-5 in valid syntax).'
   } else {
     const vr = validateScoringRulesDsl(description.value)
     if (!vr.ok) err.scoringRules = vr.errors.join(' ')
@@ -298,7 +298,7 @@ async function save() {
     emit('saved', response)
     open.value = false
   } catch (e: any) {
-    formErrors.value = {apiError: e?.response?.data?.message || 'Có lỗi xảy ra khi tạo KPI trên máy chủ.'}
+    formErrors.value = {apiError: e?.response?.data?.message || 'An error occurred while creating KPI on the server.'}
     await nextTick()
     errorBannerRef.value?.scrollIntoView({behavior: 'smooth', block: 'nearest'})
   } finally {
@@ -321,13 +321,13 @@ async function save() {
             <div>
               <h2 id="ind-create-kpi-title" class="flex items-center gap-2 text-lg font-bold text-slate-800">
                 <span class="rounded-lg bg-blue-100 p-1.5 text-blue-700 shadow-sm"><i class="fas fa-crosshairs text-sm"
-                                                                                      aria-hidden="true"/></span> Tạo
-                {{ isEditMode ? 'Chỉnh sửa KPI' : 'Tạo KPI' }}
+                                                                                      aria-hidden="true"/></span> Create
+                {{ isEditMode ? 'Edit KPI' : 'Create KPI' }}
               </h2>
             </div>
             <button type="button"
                     class="rounded-full p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-800"
-                    aria-label="Đóng" @click="close">
+                    aria-label="Close" @click="close">
               <i class="fas fa-times text-base" aria-hidden="true"/>
             </button>
           </div>
@@ -342,8 +342,8 @@ async function save() {
                  class="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-900 shadow-sm"
                  role="alert">
               <p class="mb-2 flex items-center gap-2 font-bold">
-                <i class="fas fa-circle-exclamation text-rose-600" aria-hidden="true"/> Vui lòng sửa các lỗi sau trước
-                khi {{ isEditMode ? 'cập nhật KPI' : 'tạo KPI' }}.
+                <i class="fas fa-circle-exclamation text-rose-600" aria-hidden="true"/> Please fix the following errors before
+                {{ isEditMode ? 'updating KPI' : 'creating KPI' }}.
               </p>
               <ul class="list-inside list-disc space-y-0.5 text-[11px] font-semibold text-rose-800">
                 <li v-for="(msg, key) in formErrors" :key="key">{{ msg }}</li>
@@ -353,8 +353,8 @@ async function save() {
             <div class="ind-kpi-section-card rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
               <label class="mb-4 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-800">
                 <span class="rounded-lg bg-slate-100 p-1.5 text-indigo-600"><i class="fas fa-file-lines text-sm"
-                                                                               aria-hidden="true"/></span> Thông tin cơ
-                bản &amp; phân loại
+                                                                               aria-hidden="true"/></span> Basic information
+                &amp; classification
               </label>
 
               <div class="space-y-4">
@@ -366,7 +366,7 @@ async function save() {
                       <select v-model="categoryId"
                               class="input-required w-full cursor-pointer appearance-none rounded-md py-2 pl-3 pr-8 text-xs font-bold text-slate-800 outline-none transition-all disabled:opacity-60"
                               :disabled="isLoadingMeta || !kpiCategories.length">
-                        <option value="" disabled>- Chọn nhóm -</option>
+                        <option value="" disabled>- Select group -</option>
                         <option v-for="c in kpiCategories" :key="c.id" :value="c.id">{{ c.name }}</option>
                       </select>
                       <i class="fas fa-chevron-down pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400"
@@ -378,7 +378,7 @@ async function save() {
                   <div class="min-w-0 sm:flex-1">
                     <label class="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500">KPI Name
                       <span class="text-rose-500">*</span></label>
-                    <input v-model="kpiName" type="text" placeholder="Ví dụ: Hoàn thành khóa đào tạo nội bộ"
+                    <input v-model="kpiName" type="text" placeholder="Example: Complete internal training program"
                            class="input-required w-full rounded-md px-3 py-2 text-xs font-bold text-slate-800 outline-none transition-all"
                            :class="formErrors.kpiName ? '!border-rose-400 !bg-rose-50/50' : ''"/>
                     <p v-if="formErrors.kpiName" class="mt-1 text-[10px] font-semibold text-rose-600">
@@ -403,7 +403,7 @@ async function save() {
                   </div>
 
                   <div class="min-w-0">
-                    <label class="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500">Trọng số
+                    <label class="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500">Weight
                       (W) <span class="text-rose-500">*</span></label>
                     <div class="relative">
                       <input v-model="weightInput" type="number" placeholder="10" min="0" max="100" step="1"
@@ -433,7 +433,7 @@ async function save() {
                 <div>
                   <div class="mb-1.5 flex items-center gap-1.5">
                     <label class="block flex-1 text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                      Phân loại cách tính <span class="text-rose-500">*</span>
+                      Calculation type <span class="text-rose-500">*</span>
                     </label>
                   </div>
                   <div class="flex flex-col gap-2 sm:flex-row sm:items-stretch sm:gap-3">
@@ -469,17 +469,17 @@ async function save() {
                 </div>
 
                 <p class="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-semibold text-slate-600">
-                  Năm đánh giá KPI:
+                  KPI evaluation year:
                   <span class="font-bold text-slate-800">{{ cycleYearNumFallback }}</span>
-                  (theo năm đang chọn trên dashboard)
+                  (based on the current system year)
                 </p>
 
                 <div>
                   <div class="mb-1.5 flex items-center gap-1.5">
                     <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                      Quy tắc chấm điểm <span class="text-rose-500">*</span>
+                      Scoring rules <span class="text-rose-500">*</span>
                     </label>
-                    <ScoringRulesHelpTooltip aria-label="Ví dụ cú pháp quy tắc chấm điểm" />
+                    <ScoringRulesHelpTooltip aria-label="Scoring rule syntax examples" />
                   </div>
                   <textarea
                     v-model="description"
@@ -499,14 +499,14 @@ async function save() {
           <div class="z-10 flex shrink-0 justify-end gap-3 border-t border-slate-200 bg-white p-5 shadow-sm">
             <button type="button"
                     class="rounded-lg border border-slate-200 bg-white px-5 py-2 text-xs font-bold text-slate-600 shadow-sm transition-colors hover:bg-slate-100"
-                    @click="close">Hủy
+                    @click="close">Cancel
             </button>
             <button type="button"
                     class="flex items-center gap-1.5 rounded-lg bg-blue-600 px-6 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:bg-blue-700 disabled:opacity-60"
                     :disabled="saving || isLoadingMeta || !kpiCategories.length" @click="save">
               <i v-if="saving" class="fas fa-spinner fa-spin text-sm" aria-hidden="true"/>
               <i v-else class="fas fa-save text-sm" aria-hidden="true"/>
-              {{ saving ? 'Đang lưu...' : (isEditMode ? 'Cập nhật KPI' : 'Tạo KPI') }}
+              {{ saving ? 'Saving...' : (isEditMode ? 'Update KPI' : 'Create KPI') }}
             </button>
           </div>
         </div>

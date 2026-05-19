@@ -44,36 +44,71 @@ const gmPersonalEvidenceAssign = shallowRef<LeaderKpiAssignment | null>(null)
 const acceptKpisLoading = ref(false)
 const submitGmPersonalEvalLoading = ref(false)
 const invalidRowIds = ref<Set<string>>(new Set())
+const personalTableTab = ref<'personal' | 'promotion'>('personal')
 
 const currentCycleInfo = ref<KpiCycleResponse | null>(null)
 
 import { watch } from 'vue'
-watch(() => props.yearId, async (year) => {
-  if (year) {
+watch(
+  () => props.yearId,
+  async (year) => {
+    const expectedYearId = String(year ?? '').trim()
+    if (!expectedYearId) {
+      currentCycleInfo.value = null
+      return
+    }
+    const y = Number.parseInt(expectedYearId, 10)
+    if (!Number.isFinite(y)) {
+      currentCycleInfo.value = null
+      return
+    }
     try {
-      const res = await kpiCycleService.getKpiCycleByYear(Number(year))
+      const res = await kpiCycleService.getKpiCycleByYear(y)
+      if (String(props.yearId ?? '').trim() !== expectedYearId) return
       currentCycleInfo.value = res ?? null
     } catch {
+      if (String(props.yearId ?? '').trim() !== expectedYearId) return
       currentCycleInfo.value = null
     }
-  }
-}, { immediate: true })
+  },
+  { immediate: true },
+)
 
 const submitButtonState = computed(() => {
   if (!currentCycleInfo.value) return { disabled: true, reason: 'Loading or no evaluation cycle info.' }
-  const acceptedRow = props.rows.find(r => Number(r.assignmentStatusCode) === KPI_STATUS.ACCEPTED || Number(r.assignmentStatusCode) === KPI_STATUS.FIRST_COMPLETED)
+  const acceptedRow = scopedRows.value.find(r => Number(r.assignmentStatusCode) === KPI_STATUS.ACCEPTED || Number(r.assignmentStatusCode) === KPI_STATUS.FIRST_COMPLETED)
   if (!acceptedRow) return { disabled: false, reason: '' }
   return getPmPortfolioSubmitButtonState(currentCycleInfo.value, Number(acceptedRow.assignmentStatusCode))
 })
 
+const personalRows = computed(() =>
+  props.rows.filter((row) => row.kpiType === 'individual' || row.kpiType === 'cascading'),
+)
+
+const promotionRows = computed(() =>
+  props.rows.filter((row) => row.kpiType === 'promotion'),
+)
+
+const scopedRows = computed(() =>
+  personalTableTab.value === 'promotion' ? promotionRows.value : personalRows.value,
+)
+
+const personalPendingAcceptanceCount = computed(() =>
+  personalRows.value.filter((row) => Number(row.assignmentStatusCode) === KPI_STATUS.PENDING_ACCEPTANCE).length,
+)
+
+const promotionPendingAcceptanceCount = computed(() =>
+  promotionRows.value.filter((row) => Number(row.assignmentStatusCode) === KPI_STATUS.PENDING_ACCEPTANCE).length,
+)
+
 const hasAcceptedKpis = computed(() =>
-  props.rows.some((r) => Number(r.assignmentStatusCode) === KPI_STATUS.ACCEPTED || Number(r.assignmentStatusCode) === KPI_STATUS.FIRST_COMPLETED),
+  scopedRows.value.some((r) => Number(r.assignmentStatusCode) === KPI_STATUS.ACCEPTED || Number(r.assignmentStatusCode) === KPI_STATUS.FIRST_COMPLETED),
 )
 
 const cycleIdTrimmed = computed(() => String(props.cycleId ?? '').trim())
 
 const hasPendingAcceptanceKpis = computed(() =>
-  props.rows.some((r) => Number(r.assignmentStatusCode) === KPI_STATUS.PENDING_ACCEPTANCE),
+  scopedRows.value.some((r) => Number(r.assignmentStatusCode) === KPI_STATUS.PENDING_ACCEPTANCE),
 )
 
 function sheetUpdateErrorMessage(err: unknown): string {
@@ -92,10 +127,10 @@ async function submitGmPersonalEvaluation() {
     toast.error('No evaluation cycle selected.')
     return
   }
-  if (props.rows.length === 0) return
+  if (scopedRows.value.length === 0) return
 
   // Validate: tất cả KPI status 405 hoặc 503 phải có actual và điểm
-  const acceptedRows = props.rows.filter(
+  const acceptedRows = scopedRows.value.filter(
     (r) => Number(r.assignmentStatusCode) === KPI_STATUS.ACCEPTED || Number(r.assignmentStatusCode) === KPI_STATUS.FIRST_COMPLETED,
   )
   const missingRows = acceptedRows.filter((r) => {
@@ -116,7 +151,7 @@ async function submitGmPersonalEvaluation() {
 
   submitGmPersonalEvalLoading.value = true
   try {
-    await gmKpiService.submitPersonalEvaluation(cid)
+    await gmKpiService.submitPersonalEvaluation(cid, personalTableTab.value === 'promotion')
     toast.success('Evaluation submitted — KPI statuses updated for this checkpoint (mid-year / year-end).')
     emit('sheet-saved')
   } catch (err: unknown) {
@@ -138,7 +173,7 @@ async function acceptPendingKpis() {
     await pmKpiService.bulkUpdateKpiStatus({
       cycleId: cid,
       statusCode: KPI_STATUS.ACCEPTED,
-      promotion: false,
+      promotion: personalTableTab.value === 'promotion',
       onlyFromStatusCode: KPI_STATUS.PENDING_ACCEPTANCE,
     })
     toast.success('KPIs accepted.')
@@ -296,7 +331,7 @@ interface BscGroup {
 const groupedByBsc = computed((): BscGroup[] => {
   const m = new Map<GmBscPerspective, GmPersonalKpiRowMock[]>()
   for (const id of GM_BSC_ORDER) m.set(id, [])
-  for (const r of props.rows) {
+  for (const r of scopedRows.value) {
     m.get(normalizeGmBscPerspective(r.diagnosticsFallbackGroup))!.push(r)
   }
   let stt = 0
@@ -366,6 +401,41 @@ function displayTargetWithUnit(row: GmPersonalKpiRowMock): string {
       </div>
     </div>
 
+    <div class="flex gap-2 border-b border-slate-200 bg-white px-4 pt-3 sm:px-5">
+      <button
+        type="button"
+        class="relative rounded-t-lg border px-4 py-2 text-xs font-bold transition-colors"
+        :class="
+          personalTableTab === 'personal'
+            ? 'border-slate-200 border-b-white bg-white text-blue-700'
+            : 'border-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-800'
+        "
+        @click="personalTableTab = 'personal'"
+      >
+        KPI Personal
+        <span
+          v-if="personalPendingAcceptanceCount > 0"
+          class="ml-2 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-bold text-white"
+        >{{ personalPendingAcceptanceCount }}</span>
+      </button>
+      <button
+        type="button"
+        class="relative rounded-t-lg border px-4 py-2 text-xs font-bold transition-colors"
+        :class="
+          personalTableTab === 'promotion'
+            ? 'border-slate-200 border-b-white bg-white text-purple-700'
+            : 'border-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-800'
+        "
+        @click="personalTableTab = 'promotion'"
+      >
+        KPI Promotion
+        <span
+          v-if="promotionPendingAcceptanceCount > 0"
+          class="ml-2 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-bold text-white"
+        >{{ promotionPendingAcceptanceCount }}</span>
+      </button>
+    </div>
+
     <div v-if="loading"
       class="flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-12 text-sm font-medium text-slate-600 shadow-sm"
       role="status">
@@ -373,9 +443,11 @@ function displayTargetWithUnit(row: GmPersonalKpiRowMock): string {
       Loading personal KPIs (Individual + Promotion)…
     </div>
 
-    <div v-else-if="rows.length === 0"
+    <div v-else-if="scopedRows.length === 0"
       class="rounded-2xl border border-dashed border-slate-200 bg-slate-50/80 px-4 py-10 text-center">
-      <p class="text-sm font-semibold text-slate-700">No personal KPI data yet</p>
+      <p class="text-sm font-semibold text-slate-700">
+        {{ personalTableTab === 'promotion' ? 'No promotion KPI data yet' : 'No personal KPI data yet' }}
+      </p>
     </div>
 
     <div v-else class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">

@@ -34,6 +34,27 @@ const teamTreeRaw = ref<any[]>([])
 const isLoading = ref(false)
 const activeReviewScope = ref<'portfolio' | 'promotion'>('portfolio')
 
+function countPendingByScope(nodes: unknown[] | null | undefined, scope: 'portfolio' | 'promotion'): number {
+  if (!Array.isArray(nodes) || nodes.length === 0) return 0
+  const flag = scope === 'promotion' ? 'promotionRequiresPmEvaluation' : 'portfolioRequiresPmEvaluation'
+  const status = scope === 'promotion' ? 'promotionStatusCode' : 'portfolioStatusCode'
+  let count = 0
+  for (const raw of nodes) {
+    const node = raw as Record<string, any>
+    const sc = Number(node?.[status])
+    const pending =
+      node?.[flag] === true ||
+      sc === KPI_STATUS.FIRST_WAITING_PM_APPROVAL ||
+      sc === KPI_STATUS.SECOND_WAITING_PM_APPROVAL
+    if (pending) count++
+    count += countPendingByScope(node?.children, scope)
+  }
+  return count
+}
+
+const portfolioPendingCount = computed(() => countPendingByScope(teamTreeRaw.value, 'portfolio'))
+const promotionPendingCount = computed(() => countPendingByScope(teamTreeRaw.value, 'promotion'))
+
 const EVALUATION_STATUS_UI: Record<number, any> = {
   [KPI_STATUS.INACTIVE]: { dot: 'bg-slate-300 ring-2 ring-slate-100', chip: 'border-slate-200 bg-slate-50 text-slate-800', label: 'Inactive' },
   [KPI_STATUS.WAITING_PM_APPROVAL]: { dot: 'bg-amber-400 ring-2 ring-amber-100', chip: 'border-amber-200 bg-amber-50 text-amber-950', label: 'Waiting PM approve' },
@@ -81,18 +102,7 @@ const fetchTeamHierarchy = async () => {
   try {
     const response = await pmKpiService.getTeamHierarchy(String(props.year || new Date().getFullYear()))
 
-    const filterTree = (nodes: any[]): any[] => {
-      return nodes.map(node => {
-        const filteredChildren = node.children ? filterTree(node.children) : []
-        const hasKpi = node.statusCode != null && node.statusCode !== 0
-        if (hasKpi || filteredChildren.length > 0) {
-          return { ...node, children: filteredChildren }
-        }
-        return null
-      }).filter(Boolean)
-    }
-
-    teamTreeRaw.value = filterTree(response)
+    teamTreeRaw.value = Array.isArray(response) ? response : []
     emit(
       'pending-pm-evaluation-count',
       countPmEvaluationSubjectsInHierarchy(teamTreeRaw.value),
@@ -156,7 +166,6 @@ const visibleTeamMembers = computed(() => {
   const scope = activeReviewScope.value
   const fields = teamReviewScopeFields(scope)
   const traverse = (node: any, parentWaitingGm = false) => {
-    if (!hasTeamReviewScopeRows(node, fields)) return
     // Clone to override pmScore with real-time cache if available
     const displayNode = { ...node }
     displayNode.selfScore = node[fields.selfScore]
@@ -262,6 +271,12 @@ const portfolioGatePendingLabel = computed(() => {
           @click="activeReviewScope = 'portfolio'"
         >
           KPI Personal
+          <span
+            v-if="portfolioPendingCount > 0"
+            class="ml-1 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-bold leading-none text-white shadow-sm"
+          >
+            {{ portfolioPendingCount }}
+          </span>
         </button>
         <button
           type="button"
@@ -270,6 +285,12 @@ const portfolioGatePendingLabel = computed(() => {
           @click="activeReviewScope = 'promotion'"
         >
           KPI Promotion
+          <span
+            v-if="promotionPendingCount > 0"
+            class="ml-1 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-bold leading-none text-white shadow-sm"
+          >
+            {{ promotionPendingCount }}
+          </span>
         </button>
       </div>
     </div>

@@ -200,6 +200,7 @@ public class GmKpiDiagnosticsHierarchyService {
                 .name(displayName)
                 .weight(formatWeight(first.getKpiWeight()))
                 .target(formatKpiTarget(first))
+                .targetDescription(first.getKpiTargetDescription())
                 .targetBalance(kpiTargetBalance)
                 .actual(rollup.actual())
                 .status(rollup.status())
@@ -413,6 +414,30 @@ public class GmKpiDiagnosticsHierarchyService {
         return sectionManagerId.equals(memberNodeUuidOrNull(m));
     }
 
+    /** Hide the GM-to-PM budget row from the response member list while keeping it available for rollup math. */
+    private static List<GmDiagMemberNode> filterRootPmDepartmentBudgetRowsForTeamResponse(
+            List<GmDiagMemberNode> members,
+            UUID sectionManagerId) {
+        if (members == null || members.isEmpty() || sectionManagerId == null) {
+            return members;
+        }
+        return members.stream()
+                .filter(member -> !isRootPmDepartmentBudgetRow(member, sectionManagerId))
+                .collect(Collectors.toList());
+    }
+
+    private static GmDiagMemberNode rootPmDepartmentBudgetRow(
+            List<GmDiagMemberNode> members,
+            UUID sectionManagerId) {
+        if (members == null || members.isEmpty() || sectionManagerId == null) {
+            return null;
+        }
+        return members.stream()
+                .filter(member -> isRootPmDepartmentBudgetRow(member, sectionManagerId))
+                .findFirst()
+                .orElse(null);
+    }
+
     /**
      * KPI team: tổng target số trên mọi assignment flat trong section, trừ slice GM→PM gốc — tránh
      * cộng trùng (PM trong __DIRECT__ + leader node parse) làm {@code targetBalance} = excess sai.
@@ -586,7 +611,16 @@ public class GmKpiDiagnosticsHierarchyService {
         String prefix = roleCodeToUnitLinePrefix(ownerRoleCode);
         final String unitLine = (prefix != null && !prefix.isBlank()) ? prefix + " · " + sectionName : sectionName;
 
+        GmDiagMemberNode rootPmFeedbackRow =
+                (kpiTypeCode != null && kpiTypeCode == KPI_TYPE_TEAM_CASCADING)
+                        ? rootPmDepartmentBudgetRow(pmMembers, sf.getSectionManagerId())
+                        : null;
+
         List<GmDiagMemberNode> membersForResponse = directMembers;
+        if (kpiTypeCode != null && kpiTypeCode == KPI_TYPE_TEAM_CASCADING) {
+            membersForResponse = filterRootPmDepartmentBudgetRowsForTeamResponse(
+                    membersForResponse, sf.getSectionManagerId());
+        }
 
         String blockerSummary = (kpiTypeCode != null && kpiTypeCode == KPI_TYPE_TEAM_CASCADING)
                 ? (pmMembers.size() == 1 ? "1 người nhận KPI" : pmMembers.size() + " người nhận KPI")
@@ -609,6 +643,8 @@ public class GmKpiDiagnosticsHierarchyService {
 
         return GmDiagPmNode.builder()
                 .id(pmRowId)
+                .assignmentId(rootPmFeedbackRow != null ? rootPmFeedbackRow.getAssignmentId() : null)
+                .assignmentStatusCode(rootPmFeedbackRow != null ? rootPmFeedbackRow.getStatusCode() : null)
                 .name(pmDisplayName)
                 .ownerUserId(sf.getSectionManagerId() != null ? sf.getSectionManagerId().toString() : null)
                 .ownerRoleCode(ownerRoleCode)
@@ -620,6 +656,8 @@ public class GmKpiDiagnosticsHierarchyService {
                 .actual(pmActualLabel)
                 .status(pmStatus)
                 .blockerSummary(blockerSummary)
+                .feedbackNote(rootPmFeedbackRow != null ? rootPmFeedbackRow.getFeedbackNote() : null)
+                .feedbackAwaitingGm(rootPmFeedbackRow != null && rootPmFeedbackRow.isFeedbackAwaitingGm())
                 .members(membersForResponse)
                 .leaders(leaders)
                 .build();
@@ -727,6 +765,7 @@ public class GmKpiDiagnosticsHierarchyService {
                     .performanceLabel("Không xác định")
                     .blocker("—")
                     .rank(r.getMemberRank())
+                    .rankCode(r.getMemberRankCode())
                     .leader(r.getLeaderName())
                     .ownerRoleCode(null)
                     .ownerRoleLabel(null)
@@ -754,6 +793,7 @@ public class GmKpiDiagnosticsHierarchyService {
                 .performanceLabel(perf.label())
                 .blocker("—")
                 .rank(r.getMemberRank())
+                .rankCode(r.getMemberRankCode())
                 .leader(r.getLeaderName())
                 .ownerRoleCode(normalizedAssigneeRoleCode(r))
                 .ownerRoleLabel(trimOrNull(r.getMemberRoleName()))

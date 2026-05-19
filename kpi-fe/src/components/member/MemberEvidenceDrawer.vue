@@ -6,7 +6,7 @@ import {
   EVIDENCE_MAX_URLS,
   EVIDENCE_ACCEPT_ATTR,
   averageRatioResult,
-  averageActualResultDisplay,
+  recordStyleResultDisplay,
 } from '@/composables/useMemberEvidenceDrawer'
 import {
   ratioLabels,
@@ -14,6 +14,7 @@ import {
   formatNumericTarget,
   isBLanguageCertificateKpi,
   kpiTargetTooltip,
+  isRecordStyleFormMode,
 } from '@/utils/memberKpiHelpers'
 
 const ctx = inject(EVIDENCE_DRAWER_KEY)!
@@ -46,17 +47,17 @@ const ctx = inject(EVIDENCE_DRAWER_KEY)!
                 class="flex items-center text-lg font-bold text-slate-800"
               >
                 <i class="fas fa-clipboard-check mr-2 text-indigo-600" />
-                Chi tiết Evidence
+                Evidence Details
               </h2>
               <p class="mt-0.5 text-xs text-slate-500">
-                Khai báo số liệu và đính kèm — bản nháp lưu trên trình duyệt; gửi server khi bạn
-                bấm <span class="font-semibold text-slate-700">Submit Đánh Giá</span>.
+                Fill in data and attachments — drafts are saved in your browser; sent to server when you
+                click <span class="font-semibold text-slate-700">Submit Evaluation</span>.
               </p>
             </div>
             <button
               type="button"
               class="rounded-full p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
-              aria-label="Đóng"
+              aria-label="Close"
               @click="ctx.closeEvidencePanel()"
             >
               <i class="fas fa-times text-lg" />
@@ -69,8 +70,8 @@ const ctx = inject(EVIDENCE_DRAWER_KEY)!
             class="shrink-0 border-b border-amber-200 bg-amber-50 px-6 py-2.5 text-xs font-semibold leading-snug text-amber-950"
           >
             <i class="fas fa-eye mr-2 shrink-0 text-amber-600" />
-            Chế độ chỉ xem — KPI đã nộp hoặc đang chờ duyệt; bạn vẫn xem được minh chứng, không
-            lưu chỉnh sửa.
+            View-only mode — KPI has been submitted or is pending approval; you can still view evidence but
+            cannot save changes.
           </div>
 
           <div
@@ -80,10 +81,10 @@ const ctx = inject(EVIDENCE_DRAWER_KEY)!
           >
             <p class="font-semibold">
               <i class="fas fa-triangle-exclamation mr-2 text-rose-600" />
-              KPI đã bị từ chối - vui lòng chỉnh sửa và submit lại.
+              KPI was rejected - please update and resubmit.
             </p>
             <p class="mt-1.5 whitespace-pre-wrap text-rose-800">
-              {{ "Lý do từ chối:" + " " }} <span class="font-bold text-rose-800">{{ String(ctx.selectedDrawerItem.value?.updateReason ?? ctx.selectedDrawerItem.value?.feedbackComment ?? '').trim() }}</span>
+              {{ "Rejection reason:" + " " }} <span class="font-bold text-rose-800">{{ String(ctx.selectedDrawerItem.value?.updateReason ?? ctx.selectedDrawerItem.value?.feedbackComment ?? '').trim() }}</span>
             </p>
           </div>
 
@@ -123,32 +124,31 @@ const ctx = inject(EVIDENCE_DRAWER_KEY)!
                   <div class="flex items-start gap-3">
                     <i class="fas fa-id-card mt-0.5 shrink-0 text-lg text-indigo-600" />
                     <div class="min-w-0">
-                      <p class="font-bold text-indigo-950">Mục tiêu giao & chỉ tiêu chuẩn</p>
+                      <p class="font-bold text-indigo-950">Assigned Goal & Standard Target</p>
                       <p class="mt-1 font-medium text-slate-800">
-                        <span class="font-semibold text-indigo-900">Mục tiêu (assignment):</span>
+                        <span class="font-semibold text-indigo-900">Goal (assignment):</span>
                         {{ formatNumericTarget(ctx.selectedDrawerItem.value.assignmentTargetValue) }}
                         <span class="mx-2 text-slate-300">|</span>
-                        <span class="font-semibold text-indigo-900">Chỉ tiêu (target_value):</span>
+                        <span class="font-semibold text-indigo-900">Target (target_value):</span>
                         {{ formatNumericTarget(ctx.selectedDrawerItem.value.kpiTemplateTargetValue) }}
                       </p>
                       <p class="mt-1 text-xs text-slate-600">{{ targetBannerPlain(ctx.selectedDrawerItem.value) }}</p>
                     </div>
                   </div>
                   <p class="border-t border-indigo-100/90 pt-3 text-xs leading-relaxed text-slate-600">
-                    Nếu kết quả thực tế <strong>khác</strong> mục tiêu trên - ví dụ đăng ký
-                    <strong>TOEIC 700</strong> nhưng chưa đạt, trong khi bạn có
-                    <strong>JLPT N2</strong> hoặc chứng chỉ tương đương - hãy ghi rõ chứng chỉ /
-                    điểm số thực tế ở ô bên dưới và đính kèm bản scan hoặc link tra cứu để PM đối
-                    chiếu.
+                    If your actual result is <strong>different</strong> from the target above — for example,
+                    you registered for <strong>TOEIC 700</strong> but did not reach it, while you have
+                    <strong>JLPT N2</strong> or an equivalent certificate — please specify your actual
+                    certificate / score below and attach a scan or verification link for PM review.
                   </p>
                   <div>
                     <label class="mb-1 block text-xs font-bold text-slate-700">
-                      Chứng chỉ / trình độ thực tế (minh chứng đi kèm)
+                      Actual certificate / qualification (with evidence attached)
                     </label>
                     <textarea
                       v-model="ctx.certificateOutcomeDraft.value"
                       rows="2"
-                      placeholder="Ví dụ: JLPT N2 (12/2025) - đính kèm scan kết quả; mục tiêu TOEIC 700 chưa đạt / không thi lại trong năm."
+                      placeholder="Example: JLPT N2 (12/2025) - attached score scan; TOEIC 700 target not achieved / no retake this year."
                       :readonly="ctx.evidenceDrawerReadOnly.value"
                       class="w-full resize-none rounded-md border border-indigo-200 bg-white px-3 py-2 text-sm focus:ring-1 focus:ring-indigo-500 read-only:bg-slate-50 read-only:text-slate-700"
                     />
@@ -166,31 +166,31 @@ const ctx = inject(EVIDENCE_DRAWER_KEY)!
                     <div class="flex items-start gap-3">
                       <i class="fas fa-id-card mt-0.5 shrink-0 text-lg text-indigo-600" />
                       <div class="min-w-0">
-                        <p class="font-bold text-indigo-950">Mục tiêu giao & chỉ tiêu chuẩn</p>
+                        <p class="font-bold text-indigo-950">Assigned Goal & Standard Target</p>
                         <p class="mt-1 font-medium text-slate-800">
-                          <span class="font-semibold text-indigo-900">Mục tiêu (assignment):</span>
+                          <span class="font-semibold text-indigo-900">Goal (assignment):</span>
                           {{ formatNumericTarget(ctx.selectedDrawerItem.value.assignmentTargetValue) }}
                           <span class="mx-2 text-slate-300">|</span>
-                          <span class="font-semibold text-indigo-900">Chỉ tiêu (target_value):</span>
+                          <span class="font-semibold text-indigo-900">Target (target_value):</span>
                           {{ formatNumericTarget(ctx.selectedDrawerItem.value.kpiTemplateTargetValue) }}
                         </p>
                         <p class="mt-1 text-xs text-slate-600">{{ targetBannerPlain(ctx.selectedDrawerItem.value) }}</p>
                       </div>
                     </div>
                     <p class="border-t border-indigo-100/90 pt-3 text-xs leading-relaxed text-slate-600">
-                      Nếu kết quả thực tế <strong>khác</strong> mục tiêu trên - ví dụ đăng ký
-                      <strong>TOEIC 700</strong> nhưng chưa đạt, trong khi bạn có <strong>JLPT N2</strong>
-                      hoặc chứng chỉ tương đương - hãy ghi rõ chứng chỉ / điểm số thực tế ở ô bên
-                      dưới và đính kèm bản scan hoặc link tra cứu để PM đối chiếu.
+                      If your actual result is <strong>different</strong> from the target above — for example,
+                      you registered for <strong>TOEIC 700</strong> but did not reach it, while you have <strong>JLPT N2</strong>
+                      or an equivalent certificate — please specify your actual certificate / score below and attach
+                      a scan or verification link for PM review.
                     </p>
                     <div>
                       <label class="mb-1 block text-xs font-bold text-slate-700">
-                        Chứng chỉ / trình độ thực tế (minh chứng đi kèm)
+                        Actual certificate / qualification (with evidence attached)
                       </label>
                       <textarea
                         v-model="ctx.certificateOutcomeDraft.value"
                         rows="2"
-                        placeholder="Ví dụ: JLPT N2 (12/2025) - đính kèm scan kết quả; mục tiêu TOEIC 700 chưa đạt / không thi lại trong năm."
+                        placeholder="Example: JLPT N2 (12/2025) - attached score scan; TOEIC 700 target not achieved / no retake this year."
                         :readonly="ctx.evidenceDrawerReadOnly.value"
                         class="w-full resize-none rounded-md border border-indigo-200 bg-white px-3 py-2 text-sm focus:ring-1 focus:ring-indigo-500 read-only:bg-slate-50 read-only:text-slate-700"
                       />
@@ -216,8 +216,8 @@ const ctx = inject(EVIDENCE_DRAWER_KEY)!
                         />
                         {{
                           ctx.drawerFormMode.value === 'average'
-                            ? 'Khai báo Số liệu (Auto tính tỉ lệ)'
-                            : 'Khai báo Mục tiêu / Kết quả'
+                            ? 'Data Entry (Auto ratio calculation)'
+                            : 'Goal / Result Entry'
                         }}
                       </h4>
                       <span
@@ -229,13 +229,13 @@ const ctx = inject(EVIDENCE_DRAWER_KEY)!
                     </div>
 
                     <div class="p-4">
-                      <div v-if="ctx.scoringRawInput.value && (ctx.drawerFormMode.value === 'average' || ctx.drawerFormMode.value === 'comment')" class="mt-1.5 rounded border border-slate-200 bg-slate-50 px-3 py-2">
-                          <p class="mb-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">Quy tắc chấm điểm:</p>
+                      <div v-if="ctx.scoringRawInput.value && (ctx.drawerFormMode.value === 'average' || isRecordStyleFormMode(ctx.drawerFormMode.value))" class="mt-1.5 rounded border border-slate-200 bg-slate-50 px-3 py-2">
+                          <p class="mb-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">Scoring rules:</p>
                           <pre class="font-mono text-[11px] leading-relaxed text-slate-600 whitespace-pre-wrap">{{ ctx.scoringRawInput.value }}</pre>
                         </div>
                       <div
                         class="space-y-4 rounded-lg p-4 mt-4"
-                        v-show="ctx.drawerFormMode.value === 'average' || ctx.drawerFormMode.value === 'comment'"
+                        v-show="ctx.drawerFormMode.value === 'average' || isRecordStyleFormMode(ctx.drawerFormMode.value)"
                         :class="ctx.drawerFormMode.value === 'average' ? 'border border-blue-100 bg-blue-50/20' : 'border border-teal-100 bg-teal-50/30'"
                       >
                         <div
@@ -251,12 +251,12 @@ const ctx = inject(EVIDENCE_DRAWER_KEY)!
                               : 'md:grid-cols-[minmax(0,2.2fr)_minmax(88px,0.9fr)_auto]'"
                           >
                             <div>
-                              <label class="mb-1 block text-xs font-bold text-slate-600">{{ ctx.drawerFormMode.value === 'comment' ? 'Nội dung nhận xét (Comment)' : 'Comment' }}</label>
+                              <label class="mb-1 block text-xs font-bold text-slate-600">{{ isRecordStyleFormMode(ctx.drawerFormMode.value) ? 'Comment content' : 'Comment' }}</label>
                               <input
                                 v-model="row.comment"
                                 type="text"
                                 :readonly="ctx.evidenceDrawerReadOnly.value"
-                                :placeholder="ctx.drawerFormMode.value === 'comment' ? 'Mô tả bối cảnh, kết quả...' : 'Ghi chú thêm...'"
+                                :placeholder="isRecordStyleFormMode(ctx.drawerFormMode.value) ? 'Describe context and result...' : 'Additional notes...'"
                                 class="w-full rounded border border-slate-300 px-3 py-2 text-sm focus:ring-1 read-only:bg-slate-50"
                                 :class="ctx.drawerFormMode.value === 'average' ? 'focus:ring-blue-500' : 'focus:ring-teal-500'"
                               />
@@ -277,14 +277,14 @@ const ctx = inject(EVIDENCE_DRAWER_KEY)!
                                 {{
                                   ctx.drawerFormMode.value === 'average'
                                     ? ratioLabels(ctx.selectedDrawerItem.value?.calculationTypeCode).actual
-                                    : 'Giá trị thực tế (Actual)'
+                                    : 'Actual value'
                                 }}
                               </label>
                               <input
                                 v-model="row.actual"
                                 type="text"
                                 inputmode="decimal"
-                                :placeholder="ctx.drawerFormMode.value === 'comment' ? 'Nhập số liệu thực tế...' : '0'"
+                                :placeholder="isRecordStyleFormMode(ctx.drawerFormMode.value) ? 'Enter actual data...' : '0'"
                                 :readonly="ctx.evidenceDrawerReadOnly.value"
                                 class="w-full rounded border border-slate-300 px-3 py-2 text-sm focus:ring-1 read-only:bg-slate-50"
                                 :class="ctx.drawerFormMode.value === 'average' ? 'focus:ring-blue-500' : 'focus:ring-teal-500'"
@@ -295,7 +295,7 @@ const ctx = inject(EVIDENCE_DRAWER_KEY)!
                                 v-if="ctx.generalPlanActualRows.value.length > 1 && ctx.canAddEvidenceRecords.value"
                                 type="button"
                                 class="rounded p-2 text-xs text-slate-400 hover:bg-rose-50 hover:text-rose-600"
-                                title="Xóa dòng"
+                                title="Remove row"
                                 @click="ctx.removeGeneralPlanActualRow(row.id)"
                               >
                                 <i class="fas fa-trash-alt" />
@@ -310,7 +310,7 @@ const ctx = inject(EVIDENCE_DRAWER_KEY)!
                             v-if="ctx.drawerFormMode.value === 'average' && ctx.selectedDrawerItem.value"
                             class="mt-2 flex items-center gap-2"
                           >
-                            <span class="text-[10px] font-semibold text-slate-500">Kết quả tính:</span>
+                            <span class="text-[10px] font-semibold text-slate-500">Computed result:</span>
                             <span class="rounded bg-blue-50 px-2 py-0.5 text-xs font-bold text-blue-700">
                               {{
                                 averageRatioResult(
@@ -320,10 +320,14 @@ const ctx = inject(EVIDENCE_DRAWER_KEY)!
                               }}
                             </span>
                           </div>
-                          <div v-else-if="ctx.drawerFormMode.value === 'comment'" class="mt-2 flex items-center gap-2">
-                            <span class="text-[10px] font-semibold text-slate-500">Kết quả tính:</span>
-                            <span class="rounded bg-teal-50 px-2 py-0.5 text-xs font-bold text-teal-700">{{ averageActualResultDisplay(ctx.generalPlanActualRows.value) ?? '—' }}</span>
-                            <span class="text-[10px] text-slate-400">(TB Actual)</span>
+                          <div v-else-if="isRecordStyleFormMode(ctx.drawerFormMode.value)" class="mt-2 flex items-center gap-2">
+                            <span class="text-[10px] font-semibold text-slate-500">Computed result:</span>
+                            <span class="rounded bg-teal-50 px-2 py-0.5 text-xs font-bold text-teal-700">
+                              {{ recordStyleResultDisplay(ctx.drawerFormMode.value, ctx.generalPlanActualRows.value) ?? '—' }}
+                            </span>
+                            <span class="text-[10px] text-slate-400">
+                              {{ ctx.drawerFormMode.value === 'sum' ? '(Total Actual)' : '(Avg Actual)' }}
+                            </span>
                           </div>
                           <button
                             type="button"
@@ -331,7 +335,7 @@ const ctx = inject(EVIDENCE_DRAWER_KEY)!
                             :class="ctx.drawerFormMode.value === 'average' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-teal-600 hover:bg-teal-700'"
                             @click="ctx.addGeneralPlanActualRow()"
                           >
-                            <i class="fas fa-plus mr-1" /> Thêm Record
+                            <i class="fas fa-plus mr-1" /> Add Record
                           </button>
                         </div>
                       </div>
@@ -354,7 +358,7 @@ const ctx = inject(EVIDENCE_DRAWER_KEY)!
                       v-show="ctx.isUploadOnlyDrawer.value"
                       class="rounded bg-pink-100 px-2 py-0.5 text-[10px] font-bold uppercase text-pink-700"
                     >
-                      Bắt buộc
+                      Required
                     </span>
                   </div>
                   <div class="space-y-4 p-5">
@@ -372,7 +376,7 @@ const ctx = inject(EVIDENCE_DRAWER_KEY)!
                           multiple
                           :accept="EVIDENCE_ACCEPT_ATTR"
                           class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-                          title="Chọn file (tối đa 5 file)"
+                          title="Choose files (max 5 files)"
                           :disabled="ctx.evidenceDrawerReadOnly.value"
                           @change="ctx.onEvidenceFilesChange($event)"
                         />
@@ -381,17 +385,17 @@ const ctx = inject(EVIDENCE_DRAWER_KEY)!
                         >
                           <i class="fas fa-cloud-upload-alt text-2xl" />
                         </div>
-                        <p class="text-sm font-bold text-slate-700">Tải File Lên (PC)</p>
+                        <p class="text-sm font-bold text-slate-700">Upload Files (PC)</p>
                         <p class="mt-1 text-[10px] uppercase tracking-wider text-slate-400">
-                          PDF, Word, Excel, CSV, JPG, PNG - tối đa {{ EVIDENCE_MAX_FILES }} file
+                          PDF, Word, Excel, CSV, JPG, PNG - max {{ EVIDENCE_MAX_FILES }} files
                         </p>
                       </label>
 
                       <!-- URL input -->
                       <div class="flex flex-col rounded-lg border border-slate-200 bg-slate-50 p-5">
-                        <label class="mb-1 block text-sm font-bold text-slate-700">Thêm link URL</label>
+                        <label class="mb-1 block text-sm font-bold text-slate-700">Add URL link</label>
                         <p class="mb-3 text-[10px] uppercase tracking-wider text-slate-400">
-                          Jira, Confluence, Drive, cổng tra cứu điểm… - tối đa {{ EVIDENCE_MAX_URLS }} link
+                          Jira, Confluence, Drive, score verification portals... - max {{ EVIDENCE_MAX_URLS }} links
                         </p>
                         <div class="flex flex-col gap-2 sm:flex-row sm:items-stretch">
                           <div class="relative min-w-0 flex-1">
@@ -413,7 +417,7 @@ const ctx = inject(EVIDENCE_DRAWER_KEY)!
                             :disabled="ctx.pendingEvidenceUrls.value.length >= EVIDENCE_MAX_URLS"
                             @click="ctx.addPendingEvidenceUrl()"
                           >
-                            Thêm URL
+                            Add URL
                           </button>
                         </div>
                         <p v-if="ctx.evidenceUrlHint.value" class="mt-2 text-xs text-amber-700">
@@ -427,7 +431,7 @@ const ctx = inject(EVIDENCE_DRAWER_KEY)!
                       <div class="flex flex-wrap gap-4 rounded-lg border border-slate-100 bg-slate-50/90 px-3 py-2 text-xs font-semibold text-slate-700">
                         <span class="inline-flex items-center gap-2">
                           <i class="fas fa-file-alt text-slate-500" aria-hidden="true" />
-                          File (máy):
+                          Files (local):
                           <span class="tabular-nums text-slate-900">
                             {{ ctx.evidenceFileSectionCount.value }}/{{ EVIDENCE_MAX_FILES }}
                           </span>
@@ -435,7 +439,7 @@ const ctx = inject(EVIDENCE_DRAWER_KEY)!
                         <span class="hidden sm:inline text-slate-300" aria-hidden="true">|</span>
                         <span class="inline-flex items-center gap-2">
                           <i class="fas fa-link text-indigo-500" aria-hidden="true" />
-                          URL / đường dẫn:
+                          URL / path:
                           <span class="tabular-nums text-slate-900">
                             {{ ctx.pendingEvidenceUrls.value.length }}/{{ EVIDENCE_MAX_URLS }}
                           </span>
@@ -444,8 +448,8 @@ const ctx = inject(EVIDENCE_DRAWER_KEY)!
                           v-if="ctx.pendingEvidenceFiles.value.length >= EVIDENCE_MAX_FILES || ctx.pendingEvidenceUrls.value.length >= EVIDENCE_MAX_URLS"
                           class="ml-auto flex flex-wrap gap-2 text-[11px] font-medium text-amber-700"
                         >
-                          <span v-if="ctx.pendingEvidenceFiles.value.length >= EVIDENCE_MAX_FILES">Đủ file máy</span>
-                          <span v-if="ctx.pendingEvidenceUrls.value.length >= EVIDENCE_MAX_URLS">Đủ ô link</span>
+                          <span v-if="ctx.pendingEvidenceFiles.value.length >= EVIDENCE_MAX_FILES">File limit reached</span>
+                          <span v-if="ctx.pendingEvidenceUrls.value.length >= EVIDENCE_MAX_URLS">URL limit reached</span>
                         </span>
                       </div>
                       <p v-if="ctx.evidenceUploadHint.value" class="text-xs text-amber-700">
@@ -455,7 +459,7 @@ const ctx = inject(EVIDENCE_DRAWER_KEY)!
                       <!-- File attachments -->
                       <div v-if="ctx.hasFileAttachmentsSection.value">
                         <p class="mb-2 text-[11px] font-bold uppercase tracking-wide text-slate-500">
-                          File đính kèm
+                          Attached files
                         </p>
                         <ul class="divide-y divide-slate-100 overflow-hidden rounded-lg border border-slate-200 bg-white">
                           <li
@@ -473,7 +477,7 @@ const ctx = inject(EVIDENCE_DRAWER_KEY)!
                             <button
                               type="button"
                               class="shrink-0 rounded p-1.5 text-slate-400 transition-colors hover:bg-rose-50 hover:text-rose-600"
-                              title="Xóa file"
+                              title="Remove file"
                               @click="ctx.removePendingEvidenceFile(row.id)"
                             >
                               <i class="fas fa-times" />
@@ -494,7 +498,7 @@ const ctx = inject(EVIDENCE_DRAWER_KEY)!
                             <button
                               type="button"
                               class="shrink-0 rounded p-1.5 text-slate-400 transition-colors hover:bg-rose-50 hover:text-rose-600"
-                              title="Xóa minh chứng (gỡ cả tên và đường dẫn)"
+                              title="Remove evidence (delete both name and URL)"
                               @click="ctx.removePendingEvidenceUrl(row.id)"
                             >
                               <i class="fas fa-times" />
@@ -506,7 +510,7 @@ const ctx = inject(EVIDENCE_DRAWER_KEY)!
                       <!-- URL list -->
                       <div v-if="ctx.hasEvidenceUrlList.value">
                         <p class="mb-2 text-[11px] font-bold uppercase tracking-wide text-slate-500">
-                          URL đường dẫn minh chứng
+                          Evidence URL links
                         </p>
                         <ul class="divide-y divide-slate-100 overflow-hidden rounded-lg border border-indigo-100 bg-white">
                           <li
@@ -530,7 +534,7 @@ const ctx = inject(EVIDENCE_DRAWER_KEY)!
                             <button
                               type="button"
                               class="shrink-0 rounded p-1.5 text-slate-400 transition-colors hover:bg-rose-50 hover:text-rose-600"
-                              title="Xóa URL"
+                              title="Remove URL"
                               @click="ctx.removePendingEvidenceUrl(row.id)"
                             >
                               <i class="fas fa-times" />
@@ -543,7 +547,7 @@ const ctx = inject(EVIDENCE_DRAWER_KEY)!
                         v-if="!ctx.hasEvidenceAttachments.value"
                         class="rounded border border-dashed border-slate-200 bg-slate-50/80 px-3 py-2 text-center text-xs text-slate-500"
                       >
-                        Chưa có file hoặc URL - thêm ở hai ô phía trên
+                        No files or URLs yet - add them in the two fields above
                       </p>
                     </div>
                   </div>
@@ -554,14 +558,14 @@ const ctx = inject(EVIDENCE_DRAWER_KEY)!
                   <div class="border-b border-slate-100 bg-slate-50 px-4 py-3">
                     <h4 class="flex items-center text-sm font-bold text-slate-700">
                       <i class="fas fa-comment-alt mr-2 text-slate-500" />
-                      Ghi chú (Comment cho PM)
+                      Notes (Comment for PM)
                     </h4>
                   </div>
                   <div class="p-4">
                     <textarea
                       v-model="ctx.evidenceNoteDraft.value"
                       rows="3"
-                      placeholder="Nhập diễn giải thêm về bằng chứng của bạn..."
+                      placeholder="Enter additional explanation for your evidence..."
                       :readonly="ctx.evidenceDrawerReadOnly.value"
                       class="w-full resize-none rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:ring-1 focus:ring-indigo-500 read-only:bg-slate-50"
                     />
@@ -579,12 +583,12 @@ const ctx = inject(EVIDENCE_DRAWER_KEY)!
                   <div class="space-y-4 p-4">
                     <div>
                       <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-500">
-                        Feedback của Member (target setup)
+                        Member Feedback (target setup)
                       </label>
                       <textarea
                         v-model="ctx.memberFeedbackDraft.value"
                         rows="2"
-                        placeholder="Ví dụ: KPI này quá sức, cần giảm target hoặc chia milestone."
+                        placeholder="Example: This KPI is too demanding, target should be reduced or split into milestones."
                         :readonly="ctx.evidenceDrawerReadOnly.value"
                         class="w-full resize-none rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:ring-1 focus:ring-indigo-500 read-only:bg-slate-50"
                       />
@@ -596,7 +600,7 @@ const ctx = inject(EVIDENCE_DRAWER_KEY)!
                       <textarea
                         v-model="ctx.gmCommentDraft.value"
                         rows="2"
-                        placeholder="Ghi chú từ GM cho KPI này"
+                        placeholder="GM note for this KPI"
                         readonly
                         class="w-full resize-none rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-600"
                       />
@@ -637,11 +641,11 @@ const ctx = inject(EVIDENCE_DRAWER_KEY)!
               <!-- Auto-computed score for CALC_RULE 803 with scoring rules -->
               <template
                 v-if="
-                  (ctx.drawerFormMode.value === 'comment' || ctx.drawerFormMode.value === 'average')
+                  (isRecordStyleFormMode(ctx.drawerFormMode.value) || ctx.drawerFormMode.value === 'average')
                   && ctx.scoringRulesFromItem.value.length > 0
                 "
               >
-                <label class="mb-1 text-xs font-semibold text-slate-600">Điểm (tự tính)</label>
+                <label class="mb-1 text-xs font-semibold text-slate-600">Score (auto-calculated)</label>
                 <div class="flex items-center gap-2 h-10">
                   <span
                     class="inline-flex min-w-[2.75rem] items-center justify-center rounded-md border px-3 py-2 text-sm font-bold"
@@ -656,14 +660,18 @@ const ctx = inject(EVIDENCE_DRAWER_KEY)!
                     v-if="ctx.computedEvalScore.value === null"
                     class="text-xs text-slate-400"
                   >
-                    {{ ctx.drawerFormMode.value === 'average' ? 'Nhập đủ số liệu để tính' : 'Nhập đủ Comment và Actual để tính' }}
+                    {{
+                      ctx.drawerFormMode.value === 'average'
+                        ? 'Enter complete data to calculate'
+                        : 'Enter Comment and Actual to calculate'
+                    }}
                   </span>
                 </div>
                 <p
                   v-if="ctx.metricOutOfDslRule.value"
                   class="mt-1 text-xs font-medium text-rose-600"
                 >
-                  Giá trị Actual/Kết quả tính đang vượt mức tối đa của Quy tắc chấm điểm.
+                  Actual/computed value exceeds the maximum allowed by scoring rules.
                 </p>
               </template>
               <!-- Manual score dropdown for average mode or when no scoring rules -->
@@ -680,13 +688,13 @@ const ctx = inject(EVIDENCE_DRAWER_KEY)!
                         : parseInt(($event.target as HTMLSelectElement).value, 10)
                   "
                 >
-                  <option value="" disabled>- Chưa chọn -</option>
+                  <option value="" disabled>- Not selected -</option>
                   <option v-for="n in 5" :key="'ds-' + n" :value="n">{{ n }}</option>
                 </select>
               </template>
             </div>
             <div v-else class="text-sm font-semibold text-violet-700">
-              Gửi feedback cho KPI này
+              Send feedback for this KPI
             </div>
 
             <div class="flex items-center space-x-3">
@@ -695,7 +703,7 @@ const ctx = inject(EVIDENCE_DRAWER_KEY)!
                 class="rounded-lg border border-slate-300 bg-white px-5 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50"
                 @click="ctx.closeEvidencePanel()"
               >
-                Hủy bỏ
+                Cancel
               </button>
 
               <button
@@ -705,8 +713,8 @@ const ctx = inject(EVIDENCE_DRAWER_KEY)!
                 :disabled="!ctx.canSaveEvidence.value || ctx.saving.value"
                 :title="!ctx.canSaveEvidence.value
                   ? (ctx.panelMode.value === 'feedback'
-                    ? 'Vui lòng nhập feedback trước khi gửi'
-                    : 'Vui lòng chọn điểm tự đánh giá (1–5) trước khi lưu')
+                    ? 'Please enter feedback before sending'
+                    : 'Please select a self-evaluation score (1-5) before saving')
                   : undefined"
                 @click="ctx.saveEvidenceDetail()"
               >
@@ -714,13 +722,13 @@ const ctx = inject(EVIDENCE_DRAWER_KEY)!
                   :class="ctx.saving.value ? 'fas fa-spinner fa-spin' : 'fas fa-save'"
                   class="mr-2 text-sm"
                 />
-                {{ ctx.panelMode.value === 'feedback' ? 'Gửi Feedback' : 'Lưu Evidence' }}
+                {{ ctx.panelMode.value === 'feedback' ? 'Send Feedback' : 'Save Evidence' }}
               </button>
               <span
                 v-else
                 class="rounded-lg border border-slate-200 bg-slate-50 px-4 py-2 text-xs font-semibold text-slate-500"
               >
-                Chỉ xem — không lưu chỉnh sửa
+                View only — changes cannot be saved
               </span>
             </div>
           </div>

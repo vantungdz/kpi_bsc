@@ -106,27 +106,27 @@ function statusBadge(member: TeamMemberMock) {
     return {
       cls: 'bg-rose-50 text-rose-700 border border-rose-200',
       dot: true,
-      label: 'Chờ PM duyệt',
+      label: 'Pending PM Approval',
     }
   }
   if (member.status === 'self_scoring') {
     return {
       cls: 'bg-slate-100 text-slate-600 border border-slate-200',
       dot: false,
-      label: 'Đang tự chấm',
+      label: 'Self Scoring',
     }
   }
   if (member.status === 'approved') {
     return {
       cls: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
       dot: false,
-      label: 'Đã duyệt',
+      label: 'Approved',
     }
   }
   return {
     cls: 'bg-blue-50 text-blue-700 border border-blue-200',
     dot: false,
-    label: 'Đã nộp',
+    label: 'Submitted',
   }
 }
 
@@ -188,10 +188,10 @@ watch(
     <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
       <div>
         <h2 class="text-2xl font-bold text-slate-900 tracking-tight">
-          Quản lý KPI của Team
+          Team KPI Management
         </h2>
         <p class="text-slate-500 text-sm mt-1">
-          Xem tiến độ và chi tiết KPI nhân viên (Leader không chấm điểm tại đây).
+          View progress and member KPI details (Leader does not score on this screen).
         </p>
       </div>
       <select
@@ -199,10 +199,10 @@ watch(
         class="px-4 py-2 bg-white border border-slate-200 rounded-lg text-sm font-bold text-slate-700 shadow-sm outline-none cursor-pointer focus:ring-2 focus:ring-indigo-100"
       >
         <option :value="2025">
-          Năm: 2025
+          Year: 2025
         </option>
         <option :value="2026">
-          Năm: 2026
+          Year: 2026
         </option>
       </select>
     </div>
@@ -213,10 +213,10 @@ watch(
       <i class="fas fa-eye text-indigo-600 mt-0.5" />
       <div>
         <p class="font-bold">
-          Chế độ xem
+          View Mode
         </p>
         <p class="text-indigo-900/80 mt-0.5">
-          Leader chỉ được xem KPI của team; đánh giá điểm do PM / quy trình khác thực hiện.
+          Leader can only view team KPIs; scoring is handled by PM / other workflows.
         </p>
       </div>
     </div>
@@ -228,10 +228,10 @@ watch(
       <i class="fas fa-lock text-slate-500 mt-0.5" />
       <div>
         <p class="font-bold text-slate-800">
-          Kỳ năm {{ selectedYear }} đã khóa
+          Year {{ selectedYear }} cycle is locked
         </p>
         <p class="text-slate-600 mt-0.5">
-          Dữ liệu hiển thị theo snapshot đã lưu.
+          Data is displayed from the saved snapshot.
         </p>
       </div>
     </div>
@@ -243,7 +243,7 @@ watch(
           <input
             v-model="nameQuery"
             type="text"
-            placeholder="Lọc theo tên nhân viên..."
+            placeholder="Filter by member name..."
             class="pl-9 pr-4 py-2 bg-white border border-slate-300 shadow-sm rounded-lg text-sm focus:ring-2 focus:ring-indigo-100 outline-none w-full text-slate-700"
           >
         </div>
@@ -257,7 +257,7 @@ watch(
               : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50'"
             @click="filterTab = 'all'"
           >
-            Tất cả ({{ totalCount }})
+            All ({{ totalCount }})
           </button>
           <button
             type="button"
@@ -268,7 +268,7 @@ watch(
             @click="filterTab = 'pending'"
           >
             <span class="w-2 h-2 rounded-full bg-rose-500" />
-            Chờ PM ({{ pendingCount }})
+            Pending PM ({{ pendingCount }})
           </button>
         </div>
       </div>
@@ -278,25 +278,25 @@ watch(
           <thead>
             <tr class="bg-white border-b border-slate-200 text-[11px] uppercase tracking-wider text-slate-500 font-bold">
               <th class="py-4 px-6 w-10">
-                Mã NV
+                Emp ID
               </th>
               <th class="py-4 px-6">
-                Tên Nhân viên
+                Employee Name
               </th>
               <th class="py-4 px-6 text-center">
                 Rank
               </th>
               <th class="py-4 px-6 text-center">
-                Tiến độ
+                Progress
               </th>
               <th class="py-4 px-6 text-center bg-slate-50">
-                Điểm tự chấm
+                Self Score
               </th>
               <th class="py-4 px-6 text-center bg-indigo-50/50 text-indigo-800">
-                Điểm PM
+                PM Score
               </th>
               <th class="py-4 px-6 text-right w-40">
-                Chi tiết
+                Details
               </th>
             </tr>
           </thead>
@@ -368,7 +368,7 @@ watch(
                       : 'bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700'"
                     @click="toggleExpand(member.id)"
                   >
-                    <span>Xem chi tiết</span>
+                    <span>View details</span>
                     <i
                       class="fas fa-chevron-down text-xs transition-transform duration-200"
                       :class="expandedId === member.id ? 'rotate-180' : ''"
@@ -380,7 +380,7 @@ watch(
                     disabled
                     class="inline-flex items-center justify-center px-4 py-1.5 bg-white border border-slate-300 text-slate-600 text-xs font-bold rounded-lg shadow-sm opacity-50 cursor-not-allowed w-full"
                   >
-                    {{ member.status === 'self_scoring' ? 'Chưa có sheet' : 'Không khả dụng' }}
+                    {{ member.status === 'self_scoring' ? 'No sheet yet' : 'Not available' }}
                   </button>
                 </td>
               </tr>
@@ -393,14 +393,14 @@ watch(
                       class="mb-4 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3"
                     >
                       <i class="fas fa-info-circle mr-2" />
-                      Đang dùng bộ KPI mẫu giống NV <strong>834</strong> để demo giao diện (mock).
+                      Using the same sample KPI set as employee <strong>834</strong> for UI demo (mock).
                     </div>
 
                     <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
                       <div class="p-4 border-b border-slate-200 bg-slate-50/80 flex justify-between items-center">
                         <h3 class="font-bold text-slate-800 flex items-center gap-2">
                           <i class="fas fa-list-check text-indigo-600" />
-                          Chi tiết các mục tiêu KPI
+                          KPI Goal Details
                         </h3>
                       </div>
 
@@ -412,20 +412,20 @@ watch(
                                 #
                               </th>
                               <th class="py-4 px-4 min-w-[200px]">
-                                Hạng mục
+                                Item
                               </th>
                               <th class="py-4 px-4 text-center w-20">
-                                Trọng số
+                                Weight
                               </th>
                               <th class="py-4 px-4 text-center w-32">
-                                Bằng chứng
+                                Evidence
                               </th>
                               <th class="py-4 px-4 text-center w-24">
                                 Self
                               </th>
                               <th class="py-4 px-4 text-center w-32 bg-indigo-50/50 text-indigo-800 border-l border-indigo-100">
                                 <span>PM Score</span>
-                                <span class="block text-[10px] font-normal text-slate-500 normal-case">(chỉ xem)</span>
+                                <span class="block text-[10px] font-normal text-slate-500 normal-case">(view only)</span>
                               </th>
                             </tr>
                           </thead>
@@ -537,7 +537,7 @@ watch(
                           <tfoot class="bg-slate-100/80 border-t-2 border-slate-200 font-bold text-sm">
                             <tr>
                               <td colspan="2" class="py-4 px-4 text-right text-slate-700 uppercase tracking-wider">
-                                Tổng trọng số:
+                                Total Weight:
                               </td>
                               <td class="py-4 px-4 text-center text-slate-800">
                                 {{ TOTAL_KPI_WEIGHT }} <span class="text-[10px]">pts</span>
@@ -547,7 +547,7 @@ watch(
                             <span class="text-lg text-slate-700 font-bold">{{ weightedSelfAvg(getGroups(member)) }}</span>
                             <tr class="bg-slate-200/50 border-t border-slate-200">
                               <td colspan="4" class="py-4 px-4 text-right text-slate-700 uppercase tracking-wider">
-                                Điểm TB tự chấm (Self-Avg):
+                                Average Self Score (Self-Avg):
                               </td>
                               <td class="py-4 px-4 text-center bg-white shadow-sm border-x border-slate-200">
                               </td>
@@ -555,7 +555,7 @@ watch(
                             </tr>
                             <tr class="bg-indigo-50 border-t border-slate-200">
                               <td colspan="4" class="py-5 px-4 text-right text-indigo-900 uppercase tracking-wider">
-                                Điểm Trung Bình (PM Avg Score):
+                                Average Score (PM Avg Score):
                               </td>
                                <td class="py-5 px-4 text-right text-indigo-900 uppercase tracking-wider">
                               </td>
@@ -570,17 +570,17 @@ watch(
                       <div class="p-6 border-t border-slate-200 bg-slate-50/50">
                         <h4 class="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
                           <i class="fas fa-comment text-indigo-600" />
-                          Ghi chú (chỉ xem)
+                          Notes (view only)
                         </h4>
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                           <div class="space-y-2">
-                            <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider">Nhân viên</label>
+                            <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider">Employee</label>
                             <div class="w-full min-h-[5rem] p-3 bg-white border border-slate-200 rounded-lg text-sm text-slate-600 whitespace-pre-wrap">
                               {{ member.employeeComment || '—' }}
                             </div>
                           </div>
                           <div class="space-y-2">
-                            <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider">PM / Quản lý</label>
+                            <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider">PM / Manager</label>
                             <div class="w-full min-h-[5rem] p-3 bg-white border border-slate-200 rounded-lg text-sm text-slate-700 whitespace-pre-wrap">
                               {{ member.supervisorCommentSaved || '—' }}
                             </div>
@@ -596,7 +596,7 @@ watch(
                 <td colspan="7" class="p-0 border-b border-slate-200">
                   <div class="bg-slate-100 p-8 text-center text-slate-600 text-sm">
                     <i class="fas fa-user-clock text-2xl mb-2 text-slate-400" />
-                    <p>Chưa có bảng KPI chi tiết để xem (mock).</p>
+                    <p>No detailed KPI sheet available to view yet (mock).</p>
                   </div>
                 </td>
               </tr>

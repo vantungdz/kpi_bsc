@@ -23,6 +23,10 @@ public class GmEvaluationHubAssignmentRow {
     private BigDecimal weight;
     private String masterCode;
     private String masterName;
+    /** {@code kpi_master.calculation_rule_code}. */
+    private Integer calculationRuleCode;
+    /** {@code kpi_master.calculation_type_code}. */
+    private Integer calculationTypeCode;
     private String categoryName;
     private String kpiTypeName;
     private UUID userId;

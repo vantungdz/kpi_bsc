@@ -50,6 +50,7 @@ public class GmProcessTimelineService {
     // ── Year-end phase ─────────────────────────────────────────────────────────
     private static final int STATUS_END_WAITING_PM = 601;
     private static final int STATUS_END_WAITING_GM = 602;
+    private static final int TYPE_TEAM = 102;
 
     // ── Stable group ids (khớp naming FE / tài liệu nghiệp vụ) ─────────────────
     private static final String ID_UNASSIGNED = "unassigned_members";
@@ -168,6 +169,9 @@ public class GmProcessTimelineService {
         Map<String, MutableGroup> groups = new LinkedHashMap<>();
 
         for (GmTimelineIssueRow row : notSubmitted) {
+            if (isTeamParentAssignment(row)) {
+                continue;
+            }
             getOrCreateGroup(groups, ID_KPI_NOT_SUBMITTED).putAssignmentDetail(
                     buildAssignmentDetail(row, "Member",
                             "Đang trong kỳ Mid-Year nhưng chưa nộp evidence"));
@@ -175,6 +179,9 @@ public class GmProcessTimelineService {
 
         Set<String> midCompletedSubjects = completedSubjectKeys(allRows, STATUS_MID_COMPLETED);
         for (GmTimelineIssueRow row : allRows) {
+            if (isTeamParentAssignment(row)) {
+                continue;
+            }
             int code = row.getStatusCode();
             if (code != STATUS_MID_WAITING_PM && code != STATUS_MID_WAITING_GM) {
                 continue;
@@ -228,12 +235,18 @@ public class GmProcessTimelineService {
         Map<String, MutableGroup> groups = new LinkedHashMap<>();
 
         for (GmTimelineIssueRow row : notSubmitted) {
+            if (isTeamParentAssignment(row)) {
+                continue;
+            }
             getOrCreateGroup(groups, ID_KPI_NOT_SUBMITTED).putAssignmentDetail(
                     buildAssignmentDetail(row, "Member",
                             "Đang trong kỳ Year-End nhưng chưa nộp evidence"));
         }
 
         for (GmTimelineIssueRow row : allRows) {
+            if (isTeamParentAssignment(row)) {
+                continue;
+            }
             int code = row.getStatusCode();
             if (code != STATUS_END_WAITING_PM && code != STATUS_END_WAITING_GM) {
                 continue;
@@ -250,7 +263,12 @@ public class GmProcessTimelineService {
         return finalizePhase(orderedGroups(groups, YEAR_END_GROUP_ORDER), "Year-End Review");
     }
 
-    /** Trả về id nhóm Setting; null nếu không xử lý. */
+    private static boolean isTeamParentAssignment(GmTimelineIssueRow row) {
+        return row != null
+                && Objects.equals(row.getTypeCode(), TYPE_TEAM)
+                && row.getParentAssignmentId() == null;
+    }
+
     private String detectIssueCategorySetting(int code) {
         return switch (code) {
             case STATUS_DRAFT, STATUS_REJECTED -> ID_KPI_NOT_SUBMITTED;

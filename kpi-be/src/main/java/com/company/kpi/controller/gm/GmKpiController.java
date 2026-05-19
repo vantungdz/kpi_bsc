@@ -57,7 +57,7 @@ import java.util.UUID;
  *   GET /api/v1/kpi/gm/diagnostics-hierarchy?year=2026 — catalog + cây diagnostics trong một payload
  *   GET /api/v1/kpi/gm/kpi-categories — danh sách {@code kpi_categories} (dropdown tạo KPI)
  *   GET /api/v1/kpi/gm/kpi-cycles-with-kpis — chu kỳ {@code kpi_cycles} có KPI (kpis_information / kpi_assignments / user_kpi_summaries)
- *   GET /api/v1/kpi/gm/kpi-cycles-for-evaluation — chu kỳ có dữ liệu KPI (dropdown năm đánh giá / header GM)
+ *   GET /api/v1/kpi/gm/kpi-cycles-for-evaluation — chu kỳ {@code kpi_cycles} year ≥ hiện tại (dropdown Evaluation year)
  *   GET /api/v1/kpi/gm/evaluation-hub/assignments?cycleId= — tab đánh giá: assignments ASM 501/502/503/601/602/603
  *   POST /api/v1/kpi/gm/evaluation-hub/confirm — GM xác nhận drawer: 502→503, 602→603
  *   GET /api/v1/kpi/gm/approved-kpi-queue?cycleId= — KPI cá nhân ASM 401/402/403
@@ -259,7 +259,7 @@ public class GmKpiController extends BaseController {
         return success(gmKpiCycleService.listCyclesWithKpisInformation());
     }
 
-    /** Chu kỳ đã có dữ liệu KPI — gồm cả năm trước để GM xem lịch sử đánh giá. */
+    /** Chu kỳ trong {@code kpi_cycles}, year ≥ năm hiện tại — dropdown Evaluation year (form tạo KPI). */
     @GetMapping("/kpi-cycles-for-evaluation")
     @PreAuthorize("hasAnyRole('GM','LEADER','PM','MEMBER')")
     public ResponseEntity<BaseResponse<List<GmKpiCycleOptionResponse>>> listKpiCyclesForEvaluation() {
@@ -339,7 +339,7 @@ public class GmKpiController extends BaseController {
     public ResponseEntity<BaseResponse<Void>> submitGmPersonalEvaluation(
             @Valid @RequestBody GmPersonalEvaluationSubmitRequest body, Authentication authentication) {
         UUID userId = UUID.fromString((String) authentication.getPrincipal());
-        memberKpiService.submitGmPersonalEvaluation(userId, body.getCycleId());
+        memberKpiService.submitGmPersonalEvaluation(userId, body.getCycleId(), Boolean.TRUE.equals(body.getPromotion()));
         return success(null);
     }
 

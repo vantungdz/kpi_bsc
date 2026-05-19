@@ -919,13 +919,17 @@ const routes: Route[] = [
     },
   },
 
-  // ── GET /kpi/gm/kpi-cycles-for-evaluation — mọi chu kỳ có dữ liệu KPI (kể cả năm trước) ─
+  // ── GET /kpi/gm/kpi-cycles-for-evaluation — chu kỳ kpi_cycles, year ≥ hiện tại ─
   {
     method: "get",
     test: (p) => p === "/kpi/gm/kpi-cycles-for-evaluation",
     handler: async (cfg) => {
       await sleep(120);
-      return ok<GmKpiCycleOption[]>(cfg, [...MOCK_GM_KPI_CYCLES_WITH_KPIS]);
+      const minYear = new Date().getFullYear();
+      return ok<GmKpiCycleOption[]>(
+        cfg,
+        MOCK_GM_KPI_CYCLES_WITH_KPIS.filter((c) => c.year >= minYear),
+      );
     },
   },
 
@@ -1721,6 +1725,31 @@ const adminRoutes: typeof routes = [
       }
       const updated = mockKpiCycleStore[idx]!;
       return ok(cfg, { ...updated });
+    },
+  },
+
+  // DELETE /admin/kpi-cycles/:id — xóa năm đánh giá (chỉ năm > năm hiện tại)
+  {
+    method: "delete",
+    test: (p) => /^\/admin\/kpi-cycles\/[^/]+$/.test(p),
+    handler: async (cfg, path) => {
+      await sleep(280);
+      const id = path.split("/")[3];
+      const idx = mockKpiCycleStore.findIndex((c) => c.id === id);
+      if (idx < 0) {
+        fail(cfg, 404, "Không tìm thấy kỳ đánh giá.");
+      }
+      const cur = mockKpiCycleStore[idx]!;
+      const currentYear = new Date().getFullYear();
+      if (cur.year <= currentYear) {
+        fail(
+          cfg,
+          400,
+          `Chỉ được xóa năm đánh giá lớn hơn năm hiện tại (${currentYear}).`,
+        );
+      }
+      mockKpiCycleStore = mockKpiCycleStore.filter((c) => c.id !== id);
+      return ok(cfg, null);
     },
   },
 

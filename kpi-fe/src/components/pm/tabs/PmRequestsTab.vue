@@ -216,7 +216,7 @@ function confirmRejectSelected() {
         <tbody class="divide-y divide-slate-100">
           <tr v-if="!members.length">
             <td colspan="5" class="py-14 text-center text-sm text-slate-500">
-              Không có KPI nào chờ PM duyệt (402).
+              Không có KPI nào chờ PM duyệt.
             </td>
           </tr>
           <tr

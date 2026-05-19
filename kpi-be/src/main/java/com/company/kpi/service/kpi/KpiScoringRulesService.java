@@ -117,37 +117,37 @@ public class KpiScoringRulesService {
             Matcher m = LINE.matcher(toParse);
             if (!m.matches()) {
                 throw AppException.badRequest(
-                        "Dòng "
+                        "Line "
                                 + (i + 1)
-                                + ": mỗi dòng phải có dạng «số_điểm:điều_kiện» (vd. 1: <50). Nội dung: «"
+                                + ": each line must have the format «score:condition» (e.g. 1: <50). Content: «"
                                 + truncateOneLine(line, 80)
                                 + "».");
             }
             int score = Integer.parseInt(m.group(1));
             if (score < 1 || score > 5) {
                 throw AppException.badRequest(
-                        "Dòng "
+                        "Line "
                                 + (i + 1)
-                                + ": điểm phải từ 1 đến 5 (đang ghi «"
+                                + ": score must be between 1 and 5 (currently «"
                                 + score
-                                + "»). Nội dung: «"
+                                + "»). Content: «"
                                 + truncateOneLine(line, 80)
                                 + "».");
             }
             if (!seenScores.add(score)) {
                 throw AppException.badRequest(
-                        "Dòng "
+                        "Line "
                                 + (i + 1)
-                                + ": trùng điểm "
+                                + ": duplicate score "
                                 + score
-                                + " — mỗi mức (1–5) chỉ được khai báo một lần.");
+                                + " — each level (1–5) can only be declared once.");
             }
             String cond = m.group(2).strip();
             if (cond.isEmpty()) {
                 throw AppException.badRequest(
-                        "Dòng "
+                        "Line "
                                 + (i + 1)
-                                + ": thiếu phần điều kiện sau dấu «:» (vd. "
+                                + ": missing condition after «:» (e.g. "
                                 + score
                                 + ": <50).");
             }
@@ -167,11 +167,11 @@ public class KpiScoringRulesService {
             char right = mb.group(4).charAt(0);
             if ((left != '(' && left != '[') || (right != ')' && right != ']')) {
                 throw AppException.badRequest(
-                        "Điểm "
+                        "Score "
                                 + score
-                                + ": khoảng «"
+                                + ": range «"
                                 + truncateOneLine(cond, 48)
-                                + "» — chỉ dùng ( hoặc [ ở đầu và ) hoặc ] ở cuối.");
+                                + "» — only use ( or [ at the start and ) or ] at the end.");
             }
             BigDecimal a;
             BigDecimal b;
@@ -180,19 +180,19 @@ public class KpiScoringRulesService {
                 b = new BigDecimal(mb.group(3)).setScale(6, RoundingMode.HALF_UP);
             } catch (NumberFormatException e) {
                 throw AppException.badRequest(
-                        "Điểm "
+                        "Score "
                                 + score
-                                + ": trong khoảng «"
+                                + ": range «"
                                 + truncateOneLine(cond, 48)
-                                + "» có phần không phải số hợp lệ.");
+                                + "» contains an invalid number.");
             }
             if (a.compareTo(b) > 0) {
                 throw AppException.badRequest(
-                        "Điểm "
+                        "Score "
                                 + score
-                                + ": khoảng «"
+                                + ": range «"
                                 + truncateOneLine(cond, 48)
-                                + "» — số trái phải ≤ số phải.");
+                                + "» — left value must be ≤ right value.");
             }
             Map<String, Object> map = new LinkedHashMap<>();
             map.put("score", score);
@@ -212,19 +212,19 @@ public class KpiScoringRulesService {
                 b = new BigDecimal(mr.group(2)).setScale(6, RoundingMode.HALF_UP);
             } catch (NumberFormatException e) {
                 throw AppException.badRequest(
-                        "Điểm "
+                        "Score "
                                 + score
-                                + ": trong khoảng «"
+                                + ": range «"
                                 + truncateOneLine(cond, 48)
-                                + "» có phần không phải số hợp lệ.");
+                                + "» contains an invalid number.");
             }
             if (a.compareTo(b) > 0) {
                 throw AppException.badRequest(
-                        "Điểm "
+                        "Score "
                                 + score
-                                + ": khoảng «"
+                                + ": range «"
                                 + truncateOneLine(cond, 48)
-                                + "» không hợp lệ — số bên trái phải ≤ số bên phải (vd. 50-70).");
+                                + "» is invalid — left value must be ≤ right value (e.g. 50-70).");
             }
             Map<String, Object> map = new LinkedHashMap<>();
             map.put("score", score);
@@ -253,11 +253,11 @@ public class KpiScoringRulesService {
             return pred(score, "=", parseBig(score, cond, mr.group(1)));
         }
         throw AppException.badRequest(
-                "Điểm "
+                "Score "
                         + score
-                        + ": điều kiện «"
+                        + ": condition «"
                         + truncateOneLine(cond, 56)
-                        + "» không hợp lệ. Dùng: (a,b] / [a,b); khoảng 50-70; hoặc <50, <=50, >90, >=100, =100 (số thập phân).");
+                        + "» is invalid. Use: (a,b] / [a,b); range 50-70; or <50, <=50, >90, >=100, =100 (decimal numbers).");
     }
 
     private static BigDecimal parseBig(int score, String cond, String numPart) {
@@ -265,9 +265,9 @@ public class KpiScoringRulesService {
             return new BigDecimal(numPart.trim());
         } catch (NumberFormatException e) {
             throw AppException.badRequest(
-                    "Điểm "
+                    "Score "
                             + score
-                            + ": sau toán tử cần là một số hợp lệ trong «"
+                            + ": operator must be followed by a valid number in «"
                             + truncateOneLine(cond, 48)
                             + "».");
         }

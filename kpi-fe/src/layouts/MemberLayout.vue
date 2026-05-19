@@ -18,7 +18,7 @@ const isActive = (path: string) => route.path.startsWith(path)
     <aside class="w-64 bg-white border-r border-slate-200 hidden md:flex flex-col z-20 shadow-sm shrink-0">
       <div class="h-16 flex items-center px-6 border-b border-slate-200">
         <div class="bg-gradient-to-br from-blue-600 to-indigo-600 text-white p-1.5 rounded-lg shadow-md mr-3">
-          <i class="fas fa-bullseye text-sm" />
+          <i class="fas fa-bullseye text-xl mx-auto" />
         </div>
         <span class="text-lg font-bold text-slate-900 tracking-tight">KPI System</span>
       </div>
@@ -57,10 +57,10 @@ const isActive = (path: string) => route.path.startsWith(path)
 
       <div class="p-4 border-t border-slate-200">
         <button
-          class="flex items-center gap-3 px-3 py-2 text-slate-500 hover:text-rose-600 transition-colors text-sm font-medium mt-1 w-full"
+          class="flex items-center gap-3 px-3 py-2 text-slate-500 hover:text-rose-600 transition-colors text-sm font-medium mt-1 w-full cursor-pointer"
           @click="logout"
         >
-          <i class="fas fa-sign-out-alt w-4 text-center" /> Đăng xuất
+          <i class="fas fa-sign-out-alt w-4 text-center cursor-pointer" /> Sign out
         </button>
       </div>
     </aside>

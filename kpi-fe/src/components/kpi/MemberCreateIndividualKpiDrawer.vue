@@ -651,7 +651,7 @@ async function save() {
                 <p class="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-semibold text-slate-600">
                   Năm đánh giá KPI:
                   <span class="font-bold text-slate-800">{{ cycleYearNumFallback }}</span>
-                  (theo năm đang chọn trên dashboard)
+                  (theo năm hiện tại của hệ thống)
                 </p>
 
                 <!-- Row 4: Quy tắc chấm điểm -->

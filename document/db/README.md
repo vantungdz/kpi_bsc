@@ -2,6 +2,15 @@
 
 **Mục tiêu:** Xây dựng hệ thống lõi chuẩn 3NF, linh hoạt cấu trúc cây mục tiêu (KPI Tree), tối ưu truy vấn với Table Partitioning và sẵn sàng cho việc phân tích báo cáo dữ liệu xuyên năm (Cross-year Reporting). Phiên bản này áp dụng **Máy trạng thái tập trung (Centralized State Machine)** và **chuẩn hóa Data Codes** bằng số nguyên để tối ưu cho hệ thống Backend.
 
+## Chạy SQL nhanh (cho team)
+
+| Kịch bản | Thứ tự file |
+|----------|-------------|
+| **DB mới** | `init-db.sql` → `V3__sample_data.sql` *(tuỳ chọn)* → **`V6__rating_levels_setup.sql`** |
+| **DB đang chạy (nâng cấp khung điểm)** | Chỉ **`V6__rating_levels_setup.sql`** |
+
+Chi tiết khung điểm GM: **[RATING_LEVELS_SETUP.md](./RATING_LEVELS_SETUP.md)**.
+
 -----
 
 ## PHẦN 1: TỔNG QUAN CHỨC NĂNG THEO TỪNG CỤM TABLE

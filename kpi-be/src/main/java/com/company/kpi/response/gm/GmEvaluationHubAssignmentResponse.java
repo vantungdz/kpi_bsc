@@ -25,6 +25,10 @@ public class GmEvaluationHubAssignmentResponse {
     private BigDecimal weight;
     private String masterCode;
     private String masterName;
+    /** Explicit calc rule for FE rendering (803 = comment/manual input). */
+    private Integer calculationRuleCode;
+    /** Optional calc type (701/702) for completeness. */
+    private Integer calculationTypeCode;
     private String categoryName;
     private String kpiTypeName;
     private UUID userId;

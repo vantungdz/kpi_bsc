@@ -52,16 +52,16 @@ defineEmits<{
       </div>
       <div class="z-10 min-w-0">
         <p class="mb-1 text-xs font-bold uppercase tracking-wider text-slate-500">
-          Tình trạng bằng chứng ({{ activeTab === 'promotion' ? 'Promotion' : 'Personal' }})
+          Evidence Status ({{ activeTab === 'promotion' ? 'Promotion' : 'Personal' }})
         </p>
         <p class="text-2xl font-bold text-slate-800">
           {{ evidenceCount }}
           <span class="text-sm font-bold text-slate-400">/ {{ evidenceTotalCount }}</span>
           <span
             v-if="evidenceCount < evidenceTotalCount"
-            class="mt-0.5 text-[11px] font-semibold text-orange-500"
+            class="mt-0.5 text-[11px] font-semibold text-orange-500 ml-2"
           >
-            Cần bổ sung {{ evidenceTotalCount - evidenceCount }} mục
+           ( {{ evidenceTotalCount - evidenceCount }} item(s) needed )
           </span>
         </p>
        
@@ -81,8 +81,8 @@ defineEmits<{
             (activeTab === 'promotion'
               ? promotionFinalWeightedAvg !== null && promotionFinalWeightedAvg !== undefined
               : personalFinalWeightedAvg !== null && personalFinalWeightedAvg !== undefined)
-              ? `Điểm trung bình (Average score) của Final Score (${activeTab === 'promotion' ? 'Promotion' : 'Personal'}, có trọng số)`
-              : `Điểm trung bình (Average score) của Self Score (${activeTab === 'promotion' ? 'Promotion' : 'Personal'}, có trọng số)`
+              ? `Weighted Average of Final Score (${activeTab === 'promotion' ? 'Promotion' : 'Personal'})`
+              : `Weighted Average of Self Score (${activeTab === 'promotion' ? 'Promotion' : 'Personal'})`
           }}
         </p>
         <div class="flex items-baseline gap-2">

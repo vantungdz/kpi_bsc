@@ -2,6 +2,7 @@
 import { ref, computed, shallowRef, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import GmMemberKpiDrawer from '@/components/gm/GmMemberKpiDrawer.vue'
 import GmStrategicKpiTypeTag from '@/components/gm/GmStrategicKpiTypeTag.vue'
+import KpiScoringRulesPreviewTooltip from '@/components/kpi/KpiScoringRulesPreviewTooltip.vue'
 import type {
   GmBscPerspective,
   GmHierarchyKpi,
@@ -21,10 +22,13 @@ import { formatKpiTargetWithUnit } from '@/utils/kpiUnitCodes'
 import {
   CALC_RULE_AVERAGE,
   CALC_RULE_COMMENT,
+  CALC_RULE_SUM,
   formatPmPortfolioActualCell,
-  normalizeCalculationRuleCode,
   parseNumericFromField,
+  normalizeCalculationRuleCode,
+  parsePmPortfolioEvidenceString,
 } from '@/utils/memberKpiHelpers'
+import { evidenceTableFromEvidencesJson } from '@/utils/mapGmEvaluationHubApiToPmBranches'
 import type { KpiCycleResponse } from '@/types/shared/kpi-cycle.type'
 import { KPI_STATUS } from '@/config/constants'
 
@@ -85,10 +89,38 @@ function isMemberFeedbackPendingForGm(member: GmHierarchyMember): boolean {
   )
 }
 
+function isPmFeedbackPendingForGm(pm: GmHierarchyPm): boolean {
+  if (pm.feedbackAwaitingGm === true) {
+    return typeof pm.assignmentId === 'string' && pm.assignmentId.trim().length > 0
+  }
+  if (pm.feedbackAwaitingGm === false) {
+    return false
+  }
+  const note = String(pm.feedbackNote ?? '').trim()
+  return (
+    Number(pm.assignmentStatusCode) === FEEDBACK_IN_PROGRESS_STATUS &&
+    typeof pm.assignmentId === 'string' &&
+    pm.assignmentId.trim().length > 0 &&
+    note.length > 0
+  )
+}
+
 function collectPendingFeedbackItems(kpi: GmHierarchyKpi): GmPendingFeedbackItem[] {
   const out: GmPendingFeedbackItem[] = []
   const seen = new Set<string>()
   for (const pm of kpi.pmOwners) {
+    if (isPmFeedbackPendingForGm(pm)) {
+      const assignmentId = String(pm.assignmentId ?? '').trim()
+      if (assignmentId && !seen.has(assignmentId)) {
+        seen.add(assignmentId)
+        out.push({
+          assignmentId,
+          memberName: pmManagedSectionLabel(pm) || String(pm.name ?? '').trim() || 'PM',
+          roleLabel: String(pm.ownerRoleCode ?? '').trim().toUpperCase() || 'PM',
+          note: String(pm.feedbackNote ?? '').trim() || 'No feedback content.',
+        })
+      }
+    }
     for (const member of allMembersUnderPm(pm)) {
       if (!isMemberFeedbackPendingForGm(member)) continue
       const assignmentId = String(member.assignmentId ?? '').trim()
@@ -122,6 +154,13 @@ function openFeedbackDrawerForMember(kpi: GmHierarchyKpi, member: GmHierarchyMem
   feedbackDrawerOpen.value = true
 }
 
+function openFeedbackDrawerForPm(kpi: GmHierarchyKpi, pm: GmHierarchyPm) {
+  if (!isPmFeedbackPendingForGm(pm)) return
+  feedbackDrawerFocusAssignmentId.value = String(pm.assignmentId ?? '').trim()
+  feedbackDrawerKpi.value = kpi
+  feedbackDrawerOpen.value = true
+}
+
 /** Tìm dòng member trong cây diagnostics theo `assignmentId` (vd. từ tab Approved KPI). */
 function findMemberAndKpiForAssignment(assignmentId: string): {
   kpi: GmHierarchyKpi
@@ -131,6 +170,22 @@ function findMemberAndKpiForAssignment(assignmentId: string): {
   if (!aid) return null
   for (const kpi of props.rows ?? []) {
     for (const pm of kpi.pmOwners ?? []) {
+      if (String(pm.assignmentId ?? '').trim() === aid && isPmFeedbackPendingForGm(pm)) {
+        const syntheticMember = {
+          id: String(pm.ownerUserId ?? pm.id),
+          assignmentId: pm.assignmentId,
+          name: pmManagedSectionLabel(pm) || String(pm.name ?? '').trim() || 'PM',
+          ownerRoleCode: pm.ownerRoleCode ?? 'PM',
+          target: pm.target,
+          actual: pm.actual,
+          status: pm.status,
+          blocker: pm.blockerSummary,
+          assignmentStatusCode: pm.assignmentStatusCode ?? undefined,
+          feedbackNote: pm.feedbackNote ?? undefined,
+          feedbackAwaitingGm: pm.feedbackAwaitingGm,
+        } as GmHierarchyMember
+        return { kpi, member: syntheticMember }
+      }
       for (const member of allMembersUnderPm(pm)) {
         if (String(member.assignmentId ?? '').trim() !== aid) continue
         if (!isMemberFeedbackPendingForGm(member)) continue
@@ -299,45 +354,126 @@ function memberAsmStatusCode(member: GmHierarchyMember | null | undefined): numb
   return normalizeAsmStatusCode(member?.assignmentStatusCode)
 }
 
-function pmAsmStatusCode(pm: GmHierarchyPm | null | undefined): number | null {
+/** Department đã có target GM giao (không phải placeholder). */
+function departmentHasMeaningfulTarget(pm: GmHierarchyPm): boolean {
+  const t = String(pm.target ?? '').trim()
+  return t !== '' && t !== '—' && t !== '-'
+}
+
+/**
+ * ASM status dòng department (khối phòng).
+ * Team KPI: GM đã giao slice PM nhưng assignment gốc bị ẩn khỏi cây member → fallback 404.
+ * Sau khi PM cascade: rollup min(status) trên member như cũ (407 vẫn ưu tiên trong minAsmStatusCode).
+ */
+function pmAsmStatusCode(
+  pm: GmHierarchyPm | null | undefined,
+  kpi?: GmHierarchyKpi | null,
+): number | null {
   if (!pm) return null
-  return minAsmStatusCode(allMembersUnderPm(pm).map(memberAsmStatusCode))
+  if (isUnassignedPmNode(pm)) return null
+  if (isPmFeedbackPendingForGm(pm)) return KPI_STATUS.FEEDBACK_IN_PROGRESS
+
+  const childCodes = allMembersUnderPm(pm).map(memberAsmStatusCode)
+  if (childCodes.some((c) => normalizeAsmStatusCode(c) != null)) {
+    return minAsmStatusCode(childCodes)
+  }
+
+  if (kpi?.kpiType === 'cascading' && departmentHasMeaningfulTarget(pm)) {
+    return KPI_STATUS.PENDING_ACCEPTANCE
+  }
+
+  return null
 }
 
 function kpiAsmStatusCode(kpi: GmHierarchyKpi | null | undefined): number | null {
-  return minAsmStatusCode((kpi?.pmOwners ?? []).map(pmAsmStatusCode))
+  return minAsmStatusCode((kpi?.pmOwners ?? []).map((pm) => pmAsmStatusCode(pm, kpi)))
+}
+
+function isPendingAssignmentDepartment(
+  pm: GmHierarchyPm | null | undefined,
+  kpi?: GmHierarchyKpi | null,
+): boolean {
+  if (!pm || isUnassignedPmNode(pm)) return false
+  return (
+    normalizeAsmStatusCode(pmAsmStatusCode(pm, kpi)) === KPI_STATUS.PENDING_ACCEPTANCE
+    && kpi?.kpiType === 'cascading'
+    && !pmHasRollout(pm)
+    && departmentHasMeaningfulTarget(pm)
+  )
+}
+
+function kpiHasRealPendingAcceptanceDepartment(kpi: GmHierarchyKpi | null | undefined): boolean {
+  if (!kpi) return false
+  return assignedPmOwners(kpi).some((pm) => (
+    normalizeAsmStatusCode(pmAsmStatusCode(pm, kpi)) === KPI_STATUS.PENDING_ACCEPTANCE
+    && !isPendingAssignmentDepartment(pm, kpi)
+  ))
+}
+
+function kpiHasPendingAssignmentDepartment(kpi: GmHierarchyKpi | null | undefined): boolean {
+  if (!kpi) return false
+  return assignedPmOwners(kpi).some((pm) => isPendingAssignmentDepartment(pm, kpi))
+}
+
+function kpiIsPendingAssignmentRollup(
+  kpi: GmHierarchyKpi | null | undefined,
+  code: number | null | undefined = kpiAsmStatusCode(kpi),
+): boolean {
+  return (
+    normalizeAsmStatusCode(code) === KPI_STATUS.PENDING_ACCEPTANCE
+    && kpiHasPendingAssignmentDepartment(kpi)
+    && !kpiHasRealPendingAcceptanceDepartment(kpi)
+  )
+}
+
+function asmStatusLabelForKpi(kpi: GmHierarchyKpi | null | undefined): string {
+  const code = kpiAsmStatusCode(kpi)
+  if (kpiIsPendingAssignmentRollup(kpi, code)) return 'Pending Assignment'
+  return asmStatusLabel(code)
+}
+
+/** Nhãn ASM trên dòng department — trước cascade Team KPI dùng copy riêng thay vì «Chờ Member bấm Accept». */
+function asmStatusLabelForDepartment(
+  pm: GmHierarchyPm,
+  code: number | null | undefined,
+  kpi?: GmHierarchyKpi | null,
+): string {
+  if (isPendingAssignmentDepartment(pm, kpi)) {
+    return 'Pending Assignment'
+  }
+  return asmStatusLabel(code)
 }
 
 function asmStatusLabel(code: number | null | undefined): string {
   switch (normalizeAsmStatusCode(code)) {
     case KPI_STATUS.INACTIVE:
-      return 'KPI mới tạo'
+      return 'New KPI'
     case KPI_STATUS.WAITING_PM_APPROVAL:
-      return 'Chờ PM duyệt KPI'
+      return 'Pending PM Approval'
     case KPI_STATUS.WAITING_GM_APPROVAL:
-      return 'Chờ GM duyệt KPI'
+      return 'Pending GM Approval'
     case KPI_STATUS.PENDING_ACCEPTANCE:
-      return 'Chờ Member bấm Accept'
+      return 'Pending Acceptance'
     case KPI_STATUS.ACCEPTED:
-      return 'Đang chạy'
+      return 'In progress'
     case KPI_STATUS.REJECTED:
-      return 'Bị từ chối'
+      return 'Rejected'
     case KPI_STATUS.FEEDBACK_IN_PROGRESS:
-      return 'Đang xử lý feedback'
+      return 'Processing Feedback'
     case KPI_STATUS.FIRST_WAITING_PM_APPROVAL:
-      return 'Chờ PM duyệt giữa kỳ'
+      return 'Pending PM Approval (Mid-Year)'
     case KPI_STATUS.FIRST_WAITING_GM_APPROVAL:
-      return 'Chờ GM chốt giữa kỳ'
+      return 'Pending GM Approval (Mid-Year)'
     case KPI_STATUS.FIRST_COMPLETED:
-      return 'Đã chốt giữa kỳ'
+      return 'Completed (Mid-Year)'
     case KPI_STATUS.SECOND_WAITING_PM_APPROVAL:
-      return 'Chờ PM duyệt cuối kỳ'
+      return 'Pending PM Approval (Final)'
     case KPI_STATUS.SECOND_WAITING_GM_APPROVAL:
-      return 'Chờ GM chốt cuối kỳ'
+      return 'Pending GM Approval (Final)'
     case KPI_STATUS.COMPLETED:
-      return 'Hoàn tất'
+      return 'Completed'
     default:
-      return 'Chưa assign'
+      return 'Not assigned'
   }
 }
 
@@ -385,7 +521,23 @@ function asmStatusIconClass(code: number | null | undefined): string {
 
 function asmStatusTitle(code: number | null | undefined): string {
   const normalized = normalizeAsmStatusCode(code)
-  return normalized == null ? 'Chưa có assignment/status_code' : `${asmStatusLabel(normalized)} (${normalized})`
+  if (normalized == null) return 'No assignment'
+  return asmStatusLabel(normalized)
+}
+
+function asmStatusTitleForKpi(kpi: GmHierarchyKpi | null | undefined): string {
+  const code = kpiAsmStatusCode(kpi)
+  if (kpiIsPendingAssignmentRollup(kpi, code)) return 'Pending Assignment'
+  return asmStatusTitle(code)
+}
+
+function asmStatusTitleForDepartment(
+  pm: GmHierarchyPm,
+  code: number | null | undefined,
+  kpi?: GmHierarchyKpi | null,
+): string {
+  if (isPendingAssignmentDepartment(pm, kpi)) return 'Pending Assignment'
+  return asmStatusTitle(code)
 }
 
 type DiagnosticChipKey = 'section' | 'member' | 'important' | 'status'
@@ -467,6 +619,43 @@ function allMembersUnderPm(pm: GmHierarchyPm): GmHierarchyMember[] {
 
 function pmHasRollout(pm: GmHierarchyPm): boolean {
   return allMembersUnderPm(pm).length > 0
+}
+
+function assignedPmOwners(kpi: GmHierarchyKpi): GmHierarchyPm[] {
+  return (kpi.pmOwners ?? []).filter((pm) => !isUnassignedPmNode(pm))
+}
+
+function kpiHasAssignments(kpi: GmHierarchyKpi): boolean {
+  return assignedPmOwners(kpi).length > 0
+}
+
+function normalizeRankCodeForTag(value: unknown): string {
+  const raw = String(value ?? '').trim()
+  if (!raw || raw === '-' || raw === '—' || raw.toUpperCase() === 'N/A') return ''
+  const compact = raw.toUpperCase().replace(/\s+/g, '')
+  const exact = compact.match(/^R\d+[A-Z]?$/)
+  if (exact) return exact[0]
+  const embedded = raw.match(/\bR\s*(\d+[A-Z]?)\b/i)
+  return embedded ? `R${embedded[1].toUpperCase()}` : ''
+}
+
+function compareRankCodes(a: string, b: string): number {
+  const na = Number(a.match(/^R(\d+)/i)?.[1] ?? Number.NaN)
+  const nb = Number(b.match(/^R(\d+)/i)?.[1] ?? Number.NaN)
+  if (Number.isFinite(na) && Number.isFinite(nb) && na !== nb) return na - nb
+  return a.localeCompare(b, 'en', { numeric: true, sensitivity: 'base' })
+}
+
+function kpiAssignedRankTag(kpi: GmHierarchyKpi): string {
+  if (kpi.kpiType !== 'individual') return ''
+  const ranks = new Set<string>()
+  for (const pm of assignedPmOwners(kpi)) {
+    for (const member of allMembersUnderPm(pm)) {
+      const code = normalizeRankCodeForTag(member.rankCode) || normalizeRankCodeForTag(member.rank)
+      if (code) ranks.add(code)
+    }
+  }
+  return [...ranks].sort(compareRankCodes).join(',')
 }
 
 function toggleSet(setRef: typeof expandedKpis, id: string) {
@@ -558,7 +747,12 @@ function diagnosticsActualWithUnit(kpi: GmHierarchyKpi, rawActual?: string | nul
 }
 
 function memberActualDisplayRaw(member: GmHierarchyMember, kpi: GmHierarchyKpi): string {
-  const mode = Number(kpi.calculationRuleCode) === CALC_RULE_AVERAGE ? 'mean' : 'list'
+  const rule = normalizeCalculationRuleCode(kpi.calculationRuleCode)
+  const mode = rule === CALC_RULE_SUM
+    ? 'sum'
+    : rule === CALC_RULE_AVERAGE || rule === CALC_RULE_COMMENT
+      ? 'mean'
+      : 'list'
   const fromEvidence = formatPmPortfolioActualCell(member.evidences, kpi.calculationTypeCode, mode).trim()
   if (fromEvidence) return diagnosticsTableCellText(fromEvidence)
   return diagnosticsTableCellText(member.actual)
@@ -576,9 +770,10 @@ function memberTargetNumericForProgress(member: GmHierarchyMember): number | nul
   return target != null && Number.isFinite(target) ? target : null
 }
 
-/** Roll-up Actual ở node cha (PM / KPI): CALC_RULE 803 → tổng; 802 và rule khác → trung bình. */
+/** Roll-up Actual ở node cha (PM / KPI): 803 → tổng assignee; 801 → tổng (đồng bộ rule Tổng Plan/Actual). */
 function diagnosticsRollupActualIsSum(kpi: GmHierarchyKpi): boolean {
-  return normalizeCalculationRuleCode(kpi.calculationRuleCode) === CALC_RULE_COMMENT
+  const rule = normalizeCalculationRuleCode(kpi.calculationRuleCode)
+  return rule === CALC_RULE_SUM
 }
 
 function sumNumericOrNull(values: number[]): number | null {
@@ -1212,12 +1407,17 @@ function diagnosticsMemberProgressTextClass(member: GmHierarchyMember, kpi: GmHi
   return completionPctTextClass(memberCompletionPct(member, kpi))
 }
 
-/** KPI quan trọng (`isImportant`) luôn đứng trước, thứ tự còn lại giữ nguyên. */
+/** Sort important KPIs first, then alphabetically by KPI name. */
 function sortImportantKpisFirst(list: GmHierarchyKpi[]): GmHierarchyKpi[] {
   return [...list].sort((a, b) => {
     const pa = a.isImportant === true ? 1 : 0
     const pb = b.isImportant === true ? 1 : 0
-    return pb - pa
+    const byPriority = pb - pa
+    if (byPriority !== 0) return byPriority
+    return String(a.name ?? '').localeCompare(String(b.name ?? ''), 'en', {
+      sensitivity: 'base',
+      numeric: true,
+    })
   })
 }
 
@@ -1572,6 +1772,15 @@ function diagnosticsWeightDisplay(w: string | null | undefined): string {
   return withoutPct || '-'
 }
 
+/** Trọng số department: nếu chưa có thì fallback lấy trọng số của KPI (đặc biệt khi chưa assign). */
+function pmWeightDisplayRaw(pm: GmHierarchyPm, kpi: GmHierarchyKpi): string {
+  const w = String(pm.weight ?? '').trim()
+  if (!w || w === '—' || w === '-' || w === '–') {
+    return diagnosticsWeightDisplay(kpi.weight)
+  }
+  return diagnosticsWeightDisplay(pm.weight)
+}
+
 /**
  * Pill cột Target — đổi màu theo `targetBalance` (so tổng target con vs target cha).
  * Dùng cho node KPI (`kpi.targetBalance`) và node department (`pm.targetBalance`).
@@ -1608,10 +1817,11 @@ function submissionFromMemberStatus(s: GmHierarchyStatus): GmKpiSubmissionStatus
 /** Một dòng KPI trong drawer — đúng KPI đang xem trên bảng, không phải toàn bộ KPI của member. */
 function memberRowToModalItem(member: GmHierarchyMember, kpi: GmHierarchyKpi): GmModalKpiItemMock {
   const rawBlocker = String(member.blocker ?? '').trim()
-  const evidenceNote =
-    rawBlocker && rawBlocker !== '-' && rawBlocker !== '—' && rawBlocker !== '–'
-      ? diagnosticsTableCellText(rawBlocker)
-      : '-'
+  const parsedEv = parsePmPortfolioEvidenceString(member.evidences)
+  const rolloutEvidence = evidenceTableFromEvidencesJson(
+    member.evidences,
+    kpi.calculationRuleCode,
+  )
   const drawerTarget =
     member.submissionTarget != null
       ? String(member.submissionTarget)
@@ -1624,6 +1834,7 @@ function memberRowToModalItem(member: GmHierarchyMember, kpi: GmHierarchyKpi): G
     weight: parseWeightPct(kpi.weight),
     target: drawerTarget,
     actual: drawerActual,
+    calcRuleCode: normalizeCalculationRuleCode(kpi.calculationRuleCode),
     isFail: memberStatusForUiMidYear(member, kpi) === 'danger',
     rootCause:
       rawBlocker && rawBlocker !== '-' && rawBlocker !== '—' && rawBlocker !== '–'
@@ -1633,9 +1844,13 @@ function memberRowToModalItem(member: GmHierarchyMember, kpi: GmHierarchyKpi): G
     kpiType: kpi.kpiType,
     submissionStatus: submissionFromMemberStatus(memberStatusForUiMidYear(member, kpi)),
     assignmentStatusCode: member.assignmentStatusCode ?? null,
-    targetSummary: `Contribution in KPI «${kpi.name}» · Evidence / notes: ${evidenceNote}`,
+    targetSummary: `Contribution in KPI «${kpi.name}»`,
     actualProgressPct: memberDrawerActualProgressPct(member, kpi),
     evidenceAttachmentUrl: member.evidenceAttachmentUrl ?? null,
+    rolloutEvidence,
+    evidenceData: parsedEv.rows,
+    evidenceContent: parsedEv.content || parsedEv.note || parsedEv.legacyPlain || '',
+    evidenceAttachments: parsedEv.attachments ?? [],
   }
 }
 
@@ -1892,10 +2107,19 @@ export default {
                         </div>
                         <div class="min-w-0">
                           <div class="flex flex-wrap items-center gap-x-1.5 gap-y-1">
-                            <i v-if="kpi.isImportant" class="fas fa-star shrink-0 text-[11px] text-amber-500"
-                              title="Important KPI" aria-label="Important KPI" />
                             <span class="text-sm font-bold leading-snug text-slate-800">{{ kpi.name }}</span>
                             <GmStrategicKpiTypeTag :type="kpi.kpiType" size="sm" class="shrink-0" />
+                            <template v-for="rankTag in [kpiAssignedRankTag(kpi)]" :key="`rank-tag-${kpi.id}`">
+                              <span
+                                v-if="rankTag"
+                                class="shrink-0 rounded border border-sky-200 bg-sky-50 px-1.5 py-px text-[9px] font-bold uppercase tracking-wide text-sky-700"
+                                :title="`Assigned ranks: ${rankTag}`"
+                              >
+                                {{ rankTag }}
+                              </span>
+                            </template>
+                            <i v-if="kpi.isImportant" class="fas fa-star shrink-0 text-[11px] text-amber-500"
+                              title="Important KPI" aria-label="Important KPI" />
                           </div>
                         </div>
                       </div>
@@ -1904,10 +2128,14 @@ export default {
                           class="inline-block min-w-[2.25rem] rounded-md bg-slate-100 px-1.5 py-1 text-xs font-semibold tabular-nums text-slate-700">{{
                           diagnosticsWeightDisplay(kpi.weight) }}</span>
                       </div>
-                      <div class="col-span-2 flex justify-center text-center">
+                      <div class="col-span-2 grid grid-cols-[1fr_auto_1fr] items-center text-center">
                         <span
+                          class="col-start-2"
                           :class="diagnosticsTargetPillClass(kpi.targetBalance)"
                           :title="diagnosticsTargetTitle(kpi.targetBalance)">{{ diagnosticsTargetWithUnit(kpi, kpi.target) }}</span>
+                        <span class="col-start-3 ml-1.5 inline-flex justify-self-start">
+                          <KpiScoringRulesPreviewTooltip :target-description="kpi.scoringRulesText" />
+                        </span>
                       </div>
                       <div class="col-span-2 text-center text-sm font-bold tabular-nums"
                         :class="kpiRowDiagnosticsActualColorClass(kpi)">
@@ -1944,9 +2172,9 @@ export default {
                         <span
                           class="inline-flex max-w-full cursor-default items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold leading-tight"
                           :class="asmStatusPillClass(kpiAsmStatusCode(kpi))"
-                          :title="asmStatusTitle(kpiAsmStatusCode(kpi))">
+                          :title="asmStatusTitleForKpi(kpi)">
                           <i class="fas shrink-0 text-[11px]" :class="asmStatusIconClass(kpiAsmStatusCode(kpi))" />
-                          <span class="truncate">{{ asmStatusLabel(kpiAsmStatusCode(kpi)) }}</span>
+                          <span class="truncate">{{ asmStatusLabelForKpi(kpi) }}</span>
                         </span>
                       </div>
                       <div class="col-span-1 flex flex-wrap items-center justify-center gap-1" @click.stop>
@@ -1980,12 +2208,18 @@ export default {
                     </div>
 
                     <!-- Team / Individual / Promotion: KPI → department (khối) → assignee. -->
-                    <div v-if="kpi.pmOwners.length > 0"
+                    <div v-if="kpi.pmOwners.length > 0 || expandedKpis.has(kpi.id)"
                       class="grid overflow-hidden transition-[grid-template-rows] duration-300 ease-in-out motion-reduce:transition-none"
                       :class="expandedKpis.has(kpi.id) ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'">
                       <div class="min-h-0">
                         <div class="border-t border-slate-100 bg-white pb-2">
-                          <template v-for="pm in kpi.pmOwners" :key="pm.id">
+                          <div
+                            v-if="!kpiHasAssignments(kpi)"
+                            class="border-b border-slate-50 px-3 py-3 text-center text-xs font-semibold text-slate-400"
+                          >
+                            No Assignment
+                          </div>
+                          <template v-for="pm in assignedPmOwners(kpi)" :key="pm.id">
                             <div class="flex flex-col">
                               <div
                                 class="grid grid-cols-15 items-center gap-2 border-b border-slate-50 px-3 py-2 sm:gap-3"
@@ -2018,7 +2252,7 @@ export default {
                                 <div class="col-span-1 text-center">
                                   <span
                                     class="inline-block min-w-[2.25rem] rounded-md bg-slate-100 px-1.5 py-1 text-xs font-semibold tabular-nums text-slate-700">{{
-                                      diagnosticsWeightDisplay(pm.weight)
+                                      pmWeightDisplayRaw(pm, kpi)
                                     }}</span>
                                 </div>
                                 <div class="col-span-2 flex justify-center text-center">
@@ -2061,17 +2295,27 @@ export default {
                                 <div class="col-span-2 flex justify-center">
                                   <span
                                     class="inline-flex max-w-full cursor-default items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold leading-tight"
-                                    :class="asmStatusPillClass(pmAsmStatusCode(pm))"
-                                    :title="asmStatusTitle(pmAsmStatusCode(pm))">
-                                    <i class="fas shrink-0 text-[11px]" :class="asmStatusIconClass(pmAsmStatusCode(pm))" />
-                                    <span class="truncate">{{ asmStatusLabel(pmAsmStatusCode(pm)) }}</span>
+                                    :class="asmStatusPillClass(pmAsmStatusCode(pm, kpi))"
+                                    :title="asmStatusTitleForDepartment(pm, pmAsmStatusCode(pm, kpi), kpi)">
+                                    <i class="fas shrink-0 text-[11px]" :class="asmStatusIconClass(pmAsmStatusCode(pm, kpi))" />
+                                    <span class="truncate">{{ asmStatusLabelForDepartment(pm, pmAsmStatusCode(pm, kpi), kpi) }}</span>
                                   </span>
                                 </div>
-                                <div class="col-span-1 flex justify-center pr-0.5">
+                                <div class="col-span-1 flex flex-wrap items-center justify-center gap-1 pr-0.5">
+                                  <button
+                                    v-if="isPmFeedbackPendingForGm(pm)"
+                                    type="button"
+                                    class="inline-flex h-7 items-center gap-1.5 rounded-md border border-violet-200 bg-violet-50 px-2.5 text-[10px] font-bold text-violet-700 shadow-sm transition-colors hover:bg-violet-100"
+                                    title="Feedback"
+                                    aria-label="Feedback"
+                                    @click.stop="openFeedbackDrawerForPm(kpi, pm)"
+                                  >
+                                    <i class="fas fa-message text-[10px]" />
+                                  </button>
                                   <button v-if="pmHasRollout(pm)" type="button"
                                     class="rounded border border-indigo-200 bg-indigo-50 px-2 py-1 text-[10px] font-bold leading-tight text-indigo-700 transition-colors hover:bg-indigo-100 sm:px-2.5 sm:text-xs"
                                     @click.stop="openPmKpiDrawer(pm, kpi)">
-                                    Details
+                                      <i class="far fa-eye text-[10px]" />
                                   </button>
                                 </div>
                               </div>
@@ -2140,9 +2384,11 @@ export default {
                                         <button
                                           v-if="isMemberFeedbackPendingForGm(member)"
                                           type="button"
-                                          class="rounded border border-violet-200 bg-violet-50 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-violet-700 shadow-sm transition-colors hover:border-violet-300 hover:bg-violet-100"
+                                          class="inline-flex h-7 items-center gap-1.5 rounded-md border border-violet-200 bg-violet-50 px-2.5 text-[10px] font-bold text-violet-700 shadow-sm transition-colors hover:bg-violet-100"
+                                          title="Feedback"
+                                          aria-label="Feedback"
                                           @click.stop="openFeedbackDrawerForMember(kpi, member)">
-                                          Feedback
+                                          <i class="fas fa-message text-[10px]" />
                                         </button>
                                         <span v-else class="text-xs text-slate-200">-</span>
                                       </div>

@@ -32,6 +32,7 @@ import java.util.UUID;
  *   GET  /api/v1/admin/kpi-cycles
  *   POST /api/v1/admin/kpi-cycles
  *   PATCH /api/v1/admin/kpi-cycles/{id}
+ *   DELETE /api/v1/admin/kpi-cycles/{id}
  *   PUT  /api/v1/admin/kpi-cycles/{id}/phase-dates
  *   GET  /api/v1/admin/campaigns
  *   GET  /api/v1/admin/campaigns/progress?period=current
@@ -83,6 +84,15 @@ public class AdminController extends BaseController {
             Authentication auth) {
         UUID userId = toUUID(auth.getName());
         return success(adminService.updateKpiCyclePhaseDates(id, req, userId));
+    }
+
+    @DeleteMapping("/kpi-cycles/{id}")
+    public ResponseEntity<BaseResponse<Void>> deleteKpiCycle(
+            @PathVariable UUID id,
+            Authentication auth) {
+        UUID userId = toUUID(auth.getName());
+        adminService.deleteKpiCycle(id, userId);
+        return success(null);
     }
 
     // ── Campaigns ─────────────────────────────────────────────────────────────

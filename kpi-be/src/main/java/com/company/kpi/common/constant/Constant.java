@@ -20,9 +20,9 @@ public class Constant {
     // MAPPING
     // -----------------------------------------------
     public static final Map<String, String> PHASE_LABEL_MAP = Map.of(
-            TARGET_SETUP_PHASE, "Giai đoạn Thiết lập mục tiêu",
-            MID_YEAR_PHASE, "Giai đoạn Giữa năm",
-            END_YEAR_PHASE, "Giai đoạn Cuối năm"
+            TARGET_SETUP_PHASE, "Goal Setting Phase",
+            MID_YEAR_PHASE, "Mid-Year Phase",
+            END_YEAR_PHASE, "Year-End Phase"
     );
 
     // -----------------------------------------------

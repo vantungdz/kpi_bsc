@@ -24,6 +24,7 @@ export interface GmKpiItem {
   title: string
   target: string
   weight: number
+  calcRuleCode?: number | null
   evidenceButtonLabel: string
   evidenceButtonIcon: string
   evidenceTone: 'blue' | 'emerald'
@@ -33,6 +34,12 @@ export interface GmKpiItem {
   /** GM đã lưu ?? điểm PM (end_pm_score) — prefill dropdown và fallback cột Supervisor Score khi chưa có điểm GM. */
   pmSeedScore?: number | null
   evidence: GmEvidenceTable
+  /** Parsed `planActualRecords` from `kpi_assignments.evidences`, rendered like PM Team Review. */
+  evidenceData?: Array<{ plan: string; actual: string; comment: string; content: string }>
+  /** Free-text evidence note/content kept outside the actual-result table. */
+  evidenceContent?: string
+  /** File/URL/image evidence kept outside the actual-result table. */
+  evidenceAttachments?: Array<{ url: string; name: string }>
   /** Ghi chú theo từng KPI từ `kpi_assignments.evidences.gmComment` (GM có thể chỉnh sửa/ghi đè). */
   gmComment?: string
   /** ASM assignment từ hub API: 502 = review GM (không chấm), 602 = chấm điểm GM + comment. */

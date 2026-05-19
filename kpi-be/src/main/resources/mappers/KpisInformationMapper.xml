@@ -283,6 +283,7 @@
                 LIMIT 1
             ) AS leader_role_name,
             COALESCE(kas_a.job_title_name, kas_u.job_title_name, jt.name) AS member_rank,
+            rk.code AS member_rank_code,
             ka.id AS assignment_id,
             ka.parent_assignment_id AS parentAssignmentId,
             ka.status_code,
@@ -327,6 +328,8 @@
             ) AS active_feedback_target_role_code
         FROM
             kpis_information ki
+            INNER JOIN kpi_cycles cyc ON cyc.id = ki.cycle_id
+                AND cyc.deleted_at IS NULL
             INNER JOIN kpi_master km ON ki.master_kpi_id = km.id
                 AND km.deleted_at IS NULL
             LEFT JOIN kpi_categories kc ON km.category_id = kc.id
@@ -362,6 +365,7 @@
                 AND ud.is_primary = TRUE
             LEFT JOIN kpi_assignment_snapshots kas_a ON kas_a.assignment_id = ka.id
                 AND kas_a.cycle_id = ki.cycle_id
+                AND cyc.year &lt; EXTRACT(YEAR FROM CURRENT_DATE)::int
             LEFT JOIN (
                 SELECT DISTINCT ON (user_id, cycle_id)
                     user_id,
@@ -373,6 +377,13 @@
                     supervisor_full_name
                 FROM kpi_assignment_snapshots
                 WHERE cycle_id = #{cycleId}
+                  AND EXISTS (
+                      SELECT 1
+                      FROM kpi_cycles snap_cycle
+                      WHERE snap_cycle.id = kpi_assignment_snapshots.cycle_id
+                        AND snap_cycle.deleted_at IS NULL
+                        AND snap_cycle.year &lt; EXTRACT(YEAR FROM CURRENT_DATE)::int
+                  )
                 ORDER BY user_id, cycle_id, created_at ASC
             ) kas_u ON kas_u.user_id = u.id
                 AND kas_u.cycle_id = ki.cycle_id
@@ -383,6 +394,8 @@
                 AND ldr.deleted_at IS NULL
             LEFT JOIN job_titles jt ON jt.id = u.job_title_id
                 AND jt.deleted_at IS NULL
+            LEFT JOIN ranks rk ON rk.id = jt.rank_id
+                AND rk.deleted_at IS NULL
         WHERE
             ki.cycle_id = #{cycleId}
             AND ki.deleted_at IS NULL

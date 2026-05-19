@@ -109,6 +109,7 @@ public class GmEvaluationHubService {
                             "Assignment không ở trạng thái chờ review GM (502) hoặc đã xử lý: " + aid);
                 }
                 persistLineGmCommentIfPresent(line, aid, cycleId, evaluationUserId, gmUserId);
+                syncCompletedTeamParentFromChildIfReady(aid, cycleId, 502, 503, gmUserId);
                 updated++;
             } else if (st == 602) {
                 BigDecimal score = line.getEndGmScore();
@@ -122,6 +123,7 @@ public class GmEvaluationHubService {
                             "Assignment không ở trạng thái chờ chấm GM (602) hoặc đã xử lý: " + aid);
                 }
                 persistLineGmCommentIfPresent(line, aid, cycleId, evaluationUserId, gmUserId);
+                syncCompletedTeamParentFromChildIfReady(aid, cycleId, 602, 603, gmUserId);
                 wrote602 = true;
                 updated++;
             } else {
@@ -130,13 +132,18 @@ public class GmEvaluationHubService {
             }
         }
 
+        String rawSupervisorComment = req.getSupervisorComment();
+        boolean shouldPersistSupervisorComment =
+                rawSupervisorComment != null && !rawSupervisorComment.isBlank();
         if (wrote602) {
-            String raw = req.getSupervisorComment();
-            if (raw == null || raw.isBlank()) {
+            if (rawSupervisorComment == null || rawSupervisorComment.isBlank()) {
                 throw AppException.badRequest(
                         "Vui lòng nhập nhận xét supervisor khi chấm điểm cuối kỳ (ASM 602).");
             }
-            String comment = raw.trim();
+            shouldPersistSupervisorComment = true;
+        }
+        if (shouldPersistSupervisorComment) {
+            String comment = rawSupervisorComment.trim();
             Optional<UserKpiSummary> existing =
                     userKpiSummaryMapper.findByUserIdAndCycleId(evaluationUserId, cycleId);
             boolean promotion = Boolean.TRUE.equals(req.getPromotion());
@@ -165,6 +172,20 @@ public class GmEvaluationHubService {
         out.setUpdatedCount(updated);
         out.setSkippedCount(0);
         return out;
+    }
+
+    private void syncCompletedTeamParentFromChildIfReady(
+            UUID childAssignmentId,
+            UUID cycleId,
+            int waitingStatus,
+            int completedStatus,
+            UUID gmUserId) {
+        kpiAssignmentMapper.syncCompletedTeamParentFromGmConfirmedChild(
+                childAssignmentId,
+                cycleId,
+                waitingStatus,
+                completedStatus,
+                gmUserId);
     }
 
     private void persistLineGmCommentIfPresent(
@@ -199,6 +220,8 @@ public class GmEvaluationHubService {
         a.setWeight(r.getWeight());
         a.setMasterCode(r.getMasterCode());
         a.setMasterName(r.getMasterName());
+        a.setCalculationRuleCode(r.getCalculationRuleCode());
+        a.setCalculationTypeCode(r.getCalculationTypeCode());
         a.setCategoryName(r.getCategoryName());
         a.setKpiTypeName(r.getKpiTypeName());
         a.setUserId(r.getUserId());

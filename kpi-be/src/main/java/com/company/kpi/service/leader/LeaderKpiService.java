@@ -103,8 +103,22 @@ public class LeaderKpiService {
                 .build();
     }
 
-    public LeaderMemberListResponse getMemberList(UUID leaderId) {
-        List<LeaderMemberInfoDTO> memberInfoDTOs = userDepartmentMapper.findLeaderMemberListInfo(leaderId);
+    public LeaderMemberListResponse getMemberList(UUID leaderId, Integer year) {
+        List<LeaderMemberInfoDTO> memberInfoDTOs;
+
+        Optional<KpiCycle> optionalCycle = kpiCycleMapper.findByYear(year);
+        if (optionalCycle.isPresent()) {
+            // Ưu tiên dữ liệu lịch sử snapshot: chính xác theo từng chu kỳ năm
+            memberInfoDTOs = userDepartmentMapper.findLeaderMemberListByYear(leaderId, optionalCycle.get().getId());
+        } else {
+            memberInfoDTOs = List.of();
+        }
+
+        // Fallback: nếu chưa có snapshot nào (chu kỳ mới, chưa assign KPI) dùng cơ cấu tổ chức hiện tại
+        if (memberInfoDTOs.isEmpty()) {
+            memberInfoDTOs = userDepartmentMapper.findLeaderMemberListInfo(leaderId);
+        }
+
         List<MemberInfo> memberInfoList = memberInfoDTOs.stream()
                 .map(dto -> modelMapper.map(dto, MemberInfo.class))
                 .toList();

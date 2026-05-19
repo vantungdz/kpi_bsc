@@ -43,7 +43,7 @@ defineEmits<{
           class="mt-1 text-sm leading-snug"
           :class="banner.subtitleClass"
         >
-          Còn <strong class="font-bold">{{ banner.daysLeft }}</strong> ngày để bạn tự đánh giá KPI.
+          You have <strong class="font-bold">{{ banner.daysLeft }}</strong> day(s) left to self-evaluate your KPI.
         </p>
         <p
           v-else-if="banner.subtitle"
@@ -56,7 +56,7 @@ defineEmits<{
     </div>
     <div class="flex shrink-0 flex-wrap items-center justify-end gap-2">
       <button type="button" :class="banner.ctaClass" @click="$emit('cta-click')">
-        Đánh giá ngay
+        Evaluate Now
       </button>
     </div>
   </div>

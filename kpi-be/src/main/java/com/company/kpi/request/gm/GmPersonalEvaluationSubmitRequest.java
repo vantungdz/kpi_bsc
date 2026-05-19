@@ -11,4 +11,6 @@ public class GmPersonalEvaluationSubmitRequest {
 
     @NotNull
     private UUID cycleId;
+
+    private Boolean promotion = false;
 }

@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, reactive } from 'vue'
 import type { LeaderKpiInformationResponse } from '@/types/kpi'
-import { formatTargetDisplay } from '@/utils/strategicKpiTypeCodes';
+import { formatTargetDisplay } from '@/utils/strategicKpiTypeCodes'
+import LeaderMemberEvidenceDetail from '@/components/leader/shared/LeaderMemberEvidenceDetail.vue'
 
 const props = defineProps<{
   member: LeaderMember | null
@@ -17,6 +18,38 @@ function toggleRow(id: string) {
 function rowOpen(id: string): boolean {
   return !!openRows[id]
 }
+
+function parseCodeSortValue(code: unknown): number | null {
+  const text = String(code ?? '').trim()
+  if (!text) return null
+  const match = text.match(/\d+/)
+  if (!match) return null
+  const value = Number(match[0])
+  return Number.isFinite(value) ? value : null
+}
+
+function sortAssignmentsForDisplay<T extends { kpiCode?: unknown; kpiName?: unknown }>(rows: T[]): T[] {
+  return [...rows].sort((a, b) => {
+    const aCode = parseCodeSortValue(a.kpiCode)
+    const bCode = parseCodeSortValue(b.kpiCode)
+    if (aCode != null && bCode != null && aCode !== bCode) return aCode - bCode
+    if (aCode != null && bCode == null) return -1
+    if (aCode == null && bCode != null) return 1
+
+    const aCodeText = String(a.kpiCode ?? '').trim().toLowerCase()
+    const bCodeText = String(b.kpiCode ?? '').trim().toLowerCase()
+    if (aCodeText !== bCodeText) return aCodeText.localeCompare(bCodeText, 'vi')
+
+    return String(a.kpiName ?? '').localeCompare(String(b.kpiName ?? ''), 'vi')
+  })
+}
+
+const sortedCategories = computed(() =>
+  (props.data?.categories ?? []).map(category => ({
+    ...category,
+    assignments: sortAssignmentsForDisplay(category.assignments ?? []),
+  })),
+)
 
 const totalWeight = computed(() => {
   let sum = 0
@@ -170,22 +203,23 @@ function actualPreview(raw: string | null | undefined): string {
   if (p.note) return p.note
   return '-'
 }
+
 </script>
 
 <template>
   <div class="flex min-h-0 flex-col">
     <div v-if="!data?.categories?.length" class="p-8 text-center text-slate-500">
-      Chưa có dữ liệu KPI Promotion.
+      No Promotion KPI data available.
     </div>
 
     <div v-else class="bg-white border-b border-slate-200">
       <table class="w-full text-left">
         <thead class="sticky top-0 z-10 border-b border-slate-200 bg-slate-50 text-[10px] font-bold uppercase tracking-wider text-slate-500 shadow-sm">
           <tr>
-            <th class="w-10 px-4 py-3 text-center">STT</th>
-            <th class="px-4 py-3">Hạng Mục (Promotion)</th>
-            <th class="px-4 py-3">Chỉ tiêu (Target)</th>
-            <th class="px-4 py-3">Thực tế (Actual)</th>
+            <th class="w-10 px-4 py-3 text-center">#</th>
+            <th class="px-4 py-3">Promotion Item</th>
+            <th class="px-4 py-3">Target</th>
+            <th class="px-4 py-3">Actual</th>
             <th class="w-20 px-4 py-3 text-center">W</th>
             <th class="w-36 px-4 py-3 text-center">Evidence</th>
             <th class="w-20 px-4 py-3 text-center">Self</th>
@@ -193,7 +227,7 @@ function actualPreview(raw: string | null | undefined): string {
           </tr>
         </thead>
         <tbody class="divide-y divide-slate-100">
-          <template v-for="(category, catIndex) in data.categories" :key="`pp-${catIndex}`">
+          <template v-for="(category, catIndex) in sortedCategories" :key="`pp-${catIndex}`">
             <tr class="bg-violet-50/70 border-y border-violet-100">
               <td colspan="8" class="px-4 py-2 text-xs font-bold uppercase tracking-wider text-violet-800">
                 {{ category.name }}
@@ -257,75 +291,15 @@ function actualPreview(raw: string | null | undefined): string {
 
               <tr v-if="rowOpen(assign.assignmentId)" class="bg-violet-50/25">
                 <td colspan="8" class="border-t border-violet-100 px-5 py-3">
-                  <div class="space-y-3 rounded-lg border border-violet-100 bg-white p-3">
-                    <div class="flex flex-wrap items-center gap-2">
-                      <span
-                        v-if="parseEvidence(assign.evidences).memberFeedback || parseEvidence(assign.evidences).leaderFeedback"
-                        class="inline-flex rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-[10px] font-bold text-violet-700"
-                      >
-                        Chờ PM kiểm tra feedback
-                      </span>
-                    </div>
-
-                    <p v-if="parseEvidence(assign.evidences).note" class="text-xs text-slate-700">
-                      <span class="font-bold text-slate-500">Ghi chú:</span>
-                      {{ parseEvidence(assign.evidences).note }}
-                    </p>
-                    <p v-if="parseEvidence(assign.evidences).cert" class="text-xs text-violet-700">
-                      <span class="font-bold text-violet-500">Chứng chỉ / Outcome:</span>
-                      {{ parseEvidence(assign.evidences).cert }}
-                    </p>
-                    <p v-if="parseEvidence(assign.evidences).memberFeedback" class="text-xs text-violet-700">
-                      <span class="font-bold text-violet-500">Member feedback:</span>
-                      {{ parseEvidence(assign.evidences).memberFeedback }}
-                    </p>
-                    <p v-if="parseEvidence(assign.evidences).leaderFeedback" class="text-xs text-violet-700">
-                      <span class="font-bold text-violet-500">Leader feedback:</span>
-                      {{ parseEvidence(assign.evidences).leaderFeedback }}
-                    </p>
-                    <p v-if="parseEvidence(assign.evidences).gmComment" class="text-xs text-slate-700">
-                      <span class="font-bold text-slate-500">GM comment:</span>
-                      {{ parseEvidence(assign.evidences).gmComment }}
-                    </p>
-
-                    <div class="overflow-hidden rounded-lg border border-violet-100">
-                      <div class="border-b border-violet-100 bg-violet-50/70 px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-violet-800">
-                        Evidences
-                      </div>
-                      <div v-if="parseEvidence(assign.evidences).rows.length" class="overflow-x-auto">
-                        <table class="w-full text-xs">
-                          <thead class="border-b border-violet-100 bg-slate-50 text-slate-700">
-                            <tr>
-                              <th class="px-2 py-1.5 text-left font-bold">Plan</th>
-                              <th class="px-2 py-1.5 text-left font-bold">Actual</th>
-                              <th class="px-2 py-1.5 text-left font-bold">Comment</th>
-                            </tr>
-                          </thead>
-                          <tbody class="divide-y divide-slate-100 bg-white">
-                            <tr v-for="(r, ridx) in parseEvidence(assign.evidences).rows" :key="`${assign.assignmentId}-${ridx}`">
-                              <td class="px-2 py-1.5 text-slate-700">{{ r.plan || '-' }}</td>
-                              <td class="px-2 py-1.5 font-semibold text-violet-700">{{ r.actual || '-' }}</td>
-                              <td class="px-2 py-1.5 text-slate-700">{{ r.comment || '-' }}</td>
-                            </tr>
-                          </tbody>
-                        </table>
-                      </div>
-                      <div v-else class="px-3 py-2 text-xs text-slate-500">Chưa có chi tiết evidence dạng bảng.</div>
-                    </div>
-
-                    <div v-if="parseEvidence(assign.evidences).urls.length" class="space-y-1">
-                      <p class="text-[11px] font-bold uppercase text-slate-500">Links</p>
-                      <a
-                        v-for="(u, uidx) in parseEvidence(assign.evidences).urls"
-                        :key="`${assign.assignmentId}-u-${uidx}`"
-                        :href="u"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        class="block truncate text-xs font-medium text-violet-700 hover:underline"
-                      >
-                        {{ u }}
-                      </a>
-                    </div>
+                  <div
+                    class="rounded-lg border border-violet-100 bg-white p-4 bg-gradient-to-r from-violet-50/30 to-transparent"
+                  >
+                    <LeaderMemberEvidenceDetail
+                      :evidences="assign.evidences"
+                      :calculation-rule-code="assign.calculationRuleCode"
+                      :unit-code="assign.unitCode"
+                      actual-tone="violet"
+                    />
                   </div>
                 </td>
               </tr>
@@ -336,7 +310,7 @@ function actualPreview(raw: string | null | undefined): string {
         <tfoot class="border-t-2 border-slate-200 bg-slate-100/80 font-bold">
           <tr>
             <td colspan="4" class="px-5 py-3 text-right text-xs uppercase tracking-wider text-slate-700">
-              Tổng cộng (Total score):
+              Total (Total score):
             </td>
             <td class="px-5 py-3 text-center text-sm text-slate-700">{{ totalWeight }}</td>
             <td class="px-5 py-3 text-center text-xs font-medium text-slate-400">-</td>
@@ -349,11 +323,11 @@ function actualPreview(raw: string | null | undefined): string {
           </tr>
           <tr class="border-t border-slate-200 bg-violet-50/50">
             <td colspan="4" class="px-5 py-3 text-right text-xs uppercase tracking-wider text-violet-800">
-              Điểm trung bình (Average score):
+              Average score:
             </td>
             <td class="px-5 py-3" />
             <td class="px-5 py-3 text-center text-xs font-medium text-slate-400">-</td>
-            <td class="bg-sky-50/50 px-5 py-3 text-center text-sm text-slate-700">
+            <td class="bg-sky-50/50 px-5 py-3 text-center text-sm text-violet-500">
               {{ selfWeightedAvg !== null ? selfWeightedAvg.toFixed(2) : '-' }}
             </td>
             <td class="bg-violet-100/80 px-5 py-3 text-center">
@@ -376,7 +350,7 @@ function actualPreview(raw: string | null | undefined): string {
               Employee's Comment
             </label>
             <textarea
-              :value="evaluationComment || 'Chưa có nhận xét.'"
+              :value="evaluationComment || 'No comments yet.'"
               rows="3"
               readonly
               class="w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700"
@@ -387,7 +361,7 @@ function actualPreview(raw: string | null | undefined): string {
               Supervisor Comment
             </label>
             <textarea
-              :value="evaluationSupervisorComment || 'Chưa có nhận xét từ Supervisor.'"
+              :value="evaluationSupervisorComment || 'No supervisor comments yet.'"
               rows="3"
               readonly
               class="w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700"

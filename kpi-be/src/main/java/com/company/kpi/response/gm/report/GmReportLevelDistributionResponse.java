@@ -9,8 +9,10 @@ import java.util.List;
 @Data
 public class GmReportLevelDistributionResponse {
 
-    /** Định nghĩa 9 mức (NA → O1) — đồng bộ FE. */
+    /** Định nghĩa các mức — từ khung điểm DB của {@link #scaleYear}. */
     private List<LevelDef> levels;
+    /** Năm chu kỳ dùng làm nguồn khung mức (mới nhất trong các năm được chọn). */
+    private Integer scaleYear;
     /** Map year → counts theo thứ tự `levels`. */
     private List<YearSeries> years;
     /** Top performer (level O1/A1/A2) năm chính. */

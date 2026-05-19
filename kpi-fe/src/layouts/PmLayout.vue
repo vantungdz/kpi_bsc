@@ -1,10 +1,13 @@
 <script setup lang="ts">
-import { ref } from "vue";
-import { useRoute } from "vue-router";
+import { computed, onMounted, ref, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
 import { useAuth } from "@/composables/useAuth";
 import PmAssignKpiDrawer from "@/components/pm/drawers/PmAssignKpiDrawer.vue";
+import { pmKpiService } from "@/services/modules/kpi-pm.service";
+import type { GmKpiCycleOption } from "@/types/gm-kpi-cycle";
 
 const route = useRoute();
+const router = useRouter();
 const { user, logout } = useAuth();
 
 const navItems = [
@@ -15,10 +18,73 @@ const isActive = (path: string) => route.path.startsWith(path);
 
 // State điều khiển Drawer tạo mới KPI
 const showCreateDrawer = ref(false);
+const cycleOptions = ref<GmKpiCycleOption[]>([]);
+const selectedYear = ref<number>(new Date().getFullYear());
+
+const selectedCycle = computed(() =>
+  cycleOptions.value.find((cycle) => Number(cycle.year) === Number(selectedYear.value)) ?? null,
+);
+
+const canEditSelectedYear = computed(() => Number(selectedCycle.value?.statusCode) === 201);
+
+async function loadCycleOptions() {
+  try {
+    const rows = await pmKpiService.getKpiCyclesForHeader();
+    cycleOptions.value = Array.isArray(rows) ? rows : [];
+    const queryYear = Number(route.query.year);
+    const matchedQuery = cycleOptions.value.find((cycle) => Number(cycle.year) === queryYear);
+    const openCycle = cycleOptions.value.find((cycle) => Number(cycle.statusCode) === 201);
+    const currentCycle = cycleOptions.value.find((cycle) => Number(cycle.year) === new Date().getFullYear());
+    selectedYear.value = Number(
+      matchedQuery?.year ?? openCycle?.year ?? currentCycle?.year ?? cycleOptions.value[0]?.year ?? selectedYear.value,
+    );
+    await syncSelectedYearToRoute();
+  } catch (error) {
+    console.error("Failed to load PM KPI cycles", error);
+  }
+}
+
+async function syncSelectedYearToRoute() {
+  if (!route.path.startsWith("/pm")) return;
+  const nextYear = String(selectedYear.value);
+  if (String(route.query.year ?? "") === nextYear) return;
+  await router.replace({
+    query: {
+      ...route.query,
+      year: nextYear,
+    },
+  });
+}
+
+function openCreateDrawer() {
+  if (!canEditSelectedYear.value) return;
+  showCreateDrawer.value = true;
+}
 
 const handleKpiCreated = () => {
   window.dispatchEvent(new CustomEvent('pm-kpi-created'));
 }
+
+watch(selectedYear, () => {
+  if (!canEditSelectedYear.value) {
+    showCreateDrawer.value = false;
+  }
+  void syncSelectedYearToRoute();
+});
+
+watch(
+  () => route.query.year,
+  (year) => {
+    const n = Number(year);
+    if (Number.isFinite(n) && n > 0 && n !== selectedYear.value) {
+      selectedYear.value = n;
+    }
+  },
+);
+
+onMounted(() => {
+  void loadCycleOptions();
+});
 </script>
 
 <template>
@@ -107,7 +173,25 @@ const handleKpiCreated = () => {
           <h2 class="text-xl font-bold text-slate-800">KPI Management</h2>
         </div>
         <div class="flex items-center gap-4">
-          <button @click="showCreateDrawer = true" class="flex shrink-0 items-center gap-1.5 rounded-lg bg-purple-600 px-3 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:bg-purple-700">
+          <select
+            v-model.number="selectedYear"
+            class="h-9 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 shadow-sm outline-none transition focus:border-purple-500"
+            title="Evaluation cycle"
+          >
+            <option
+              v-for="cycle in cycleOptions"
+              :key="cycle.id"
+              :value="cycle.year"
+            >
+              {{ cycle.name || `Evaluation cycle ${cycle.year}` }}
+            </option>
+          </select>
+          <button
+            :disabled="!canEditSelectedYear"
+            :title="canEditSelectedYear ? undefined : 'Chỉ được tạo KPI trong kỳ đang mở.'"
+            class="flex shrink-0 items-center gap-1.5 rounded-lg bg-purple-600 px-3 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:bg-purple-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500 disabled:shadow-none"
+            @click="openCreateDrawer"
+          >
             <i class="fas fa-plus text-xs" /> Create KPI
           </button>
 
@@ -127,6 +211,7 @@ const handleKpiCreated = () => {
       <PmAssignKpiDrawer 
         :open="showCreateDrawer" 
         mode="create" 
+        :readonly="!canEditSelectedYear"
         @close="showCreateDrawer = false" 
         @refresh="handleKpiCreated" 
       />

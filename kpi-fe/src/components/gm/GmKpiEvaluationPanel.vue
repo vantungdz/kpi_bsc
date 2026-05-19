@@ -22,6 +22,11 @@ import type {
 } from "@/types/gm-employee-evaluation";
 import { isReadonlyKpiYear } from "@/utils/kpi-year";
 import { gmKpiService } from "@/services/modules/kpi-gm.service";
+import {
+  isEvidenceImageUrl,
+  isRecordStyleCalcRule,
+  normalizeEvidenceHref,
+} from "@/utils/memberKpiHelpers";
 
 const props = withDefaults(
   defineProps<{
@@ -111,6 +116,24 @@ const unlockConfirmTarget = ref<{ emp: GmEvalMember; tab: "cascade" | "promotion
 const pageLoading = ref(true);
 
 const isReadonly = computed(() => isReadonlyKpiYear(effectiveYear.value));
+
+function gmKpiSortText(item: GmKpiItem): string {
+  return String(item?.title ?? "").trim();
+}
+
+function compareKpiNameEn(a: GmKpiItem, b: GmKpiItem): number {
+  return gmKpiSortText(a).localeCompare(gmKpiSortText(b), "en", {
+    sensitivity: "base",
+    numeric: true,
+  });
+}
+
+function sortKpiGroupItemsByNameEn(groups: GmKpiGroup[]): GmKpiGroup[] {
+  return groups.map((group) => ({
+    ...group,
+    items: [...group.items].sort(compareKpiNameEn),
+  }));
+}
 
 function readRouteIntoUi() {
   const q = route.query.q;
@@ -223,6 +246,29 @@ function drawerHasAssignmentsInStatusForTab(
   return itemsForHubConfirmScopeForTab(emp, code, tab).length > 0;
 }
 
+function supervisorCommentEditable(
+  emp: GmEvalMember,
+  tab: "cascade" | "promotion",
+): boolean {
+  return (
+    drawerHasAssignmentsInStatusForTab(emp, 502, tab) ||
+    drawerHasAssignmentsInStatusForTab(emp, 602, tab)
+  );
+}
+
+function supervisorCommentPlaceholder(
+  emp: GmEvalMember,
+  tab: "cascade" | "promotion",
+): string {
+  if (drawerHasAssignmentsInStatusForTab(emp, 602, tab)) {
+    return "Enter an overall supervisor comment explaining the scores you assigned...";
+  }
+  if (drawerHasAssignmentsInStatusForTab(emp, 502, tab)) {
+    return "Optional during mid-year review. You can keep the PM comment or edit it before completing review.";
+  }
+  return "";
+}
+
 function drawerRequiresGmFinalGradingForTab(
   emp: GmEvalMember,
   tab: "cascade" | "promotion",
@@ -244,6 +290,23 @@ function evidenceKey(empId: string, kpiId: string) {
 function isEvidenceCellHttpUrl(raw: unknown): raw is string {
   const s = String(raw ?? "").trim();
   return /^https?:\/\//i.test(s);
+}
+
+function usesPmStyleEvidence(item: GmKpiItem): boolean {
+  return (
+    item.evidenceData !== undefined ||
+    item.evidenceContent !== undefined ||
+    item.evidenceAttachments !== undefined
+  );
+}
+
+function gmEvidenceColspan(item: GmKpiItem): number {
+  return isRecordStyleCalcRule(item.calcRuleCode) ? 2 : 3;
+}
+
+function gmEvidenceText(raw: unknown): string {
+  const s = String(raw ?? "").trim();
+  return s || "—";
 }
 
 function ensurePmScoreKeys() {
@@ -530,6 +593,12 @@ function statusBadgeClassForTab(emp: GmEvalMember, tab = tableEvalTab.value) {
   return statusBadgeClass({ ...emp, status: scopedSheetStatus(emp, tab) });
 }
 
+function statusBadgeDotClassForTab(emp: GmEvalMember, tab = tableEvalTab.value) {
+  return scopedSheetStatus(emp, tab) === "approved"
+    ? "bg-emerald-500"
+    : "bg-blue-500";
+}
+
 function assignmentProgressLabelForTab(emp: GmEvalMember, tab = tableEvalTab.value): string {
   if (!hasKpisForEvalTab(emp, tab)) return "No KPIs";
   const labels = [
@@ -610,7 +679,7 @@ const pmEvalSectionsForDisplay = computed((): GmPmEvalLayoutSection[] =>
 function ensureSectionExpandDefaults() {
   for (const sec of pmEvalSectionsForDisplay.value) {
     if (expandedSectionIds[sec.sectionId] === undefined) {
-      expandedSectionIds[sec.sectionId] = true;
+      expandedSectionIds[sec.sectionId] = false;
     }
   }
 }
@@ -690,13 +759,13 @@ watch(drawerEmpId, () => {
 const drawerCascadeGroups = computed((): GmKpiGroup[] => {
   const e = drawerEmployee.value;
   if (!e) return [];
-  return e.groups.filter((g) => !isGmEvalPromotionKpiGroup(g));
+  return sortKpiGroupItemsByNameEn(e.groups.filter((g) => !isGmEvalPromotionKpiGroup(g)));
 });
 
 const drawerPromotionGroups = computed((): GmKpiGroup[] => {
   const e = drawerEmployee.value;
   if (!e) return [];
-  return e.groups.filter((g) => isGmEvalPromotionKpiGroup(g));
+  return sortKpiGroupItemsByNameEn(e.groups.filter((g) => isGmEvalPromotionKpiGroup(g)));
 });
 
 const drawerActiveKpiGroups = computed((): GmKpiGroup[] =>
@@ -715,14 +784,11 @@ const drawerPromotionItemCount = computed(() =>
 
 function statusBadgeClass(emp: GmEvalMember) {
   const base =
-    "inline-flex max-w-[12rem] items-center gap-1 whitespace-normal rounded-full border px-2 py-0.5 text-left text-[10px] font-bold leading-snug sm:max-w-[16rem] sm:gap-1.5 sm:px-2.5 sm:py-1 sm:text-xs";
-  if (emp.status === "pending_pm") {
-    return `${base} border-rose-200 bg-rose-50 text-rose-700`;
+    "inline-flex max-w-full items-center justify-center gap-1.5 rounded-md border px-2 py-1 text-[10px] font-bold leading-none sm:text-[11px]";
+  if (emp.status === "approved") {
+    return `${base} border-emerald-200 bg-emerald-50 text-emerald-700`;
   }
-  if (emp.status === "self_scoring") {
-    return `${base} border-slate-200 bg-slate-100 text-slate-600`;
-  }
-  return `${base} border-emerald-200 bg-emerald-50 text-emerald-800`;
+  return `${base} border-blue-200 bg-blue-50 text-blue-700`;
 }
 
 /** Cột Tiến độ: `sys_status_codes.name` (API / mock), không map nhãn cố định. */
@@ -967,7 +1033,7 @@ async function confirmDone(
       const res = await gmKpiService.confirmEvaluationHub({
         cycleId: cid,
         evaluationUserId: uid,
-        supervisorComment: needFinal ? c : "",
+        supervisorComment: c,
         promotion: tab === "promotion",
         lines: items.map((it) => {
           const line: {
@@ -1256,15 +1322,12 @@ async function confirmDone(
                     </template>
                     <span v-else :class="statusBadgeClassForTab(emp)">
                       <span
-                        v-if="scopedSheetStatus(emp) === 'pending_pm'"
-                        class="w-1.5 h-1.5 bg-rose-500 rounded-full animate-pulse"
+                        class="h-1.5 w-1.5 shrink-0 rounded-full"
+                        :class="statusBadgeDotClassForTab(emp)"
                       />
-                      <i
-                        v-else-if="scopedSheetStatus(emp) === 'self_scoring'"
-                        class="fas fa-pen text-[10px]"
-                      />
-                      <i v-else class="fas fa-check text-[10px]" />
-                      {{ assignmentProgressLabelForTab(emp) }}
+                      <span class="truncate">
+                        {{ assignmentProgressLabelForTab(emp) }}
+                      </span>
                     </span>
                   </td>
                   <td
@@ -1370,26 +1433,26 @@ async function confirmDone(
                   class="cursor-pointer border-y border-slate-200 bg-slate-100/95 transition-colors hover:bg-slate-100"
                   @click="toggleSectionExpand(sec.sectionId)"
                 >
-                  <td colspan="6" class="px-4 py-2 sm:px-5">
-                    <div class="flex flex-wrap items-center gap-2">
+                  <td colspan="6" class="px-4 py-3 sm:px-5 sm:py-3.5">
+                    <div class="flex min-h-8 flex-wrap items-center gap-2.5">
                       <i
-                        class="fas fa-chevron-right text-[10px] text-slate-500 transition-transform duration-300 ease-out motion-reduce:transition-none sm:text-xs"
+                        class="fas fa-chevron-right text-xs text-slate-500 transition-transform duration-300 ease-out motion-reduce:transition-none sm:text-sm"
                         :class="
                           expandedSectionIds[sec.sectionId] ? 'rotate-90' : ''
                         "
                         aria-hidden="true"
                       />
                       <i
-                        class="fas fa-sitemap text-[10px] text-slate-500 sm:text-xs"
+                        class="fas fa-sitemap text-xs text-slate-500 sm:text-sm"
                         aria-hidden="true"
                       />
                       <span
-                        class="text-[10px] font-extrabold uppercase tracking-wide text-slate-700 sm:text-[11px]"
+                        class="text-[11px] font-extrabold uppercase tracking-wide text-slate-700 sm:text-xs"
                       >
                         {{ sec.sectionName }}
                       </span>
                       <span
-                        class="text-[10px] font-semibold normal-case text-slate-500 sm:text-xs"
+                        class="text-[11px] font-semibold normal-case text-slate-500 sm:text-xs"
                       >
                         · {{ sectionMembers(sec.branch).length }} members
                       </span>
@@ -1470,15 +1533,12 @@ async function confirmDone(
                                 </template>
                                 <span v-else :class="statusBadgeClassForTab(emp)">
                                   <span
-                                    v-if="scopedSheetStatus(emp) === 'pending_pm'"
-                                    class="h-1.5 w-1.5 shrink-0 rounded-full bg-rose-500 animate-pulse"
+                                    class="h-1.5 w-1.5 shrink-0 rounded-full"
+                                    :class="statusBadgeDotClassForTab(emp)"
                                   />
-                                  <i
-                                    v-else-if="scopedSheetStatus(emp) === 'self_scoring'"
-                                    class="fas fa-pen text-[10px]"
-                                  />
-                                  <i v-else class="fas fa-check text-[10px]" />
-                                  {{ assignmentProgressLabelForTab(emp) }}
+                                  <span class="truncate">
+                                    {{ assignmentProgressLabelForTab(emp) }}
+                                  </span>
                                 </span>
                               </td>
                               <td class="bg-slate-50/80 px-3 py-2.5 text-center sm:px-4 sm:py-3">
@@ -2407,51 +2467,7 @@ async function confirmDone(
                       </p>
                     </div>
 
-                    <!-- Tab bao bọc toàn bộ bảng KPI (thead/tbody/tfoot) -->
                     <div class="border-b border-slate-200 bg-white">
-                      <div
-                        class="flex w-full border-b border-slate-200 bg-slate-100/90 px-2 pt-2 sm:px-3 sm:pt-2.5"
-                        role="tablist"
-                        aria-label="KPI evaluation type"
-                      >
-                        <button
-                          type="button"
-                          role="tab"
-                          :aria-selected="drawerEvalTab === 'cascade'"
-                          class="min-h-[2.75rem] flex-1 rounded-t-lg border border-b-0 px-2 py-2 text-center text-[11px] font-bold transition-colors sm:min-h-0 sm:px-4 sm:text-xs"
-                          :class="
-                            drawerEvalTab === 'cascade'
-                              ? 'relative z-[1] border-slate-200 bg-white text-indigo-800 shadow-[0_-1px_0_0_white]'
-                              : 'border-transparent bg-transparent text-slate-600 hover:bg-slate-50/80'
-                          "
-                          @click="drawerEvalTab = 'cascade'"
-                        >
-                          BSC — Individual / Cascading
-                          <span
-                            class="block font-semibold opacity-90 sm:inline sm:ml-0.5"
-                            >({{ drawerCascadeItemCount }})</span
-                          >
-                        </button>
-                        <button
-                          type="button"
-                          role="tab"
-                          :aria-selected="drawerEvalTab === 'promotion'"
-                          class="min-h-[2.75rem] flex-1 rounded-t-lg border border-b-0 px-2 py-2 text-center text-[11px] font-bold transition-colors sm:min-h-0 sm:px-4 sm:text-xs"
-                          :class="
-                            drawerEvalTab === 'promotion'
-                              ? 'relative z-[1] border-slate-200 bg-white text-indigo-800 shadow-[0_-1px_0_0_white]'
-                              : 'border-transparent bg-transparent text-slate-600 hover:bg-slate-50/80'
-                          "
-                          @click="drawerEvalTab = 'promotion'"
-                        >
-                          Promotion
-                          <span
-                            class="block font-semibold opacity-90 sm:inline sm:ml-0.5"
-                            >({{ drawerPromotionItemCount }})</span
-                          >
-                        </button>
-                      </div>
-
                       <div class="overflow-x-auto bg-white">
                         <table class="w-full text-left">
                           <thead>
@@ -2526,7 +2542,7 @@ async function confirmDone(
                                 </td>
                               </tr>
                               <template
-                                v-for="item in group.items"
+                                v-for="(item, itemIdx) in group.items"
                                 :key="item.id"
                               >
                                 <tr
@@ -2535,7 +2551,7 @@ async function confirmDone(
                                   <td
                                     class="px-4 py-4 text-center font-bold text-slate-400"
                                   >
-                                    {{ item.index }}
+                                    {{ itemIdx + 1 }}
                                   </td>
                                   <td class="px-4 py-4">
                                     <p class="font-bold text-slate-900">
@@ -2671,121 +2687,258 @@ async function confirmDone(
                                         />
                                         {{ item.evidence.title }}
                                       </h4>
-                                      <p
-                                        v-if="item.evidence.attachmentUrl"
-                                        class="mb-3"
-                                      >
-                                        <a
-                                          :href="item.evidence.attachmentUrl"
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          class="inline-flex max-w-full items-center gap-2 break-all text-sm font-bold text-indigo-600 hover:text-indigo-800 hover:underline"
+                                      <template v-if="usesPmStyleEvidence(item)">
+                                        <p
+                                          class="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-500"
                                         >
-                                          <i
-                                            class="fas fa-paperclip shrink-0 text-xs"
-                                          />
-                                          <span>{{
-                                            item.evidence.attachmentLabel ??
-                                            "View attached evidence"
-                                          }}</span>
-                                        </a>
-                                      </p>
-                                      <table
-                                        v-if="item.evidence.rows.length > 0"
-                                        class="w-full overflow-hidden rounded-lg border border-slate-200 bg-white text-left text-sm shadow-sm"
-                                      >
-                                        <thead
-                                          class="bg-slate-50 text-xs uppercase tracking-wider text-slate-600"
+                                          Evidences
+                                        </p>
+                                        <div
+                                          class="overflow-x-auto rounded-lg border border-indigo-100 bg-white shadow-sm"
                                         >
-                                          <tr>
-                                            <th
-                                              v-for="(h, hi) in item.evidence
-                                                .headers"
-                                              :key="hi"
-                                              class="border-b border-slate-200 p-3"
-                                              :class="
-                                                hi > 0 ? 'text-center' : ''
-                                              "
+                                          <table class="w-full text-left text-xs">
+                                            <thead
+                                              class="bg-indigo-50 text-[10px] font-bold uppercase tracking-wider text-indigo-800"
                                             >
-                                              {{ h }}
-                                            </th>
-                                          </tr>
-                                        </thead>
-                                        <tbody
-                                          class="divide-y divide-slate-100"
+                                              <tr>
+                                                <th
+                                                  class="px-3 py-2.5 text-center"
+                                                  :class="
+                                                    !isRecordStyleCalcRule(item.calcRuleCode)
+                                                      ? 'w-3/5'
+                                                      : 'w-2/3'
+                                                  "
+                                                >
+                                                  Content
+                                                </th>
+                                                <th
+                                                  v-if="!isRecordStyleCalcRule(item.calcRuleCode)"
+                                                  class="w-1/5 border-l border-indigo-100/60 px-3 py-2.5 text-center"
+                                                >
+                                                  Plan
+                                                </th>
+                                                <th
+                                                  class="border-l border-indigo-100/60 px-3 py-2.5 text-center"
+                                                  :class="
+                                                    !isRecordStyleCalcRule(item.calcRuleCode)
+                                                      ? 'w-1/5'
+                                                      : 'w-1/3'
+                                                  "
+                                                >
+                                                  Actual
+                                                </th>
+                                              </tr>
+                                            </thead>
+                                            <tbody class="divide-y divide-slate-100">
+                                              <tr
+                                                v-for="(ev, eIdx) in item.evidenceData"
+                                                :key="eIdx"
+                                                class="transition-colors hover:bg-slate-50"
+                                              >
+                                                <td
+                                                  class="px-3 py-2.5 font-medium leading-snug text-slate-800"
+                                                >
+                                                  {{ gmEvidenceText(ev.content || ev.comment) }}
+                                                </td>
+                                                <td
+                                                  v-if="!isRecordStyleCalcRule(item.calcRuleCode)"
+                                                  class="border-l border-slate-100 px-3 py-2.5 text-center text-slate-600"
+                                                >
+                                                  {{ gmEvidenceText(ev.plan) }}
+                                                </td>
+                                                <td
+                                                  class="border-l border-slate-100 px-3 py-2.5 text-center font-bold text-emerald-600"
+                                                >
+                                                  {{ gmEvidenceText(ev.actual) }}
+                                                </td>
+                                              </tr>
+                                              <tr
+                                                v-if="
+                                                  (!item.evidenceData ||
+                                                    item.evidenceData.length === 0) &&
+                                                  !item.evidenceContent
+                                                "
+                                              >
+                                                <td
+                                                  :colspan="gmEvidenceColspan(item)"
+                                                  class="px-3 py-3 text-center font-medium italic text-slate-400"
+                                                >
+                                                  No tabular evidence details yet.  
+                                                </td>
+                                              </tr>
+                                              <tr v-if="item.evidenceContent">
+                                                <td
+                                                  :colspan="gmEvidenceColspan(item)"
+                                                  class="border-t border-yellow-100 bg-yellow-50/30 px-4 py-3 text-slate-700 whitespace-pre-wrap"
+                                                >
+                                                  <p
+                                                    class="mb-1 text-[10px] font-bold uppercase text-yellow-700/70"
+                                                  >
+                                                    Notes (Comment for Supervisor): 
+                                                  </p>
+                                                  {{ item.evidenceContent }}
+                                                </td>
+                                              </tr>
+                                            </tbody>
+                                          </table>
+                                        </div>
+                                        <div
+                                          v-if="
+                                            item.evidenceAttachments &&
+                                            item.evidenceAttachments.length > 0
+                                          "
+                                          class="mt-3 rounded-lg border border-slate-200 bg-white p-3 shadow-sm"
                                         >
-                                          <tr
-                                            v-for="(row, ri) in item.evidence
-                                              .rows"
-                                            :key="ri"
+                                          <p
+                                            class="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-500"
                                           >
-                                            <td
-                                              v-for="(cell, ci) in row"
-                                              :key="ci"
-                                              class="p-3 font-medium"
-                                              :class="
-                                                ci > 0
-                                                  ? 'text-center text-slate-800'
-                                                  : 'text-slate-700'
-                                              "
+                                            Attached evidence (URL / file)
+                                          </p>
+                                          <ul class="flex flex-col gap-3">
+                                            <li
+                                              v-for="(att, aIdx) in item.evidenceAttachments"
+                                              :key="aIdx"
+                                              class="rounded-md border border-slate-100 bg-slate-50/80 p-2"
                                             >
                                               <a
-                                                v-if="
-                                                  isEvidenceCellHttpUrl(cell)
-                                                "
-                                                :href="cell.trim()"
+                                                :href="normalizeEvidenceHref(att.url)"
                                                 target="_blank"
                                                 rel="noopener noreferrer"
-                                                class="break-all font-semibold text-indigo-600 hover:underline"
+                                                class="break-all text-xs font-semibold text-indigo-600 underline hover:text-indigo-800"
                                               >
-                                                {{ cell }}
+                                                {{ att.name || att.url }}
                                               </a>
-                                              <template v-else>{{
-                                                cell
-                                              }}</template>
-                                            </td>
-                                          </tr>
-                                        </tbody>
-                                        <tfoot
-                                          v-if="item.evidence.footer"
-                                          class="bg-slate-50 font-bold"
+                                              <div
+                                                v-if="isEvidenceImageUrl(att.url)"
+                                                class="mt-2"
+                                              >
+                                                <img
+                                                  :src="normalizeEvidenceHref(att.url)"
+                                                  :alt="att.name || 'Evidence'"
+                                                  class="max-h-40 max-w-full rounded border border-slate-200 object-contain"
+                                                />
+                                              </div>
+                                            </li>
+                                          </ul>
+                                        </div>
+                                      </template>
+                                      <template v-else>
+                                        <p
+                                          v-if="item.evidence.attachmentUrl"
+                                          class="mb-3"
                                         >
-                                          <tr>
-                                            <td
-                                              v-for="(cell, fi) in item.evidence
-                                                .footer"
-                                              :key="fi"
-                                              class="p-3"
-                                              :class="
-                                                fi > 0
-                                                  ? 'text-center'
-                                                  : 'text-right'
-                                              "
-                                            >
-                                              <a
-                                                v-if="
-                                                  isEvidenceCellHttpUrl(cell)
+                                          <a
+                                            :href="item.evidence.attachmentUrl"
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            class="inline-flex max-w-full items-center gap-2 break-all text-sm font-bold text-indigo-600 hover:text-indigo-800 hover:underline"
+                                          >
+                                            <i
+                                              class="fas fa-paperclip shrink-0 text-xs"
+                                            />
+                                            <span>{{
+                                              item.evidence.attachmentLabel ??
+                                              "View attached evidence"
+                                            }}</span>
+                                          </a>
+                                        </p>
+                                        <table
+                                          v-if="item.evidence.rows.length > 0"
+                                          class="w-full overflow-hidden rounded-lg border border-slate-200 bg-white text-left text-sm shadow-sm"
+                                        >
+                                          <thead
+                                            class="bg-slate-50 text-xs uppercase tracking-wider text-slate-600"
+                                          >
+                                            <tr>
+                                              <th
+                                                v-for="(h, hi) in item.evidence
+                                                  .headers"
+                                                :key="hi"
+                                                class="border-b border-slate-200 p-3"
+                                                :class="
+                                                  hi > 0 ? 'text-center' : ''
                                                 "
-                                                :href="cell.trim()"
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                class="break-all font-semibold text-indigo-600 hover:underline"
                                               >
-                                                {{ cell }}
-                                              </a>
-                                              <template v-else>{{
-                                                cell
-                                              }}</template>
-                                            </td>
-                                          </tr>
-                                        </tfoot>
-                                      </table>
-                                      <p
-                                        v-else
-                                        class="rounded-lg border border-dashed border-slate-200 bg-slate-50/80 px-3 py-2 text-xs italic text-slate-500"
-                                      >
-                                        No evidence data yet.
-                                      </p>
+                                                {{ h }}
+                                              </th>
+                                            </tr>
+                                          </thead>
+                                          <tbody
+                                            class="divide-y divide-slate-100"
+                                          >
+                                            <tr
+                                              v-for="(row, ri) in item.evidence
+                                                .rows"
+                                              :key="ri"
+                                            >
+                                              <td
+                                                v-for="(cell, ci) in row"
+                                                :key="ci"
+                                                class="p-3 font-medium"
+                                                :class="
+                                                  ci > 0
+                                                    ? 'text-center text-slate-800'
+                                                    : 'text-slate-700'
+                                                "
+                                              >
+                                                <a
+                                                  v-if="
+                                                    isEvidenceCellHttpUrl(cell)
+                                                  "
+                                                  :href="cell.trim()"
+                                                  target="_blank"
+                                                  rel="noopener noreferrer"
+                                                  class="break-all font-semibold text-indigo-600 hover:underline"
+                                                >
+                                                  {{ cell }}
+                                                </a>
+                                                <template v-else>{{
+                                                  cell
+                                                }}</template>
+                                              </td>
+                                            </tr>
+                                          </tbody>
+                                          <tfoot
+                                            v-if="item.evidence.footer"
+                                            class="bg-slate-50 font-bold"
+                                          >
+                                            <tr>
+                                              <td
+                                                v-for="(cell, fi) in item.evidence
+                                                  .footer"
+                                                :key="fi"
+                                                class="p-3"
+                                                :class="
+                                                  fi > 0
+                                                    ? 'text-center'
+                                                    : 'text-right'
+                                                "
+                                              >
+                                                <a
+                                                  v-if="
+                                                    isEvidenceCellHttpUrl(cell)
+                                                  "
+                                                  :href="cell.trim()"
+                                                  target="_blank"
+                                                  rel="noopener noreferrer"
+                                                  class="break-all font-semibold text-indigo-600 hover:underline"
+                                                >
+                                                  {{ cell }}
+                                                </a>
+                                                <template v-else>{{
+                                                  cell
+                                                }}</template>
+                                              </td>
+                                            </tr>
+                                          </tfoot>
+                                        </table>
+                                        <p
+                                          v-else
+                                          class="rounded-lg border border-dashed border-slate-200 bg-slate-50/80 px-3 py-2 text-xs italic text-slate-500"
+                                        >
+                                          No evidence data yet.
+                                        </p>
+                                      </template>
                                       <div
                                         class="mt-4 rounded-lg border border-indigo-200 bg-indigo-50/40 p-3"
                                         :class="{
@@ -2919,7 +3072,7 @@ async function confirmDone(
                           <label
                             class="block text-[11px] font-bold uppercase tracking-wider text-indigo-600"
                           >
-                            Supervisor Comment (portfolio)
+                            Supervisor Comment
                             <span
                               v-if="
                                 drawerHasAssignmentsInStatusForTab(
@@ -2942,21 +3095,12 @@ async function confirmDone(
                             "
                             :disabled="
                               isReadonly ||
-                              !drawerHasAssignmentsInStatusForTab(
+                              !supervisorCommentEditable(
                                 drawerEmployee,
-                                602,
                                 'cascade',
                               )
                             "
-                            :placeholder="
-                              drawerHasAssignmentsInStatusForTab(
-                                drawerEmployee,
-                                602,
-                                'cascade',
-                              )
-                                ? 'Enter an overall supervisor comment explaining the scores you assigned...'
-                                : 'Required only when there are year-end KPIs (602) awaiting GM scores on this tab.'
-                            "
+                            :placeholder="supervisorCommentPlaceholder(drawerEmployee, 'cascade')"
                           />
                           <p
                             v-if="supervisorCommentInvalid(drawerEmployee, 'cascade')"
@@ -3074,21 +3218,12 @@ async function confirmDone(
                             "
                             :disabled="
                               isReadonly ||
-                              !drawerHasAssignmentsInStatusForTab(
+                              !supervisorCommentEditable(
                                 drawerEmployee,
-                                602,
                                 'promotion',
                               )
                             "
-                            :placeholder="
-                              drawerHasAssignmentsInStatusForTab(
-                                drawerEmployee,
-                                602,
-                                'promotion',
-                              )
-                                ? 'Enter an overall supervisor comment explaining the scores you assigned...'
-                                : 'Required only when there are year-end Promotion KPIs (602) awaiting GM scores.'
-                            "
+                            :placeholder="supervisorCommentPlaceholder(drawerEmployee, 'promotion')"
                           />
                           <p
                             v-if="supervisorCommentInvalid(drawerEmployee, 'promotion')"

@@ -32,6 +32,15 @@ const endYearEnd = ref("");
 const activateImmediately = ref(false);
 
 const statusSavingId = ref<string | null>(null);
+const deleteSavingId = ref<string | null>(null);
+const deleteDialogOpen = ref(false);
+const deleteTarget = ref<AdminKpiCycle | null>(null);
+
+const currentCalendarYear = new Date().getFullYear();
+
+function canDeleteCycle(c: AdminKpiCycle): boolean {
+  return c.year > currentCalendarYear;
+}
 
 const hasOpenCycle = computed(() =>
   cycles.value.some((c) => c.statusCode === 201),
@@ -307,6 +316,48 @@ async function submitCreate() {
   }
 }
 
+function onDeleteCycle(c: AdminKpiCycle) {
+  if (!canDeleteCycle(c)) {
+    showMessage(
+      `Chỉ được xóa năm đánh giá lớn hơn năm hiện tại (${currentCalendarYear}).`,
+    );
+    return;
+  }
+  deleteTarget.value = c;
+  deleteDialogOpen.value = true;
+}
+
+function closeDeleteDialog() {
+  if (deleteSavingId.value) return;
+  deleteDialogOpen.value = false;
+  deleteTarget.value = null;
+}
+
+async function confirmDeleteCycle() {
+  const c = deleteTarget.value;
+  if (!c || !canDeleteCycle(c)) return;
+
+  deleteSavingId.value = c.id;
+  try {
+    await adminKpiService.deleteKpiCycle(c.id);
+    showMessage(`Đã xóa năm đánh giá ${c.year}.`);
+    const nextExpanded = { ...expanded.value };
+    delete nextExpanded[c.year];
+    expanded.value = nextExpanded;
+    deleteDialogOpen.value = false;
+    deleteTarget.value = null;
+    await load();
+  } catch (e) {
+    showMessage(
+      isAxiosError(e)
+        ? String(e.response?.data?.message ?? e.message)
+        : "Không xóa được năm đánh giá.",
+    );
+  } finally {
+    deleteSavingId.value = null;
+  }
+}
+
 function phaseBadge(c: AdminKpiCycle) {
   if (c.statusCode === 201)
     return {
@@ -466,6 +517,24 @@ function phaseBadge(c: AdminKpiCycle) {
                     class="relative w-11 h-6 bg-slate-200 peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-indigo-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"
                   />
                 </label>
+                <button
+                  v-if="canDeleteCycle(c)"
+                  type="button"
+                  class="p-1.5 text-rose-500 hover:text-rose-700 rounded-lg hover:bg-rose-50 disabled:opacity-50 disabled:pointer-events-none"
+                  :disabled="deleteSavingId === c.id || statusSavingId === c.id"
+                  :title="`Xóa năm đánh giá ${c.year}`"
+                  :aria-label="`Xóa năm đánh giá ${c.year}`"
+                  @click="onDeleteCycle(c)"
+                >
+                  <i
+                    class="fas text-sm"
+                    :class="
+                      deleteSavingId === c.id
+                        ? 'fa-spinner fa-spin'
+                        : 'fa-trash-alt'
+                    "
+                  />
+                </button>
                 <button
                   type="button"
                   class="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-200/80"
@@ -714,6 +783,64 @@ function phaseBadge(c: AdminKpiCycle) {
               :class="editSaving ? 'fa-spinner fa-spin' : 'fa-save'"
             />
             Lưu Lịch trình
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: Xác nhận xóa năm đánh giá -->
+    <div
+      v-if="deleteDialogOpen && deleteTarget"
+      class="fixed inset-0 z-50 flex items-center justify-center p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="delete-cycle-title"
+    >
+      <div
+        class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+        @click="closeDeleteDialog"
+      />
+      <div
+        class="relative z-10 w-full max-w-md overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl"
+        @click.stop
+      >
+        <div class="border-b border-rose-100 bg-rose-50/80 px-6 py-4">
+          <h3
+            id="delete-cycle-title"
+            class="font-bold text-lg text-slate-800 flex items-center gap-2"
+          >
+            <i class="fas fa-triangle-exclamation text-rose-600" />
+            Xóa năm đánh giá?
+          </h3>
+          <p class="mt-2 text-sm text-slate-600 leading-relaxed">
+            Bạn có chắc muốn xóa năm đánh giá
+            <span class="font-bold text-slate-800">{{ deleteTarget.year }}</span>
+            (<span class="font-medium">{{ deleteTarget.name }}</span>)?
+          </p>
+          <p class="mt-2 text-xs font-medium text-rose-600">
+            Thao tác không thể hoàn tác.
+          </p>
+        </div>
+        <div class="px-6 py-4 flex justify-end gap-3 bg-white">
+          <button
+            type="button"
+            class="px-4 py-2 text-sm font-medium text-slate-600 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-50"
+            :disabled="!!deleteSavingId"
+            @click="closeDeleteDialog"
+          >
+            Hủy
+          </button>
+          <button
+            type="button"
+            class="px-5 py-2 text-sm font-bold text-white bg-rose-600 rounded-lg hover:bg-rose-700 shadow-sm inline-flex items-center gap-2 disabled:opacity-60"
+            :disabled="!!deleteSavingId"
+            @click="confirmDeleteCycle"
+          >
+            <i
+              class="fas text-sm"
+              :class="deleteSavingId ? 'fa-spinner fa-spin' : 'fa-trash-alt'"
+            />
+            Xác nhận xóa
           </button>
         </div>
       </div>

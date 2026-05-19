@@ -34,6 +34,31 @@ const emit = defineEmits<{
 
 const { formatKpiActualResult } = useMemberKpiFormatters()
 
+function parseCodeSortValue(code: unknown): number | null {
+  const text = String(code ?? '').trim()
+  if (!text) return null
+  const match = text.match(/\d+/)
+  if (!match) return null
+  const value = Number(match[0])
+  return Number.isFinite(value) ? value : null
+}
+
+function sortItemsForDisplay<T extends { code?: unknown; name?: unknown }>(rows: T[]): T[] {
+  return [...rows].sort((a, b) => {
+    const aCode = parseCodeSortValue(a.code)
+    const bCode = parseCodeSortValue(b.code)
+    if (aCode != null && bCode != null && aCode !== bCode) return aCode - bCode
+    if (aCode != null && bCode == null) return -1
+    if (aCode == null && bCode != null) return 1
+
+    const aCodeText = String(a.code ?? '').trim().toLowerCase()
+    const bCodeText = String(b.code ?? '').trim().toLowerCase()
+    if (aCodeText !== bCodeText) return aCodeText.localeCompare(bCodeText, 'vi')
+
+    return String(a.name ?? '').localeCompare(String(b.name ?? ''), 'vi')
+  })
+}
+
 function rowAlertClass(item: KpiItem): string {
   if (Number(item.statusCode ?? 0) === 407) return 'bg-violet-100/70 ring-1 ring-inset ring-violet-200'
   if (Number(item.statusCode ?? 0) === 406) return 'bg-rose-50/60'
@@ -131,7 +156,7 @@ function finalScoreTooltip(item: KpiItem): string | undefined {
 function statusTooltip(item: KpiItem): string {
   const status = Number(item.statusCode ?? 0)
   const reason = String(item.updateReason ?? item.feedbackComment ?? '').trim()
-  if (status === 406 && reason) return `Lý do từ chối:\n${reason}`
+  if (status === 406 && reason) return `Rejection reason:\n${reason}`
   return item.assignmentStatusName ?? ''
 }
 
@@ -152,7 +177,7 @@ function targetDataTooltip(item: KpiItem): string {
   const rawRules =
     extractRawInputFromApiTargetDescription(item.targetDescription ?? '')
     || extractRawInputFromApiTargetDescription(item.target ?? '')
-  if (rawRules) return `Quy tắc chấm điểm:\n${rawRules}`
+  if (rawRules) return `Scoring rules:\n${rawRules}`
   const fallback = String(item.target ?? '').trim()
   return fallback || formatTargetDisplayForMemeber(item)
 }
@@ -160,6 +185,12 @@ function targetDataTooltip(item: KpiItem): string {
 // ── Tfoot computed values ─────────────────────────────────────────────────────
 const allItems = computed(() => props.sections.flatMap(s => s.items))
 const hasPersonalAssignments = computed(() => allItems.value.length > 0)
+const sortedSections = computed(() =>
+  props.sections.map(section => ({
+    ...section,
+    items: sortItemsForDisplay(section.items ?? []),
+  })),
+)
 
 /** Tổng trọng số của tất cả KPI */
 const totalWeight = computed(() =>
@@ -200,15 +231,15 @@ const pmWeightedAvg = computed((): number | null => {
   <div class="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-5 py-4">
     <h3 class="flex items-center gap-2 text-lg font-bold text-slate-800">
       <i class="fas fa-list-alt text-slate-400" />
-      Chi Tiết Bảng KPI Cá Nhân
+      Personal KPI Details
     </h3>
   </div>
 
   <div v-if="!hasPersonalAssignments" class="px-5 py-16 text-center text-sm text-slate-500">
     <i class="fas fa-bullseye mb-3 text-3xl text-slate-200" />
-    <p class="font-medium text-slate-600">Chưa có KPI Personal</p>
+    <p class="font-medium text-slate-600">No Personal KPI Yet</p>
     <p class="mt-1 mx-auto max-w-md text-xs text-slate-400">
-      Khi PM/Leader giao mục tiêu cá nhân hoặc bạn tạo KPI mới, các dòng sẽ hiển thị tại đây.
+      When PM/Leader assigns personal goals or you create a new KPI, items will appear here.
     </p>
   </div>
 
@@ -216,11 +247,11 @@ const pmWeightedAvg = computed((): number | null => {
     <table class="w-full text-left">
       <thead class="border-b border-slate-200 bg-slate-200">
         <tr class="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-          <th class="w-12 px-5 py-4 text-center">STT</th>
-          <th class="min-w-[200px] px-5 py-4">Hạng Mục (Objectives)</th>
-          <th class="min-w-[10rem] px-5 py-4 text-center">Trạng thái KPI</th>
-          <th class="px-5 py-4">Chỉ Tiêu (Target)</th>
-          <th class="w-24 px-5 py-4 text-center">Trọng số (W)</th>
+          <th class="w-12 px-5 py-4 text-center">#</th>
+          <th class="min-w-[200px] px-5 py-4">Objectives</th>
+          <th class="min-w-[10rem] px-5 py-4 text-center">KPI Status</th>
+          <th class="px-5 py-4">Target</th>
+          <th class="w-24 px-5 py-4 text-center">Weight (W)</th>
           <th class="min-w-[8rem] px-5 py-4 text-center">
             <span class="inline-flex items-center gap-1">
               Actual Result
@@ -228,11 +259,11 @@ const pmWeightedAvg = computed((): number | null => {
           </th>
           <th class="w-28 px-5 py-4 text-center ">Self Score</th>
           <th class="w-28 px-5 py-4 text-center">Final Score</th>
-          <th class="w-28 px-5 py-4 text-right">Thao tác</th>
+          <th class="w-28 px-5 py-4 text-right">Actions</th>
         </tr>
       </thead>
       <tbody class="divide-y divide-slate-100">
-        <template v-for="section in sections" :key="section.key">
+        <template v-for="section in sortedSections" :key="section.key">
           <tr class="border-y border-slate-200 bg-slate-50">
             <td colspan="9" class="py-2 px-5 text-xs font-bold text-slate-800 uppercase tracking-wider">
               {{ section.headerLabel }}
@@ -265,7 +296,7 @@ const pmWeightedAvg = computed((): number | null => {
                   :title="statusTooltip(item)"
                   class="ml-1 mt-1 inline-flex max-w-full items-start gap-1 text-left text-[10px] font-medium text-orange-700 cursor-pointer hover:bg-orange-100 rounded"
                 >
-                  <span class="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-orange-300 text-[10px] font-bold leading-none text-orange-700">
+                  <span class="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-orange-300 text-[10px] font-bold leading-none text-orange-700 cursor-pointer">
                     ?
                   </span>
                </span>
@@ -277,7 +308,7 @@ const pmWeightedAvg = computed((): number | null => {
                   {{ formatTargetDisplayForMemeber(item) }}
                 </p>
                 <span
-                  class="inline-flex h-4 w-4 items-center justify-center rounded-full border border-slate-300 text-[10px] font-bold text-slate-500 cursor-help cursor-pointer hover:bg-sky-200"
+                  class="inline-flex h-4 w-4 items-center justify-center rounded-full border border-slate-300 text-[10px] font-bold text-slate-500 cursor-help cursor-pointer"
                   :title="targetDataTooltip(item)"
                 >
                   ?
@@ -316,7 +347,7 @@ const pmWeightedAvg = computed((): number | null => {
                 </p>
                 <span
                   v-if="finalScoreTooltip(item)"
-                  class="inline-flex h-4 w-4 items-center justify-center rounded-full border border-slate-300 text-[10px] font-bold text-slate-500 cursor-help cursor-pointer hover:bg-sky-200"
+                  class="inline-flex h-4 w-4 items-center justify-center rounded-full border border-slate-300 text-[10px] font-bold text-slate-500 cursor-help cursor-pointer hover:bg-sky-200 cursor-pointer"
                   :title="finalScoreTooltip(item)"
                 >
                   ?
@@ -341,7 +372,7 @@ const pmWeightedAvg = computed((): number | null => {
                   type="button"
                   class="flex h-8 items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-3 text-[10px] font-bold text-violet-700 shadow-sm transition-colors hover:bg-violet-100 disabled:cursor-not-allowed disabled:opacity-45 cursor-pointer"
                   :disabled="!canSendFeedback(item)"
-                  title="Mở KPI này để nhập và gửi feedback riêng"
+                  title="Open this KPI to enter and send feedback"
                   @click="emit('open-feedback', item)"
                 >
                   <i class="fas fa-message text-[10px]" />
@@ -352,7 +383,7 @@ const pmWeightedAvg = computed((): number | null => {
                   class="flex h-8 items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-3 text-[10px] font-bold text-rose-700 shadow-sm transition-colors hover:bg-rose-100 cursor-pointer"
                   :class="!canDeleteSelfCreatedEnabled(item) ? 'cursor-not-allowed opacity-45 hover:bg-rose-50' : ''"
                   :disabled="!canDeleteSelfCreatedEnabled(item)"
-                  :title="canDeleteSelfCreatedEnabled(item) ? 'Xóa KPI tự tạo' : 'KPI đã submit đầu năm, không thể xóa'"
+                  :title="canDeleteSelfCreatedEnabled(item) ? 'Delete self-created KPI' : 'KPI already submitted, cannot be deleted'"
                   @click="emit('delete-self-created', item)"
                 >
                   <i class="fas fa-trash text-[10px]" />
@@ -367,7 +398,7 @@ const pmWeightedAvg = computed((): number | null => {
         <!-- Tổng cộng -->
         <tr>
           <td colspan="4" class="py-4 px-5 text-right text-slate-700 uppercase text-xs tracking-wider">
-            Tổng cộng (Total score):
+            Total (Total score):
           </td>
           <td class="py-4 px-5 text-center">
             <span class="text-sm text-slate-800">{{ totalWeight }}</span>
@@ -387,12 +418,12 @@ const pmWeightedAvg = computed((): number | null => {
         <!-- Điểm trung bình -->
         <tr class="bg-violet-50/50 border-t border-slate-200">
           <td colspan="4" class="py-4 px-5 text-right text-violet-800 uppercase text-xs tracking-wider">
-            Điểm trung bình (Average score):
+            Average score:
           </td>
           <td class="py-4 px-5"></td>
           <td class="py-4 px-5 text-center text-xs font-medium text-slate-400">-</td>
           <td class="bg-sky-50/50 py-4 px-5 text-center text-sm text-slate-500">
-            <span class="text-sm text-slate-500">
+            <span class="text-sm text-violet-500">
               {{ personalSelfWeightedAvg !== null ? personalSelfWeightedAvg.toFixed(2) : '-' }}
             </span>
           </td>
@@ -422,7 +453,7 @@ const pmWeightedAvg = computed((): number | null => {
           <textarea
             class="w-full h-24 p-3 bg-white border border-slate-200 rounded-lg text-sm text-slate-700 focus:ring-2 focus:ring-blue-100 outline-none resize-none shadow-sm"
             :class="{ 'bg-slate-100 text-slate-500': employeeCommentReadonly }"
-            placeholder="Nhập ý kiến của bạn..."
+            placeholder="Enter your comment..."
             :readonly="employeeCommentReadonly"
             :value="employeeComment"
             @input="emit('update-employee-comment', String(($event.target as HTMLTextAreaElement).value ?? ''))"
@@ -436,7 +467,7 @@ const pmWeightedAvg = computed((): number | null => {
           </label>
           <textarea
             class="w-full h-24 p-3 bg-slate-100 border border-slate-200 rounded-lg text-sm text-slate-500 outline-none resize-none"
-            placeholder="Supervisor sẽ nhập ý kiến tại đây..."
+            placeholder="Supervisor will enter their comment here..."
             :value="supervisorComment"
             readonly
           />
@@ -457,11 +488,11 @@ const pmWeightedAvg = computed((): number | null => {
       >
         <i v-if="submitting" class="fas fa-spinner fa-spin text-xs" />
         <i v-else class="fas fa-paper-plane text-xs" />
-        {{ submitting ? 'Đang xử lý...' : submitLabel }}
+        {{ submitting ? 'Processing...' : submitLabel }}
       </button>
     </template>
     <div v-else class="text-sm text-slate-500 font-medium">
-      Dữ liệu năm này chỉ để xem
+      This year's data is read-only
     </div>
   </div>
 </template>

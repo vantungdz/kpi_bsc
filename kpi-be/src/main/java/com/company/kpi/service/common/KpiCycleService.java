@@ -5,12 +5,14 @@ import com.company.kpi.common.exception.AppException;
 import com.company.kpi.entity.KpiCycle;
 import com.company.kpi.mapper.KpiCycleMapper;
 import com.company.kpi.response.common.KpiCycleResponse;
+import com.company.kpi.response.gm.GmKpiCycleOptionResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.modelmapper.ModelMapper;
 import org.springframework.stereotype.Service;
 
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Optional;
 
 @Slf4j
@@ -42,6 +44,11 @@ public class KpiCycleService {
         response.setActivePhase(activePhase);
 
         return response;
+    }
+
+    /** Danh sách chu kỳ KPI dùng cho dropdown năm (mọi dòng chưa xóa mềm trong kpi_cycles). */
+    public List<GmKpiCycleOptionResponse> listKpiCyclesForDropdown() {
+        return kpiCycleMapper.listAllCyclesForDropdown();
     }
 
     /**

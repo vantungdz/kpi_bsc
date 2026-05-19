@@ -486,34 +486,65 @@
     </resultMap>
 
     <select id="findTeamHierarchyBySupervisor" resultMap="UserTeamHierarchyResultMap">
-        WITH RECURSIVE team_tree_raw AS (
+        WITH RECURSIVE org_edges AS (
+            SELECT DISTINCT ON (kas.user_id)
+                kas.user_id,
+                kas.supervisor_id,
+                kas.department_id
+            FROM kpi_assignment_snapshots kas
+            INNER JOIN kpi_cycles kc
+                    ON kc.id = kas.cycle_id
+                   AND kc.deleted_at IS NULL
+                   AND kc.year &lt; EXTRACT(YEAR FROM CURRENT_DATE)::int
+            WHERE kas.cycle_id = #{cycleId}
+              AND kas.user_id IS NOT NULL
+            ORDER BY kas.user_id, kas.created_at ASC
+        ),
+        fallback_edges AS (
             SELECT
                 ud.user_id,
+                ud.supervisor_id,
+                ud.department_id
+            FROM user_departments ud
+            WHERE ud.is_primary = TRUE
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM org_edges oe
+                  WHERE oe.user_id = ud.user_id
+              )
+        ),
+        effective_edges AS (
+            SELECT * FROM org_edges
+            UNION ALL
+            SELECT * FROM fallback_edges
+        ),
+        team_tree_raw AS (
+            SELECT
+                ee.user_id,
                 CASE
-                    WHEN ud.supervisor_id = #{pmId} THEN ud.supervisor_id
+                    WHEN ee.supervisor_id = #{pmId} THEN ee.supervisor_id
                     ELSE #{pmId}
                 END AS supervisor_id
-            FROM user_departments ud
+            FROM effective_edges ee
             INNER JOIN departments d
-                    ON d.id = ud.department_id
+                    ON d.id = ee.department_id
                    AND d.deleted_at IS NULL
                    AND d.manager_id = #{pmId}
-            WHERE ud.is_primary = TRUE
-              AND ud.user_id &lt;&gt; #{pmId}
+            WHERE ee.user_id &lt;&gt; #{pmId}
 
             UNION
 
-            SELECT ud.user_id, ud.supervisor_id
-            FROM user_departments ud
-            WHERE ud.supervisor_id = #{pmId}
-              AND ud.user_id &lt;&gt; #{pmId}
+            SELECT ee.user_id, ee.supervisor_id
+            FROM effective_edges ee
+            WHERE ee.supervisor_id = #{pmId}
+              AND ee.user_id &lt;&gt; #{pmId}
             
             UNION
             
-            SELECT ud.user_id, ud.supervisor_id
-            FROM user_departments ud
-            INNER JOIN team_tree_raw tt ON ud.supervisor_id = tt.user_id
-            WHERE ud.user_id &lt;&gt; #{pmId}
+            SELECT ee.user_id, ee.supervisor_id
+            FROM effective_edges ee
+            INNER JOIN team_tree_raw tt ON ee.supervisor_id = tt.user_id
+            WHERE ee.user_id &lt;&gt; #{pmId}
         ),
         team_tree AS (
             SELECT DISTINCT ON (user_id)
@@ -596,14 +627,58 @@
     </select>
 
     <select id="listPmPortfolioGateBlockingMembers" resultType="com.company.kpi.response.pm.PmPortfolioGatePendingMemberResponse">
-        WITH RECURSIVE team_tree AS (
-            SELECT ud.user_id
+        WITH RECURSIVE org_edges AS (
+            SELECT DISTINCT ON (kas.user_id)
+                kas.user_id,
+                kas.supervisor_id,
+                kas.department_id
+            FROM kpi_assignment_snapshots kas
+            INNER JOIN kpi_cycles kc
+                    ON kc.id = kas.cycle_id
+                   AND kc.deleted_at IS NULL
+                   AND kc.year &lt; EXTRACT(YEAR FROM CURRENT_DATE)::int
+            WHERE kas.cycle_id = #{cycleId}
+              AND kas.user_id IS NOT NULL
+            ORDER BY kas.user_id, kas.created_at ASC
+        ),
+        fallback_edges AS (
+            SELECT
+                ud.user_id,
+                ud.supervisor_id,
+                ud.department_id
             FROM user_departments ud
-            WHERE ud.supervisor_id = #{pmId}
+            WHERE ud.is_primary = TRUE
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM org_edges oe
+                  WHERE oe.user_id = ud.user_id
+              )
+              AND EXISTS (
+                  SELECT 1
+                  FROM kpi_assignments ka
+                  WHERE ka.user_id = ud.user_id
+                    AND ka.cycle_id = #{cycleId}
+                    AND ka.deleted_at IS NULL
+              )
+        ),
+        effective_edges AS (
+            SELECT * FROM org_edges
             UNION ALL
-            SELECT ud.user_id
-            FROM user_departments ud
-            INNER JOIN team_tree tt ON ud.supervisor_id = tt.user_id
+            SELECT * FROM fallback_edges
+        ),
+        team_tree AS (
+            SELECT ee.user_id
+            FROM effective_edges ee
+            LEFT JOIN departments d
+                   ON d.id = ee.department_id
+                  AND d.deleted_at IS NULL
+            WHERE ee.user_id &lt;&gt; #{pmId}
+              AND (ee.supervisor_id = #{pmId} OR d.manager_id = #{pmId})
+            UNION ALL
+            SELECT ee.user_id
+            FROM effective_edges ee
+            INNER JOIN team_tree tt ON ee.supervisor_id = tt.user_id
+            WHERE ee.user_id &lt;&gt; #{pmId}
         )
         SELECT DISTINCT u.id AS userId, u.full_name AS fullName
         FROM team_tree tt

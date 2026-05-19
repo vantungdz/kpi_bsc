@@ -76,6 +76,7 @@
         private static final int ASM_PENDING_ACCEPTANCE = 404;
         private static final int ASM_FEEDBACK_IN_PROGRESS = 407;
         private static final int ASM_ACCEPTED = 405;
+        private static final int CALC_RULE_SUM = 801;
         private static final int CALC_RULE_AVERAGE = 802;
         private static final int CALC_RULE_COMMENT = 803;
         private static final int CALC_TYPE_PLAN_OVER_ACTUAL = 702;
@@ -86,19 +87,19 @@
 
         /** ASM_STATUS labels — đồng bộ document/db/init-db.sql */
         private static final Map<Integer, String> ASM_STATUS_LABEL = Map.ofEntries(
-                Map.entry(401, "KPI mới tạo (Chưa kích hoạt)"),
-                Map.entry(402, "Chờ PM duyệt KPI"),
-                Map.entry(403, "Chờ GM duyệt KPI"),
-                Map.entry(404, "Chờ Member bấm Accept"),
-                Map.entry(407, "Chờ PM/GM kiểm tra feedback"),
-                Map.entry(405, "Đã chốt mục tiêu (Đang chạy)"),
-                Map.entry(406, "Bị từ chối"),
-                Map.entry(501, "Member đã nộp bằng chứng 1st Half, chờ PM duyệt"),
-                Map.entry(502, "PM đã duyệt 1st Half, chờ GM chốt điểm"),
-                Map.entry(503, "GM đã chốt điểm 1st Half"),
-                Map.entry(601, "Chờ PM chấm điểm Final"),
-                Map.entry(602, "Chờ GM chốt điểm Final"),
-                Map.entry(603, "Đã chốt sổ hoàn toàn (Kết thúc vòng đời)"));
+                Map.entry(401, "Newly Created KPI (Inactive)"),
+                Map.entry(402, "Pending PM Approval"),
+                Map.entry(403, "Pending GM Approval"),
+                Map.entry(404, "Pending Member Acceptance"),
+                Map.entry(407, "Feedback Pending PM/GM Review"),
+                Map.entry(405, "Goal Confirmed (In Progress)"),
+                Map.entry(406, "Rejected"),
+                Map.entry(501, "Member Submitted Mid-Year Evidence, Pending PM Approval"),
+                Map.entry(502, "PM Approved Mid-Year, Pending GM Score"),
+                Map.entry(503, "GM Finalized Mid-Year Score"),
+                Map.entry(601, "Pending PM Final Score"),
+                Map.entry(602, "Pending GM Final Score"),
+                Map.entry(603, "Fully Closed (Lifecycle Completed)"));
 
         private final KpiCycleMapper kpiCycleMapper;
         private final UserMapper userMapper;
@@ -166,7 +167,7 @@
             if (Objects.equals(row.getStatusCode(), ASM_MEMBER_CREATED_PENDING_PM)
                 || Objects.equals(row.getStatusCode(), ASM_MEMBER_CREATED_PENDING_GM)) {
                 throw new ResponseStatusException(
-                        HttpStatus.BAD_REQUEST, "KPI đề xuất đang chờ PM/GM duyệt — chưa chỉnh được");
+                        HttpStatus.BAD_REQUEST, "Proposed KPI is pending PM/GM approval — cannot be edited");
             }
             UUID cycleId = row.getCycleId();
             KpiCycle cycle = kpiCycleMapper.findById(cycleId)
@@ -221,11 +222,11 @@
             }
             Integer status = row.getStatusCode();
             if (!Objects.equals(status, ASM_PENDING_ACCEPTANCE) && !Objects.equals(status, ASM_FEEDBACK_IN_PROGRESS)) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "KPI không ở trạng thái cho phép gửi feedback");
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "KPI is not in a state that allows sending feedback");
             }
             String normalized = StringUtils.trimToEmpty(feedbackComment);
             if (StringUtils.isBlank(normalized)) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Feedback không được để trống");
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Feedback cannot be empty");
             }
             int n = kpiAssignmentMapper.submitAssignmentFeedback(
                     assignmentId,
@@ -234,7 +235,7 @@
                     normalized,
                     ASM_FEEDBACK_IN_PROGRESS);
             if (n == 0) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Không thể gửi feedback cho KPI này");
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cannot send feedback for this KPI");
             }
             MemberKpiAssignmentDTO refreshed = kpiAssignmentMapper.findByIdAndUser(assignmentId, userId);
             String roleCode = refreshed != null ? refreshed.getFeedbackTargetRoleCode() : null;
@@ -247,9 +248,9 @@
         private static String feedback407StatusLabel(String feedbackTargetRoleCode) {
             if (StringUtils.isNotBlank(feedbackTargetRoleCode)
                     && "GM".equalsIgnoreCase(feedbackTargetRoleCode.trim())) {
-                return "Chờ GM kiểm tra feedback";
+                return "Feedback Pending GM Review";
             }
-            return "Chờ PM kiểm tra feedback";
+            return "Feedback Pending PM Review";
         }
 
         /** Cập nhật evidences — có kiểm tra assignment thuộc member. */
@@ -261,7 +262,7 @@
         if (Objects.equals(row.getStatusCode(), ASM_MEMBER_CREATED_PENDING_PM)
                 || Objects.equals(row.getStatusCode(), ASM_MEMBER_CREATED_PENDING_GM)) {
                 throw new ResponseStatusException(
-                        HttpStatus.BAD_REQUEST, "KPI đề xuất đang chờ duyệt — chưa nộp minh chứng");
+                        HttpStatus.BAD_REQUEST, "Proposed KPI is pending approval — cannot submit evidence");
             }
             kpiAssignmentMapper.patchMemberAssignment(
                     request.getAssignmentId(),
@@ -287,7 +288,7 @@
             if (n == 0) {
                 throw new ResponseStatusException(
                         HttpStatus.BAD_REQUEST,
-                        "KPI không thể xóa (chỉ cho phép KPI tự tạo ở trạng thái chờ duyệt/chờ xác nhận/từ chối)");
+                        "KPI cannot be deleted (only self-created KPIs in pending/awaiting/rejected status are eligible)");
             }
         }
 
@@ -401,7 +402,7 @@
          * Giữa kỳ: {@code 405→503}; cuối kỳ: {@code 503→603}. Khác {@link #submitMemberSheet} (member: 405→501 / →601).
          */
         @Transactional
-        public void submitGmPersonalEvaluation(UUID userId, UUID cycleId) {
+        public void submitGmPersonalEvaluation(UUID userId, UUID cycleId, boolean promotionSubmit) {
             Optional<KpiCycle> opt = kpiCycleMapper.findById(cycleId);
             if (opt.isEmpty()) {
                 throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Cycle not found");
@@ -425,26 +426,25 @@
             }
             if (Constant.TARGET_SETUP_PHASE.equals(submitPhase)) {
                 throw new ResponseStatusException(
-                        HttpStatus.BAD_REQUEST, "Chưa trong cửa sổ đánh giá giữa kỳ hoặc cuối kỳ");
+                        HttpStatus.BAD_REQUEST, "Not yet in the mid-year or year-end evaluation window");
             }
 
-            List<MemberKpiAssignmentDTO> personal = filterGmPersonalSheetRows(rows);
+            List<MemberKpiAssignmentDTO> personal = filterRowsBySubmitType(filterGmPersonalSheetRows(rows), promotionSubmit);
 
             if (Constant.MID_YEAR_PHASE.equals(submitPhase)) {
-                if (assignmentsIndicatePhaseAlreadyDone(submitPhase, rows)) {
-                    throw new ResponseStatusException(HttpStatus.CONFLICT, "Đã nộp đánh giá giữa kỳ cho chu kỳ này");
+                if (assignmentsIndicatePhaseAlreadyDone(submitPhase, personal)) {
+                    throw new ResponseStatusException(HttpStatus.CONFLICT, "Mid-year evaluation already submitted for this cycle");
                 }
                 List<MemberKpiAssignmentDTO> targets =
                         personal.stream().filter(r -> Objects.equals(r.getStatusCode(), ASM_ACCEPTED)).toList();
                 if (targets.isEmpty()) {
                     throw new ResponseStatusException(
-                            HttpStatus.BAD_REQUEST, "Không có KPI cá nhân ở trạng thái 405 để nộp giữa kỳ");
+                            HttpStatus.BAD_REQUEST, "No personal KPIs at status 405 eligible for mid-year submission");
                 }
                 validateGmPersonalMidYearReady(targets);
-                int nIndiv = kpiAssignmentMapper.updateKpiStatuses(userId, cycleId, ASM_GM_FIRST_HALF_DONE, false, ASM_ACCEPTED, false);
-                int nPromo = kpiAssignmentMapper.updateKpiStatuses(userId, cycleId, ASM_GM_FIRST_HALF_DONE, true, ASM_ACCEPTED, false);
-                if (nIndiv + nPromo == 0) {
-                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Không cập nhật được trạng thái giữa kỳ");
+                int n = kpiAssignmentMapper.updateKpiStatuses(userId, cycleId, ASM_GM_FIRST_HALF_DONE, promotionSubmit, ASM_ACCEPTED, false);
+                if (n == 0) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Failed to update mid-year status");
                 }
                 return;
             }
@@ -453,30 +453,28 @@
                 boolean has405 = personal.stream().anyMatch(r -> Objects.equals(r.getStatusCode(), ASM_ACCEPTED));
                 if (has405) {
                     throw new ResponseStatusException(
-                            HttpStatus.BAD_REQUEST, "Vui lòng nộp đánh giá giữa kỳ trước (còn KPI ở trạng thái 405)");
+                            HttpStatus.BAD_REQUEST, "Please submit mid-year evaluation first (there are KPIs still at status 405)");
                 }
-                if (assignmentsIndicatePhaseAlreadyDone(submitPhase, rows)) {
-                    throw new ResponseStatusException(HttpStatus.CONFLICT, "Đã nộp đánh giá cuối kỳ cho chu kỳ này");
+                if (assignmentsIndicatePhaseAlreadyDone(submitPhase, personal)) {
+                    throw new ResponseStatusException(HttpStatus.CONFLICT, "Year-end evaluation already submitted for this cycle");
                 }
                 List<MemberKpiAssignmentDTO> targets = personal.stream()
                         .filter(r -> Objects.equals(r.getStatusCode(), ASM_GM_FIRST_HALF_DONE))
                         .toList();
                 if (targets.isEmpty()) {
                     throw new ResponseStatusException(
-                            HttpStatus.BAD_REQUEST, "Không có KPI ở trạng thái 503 để nộp cuối kỳ");
+                            HttpStatus.BAD_REQUEST, "No KPIs at status 503 eligible for year-end submission");
                 }
                 validateGmPersonalEndYearReady(targets);
-                int nIndiv =
-                        kpiAssignmentMapper.updateKpiStatuses(userId, cycleId, ASM_CYCLE_COMPLETED, false, ASM_GM_FIRST_HALF_DONE, false);
-                int nPromo =
-                        kpiAssignmentMapper.updateKpiStatuses(userId, cycleId, ASM_CYCLE_COMPLETED, true, ASM_GM_FIRST_HALF_DONE, false);
-                if (nIndiv + nPromo == 0) {
-                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Không cập nhật được trạng thái cuối kỳ");
+                int n =
+                        kpiAssignmentMapper.updateKpiStatuses(userId, cycleId, ASM_CYCLE_COMPLETED, promotionSubmit, ASM_GM_FIRST_HALF_DONE, false);
+                if (n == 0) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Failed to update year-end status");
                 }
                 return;
             }
 
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Phase submit không hợp lệ");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid submission phase");
         }
 
         private static List<MemberKpiAssignmentDTO> filterGmPersonalSheetRows(List<MemberKpiAssignmentDTO> rows) {
@@ -509,7 +507,7 @@
             if (incomplete) {
                 throw new ResponseStatusException(
                         HttpStatus.BAD_REQUEST,
-                        "Cần nhập đủ Actual và điểm tự đánh giá (giữa kỳ) cho tất cả KPI cá nhân trước khi gửi");
+                        "Please enter Actual results and self-evaluation scores (mid-year) for all personal KPIs before submitting");
             }
         }
 
@@ -519,7 +517,7 @@
             if (incomplete) {
                 throw new ResponseStatusException(
                         HttpStatus.BAD_REQUEST,
-                        "Cần nhập đủ Actual và điểm tự đánh giá (cuối kỳ) cho tất cả KPI đang ở 503 trước khi gửi");
+                        "Please enter Actual results and self-evaluation scores (year-end) for all KPIs at status 503 before submitting");
             }
         }
 
@@ -552,15 +550,15 @@
             User user = userMapper.findById(userId).orElseThrow(() ->
                     new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User not found"));
             if (user.getJobTitleId() == null) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Thiếu job_title_id trên user — không tạo assignment được");
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Missing job_title_id on user — cannot create assignment");
             }
             Optional<KpiCycle> cycleOpt = kpiCycleMapper.findByYear(req.getCycleYear());
             if (cycleOpt.isEmpty()) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Không có chu kỳ KPI cho năm " + req.getCycleYear());
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No KPI cycle found for year " + req.getCycleYear());
             }
             KpiCycle cycle = cycleOpt.get();
             if (!Objects.equals(cycle.getStatusCode(), Constants.CycleStatus.OPEN)) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Chu kỳ KPI không ở trạng thái mở — không tạo KPI đề xuất");
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "KPI cycle is not open — cannot create proposed KPI");
             }
 
             UUID masterId = UUID.randomUUID();
@@ -579,7 +577,7 @@
                     false,
                     userId);
             if (m != 1) {
-                throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Không thể tạo kpi_master");
+                throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to create kpi_master");
             }
 
             UUID kpiInfoId = UUID.randomUUID();
@@ -594,7 +592,7 @@
                     false,
                     userId);
             if (ki != 1) {
-                throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Không thể tạo kpis_information");
+                throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to create kpis_information");
             }
 
             UUID assignmentId = UUID.randomUUID();
@@ -608,7 +606,7 @@
                     ASM_PENDING_ACCEPTANCE,
                     userId);
             if (ka != 1) {
-                throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Không thể tạo kpi_assignments");
+                throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to create kpi_assignments");
             }
             kpiAssignmentSnapshotService.createSnapshotForAssignment(assignmentId, userId);
             return assignmentId;
@@ -708,7 +706,7 @@
             String target = buildTargetDisplay(row);
             Integer sc = row.getStatusCode();
             String ftr = row.getFeedbackTargetRoleCode();
-            String statusName = sc != null ? ASM_STATUS_LABEL.getOrDefault(sc, "Mã " + sc) : null;
+            String statusName = sc != null ? ASM_STATUS_LABEL.getOrDefault(sc, "Code " + sc) : null;
             if (sc != null && sc == ASM_FEEDBACK_IN_PROGRESS) {
                 statusName = feedback407StatusLabel(ftr);
             }
@@ -920,20 +918,20 @@
                     boolean submittedRound) {
                 if (!canViewEvidence) {
                     if (approvedEval) {
-                        return "Đã duyệt - không chỉnh sửa";
+                        return "Approved — read-only";
                     }
                     if (pendingProposal) {
-                        return "Chờ PM/GM duyệt KPI đề xuất";
+                        return "Pending PM/GM approval for proposed KPI";
                     }
                     if (pendingAccept) {
-                        return "Có thể xem & gửi feedback";
+                        return "Can view & send feedback";
                     }
-                    return "Không thể mở minh chứng";
+                    return "Cannot open evidence";
                 }
                 if (!canEditEvidence && submittedRound) {
-                    return "Xem chi tiết minh chứng (đã nộp)";
+                    return "View evidence details (submitted)";
                 }
-                return "Tự đánh giá & bằng chứng";
+                return "Self-evaluation & evidence";
             }
 
             private static String memberEvaluationStateVi(String evaluationStatus, String feedbackTargetRoleCode) {
@@ -941,11 +939,11 @@
                     return null;
                 }
                 return switch (evaluationStatus) {
-                    case "not_started" -> "Chưa đánh giá";
-                    case "pending_approval" -> "Chờ duyệt";
-                    case "approved" -> "Đã duyệt";
-                    case "revision" -> "Cần làm lại";
-                    case "overdue" -> "Quá hạn";
+                    case "not_started" -> "Not Evaluated";
+                    case "pending_approval" -> "Pending Approval";
+                    case "approved" -> "Approved";
+                    case "revision" -> "Revision Required";
+                    case "overdue" -> "Overdue";
                     case "feedback" -> feedback407StatusLabel(feedbackTargetRoleCode);
                     default -> null;
                 };
@@ -1241,7 +1239,7 @@
         }
 
         /**
-         * Điểm tự đánh giá tự tính khi lưu minh chứng (CALC_RULE 802/803 + DSL trong {@code target_description}),
+         * Điểm tự đánh giá tự tính khi lưu minh chứng (CALC_RULE 801/802/803 + DSL trong {@code target_description}),
          * đồng bộ JSON evidences với FE {@code EvaluationEvidenceDrawer} / {@code memberKpiHelpers}.
          */
         private Integer computeAutoSelfScoreFromEvidences(MemberKpiAssignmentDTO row, String evidencesJson) {
@@ -1256,7 +1254,7 @@
             try {
                 JsonNode root = objectMapper.readTree(trimmed);
                 BigDecimal metric = null;
-                if (Objects.equals(rule, CALC_RULE_COMMENT)) {
+                if (Objects.equals(rule, CALC_RULE_COMMENT) || Objects.equals(rule, CALC_RULE_SUM)) {
                     metric = metricForCommentRule803(root);
                 } else if (Objects.equals(rule, CALC_RULE_AVERAGE)) {
                     metric = metricForAverageRule802(root, row.getCalculationTypeCode());

@@ -8,6 +8,8 @@ import type {
   GmKpiItem,
 } from '@/types/gm-employee-evaluation'
 import type { GmEvaluationHubApiResponse, GmEvaluationHubAssignmentApiRow } from '@/types/gm-evaluation-hub-api'
+import { codesFromPersistedCalculationMethod } from '@/utils/kpiCalculationCodes'
+import { isRecordStyleCalcRule, parsePmPortfolioEvidenceString } from '@/utils/memberKpiHelpers'
 
 function initialsFromName(name: string): string {
   const p = String(name ?? '')
@@ -199,6 +201,35 @@ function planActualEvidenceRowsFromObject(o: Record<string, unknown>): string[][
   return rows
 }
 
+function normalizeCalcRuleCode(raw: unknown): number | null {
+  const n = typeof raw === 'number' ? raw : Number.parseInt(String(raw ?? ''), 10)
+  return Number.isFinite(n) ? n : null
+}
+
+function rowCalcRuleCode(row: GmEvaluationHubAssignmentApiRow): number | null {
+  const fromExplicit = normalizeCalcRuleCode(
+    row.calculationRuleCode ?? row.calcRuleCode ?? row.calculation_rule_code,
+  )
+  if (fromExplicit != null) return fromExplicit
+
+  const persisted =
+    typeof row.calculationMethod === 'string' && row.calculationMethod.trim()
+      ? row.calculationMethod.trim()
+      : typeof row.calculation_method === 'string' && row.calculation_method.trim()
+        ? row.calculation_method.trim()
+        : ''
+  if (!persisted) return null
+  return codesFromPersistedCalculationMethod(persisted).calculationRuleCode
+}
+
+function isImplicitCommentRuleRows(rows: string[][]): boolean {
+  if (!rows.length) return false
+  const hasAnyActual = rows.some((r) => String(r[2] ?? '').trim() !== '')
+  if (!hasAnyActual) return false
+  const hasAnyPlan = rows.some((r) => String(r[1] ?? '').trim() !== '')
+  return !hasAnyPlan
+}
+
 function parseEvidenceObject(raw: string): Record<string, unknown> | null {
   if (!raw || (!raw.startsWith('{') && !raw.startsWith('['))) return null
   try {
@@ -274,8 +305,13 @@ function evidenceRowsFromObject(o: Record<string, unknown>): string[][] {
   return rows
 }
 
-function evidenceFromRow(row: GmEvaluationHubAssignmentApiRow): GmEvidenceTable {
-  const raw = String(row.evidences ?? '').trim()
+/** Bảng Evidence từ `kpi_assignments.evidences` — dùng chung evaluation sheet & diagnostics drawer. */
+export function evidenceTableFromEvidencesJson(
+  evidences: string | null | undefined,
+  calculationRuleCode?: number | null,
+): GmEvidenceTable {
+  const isCommentRule803 = isRecordStyleCalcRule(calculationRuleCode)
+  const raw = String(evidences ?? '').trim()
   if (raw && (raw.startsWith('{') || raw.startsWith('['))) {
     try {
       const j = JSON.parse(raw) as unknown
@@ -292,12 +328,16 @@ function evidenceFromRow(row: GmEvaluationHubAssignmentApiRow): GmEvidenceTable 
         const o = j as Record<string, unknown>
         const planActualRows = planActualEvidenceRowsFromObject(o)
         if (planActualRows.length > 0) {
+          const hidePlanCol = isCommentRule803 || isImplicitCommentRuleRows(planActualRows)
+          const rows = hidePlanCol
+            ? planActualRows.map((r) => [r[0] ?? '', r[2] ?? ''])
+            : planActualRows
           return {
             title: 'Evidence',
             icon: 'fas fa-paperclip',
             accent: 'emerald',
-            headers: ['Content', 'Plan', 'Actual'],
-            rows: planActualRows,
+            headers: hidePlanCol ? ['Content', 'Actual'] : ['Content', 'Plan', 'Actual'],
+            rows,
           }
         }
         const rows = evidenceRowsFromObject(o)
@@ -326,11 +366,17 @@ function evidenceFromRow(row: GmEvaluationHubAssignmentApiRow): GmEvidenceTable 
   }
 }
 
+function evidenceFromRow(row: GmEvaluationHubAssignmentApiRow): GmEvidenceTable {
+  return evidenceTableFromEvidencesJson(row.evidences, rowCalcRuleCode(row))
+}
+
 function toKpiItem(row: GmEvaluationHubAssignmentApiRow, index: number): GmKpiItem {
   const code = (row.masterCode ?? '').trim()
   const name = (row.masterName ?? '').trim()
   const title = [code, name].filter(Boolean).join(' · ') || `KPI ${index + 1}`
   const evidenceObject = parseEvidenceObject(String(row.evidences ?? '').trim())
+  const calcRuleCode = rowCalcRuleCode(row)
+  const parsedEvidences = parsePmPortfolioEvidenceString(row.evidences)
   const gmComment =
     evidenceObject && typeof evidenceObject.gmComment === 'string'
       ? evidenceObject.gmComment.trim()
@@ -342,6 +388,7 @@ function toKpiItem(row: GmEvaluationHubAssignmentApiRow, index: number): GmKpiIt
     /** Không gán mô tả target JSON dài vào drawer — chỉ hiển thị tiêu đề KPI (UI GM). */
     target: '',
     weight: parseWeight(row),
+    calcRuleCode,
     evidenceButtonLabel: 'Evidence',
     evidenceButtonIcon: 'fas fa-file-alt',
     evidenceTone: 'blue',
@@ -350,6 +397,10 @@ function toKpiItem(row: GmEvaluationHubAssignmentApiRow, index: number): GmKpiIt
     pmScore: parseReviewScore(row.endGmScore),
     pmSeedScore: parseReviewScore(row.endGmScore) ?? parseReviewScore(row.endPmScore),
     evidence: evidenceFromRow(row),
+    evidenceData: parsedEvidences.rows,
+    evidenceContent:
+      parsedEvidences.content || parsedEvidences.note || parsedEvidences.legacyPlain || '',
+    evidenceAttachments: parsedEvidences.attachments ?? [],
     gmComment,
     hubAssignmentStatusCode:
       typeof row.statusCode === 'number' && Number.isFinite(row.statusCode)

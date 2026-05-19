@@ -55,8 +55,8 @@ export function buildKpiDeadlineBanner(params: {
   if (daysLeft < 0) {
     return {
       kind: 'overdue',
-      title: `Đã quá hạn tự đánh giá ${subject}`,
-      subtitle: 'Vui lòng hoàn tất tự đánh giá và nộp bảng KPI sớm nhất để PM/HR xử lý.',
+      title: `${subject} self-evaluation overdue`,
+      subtitle: 'Please complete your self-evaluation and submit the KPI sheet as soon as possible for PM/HR to process.',
       bgClass: 'bg-rose-50',
       borderClass: 'border-rose-200',
       iconWrapClass: 'bg-rose-100 text-rose-600',
@@ -70,7 +70,7 @@ export function buildKpiDeadlineBanner(params: {
   if (daysLeft <= warningDays) {
     return {
       kind: 'warning',
-      title: `Kỳ đánh giá ${subject} đang diễn ra`,
+      title: `${subject} evaluation period is in progress`,
       daysLeft,
       bgClass: 'bg-amber-50',
       borderClass: 'border-amber-200',

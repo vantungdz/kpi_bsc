@@ -458,6 +458,33 @@ CREATE TABLE user_kpi_summaries (
 CREATE UNIQUE INDEX idx_unique_user_cycle_summary ON user_kpi_summaries(user_id, cycle_id) WHERE deleted_at IS NULL;
 
 -- ============================================================================
+-- MODULE 5b: KHUNG ĐIỂM ĐÁNH GIÁ (GM — mức gắn trực tiếp kpi_cycles)
+-- ============================================================================
+CREATE TABLE performance_rating_levels (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    cycle_id UUID REFERENCES kpi_cycles(id) NOT NULL,
+    sort_order SMALLINT NOT NULL,
+    level_code VARCHAR(10) NOT NULL,
+    label VARCHAR(120) NOT NULL,
+    min_score NUMERIC(5,2) NOT NULL,
+    max_score NUMERIC(5,2),
+    pitch NUMERIC(5,2) NOT NULL DEFAULT 0,
+    color_hex VARCHAR(7),
+    is_top_tier BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    created_by UUID,
+    updated_by UUID,
+    deleted_at TIMESTAMP WITH TIME ZONE
+);
+CREATE UNIQUE INDEX idx_performance_rating_levels_cycle_code_active
+    ON performance_rating_levels(cycle_id, level_code) WHERE deleted_at IS NULL;
+CREATE UNIQUE INDEX idx_performance_rating_levels_cycle_order_active
+    ON performance_rating_levels(cycle_id, sort_order) WHERE deleted_at IS NULL;
+CREATE INDEX idx_performance_rating_levels_cycle_id
+    ON performance_rating_levels(cycle_id) WHERE deleted_at IS NULL;
+
+-- ============================================================================
 -- MODULE 6: INDEXES TỐI ƯU PERFORMANCE
 -- ============================================================================
 CREATE INDEX idx_kpi_assign_user ON kpi_assignments(user_id) WHERE deleted_at IS NULL;

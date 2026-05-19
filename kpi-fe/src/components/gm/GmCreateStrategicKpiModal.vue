@@ -55,7 +55,7 @@ const open = defineModel<boolean>({ default: false })
 
 const props = withDefaults(
   defineProps<{
-    /** UUID `kpi_cycles.id` đang chọn ở header GM (sau khi tải `kpi-cycles-for-evaluation`). */
+    /** UUID `kpi_cycles.id` đang chọn ở header GM (`GET /common/kpi-cycles`). */
     cycleId: string
     /** Khi có — drawer mở ở chế độ sửa, điền form từ dòng diagnostics; không hiện block sao chép KPI. */
     editInitial?: GmHierarchyKpi | null
@@ -135,7 +135,7 @@ const emit = defineEmits<{
   evaluationCyclesLoaded: [rows: GmKpiCycleOption[]]
 }>()
 
-/** «Năm đánh giá»: `GET /kpi/gm/kpi-cycles-for-evaluation` — chu kỳ có dữ liệu KPI (gồm năm trước). */
+/** «Năm đánh giá»: `GET /kpi/gm/kpi-cycles-for-evaluation` — chu kỳ kpi_cycles, year ≥ hiện tại. */
 const evaluationCycleRows = ref<GmKpiCycleOption[]>([])
 const evaluationCyclesLoading = ref(false)
 const evaluationCyclesError = ref<string | null>(null)
@@ -184,6 +184,13 @@ function resolveDefaultFormCycleUuid(): string {
     if (match) return match.id
   }
   return rows[0]?.id ?? header
+}
+
+function resolveCurrentYearFormCycleUuid(): string {
+  const rows = evaluationCycleRows.value
+  const currentYear = new Date().getFullYear()
+  const match = rows.find((r) => r.year === currentYear)
+  return match?.id ?? resolveDefaultFormCycleUuid()
 }
 
 /** «Năm nguồn» sao chép: `GET /kpi/gm/kpi-cycles-with-kpis` (chỉ dữ liệu từ API). */
@@ -659,7 +666,7 @@ function buildPayloadFromTemplateApiItem(it: GmKpiTemplateItemRow): Record<strin
   }
 
   const base: Record<string, unknown> = {
-    cycleId: resolveDefaultFormCycleUuid(),
+    cycleId: resolveCurrentYearFormCycleUuid(),
     typeCode,
     perspective: cid,
     kpiName: String(it.masterName ?? '').trim() || 'KPI',

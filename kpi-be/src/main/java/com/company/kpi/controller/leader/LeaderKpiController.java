@@ -42,8 +42,10 @@ public class LeaderKpiController extends BaseController {
     }
 
     @GetMapping("/members")
-    public ResponseEntity<BaseResponse<LeaderMemberListResponse>> getMemberList(Authentication authentication) {
-        return success(leaderKpiService.getMemberList(UUID.fromString((String) authentication.getPrincipal())));
+    public ResponseEntity<BaseResponse<LeaderMemberListResponse>> getMemberList(
+            @RequestParam Integer year,
+            Authentication authentication) {
+        return success(leaderKpiService.getMemberList(UUID.fromString((String) authentication.getPrincipal()), year));
     }
 
     @GetMapping("/dashboard")

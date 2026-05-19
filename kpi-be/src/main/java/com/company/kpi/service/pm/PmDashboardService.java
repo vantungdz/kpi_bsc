@@ -80,6 +80,24 @@ public class PmDashboardService {
         return a.getEndPmScore();
     }
 
+    private static BigDecimal supervisorPortfolioScoreForPmNode(
+            KpiAssignment parentAssignment,
+            List<PmPortfolioCascadeChildRow> children,
+            UUID pmId,
+            Integer typeCode) {
+        if (Objects.equals(typeCode, 102) && children != null && pmId != null) {
+            for (PmPortfolioCascadeChildRow child : children) {
+                if (child == null || child.getChildUser() == null || child.getChildAssignment() == null) {
+                    continue;
+                }
+                if (pmId.equals(child.getChildUser().getId())) {
+                    return supervisorPortfolioScore(child.getChildAssignment());
+                }
+            }
+        }
+        return supervisorPortfolioScore(parentAssignment);
+    }
+
     private static boolean isPromotionKpi(KpiAssignmentDetailAggregate detail) {
         return detail != null
                 && detail.getKpiMaster() != null
@@ -242,7 +260,11 @@ public class PmDashboardService {
                         .actualResult(agg.getPmAssignment().getEvidences())
                         .feedbackNote(agg.getPmFeedbackNote())
                         .selfScore(pmSelfScore)
-                        .pmScore(supervisorPortfolioScore(agg.getPmAssignment()))
+                        .pmScore(supervisorPortfolioScoreForPmNode(
+                                agg.getPmAssignment(),
+                                agg.getCascadeChildren(),
+                                pmId,
+                                agg.getKpiMaster() != null ? agg.getKpiMaster().getTypeCode() : null))
                         .gmEvaluationComment(gmCommentFromEvidencesJson(agg.getPmAssignment().getEvidences()))
                         .isTree(agg.getKpiMaster() != null && agg.getKpiMaster().getTypeCode() != null && agg.getKpiMaster().getTypeCode() == 102)
                         .expanded(true)
@@ -460,14 +482,14 @@ public class PmDashboardService {
         if (!approve) {
             rejectReason = req.getRejectReason() == null ? "" : req.getRejectReason().trim();
             if (rejectReason.isEmpty()) {
-                throw AppException.badRequest("Vui lòng nhập lý do từ chối.");
+                throw AppException.badRequest("Please enter a rejection reason.");
             }
         }
         int n = kpiAssignmentMapper.updateMemberKpiApprovalStatusByPm(
                 req.getAssignmentId(), cycleId, pmId, newStatus, pmId, rejectReason);
         if (n == 0) {
             throw AppException.badRequest(
-                    "Không cập nhật được: không thấy KPI chờ duyệt (402) hoặc không thuộc quyền PM.");
+                    "Update failed: no pending KPI (402) found or not under PM's authority.");
         }
     }
 
@@ -482,7 +504,7 @@ public class PmDashboardService {
                 req.getAssignmentId(), cycleId, pmId, pmId);
         if (n == 0) {
             throw AppException.badRequest(
-                    "Không cập nhật được feedback: assignment không ở 407, không thuộc quyền PM, hoặc feedback đang chờ GM xử lý.");
+                    "Failed to update feedback: assignment is not at 407, not under PM's authority, or feedback is pending GM review.");
         }
     }
 
@@ -498,13 +520,13 @@ public class PmDashboardService {
         }
         UUID cycleId = cycleOpt.get().getId();
         if (!cycleId.equals(req.getCycleId())) {
-            throw AppException.badRequest("cycleId không khớp với năm chu kỳ.");
+            throw AppException.badRequest("cycleId does not match the cycle year.");
         }
         int n = kpiAssignmentMapper.updateMemberFeedbackStatusByPm(
                 req.getMemberFeedbackAssignmentId(), cycleId, pmId, pmId);
         if (n == 0) {
             throw AppException.badRequest(
-                    "Không cập nhật được feedback: assignment không ở 407, không thuộc quyền PM, hoặc feedback đang chờ GM xử lý.");
+                    "Failed to update feedback: assignment is not at 407, not under PM's authority, or feedback is pending GM review.");
         }
         Map<UUID, BigDecimal> targets = new LinkedHashMap<>();
         for (Map.Entry<String, BigDecimal> e : req.getMemberTargets().entrySet()) {
@@ -514,12 +536,12 @@ public class PmDashboardService {
             }
             BigDecimal target = e.getValue();
             if (target == null) {
-                throw AppException.badRequest("Thiếu target cho member: " + key);
+                throw AppException.badRequest("Missing target for member: " + key);
             }
             try {
                 targets.put(UUID.fromString(key), target);
             } catch (IllegalArgumentException ex) {
-                throw AppException.badRequest("memberTargets có khóa không phải UUID hợp lệ: " + key);
+                throw AppException.badRequest("memberTargets has an invalid UUID key: " + key);
             }
         }
         AssignMemberRequest cascade = new AssignMemberRequest();
@@ -545,7 +567,7 @@ public class PmDashboardService {
                 req.getAssignmentId(), cycleId, pmId, pmId);
         if (moved != 1) {
             throw AppException.badRequest(
-                    "Không thể gửi feedback: KPI không thuộc PM, sai chu kỳ hoặc không ở trạng thái 404.");
+                    "Cannot send feedback: KPI does not belong to PM, wrong cycle, or not at status 404.");
         }
         kpiAssignmentMapper.insertAssignmentFeedbackForGm(req.getAssignmentId(), cycleId, note, pmId);
     }
@@ -604,7 +626,7 @@ public class PmDashboardService {
         int updated = kpiAssignmentMapper.updatePmComment(assignmentId, cycleId, pmId, pmComment);
         if (updated == 0) {
             throw AppException.badRequest(
-                    "Không lưu được nhận xét PM: KPI không thuộc member dưới quyền PM hoặc không thuộc chu kỳ.");
+                    "Failed to save PM comment: KPI does not belong to a member under PM's authority or wrong cycle.");
         }
     }
 
@@ -619,7 +641,7 @@ public class PmDashboardService {
         boolean managed = userMapper.findTeamHierarchyBySupervisor(pmId, cycleId).stream()
                 .anyMatch(row -> memberId.equals(row.getId()));
         if (!managed) {
-            throw AppException.badRequest("Member không thuộc team do PM quản lý trong chu kỳ này.");
+            throw AppException.badRequest("Member is not part of the team managed by this PM in this cycle.");
         }
         String comment = Objects.toString(pmComment, "").trim();
         boolean promotion = Boolean.TRUE.equals(promotionScope);
@@ -654,7 +676,7 @@ public class PmDashboardService {
         boolean managed = userMapper.findTeamHierarchyBySupervisor(pmId, cycleId).stream()
                 .anyMatch(row -> memberId.equals(row.getId()));
         if (!managed) {
-            throw AppException.badRequest("Member không thuộc team do PM quản lý trong chu kỳ này.");
+            throw AppException.badRequest("Member is not part of the team managed by this PM in this cycle.");
         }
         UserKpiSummary s = userKpiSummaryMapper.findByUserIdAndCycleId(memberId, cycleId).orElse(null);
         String supP = s != null ? s.getEvaluationSupervisorComments() : null;
@@ -675,13 +697,13 @@ public class PmDashboardService {
     @Transactional
     public void savePmEndPmScoreForManagedMember(UUID pmId, UUID memberUserId, UUID assignmentId, Integer pmScore) {
         if (pmScore == null || pmScore < 1 || pmScore > 5) {
-            throw AppException.badRequest("Điểm PM phải từ 1 đến 5.");
+            throw AppException.badRequest("PM score must be between 1 and 5.");
         }
         int n = kpiAssignmentMapper.updateEndPmScoreForPmManagedMember(
                 assignmentId, memberUserId, pmId, java.math.BigDecimal.valueOf(pmScore));
         if (n != 1) {
             throw AppException.badRequest(
-                    "Không lưu được điểm PM: assignment không thuộc member dưới quyền PM, không ở trạng thái chờ đánh giá PM cuối kỳ (601), hoặc không tồn tại.");
+                    "Failed to save PM score: assignment does not belong to a member under PM's authority, is not at year-end evaluation status (601), or does not exist.");
         }
     }
 
@@ -690,7 +712,7 @@ public class PmDashboardService {
         var row = kpisInformationMapper.selectSelfCreatedKpiInfoForPmDelete(assignmentId, pmId);
         if (row == null) {
             throw AppException.badRequest(
-                    "KPI không thể xóa (chỉ cho phép KPI tự tạo ở trạng thái chờ duyệt/chờ xác nhận/từ chối)");
+                    "KPI cannot be deleted (only self-created KPIs in pending/awaiting/rejected status are eligible)");
         }
 
         kpiAssignmentMapper.softDeleteAssignmentsForKpiInformation(
@@ -700,7 +722,7 @@ public class PmDashboardService {
 
         int updatedInfo = kpisInformationMapper.softDeleteKpisInformationById(row.getKpiInformationId(), pmId);
         if (updatedInfo < 1) {
-            throw AppException.badRequest("KPI không thể xóa hoặc đã được xóa trước đó.");
+            throw AppException.badRequest("KPI cannot be deleted or has already been deleted.");
         }
 
         int remaining = kpisInformationMapper.countActiveKpisInformationByMasterKpiId(row.getMasterKpiId());

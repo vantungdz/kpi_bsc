@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { useToast } from 'vue-toastification'
 import { useAuthStore } from '@/stores/auth.store'
 import { pmKpiService } from '@/services/modules/kpi-pm.service'
 import type { PmMemberKpiApprovalItem } from '@/services/modules/kpi-pm.service'
+import type { GmKpiCycleOption } from '@/types/gm-kpi-cycle'
 import type {
   GmMidYearIssuesData,
   GmPmKpiRolloutPayload,
@@ -14,6 +16,7 @@ import type { GmProcessTimelineApiResponse } from '@/services/modules/kpi-gm.ser
 import {
   formatPmPortfolioActualCell,
   parsePmPortfolioEvidenceString,
+  pmPortfolioActualDisplayMode,
 } from '@/utils/memberKpiHelpers'
 import { formatKpiTargetWithUnit, kpiUnitCodeToFormUnit } from '@/utils/kpiUnitCodes'
 import { countPmEvaluationSubjectsInHierarchy } from '@/utils/pmEvaluationSubject'
@@ -27,6 +30,7 @@ import GmProcessTimeline from '@/components/gm/GmProcessTimeline.vue'
 import GmMemberKpiDrawer from '@/components/gm/GmMemberKpiDrawer.vue'
 
 const toast = useToast()
+const route = useRoute()
 const activeTab = ref('personal')
 const pmFeedbackPendingByScope = ref<{ portfolio: number; promotion: number }>({
   portfolio: 0,
@@ -49,9 +53,49 @@ const memberKpisCache = ref<Record<string, any[]>>({})
 
 // Control refresh of PM Portfolio tab after actions in drawers
 const personalKpiKey = ref(0)
-const approvalYear = new Date().getFullYear()
+const selectedYear = ref(new Date().getFullYear())
+const cycleOptions = ref<GmKpiCycleOption[]>([])
+const approvalYear = computed(() => selectedYear.value)
+const selectedYearReadonly = computed(() => {
+  const cycle = cycleOptions.value.find((row) => Number(row.year) === Number(selectedYear.value))
+  if (cycle) return Number(cycle.statusCode) !== 201
+  return selectedYear.value !== new Date().getFullYear()
+})
 /** Tăng để Team Review refetch hierarchy sau khi gửi đánh giá (không reload trang). */
 const teamReviewReloadNonce = ref(0)
+
+function syncYearFromRoute() {
+  const n = Number(route.query.year)
+  selectedYear.value = Number.isFinite(n) && n > 0 ? n : new Date().getFullYear()
+}
+
+async function refreshPmDashboardForYear() {
+  memberComments.value = {}
+  memberKpisCache.value = {}
+  approvalRawItems.value = []
+  processTimelineData.value = null
+  rightPanelVisible.value = false
+  rightPanelMode.value = 'none'
+  activeItem.value = null
+  personalKpiKey.value += 1
+  teamReviewReloadNonce.value += 1
+  await Promise.all([
+    loadProcessTimeline(),
+    loadApprovalRequests(),
+    loadTeamReviewPendingCount(),
+    loadPmPortfolioEvaluationGate(),
+  ])
+}
+
+async function loadCycleOptions() {
+  try {
+    const rows = await pmKpiService.getKpiCyclesForHeader()
+    cycleOptions.value = Array.isArray(rows) ? rows : []
+  } catch (error) {
+    console.error('Failed to load PM KPI cycles', error)
+    cycleOptions.value = []
+  }
+}
 
 /** Điều kiện gửi đánh giá KPI Member lên GM: mọi member trong cây đã nộp individual/team (≥501) cho PM. */
 const pmPortfolioEvalGate = ref<{
@@ -62,7 +106,7 @@ const pmPortfolioEvalGate = ref<{
 
 async function loadPmPortfolioEvaluationGate() {
   try {
-    const data = await pmKpiService.getPmPortfolioEvaluationGate(approvalYear)
+    const data = await pmKpiService.getPmPortfolioEvaluationGate(approvalYear.value)
     pmPortfolioEvalGate.value = {
       loaded: true,
       open: Boolean(data?.allPortfolioSubmittedToPm),
@@ -77,7 +121,7 @@ const teamPmEvaluationPendingCount = ref(0)
 
 async function loadTeamReviewPendingCount() {
   try {
-    const response = await pmKpiService.getTeamHierarchy(String(approvalYear))
+    const response = await pmKpiService.getTeamHierarchy(String(approvalYear.value))
     const roots = Array.isArray(response) ? response : []
     teamPmEvaluationPendingCount.value = countPmEvaluationSubjectsInHierarchy(roots)
   } catch {
@@ -105,7 +149,7 @@ const processTimelineData = ref<GmProcessTimelineApiResponse | null>(null)
 
 async function loadProcessTimeline() {
   try {
-    processTimelineData.value = await pmKpiService.getProcessTimeline(approvalYear)
+    processTimelineData.value = await pmKpiService.getProcessTimeline(approvalYear.value)
   } catch (e) {
     console.error(e)
     processTimelineData.value = null
@@ -298,7 +342,7 @@ function mapApprovalToUi(r: PmMemberKpiApprovalItem): PmRequestUiRow {
 async function loadApprovalRequests() {
   approvalLoading.value = true
   try {
-    const rows = await pmKpiService.listMemberKpiApprovals(approvalYear)
+    const rows = await pmKpiService.listMemberKpiApprovals(approvalYear.value)
     approvalRawItems.value = rows
 
     const openMemberApproval =
@@ -345,11 +389,12 @@ function apiErrorMessage(err: unknown): string {
 }
 
 async function submitApprovalDecision(req: PmRequestUiRow, approve: boolean, rejectReason?: string) {
+  if (selectedYearReadonly.value) return
   if (approvalSubmitting.value) return
   approvalSubmitting.value = true
   try {
     await pmKpiService.decideMemberKpiApproval({
-      year: approvalYear,
+      year: approvalYear.value,
       assignmentId: req.id,
       approve,
       rejectReason: approve ? undefined : (rejectReason ?? ''),
@@ -371,6 +416,7 @@ async function submitApprovalDecisionBatch(
   approve: boolean,
   rejectReason?: string,
 ) {
+  if (selectedYearReadonly.value) return
   const targets = rows.filter((r) => r.status === 'PENDING')
   if (!targets.length || approvalSubmitting.value) return
   approvalSubmitting.value = true
@@ -379,7 +425,7 @@ async function submitApprovalDecisionBatch(
     for (const req of targets) {
       try {
         await pmKpiService.decideMemberKpiApproval({
-          year: approvalYear,
+          year: approvalYear.value,
           assignmentId: req.id,
           approve,
           rejectReason: approve ? undefined : (rejectReason ?? ''),
@@ -413,6 +459,14 @@ watch(activeTab, (t) => {
   if (t === 'team') void loadPmPortfolioEvaluationGate()
 })
 
+watch(
+  () => route.query.year,
+  async () => {
+    syncYearFromRoute()
+    await refreshPmDashboardForYear()
+  },
+)
+
 watch(teamReviewReloadNonce, () => {
   void loadTeamReviewPendingCount()
   void loadPmPortfolioEvaluationGate()
@@ -424,7 +478,9 @@ const clearPmEvaluationStorage = () => {
 }
 
 onMounted(() => {
+  syncYearFromRoute()
   clearPmEvaluationStorage()
+  void loadCycleOptions()
   void loadProcessTimeline()
   void loadApprovalRequests()
   void loadTeamReviewPendingCount()
@@ -491,6 +547,7 @@ const activeItem = ref<any>(null)
 const pendingAssignDrawerMemberFeedbackAssignmentId = ref<string | undefined>(undefined)
 
 function openAssignDrawer(kpi: any) {
+  if (selectedYearReadonly.value) return
   pendingAssignDrawerMemberFeedbackAssignmentId.value = undefined
   activeItem.value = kpi
   rightPanelMode.value = 'assign'
@@ -498,6 +555,7 @@ function openAssignDrawer(kpi: any) {
 }
 
 function openAssignDrawerAfterMemberFeedback(payload: { parentKpi: any; feedbackAssignmentId: string }) {
+  if (selectedYearReadonly.value) return
   const id = String(payload?.feedbackAssignmentId ?? '').trim()
   pendingAssignDrawerMemberFeedbackAssignmentId.value = id || undefined
   activeItem.value = payload.parentKpi
@@ -562,7 +620,11 @@ const openKpiChildDetail = (payload: { child: any; parent: any }) => {
   const targetStr =
     child.target != null && String(child.target).trim() !== '' ? String(child.target).trim() : '—'
   const actualFormatted =
-    formatPmPortfolioActualCell(child.actualResult, parent.calculationTypeCode) || ''
+    formatPmPortfolioActualCell(
+      child.actualResult,
+      parent.calculationTypeCode,
+      pmPortfolioActualDisplayMode(parent.calculationRuleCode),
+    ) || ''
   const actualStr = actualFormatted || '—'
 
   const rawEvidences =
@@ -697,6 +759,8 @@ const handleRefresh = () => {
           v-if="activeTab === 'personal'"
           :key="`pf-${personalKpiKey}`"
           portfolio-scope="portfolio"
+          :year="approvalYear"
+          :readonly-year="selectedYearReadonly"
           @open-assign="openAssignDrawer"
           @open-assign-after-member-feedback="openAssignDrawerAfterMemberFeedback"
           @open-member-detail="openKpiChildDetail"
@@ -707,6 +771,8 @@ const handleRefresh = () => {
           v-if="activeTab === 'promotion'"
           :key="`pm-${personalKpiKey}`"
           portfolio-scope="promotion"
+          :year="approvalYear"
+          :readonly-year="selectedYearReadonly"
           @open-assign="openAssignDrawer"
           @open-assign-after-member-feedback="openAssignDrawerAfterMemberFeedback"
           @open-member-detail="openKpiChildDetail"
@@ -729,7 +795,7 @@ const handleRefresh = () => {
           v-if="activeTab === 'requests'"
           :members="approvalMemberSummaries"
           :loading="approvalLoading"
-          :action-busy="approvalSubmitting"
+          :action-busy="approvalSubmitting || selectedYearReadonly"
           @open-member="openMemberApprovalDrawer"
           @approve-selected="onApproveSelectedMembers"
           @reject-selected="onRejectSelectedMembers"
@@ -741,6 +807,7 @@ const handleRefresh = () => {
     <PmAssignKpiDrawer
       :open="rightPanelVisible && rightPanelMode === 'assign'"
       :kpi="rightPanelMode === 'assign' ? activeItem : null"
+      :readonly="selectedYearReadonly"
       :pending-member-feedback-assignment-id="pendingAssignDrawerMemberFeedbackAssignmentId"
       @close="onPmAssignDrawerClose"
       @refresh="handleRefresh"
@@ -748,6 +815,8 @@ const handleRefresh = () => {
     <PmMemberDetailDrawer
       :open="rightPanelVisible && rightPanelMode === 'member_detail'"
       :member="activeItem"
+      :year="approvalYear"
+      :readonly-year="selectedYearReadonly"
       :portfolio-gate-loaded="pmPortfolioEvalGate.loaded"
       :portfolio-gate-open="pmPortfolioEvalGate.open"
       :cached-supervisor-comments="
@@ -773,7 +842,7 @@ const handleRefresh = () => {
             }
           : null
       "
-      :action-busy="approvalSubmitting"
+      :action-busy="approvalSubmitting || selectedYearReadonly"
       @close="closePanel"
       @approve="onDrawerApproveRequest"
       @reject="onDrawerRejectRequest"

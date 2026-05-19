@@ -182,7 +182,15 @@ public interface KpiAssignmentMapper {
             @Param("endGmScore") BigDecimal endGmScore,
             @Param("updatedBy") UUID updatedBy);
 
-    /** Cập nhật comment theo từng KPI của GM vào {@code evidences.gmComment}. */
+    /** Sync a Team KPI parent only after every active child has completed the same GM review phase. */
+    int syncCompletedTeamParentFromGmConfirmedChild(
+            @Param("childAssignmentId") UUID childAssignmentId,
+            @Param("cycleId") UUID cycleId,
+            @Param("waitingStatus") Integer waitingStatus,
+            @Param("completedStatus") Integer completedStatus,
+            @Param("updatedBy") UUID updatedBy);
+
+    /** Cáº­p nháº­t comment theo tá»«ng KPI cá»§a GM vÃ o {@code evidences.gmComment}. */
     int updateGmEvaluationHubLineComment(
             @Param("assignmentId") UUID assignmentId,
             @Param("cycleId") UUID cycleId,

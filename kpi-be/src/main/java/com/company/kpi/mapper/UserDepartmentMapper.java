@@ -12,6 +12,9 @@ public interface UserDepartmentMapper {
 
     List<LeaderMemberInfoDTO> findLeaderMemberListInfo(UUID leaderId);
 
+    List<LeaderMemberInfoDTO> findLeaderMemberListByYear(@Param("leaderId") UUID leaderId,
+                                                         @Param("cycleId") UUID cycleId);
+
     // ── Thêm từ AdminMapper ───────────────────────────────────────────────────
     void insertUserDepartment(@Param("userId") UUID userId,
                               @Param("departmentId") UUID departmentId,

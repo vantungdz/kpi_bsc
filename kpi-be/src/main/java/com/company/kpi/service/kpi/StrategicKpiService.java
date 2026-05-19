@@ -24,6 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -64,8 +65,8 @@ public class StrategicKpiService {
                     "Updating an existing KPI via this endpoint is not supported; omit editingKpiInformationId.");
         }
 
-        kpiCycleMapper.findById(req.getCycleId())
-                .orElseThrow(() -> AppException.notFound("KPI cycle not found: " + req.getCycleId()));
+        UUID cycleId = resolveCreateCycleId(req.getCycleId());
+        req.setCycleId(cycleId);
 
         if (kpiCategoryMapper.countActiveById(req.getPerspective()) < 1) {
             throw AppException.badRequest("Invalid or inactive KPI category (perspective): " + req.getPerspective());
@@ -103,7 +104,7 @@ public class StrategicKpiService {
         String scoringJson = kpiScoringRulesService.serializeForPersistence(req.getTargetDescription());
         kpisInformationMapper.insertKpisInformation(
                 infoId,
-                req.getCycleId(),
+                cycleId,
                 masterId,
                 scoringJson,
                 targetNum,
@@ -117,7 +118,7 @@ public class StrategicKpiService {
             parentAssignmentId = UUID.randomUUID();
             rows.add(KpiAssignmentInsertRow.builder()
                     .id(parentAssignmentId)
-                    .cycleId(req.getCycleId())
+                    .cycleId(cycleId)
                     .kpiInfoId(infoId)
                     .userId(actorId)
                     .jobTitleId(null)
@@ -129,7 +130,7 @@ public class StrategicKpiService {
         }
 
         rows.addAll(buildAssignmentRows(
-                assigneeUserIds, type, req, infoId, req.getCycleId(), targetNum, actorId, role, parentAssignmentId));
+                assigneeUserIds, type, req, infoId, cycleId, targetNum, actorId, role, parentAssignmentId));
 
         if (!rows.isEmpty()) {
             kpiAssignmentMapper.insertKpiAssignments(rows);
@@ -141,7 +142,7 @@ public class StrategicKpiService {
 
         return StrategicKpiResponse.builder()
                 .kpiInformationId(infoId)
-                .cycleId(req.getCycleId())
+                .cycleId(cycleId)
                 .masterKpiId(masterId)
                 .code(null)
                 .name(req.getKpiName().trim())
@@ -158,6 +159,19 @@ public class StrategicKpiService {
                 .isImportant(important)
                 .assignmentsCreated(rows.size())
                 .build();
+    }
+
+    private UUID resolveCreateCycleId(UUID requestedCycleId) {
+        if (requestedCycleId != null) {
+            kpiCycleMapper.findById(requestedCycleId)
+                    .orElseThrow(() -> AppException.notFound("KPI cycle not found: " + requestedCycleId));
+            return requestedCycleId;
+        }
+
+        int currentYear = LocalDate.now().getYear();
+        return kpiCycleMapper.findByYear(currentYear)
+                .orElseThrow(() -> AppException.notFound("KPI cycle not found for current year: " + currentYear))
+                .getId();
     }
 
     // ── UPDATE ────────────────────────────────────────────────────────────────
@@ -584,18 +598,18 @@ public class StrategicKpiService {
             Object raw = lookupPmTargetRaw(pm, uid);
             if (raw == null) {
                 throw AppException.badRequest(
-                        "Team KPI: thiếu mục tiêu cho PM đã chọn");
+                        "Team KPI: missing target for the selected PM");
             }
             String s = String.valueOf(raw).trim();
             if (s.isEmpty()) {
                 throw AppException.badRequest(
-                        "Team KPI: Target value không được để trống cho PM");
+                        "Team KPI: target value cannot be empty for PM");
             }
             try {
                 BigDecimal val = normalizeTargetValue(new BigDecimal(s));
                 if (val.compareTo(BigDecimal.ZERO) < 0) {
-                    throw AppException.badRequest(
-                            "Team KPI: mục tiêu PM phải ≥ 0");
+                throw AppException.badRequest(
+                        "Team KPI: PM target must be ≥ 0");
                 }
             } catch (NumberFormatException ex) {
                 throw AppException.badRequest("pmTargets has invalid number for user " + uid + ": " + s);
@@ -763,7 +777,7 @@ public class StrategicKpiService {
                     req.getParentAssignmentId(), req.getCycleId(), userId);
             if (submittedChildren > 0) {
                 throw AppException.badRequest(
-                        "Không thể lưu phân bổ vì member đã gửi actual cho PM duyệt.");
+                        "Cannot save allocation because the member has already submitted actuals for PM review.");
             }
 
             // Phần target chưa phân không tự gán cho PM khi lưu — chỉ khi PM có trong
@@ -843,7 +857,7 @@ public class StrategicKpiService {
                 && !userMapper.userHasRoleCode(currentUserId, "GM")
                 && kpiAssignmentMapper.existsTeamCascadeBlockingPmAccept(currentUserId, request.getCycleId())) {
             throw AppException.badRequest(
-                    "Vui lòng phân bổ ít nhất một thành viên cho mỗi KPI Team và chờ họ xác nhận trước khi chấp nhận KPI.");
+                    "Please allocate at least one member per Team KPI and wait for their confirmation before accepting the KPI.");
         }
 
         // PM gửi đánh giá KPI Member lên GM (501→502 / 601→602): cần mọi member trong cây đã nộp portfolio (individual/team ≥ 501).
@@ -865,9 +879,9 @@ public class StrategicKpiService {
                             .filter(s -> !s.isEmpty())
                             .collect(Collectors.joining(", "));
                     throw AppException.badRequest(
-                            "Chưa thể gửi đánh giá KPI Member lên GM: còn thành viên chưa nộp kết quả cho PM "
-                                    + "(KPI individual/team chưa đạt trạng thái chờ PM — dưới 501)."
-                                    + (names.isEmpty() ? "" : " Còn thiếu: " + names + "."));
+                            "Cannot send Member KPI evaluation to GM: some members have not submitted results to PM "
+                                    + "(individual/team KPIs have not reached pending PM status — below 501)."
+                                    + (names.isEmpty() ? "" : " Missing: " + names + "."));
                 }
             }
         }
@@ -887,8 +901,8 @@ public class StrategicKpiService {
                     completedStatus);
             if (blockingTeamMembers > 0) {
                 throw AppException.badRequest(waitingGmStatus == 502
-                        ? "Vui lòng gửi toàn bộ KPI Team của member lên GM duyệt giữa kỳ trước (trạng thái 502)."
-                        : "Vui lòng gửi toàn bộ KPI Team của member lên GM duyệt cuối kỳ trước (trạng thái 602).");
+                        ? "Please send all member Team KPIs to GM for mid-year review first (status 502)."
+                        : "Please send all member Team KPIs to GM for year-end review first (status 602).");
             }
         }
 

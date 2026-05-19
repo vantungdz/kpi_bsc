@@ -11,6 +11,7 @@ import type {
   KpiRegistrationInitResponse, // Thêm mới cho Assign Drawer
   KpiRegistrationRequest       // Thêm mới cho Assign Drawer
 } from '@/types/kpi'
+import type { GmKpiCycleOption } from '@/types/gm-kpi-cycle'
 
 /** GET /api/kpi/pm/dashboard?year=2025 */
 export async function apiGetPmKpiDashboard(year?: number): Promise<ApiResponse<PmKpiDashboard>> {
@@ -20,6 +21,11 @@ export async function apiGetPmKpiDashboard(year?: number): Promise<ApiResponse<P
 /** GET /api/pm/dashboard/init?year=... */
 export async function apiGetPmDashboardInit(year?: string): Promise<ApiResponse<PmKpiDashboard>> {
   return http.get('/pm/dashboard/init', { params: year ? { year } : {} }).then(r => r.data)
+}
+
+/** GET /common/kpi-cycles — mọi chu kỳ trong kpi_cycles cho dropdown năm PM. */
+export async function apiGetPmKpiCyclesForHeader(): Promise<ApiResponse<GmKpiCycleOption[]>> {
+  return http.get('/common/kpi-cycles').then(r => r.data)
 }
 
 /** GET /v1/pm/dashboard/process-timeline?year= — timeline vấn đề chỉ trong section của PM đăng nhập. */
@@ -223,6 +229,7 @@ export async function apiDeleteSelfCreatedPmKpi(assignmentId: string): Promise<A
 export const pmKpiService = {
   getDashboard: (year?: number) => apiGetPmKpiDashboard(year).then(r => r.data),
   getInitialization: (year?: string) => apiGetPmDashboardInit(year).then(r => r.data),
+  getKpiCyclesForHeader: () => apiGetPmKpiCyclesForHeader().then(r => r.data),
   getProcessTimeline: (year: number) => apiGetPmProcessTimeline(year),
   scoreItem: (memberId: string, itemId: string, score: number) => apiPmScore(memberId, itemId, score).then(r => r.data),
   approveSheet: (memberId: string, year: number) => apiPmApproveSheet(memberId, year).then(r => r.data),

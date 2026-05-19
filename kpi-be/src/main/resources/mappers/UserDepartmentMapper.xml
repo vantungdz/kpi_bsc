@@ -22,6 +22,24 @@
             AND r.deleted_at IS NULL
             AND jf.deleted_at IS NULL
     </select>
+
+    <!-- Lấy danh sách members theo năm cụ thể dựa vào snapshot lịch sử KPI assignment -->
+    <select id="findLeaderMemberListByYear" resultType="com.company.kpi.response.leader.LeaderMemberInfoDTO">
+        SELECT DISTINCT ON (kas.user_id)
+            kas.user_id        AS member_id,
+            kas.user_full_name AS full_name,
+            kas.user_email     AS email,
+            r.name             AS rank,
+            jf.name            AS job_title,
+            jt.name            AS job_level
+        FROM public.kpi_assignment_snapshots kas
+            LEFT JOIN public.job_titles jt  ON kas.job_title_id = jt.id  AND jt.deleted_at IS NULL
+            LEFT JOIN public.ranks r        ON jt.rank_id = r.id         AND r.deleted_at IS NULL
+            LEFT JOIN public.job_families jf ON jt.job_family_id = jf.id AND jf.deleted_at IS NULL
+        WHERE kas.supervisor_id = #{leaderId, jdbcType=OTHER}
+          AND kas.cycle_id      = #{cycleId, jdbcType=OTHER}
+          AND kas.user_id IS NOT NULL
+    </select>
     <!-- ── Thêm từ AdminMapper ─────────────────────────────────────────────────── -->
     <insert id="insertUserDepartment">
         INSERT INTO user_departments (user_id, department_id, supervisor_id, is_primary)

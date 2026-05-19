@@ -30,7 +30,7 @@ function selectYear(year: number) {
             class="flex items-center gap-2.5 px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 shadow-sm transition-all hover:bg-slate-50 hover:border-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
             @click="showDropdown = !showDropdown">
             <i class="fas fa-calendar-alt text-emerald-600" />
-            <span>Năm: {{ modelValue }}</span>
+            <span>Year: {{ modelValue }}</span>
             <i class="fas fa-chevron-down text-[10px] text-slate-400 transition-transform duration-200 ml-1"
                 :class="showDropdown ? 'rotate-180' : ''" />
         </button>
@@ -60,7 +60,7 @@ function selectYear(year: number) {
 
                         <span v-if="yearOption.isCurrent"
                             class="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-700">
-                            Hiện tại
+                            Current
                         </span>
                     </button>
                 </div>

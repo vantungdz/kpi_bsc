@@ -15,6 +15,8 @@ public class GmDiagKpiNode {
     private String name;
     private String weight;
     private String target;
+    /** {@code kpis_information.target_description} — quy tắc chấm điểm (JSON DSL / rawInput). */
+    private String targetDescription;
     /**
      * So khớp target KPI (catalog) với tổng target hiển thị trên các dòng khối (department),
      * không cộng lặp từng assignment con: {@code short} | {@code ok} | {@code excess}.

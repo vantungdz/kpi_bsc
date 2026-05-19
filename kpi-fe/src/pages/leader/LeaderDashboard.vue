@@ -21,10 +21,7 @@ const activeTab = ref<'personal' | 'team' | 'promotion'>('personal')
 const isReadonly = computed(() => isReadonlyKpiYear(selectedYear.value))
 
 const currentYear = new Date().getFullYear()
-const availableYears = Array.from({ length: 5 }, (_, i) => {
-  const year = currentYear - 3 + i
-  return { value: year, label: `Năm ${year}` }
-}).reverse()
+const availableYears = ref<{ value: number; label: string }[]>([])
 
 // ── Create individual KPI ─────────────────────────────────────────────────────
 const showCreateIndividualKpiDrawer = ref(false)
@@ -80,7 +77,35 @@ async function loadSummary() {
   cycleData.value = cycleRs.status === 'fulfilled' ? cycleRs.value : null
 }
 
-onMounted(loadSummary)
+async function loadAvailableYears(): Promise<boolean> {
+  try {
+    const rows = await kpiCycleService.getKpiCyclesForDropdown()
+    const years = rows
+      .map(row => Number(row.year))
+      .filter(year => Number.isFinite(year))
+      .sort((a, b) => b - a)
+      .map(year => ({ value: year, label: `Year ${year}` }))
+    availableYears.value = years
+
+    if (years.length > 0 && !years.some(y => y.value === selectedYear.value)) {
+      selectedYear.value = years[0].value
+      return true
+    }
+    return false
+  } catch {
+    const fallbackYears = Array.from({ length: 5 }, (_, i) => {
+      const year = currentYear - 3 + i
+      return { value: year, label: `Year ${year}` }
+    }).reverse()
+    availableYears.value = fallbackYears
+    return false
+  }
+}
+
+onMounted(async () => {
+  const didChangeYear = await loadAvailableYears()
+  if (!didChangeYear) await loadSummary()
+})
 watch(selectedYear, loadSummary)
 
 const evidenceTotalCount = computed(() => {
@@ -283,10 +308,10 @@ function pickGlobalDeadlineBanner(
   if (bothOverdue) {
     return {
       banner: {
-        ...promotionBanner,
-        title: 'Bạn có KPI đang quá hạn tự đánh giá',
-        subtitle: 'Vui lòng hoàn tất tự đánh giá KPI Personal và KPI thăng tiến sớm nhất để PM/HR xử lý.',
-      },
+            ...promotionBanner,
+            title: 'You have KPIs with overdue self-evaluations',
+            subtitle: 'Please complete your Personal KPI and Promotion KPI self-evaluations as soon as possible for PM/HR to process.',
+          },
       targetTab: 'promotion',
     }
   }
@@ -326,13 +351,13 @@ function buildLeaderDeadlineBanner(
 }
 
 const kpiDeadlineBanner = computed((): KpiDeadlineBannerVm | null => {
-  const promotionBanner = buildLeaderDeadlineBanner(promotionSummaryData.value, 'KPI thăng tiến')
+  const promotionBanner = buildLeaderDeadlineBanner(promotionSummaryData.value, 'Promotion KPI')
   const personalBanner = buildLeaderDeadlineBanner(summaryData.value, 'KPI')
   return pickGlobalDeadlineBanner(promotionBanner, personalBanner).banner
 })
 
 const kpiDeadlineBannerTargetTab = computed<LeaderBannerTarget>(() => {
-  const promotionBanner = buildLeaderDeadlineBanner(promotionSummaryData.value, 'KPI thăng tiến')
+  const promotionBanner = buildLeaderDeadlineBanner(promotionSummaryData.value, 'Promotion KPI')
   const personalBanner = buildLeaderDeadlineBanner(summaryData.value, 'KPI')
   return pickGlobalDeadlineBanner(promotionBanner, personalBanner).targetTab
 })
@@ -368,15 +393,15 @@ function handleDeadlineBannerCtaClick() {
           <i class="fas fa-lock text-lg" />
         </div>
         <div class="min-w-0">
-          <p class="font-bold text-sm text-slate-800">Chế độ chỉ xem (năm {{ selectedYear }})</p>
+          <p class="font-bold text-sm text-slate-800">Read-only mode (year {{ selectedYear }})</p>
           <p class="text-sm mt-1 leading-snug text-slate-600">
-            Bảng KPI cá nhân và drawer hiện đang bị khóa — không thể chỉnh sửa hay lưu dữ liệu.
+            The personal KPI table and drawer are currently locked — editing and saving data is not allowed.
           </p>
         </div>
       </div>
       <div class="flex flex-wrap items-center gap-2 shrink-0 justify-end">
         <span class="px-4 py-2 rounded-lg text-sm font-bold bg-slate-200/70 text-slate-500 border border-slate-300/50 cursor-not-allowed flex items-center gap-1.5">
-          <i class="fas fa-eye text-xs" /> Chỉ xem
+          <i class="fas fa-eye text-xs" /> View Only
         </span>
       </div>
     </div>
@@ -392,7 +417,7 @@ function handleDeadlineBannerCtaClick() {
     <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
       <div>
         <h2 class="text-2xl font-bold text-slate-900 tracking-tight">Leader Dashboard</h2>
-        <p class="text-slate-500 text-sm mt-1">Tổng quan team và KPI cá nhân của Leader.</p>
+          <p class="text-slate-500 text-sm mt-1">Team overview and Leader's personal KPI.</p>
       </div>
       <div class="flex gap-3">
         <select
@@ -425,16 +450,16 @@ function handleDeadlineBannerCtaClick() {
         </div>
         <div class="z-10 min-w-0">
           <p class="mb-1 text-xs font-bold uppercase tracking-wider text-slate-500">
-            Tình trạng bằng chứng ({{ activeTab === 'promotion' ? 'Promotion' : 'Personal' }})
+            Evidence Status ({{ activeTab === 'promotion' ? 'Promotion' : 'Personal' }})
           </p>
           <p class="text-2xl font-bold text-slate-800">
             {{ evidenceCount }}
             <span class="text-sm font-bold text-slate-400">/ {{ evidenceTotalCount }}</span>
             <span
               v-if="evidenceCount < evidenceTotalCount && evidenceTotalCount > 0"
-              class="mt-0.5 text-[11px] font-semibold text-orange-500"
+              class="mt-0.5 text-[11px] font-semibold text-orange-500 ml-2"
             >
-              ( Cần bổ sung {{ evidenceTotalCount - evidenceCount }} mục )
+              ( {{ evidenceTotalCount - evidenceCount }} item(s) needed )
             </span>
           </p>
         </div>
@@ -450,8 +475,8 @@ function handleDeadlineBannerCtaClick() {
           <p class="mb-1 text-xs font-bold uppercase tracking-wider text-slate-500">
             {{
               leaderManagerWeightedAvg !== null
-                ? `Điểm trung bình (Average score) của Final Score (${activeTab === 'promotion' ? 'Promotion' : 'Personal'}, có trọng số)`
-                : `Điểm trung bình (Average score) của Self Score (${activeTab === 'promotion' ? 'Promotion' : 'Personal'}, có trọng số)`
+                ? `Weighted Average of Final Score (${activeTab === 'promotion' ? 'Promotion' : 'Personal'})`
+                : `Weighted Average of Self Score (${activeTab === 'promotion' ? 'Promotion' : 'Personal'})`
             }}
           </p>
           <div class="flex items-baseline gap-2">
@@ -506,13 +531,13 @@ function handleDeadlineBannerCtaClick() {
           @click="openCreateIndividualDrawer"
         >
           <i class="fas fa-plus text-xs" aria-hidden="true" />
-          Tạo KPI
+          Create KPI
         </button>
       </div>
 
       <CreateIndividualKpiDrawer
         v-model="showCreateIndividualKpiDrawer"
-        :cycle-year="String(selectedYear)"
+        :cycle-year="String(currentYear)"
         :edit-item="editingRejectedSelfCreatedItem"
         @saved="onLeaderIndividualKpiSaved"
       />
@@ -539,7 +564,7 @@ function handleDeadlineBannerCtaClick() {
               <h3 class="text-base font-bold text-slate-900 flex items-center gap-2">
                 <i class="fas fa-users text-emerald-600" /> Team Performance Overview
               </h3>
-              <p class="text-xs text-slate-500 mt-0.5">Nhấn vào thành viên để xem chi tiết KPI và phê duyệt.</p>
+              <p class="text-xs text-slate-500 mt-0.5">Click on a member to view KPI details and approve.</p>
             </div>
           </div>
           <TeamMemberTable :year="selectedYear" />

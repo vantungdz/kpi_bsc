@@ -5,12 +5,141 @@
 import type { KpiItem, MemberKpiEvaluationStatus } from '@/types/kpi'
 
 // ── Calculation rule / type codes (mirrors sys_status_codes in DB) ──────────
+export const CALC_RULE_SUM = 801
 export const CALC_RULE_AVERAGE = 802
 export const CALC_RULE_COMMENT = 803
 export const CALC_TYPE_PLAN_OVER_ACTUAL = 702
 
-/** 802 + 701/702 → ratio form with auto-preview; 803 → text + content textarea */
-export type EvidenceFormMode = 'average' | 'comment'
+/** 802 → Plan+Actual+Comment; 803/801 → Comment+Actual (nhiều record) */
+export type EvidenceFormMode = 'average' | 'comment' | 'sum'
+
+/** Layout nhiều dòng Comment + Actual (803 TB Actual, 801 tổng Actual). */
+export function isRecordStyleFormMode(mode: EvidenceFormMode): boolean {
+  return mode === 'comment' || mode === 'sum'
+}
+
+/** CALC_RULE 801/803 — layout Comment+Actual, roll-up tổng ở bảng PM/GM. */
+export function isRecordStyleCalcRule(calculationRuleCode: unknown): boolean {
+  const rule = normalizeCalculationRuleCode(calculationRuleCode)
+  return rule === CALC_RULE_COMMENT || rule === CALC_RULE_SUM
+}
+
+export type PlanActualField = 'comment' | 'plan' | 'actual'
+
+export function requiredPlanActualFields(mode: EvidenceFormMode): PlanActualField[] {
+  return isRecordStyleFormMode(mode) ? ['comment', 'actual'] : ['comment', 'plan', 'actual']
+}
+
+export function planActualRowPartiallyFilled(
+  row: { comment: string; plan: string; actual: string },
+  fields: PlanActualField[],
+): boolean {
+  const vals = fields.map(f => String(row[f] ?? '').trim())
+  return vals.some(v => v.length > 0) && vals.some(v => v.length === 0)
+}
+
+/** CALC_RULE 803 — trung bình cộng các giá trị Actual (số) trên nhiều record. */
+export function averageActualNumeric(rows: Array<{ actual: string }>): number | null {
+  const values = rows
+    .map(r => parseNumericFromField(String(r.actual ?? '')))
+    .filter((n): n is number => n != null)
+  if (!values.length) return null
+  return values.reduce((sum, x) => sum + x, 0) / values.length
+}
+
+export function averageActualResultDisplay(rows: Array<{ actual: string }>): string | undefined {
+  const avg = averageActualNumeric(rows)
+  if (avg == null) return undefined
+  return Number.isInteger(avg) ? String(avg) : avg.toFixed(2)
+}
+
+/** CALC_RULE 801 — tổng các giá trị Actual (số) trên nhiều record. */
+export function sumActualNumeric(rows: Array<{ actual: string }>): number | null {
+  const values = rows
+    .map(r => parseNumericFromField(String(r.actual ?? '')))
+    .filter((n): n is number => n != null)
+  if (!values.length) return null
+  return values.reduce((sum, x) => sum + x, 0)
+}
+
+export function sumActualResultDisplay(rows: Array<{ actual: string }>): string | undefined {
+  const total = sumActualNumeric(rows)
+  if (total == null) return undefined
+  return Number.isInteger(total) ? String(total) : total.toFixed(2)
+}
+
+export function recordStyleMetricNumeric(
+  mode: EvidenceFormMode,
+  rows: Array<{ actual: string }>,
+): number | null {
+  if (mode === 'sum') return sumActualNumeric(rows)
+  if (mode === 'comment') return averageActualNumeric(rows)
+  return null
+}
+
+export function recordStyleResultDisplay(
+  mode: EvidenceFormMode,
+  rows: Array<{ actual: string }>,
+): string | undefined {
+  if (mode === 'sum') return sumActualResultDisplay(rows)
+  if (mode === 'comment') return averageActualResultDisplay(rows)
+  return undefined
+}
+
+/** Hiển thị cột Actual Result từ JSON evidences (Member/Leader table). */
+export function formatActualResultFromEvidencesJson(
+  evidencesJson: string | null | undefined,
+  calcRule: number | null | undefined,
+  calcType: number | null | undefined,
+): string {
+  if (!evidencesJson) return '-'
+  try {
+    const parsed = JSON.parse(evidencesJson) as Record<string, unknown>
+    const rule = normalizeCalculationRuleCode(calcRule)
+    const stored = String(parsed.actual ?? parsed.result ?? '').trim()
+    if (rule === CALC_RULE_SUM || rule === CALC_RULE_COMMENT) {
+      if (stored) return stored
+    }
+    const records = Array.isArray(parsed.planActualRecords)
+      ? (parsed.planActualRecords as Array<{ plan?: string; actual?: string }>)
+      : []
+    if (records.length && rule === CALC_RULE_AVERAGE) {
+      const values = records
+        .map(r => computeRatioPreview(String(r.plan ?? ''), String(r.actual ?? ''), calcType))
+        .filter((v): v is string => v !== null)
+        .map(v => parseNumericFromField(v))
+        .filter((n): n is number => n !== null)
+      if (values.length) {
+        const avg = values.reduce((s, x) => s + x, 0) / values.length
+        return `${avg.toFixed(1)}%`
+      }
+    }
+    if (records.length && rule === CALC_RULE_COMMENT) {
+      const display = averageActualResultDisplay(
+        records.map(r => ({ actual: String(r.actual ?? '') })),
+      )
+      if (display) return display
+    }
+    if (records.length && rule === CALC_RULE_SUM) {
+      const display = sumActualResultDisplay(
+        records.map(r => ({ actual: String(r.actual ?? '') })),
+      )
+      if (display) return display
+    }
+    const waRecords = Array.isArray(parsed.waTimeRecords)
+      ? (parsed.waTimeRecords as Array<{ spent?: string }>)
+      : []
+    if (waRecords.length) {
+      const totalSpent = waRecords.reduce((s, r) => s + (parseFloat(String(r.spent ?? '')) || 0), 0)
+      if (totalSpent > 0) return `${totalSpent}h`
+    }
+    const note = String(parsed.note ?? parsed.content ?? '').trim()
+    if (note) return note.length > 40 ? `${note.slice(0, 40)}…` : note
+  } catch {
+    /* ignore */
+  }
+  return '-'
+}
 
 export const WA_MONTH_OPTIONS = Array.from({ length: 12 }, (_, i) => ({
   value: String(i + 1),
@@ -37,6 +166,7 @@ export function normalizeCalculationRuleCode(raw: unknown): number | null {
 
 export function resolveFormMode(item: KpiItem): EvidenceFormMode {
   const rule = normalizeCalculationRuleCode(item.calculationRuleCode)
+  if (rule === CALC_RULE_SUM) return 'sum'
   if (rule === CALC_RULE_COMMENT) return 'comment'
   if (rule === CALC_RULE_AVERAGE) return 'average'
   return 'comment'
@@ -127,8 +257,17 @@ export function isEvidenceImageUrl(url: string): boolean {
   return /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(path)
 }
 
-/** `list` — nối từng % theo dòng; `mean` — trung bình cộng các % (vd drawer đánh giá PM). */
-export type PmPortfolioActualDisplayMode = 'list' | 'mean'
+/** `list` — nối từng % theo dòng; `mean` — TB % (802); `sum` — tổng Actual (801). */
+export type PmPortfolioActualDisplayMode = 'list' | 'mean' | 'sum'
+
+export function pmPortfolioActualDisplayMode(
+  calculationRuleCode: unknown,
+): PmPortfolioActualDisplayMode {
+  const rule = normalizeCalculationRuleCode(calculationRuleCode)
+  if (rule === CALC_RULE_AVERAGE) return 'mean'
+  if (rule === CALC_RULE_SUM) return 'sum'
+  return 'list'
+}
 
 function meanPercentFromRatioPreviewStrings(bits: string[]): string {
   const nums: number[] = []
@@ -175,6 +314,10 @@ export function formatPmPortfolioActualCell(
         .map((r) => parseNumericFromField(String(r.actual ?? '')))
         .filter((n): n is number => n != null)
       if (numericActuals.length && !bits.length) {
+        if (displayMode === 'sum') {
+          const total = numericActuals.reduce((a, c) => a + c, 0)
+          return Number.isInteger(total) ? String(total) : total.toFixed(2)
+        }
         const avg = numericActuals.reduce((a, c) => a + c, 0) / numericActuals.length
         const avgStr = Number.isInteger(avg) ? String(avg) : avg.toFixed(2)
         return displayMode === 'mean' ? avgStr : avgStr
@@ -184,8 +327,8 @@ export function formatPmPortfolioActualCell(
         .filter(Boolean)
       if (texts.length) return texts.slice(0, 2).join(' · ') + (texts.length > 2 ? '…' : '')
     }
-    // KPI rule 803 / comment mode: ưu tiên trường actual.
-    const actual = String(o.actual ?? '').trim()
+    // KPI 801/803: ưu tiên actual/result đã tổng hợp khi lưu drawer.
+    const actual = String(o.actual ?? o.result ?? '').trim()
     if (actual) return actual
     // Fallback nhẹ để không trống hoàn toàn khi chưa có actual nhưng có nội dung.
     const content = String(o.content ?? '').trim()

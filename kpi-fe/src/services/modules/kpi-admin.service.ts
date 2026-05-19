@@ -79,6 +79,10 @@ export async function apiPutKpiCyclePhaseDates(
     .then((r) => r.data?.data ?? r.data);
 }
 
+export async function apiDeleteKpiCycle(id: string): Promise<void> {
+  return http.delete(`/admin/kpi-cycles/${id}`).then(() => {});
+}
+
 // ── Campaigns ──────────────────────────────────────────────────────────────────
 
 export async function apiGetCampaigns(): Promise<Campaign[]> {
@@ -230,6 +234,7 @@ export const adminKpiService = {
     apiPatchKpiCycleStatus(id, statusCode),
   updateKpiCyclePhaseDates: (id: string, data: UpdateKpiCyclePhaseDatesBody) =>
     apiPutKpiCyclePhaseDates(id, data),
+  deleteKpiCycle: (id: string) => apiDeleteKpiCycle(id),
 
   getCampaigns: () => apiGetCampaigns(),
   getEmployeeProgress: (period: string) => apiGetEmployeeProgress(period),

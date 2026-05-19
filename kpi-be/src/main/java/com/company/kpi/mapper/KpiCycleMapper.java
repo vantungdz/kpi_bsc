@@ -20,6 +20,9 @@ public interface KpiCycleMapper {
 
     /** Chu kỳ chưa xóa mềm, {@code year >= minYear} — dropdown năm đánh giá (không lấy năm quá khứ). */
     List<GmKpiCycleOptionResponse> listCyclesFromMinYear(@Param("minYear") int minYear);
+
+    /** Mọi dòng {@code kpi_cycles} chưa xóa mềm — dropdown «Năm» header GM. */
+    List<GmKpiCycleOptionResponse> listAllCyclesForDropdown();
     KpiCycle findActiveCycle(@Param("statusCode") Integer statusCode);
 
     List<KpiCycle> getCycles();
@@ -61,4 +64,6 @@ public interface KpiCycleMapper {
             @Param("startDate") String startDate,
             @Param("endDate") String endDate,
             @Param("updatedBy") UUID updatedBy);
+
+    int softDeleteKpiCycle(@Param("id") UUID id, @Param("updatedBy") UUID updatedBy);
 }

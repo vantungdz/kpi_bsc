@@ -519,7 +519,53 @@
             ORDER BY f.created_at DESC
             LIMIT 1
         ) pm_kf ON TRUE
-        LEFT JOIN kpi_assignments child_ka ON child_ka.parent_assignment_id = pm_ka.id AND child_ka.deleted_at IS NULL
+        LEFT JOIN kpi_assignments child_ka ON child_ka.cycle_id = pm_ka.cycle_id
+            AND child_ka.kpi_info_id = pm_ka.kpi_info_id
+            AND child_ka.id != pm_ka.id
+            AND child_ka.user_id IS NOT NULL
+            AND child_ka.deleted_at IS NULL
+            AND (
+                child_ka.user_id = #{pmId}
+                OR EXISTS (
+                    SELECT 1
+                    FROM kpi_assignment_snapshots child_scope
+                    INNER JOIN kpi_cycles child_scope_cycle
+                            ON child_scope_cycle.id = child_scope.cycle_id
+                           AND child_scope_cycle.deleted_at IS NULL
+                           AND child_scope_cycle.year &lt; EXTRACT(YEAR FROM CURRENT_DATE)::int
+                    LEFT JOIN departments child_sd
+                           ON child_sd.id = child_scope.department_id
+                          AND child_sd.deleted_at IS NULL
+                    WHERE child_scope.assignment_id = child_ka.id
+                      AND child_scope.cycle_id = child_ka.cycle_id
+                      AND (
+                          child_scope.supervisor_id = #{pmId}
+                          OR child_sd.manager_id = #{pmId}
+                      )
+                )
+                OR (
+                    NOT EXISTS (
+                    SELECT 1
+                    FROM kpi_assignment_snapshots child_scope_missing
+                    INNER JOIN kpi_cycles child_scope_missing_cycle
+                            ON child_scope_missing_cycle.id = child_scope_missing.cycle_id
+                           AND child_scope_missing_cycle.deleted_at IS NULL
+                           AND child_scope_missing_cycle.year &lt; EXTRACT(YEAR FROM CURRENT_DATE)::int
+                    WHERE child_scope_missing.assignment_id = child_ka.id
+                      AND child_scope_missing.cycle_id = child_ka.cycle_id
+                    )
+                    AND EXISTS (
+                        SELECT 1
+                        FROM user_departments child_ud
+                        INNER JOIN departments child_d
+                                ON child_d.id = child_ud.department_id
+                               AND child_d.deleted_at IS NULL
+                               AND child_d.manager_id = #{pmId}
+                        WHERE child_ud.user_id = child_ka.user_id
+                          AND child_ud.is_primary = TRUE
+                    )
+                )
+            )
         LEFT JOIN LATERAL (
             SELECT f.feedback_note
             FROM kpi_assignment_feedbacks f
@@ -553,6 +599,13 @@
         LEFT JOIN kpi_assignment_snapshots child_kas
                ON child_kas.assignment_id = child_ka.id
               AND child_kas.cycle_id = child_ka.cycle_id
+              AND EXISTS (
+                  SELECT 1
+                  FROM kpi_cycles child_kas_cycle
+                  WHERE child_kas_cycle.id = child_kas.cycle_id
+                    AND child_kas_cycle.deleted_at IS NULL
+                    AND child_kas_cycle.year &lt; EXTRACT(YEAR FROM CURRENT_DATE)::int
+              )
         LEFT JOIN job_titles child_jt ON child_u.job_title_id = child_jt.id AND child_jt.deleted_at IS NULL
 
         WHERE pm_ka.cycle_id = #{cycleId}
@@ -1009,6 +1062,57 @@
           ) IS NOT DISTINCT FROM src.resolved_department_id
     </update>
 
+    <update id="syncCompletedTeamParentFromGmConfirmedChild">
+        WITH touched_parent AS (
+            SELECT parent.id AS parent_id
+            FROM kpi_assignments child
+            INNER JOIN kpi_assignments parent
+                    ON parent.id = child.parent_assignment_id
+                   AND parent.cycle_id = child.cycle_id
+                   AND parent.deleted_at IS NULL
+            INNER JOIN kpis_information ki
+                    ON ki.id = parent.kpi_info_id
+                   AND ki.deleted_at IS NULL
+            INNER JOIN kpi_master km
+                    ON km.id = ki.master_kpi_id
+                   AND km.deleted_at IS NULL
+            WHERE child.id = #{childAssignmentId, jdbcType=OTHER}
+              AND child.cycle_id = #{cycleId, jdbcType=OTHER}
+              AND child.deleted_at IS NULL
+              AND child.parent_assignment_id IS NOT NULL
+              AND parent.parent_assignment_id IS NULL
+              AND parent.status_code = #{waitingStatus}
+              AND km.type_code = 102
+        )
+        UPDATE kpi_assignments parent
+        SET
+            status_code = #{completedStatus},
+            updated_at = NOW(),
+            updated_by = #{updatedBy, jdbcType=OTHER}
+        FROM touched_parent tp
+        WHERE parent.id = tp.parent_id
+          AND parent.cycle_id = #{cycleId, jdbcType=OTHER}
+          AND parent.deleted_at IS NULL
+          AND EXISTS (
+              SELECT 1
+              FROM kpi_assignments child
+              WHERE child.parent_assignment_id = parent.id
+                AND child.cycle_id = parent.cycle_id
+                AND child.deleted_at IS NULL
+          )
+          AND NOT EXISTS (
+              SELECT 1
+              FROM kpi_assignments child
+              WHERE child.parent_assignment_id = parent.id
+                AND child.cycle_id = parent.cycle_id
+                AND child.deleted_at IS NULL
+                AND (
+                    (#{completedStatus} = 503 AND child.status_code &lt; 503)
+                    OR (#{completedStatus} = 603 AND child.status_code &lt;&gt; 603)
+                )
+          )
+    </update>
+
     <update id="updateGmEvaluationHubLineComment">
         UPDATE kpi_assignments
         SET
@@ -1281,6 +1385,7 @@
             ka.parent_assignment_id AS parent_assignment_id,
             ka.user_id         AS user_id,
             km.id              AS master_kpi_id,
+            km.type_code       AS type_code,
             km.name            AS kpi_name,
             COALESCE(kas.user_full_name, member_u.full_name) AS member_name,
             COALESCE((
@@ -1343,6 +1448,7 @@
             ka.parent_assignment_id AS parent_assignment_id,
             ka.user_id         AS user_id,
             km.id              AS master_kpi_id,
+            km.type_code       AS type_code,
             km.name            AS kpi_name,
             COALESCE(kas.user_full_name, member_u.full_name) AS member_name,
             COALESCE((
@@ -1411,6 +1517,7 @@
             ka.parent_assignment_id AS parent_assignment_id,
             ka.user_id         AS user_id,
             km.id              AS master_kpi_id,
+            km.type_code       AS type_code,
             km.name            AS kpi_name,
             COALESCE(kas.user_full_name, member_u.full_name) AS member_name,
             COALESCE((
@@ -1479,6 +1586,7 @@
             ka.parent_assignment_id AS parent_assignment_id,
             ka.user_id         AS user_id,
             km.id              AS master_kpi_id,
+            km.type_code       AS type_code,
             km.name            AS kpi_name,
             COALESCE(kas.user_full_name, member_u.full_name) AS member_name,
             COALESCE((
@@ -1907,23 +2015,61 @@
         (supervisor trực tiếp = PM hoặc chuỗi Member → Leader → … → PM — đồng bộ UserMapper.findTeamHierarchyBySupervisor).
     -->
     <select id="listPmPendingMemberKpiApprovals" resultType="com.company.kpi.response.pm.PmMemberKpiApprovalItemResponse">
-        WITH RECURSIVE pm_team AS (
-            SELECT ud.user_id
+        WITH RECURSIVE org_edges AS (
+            SELECT DISTINCT ON (kas.user_id)
+                kas.user_id,
+                kas.supervisor_id,
+                kas.department_id
+            FROM kpi_assignment_snapshots kas
+            INNER JOIN kpi_cycles kc
+                    ON kc.id = kas.cycle_id
+                   AND kc.deleted_at IS NULL
+                   AND kc.year &lt; EXTRACT(YEAR FROM CURRENT_DATE)::int
+            WHERE kas.cycle_id = #{cycleId, jdbcType=OTHER}
+              AND kas.user_id IS NOT NULL
+            ORDER BY kas.user_id, kas.created_at ASC
+        ),
+        fallback_edges AS (
+            SELECT
+                ud.user_id,
+                ud.supervisor_id,
+                ud.department_id
             FROM user_departments ud
-            WHERE ud.supervisor_id = #{pmId, jdbcType=OTHER}
+            WHERE ud.is_primary = TRUE
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM org_edges oe
+                  WHERE oe.user_id = ud.user_id
+              )
+              AND EXISTS (
+                  SELECT 1
+                  FROM kpi_assignments ka
+                  WHERE ka.user_id = ud.user_id
+                    AND ka.cycle_id = #{cycleId, jdbcType=OTHER}
+                    AND ka.deleted_at IS NULL
+              )
+        ),
+        effective_edges AS (
+            SELECT * FROM org_edges
             UNION ALL
-            SELECT ud.user_id
-            FROM user_departments ud
-            INNER JOIN pm_team pt ON ud.supervisor_id = pt.user_id
+            SELECT * FROM fallback_edges
+        ),
+        pm_team AS (
+            SELECT ee.user_id
+            FROM effective_edges ee
+            WHERE ee.supervisor_id = #{pmId, jdbcType=OTHER}
+            UNION ALL
+            SELECT ee.user_id
+            FROM effective_edges ee
+            INNER JOIN pm_team pt ON ee.supervisor_id = pt.user_id
         ),
         pm_department_members AS (
-            SELECT ud.user_id
-            FROM user_departments ud
+            SELECT ee.user_id
+            FROM effective_edges ee
             INNER JOIN departments d
-                    ON d.id = ud.department_id
+                    ON d.id = ee.department_id
                    AND d.deleted_at IS NULL
                    AND d.manager_id = #{pmId, jdbcType=OTHER}
-            WHERE ud.is_primary = TRUE
         )
         SELECT
             ka.id AS assignment_id,

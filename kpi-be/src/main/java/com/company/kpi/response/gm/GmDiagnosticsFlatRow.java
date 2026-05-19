@@ -59,6 +59,8 @@ public class GmDiagnosticsFlatRow {
     /** {@code roles.name} tương ứng {@link #leaderRoleCode}. */
     private String leaderRoleName;
     private String memberRank;
+    /** {@code ranks.code} của assignee, ví dụ R1/R2/R3. */
+    private String memberRankCode;
 
     private UUID assignmentId;
     /** {@code kpi_assignments.parent_assignment_id} — null = assignment gốc (vd GM giao slice cho PM/đơn vị). */

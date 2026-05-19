@@ -7,7 +7,7 @@ import type {LeaderKpiInformationResponse} from "@/types/kpi";
 import {KPI_TYPE_INDIVIDUAL} from "@/types/constant";
 import {KPI_STATUS} from "@/config/constants";
 import {getSubmitButtonState, shouldCollapseKpiProcessTimelineToYearEndOnly} from "@/utils/common";
-import {computeRatioPreview, parseNumericFromField, CALC_RULE_AVERAGE} from "@/utils/memberKpiHelpers";
+import { formatActualResultFromEvidencesJson } from '@/utils/memberKpiHelpers'
 import { extractRawInputFromApiTargetDescription } from "@/utils/kpiScoringRulesDsl";
 import EvidenceDrawer from '@/components/leader/drawer/EvidenceDrawer.vue';
 import { displayTargetValue, formatTargetDisplay } from "@/utils/strategicKpiTypeCodes";
@@ -33,6 +33,31 @@ const employeeComment = ref("");
 const supervisorComment = ref("");
 
 const emit = defineEmits(['updateAverage', 'refresh-summary', 'open-edit-self-created'])
+
+function parseCodeSortValue(code: unknown): number | null {
+  const text = String(code ?? '').trim()
+  if (!text) return null
+  const match = text.match(/\d+/)
+  if (!match) return null
+  const value = Number(match[0])
+  return Number.isFinite(value) ? value : null
+}
+
+function sortAssignmentsForDisplay<T extends { kpiCode?: unknown; kpiName?: unknown }>(rows: T[]): T[] {
+  return [...rows].sort((a, b) => {
+    const aCode = parseCodeSortValue(a.kpiCode)
+    const bCode = parseCodeSortValue(b.kpiCode)
+    if (aCode != null && bCode != null && aCode !== bCode) return aCode - bCode
+    if (aCode != null && bCode == null) return -1
+    if (aCode == null && bCode != null) return 1
+
+    const aCodeText = String(a.kpiCode ?? '').trim().toLowerCase()
+    const bCodeText = String(b.kpiCode ?? '').trim().toLowerCase()
+    if (aCodeText !== bCodeText) return aCodeText.localeCompare(bCodeText, 'vi')
+
+    return String(a.kpiName ?? '').localeCompare(String(b.kpiName ?? ''), 'vi')
+  })
+}
 
 // draftMap: lưu tạm evidence/score/actualResult chưa submit lên server
 type DraftEntry = { evidencesJson: string; selfScore: number | null; actualResult: string | null }
@@ -90,8 +115,8 @@ function openEvidence(assign: any, mode: 'detail' | 'feedback' = 'detail') {
 function feedbackPendingStatusDesc(assign: any): string {
   const createdByRole = String(assign?.createdByRoleCode ?? '').trim().toUpperCase()
   return createdByRole === 'GM'
-    ? 'Chờ GM kiểm tra feedback'
-    : 'Chờ PM kiểm tra feedback'
+    ? 'Feedback Pending GM Review'
+    : 'Feedback Pending PM Review'
 }
 
 async function onEvidenceSaved(payload: any) {
@@ -105,10 +130,10 @@ async function onEvidenceSaved(payload: any) {
       selectedKpi.value.feedbackComment = String(payload.feedbackComment ?? '').trim()
       isDrawerOpen.value = false
       emit('refresh-summary')
-      toast.success('Gửi feedback thành công')
+      toast.success('Feedback sent successfully')
     } catch (error) {
       console.error('Failed to submit Personal KPI feedback', error)
-      toast.error('Gửi feedback thất bại')
+      toast.error('Failed to send feedback')
     }
     return
   }
@@ -120,7 +145,7 @@ async function onEvidenceSaved(payload: any) {
     })
   } catch (error) {
     console.error('Failed to save Personal KPI evidence', error)
-    toast.error('Lưu evidence thất bại')
+    toast.error('Failed to save evidence')
     return
   }
   delete draftMap.value[assignId]
@@ -169,6 +194,13 @@ const totals = computed(() => {
     averagePmScore: Math.round(averagePmScore * 100) / 100,
   };
 });
+
+const sortedCategories = computed(() => {
+  return (apiData.value?.categories ?? []).map((category) => ({
+    ...category,
+    assignments: sortAssignmentsForDisplay(category.assignments ?? []),
+  }))
+})
 
 watch(
   () => totals.value.averageScore,
@@ -237,10 +269,10 @@ const buttonState = computed(() => {
 });
 
 const submitLabel = computed(() => {
-  if (buttonState.value.actionType === 'GOAL_SETTING') return 'Nộp mục tiêu KPI (Goal Setting)'
-  if (buttonState.value.actionType === 'MID_YEAR') return 'Nộp KPI giữa năm (Mid-Year)'
-  if (buttonState.value.actionType === 'END_YEAR') return 'Nộp KPI cuối năm (End-Year)'
-  return 'Nộp đánh giá KPI'
+  if (buttonState.value.actionType === 'GOAL_SETTING') return 'Submit KPI Goals (Goal Setting)'
+  if (buttonState.value.actionType === 'MID_YEAR') return 'Submit Mid-Year KPI (Mid-Year)'
+  if (buttonState.value.actionType === 'END_YEAR') return 'Submit Year-End KPI (End-Year)'
+  return 'Submit KPI Evaluation'
 });
 
 // ==========================================
@@ -254,7 +286,7 @@ async function fetchData() {
     supervisorComment.value = String(apiData.value?.kpiSummary?.evaluationSupervisorComments ?? '')
     draftMap.value = {}; // Reset draft sau khi reload
   } catch (error) {
-    console.error("Lỗi khi tải dữ liệu Personal KPI:", error);
+    console.error("Failed to load Personal KPI data:", error);
   } finally {
     loading.value = false;
   }
@@ -277,12 +309,12 @@ async function submitEvaluation() {
       )
     }
     await memberKpiService.submit(props.year, 'INDIVIDUAL', employeeComment.value)
-    toast.success('Nộp KPI thành công!')
+    toast.success('KPI submitted successfully!')
     await fetchData() // Reset draft + reload
     emit('refresh-summary')
   } catch (error) {
     console.error('Failed to submit KPI', error)
-    toast.error('Có lỗi xảy ra khi nộp KPI.')
+    toast.error('An error occurred while submitting KPI.')
   } finally {
     submitting.value = false
   }
@@ -321,7 +353,7 @@ function statusTextClass(assign: any): string {
 
 function statusDescForUi(assign: any): string {
   if (isOverdueEval(assign)) {
-    return String(assign?.evaluationState ?? '').trim() || 'Đã quá hạn tự đánh giá KPI'
+    return String(assign?.evaluationState ?? '').trim() || 'KPI self-evaluation is overdue'
   }
   if (Number(assign?.statusCode ?? 0) === 407) {
     return feedbackPendingStatusDesc(assign)
@@ -419,7 +451,7 @@ function finalScoreTooltip(assign: any): string | undefined {
 function statusTooltip(assign: any): string {
   const status = Number(assign?.statusCode ?? 0)
   const reason = String(assign?.updateReason ?? assign?.feedbackComment ?? '').trim()
-  if (status === 406 && reason) return `Lý do từ chối:\n${reason}`
+  if (status === 406 && reason) return `Rejection reason:\n${reason}`
   return statusDescForUi(assign)
 }
 
@@ -443,12 +475,12 @@ async function confirmDeleteSelfCreated() {
   if (!assignmentId) return
   try {
     await memberKpiService.deleteSelfCreatedKpi(assignmentId)
-    toast.success('Đã xóa KPI tự tạo')
+    toast.success('Self-created KPI deleted')
     await fetchData()
     emit('refresh-summary')
   } catch (error) {
     console.error('Failed to delete self-created KPI', error)
-    toast.error('Xóa KPI thất bại')
+    toast.error('Failed to delete KPI')
   } finally {
     cancelDeleteSelfCreated()
   }
@@ -463,7 +495,7 @@ async function confirmDeleteSelfCreated() {
 
 function targetDataTooltip(assign: any): string {
   const rawRules = extractRawInputFromApiTargetDescription(assign?.targetDescription ?? '')
-  if (rawRules) return `Quy tắc chấm điểm:\n${rawRules}`
+  if (rawRules) return `Scoring rules:\n${rawRules}`
   const fallback = String(assign?.targetDescription ?? '').trim()
   return fallback || formatTargetDisplay(assign)
 }
@@ -488,33 +520,7 @@ function parseActualResultFromEvidences(
   calcRule: number | null | undefined,
   calcType: number | null | undefined,
 ): string {
-  if (!evidencesJson) return '-'
-  try {
-    const parsed = JSON.parse(evidencesJson)
-    // Average mode (802): tính ratio từ planActualRecords
-    const records: any[] = parsed.planActualRecords ?? []
-    if (records.length && calcRule === CALC_RULE_AVERAGE) {
-      const values = records
-        .map(r => computeRatioPreview(r.plan ?? '', r.actual ?? '', calcType))
-        .filter((v): v is string => v !== null)
-        .map(v => parseNumericFromField(v))
-        .filter((n): n is number => n !== null)
-      if (values.length) {
-        const avg = values.reduce((s, x) => s + x, 0) / values.length
-        return `${avg.toFixed(1)}%`
-      }
-    }
-    // Monthly (A.2): tổng giờ worked
-    const waRecords: any[] = parsed.waTimeRecords ?? []
-    if (waRecords.length) {
-      const totalSpent = waRecords.reduce((s, r) => s + (parseFloat(r.spent) || 0), 0)
-      if (totalSpent > 0) return `${totalSpent}h`
-    }
-    // Comment/text: note ngắn
-    const note: string = parsed.note ?? parsed.content ?? ''
-    if (note.trim()) return note.trim().length > 40 ? note.trim().slice(0, 40) + '…' : note.trim()
-  } catch { /* ignore */ }
-  return '-'
+  return formatActualResultFromEvidencesJson(evidencesJson, calcRule, calcType)
 }
 </script>
 
@@ -530,7 +536,7 @@ function parseActualResultFromEvidences(
       <div class="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-5 py-4">
         <h3 class="flex items-center gap-2 text-lg font-bold text-slate-800">
           <i class="fas fa-list-alt text-slate-400"/>
-          Chi Tiết Bảng KPI Cá Nhân
+          Personal KPI Details
         </h3>
       </div>
 
@@ -539,9 +545,9 @@ function parseActualResultFromEvidences(
         class="flex min-h-[220px] flex-col items-center justify-center bg-slate-50/60 px-5 py-16 text-center text-sm text-slate-500"
       >
         <i class="fas fa-bullseye mb-3 text-3xl text-slate-200" />
-        <p class="font-medium text-slate-600">Chưa có KPI Personal</p>
+        <p class="font-medium text-slate-600">No Personal KPI Yet</p>
         <p class="mt-1 mx-auto max-w-md text-xs text-slate-400">
-          Khi PM/Leader giao mục tiêu cá nhân hoặc bạn tạo KPI mới, các dòng sẽ hiển thị tại đây.
+          Items will appear here when PM/Leader assigns personal goals or when you create a new KPI.
         </p>
       </div>
 
@@ -549,11 +555,11 @@ function parseActualResultFromEvidences(
         <table class="w-full text-left border-collapse text-sm">
           <thead class="border-b border-slate-200 bg-slate-200">
           <tr class="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-            <th class="w-12 px-5 py-4 text-center">STT</th>
-            <th class="min-w-[200px] px-5 py-4">Hạng Mục (Objectives)</th>
-            <th class="min-w-[10rem] px-5 py-4 text-center">Trạng thái KPI</th>
-            <th class="px-5 py-4">Chỉ Tiêu (Target)</th>
-            <th class="w-24 px-5 py-4 text-center">Trọng số (W)</th>
+            <th class="w-12 px-5 py-4 text-center">#</th>
+            <th class="min-w-[200px] px-5 py-4">Objectives</th>
+            <th class="min-w-[10rem] px-5 py-4 text-center">KPI Status</th>
+            <th class="px-5 py-4">Target</th>
+            <th class="w-24 px-5 py-4 text-center">Weight (W)</th>
             <th class="min-w-[8rem] px-5 py-4 text-center">
               <span class="inline-flex items-center gap-1">
                 Actual Result
@@ -561,12 +567,12 @@ function parseActualResultFromEvidences(
             </th>
             <th class="w-28 px-5 py-4 text-center ">Self Score</th>
             <th class="w-28 px-5 py-4 text-center">Final Score</th>
-            <th class="w-28 px-5 py-4 text-right">Thao tác</th>
+            <th class="w-28 px-5 py-4 text-right">Actions</th>
           </tr>
           </thead>
 
           <tbody class="divide-y divide-slate-100">
-          <template v-for="(category, catIndex) in apiData?.categories" :key="'cat-' + catIndex">
+          <template v-for="(category, catIndex) in sortedCategories" :key="'cat-' + catIndex">
             <tr class="bg-slate-50 border-y border-slate-200">
               <td colspan="10" class="py-2 px-5 text-xs font-bold text-slate-800 uppercase tracking-wider">
                 {{ category.name }}
@@ -600,7 +606,7 @@ function parseActualResultFromEvidences(
                     :title="statusTooltip(assign)"
                     class="ml-1 mt-1 inline-flex max-w-full items-start gap-1 text-left text-[10px] font-medium text-orange-700 cursor-pointer hover:bg-orange-100 rounded"
                   >
-                    <span class="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-orange-300 text-[10px] font-bold leading-none text-orange-700">
+                    <span class="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-orange-300 text-[10px] font-bold leading-none text-orange-700 cursor-pointer">
                       ?
                     </span>
                 </span>
@@ -612,7 +618,7 @@ function parseActualResultFromEvidences(
                     {{ formatTargetDisplay(assign) }}
                   </p>
                   <span
-                    class="inline-flex h-4 w-4 items-center justify-center rounded-full border border-slate-300 text-[10px] font-bold text-slate-500 cursor-help"
+                    class="inline-flex h-4 w-4 items-center justify-center rounded-full border border-slate-300 text-[10px] font-bold text-slate-500 cursor-pointer"
                     :title="targetDataTooltip(assign)"
                   >
                     ?
@@ -639,7 +645,7 @@ function parseActualResultFromEvidences(
               <td class="py-4 px-5 text-center align-middle">
                 <span class="text-sm font-semibold leading-snug text-slate-700 inline-block">
                   <span :class="scoreColorClass((draftMap[assign.assignmentId]?.selfScore ?? resolveSelfScoreForUi(assign)))">
-                    {{ (draftMap[assign.assignmentId]?.selfScore ?? resolveSelfScoreForUi(assign)) ?? 0 }}
+                    {{ (draftMap[assign.assignmentId]?.selfScore ?? resolveSelfScoreForUi(assign)) ?? '-' }}
                   </span>
                 </span>
               </td>
@@ -649,11 +655,11 @@ function parseActualResultFromEvidences(
                 <p 
                   class="font-medium text-sm display-inline-flex items-center gap-1"
                   :class="scoreColorClass(assign.endGmScore ?? assign.endPmScore)">
-                   {{ assign.endGmScore ?? assign.endPmScore ?? '' }}
+                   {{ assign.endGmScore ?? assign.endPmScore ?? '-' }}
                 </p>
                 <span
                   v-if="finalScoreTooltip(assign)"
-                  class="inline-flex h-4 w-4 items-center justify-center rounded-full border border-slate-300 text-[10px] font-bold text-slate-500 cursor-help cursor-pointer hover:bg-sky-200"
+                  class="inline-flex h-4 w-4 items-center justify-center rounded-full border border-slate-300 text-[10px] font-bold text-slate-500 cursor-help cursor-pointer hover:bg-sky-200 cursor-pointer"
                   :title="finalScoreTooltip(assign)"
                 >
                   ?
@@ -665,7 +671,7 @@ function parseActualResultFromEvidences(
                 <div class="flex items-center justify-end gap-2">
                   <button
                     type="button"
-                    class="flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-[10px] font-bold text-slate-600 shadow-sm transition-colors hover:bg-slate-50 hover:text-indigo-600"
+                    class="flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-[10px] font-bold text-slate-600 shadow-sm transition-colors hover:bg-slate-50 hover:text-indigo-600 cursor-pointer"
                     @click.stop="shouldOpenSelfCreatedEditForm(assign) ? emit('open-edit-self-created', assign) : openEvidence(assign)"
                   >
                     <i class="fas fa-pen text-[10px]"></i>
@@ -675,7 +681,7 @@ function parseActualResultFromEvidences(
                     type="button"
                     class="flex h-8 items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-3 text-[10px] font-bold text-violet-700 shadow-sm transition-colors hover:bg-violet-100 disabled:cursor-not-allowed disabled:opacity-45"
                     :disabled="isReadonly || !canSendFeedback(assign)"
-                    title="Mở KPI này để nhập và gửi feedback riêng"
+                    title="Open this KPI to enter and send feedback"
                     @click.stop="openEvidence(assign, 'feedback')"
                   >
                     <i class="fas fa-message text-[10px]"></i>
@@ -686,7 +692,7 @@ function parseActualResultFromEvidences(
                   class="flex h-8 items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-3 text-[10px] font-bold text-rose-700 shadow-sm transition-colors hover:bg-rose-100 cursor-pointer"
                   :class="!canDeleteSelfCreatedEnabled(assign) ? 'cursor-not-allowed opacity-45 hover:bg-rose-50' : ''"
                   :disabled="!canDeleteSelfCreatedEnabled(assign)"
-                  :title="canDeleteSelfCreatedEnabled(assign) ? 'Xóa KPI tự tạo' : 'KPI đã submit đầu năm, không thể xóa'"
+                  :title="canDeleteSelfCreatedEnabled(assign) ? 'Delete self-created KPI' : 'KPI already submitted for goal setting and cannot be deleted'"
                   @click.stop="handleDeleteSelfCreated(assign)"
                 >
                   <i class="fas fa-trash text-[10px]"></i>
@@ -701,7 +707,7 @@ function parseActualResultFromEvidences(
           <tr>
             <td class="py-4 px-5"></td>
             <td colspan="3" class="py-4 px-5 text-right text-slate-700 uppercase text-xs tracking-wider">
-              Tổng cộng (Total score):
+              Total (Total score):
             </td>
             <td class="py-4 px-5 text-center">
                 <span class="text-sm text-slate-800">
@@ -711,7 +717,7 @@ function parseActualResultFromEvidences(
             </td>
             <td class="py-4 px-5 text-center text-xs font-medium text-slate-400">-</td>
             <td class="bg-sky-50/50 py-4 px-5 text-center text-sm text-slate-700">
-              {{ totals.weightedSelfPoints }}
+              {{ totals.weightedSelfPoints === 0 ? '-' : totals.weightedSelfPoints }}
             </td>
             <td class="py-4 px-5 text-center">
               <span class="text-sm text-slate-800">{{ totals.weightedPmPoints === 0 ? '' : totals.weightedPmPoints }}</span>
@@ -721,11 +727,11 @@ function parseActualResultFromEvidences(
           <tr class="bg-violet-50/50 border-t border-slate-200">
             <td class="py-4 px-5"></td>
             <td colspan="3" class="py-4 px-5 text-right text-violet-800 uppercase text-xs tracking-wider">
-              Điểm trung bình (Average score):
+              Average score:
             </td>
             <td class="py-4 px-5"></td>
             <td class="py-4 px-5 text-center text-xs font-medium text-slate-400">-</td>
-            <td class="bg-sky-50/50 py-4 px-5 text-center text-sm text-slate-700">
+            <td class="bg-sky-50/50 py-4 px-5 text-center text-sm text-violet-500">
               {{ totals.averageScore.toFixed(2) }}
             </td>
             <td class="py-4 px-5 text-center bg-violet-100/80">
@@ -750,7 +756,7 @@ function parseActualResultFromEvidences(
               <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
                 Employee's comment
               </label>
-              <textarea v-model="employeeComment" rows="4" placeholder="Nhập ý kiến của bạn..."
+              <textarea v-model="employeeComment" rows="4" placeholder="Enter your comment..."
                         class="w-full resize-none p-3 bg-white border border-slate-200 rounded-lg text-sm text-slate-700 focus:ring-2 focus:ring-blue-100 outline-none shadow-sm"
                         :class="{ 'bg-slate-100 text-slate-500': isEmployeeCommentReadonly }"
                         :readonly="isEmployeeCommentReadonly"/>
@@ -762,7 +768,7 @@ function parseActualResultFromEvidences(
                 Supervisor Comment
               </label>
               <textarea v-model="supervisorComment" rows="4"
-                        placeholder="Supervisor sẽ nhập ý kiến tại đây..."
+                        placeholder="Supervisor will enter comments here..."
                         class="w-full resize-none p-3 bg-slate-100 border border-slate-200 rounded-lg text-sm text-slate-500 outline-none"
                         readonly/>
             </div>
@@ -780,13 +786,13 @@ function parseActualResultFromEvidences(
         >
           <i v-if="submitting" class="fas fa-spinner fa-spin text-xs" />
           <i v-else class="fas fa-paper-plane text-xs" />
-          {{ submitting ? 'Đang xử lý...' : submitLabel }}
+          {{ submitting ? 'Processing...' : submitLabel }}
         </button>
       </div>
 
       <div v-if="isReadonly && hasPersonalAssignments && !loading" class="bg-slate-50 p-4 border-t border-slate-200 flex flex-col items-center gap-2">
         <div class="text-sm text-slate-500 font-medium">
-          Dữ liệu năm {{ year }} chỉ để xem
+          Year {{ year }} data is view-only
         </div>
       </div>
     </div>
@@ -808,12 +814,12 @@ function parseActualResultFromEvidences(
       >
         <div class="w-full max-w-md rounded-xl border border-slate-200 bg-white shadow-2xl">
           <div class="border-b border-slate-100 px-5 py-4">
-            <h3 class="text-base font-bold text-slate-800">Xác nhận xóa KPI</h3>
-            <p class="mt-1 text-xs text-slate-500">KPI tự tạo sẽ bị xóa khỏi danh sách hiện tại.</p>
+            <h3 class="text-base font-bold text-slate-800">Confirm KPI Deletion</h3>
+            <p class="mt-1 text-xs text-slate-500">The self-created KPI will be removed from the current list.</p>
           </div>
           <div class="px-5 py-4 text-sm text-slate-700">
             <p>
-              Bạn có chắc muốn xóa KPI:
+              Are you sure you want to delete KPI:
               <span class="font-semibold text-slate-900">
                 {{ pendingDeleteAssignment?.kpiCode }} {{ pendingDeleteAssignment?.kpiName }}
               </span>
@@ -826,14 +832,14 @@ function parseActualResultFromEvidences(
               class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"
               @click="cancelDeleteSelfCreated"
             >
-              Hủy
+              Cancel
             </button>
             <button
               type="button"
               class="rounded-lg bg-rose-600 px-3 py-2 text-xs font-semibold text-white hover:bg-rose-700"
               @click="confirmDeleteSelfCreated"
             >
-              Xóa KPI
+              Delete KPI
             </button>
           </div>
         </div>

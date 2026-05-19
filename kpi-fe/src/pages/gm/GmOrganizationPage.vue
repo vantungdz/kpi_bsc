@@ -870,7 +870,7 @@ function openCopyKpiDrawer(emp: GmEmployeeRow) {
       <!-- Lưới thẻ phòng ban — lg+ 4 cột / card gọn -->
       <div
         v-if="sections.length > 0 && filteredSectionCards.length > 0"
-        class="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3 md:grid-cols-4 lg:grid-cols-4"
+        class="grid grid-cols-2 mt-4 gap-2 sm:grid-cols-3 sm:gap-3 md:grid-cols-4 lg:grid-cols-4"
       >
         <article
           v-for="sectionCard in filteredSectionCards"
@@ -1146,7 +1146,7 @@ function openCopyKpiDrawer(emp: GmEmployeeRow) {
     </div>
 
     <!-- Drawer Create Section — theo index.html + mock ảnh -->
-    <Teleport :to="GM_MAIN_MODAL_ANCHOR">
+    <Teleport defer :to="GM_MAIN_MODAL_ANCHOR">
       <Transition name="gm-section-drawer">
         <div
           v-if="drawerOpen"
@@ -1323,7 +1323,7 @@ function openCopyKpiDrawer(emp: GmEmployeeRow) {
     </Teleport>
 
     <!-- Drawer chi tiết Section — theo index.html `#section-detail-drawer` -->
-    <Teleport :to="GM_MAIN_MODAL_ANCHOR">
+    <Teleport defer :to="GM_MAIN_MODAL_ANCHOR">
       <Transition name="gm-section-detail-drawer">
         <div
           v-if="sectionDetailOpen && sectionDetailRow"
@@ -1485,7 +1485,7 @@ function openCopyKpiDrawer(emp: GmEmployeeRow) {
     </Teleport>
 
     <!-- Chỉnh sửa section — theo index.html `#edit-section-modal` -->
-    <Teleport :to="GM_MAIN_MODAL_ANCHOR">
+    <Teleport defer :to="GM_MAIN_MODAL_ANCHOR">
       <div
         v-if="editSectionModalOpen"
         class="absolute inset-0 z-[150] flex items-center justify-center p-4"
@@ -1589,7 +1589,7 @@ function openCopyKpiDrawer(emp: GmEmployeeRow) {
     </Teleport>
 
     <!-- Thêm nhân viên — wireframe: tìm kiếm, chip lọc, checkbox đa chọn, Đã chọn -->
-    <Teleport :to="GM_MAIN_MODAL_ANCHOR">
+    <Teleport defer :to="GM_MAIN_MODAL_ANCHOR">
       <div
         v-if="addMemberModalOpen"
         class="absolute inset-0 z-[150] flex items-center justify-center p-4"
@@ -1798,7 +1798,7 @@ function openCopyKpiDrawer(emp: GmEmployeeRow) {
     </Teleport>
 
     <!-- Xác nhận xóa section -->
-    <Teleport :to="GM_MAIN_MODAL_ANCHOR">
+    <Teleport defer :to="GM_MAIN_MODAL_ANCHOR">
       <div
         v-if="deleteSectionModalOpen && deleteSectionTarget"
         class="absolute inset-0 z-[160] flex items-center justify-center p-4"
@@ -1848,7 +1848,7 @@ function openCopyKpiDrawer(emp: GmEmployeeRow) {
     </Teleport>
 
     <!-- Xác nhận gỡ thành viên khỏi phòng ban -->
-    <Teleport :to="GM_MAIN_MODAL_ANCHOR">
+    <Teleport defer :to="GM_MAIN_MODAL_ANCHOR">
       <div
         v-if="removeMemberModalOpen && removeMemberTarget"
         class="absolute inset-0 z-[160] flex items-center justify-center p-4"
@@ -1906,7 +1906,7 @@ function openCopyKpiDrawer(emp: GmEmployeeRow) {
     </Teleport>
 
     <!-- Modal xác nhận xóa nhân viên khỏi hệ thống -->
-    <Teleport :to="GM_MAIN_MODAL_ANCHOR">
+    <Teleport defer :to="GM_MAIN_MODAL_ANCHOR">
       <div
         v-if="deleteEmployeeModalOpen && deleteEmployeeTarget"
         class="absolute inset-0 z-[160] flex items-center justify-center p-4"

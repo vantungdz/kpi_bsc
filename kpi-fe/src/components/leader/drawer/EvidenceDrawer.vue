@@ -3,8 +3,8 @@ import { computed, ref, watch } from 'vue'
 import { useToast } from 'vue-toastification'
 import type { EvidenceFormCase } from '@/types/kpi'
 import {
-  averageActualNumeric,
-  averageActualResultDisplay,
+  recordStyleMetricNumeric,
+  recordStyleResultDisplay,
   planActualRowPartiallyFilled,
   requiredPlanActualFields,
 } from '@/composables/useMemberEvidenceDrawer'
@@ -13,7 +13,9 @@ import {
   ratioLabels,
   computeRatioPreview,
   parseNumericFromField,
+  isRecordStyleFormMode,
   WA_MONTH_OPTIONS,
+  type EvidenceFormMode,
 } from '@/utils/memberKpiHelpers'
 import {
   parseRulesFromTargetDescription,
@@ -148,7 +150,7 @@ const drawerCase = computed<EvidenceFormCase>(() => {
  * Adapt `resolveFormMode` (which expects a KpiItem) by constructing a minimal
  * KpiItem-like object from the leader assignment's calculationRuleCode.
  */
-const drawerFormMode = computed<'average' | 'comment'>(() => {
+const drawerFormMode = computed<EvidenceFormMode>(() => {
   if (!props.item) return 'comment'
   return resolveFormMode({
     calculationRuleCode: props.item.calculationRuleCode ?? null,
@@ -158,9 +160,9 @@ const drawerFormMode = computed<'average' | 'comment'>(() => {
 const isUploadOnlyDrawer = computed(() => drawerCase.value === 'upload_only')
 
 const attachmentHubTitle = computed(() => {
-  if (isUploadOnlyDrawer.value) return 'Chứng chỉ / Bằng cấp Đính kèm'
-  if (drawerCase.value === 'category_b') return 'Minh chứng & Đính kèm'
-  return 'Tài liệu Minh chứng Đính kèm (Bổ trợ)'
+  if (isUploadOnlyDrawer.value) return 'Attached Certificates / Qualifications'
+  if (drawerCase.value === 'category_b') return 'Evidence & Attachments'
+  return 'Supporting Evidence Attachments'
 })
 
 const hasEvidenceAttachments = computed(
@@ -206,13 +208,9 @@ const scoringRawInput = computed(() => {
   return extractRawInputFromApiTargetDescription(target)
 })
 
-const averageActualResult = computed(() =>
-  averageActualResultDisplay(generalPlanActualRows.value),
-)
-
 const autoScoreMetric = computed((): number | null => {
-  if (drawerFormMode.value === 'comment') {
-    return averageActualNumeric(generalPlanActualRows.value)
+  if (isRecordStyleFormMode(drawerFormMode.value)) {
+    return recordStyleMetricNumeric(drawerFormMode.value, generalPlanActualRows.value)
   }
   if (drawerFormMode.value === 'average') {
     const calcTypeCode = props.item?.calculationTypeCode ?? null
@@ -239,7 +237,7 @@ const exceedsMaxMetricRule = computed(() => {
 })
 
 const hasDslScoringRules = computed(() =>
-  (drawerFormMode.value === 'comment' || drawerFormMode.value === 'average')
+  (isRecordStyleFormMode(drawerFormMode.value) || drawerFormMode.value === 'average')
   && scoringRulesFromItem.value.length > 0,
 )
 
@@ -298,7 +296,7 @@ function initForm() {
         plan: r.plan || '',
         actual: r.actual || '',
       }))
-    } else if (formMode === 'comment' && (parsed.actual || parsed.content)) {
+    } else if (isRecordStyleFormMode(formMode) && (parsed.actual || parsed.content)) {
       generalPlanActualRows.value = [{
         id: 'p-legacy',
         plan: '',
@@ -382,7 +380,7 @@ function onEvidenceFilesChange(e: Event) {
   evidenceUploadHint.value = ''
   let slot = EVIDENCE_MAX_FILES - pendingEvidenceFiles.value.length
   if (slot <= 0) {
-    evidenceUploadHint.value = `Đã đủ ${EVIDENCE_MAX_FILES} file. Xóa bớt để thêm file mới.`
+    evidenceUploadHint.value = `Maximum ${EVIDENCE_MAX_FILES} files reached. Remove some files to add new ones.`
     return
   }
 
@@ -400,8 +398,8 @@ function onEvidenceFilesChange(e: Event) {
   }
 
   const parts: string[] = []
-  if (rejected.length) parts.push(`Loại file không hỗ trợ: ${rejected.join(', ')}`)
-  if (truncated) parts.push(`Tối đa ${EVIDENCE_MAX_FILES} file; một số bị bỏ qua.`)
+  if (rejected.length) parts.push(`Unsupported file types: ${rejected.join(', ')}`)
+  if (truncated) parts.push(`Maximum ${EVIDENCE_MAX_FILES} files; some files were skipped.`)
   if (parts.length) evidenceUploadHint.value = parts.join(' | ')
 }
 
@@ -428,10 +426,10 @@ function isValidUrl(s: string): boolean {
 function addPendingEvidenceUrl() {
   evidenceUrlHint.value = ''
   const normalized = normalizeUrl(evidenceUrlDraft.value)
-  if (!normalized) { evidenceUrlHint.value = 'Vui lòng nhập URL hợp lệ.'; return }
-  if (!isValidUrl(normalized)) { evidenceUrlHint.value = 'URL không hợp lệ. Ví dụ: https://drive.google.com/...'; return }
-  if (pendingEvidenceUrls.value.length >= EVIDENCE_MAX_URLS) { evidenceUrlHint.value = `Tối đa ${EVIDENCE_MAX_URLS} URL.`; return }
-  if (pendingEvidenceUrls.value.some(x => x.url === normalized)) { evidenceUrlHint.value = 'URL này đã tồn tại.'; return }
+  if (!normalized) { evidenceUrlHint.value = 'Please enter a valid URL.'; return }
+  if (!isValidUrl(normalized)) { evidenceUrlHint.value = 'Invalid URL. Example: https://drive.google.com/...'; return }
+  if (pendingEvidenceUrls.value.length >= EVIDENCE_MAX_URLS) { evidenceUrlHint.value = `Maximum ${EVIDENCE_MAX_URLS} URLs.`; return }
+  if (pendingEvidenceUrls.value.some(x => x.url === normalized)) { evidenceUrlHint.value = 'This URL already exists.'; return }
   pendingEvidenceUrls.value.push({
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
     url: normalized,
@@ -456,9 +454,9 @@ function addPlanRow() {
   )
   if (hasIncomplete) {
     toast.warning(
-      drawerFormMode.value === 'comment'
-        ? 'Vui lòng nhập đủ Comment và Actual trước khi thêm dòng mới.'
-        : 'Vui lòng nhập đủ Comment, Plan và Actual trước khi thêm dòng mới.',
+      isRecordStyleFormMode(drawerFormMode.value)
+        ? 'Please fill in Comment and Actual before adding a new row.'
+        : 'Please fill in Comment, Plan, and Actual before adding a new row.',
     )
     return
   }
@@ -485,7 +483,7 @@ async function handleSave() {
     return
   }
   if (metricOutOfDslRule.value) {
-    toast.warning('Giá trị Actual/Kết quả tính vượt mức tối đa trong Quy tắc chấm điểm.')
+    toast.warning('Actual/computed result exceeds the maximum allowed in scoring rules.')
     return
   }
   if (drawerFormMode.value === 'average') {
@@ -494,31 +492,31 @@ async function handleSave() {
       planActualRowPartiallyFilled(r, fields),
     )
     if (hasIncomplete) {
-      toast.warning('Mỗi dòng phải nhập đủ 3 trường: Comment, Plan và Actual.')
+      toast.warning('Each row must include all 3 fields: Comment, Plan, and Actual.')
       return
     }
     const hasAnyCompleteRow = generalPlanActualRows.value.some(r =>
       fields.every(f => String(r[f] ?? '').trim().length > 0),
     )
     if (!hasAnyCompleteRow) {
-      toast.warning('Vui lòng nhập đủ Comment, Plan và Actual cho ít nhất 1 dòng trước khi lưu.')
+      toast.warning('Please fill in Comment, Plan, and Actual for at least one row before saving.')
       return
     }
   }
-  if (drawerFormMode.value === 'comment') {
-    const fields = requiredPlanActualFields('comment')
+  if (isRecordStyleFormMode(drawerFormMode.value)) {
+    const fields = requiredPlanActualFields(drawerFormMode.value)
     const hasIncomplete = generalPlanActualRows.value.some(r =>
       planActualRowPartiallyFilled(r, fields),
     )
     if (hasIncomplete) {
-      toast.warning('Mỗi dòng phải nhập đủ Comment và Actual.')
+      toast.warning('Each row must include Comment and Actual.')
       return
     }
     const hasAnyCompleteRow = generalPlanActualRows.value.some(r =>
       fields.every(f => String(r[f] ?? '').trim().length > 0),
     )
     if (!hasAnyCompleteRow) {
-      toast.warning('Vui lòng nhập đủ Comment và Actual cho ít nhất 1 dòng trước khi lưu.')
+      toast.warning('Please fill in Comment and Actual for at least one row before saving.')
       return
     }
   }
@@ -529,8 +527,8 @@ async function handleSave() {
     let actualResult: string | null = null
     if (averageRatioResult.value) {
       actualResult = averageRatioResult.value
-    } else if (averageActualResult.value) {
-      actualResult = averageActualResult.value
+    } else if (isRecordStyleFormMode(drawerFormMode.value)) {
+      actualResult = recordStyleResultDisplay(drawerFormMode.value, generalPlanActualRows.value) ?? null
     } else if (drawerCase.value === 'monthly') {
       const totalSpent = waTimeRows.value.reduce((sum, r) => sum + (parseFloat(r.spent) || 0), 0)
       if (totalSpent > 0) actualResult = `${totalSpent}h`
@@ -558,7 +556,7 @@ async function handleSave() {
         ...(comment.trim() ? { comment: comment.trim() } : {}),
       }))
       .filter(r =>
-        drawerFormMode.value === 'comment'
+        isRecordStyleFormMode(drawerFormMode.value)
           ? Boolean(r.actual || r.comment)
           : Boolean(r.plan || r.actual),
       )
@@ -571,10 +569,13 @@ async function handleSave() {
       planActualRecords: planRows,
       waTimeRecords: waTimeRows.value.filter(r => r.spent || r.standard),
     }
-    if (drawerFormMode.value === 'comment' && averageActualResult.value) {
-      evidencesObj.actual = averageActualResult.value
-      evidencesObj.result = averageActualResult.value
-      if (!actualResult) actualResult = averageActualResult.value
+    if (isRecordStyleFormMode(drawerFormMode.value)) {
+      const metricDisplay = recordStyleResultDisplay(drawerFormMode.value, generalPlanActualRows.value)
+      if (metricDisplay != null) {
+        evidencesObj.actual = metricDisplay
+        evidencesObj.result = metricDisplay
+        if (!actualResult) actualResult = metricDisplay
+      }
     }
 
     const payload = {
@@ -619,17 +620,17 @@ async function handleSave() {
                 class="flex items-center text-lg font-bold text-slate-800"
               >
                 <i class="fas fa-clipboard-check mr-2 text-indigo-600" />
-                Chi tiết Evidence
+                Evidence Details
               </h2>
               <p class="mt-0.5 text-xs text-slate-500">
-                Khai báo số liệu và đính kèm - bản nháp lưu trên trình duyệt; gửi server khi bạn
-                bấm <span class="font-semibold text-slate-700">Submit Đánh Giá</span>.
+                Fill in data and attachments - drafts are saved in your browser; sent to the server when you
+                click <span class="font-semibold text-slate-700">Submit Evaluation</span>.
               </p>
             </div>
             <button
               type="button"
               class="rounded-full p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
-              aria-label="Đóng"
+              aria-label="Close"
               @click="$emit('close')"
             >
               <i class="fas fa-times text-lg" />
@@ -642,8 +643,8 @@ async function handleSave() {
             class="shrink-0 border-b border-amber-200 bg-amber-50 px-6 py-2.5 text-xs font-semibold leading-snug text-amber-950"
           >
             <i class="fas fa-eye mr-2 shrink-0 text-amber-600" />
-            Chế độ chỉ xem - KPI đã nộp hoặc đang chờ duyệt; bạn vẫn xem được minh chứng, không
-            lưu chỉnh sửa.
+            View-only mode - KPI has been submitted or is pending approval; you can still view evidence but cannot
+            save changes.
           </div>
 
           <div
@@ -652,10 +653,10 @@ async function handleSave() {
           >
             <p class="font-semibold">
               <i class="fas fa-triangle-exclamation mr-2 text-rose-600" />
-              KPI đã bị từ chối - vui lòng chỉnh sửa và submit lại.
+              KPI was rejected - please update and resubmit.
             </p>
             <p class="mt-1.5 whitespace-pre-wrap text-rose-800">
-              {{ "Lý do từ chối:" + " " }} <span class="font-bold text-rose-800">{{ rejectedReasonNote }}</span>
+              {{ "Rejection reason:" + " " }} <span class="font-bold text-rose-800">{{ rejectedReasonNote }}</span>
             </p>
           </div>
 
@@ -695,22 +696,22 @@ async function handleSave() {
                   <div class="flex items-start gap-3">
                     <i class="fas fa-id-card mt-0.5 shrink-0 text-lg text-indigo-600" />
                     <div class="min-w-0">
-                      <p class="font-bold text-indigo-950">Mục tiêu giao & chỉ tiêu chuẩn</p>
+                      <p class="font-bold text-indigo-950">Assigned Goal & Standard Target</p>
                       <p class="mt-1 text-xs text-slate-600">{{ item.targetDescription || '-' }}</p>
                     </div>
                   </div>
                   <p class="border-t border-indigo-100/90 pt-3 text-xs leading-relaxed text-slate-600">
-                    Nếu kết quả thực tế <strong>khác</strong> mục tiêu trên - hãy ghi rõ chứng chỉ /
-                    điểm số thực tế ở ô bên dưới và đính kèm bản scan hoặc link tra cứu.
+                    If your actual result is <strong>different</strong> from the target above, please provide your
+                    certificate / actual score below and attach a scan or verification link.
                   </p>
                   <div>
                     <label class="mb-1 block text-xs font-bold text-slate-700">
-                      Chứng chỉ / trình độ thực tế (minh chứng đi kèm)
+                      Actual certificate / qualification (with evidence attached)
                     </label>
                     <textarea
                       v-model="certificateOutcomeDraft"
                       rows="2"
-                      placeholder="Ví dụ: JLPT N2 (12/2025) - đính kèm scan kết quả; mục tiêu TOEIC 700 chưa đạt."
+                      placeholder="Example: JLPT N2 (12/2025) - attached score scan; TOEIC 700 target not achieved."
                       :readonly="isReadOnly"
                       class="w-full resize-none rounded-md border border-indigo-200 bg-white px-3 py-2 text-sm focus:ring-1 focus:ring-indigo-500 read-only:bg-slate-50 read-only:text-slate-700"
                     />
@@ -728,14 +729,14 @@ async function handleSave() {
                     <div class="flex items-center border-b border-blue-100 bg-blue-50/50 px-4 py-3">
                       <h4 class="flex items-center text-sm font-bold text-blue-800">
                         <i class="fas fa-calculator mr-2 text-blue-600" />
-                        Khai báo Work Amount (A.2)
+                        Work Amount Entry (A.2)
                       </h4>
                     </div>
                     <div class="p-4 overflow-x-auto">
                       <table class="w-full text-left text-sm">
                         <thead>
                           <tr class="text-xs uppercase text-slate-500 bg-slate-50 border-b border-slate-200">
-                            <th class="px-3 py-2">Tháng</th>
+                            <th class="px-3 py-2">Month</th>
                             <th class="px-3 py-2">Spent (h)</th>
                             <th class="px-3 py-2">Std (h)</th>
                             <th class="px-3 py-2" />
@@ -789,14 +790,14 @@ async function handleSave() {
                         class="mt-3 text-xs font-bold text-blue-600 hover:underline"
                         @click="addWaRow"
                       >
-                        + Thêm tháng
+                        + Add month
                       </button>
                     </div>
                   </div>
 
                   <!-- General: Plan/Actual records (802) hoặc Comment+Actual (803) -->
                   <div
-                    v-else-if="drawerFormMode === 'average' || drawerFormMode === 'comment'"
+                    v-else-if="drawerFormMode === 'average' || isRecordStyleFormMode(drawerFormMode)"
                     class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"
                   >
                     <div
@@ -813,8 +814,8 @@ async function handleSave() {
                         />
                         {{
                           drawerFormMode === 'average'
-                            ? 'Khai báo Số liệu (Auto tính tỉ lệ)'
-                            : 'Khai báo Mục tiêu / Kết quả'
+                            ? 'Data Entry (Auto ratio calculation)'
+                            : 'Goal / Result Entry'
                         }}
                       </h4>
                       <span
@@ -827,7 +828,7 @@ async function handleSave() {
 
                     <div class="p-4">
                       <div v-if="scoringRawInput" class="mt-1.5 rounded border border-slate-200 bg-slate-50 px-3 py-2">
-                          <p class="mb-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">Quy tắc chấm điểm:</p>
+                          <p class="mb-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">Scoring rules:</p>
                           <pre class="font-mono text-[11px] leading-relaxed text-slate-600 whitespace-pre-wrap">{{ scoringRawInput }}</pre>
                       </div>
                       <div
@@ -848,13 +849,13 @@ async function handleSave() {
                           >
                             <div>
                               <label class="mb-1 block text-xs font-bold text-slate-600">
-                                {{ drawerFormMode === 'comment' ? 'Nội dung nhận xét (Comment)' : 'Comment' }}
+                                {{ isRecordStyleFormMode(drawerFormMode) ? 'Comment content' : 'Comment' }}
                               </label>
                               <input
                                 v-model="row.comment"
                                 type="text"
                                 :readonly="isReadOnly"
-                                :placeholder="drawerFormMode === 'comment' ? 'Mô tả bối cảnh, kết quả...' : 'Ghi chú thêm...'"
+                                :placeholder="isRecordStyleFormMode(drawerFormMode) ? 'Describe context and result...' : 'Additional notes...'"
                                 class="w-full rounded border border-slate-300 px-3 py-2 text-sm focus:ring-1 read-only:bg-slate-50"
                                 :class="drawerFormMode === 'average' ? 'focus:ring-blue-500' : 'focus:ring-teal-500'"
                               />
@@ -877,14 +878,14 @@ async function handleSave() {
                                 {{
                                   drawerFormMode === 'average'
                                     ? ratioLabels(item?.calculationTypeCode).actual
-                                    : 'Giá trị thực tế (Actual)'
+                                    : 'Actual value'
                                 }}
                               </label>
                               <input
                                 v-model="row.actual"
                                 type="text"
                                 inputmode="decimal"
-                                :placeholder="drawerFormMode === 'comment' ? 'Nhập số liệu thực tế...' : '0'"
+                                :placeholder="isRecordStyleFormMode(drawerFormMode) ? 'Enter actual data...' : '0'"
                                 :readonly="isReadOnly"
                                 class="w-full rounded border border-slate-300 px-3 py-2 text-sm focus:ring-1 read-only:bg-slate-50"
                                 :class="drawerFormMode === 'average' ? 'focus:ring-blue-500' : 'focus:ring-teal-500'"
@@ -895,7 +896,7 @@ async function handleSave() {
                                 v-if="generalPlanActualRows.length > 1 && !isReadOnly"
                                 type="button"
                                 class="rounded p-2 text-xs text-slate-400 hover:bg-rose-50 hover:text-rose-600"
-                                title="Xóa dòng"
+                                title="Remove row"
                                 @click="removePlanRow(row.id)"
                               >
                                 <i class="fas fa-trash-alt" />
@@ -909,20 +910,22 @@ async function handleSave() {
                             v-if="drawerFormMode === 'average' && averageRatioResult"
                             class="flex items-center gap-2"
                           >
-                            <span class="text-[10px] font-semibold text-slate-500">Kết quả tính:</span>
+                            <span class="text-[10px] font-semibold text-slate-500">Computed result:</span>
                             <span class="rounded bg-blue-50 px-2 py-0.5 text-xs font-bold text-blue-700">
                               {{ averageRatioResult }}
                             </span>
                           </div>
                           <div
-                            v-else-if="drawerFormMode === 'comment'"
+                            v-else-if="isRecordStyleFormMode(drawerFormMode)"
                             class="flex items-center gap-2"
                           >
-                            <span class="text-[10px] font-semibold text-slate-500">Kết quả tính:</span>
+                            <span class="text-[10px] font-semibold text-slate-500">Computed result:</span>
                             <span class="rounded bg-teal-50 px-2 py-0.5 text-xs font-bold text-teal-700">
-                              {{ averageActualResult ?? '—' }}
+                              {{ recordStyleResultDisplay(drawerFormMode, generalPlanActualRows) ?? '—' }}
                             </span>
-                            <span class="text-[10px] text-slate-400">(TB Actual)</span>
+                            <span class="text-[10px] text-slate-400">
+                              {{ drawerFormMode === 'sum' ? '(Total Actual)' : '(Avg Actual)' }}
+                            </span>
                           </div>
                           <div v-else />
                           <button
@@ -931,7 +934,7 @@ async function handleSave() {
                             :class="drawerFormMode === 'average' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-teal-600 hover:bg-teal-700'"
                             @click="addPlanRow"
                           >
-                            <i class="fas fa-plus mr-1" /> Thêm Record
+                            <i class="fas fa-plus mr-1" /> Add Record
                           </button>
                         </div>
                       </div>
@@ -954,7 +957,7 @@ async function handleSave() {
                       v-show="isUploadOnlyDrawer"
                       class="rounded bg-pink-100 px-2 py-0.5 text-[10px] font-bold uppercase text-pink-700"
                     >
-                      Bắt buộc
+                      Required
                     </span>
                   </div>
                   <div class="space-y-4 p-5">
@@ -974,7 +977,7 @@ async function handleSave() {
                           multiple
                           :accept="EVIDENCE_ACCEPT_ATTR"
                           class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-                          title="Chọn file (tối đa 5 file)"
+                          title="Choose files (max 5 files)"
                           :disabled="isReadOnly"
                           @change="onEvidenceFilesChange"
                         />
@@ -983,17 +986,17 @@ async function handleSave() {
                         >
                           <i class="fas fa-cloud-upload-alt text-2xl" />
                         </div>
-                        <p class="text-sm font-bold text-slate-700">Tải File Lên (PC)</p>
+                        <p class="text-sm font-bold text-slate-700">Upload Files (PC)</p>
                         <p class="mt-1 text-[10px] uppercase tracking-wider text-slate-400">
-                          PDF, Word, Excel, CSV, JPG, PNG - tối đa {{ EVIDENCE_MAX_FILES }} file
+                          PDF, Word, Excel, CSV, JPG, PNG - max {{ EVIDENCE_MAX_FILES }} files
                         </p>
                       </label>
 
                       <!-- URL input -->
                       <div class="flex flex-col rounded-lg border border-slate-200 bg-slate-50 p-5">
-                        <label class="mb-1 block text-sm font-bold text-slate-700">Thêm link URL</label>
+                        <label class="mb-1 block text-sm font-bold text-slate-700">Add URL link</label>
                         <p class="mb-3 text-[10px] uppercase tracking-wider text-slate-400">
-                          Jira, Confluence, Drive, cổng tra cứu điểm… - tối đa {{ EVIDENCE_MAX_URLS }} link
+                          Jira, Confluence, Drive, score verification portals... - max {{ EVIDENCE_MAX_URLS }} links
                         </p>
                         <div class="flex flex-col gap-2 sm:flex-row sm:items-stretch">
                           <div class="relative min-w-0 flex-1">
@@ -1017,7 +1020,7 @@ async function handleSave() {
                             :disabled="pendingEvidenceUrls.length >= EVIDENCE_MAX_URLS || isReadOnly"
                             @click="addPendingEvidenceUrl"
                           >
-                            Thêm URL
+                            Add URL
                           </button>
                         </div>
                         <p v-if="evidenceUrlHint" class="mt-2 text-xs text-amber-700">
@@ -1033,7 +1036,7 @@ async function handleSave() {
                       >
                         <span class="inline-flex items-center gap-2">
                           <i class="fas fa-file-alt text-slate-500" aria-hidden="true" />
-                          File (máy):
+                          Files (local):
                           <span class="tabular-nums text-slate-900">
                             {{ evidenceFileSectionCount }}/{{ EVIDENCE_MAX_FILES }}
                           </span>
@@ -1041,7 +1044,7 @@ async function handleSave() {
                         <span class="hidden sm:inline text-slate-300" aria-hidden="true">|</span>
                         <span class="inline-flex items-center gap-2">
                           <i class="fas fa-link text-indigo-500" aria-hidden="true" />
-                          URL / đường dẫn:
+                          URL / path:
                           <span class="tabular-nums text-slate-900">
                             {{ pendingEvidenceUrls.length }}/{{ EVIDENCE_MAX_URLS }}
                           </span>
@@ -1050,8 +1053,8 @@ async function handleSave() {
                           v-if="pendingEvidenceFiles.length >= EVIDENCE_MAX_FILES || pendingEvidenceUrls.length >= EVIDENCE_MAX_URLS"
                           class="ml-auto flex flex-wrap gap-2 text-[11px] font-medium text-amber-700"
                         >
-                          <span v-if="pendingEvidenceFiles.length >= EVIDENCE_MAX_FILES">Đủ file máy</span>
-                          <span v-if="pendingEvidenceUrls.length >= EVIDENCE_MAX_URLS">Đủ ô link</span>
+                          <span v-if="pendingEvidenceFiles.length >= EVIDENCE_MAX_FILES">File limit reached</span>
+                          <span v-if="pendingEvidenceUrls.length >= EVIDENCE_MAX_URLS">URL limit reached</span>
                         </span>
                       </div>
                       <p v-if="evidenceUploadHint" class="text-xs text-amber-700">
@@ -1061,7 +1064,7 @@ async function handleSave() {
                       <!-- File attachments list -->
                       <div v-if="hasFileAttachmentsSection">
                         <p class="mb-2 text-[11px] font-bold uppercase tracking-wide text-slate-500">
-                          File đính kèm
+                          Attached files
                         </p>
                         <ul
                           class="divide-y divide-slate-100 overflow-hidden rounded-lg border border-slate-200 bg-white"
@@ -1083,7 +1086,7 @@ async function handleSave() {
                             <button
                               type="button"
                               class="shrink-0 rounded p-1.5 text-slate-400 transition-colors hover:bg-rose-50 hover:text-rose-600"
-                              title="Xóa file"
+                              title="Remove file"
                               @click="removePendingEvidenceFile(row.id)"
                             >
                               <i class="fas fa-times" />
@@ -1109,7 +1112,7 @@ async function handleSave() {
                             <button
                               type="button"
                               class="shrink-0 rounded p-1.5 text-slate-400 transition-colors hover:bg-rose-50 hover:text-rose-600"
-                              title="Xóa minh chứng"
+                              title="Remove evidence"
                               @click="removePendingEvidenceUrl(row.id)"
                             >
                               <i class="fas fa-times" />
@@ -1121,7 +1124,7 @@ async function handleSave() {
                       <!-- URL list -->
                       <div v-if="hasEvidenceUrlList">
                         <p class="mb-2 text-[11px] font-bold uppercase tracking-wide text-slate-500">
-                          URL đường dẫn minh chứng
+                          Evidence URL links
                         </p>
                         <ul
                           class="divide-y divide-slate-100 overflow-hidden rounded-lg border border-indigo-100 bg-white"
@@ -1149,7 +1152,7 @@ async function handleSave() {
                             <button
                               type="button"
                               class="shrink-0 rounded p-1.5 text-slate-400 transition-colors hover:bg-rose-50 hover:text-rose-600"
-                              title="Xóa URL"
+                              title="Remove URL"
                               @click="removePendingEvidenceUrl(row.id)"
                             >
                               <i class="fas fa-times" />
@@ -1162,7 +1165,7 @@ async function handleSave() {
                         v-if="!hasEvidenceAttachments"
                         class="rounded border border-dashed border-slate-200 bg-slate-50/80 px-3 py-2 text-center text-xs text-slate-500"
                       >
-                        Chưa có file hoặc URL - thêm ở hai ô phía trên
+                        No files or URLs yet - add them in the two fields above
                       </p>
                     </div>
                   </div>
@@ -1173,14 +1176,14 @@ async function handleSave() {
                   <div class="border-b border-slate-100 bg-slate-50 px-4 py-3">
                     <h4 class="flex items-center text-sm font-bold text-slate-700">
                       <i class="fas fa-comment-alt mr-2 text-slate-500" />
-                      Ghi chú (Comment cho PM)
+                      Notes (Comment for PM)
                     </h4>
                   </div>
                   <div class="p-4">
                     <textarea
                       v-model="evidenceNoteDraft"
                       rows="3"
-                      placeholder="Nhập diễn giải thêm về bằng chứng của bạn..."
+                      placeholder="Enter additional explanation for your evidence..."
                       :readonly="isReadOnly"
                       class="w-full resize-none rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:ring-1 focus:ring-indigo-500 read-only:bg-slate-50"
                     />
@@ -1198,12 +1201,12 @@ async function handleSave() {
                   <div class="space-y-4 p-4">
                     <div>
                       <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-500">
-                        Feedback của Leader (target setup)
+                        Leader Feedback (target setup)
                       </label>
                       <textarea
                         v-model="leaderFeedbackDraft"
                         rows="2"
-                        placeholder="Ví dụ: KPI này cần điều chỉnh target hoặc timeline"
+                        placeholder="Example: This KPI needs target or timeline adjustment"
                         :readonly="isReadOnly"
                         class="w-full resize-none rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:ring-1 focus:ring-indigo-500 read-only:bg-slate-50"
                       />
@@ -1215,7 +1218,7 @@ async function handleSave() {
                       <textarea
                         v-model="gmCommentDraft"
                         rows="2"
-                        placeholder="Ghi chú từ GM cho KPI này"
+                        placeholder="GM note for this KPI"
                         readonly
                         class="w-full resize-none rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-600"
                       />
@@ -1256,11 +1259,11 @@ async function handleSave() {
               <!-- Auto-computed score (comment/average mode + scoring rules) -->
               <template
                 v-if="
-                  (drawerFormMode === 'comment' || drawerFormMode === 'average')
+                  (isRecordStyleFormMode(drawerFormMode) || drawerFormMode === 'average')
                   && scoringRulesFromItem.length > 0
                 "
               >
-                <label class="mb-1 text-xs font-semibold text-slate-600">Điểm (tự tính)</label>
+                <label class="mb-1 text-xs font-semibold text-slate-600">Score (auto-calculated)</label>
                 <div class="flex items-center gap-2 h-10">
                   <span
                     class="inline-flex min-w-[2.75rem] items-center justify-center rounded-md border px-3 py-2 text-sm font-bold"
@@ -1272,14 +1275,14 @@ async function handleSave() {
                   </span>
                   <span class="text-xs text-slate-500">/ 5</span>
                   <span v-if="computedEvalScore === null" class="text-xs text-slate-400">
-                    {{ drawerFormMode === 'average' ? 'Nhập đủ số liệu để tính' : 'Nhập đủ Comment và Actual để tính' }}
+                    {{ drawerFormMode === 'average' ? 'Enter complete data to calculate' : 'Enter Comment and Actual to calculate' }}
                   </span>
                 </div>
                 <p
                   v-if="metricOutOfDslRule"
                   class="mt-1 text-xs font-medium text-rose-600"
                 >
-                  Giá trị Actual/Kết quả tính đang vượt mức tối đa của Quy tắc chấm điểm.
+                  Actual/computed value exceeds the maximum allowed by scoring rules.
                 </p>
               </template>
               <!-- Manual score dropdown for average mode or KPIs without scoring rules -->
@@ -1296,13 +1299,13 @@ async function handleSave() {
                         : parseInt(($event.target as HTMLSelectElement).value, 10)
                   "
                 >
-                  <option value="" disabled>- Chưa chọn -</option>
+                  <option value="" disabled>- Not selected -</option>
                   <option v-for="n in 5" :key="'ds-' + n" :value="n">{{ n }}</option>
                 </select>
               </template>
             </div>
             <div v-else class="text-sm font-semibold text-violet-700">
-              Gửi feedback cho KPI này
+              Send feedback for this KPI
             </div>
 
             <div class="flex items-center gap-3">
@@ -1311,7 +1314,7 @@ async function handleSave() {
                 class="rounded-lg border border-slate-300 bg-white px-5 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50"
                 @click="$emit('close')"
               >
-                Hủy bỏ
+                Cancel
               </button>
 
               <button
@@ -1321,19 +1324,19 @@ async function handleSave() {
                 :disabled="!canSaveEvidence || saving"
                 :title="!canSaveEvidence
                   ? (isFeedbackMode
-                    ? 'Vui lòng nhập feedback trước khi gửi'
-                    : 'Vui lòng chọn điểm tự đánh giá (1–5) trước khi lưu')
+                    ? 'Please enter feedback before sending'
+                    : 'Please select a self-evaluation score (1-5) before saving')
                   : undefined"
                 @click="handleSave"
               >
                 <i :class="saving ? 'fas fa-spinner fa-spin' : 'fas fa-save'" class="text-xs" />
-                {{ saving ? 'Đang lưu...' : (isFeedbackMode ? 'Gửi Feedback' : 'Lưu Evidence') }}
+                {{ saving ? 'Saving...' : (isFeedbackMode ? 'Send Feedback' : 'Save Evidence') }}
               </button>
               <span
                 v-else
                 class="rounded-lg border border-slate-200 bg-slate-50 px-4 py-2 text-xs font-semibold text-slate-500"
               >
-                Chỉ xem - không lưu chỉnh sửa
+                View only - changes cannot be saved
               </span>
             </div>
           </div>

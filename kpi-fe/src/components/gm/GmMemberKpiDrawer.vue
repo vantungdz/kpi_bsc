@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import type {
   GmMemberKpiDrawerProfile,
   GmModalKpiItemMock,
   GmPmKpiRolloutPayload,
   GmStrategicKpiKind,
 } from '@/types/gm-workspace'
-import { isEvidenceImageUrl, normalizeEvidenceHref } from '@/utils/memberKpiHelpers'
+import type { GmEvidenceTable } from '@/types/gm-employee-evaluation'
+import { isEvidenceImageUrl, isRecordStyleCalcRule, normalizeEvidenceHref } from '@/utils/memberKpiHelpers'
 
 const props = withDefaults(
   defineProps<{
@@ -126,10 +127,10 @@ function asmStatusMeta(item: GmModalKpiItemMock): { label: string; badgeClass: s
     return {
       label:
         code === 403
-          ? 'Awaiting GM approval (new)'
+          ? 'Pending GM Approval'
           : code === 502
-            ? '1st half · Awaiting GM'
-            : 'Final · Awaiting GM',
+            ? 'Pending GM Approval (Mid-Year)'
+            : 'Pending GM Approval (Final)',
       badgeClass: 'border-rose-200 bg-rose-50 text-rose-700',
     }
   }
@@ -137,18 +138,18 @@ function asmStatusMeta(item: GmModalKpiItemMock): { label: string; badgeClass: s
     return {
       label:
         code === 402
-          ? 'Awaiting PM approval (new)'
+          ? 'Pending PM Approval'
           : code === 404
-            ? 'Awaiting member acceptance'
+            ? 'Pending Acceptance'
             : code === 501
-              ? '1st half submitted · Awaiting PM'
-              : 'Final · Awaiting PM',
+              ? 'Pending PM Approval (Mid-Year)'
+              : 'Pending PM Approval (Final)',
       badgeClass: 'border-amber-200 bg-amber-50 text-amber-900',
     }
   }
   if (code === 405 || code === 503 || code === 603) {
     return {
-      label: code === 405 ? 'In progress' : code === 503 ? '1st half locked' : 'Final locked',
+      label: code === 405 ? 'In progress' : code === 503 ? 'Completed (Mid-Year)' : 'Complete',
       badgeClass: 'border-emerald-200 bg-emerald-50 text-emerald-800',
     }
   }
@@ -160,40 +161,42 @@ function asmStatusMeta(item: GmModalKpiItemMock): { label: string; badgeClass: s
   }
   if (code === 401) {
     return {
-      label: 'Not activated',
+      label: 'New KPI',
       badgeClass: 'border-slate-200 bg-slate-100 text-slate-600',
     }
   }
   return {
-    label: `ASM code ${code}`,
+    label: `Processing Feedback`,
     badgeClass: 'border-slate-200 bg-slate-100 text-slate-600',
   }
 }
 
-/** Tail after «Evidence / notes:» or legacy Vietnamese label in targetSummary (rollout PM/GM). */
-function rolloutMinhChungTail(item: GmModalKpiItemMock): string {
-  const src = (item.targetSummary ?? '').trim()
-  const tail =
-    src.match(/Minh chứng\s*\/\s*ghi chú:\s*(.+)$/i)?.[1]?.trim()
-    ?? src.match(/Evidence\s*\/\s*notes?:\s*(.+)$/i)?.[1]?.trim()
-  if (tail) return tail
-  if (item.evidenceAttachmentUrl) return ''
-  return '—'
-}
-
-/** Ưu tiên note/content đã parse (PM Portfolio); fallback đuôi targetSummary. */
-function rolloutEvidenceNoteText(item: GmModalKpiItemMock): string {
-  const explicit = (item.evidenceNoteDisplay ?? '').trim()
-  if (explicit && explicit !== '—') return explicit
-  const tail = rolloutMinhChungTail(item).trim()
-  return tail || '—'
-}
-
-/** Chỉ hiển thị ô ghi chú khi có nội dung thật (không hiện placeholder «—»). */
-function rolloutEvidenceNoteOnly(item: GmModalKpiItemMock): string {
-  const t = rolloutEvidenceNoteText(item).trim()
-  if (!t || t === '—') return ''
+function rolloutEvidenceTable(item: GmModalKpiItemMock): GmEvidenceTable | null {
+  const t = item.rolloutEvidence
+  if (!t?.rows?.length) return null
   return t
+}
+
+function isEvidenceCellHttpUrl(raw: unknown): boolean {
+  const s = String(raw ?? '').trim()
+  return /^https?:\/\//i.test(s)
+}
+
+function usesPmStyleEvidence(item: GmModalKpiItemMock): boolean {
+  return (
+    item.evidenceData !== undefined ||
+    item.evidenceContent !== undefined ||
+    item.evidenceAttachments !== undefined
+  )
+}
+
+function rolloutEvidenceColspan(item: GmModalKpiItemMock): number {
+  return isRecordStyleCalcRule(item.calcRuleCode) ? 2 : 3
+}
+
+function evidenceText(raw: unknown): string {
+  const s = String(raw ?? '').trim()
+  return s || '—'
 }
 
 /** % hoàn thành 0–100: từ actualProgressPct hoặc chuỗi Actual kiểu «10 (100%)» / «100%». */
@@ -290,6 +293,27 @@ const rolloutPersonnelCountLabel = computed(() => {
   const n = props.pmKpiRollout?.rows.length ?? 0
   return n === 1 ? '1 member' : `${n} members`
 })
+
+const expandedRolloutRows = ref<Record<number, boolean>>({})
+
+function isRolloutRowExpanded(idx: number): boolean {
+  return expandedRolloutRows.value[idx] ?? false
+}
+
+function toggleRolloutRow(idx: number) {
+  expandedRolloutRows.value[idx] = !isRolloutRowExpanded(idx)
+}
+
+watch(
+  () => props.pmKpiRollout,
+  (rollout) => {
+    const len = rollout?.rows.length ?? 0
+    const next: Record<number, boolean> = {}
+    for (let i = 0; i < len; i += 1) next[i] = false
+    expandedRolloutRows.value = next
+  },
+  { immediate: true },
+)
 </script>
 
 <template>
@@ -369,179 +393,382 @@ const rolloutPersonnelCountLabel = computed(() => {
               <div
                 v-for="(row, idx) in pmKpiRollout.rows"
                 :key="`${row.item.code}-${idx}`"
-                class="group relative overflow-hidden ring-1 ring-slate-900/[0.03] transition-shadow hover:shadow-md"
-                :class="rolloutMemberCardStyle(row.item).outerCard"
+                class="group relative overflow-hidden rounded-xl border border-red-100 bg-white shadow-sm ring-1 ring-slate-900/[0.03] transition-all duration-200 hover:shadow-md"
               >
                 <div
-                  class="pointer-events-none absolute bottom-0 left-0 top-0 w-1 rounded-l-2xl"
+                  class="pointer-events-none absolute bottom-0 left-0 top-0 w-1.5 rounded-l-xl"
                   :class="rolloutMemberCardStyle(row.item).accentClass"
                 />
-                <div class="relative pl-4 pr-3 py-4 sm:pl-5 sm:pr-4">
-                  <div class="flex min-w-0 gap-3">
+                <div class="relative p-4 sm:p-5">
+                  <div class="flex min-w-0 flex-col">
                     <div
-                      class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border shadow-sm"
-                      :class="rolloutMemberCardStyle(row.item).avatarWrap"
+                      class="flex min-w-0 cursor-pointer select-none flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+                      @click="toggleRolloutRow(idx)"
                     >
-                      <i class="fas fa-user text-sm" />
-                    </div>
-                    <div class="min-w-0 flex-1 space-y-3">
-                      <div class="flex min-w-0 flex-wrap items-start justify-between gap-2">
-                        <div class="min-w-0 flex flex-wrap items-center gap-2">
+                      <div class="flex min-w-0 items-center gap-3">
+                        <div
+                          class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border shadow-sm"
+                          :class="rolloutMemberCardStyle(row.item).avatarWrap"
+                        >
+                          <i class="fas fa-user text-sm" />
+                        </div>
+                        <div class="min-w-0 flex flex-col gap-1 sm:flex-row sm:items-baseline sm:gap-3">
                           <h4
-                            class="max-w-full text-[15px] font-bold leading-snug tracking-tight"
+                            class="max-w-full truncate text-base font-bold leading-snug"
                             :class="rolloutMemberCardStyle(row.item).nameClass"
                           >
                             {{ row.profile.name }}
                           </h4>
                           <span
-                            class="rounded-md border px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide"
+                            class="w-fit rounded border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider"
                             :class="rolloutMemberCardStyle(row.item).rankBadgeClass"
                           >
                             {{ row.profile.rank ?? '—' }}
                           </span>
                         </div>
+                      </div>
+                      <div class="flex items-center gap-2">
                         <span
-                          class="inline-flex max-w-full items-center rounded-full border px-3 py-1 text-[11px] font-bold leading-snug shadow-sm"
+                          class="inline-flex w-fit max-w-full items-center rounded-full border px-3 py-1 text-xs font-medium shadow-sm"
                           :class="asmStatusMeta(row.item).badgeClass"
                         >
                           {{ asmStatusMeta(row.item).label }}
                         </span>
+                        <button
+                          type="button"
+                          class="rounded-full p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                          :aria-label="isRolloutRowExpanded(idx) ? 'Collapse details' : 'Expand details'"
+                          @click.stop="toggleRolloutRow(idx)"
+                        >
+                          <i
+                            class="fas fa-chevron-down text-sm transition-transform duration-300"
+                            :class="isRolloutRowExpanded(idx) ? 'rotate-180' : ''"
+                          />
+                        </button>
                       </div>
+                    </div>
 
-                      <div
-                        class="rounded-xl border border-slate-100 bg-slate-50/90 p-3 shadow-inner sm:p-4"
-                      >
-                        <div class="mb-2 flex items-end justify-between gap-3">
-                          <div class="min-w-0">
-                            <p
-                              class="mb-1 text-[11px] font-semibold text-slate-500"
-                              title="Target allocated to this person for this KPI (when the PM rolled it out)."
-                            >
-                              Assigned target
-                            </p>
-                            <p class="text-lg font-bold tabular-nums text-slate-900">
-                              {{ row.item.target }}
-                            </p>
-                          </div>
-                          <div class="min-w-0 text-right">
-                            <p class="mb-1 text-[11px] font-semibold text-slate-500">Actual</p>
-                            <div class="flex flex-wrap items-baseline justify-end gap-1">
-                              <span
-                                class="max-w-full text-lg font-bold tabular-nums leading-snug"
-                                :class="rolloutMemberCardStyle(row.item).actualValueClass"
-                              >
-                                {{ rolloutMetricHeadline(row.item).actualMain }}
-                              </span>
-                              <span
-                                v-if="rolloutMetricHeadline(row.item).actualPct != null"
-                                class="text-sm font-semibold tabular-nums"
-                                :class="rolloutMemberCardStyle(row.item).actualValueClass"
-                              >
-                                ({{ rolloutMetricHeadline(row.item).actualPct }}%)
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div
-                          v-if="rolloutProgressPctRounded(row.item) != null"
-                          class="relative mt-2 h-2 w-full overflow-visible rounded-full bg-slate-200/90"
-                        >
-                          <div
-                            class="relative h-2 rounded-full bg-gradient-to-r from-emerald-600 to-teal-500 shadow-sm transition-[width] duration-500 ease-out"
-                            :style="{
-                              width:
-                                Math.min(
-                                  100,
-                                  Math.max(0, rolloutProgressPctRounded(row.item) ?? 0),
-                                ) + '%',
-                            }"
-                          >
-                            <i
-                              v-if="(rolloutProgressPctRounded(row.item) ?? 0) >= 100"
-                              class="fas fa-check-circle absolute -right-0.5 -top-1 text-[13px] text-emerald-600 drop-shadow-sm ring-2 ring-white"
-                              aria-hidden="true"
-                            />
-                          </div>
-                        </div>
-                        <div
-                          v-else-if="
-                            row.item.actualProgressPct &&
-                            !rolloutActualProgressRedundant(row.item)
-                          "
-                          class="mt-3 flex items-start justify-between gap-3 border-t border-slate-200/60 pt-3 text-xs"
-                        >
-                          <span class="font-semibold text-slate-500">Actual %</span>
-                          <span
-                            class="font-extrabold tabular-nums"
-                            :class="rolloutMemberCardStyle(row.item).actualValueClass"
-                          >
-                            {{ row.item.actualProgressPct }}
-                          </span>
-                        </div>
-                      </div>
-
-                      <div class="space-y-3 border-t border-slate-100 pt-1">
-                        <p class="text-[11px] font-extrabold uppercase tracking-[0.1em] text-slate-500">
-                          Evidence / notes
-                        </p>
-                        <div
-                          v-if="rolloutEvidenceNoteOnly(row.item)"
-                          class="rounded-xl border border-amber-200/80 bg-amber-50/95 px-3.5 py-3 text-[13px] leading-relaxed text-amber-950 shadow-sm"
-                        >
-                          {{ rolloutEvidenceNoteOnly(row.item) }}
-                        </div>
-                        <p
-                          v-else
-                          class="rounded-lg border border-dashed border-slate-200 bg-slate-50/80 px-3 py-2 text-xs italic text-slate-400"
-                        >
-                          No notes attached.
-                        </p>
-
-                        <ul
-                          v-if="row.item.evidenceAttachments && row.item.evidenceAttachments.length > 0"
-                          class="space-y-2"
-                        >
-                          <li
-                            v-for="(att, ai) in row.item.evidenceAttachments"
-                            :key="'ev-' + ai"
-                            class="flex gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2.5 shadow-sm transition-colors hover:border-indigo-200 hover:bg-indigo-50/30"
-                          >
-                            <span
-                              class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600"
-                            >
-                              <i class="fas fa-link text-sm" />
-                            </span>
-                            <div class="min-w-0 flex-1 space-y-2">
-                              <a
-                                :href="normalizeEvidenceHref(att.url)"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                class="break-all text-[13px] font-semibold text-indigo-700 hover:text-indigo-900 hover:underline"
-                              >
-                                {{ att.name || att.url }}
-                              </a>
-                              <div v-if="isEvidenceImageUrl(att.url)" class="overflow-hidden rounded-lg border border-slate-100 bg-slate-50">
-                                <img
-                                  :src="normalizeEvidenceHref(att.url)"
-                                  :alt="att.name || 'Evidence'"
-                                  class="max-h-40 w-full object-contain"
-                                />
+                    <div
+                      class="grid transition-all duration-300 ease-in-out"
+                      :class="
+                        isRolloutRowExpanded(idx)
+                          ? 'mt-5 grid-rows-[1fr] opacity-100'
+                          : 'mt-0 grid-rows-[0fr] opacity-0'
+                      "
+                    >
+                      <div class="overflow-hidden space-y-4">
+                        <div class="rounded-lg border border-slate-100 bg-slate-50/70 p-4">
+                          <div class="space-y-4">
+                            <div class="flex items-end justify-between gap-6">
+                              <div class="min-w-0">
+                                <p
+                                  class="mb-1 text-xs font-semibold text-slate-500"
+                                  title="Target allocated to this person for this KPI (when the PM rolled it out)."
+                                >
+                                  Assigned target
+                                </p>
+                                <div class="text-2xl font-bold leading-none text-slate-900">
+                                  {{ row.item.target }}
+                                </div>
+                              </div>
+                              <div class="min-w-0 shrink-0 text-right">
+                                <p class="mb-1 text-xs font-semibold text-slate-500">Actual</p>
+                                <div class="flex flex-wrap items-baseline justify-end gap-1">
+                                  <span
+                                    class="text-2xl font-bold leading-none"
+                                    :class="rolloutMemberCardStyle(row.item).actualValueClass"
+                                  >
+                                    {{ rolloutMetricHeadline(row.item).actualMain }}
+                                  </span>
+                                  <span
+                                    v-if="rolloutMetricHeadline(row.item).actualPct != null"
+                                    class="text-sm font-semibold tabular-nums"
+                                    :class="rolloutMemberCardStyle(row.item).actualValueClass"
+                                  >
+                                    ({{ rolloutMetricHeadline(row.item).actualPct }}%)
+                                  </span>
+                                </div>
                               </div>
                             </div>
-                          </li>
-                        </ul>
 
-                        <a
-                          v-if="row.item.evidenceAttachmentUrl"
-                          :href="row.item.evidenceAttachmentUrl"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          class="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50/80 px-3 py-2.5 text-xs font-bold text-indigo-800 transition-colors hover:bg-indigo-100"
-                        >
-                          <i class="fas fa-paperclip" />
-                          View attached evidence
-                        </a>
+                            <div
+                              v-if="rolloutProgressPctRounded(row.item) != null"
+                              class="relative h-2 w-full overflow-visible rounded-full bg-slate-200/90"
+                            >
+                                <div
+                                  class="relative h-2 rounded-full bg-gradient-to-r from-emerald-600 to-teal-500 shadow-sm transition-[width] duration-500 ease-out"
+                                  :style="{
+                                    width:
+                                      Math.min(
+                                        100,
+                                        Math.max(0, rolloutProgressPctRounded(row.item) ?? 0),
+                                      ) + '%',
+                                  }"
+                                >
+                                  <i
+                                    v-if="(rolloutProgressPctRounded(row.item) ?? 0) >= 100"
+                                    class="fas fa-check-circle absolute -right-0.5 -top-1 text-[13px] text-emerald-600 drop-shadow-sm ring-2 ring-white"
+                                    aria-hidden="true"
+                                  />
+                                </div>
+                              </div>
+                              <div
+                                v-else-if="
+                                  row.item.actualProgressPct &&
+                                  !rolloutActualProgressRedundant(row.item)
+                                "
+                                class="mt-3 flex items-start justify-between gap-3 border-t border-slate-200/60 pt-3 text-xs"
+                              >
+                                <span class="font-semibold text-slate-500">Actual %</span>
+                                <span
+                                  class="font-extrabold tabular-nums"
+                                  :class="rolloutMemberCardStyle(row.item).actualValueClass"
+                                >
+                                  {{ row.item.actualProgressPct }}
+                                </span>
+                              </div>
+
+                            <div class="space-y-2 mt-2 border-t border-slate-200/60 pt-2">
+                              <p class="text-xs font-bold uppercase tracking-wide text-slate-500">
+                                Evidence / notes
+                              </p>
+
+                              <template v-if="usesPmStyleEvidence(row.item)">
+                                <div
+                                  class="overflow-x-auto rounded-lg border border-indigo-100 bg-white shadow-sm"
+                                >
+                                  <table class="w-full text-left text-xs">
+                                    <thead
+                                      class="bg-indigo-50 text-[10px] font-bold uppercase tracking-wider text-indigo-800"
+                                    >
+                                      <tr>
+                                        <th
+                                          class="px-3 py-2.5 text-center"
+                                          :class="
+                                            !isRecordStyleCalcRule(row.item.calcRuleCode)
+                                              ? 'w-3/5'
+                                              : 'w-2/3'
+                                          "
+                                        >
+                                          Content
+                                        </th>
+                                        <th
+                                          v-if="!isRecordStyleCalcRule(row.item.calcRuleCode)"
+                                          class="w-1/5 border-l border-indigo-100/60 px-3 py-2.5 text-center"
+                                        >
+                                          Plan
+                                        </th>
+                                        <th
+                                          class="border-l border-indigo-100/60 px-3 py-2.5 text-center"
+                                          :class="
+                                            !isRecordStyleCalcRule(row.item.calcRuleCode)
+                                              ? 'w-1/5'
+                                              : 'w-1/3'
+                                          "
+                                        >
+                                          Actual
+                                        </th>
+                                      </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-slate-100">
+                                      <tr
+                                        v-for="(ev, eIdx) in row.item.evidenceData"
+                                        :key="eIdx"
+                                        class="transition-colors hover:bg-slate-50"
+                                      >
+                                        <td
+                                          class="px-3 py-2.5 font-medium leading-snug text-slate-800"
+                                        >
+                                          {{ evidenceText(ev.content || ev.comment) }}
+                                        </td>
+                                        <td
+                                          v-if="!isRecordStyleCalcRule(row.item.calcRuleCode)"
+                                          class="border-l border-slate-100 px-3 py-2.5 text-center text-slate-600"
+                                        >
+                                          {{ evidenceText(ev.plan) }}
+                                        </td>
+                                        <td
+                                          class="border-l border-slate-100 px-3 py-2.5 text-center font-bold text-emerald-600"
+                                        >
+                                          {{ evidenceText(ev.actual) }}
+                                        </td>
+                                      </tr>
+                                      <tr
+                                        v-if="
+                                          (!row.item.evidenceData ||
+                                            row.item.evidenceData.length === 0) &&
+                                          !row.item.evidenceContent
+                                        "
+                                      >
+                                        <td
+                                          :colspan="rolloutEvidenceColspan(row.item)"
+                                          class="px-3 py-3 text-center font-medium italic text-slate-400"
+                                        >
+                                          No tabular evidence details yet.
+                                        </td>
+                                      </tr>
+                                      <tr v-if="row.item.evidenceContent">
+                                        <td
+                                          :colspan="rolloutEvidenceColspan(row.item)"
+                                          class="border-t border-yellow-100 bg-yellow-50/30 px-4 py-3 text-slate-700 whitespace-pre-wrap"
+                                        >
+                                          <p
+                                            class="mb-1 text-[10px] font-bold uppercase text-yellow-700/70"
+                                          >
+                                            Notes (Comment for Supervisor):
+                                          </p>
+                                          {{ row.item.evidenceContent }}
+                                        </td>
+                                      </tr>
+                                    </tbody>
+                                  </table>
+                                </div>
+
+                                <div
+                                  v-if="
+                                    row.item.evidenceAttachments &&
+                                    row.item.evidenceAttachments.length > 0
+                                  "
+                                  class="rounded-lg border border-slate-200 bg-white p-3 shadow-sm"
+                                >
+                                  <p class="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                                    Attached evidence (URL / file)
+                                  </p>
+                                  <ul class="flex flex-col gap-3">
+                                    <li
+                                      v-for="(att, ai) in row.item.evidenceAttachments"
+                                      :key="'ev-' + ai"
+                                      class="rounded-md border border-slate-100 bg-slate-50/80 p-2"
+                                    >
+                                      <a
+                                        :href="normalizeEvidenceHref(att.url)"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        class="break-all text-xs font-semibold text-indigo-600 underline hover:text-indigo-800"
+                                      >
+                                        {{ att.name || att.url }}
+                                      </a>
+                                      <div v-if="isEvidenceImageUrl(att.url)" class="mt-2">
+                                        <img
+                                          :src="normalizeEvidenceHref(att.url)"
+                                          :alt="att.name || 'Evidence'"
+                                          class="max-h-40 max-w-full rounded border border-slate-200 object-contain"
+                                        />
+                                      </div>
+                                    </li>
+                                  </ul>
+                                </div>
+                              </template>
+
+                              <template v-else>
+                                <table
+                                  v-if="rolloutEvidenceTable(row.item)"
+                                  class="w-full overflow-hidden rounded-md border border-slate-200 bg-white text-left text-xs shadow-sm"
+                                >
+                                  <thead
+                                    class="bg-slate-50 text-[10px] font-semibold uppercase tracking-wider text-slate-600"
+                                  >
+                                    <tr>
+                                      <th
+                                        v-for="(h, hi) in rolloutEvidenceTable(row.item)!.headers"
+                                        :key="hi"
+                                        class="border-b border-slate-200 px-2.5 py-2"
+                                        :class="hi > 0 ? 'text-center' : 'text-left'"
+                                      >
+                                        {{ h }}
+                                      </th>
+                                    </tr>
+                                  </thead>
+                                  <tbody class="divide-y divide-slate-100">
+                                    <tr
+                                      v-for="(evRow, ri) in rolloutEvidenceTable(row.item)!.rows"
+                                      :key="ri"
+                                    >
+                                      <td
+                                        v-for="(cell, ci) in evRow"
+                                        :key="ci"
+                                        class="px-2.5 py-2 font-medium leading-snug"
+                                        :class="
+                                          ci > 0
+                                            ? 'text-center text-slate-800'
+                                            : 'text-slate-700'
+                                        "
+                                      >
+                                        <a
+                                          v-if="isEvidenceCellHttpUrl(cell)"
+                                          :href="cell.trim()"
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          class="break-all font-semibold text-indigo-600 hover:underline"
+                                        >
+                                          {{ cell }}
+                                        </a>
+                                        <template v-else>{{ cell || '—' }}</template>
+                                      </td>
+                                    </tr>
+                                  </tbody>
+                                </table>
+                                <div
+                                  v-else
+                                  class="min-h-[44px] rounded-md border border-slate-200 bg-white p-2.5 text-sm text-slate-400"
+                                >
+                                  —
+                                </div>
+                              </template>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div class="space-y-2">
+                          <ul
+                            v-if="
+                              !usesPmStyleEvidence(row.item) &&
+                              row.item.evidenceAttachments &&
+                              row.item.evidenceAttachments.length > 0
+                            "
+                            class="space-y-2"
+                          >
+                            <li
+                              v-for="(att, ai) in row.item.evidenceAttachments"
+                              :key="'ev-' + ai"
+                              class="flex gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2.5 shadow-sm transition-colors hover:border-indigo-200 hover:bg-indigo-50/30"
+                            >
+                              <span
+                                class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600"
+                              >
+                                <i class="fas fa-link text-sm" />
+                              </span>
+                              <div class="min-w-0 flex-1 space-y-2">
+                                <a
+                                  :href="normalizeEvidenceHref(att.url)"
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  class="break-all text-[13px] font-semibold text-indigo-700 hover:text-indigo-900 hover:underline"
+                                >
+                                  {{ att.name || att.url }}
+                                </a>
+                                <div v-if="isEvidenceImageUrl(att.url)" class="overflow-hidden rounded-lg border border-slate-100 bg-slate-50">
+                                  <img
+                                    :src="normalizeEvidenceHref(att.url)"
+                                    :alt="att.name || 'Evidence'"
+                                    class="max-h-40 w-full object-contain"
+                                  />
+                                </div>
+                              </div>
+                            </li>
+                          </ul>
+
+                          <a
+                            v-if="row.item.evidenceAttachmentUrl"
+                            :href="row.item.evidenceAttachmentUrl"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            class="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50/80 px-3 py-2.5 text-xs font-bold text-indigo-800 transition-colors hover:bg-indigo-100"
+                          >
+                            <i class="fas fa-paperclip" />
+                            View attached evidence
+                          </a>
+                        </div>
                       </div>
                     </div>
                   </div>

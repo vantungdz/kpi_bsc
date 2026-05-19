@@ -26,6 +26,7 @@ const props = defineProps({
   open: { type: Boolean, default: false },
   kpi: { type: Object, default: null }, // Mapped từ kpiLibrary
   mode: { type: String, default: 'assign' }, // 'assign' | 'create'
+  readonly: { type: Boolean, default: false },
   /** Assignment member đang 407 — khi lưu phân bổ gọi API accept-with-cascade (một transaction). */
   pendingMemberFeedbackAssignmentId: { type: String, default: undefined },
 })
@@ -668,6 +669,9 @@ const handleAssignMember = async () => {
 }
 
 const handleSave = async () => {
+  if (props.readonly) {
+    return
+  }
   if (allocationSaveBlockedReason.value) {
     return
   }
@@ -1246,8 +1250,8 @@ const handleSave = async () => {
             <button 
               type="button" 
               class="flex items-center gap-1.5 px-6 py-2 rounded-lg bg-blue-600 text-xs font-bold text-white shadow-sm hover:bg-blue-700 disabled:opacity-60 transition-colors" 
-              :disabled="saving || !!allocationSaveBlockedReason" 
-              :title="allocationSaveBlockedReason || undefined"
+              :disabled="props.readonly || saving || !!allocationSaveBlockedReason" 
+              :title="props.readonly ? 'Năm đã khóa, chỉ được xem dữ liệu.' : allocationSaveBlockedReason || undefined"
               @click="handleSave"
             >
               <i v-if="saving" class="fas fa-spinner fa-spin text-sm" />
