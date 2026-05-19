@@ -366,6 +366,9 @@ public class GmKpiDiagnosticsHierarchyService {
         }
         BigDecimal s = BigDecimal.ZERO;
         for (GmDiagMemberNode mem : members) {
+            if (isExcludedFromRollup(mem)) {
+                continue;
+            }
             BigDecimal p = tryParseBigDecimalForBalance(mem.getTarget());
             if (p != null) {
                 s = s.add(p);
@@ -424,6 +427,10 @@ public class GmKpiDiagnosticsHierarchyService {
         return members.stream()
                 .filter(member -> !isRootPmDepartmentBudgetRow(member, sectionManagerId))
                 .collect(Collectors.toList());
+    }
+
+    private static boolean isExcludedFromRollup(GmDiagMemberNode member) {
+        return member != null && Boolean.TRUE.equals(member.getExcludedFromRollup());
     }
 
     private static GmDiagMemberNode rootPmDepartmentBudgetRow(
@@ -759,6 +766,7 @@ public class GmKpiDiagnosticsHierarchyService {
                     .name("(Không tải được user giao)")
                     .weight(kpiWeightDisplay)
                     .statusCode(r.getStatusCode())
+                    .excludedFromRollup(r.getExcludedFromRollup())
                     .target(formatKpiTarget(kpiFirst))
                     .actual("—")
                     .status("danger")
@@ -787,6 +795,7 @@ public class GmKpiDiagnosticsHierarchyService {
                 .name(r.getMemberName())
                 .weight(kpiWeightDisplay)
                 .statusCode(r.getStatusCode())
+                .excludedFromRollup(r.getExcludedFromRollup())
                 .target(formatMemberTarget(r.getMemberTargetValue(), kpiFirst))
                 .actual(formatMemberActual(r))
                 .status(perf.status())
@@ -1063,6 +1072,9 @@ public class GmKpiDiagnosticsHierarchyService {
     private record Rollup(String status, String actual) {}
 
     private static Rollup rollupFromMembers(List<GmDiagMemberNode> members, String fallbackActual) {
+        members = members.stream()
+                .filter(m -> !isExcludedFromRollup(m))
+                .collect(Collectors.toList());
         if (members.isEmpty()) {
             return new Rollup("success", fallbackActual != null ? fallbackActual : "—");
         }
@@ -1132,6 +1144,9 @@ public class GmKpiDiagnosticsHierarchyService {
         Integer tc = kpiFirst.getTypeCode();
         if (tc != null && tc == KPI_TYPE_TEAM_CASCADING) {
             for (GmDiagnosticsFlatRow r : secRows) {
+                if (Boolean.TRUE.equals(r.getExcludedFromRollup())) {
+                    continue;
+                }
                 if (r.getSectionAssignedTargetValue() != null) {
                     return r.getSectionAssignedTargetValue().stripTrailingZeros().toPlainString();
                 }
@@ -1140,6 +1155,9 @@ public class GmKpiDiagnosticsHierarchyService {
         List<BigDecimal> vals = new ArrayList<>();
         LinkedHashSet<UUID> seenAssignment = new LinkedHashSet<>();
         for (GmDiagnosticsFlatRow r : secRows) {
+            if (Boolean.TRUE.equals(r.getExcludedFromRollup())) {
+                continue;
+            }
             if (r.getMemberTargetValue() == null) {
                 continue;
             }
@@ -1178,6 +1196,9 @@ public class GmKpiDiagnosticsHierarchyService {
         List<BigDecimal> vals = new ArrayList<>();
         LinkedHashSet<String> seenAssignment = new LinkedHashSet<>();
         for (GmDiagMemberNode m : members) {
+            if (isExcludedFromRollup(m)) {
+                continue;
+            }
             String raw = m.getTarget();
             if (raw == null) {
                 continue;

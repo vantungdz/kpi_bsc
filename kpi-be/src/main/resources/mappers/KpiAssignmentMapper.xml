@@ -50,7 +50,9 @@
             km.calculation_rule_code AS calculation_rule_code,
             km.calculation_type_code AS calculation_type_code,
             kc.id              AS category_id,
-            kc.name            AS category_name
+            kc.name            AS category_name,
+            ka.inactive_reason AS inactive_reason,
+            ka.excluded_from_rollup AS excluded_from_rollup
         FROM
             kpi_assignments ka
             JOIN kpis_information ki ON ka.kpi_info_id = ki.id
@@ -154,7 +156,9 @@
             km.calculation_rule_code AS calculation_rule_code,
             km.calculation_type_code AS calculation_type_code,
             kc.id              AS category_id,
-            kc.name            AS category_name
+            kc.name            AS category_name,
+            ka.inactive_reason AS inactive_reason,
+            ka.excluded_from_rollup AS excluded_from_rollup
         FROM
             kpi_assignments ka
             JOIN kpis_information ki ON ka.kpi_info_id = ki.id
@@ -214,6 +218,7 @@
           AND cycle_id = #{cycleId}
           AND user_id = #{userId}
           AND deleted_at IS NULL
+          AND COALESCE(inactive_reason, '') <> 'USER_RESIGNED'
     </update>
 
     <update id="softDeleteSelfCreatedAssignment">
@@ -229,8 +234,25 @@
           AND ka.deleted_at IS NULL
           AND ka.user_id = #{userId}
           AND ka.created_by = #{userId}
+          AND COALESCE(ka.inactive_reason, '') <> 'USER_RESIGNED'
           AND ka.status_code IN (402, 403, 404, 406)
           AND km.type_code IN (101, 102, 103)
+    </update>
+
+    <update id="markAssignmentsUserResigned">
+        UPDATE kpi_assignments
+        SET
+            inactive_reason = 'USER_RESIGNED',
+            excluded_from_rollup = CASE
+                WHEN status_code IN (501, 502, 503, 601, 602, 603) THEN FALSE
+                WHEN status_code IN (401, 402, 403, 404, 405, 406, 407) THEN TRUE
+                ELSE excluded_from_rollup
+            END,
+            updated_at = NOW(),
+            updated_by = #{updatedBy}
+        WHERE user_id = #{userId}
+          AND deleted_at IS NULL
+          AND status_code IN (401, 402, 403, 404, 405, 406, 407, 501, 502, 503, 601, 602, 603)
     </update>
 
     <update id="submitAssignmentFeedback">
@@ -257,6 +279,7 @@
               AND ka.cycle_id = #{cycleId}
               AND ka.user_id = #{userId}
               AND ka.deleted_at IS NULL
+              AND COALESCE(ka.inactive_reason, '') <> 'USER_RESIGNED'
         ),
         assigner_best AS (
             SELECT COALESCE(
@@ -387,6 +410,8 @@
             <result property="statusCode" column="pm_status_code"/>
             <result property="evidences" column="pm_evidences"/>
             <result property="createdBy" column="pm_created_by"/>
+            <result property="inactiveReason" column="pm_inactive_reason"/>
+            <result property="excludedFromRollup" column="pm_excluded_from_rollup"/>
         </association>
 
         <association property="kpiInfo" javaType="com.company.kpi.entity.KpisInformation">
@@ -423,10 +448,14 @@
                 <result property="endGmScore" column="child_end_gm_score"/>
                 <result property="statusCode" column="child_status_code"/>
                 <result property="evidences" column="child_evidences"/>
+                <result property="inactiveReason" column="child_inactive_reason"/>
+                <result property="excludedFromRollup" column="child_excluded_from_rollup"/>
             </association>
             <association property="childUser" javaType="com.company.kpi.entity.User">
                 <id property="id" column="child_user_id"/>
                 <result property="fullName" column="child_full_name"/>
+                <result property="employmentStatus" column="child_employment_status"/>
+                <result property="resignedAt" column="child_resigned_at"/>
             </association>
             <association property="childJobTitle" javaType="com.company.kpi.entity.JobTitle">
                 <id property="id" column="child_jt_id"/>
@@ -446,6 +475,8 @@
             pm_ka.status_code AS pm_status_code,
             pm_ka.evidences AS pm_evidences,
             pm_ka.created_by AS pm_created_by,
+            pm_ka.inactive_reason AS pm_inactive_reason,
+            pm_ka.excluded_from_rollup AS pm_excluded_from_rollup,
             pm_kf.feedback_note AS pm_feedback_note,
 
             ki.id AS info_id,
@@ -488,11 +519,15 @@
             child_ka.end_gm_score AS child_end_gm_score,
             child_ka.status_code AS child_status_code,
             child_ka.evidences AS child_evidences,
+            child_ka.inactive_reason AS child_inactive_reason,
+            child_ka.excluded_from_rollup AS child_excluded_from_rollup,
             child_kf.feedback_note AS child_feedback_note,
             child_fb_role.target_role_code AS child_feedback_target_role_code,
 
             child_u.id AS child_user_id,
             COALESCE(child_kas.user_full_name, child_u.full_name) AS child_full_name,
+            child_u.employment_status AS child_employment_status,
+            child_u.resigned_at AS child_resigned_at,
 
             COALESCE(child_kas.job_title_id, child_jt.id) AS child_jt_id,
             COALESCE(child_kas.job_title_name, child_jt.name) AS child_jt_name
@@ -681,7 +716,9 @@
             km.calculation_type_code AS calculation_type_code,
             st.code            AS type_code,
             st.name            AS type_name,
-            km.unit_code       AS unit_code
+            km.unit_code       AS unit_code,
+            ka.inactive_reason AS inactive_reason,
+            ka.excluded_from_rollup AS excluded_from_rollup
         FROM
             kpi_assignments ka
             JOIN kpi_cycles cyc ON cyc.id = ka.cycle_id
@@ -746,6 +783,7 @@
         FROM kpi_assignments ka
         WHERE ka.cycle_id   = #{cycleId}
           AND ka.deleted_at IS NULL
+          AND COALESCE(ka.excluded_from_rollup, FALSE) = FALSE
           AND ka.user_id IS NOT NULL
           AND ka.status_code = 603
           AND ka.user_id NOT IN (
@@ -753,6 +791,7 @@
               FROM kpi_assignments
               WHERE cycle_id   = #{cycleId}
                 AND deleted_at IS NULL
+                AND COALESCE(excluded_from_rollup, FALSE) = FALSE
                 AND user_id IS NOT NULL
                 AND status_code != 603
           )
@@ -763,6 +802,7 @@
         FROM kpi_assignments ka
         WHERE ka.cycle_id   = #{cycleId}
           AND ka.deleted_at IS NULL
+          AND COALESCE(ka.excluded_from_rollup, FALSE) = FALSE
           AND ka.user_id    IS NOT NULL
           AND ka.status_code IN (501, 502, 601, 602)
     </select>
@@ -773,6 +813,7 @@
         JOIN kpi_cycles kc ON kc.id = ka.cycle_id
         WHERE ka.cycle_id    = #{cycleId}
           AND ka.deleted_at  IS NULL
+          AND COALESCE(ka.excluded_from_rollup, FALSE) = FALSE
           AND ka.user_id     IS NOT NULL
           AND ka.status_code != 603
           AND kc.end_year_end &lt; NOW()
@@ -868,6 +909,7 @@
           AND ka.deleted_at IS NULL
           AND ka.user_id IS NOT NULL
           AND ka.user_id &lt;&gt; #{pmId, jdbcType=OTHER}
+          AND COALESCE(ka.excluded_from_rollup, FALSE) = FALSE
           AND COALESCE(ka.status_code, 0) &gt;= 501
     </select>
 
@@ -1086,6 +1128,7 @@
             WHERE child.id = #{childAssignmentId, jdbcType=OTHER}
               AND child.cycle_id = #{cycleId, jdbcType=OTHER}
               AND child.deleted_at IS NULL
+              AND COALESCE(child.excluded_from_rollup, FALSE) = FALSE
               AND child.parent_assignment_id IS NOT NULL
               AND parent.parent_assignment_id IS NULL
               AND parent.status_code = #{waitingStatus}
@@ -1106,6 +1149,7 @@
               WHERE child.parent_assignment_id = parent.id
                 AND child.cycle_id = parent.cycle_id
                 AND child.deleted_at IS NULL
+                AND COALESCE(child.excluded_from_rollup, FALSE) = FALSE
           )
           AND NOT EXISTS (
               SELECT 1
@@ -1113,6 +1157,7 @@
               WHERE child.parent_assignment_id = parent.id
                 AND child.cycle_id = parent.cycle_id
                 AND child.deleted_at IS NULL
+                AND COALESCE(child.excluded_from_rollup, FALSE) = FALSE
                 AND (
                     (#{completedStatus} = 503 AND child.status_code &lt; 503)
                     OR (#{completedStatus} = 603 AND child.status_code &lt;&gt; 603)
@@ -1303,6 +1348,7 @@
           AND parent.cycle_id = #{cycleId, jdbcType=OTHER}
           AND child.deleted_at IS NULL
           AND parent.deleted_at IS NULL
+          AND COALESCE(child.excluded_from_rollup, FALSE) = FALSE
           AND child.user_id IS NOT NULL
           AND child.user_id = parent.user_id
           AND child.status_code IN (403, 404)
@@ -1444,6 +1490,7 @@
         WHERE ka.cycle_id   = #{cycleId, jdbcType=OTHER}
           AND ka.deleted_at IS NULL
           AND ka.user_id    IS NOT NULL
+          AND COALESCE(ka.excluded_from_rollup, FALSE) = FALSE
           AND ka.status_code BETWEEN 401 AND 603
         ORDER BY ka.id
     </select>
@@ -1507,6 +1554,7 @@
         WHERE ka.cycle_id   = #{cycleId, jdbcType=OTHER}
           AND ka.deleted_at IS NULL
           AND ka.user_id    IS NOT NULL
+          AND COALESCE(ka.excluded_from_rollup, FALSE) = FALSE
           AND ka.status_code BETWEEN 401 AND 603
         ORDER BY ka.id
     </select>
@@ -1572,6 +1620,7 @@
         WHERE ka.cycle_id   = #{cycleId, jdbcType=OTHER}
           AND ka.deleted_at IS NULL
           AND ka.user_id    IS NOT NULL
+          AND COALESCE(ka.excluded_from_rollup, FALSE) = FALSE
           AND ka.status_code IN
           <foreach collection="statuses" item="s" open="(" separator="," close=")">
               #{s}
@@ -1641,6 +1690,7 @@
         WHERE ka.cycle_id   = #{cycleId, jdbcType=OTHER}
           AND ka.deleted_at IS NULL
           AND ka.user_id    IS NOT NULL
+          AND COALESCE(ka.excluded_from_rollup, FALSE) = FALSE
           AND ka.status_code IN
           <foreach collection="statuses" item="s" open="(" separator="," close=")">
               #{s}
@@ -1691,6 +1741,7 @@
         JOIN roles r ON r.id = ur.role_id AND r.deleted_at IS NULL AND upper(r.code) IN ('MEMBER', 'LEADER', 'PM')
         WHERE u.deleted_at IS NULL
           AND u.is_active = TRUE
+          AND COALESCE(u.employment_status, 'ACTIVE') = 'ACTIVE'
           AND NOT EXISTS (
               SELECT 1 FROM kpi_assignments ka
               WHERE ka.user_id = u.id
@@ -1735,6 +1786,7 @@
         JOIN roles r ON r.id = ur.role_id AND r.deleted_at IS NULL AND upper(r.code) IN ('MEMBER', 'LEADER', 'PM')
         WHERE u.deleted_at IS NULL
           AND u.is_active = TRUE
+          AND COALESCE(u.employment_status, 'ACTIVE') = 'ACTIVE'
           AND NOT EXISTS (
               SELECT 1 FROM kpi_assignments ka
               WHERE ka.user_id = u.id
@@ -1756,6 +1808,7 @@
               AND parent.cycle_id = #{cycleId, jdbcType=OTHER}
               AND parent.parent_assignment_id IS NULL
               AND parent.deleted_at IS NULL
+              AND COALESCE(parent.excluded_from_rollup, FALSE) = FALSE
               AND (
                   NOT EXISTS (
                       SELECT 1 FROM kpi_assignments ch
@@ -1764,6 +1817,7 @@
                   OR EXISTS (
                       SELECT 1 FROM kpi_assignments ch
                       WHERE ch.parent_assignment_id = parent.id AND ch.deleted_at IS NULL
+                        AND COALESCE(ch.excluded_from_rollup, FALSE) = FALSE
                         AND ch.user_id IS NOT NULL
                         AND ch.user_id &lt;&gt; #{pmId, jdbcType=OTHER}
                         AND COALESCE(ch.status_code, 0) &lt; 405
@@ -1781,6 +1835,7 @@
           ON child.parent_assignment_id = parent.id
          AND child.cycle_id = parent.cycle_id
          AND child.deleted_at IS NULL
+         AND COALESCE(child.excluded_from_rollup, FALSE) = FALSE
          AND child.user_id IS NOT NULL
          AND child.user_id &lt;&gt; #{pmId, jdbcType=OTHER}
         WHERE parent.user_id = #{pmId, jdbcType=OTHER}
@@ -1815,6 +1870,7 @@
             )
             AND ka.cycle_id = #{cycleId}
             AND ka.deleted_at IS NULL
+            AND COALESCE(ka.inactive_reason, '') <> 'USER_RESIGNED'
             <!-- PM Personal accept: 404→403 để GM duyệt trước khi KPI chạy. -->
             <if test="onlyFromStatusCode != null">
                 AND ka.status_code = #{onlyFromStatusCode}
@@ -1855,9 +1911,10 @@
             JOIN public.kpi_master km ON ki.master_kpi_id = km.id
             JOIN public.sys_status_codes sys ON km.type_code = sys.code
         WHERE ka.kpi_info_id = ki.id
-            AND ka.user_id IN (SELECT user_id FROM team_tree)
-            AND ka.cycle_id = #{cycleId}
-            AND ka.deleted_at IS NULL
+          AND ka.user_id IN (SELECT user_id FROM team_tree)
+          AND ka.cycle_id = #{cycleId}
+          AND ka.deleted_at IS NULL
+            AND COALESCE(ka.excluded_from_rollup, FALSE) = FALSE
             <if test="onlyFromStatusCode != null">
                 AND ka.status_code = #{onlyFromStatusCode}
                 <if test="promotion">
@@ -1901,6 +1958,7 @@
             AND ka.user_id IN (SELECT user_id FROM team_tree)
             AND ka.cycle_id = #{cycleId}
             AND ka.deleted_at IS NULL
+            AND COALESCE(ka.excluded_from_rollup, FALSE) = FALSE
             <if test="onlyFromStatusCode != null">
                 AND ka.status_code = #{onlyFromStatusCode}
                 <if test="promotion">
@@ -1946,6 +2004,7 @@
           AND parent.user_id = #{pmId, jdbcType=OTHER}
           AND parent.parent_assignment_id IS NULL
           AND parent.deleted_at IS NULL
+          AND COALESCE(parent.excluded_from_rollup, FALSE) = FALSE
           AND km.type_code = 102
           AND COALESCE(parent.status_code, 0) &lt;&gt; #{statusCode}
           AND EXISTS (
@@ -1954,6 +2013,7 @@
               WHERE child.parent_assignment_id = parent.id
                 AND child.cycle_id = parent.cycle_id
                 AND child.deleted_at IS NULL
+                AND COALESCE(child.excluded_from_rollup, FALSE) = FALSE
                 AND child.user_id IN (SELECT user_id FROM team_tree)
                 AND child.status_code = #{statusCode}
           );
@@ -1968,6 +2028,8 @@
         <result property="endGmScore" column="end_gm_score"/>
         <result property="pmComment" column="pm_comment"/>
         <result property="statusCode" column="status_code"/>
+        <result property="inactiveReason" column="inactive_reason"/>
+        <result property="excludedFromRollup" column="excluded_from_rollup"/>
         <result property="unitName" column="unit_name"/>
 
         <association property="kpisInformation" javaType="com.company.kpi.entity.KpisInformation" autoMapping="true">
@@ -2001,7 +2063,7 @@
             ka.end_pm_score,
             ka.end_gm_score,
             NULL AS pm_comment,
-            ka.status_code, ka.evidences,
+            ka.status_code, ka.evidences, ka.inactive_reason, ka.excluded_from_rollup,
             ki.id AS info_id, ki.target_description, ki.target_value, ki.weight,
             km.id AS master_id, km.code AS master_code, km.name AS master_name, 
             km.type_code, km.calculation_rule_code, km.unit_code,
@@ -2112,7 +2174,9 @@
         JOIN kpis_information ki ON ka.kpi_info_id = ki.id AND ki.deleted_at IS NULL
         JOIN kpi_master km ON ki.master_kpi_id = km.id AND km.deleted_at IS NULL
         JOIN kpi_categories kc ON km.category_id = kc.id AND kc.deleted_at IS NULL
-        JOIN users u ON ka.user_id = u.id AND u.deleted_at IS NULL
+        JOIN users u ON ka.user_id = u.id
+            AND u.deleted_at IS NULL
+            AND COALESCE(u.employment_status, 'ACTIVE') = 'ACTIVE'
         WHERE ka.cycle_id = #{cycleId, jdbcType=OTHER}
           AND ka.deleted_at IS NULL
           AND ka.user_id IS NOT NULL
@@ -2139,6 +2203,13 @@
           AND ka.deleted_at IS NULL
           AND ka.status_code = 402
           AND ka.user_id IS NOT NULL
+          AND EXISTS (
+              SELECT 1
+              FROM users u
+              WHERE u.id = ka.user_id
+                AND u.deleted_at IS NULL
+                AND COALESCE(u.employment_status, 'ACTIVE') = 'ACTIVE'
+          )
           AND EXISTS (
               WITH RECURSIVE pm_team AS (
                   SELECT ud.user_id

@@ -18,6 +18,7 @@
         WHERE ud.supervisor_id = #{leaderId, jdbcType=OTHER}
             AND u.is_active = true
             AND u.deleted_at IS NULL
+            AND COALESCE(u.employment_status, 'ACTIVE') = 'ACTIVE'
             AND jt.deleted_at IS NULL
             AND r.deleted_at IS NULL
             AND jf.deleted_at IS NULL

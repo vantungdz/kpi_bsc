@@ -18,6 +18,7 @@ public class GmDiagMemberNode {
     private String weight;
     /** {@code kpi_assignments.status_code} (ASM) của assignee. */
     private Integer statusCode;
+    private Boolean excludedFromRollup;
     private String target;
     /** So target member/PM self voi tong target node con phu thuoc: {@code short} | {@code ok} | {@code excess}. */
     private String targetBalance;

@@ -21,4 +21,6 @@ public class MemberKpiDetailResponse {
     private Integer unitCode;
     private String unitName;
     private String evidences;
+    private String inactiveReason;
+    private Boolean excludedFromRollup;
 }

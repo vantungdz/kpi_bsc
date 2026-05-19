@@ -49,4 +49,6 @@ public class MemberKpiAssignmentDTO {
     private String categoryName;
     /** {@code kpi_assignments.created_at} — dùng để phân nhánh onboard sau giữa kỳ (bỏ nộp 1H). */
     private OffsetDateTime assignmentCreatedAt;
+    private String inactiveReason;
+    private Boolean excludedFromRollup;
 }

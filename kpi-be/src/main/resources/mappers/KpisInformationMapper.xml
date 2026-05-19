@@ -287,6 +287,7 @@
             ka.id AS assignment_id,
             ka.parent_assignment_id AS parentAssignmentId,
             ka.status_code,
+            ka.excluded_from_rollup,
             ka.mid_self_score,
             ka.end_self_score,
             ka.end_pm_score,
@@ -338,11 +339,11 @@
                 SELECT DISTINCT ON (user_id, kpi_info_id)
                     id, cycle_id, kpi_info_id, user_id,
                     status_code, mid_self_score, end_self_score,
-                    end_pm_score, end_gm_score, target_value, evidences, parent_assignment_id
+                    end_pm_score, end_gm_score, target_value, evidences, parent_assignment_id, excluded_from_rollup
                 FROM kpi_assignments
                 WHERE deleted_at IS NULL
                   AND user_id IS NOT NULL
-                ORDER BY user_id, kpi_info_id, status_code DESC, created_at DESC
+                ORDER BY user_id, kpi_info_id, COALESCE(excluded_from_rollup, FALSE) ASC, status_code DESC, created_at DESC
             ) ka ON ka.cycle_id = ki.cycle_id
                 AND ka.kpi_info_id = ki.id
             LEFT JOIN kpi_assignment_feedbacks kf ON kf.assignment_id = ka.id

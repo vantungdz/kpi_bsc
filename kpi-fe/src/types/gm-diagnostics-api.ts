@@ -110,6 +110,7 @@ export interface GmDiagMemberApi {
   weight?: string | null
   /** `kpi_assignments.status_code` (ASM). */
   statusCode?: number | null
+  excludedFromRollup?: boolean | null
   target: string
   targetBalance?: string | null
   actual: string

@@ -2,6 +2,7 @@ package com.company.kpi.service.gm;
 
 import com.company.kpi.common.exception.AppException;
 import com.company.kpi.mapper.DepartmentMapper;
+import com.company.kpi.mapper.KpiAssignmentMapper;
 import com.company.kpi.mapper.UserMapper;
 import com.company.kpi.aggregate.DeptMemberJoinRow;
 import com.company.kpi.aggregate.DeptTeamKpiJoinRow;
@@ -34,6 +35,7 @@ public class GmDepartmentService {
 
     private final DepartmentMapper departmentMapper;
     private final UserMapper userMapper;
+    private final KpiAssignmentMapper kpiAssignmentMapper;
 
     public List<GmDepartmentResponse> listDepartments(int kpiYear) {
         List<GmDepartmentResponse> list = departmentMapper.selectAllActive();
@@ -189,11 +191,11 @@ public class GmDepartmentService {
             throw AppException.badRequest(
                     "Cannot delete an employee who is manager of an active department; change manager first.");
         }
-        departmentMapper.deleteUserDepartmentsByUser(userId);
-        int n = userMapper.softDeleteUser(userId, actorId);
+        int n = userMapper.markUserResigned(userId, actorId);
         if (n != 1) {
             throw AppException.notFound("User not found or already deleted");
         }
+        kpiAssignmentMapper.markAssignmentsUserResigned(userId, actorId);
     }
 
     /**

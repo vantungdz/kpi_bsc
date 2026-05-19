@@ -3,6 +3,7 @@ package com.company.kpi.aggregate;
 import lombok.Data;
 
 import java.math.BigDecimal;
+import java.time.OffsetDateTime;
 import java.util.UUID;
 
 /** MyBatis row for {@code GmEvaluationHubMapper#listAssignmentsForEvaluationHub}. */
@@ -32,6 +33,8 @@ public class GmEvaluationHubAssignmentRow {
     private UUID userId;
     private String userFullName;
     private String userUsername;
+    private String employmentStatus;
+    private OffsetDateTime resignedAt;
     private String rankCode;
     private UUID assigneeSupervisorId;
     private String assigneeSupervisorFullName;
@@ -49,4 +52,6 @@ public class GmEvaluationHubAssignmentRow {
     private String supervisorCommentPortfolio;
     /** PM tổng promotion — evaluation_supervisor_comments_promotion. */
     private String supervisorCommentPromotion;
+    private String inactiveReason;
+    private Boolean excludedFromRollup;
 }

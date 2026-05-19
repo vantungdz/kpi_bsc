@@ -5,6 +5,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.time.OffsetDateTime;
 import java.util.UUID;
 
 @Data
@@ -18,4 +19,6 @@ public class GmDepartmentMemberResponse {
     private String email;
     /** {@code ranks.code} — có thể null. */
     private String rankCode;
+    private String employmentStatus;
+    private OffsetDateTime resignedAt;
 }

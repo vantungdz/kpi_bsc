@@ -66,6 +66,7 @@ public class GmDiagnosticsFlatRow {
     /** {@code kpi_assignments.parent_assignment_id} — null = assignment gốc (vd GM giao slice cho PM/đơn vị). */
     private UUID parentAssignmentId;
     private Integer statusCode;
+    private Boolean excludedFromRollup;
     private BigDecimal midSelfScore;
     private BigDecimal endSelfScore;
     private BigDecimal endPmScore;

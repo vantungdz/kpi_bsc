@@ -52,4 +52,6 @@ public class LeaderKpiAssignmentDTO {
     private String typeName;
     /** {@code kpi_assignments.created_at} — đồng bộ nút submit với luồng member (onboard sau giữa kỳ). */
     private OffsetDateTime assignmentCreatedAt;
+    private String inactiveReason;
+    private Boolean excludedFromRollup;
 }

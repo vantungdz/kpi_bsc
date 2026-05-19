@@ -280,6 +280,7 @@ export interface GmHierarchyMember {
   weight?: string | null;
   /** `kpi_assignments.status_code` (ASM). */
   assignmentStatusCode?: number | null;
+  excludedFromRollup?: boolean | null;
   /** GM / PM / LEADER / MEMBER / … — từ BE `GmDiagMemberNode.ownerRoleCode`. */
   ownerRoleCode?: string | null;
   /** `roles.name` assignee — nhãn tag. */

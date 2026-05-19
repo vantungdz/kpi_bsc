@@ -40,6 +40,8 @@
             u.id AS user_id,
             COALESCE(kas.user_full_name, u.full_name) AS user_full_name,
             u.username AS user_username,
+            u.employment_status AS employment_status,
+            u.resigned_at AS resigned_at,
             r.code AS rank_code,
             COALESCE(kas.supervisor_id, ud.supervisor_id) AS assignee_supervisor_id,
             COALESCE(kas.supervisor_full_name, sup.full_name) AS assignee_supervisor_full_name,
@@ -82,7 +84,9 @@
             NULLIF(TRIM(COALESCE(uks.evaluation_comments, '')), '') AS evaluation_comments,
             NULLIF(TRIM(COALESCE(uks.evaluation_comments_promotion, '')), '') AS evaluation_comments_promotion,
             NULLIF(TRIM(COALESCE(uks.evaluation_supervisor_comments, '')), '') AS supervisor_comment_portfolio,
-            NULLIF(TRIM(COALESCE(uks.evaluation_supervisor_comments_promotion, '')), '') AS supervisor_comment_promotion
+            NULLIF(TRIM(COALESCE(uks.evaluation_supervisor_comments_promotion, '')), '') AS supervisor_comment_promotion,
+            ka.inactive_reason AS inactive_reason,
+            ka.excluded_from_rollup AS excluded_from_rollup
         FROM users u
         INNER JOIN kpi_cycles cyc
                 ON cyc.id = #{cycleId, jdbcType=OTHER}
@@ -123,6 +127,7 @@
             WHERE ch.parent_assignment_id = ka.id
               AND ch.cycle_id = ka.cycle_id
               AND ch.deleted_at IS NULL
+              AND COALESCE(ch.excluded_from_rollup, FALSE) = FALSE
               AND COALESCE(ch.end_self_score, ch.mid_self_score) IS NOT NULL
         ) child_self ON TRUE
         LEFT JOIN kpis_information ki ON ka.kpi_info_id = ki.id AND ki.deleted_at IS NULL
@@ -139,7 +144,7 @@
         LEFT JOIN users mgr ON mgr.id = COALESCE(kas_dept.manager_id, d.manager_id) AND mgr.deleted_at IS NULL
         LEFT JOIN users sup ON sup.id = COALESCE(kas.supervisor_id, ud.supervisor_id) AND sup.deleted_at IS NULL
         WHERE u.deleted_at IS NULL
-          AND COALESCE(u.is_active, TRUE) = TRUE
+          AND ka.id IS NOT NULL
           AND EXISTS (
               SELECT 1
               FROM user_roles ur_member

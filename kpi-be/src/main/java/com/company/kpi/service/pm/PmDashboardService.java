@@ -270,6 +270,8 @@ public class PmDashboardService {
                         .expanded(true)
                         .isSelfCreated(pmId.equals(agg.getPmAssignment().getCreatedBy()))
                         .creatorRoleCode(trimUpperOrNull(agg.getKpiCreatorRoleCode()))
+                        .inactiveReason(agg.getPmAssignment().getInactiveReason())
+                        .excludedFromRollup(agg.getPmAssignment().getExcludedFromRollup())
                         .build();
             });
 
@@ -287,6 +289,8 @@ public class PmDashboardService {
                             .userId(slice.getChildUser() != null ? slice.getChildUser().getId() : null)
                             .name(slice.getChildUser() != null ? slice.getChildUser().getFullName() : "Unknown")
                             .role(slice.getChildJobTitle() != null ? slice.getChildJobTitle().getName() : "Member")
+                            .employmentStatus(slice.getChildUser() != null ? slice.getChildUser().getEmploymentStatus() : null)
+                            .resignedAt(slice.getChildUser() != null ? slice.getChildUser().getResignedAt() : null)
                             .targetValue(slice.getChildAssignment().getTargetValue())
                             .actualResult(slice.getChildAssignment().getEvidences())
                             .feedbackNote(slice.getChildFeedbackNote())
@@ -295,6 +299,8 @@ public class PmDashboardService {
                             .pmScore(supervisorPortfolioScore(slice.getChildAssignment()))
                             .gmEvaluationComment(gmCommentFromEvidencesJson(slice.getChildAssignment().getEvidences()))
                             .statusCode(slice.getChildAssignment().getStatusCode())
+                            .inactiveReason(slice.getChildAssignment().getInactiveReason())
+                            .excludedFromRollup(slice.getChildAssignment().getExcludedFromRollup())
                             .build());
                 }
             }
@@ -354,6 +360,8 @@ public class PmDashboardService {
             res.setId(agg.getId());
             res.setName(agg.getFullName());
             res.setRole(agg.getJobTitle() != null ? agg.getJobTitle().getName() : "");
+            res.setEmploymentStatus(agg.getEmploymentStatus());
+            res.setResignedAt(agg.getResignedAt());
             res.setSupervisorId(agg.getSupervisorId());
             res.setSelfScore(allSelfScore);
             res.setPmScore(allPmScore);
@@ -371,6 +379,8 @@ public class PmDashboardService {
             res.setPromotionPmComment(agg.getPromotionPmComment());
             res.setPromotionStatusCode(promotionStatusCode);
             res.setPromotionRequiresPmEvaluation(Boolean.TRUE.equals(agg.getPromotionRequiresPmEvaluation()));
+            res.setInactiveReason(agg.getInactiveReason());
+            res.setExcludedFromRollup(agg.getExcludedFromRollup());
             res.setExpanded(true);
             
             lookupMap.put(res.getId(), res);
@@ -447,6 +457,8 @@ public class PmDashboardService {
             res.setUnitCode(agg.getKpiMaster().getUnitCode());
             res.setUnitName(agg.getUnitName());
             res.setEvidences(agg.getEvidences());
+            res.setInactiveReason(agg.getInactiveReason());
+            res.setExcludedFromRollup(agg.getExcludedFromRollup());
             result.add(res);
         }
 

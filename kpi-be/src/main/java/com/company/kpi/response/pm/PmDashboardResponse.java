@@ -62,6 +62,8 @@ public class PmDashboardResponse {
         private Boolean isSelfCreated;
         /** {@code roles.code} người tạo KPI master — màu nền dòng trên PM dashboard. */
         private String creatorRoleCode;
+        private String inactiveReason;
+        private Boolean excludedFromRollup;
 
         @Builder.Default
         private List<KpiChildDto> children = new ArrayList<>();
@@ -87,5 +89,9 @@ public class PmDashboardResponse {
         /** Nhận xét GM — {@code kpi_assignments.evidences.gmComment}. */
         private String gmEvaluationComment;
         private Integer statusCode;
+        private String employmentStatus;
+        private java.time.OffsetDateTime resignedAt;
+        private String inactiveReason;
+        private Boolean excludedFromRollup;
     }
 }

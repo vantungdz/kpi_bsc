@@ -354,6 +354,10 @@ function memberAsmStatusCode(member: GmHierarchyMember | null | undefined): numb
   return normalizeAsmStatusCode(member?.assignmentStatusCode)
 }
 
+function isExcludedFromRollup(member: GmHierarchyMember | null | undefined): boolean {
+  return member?.excludedFromRollup === true
+}
+
 /** Department đã có target GM giao (không phải placeholder). */
 function departmentHasMeaningfulTarget(pm: GmHierarchyPm): boolean {
   const t = String(pm.target ?? '').trim()
@@ -373,12 +377,12 @@ function pmAsmStatusCode(
   if (isUnassignedPmNode(pm)) return null
   if (isPmFeedbackPendingForGm(pm)) return KPI_STATUS.FEEDBACK_IN_PROGRESS
 
-  const childCodes = allMembersUnderPm(pm).map(memberAsmStatusCode)
+  const childCodes = activeMembersUnderPm(pm).map(memberAsmStatusCode)
   if (childCodes.some((c) => normalizeAsmStatusCode(c) != null)) {
     return minAsmStatusCode(childCodes)
   }
 
-  if (kpi?.kpiType === 'cascading' && departmentHasMeaningfulTarget(pm)) {
+  if (kpi?.kpiType === 'cascading' && departmentHasMeaningfulTarget(pm) && !pmHasRollout(pm)) {
     return KPI_STATUS.PENDING_ACCEPTANCE
   }
 
@@ -617,6 +621,10 @@ function allMembersUnderPm(pm: GmHierarchyPm): GmHierarchyMember[] {
   })
 }
 
+function activeMembersUnderPm(pm: GmHierarchyPm): GmHierarchyMember[] {
+  return allMembersUnderPm(pm).filter((member) => !isExcludedFromRollup(member))
+}
+
 function pmHasRollout(pm: GmHierarchyPm): boolean {
   return allMembersUnderPm(pm).length > 0
 }
@@ -791,7 +799,7 @@ function formatAverageNumber(n: number): string {
 }
 
 function pmNonCascadingAverageTargetRaw(pm: GmHierarchyPm): string {
-  const targets = allMembersUnderPm(pm)
+  const targets = activeMembersUnderPm(pm)
     .map(memberTargetNumericForProgress)
     .filter((v): v is number => v != null && Number.isFinite(v))
   const avg = averageNumericOrNull(targets)
@@ -819,7 +827,7 @@ function pmTargetWithUnit(pm: GmHierarchyPm, kpi: GmHierarchyKpi): string {
 /** CALC_RULE 803: Actual khối phòng = tổng Actual các assignee hiển thị (một tầng, gồm PM nếu tự assign). */
 function computePmDirectTotalActualNumeric(pm: GmHierarchyPm, kpi: GmHierarchyKpi): number | null {
   const nums: number[] = []
-  for (const member of allMembersUnderPm(pm)) {
+  for (const member of activeMembersUnderPm(pm)) {
     const v = memberActualNumericForProgress(member, kpi)
     if (v != null && Number.isFinite(v)) nums.push(v)
   }
@@ -1169,7 +1177,7 @@ function kpiHasNonCascadingRollupMembers(kpi: GmHierarchyKpi): boolean {
   const ownTarget = kpiTargetNumericForProgress(kpi)
   if (ownTarget != null && ownTarget > 0) return true
   return kpi.pmOwners.some((pm) =>
-    allMembersUnderPm(pm).some((m) => {
+    activeMembersUnderPm(pm).some((m) => {
       const t = memberTargetNumericForProgress(m)
       return t != null && t > 0
     }),
@@ -1181,7 +1189,7 @@ function pmHasNonCascadingRollupMembers(pm: GmHierarchyPm, kpi: GmHierarchyKpi):
   if (kpi.kpiType === 'cascading') return false
   const ownTarget = parseNumericFromField(pmTargetDisplayRaw(pm, kpi))
   if (ownTarget != null && ownTarget > 0) return true
-  return allMembersUnderPm(pm).some((m) => {
+  return activeMembersUnderPm(pm).some((m) => {
     const t = memberTargetNumericForProgress(m)
     return t != null && t > 0
   })
@@ -1194,7 +1202,7 @@ function pmHasNonCascadingRollupMembers(pm: GmHierarchyPm, kpi: GmHierarchyKpi):
 function kpiNonCascadingRollupCompletionPct(kpi: GmHierarchyKpi): number {
   const parts: number[] = []
   for (const pm of kpi.pmOwners) {
-    for (const m of allMembersUnderPm(pm)) {
+    for (const m of activeMembersUnderPm(pm)) {
       const t = memberTargetNumericForProgress(m)
       if (t != null && t > 0) parts.push(memberCompletionPct(m, kpi))
     }
@@ -1207,7 +1215,7 @@ function kpiNonCascadingRollupCompletionPct(kpi: GmHierarchyKpi): number {
 
 function pmNonCascadingRollupCompletionPct(pm: GmHierarchyPm, kpi: GmHierarchyKpi): number {
   const parts: number[] = []
-  for (const m of allMembersUnderPm(pm)) {
+  for (const m of activeMembersUnderPm(pm)) {
     const t = memberTargetNumericForProgress(m)
     if (t != null && t > 0) parts.push(memberCompletionPct(m, kpi))
   }

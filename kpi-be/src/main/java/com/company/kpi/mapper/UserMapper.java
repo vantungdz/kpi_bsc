@@ -33,6 +33,8 @@ public interface UserMapper {
                 U.FULL_NAME,
                 R.CODE AS ROLE,
                 U.IS_ACTIVE,
+                U.EMPLOYMENT_STATUS,
+                U.RESIGNED_AT,
                 U.CREATED_AT,
                 U.UPDATED_AT
             FROM
@@ -41,7 +43,9 @@ public interface UserMapper {
                 LEFT JOIN ROLES R ON UR.ROLE_ID = R.ID
             WHERE
                 U.EMAIL = #{email}
+                AND U.DELETED_AT IS NULL
                 AND U.IS_ACTIVE = TRUE
+                AND COALESCE(U.EMPLOYMENT_STATUS, 'ACTIVE') = 'ACTIVE'
             """)
     @Results(id = "userResultMap", value = {
             @Result(property = "id",           column = "id",            javaType = UUID.class),
@@ -50,6 +54,8 @@ public interface UserMapper {
             @Result(property = "fullName",     column = "full_name"),
             @Result(property = "role",         column = "role"),
             @Result(property = "isActive",     column = "is_active"),
+            @Result(property = "employmentStatus", column = "employment_status"),
+            @Result(property = "resignedAt",   column = "resigned_at"),
             @Result(property = "createdAt",    column = "created_at"),
             @Result(property = "updatedAt",    column = "updated_at")
     })
@@ -112,6 +118,8 @@ public interface UserMapper {
             @Param("isActive") boolean isActive);
 
     int softDeleteUser(@Param("id") UUID id, @Param("actorId") UUID actorId);
+
+    int markUserResigned(@Param("id") UUID id, @Param("actorId") UUID actorId);
 
     List<UUID> listExistingActiveUserIds(@Param("userIds") List<UUID> userIds);
 

@@ -26,4 +26,6 @@ public class KpiAssignment extends BaseEntity {
     private String evidences; // Handled as JSON string
     private String pmComment; // PM's evaluation comment for this KPI
     private Integer statusCode;
+    private String inactiveReason;
+    private Boolean excludedFromRollup;
 }

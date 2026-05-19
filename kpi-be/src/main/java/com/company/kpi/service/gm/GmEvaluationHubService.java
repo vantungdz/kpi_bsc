@@ -227,6 +227,8 @@ public class GmEvaluationHubService {
         a.setUserId(r.getUserId());
         a.setUserFullName(r.getUserFullName());
         a.setUserUsername(r.getUserUsername());
+        a.setEmploymentStatus(r.getEmploymentStatus());
+        a.setResignedAt(r.getResignedAt());
         a.setRankCode(r.getRankCode());
         a.setAssigneeSupervisorId(r.getAssigneeSupervisorId());
         a.setAssigneeSupervisorFullName(r.getAssigneeSupervisorFullName());
@@ -240,6 +242,8 @@ public class GmEvaluationHubService {
         a.setEvaluationCommentsPromotion(r.getEvaluationCommentsPromotion());
         a.setSupervisorCommentPortfolio(r.getSupervisorCommentPortfolio());
         a.setSupervisorCommentPromotion(r.getSupervisorCommentPromotion());
+        a.setInactiveReason(r.getInactiveReason());
+        a.setExcludedFromRollup(r.getExcludedFromRollup());
         return a;
     }
 

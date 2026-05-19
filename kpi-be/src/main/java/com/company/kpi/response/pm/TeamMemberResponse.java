@@ -2,6 +2,7 @@ package com.company.kpi.response.pm;
 
 import lombok.Data;
 import java.math.BigDecimal;
+import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -11,6 +12,8 @@ public class TeamMemberResponse {
     private UUID id;
     private String name;
     private String role;
+    private String employmentStatus;
+    private OffsetDateTime resignedAt;
     private BigDecimal selfScore;
     private BigDecimal pmScore;
     private String pmComment;
@@ -30,5 +33,7 @@ public class TeamMemberResponse {
     private boolean expanded = true;
     private int depth;
     private UUID supervisorId;
+    private String inactiveReason;
+    private Boolean excludedFromRollup;
     private List<TeamMemberResponse> children = new ArrayList<>();
 }

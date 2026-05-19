@@ -2,6 +2,7 @@ package com.company.kpi.entity;
 
 import lombok.Data;
 
+import java.time.OffsetDateTime;
 import java.util.UUID;
 
 import com.company.kpi.entity.base.BaseEntity;
@@ -18,4 +19,6 @@ public class User extends BaseEntity {
     private String role;
     private UUID jobTitleId;
     private Boolean isActive;
+    private String employmentStatus;
+    private OffsetDateTime resignedAt;
 }

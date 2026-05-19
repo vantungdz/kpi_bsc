@@ -80,6 +80,7 @@
         private static final int CALC_RULE_AVERAGE = 802;
         private static final int CALC_RULE_COMMENT = 803;
         private static final int CALC_TYPE_PLAN_OVER_ACTUAL = 702;
+        private static final String INACTIVE_REASON_USER_RESIGNED = "USER_RESIGNED";
         private static final Pattern FIRST_NUMERIC_TOKEN = Pattern.compile("-?\\d+(?:\\.\\d+)?");
         private static final BigDecimal BD_ZERO = BigDecimal.ZERO;
         private static final BigDecimal BD_HUNDRED = new BigDecimal("100");
@@ -163,6 +164,7 @@
             if (row == null) {
                 throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Assignment not found");
             }
+            rejectIfResignedAssignment(row);
             /* README Flow 3: KPI member tạo chờ PM/GM */
             if (Objects.equals(row.getStatusCode(), ASM_MEMBER_CREATED_PENDING_PM)
                 || Objects.equals(row.getStatusCode(), ASM_MEMBER_CREATED_PENDING_GM)) {
@@ -220,6 +222,7 @@
             if (row == null) {
                 throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Assignment not found");
             }
+            rejectIfResignedAssignment(row);
             Integer status = row.getStatusCode();
             if (!Objects.equals(status, ASM_PENDING_ACCEPTANCE) && !Objects.equals(status, ASM_FEEDBACK_IN_PROGRESS)) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "KPI is not in a state that allows sending feedback");
@@ -253,13 +256,39 @@
             return "Feedback Pending PM Review";
         }
 
+        private static void rejectIfAnyResignedAssignment(List<MemberKpiAssignmentDTO> rows) {
+            if (rows != null && rows.stream().anyMatch(MemberKpiService::isResignedAssignment)) {
+                throw resignedAssignmentException();
+            }
+        }
+
+        private static void rejectIfResignedAssignment(MemberKpiAssignmentDTO row) {
+            if (isResignedAssignment(row)) {
+                throw resignedAssignmentException();
+            }
+        }
+
+        private static boolean isResignedAssignment(MemberKpiAssignmentDTO row) {
+            return row != null
+                    && StringUtils.equalsIgnoreCase(
+                            StringUtils.trimToEmpty(row.getInactiveReason()),
+                            INACTIVE_REASON_USER_RESIGNED);
+        }
+
+        private static ResponseStatusException resignedAssignmentException() {
+            return new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "User has resigned; KPI submission or editing is no longer allowed.");
+        }
+
         /** Cập nhật evidences — có kiểm tra assignment thuộc member. */
         public void submitEvaluation(SubmitEvalRequest request, UUID userId) {
             MemberKpiAssignmentDTO row = kpiAssignmentMapper.findByIdAndUser(request.getAssignmentId(), userId);
             if (row == null) {
                 throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Assignment not found");
             }
-        if (Objects.equals(row.getStatusCode(), ASM_MEMBER_CREATED_PENDING_PM)
+            rejectIfResignedAssignment(row);
+            if (Objects.equals(row.getStatusCode(), ASM_MEMBER_CREATED_PENDING_PM)
                 || Objects.equals(row.getStatusCode(), ASM_MEMBER_CREATED_PENDING_GM)) {
                 throw new ResponseStatusException(
                         HttpStatus.BAD_REQUEST, "Proposed KPI is pending approval — cannot submit evidence");
@@ -284,6 +313,11 @@
         }
 
         public void deleteSelfCreatedKpi(UUID assignmentId, UUID userId) {
+            MemberKpiAssignmentDTO row = kpiAssignmentMapper.findByIdAndUser(assignmentId, userId);
+            if (row == null) {
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Assignment not found");
+            }
+            rejectIfResignedAssignment(row);
             int n = kpiAssignmentMapper.softDeleteSelfCreatedAssignment(assignmentId, userId);
             if (n == 0) {
                 throw new ResponseStatusException(
@@ -320,6 +354,7 @@
             if (scopedRowsSnapshot.isEmpty()) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No KPI rows available for submit scope");
             }
+            rejectIfAnyResignedAssignment(scopedRowsSnapshot);
             String submitPhase = resolveSubmitPhaseForSubmission(cycle, phase, now, scopedRowsSnapshot, submitUser.getCreatedAt());
             if (submitPhase == null) {
                     throw new ResponseStatusException(
@@ -430,6 +465,7 @@
             }
 
             List<MemberKpiAssignmentDTO> personal = filterRowsBySubmitType(filterGmPersonalSheetRows(rows), promotionSubmit);
+            rejectIfAnyResignedAssignment(personal);
 
             if (Constant.MID_YEAR_PHASE.equals(submitPhase)) {
                 if (assignmentsIndicatePhaseAlreadyDone(submitPhase, personal)) {

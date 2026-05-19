@@ -49,6 +49,10 @@ public interface KpiAssignmentMapper {
             @Param("assignmentId") UUID assignmentId,
             @Param("userId") UUID userId);
 
+    int markAssignmentsUserResigned(
+            @Param("userId") UUID userId,
+            @Param("updatedBy") UUID updatedBy);
+
     int submitAssignmentFeedback(
             @Param("id") UUID id,
             @Param("cycleId") UUID cycleId,

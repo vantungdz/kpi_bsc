@@ -3,6 +3,7 @@ package com.company.kpi.response.gm;
 import lombok.Data;
 
 import java.math.BigDecimal;
+import java.time.OffsetDateTime;
 import java.util.UUID;
 
 /**
@@ -34,6 +35,8 @@ public class GmEvaluationHubAssignmentResponse {
     private UUID userId;
     private String userFullName;
     private String userUsername;
+    private String employmentStatus;
+    private OffsetDateTime resignedAt;
     private String rankCode;
     private UUID assigneeSupervisorId;
     private String assigneeSupervisorFullName;
@@ -51,4 +54,6 @@ public class GmEvaluationHubAssignmentResponse {
     private String supervisorCommentPortfolio;
     /** Nhận xét PM tổng promotion. */
     private String supervisorCommentPromotion;
+    private String inactiveReason;
+    private Boolean excludedFromRollup;
 }

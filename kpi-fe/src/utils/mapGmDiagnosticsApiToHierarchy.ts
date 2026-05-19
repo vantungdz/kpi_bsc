@@ -58,6 +58,8 @@ function mapMember(m: GmDiagMemberApi): GmHierarchyMember {
     weight: m.weight ?? undefined,
     assignmentStatusCode:
       typeof m.statusCode === 'number' && Number.isFinite(m.statusCode) ? m.statusCode : undefined,
+    excludedFromRollup:
+      typeof m.excludedFromRollup === 'boolean' ? m.excludedFromRollup : undefined,
     ownerRoleCode: m.ownerRoleCode ?? undefined,
     ownerRoleLabel: m.ownerRoleLabel ?? undefined,
     leaderRoleCode: m.leaderRoleCode ?? undefined,

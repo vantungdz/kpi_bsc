@@ -31,4 +31,6 @@ public class UserTeamHierarchyAggregate extends User {
     private String promotionPmComment;
     private Integer promotionStatusCode;
     private Boolean promotionRequiresPmEvaluation;
+    private String inactiveReason;
+    private Boolean excludedFromRollup;
 }

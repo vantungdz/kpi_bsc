@@ -92,12 +92,15 @@
             U.ID AS USER_ID,
             U.FULL_NAME,
             U.EMAIL,
-            R.CODE AS RANK_CODE
+            R.CODE AS RANK_CODE,
+            U.EMPLOYMENT_STATUS AS EMPLOYMENT_STATUS,
+            U.RESIGNED_AT AS RESIGNED_AT
         FROM
             USER_DEPARTMENTS UD
             INNER JOIN USERS U ON U.ID = UD.USER_ID
                 AND U.DELETED_AT IS NULL
                 AND COALESCE(U.IS_ACTIVE, TRUE) = TRUE
+                AND COALESCE(U.EMPLOYMENT_STATUS, 'ACTIVE') = 'ACTIVE'
             LEFT JOIN JOB_TITLES JT ON JT.ID = U.JOB_TITLE_ID
                 AND JT.DELETED_AT IS NULL
             LEFT JOIN RANKS R ON R.ID = JT.RANK_ID
@@ -154,6 +157,8 @@
             U.FULL_NAME AS FULL_NAME,
             U.EMAIL,
             R.CODE AS RANK_CODE,
+            U.EMPLOYMENT_STATUS AS EMPLOYMENT_STATUS,
+            U.RESIGNED_AT AS RESIGNED_AT,
             NULLIF(
                 TRIM(BOTH ' · ' FROM CONCAT_WS(' · ', NULLIF(TRIM(JF.NAME), ''), NULLIF(TRIM(JT.NAME), ''))),
                 ''
@@ -169,6 +174,7 @@
         WHERE
             U.DELETED_AT IS NULL
             AND COALESCE(U.IS_ACTIVE, TRUE) = TRUE
+            AND COALESCE(U.EMPLOYMENT_STATUS, 'ACTIVE') = 'ACTIVE'
             AND NOT EXISTS (
                 SELECT 1
                 FROM USER_DEPARTMENTS UD0

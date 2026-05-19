@@ -16,6 +16,8 @@
             U.FULL_NAME,
             R.CODE AS ROLE,
             U.IS_ACTIVE,
+            U.EMPLOYMENT_STATUS AS employmentStatus,
+            U.RESIGNED_AT AS resignedAt,
             U.CREATED_AT,
             U.UPDATED_AT
         FROM
@@ -26,6 +28,7 @@
             U.ID = #{id}
             AND U.DELETED_AT IS NULL
             AND U.IS_ACTIVE = TRUE
+            AND COALESCE(U.EMPLOYMENT_STATUS, 'ACTIVE') = 'ACTIVE'
     </select>
 
     <select id="listActiveDepartmentManagers" resultType="com.company.kpi.response.reference.DepartmentManagerOptionResponse">
@@ -43,6 +46,7 @@
             AND d.manager_id IS NOT NULL
             AND u.deleted_at IS NULL
             AND u.is_active = TRUE
+            AND COALESCE(u.employment_status, 'ACTIVE') = 'ACTIVE'
         GROUP BY
             u.id, u.username, u.email, u.full_name
         ORDER BY
@@ -71,6 +75,7 @@
             R.CODE = #{rankCode}
             AND U.DELETED_AT IS NULL
             AND U.IS_ACTIVE = TRUE
+            AND COALESCE(U.EMPLOYMENT_STATUS, 'ACTIVE') = 'ACTIVE'
         ORDER BY
             U.FULL_NAME ASC
     </select>
@@ -96,6 +101,7 @@
         WHERE
             U.DELETED_AT IS NULL
             AND U.IS_ACTIVE = TRUE
+            AND COALESCE(U.EMPLOYMENT_STATUS, 'ACTIVE') = 'ACTIVE'
         ORDER BY
             U.FULL_NAME ASC
     </select>
@@ -137,7 +143,9 @@
                 FROM DEPARTMENTS MD
                 WHERE MD.DELETED_AT IS NULL
                   AND MD.MANAGER_ID = U.ID
-            ) AS MANAGING_DEPARTMENT_NAME
+            ) AS MANAGING_DEPARTMENT_NAME,
+            U.EMPLOYMENT_STATUS AS EMPLOYMENT_STATUS,
+            U.RESIGNED_AT AS RESIGNED_AT
         FROM
             USERS U
             LEFT JOIN JOB_TITLES JT ON JT.ID = U.JOB_TITLE_ID
@@ -150,11 +158,14 @@
         WHERE
             U.DELETED_AT IS NULL
             AND COALESCE(U.IS_ACTIVE, TRUE) = TRUE
+            AND COALESCE(U.EMPLOYMENT_STATUS, 'ACTIVE') = 'ACTIVE'
         GROUP BY
             U.ID,
             U.FULL_NAME,
             U.EMAIL,
-            R.CODE
+            R.CODE,
+            U.EMPLOYMENT_STATUS,
+            U.RESIGNED_AT
         ORDER BY
             U.FULL_NAME ASC
     </select>
@@ -192,6 +203,7 @@
         )
         AND u.is_active = true 
         AND u.deleted_at IS NULL
+        AND COALESCE(u.employment_status, 'ACTIVE') = 'ACTIVE'
     </select>
 
     <resultMap id="PmDashboardAggregateResultMap" type="com.company.kpi.aggregate.PmDashboardAggregate">
@@ -266,7 +278,10 @@
         FROM users u
         JOIN user_departments ud ON u.id = ud.user_id
         JOIN departments d ON ud.department_id = d.id
-        JOIN kpi_assignments ka ON u.id = ka.user_id AND ka.cycle_id = #{cycleId} AND ka.deleted_at IS NULL
+        JOIN kpi_assignments ka ON u.id = ka.user_id
+            AND ka.cycle_id = #{cycleId}
+            AND ka.deleted_at IS NULL
+            AND COALESCE(ka.excluded_from_rollup, FALSE) = FALSE
         JOIN kpis_information ki ON ka.kpi_info_id = ki.id AND ki.deleted_at IS NULL
         JOIN kpi_master km ON ki.master_kpi_id = km.id AND km.deleted_at IS NULL
         LEFT JOIN kpi_categories kc ON km.category_id = kc.id AND kc.deleted_at IS NULL
@@ -285,6 +300,7 @@
         WHERE r.code IN ('MEMBER', 'LEADER', 'PM')
           AND u.is_active = TRUE
           AND u.deleted_at IS NULL
+          AND COALESCE(u.employment_status, 'ACTIVE') = 'ACTIVE'
     </select>
 
     <select id="getEmployeeProgressByCycleId"
@@ -314,11 +330,15 @@
         LEFT JOIN departments d
             ON ud.department_id = d.id AND d.deleted_at IS NULL
         LEFT JOIN kpi_assignments ka
-            ON ka.user_id = u.id AND ka.cycle_id = #{cycleId} AND ka.deleted_at IS NULL
+            ON ka.user_id = u.id
+           AND ka.cycle_id = #{cycleId}
+           AND ka.deleted_at IS NULL
+           AND COALESCE(ka.excluded_from_rollup, FALSE) = FALSE
         LEFT JOIN kpi_cycles kc
             ON kc.id = #{cycleId}
         WHERE u.is_active  = TRUE
           AND u.deleted_at IS NULL
+          AND COALESCE(u.employment_status, 'ACTIVE') = 'ACTIVE'
         GROUP BY u.id, u.full_name, u.email, d.name
         ORDER BY u.full_name
     </select>
@@ -329,6 +349,7 @@
         WHERE u.id = #{id}
           AND u.is_active = TRUE
           AND u.deleted_at IS NULL
+          AND COALESCE(u.employment_status, 'ACTIVE') = 'ACTIVE'
     </select>
 
     <select id="getAllActiveEmployeeEmails" resultType="java.lang.String">
@@ -338,6 +359,7 @@
         JOIN roles r       ON ur.role_id = r.id AND r.code != 'ADMIN'
         WHERE u.is_active  = TRUE
           AND u.deleted_at IS NULL
+          AND COALESCE(u.employment_status, 'ACTIVE') = 'ACTIVE'
         ORDER BY u.email
     </select>
 
@@ -379,6 +401,7 @@
         JOIN roles r ON ur.role_id = r.id AND r.code != 'ADMIN'
         WHERE u.is_active = TRUE
           AND u.deleted_at IS NULL
+          AND COALESCE(u.employment_status, 'ACTIVE') = 'ACTIVE'
           AND ud.department_id IN
         <foreach collection="departmentIds" item="deptId" open="(" separator="," close=")">
             #{deptId, jdbcType=OTHER, typeHandler=com.company.kpi.common.mybatis.UUIDTypeHandler}
@@ -434,12 +457,24 @@
         WHERE id = #{id}
           AND deleted_at IS NULL
     </update>
+
+    <update id="markUserResigned">
+        UPDATE users
+        SET is_active = FALSE,
+            employment_status = 'RESIGNED',
+            resigned_at = COALESCE(resigned_at, NOW()),
+            updated_at = NOW(),
+            updated_by = #{actorId}
+        WHERE id = #{id}
+          AND deleted_at IS NULL
+    </update>
     <!-- ── Thêm từ StrategicKpiWriteMapper ─────────────────────────────────────── -->
     <select id="listExistingActiveUserIds" resultType="java.util.UUID">
         SELECT u.id
         FROM users u
         WHERE u.deleted_at IS NULL
           AND u.is_active = TRUE
+          AND COALESCE(u.employment_status, 'ACTIVE') = 'ACTIVE'
           AND u.id IN
         <foreach collection="userIds" item="uid" open="(" separator="," close=")">
             #{uid}
@@ -453,6 +488,7 @@
         FROM users u
         WHERE u.deleted_at IS NULL
           AND u.is_active = TRUE
+          AND COALESCE(u.employment_status, 'ACTIVE') = 'ACTIVE'
           AND u.id IN
         <foreach collection="userIds" item="uid" open="(" separator="," close=")">
             #{uid}
@@ -462,6 +498,8 @@
     <resultMap id="UserTeamHierarchyResultMap" type="com.company.kpi.aggregate.UserTeamHierarchyAggregate" autoMapping="true">
         <id property="id" column="user_id"/>
         <result property="fullName" column="full_name"/>
+        <result property="employmentStatus" column="employment_status"/>
+        <result property="resignedAt" column="resigned_at"/>
         <result property="supervisorId" column="supervisor_id"/>
         <result property="selfScore" column="self_score"/>
         <result property="pmScore" column="pm_score"/>
@@ -478,6 +516,8 @@
         <result property="promotionPmComment" column="promotion_pm_comment"/>
         <result property="promotionStatusCode" column="promotion_status_code"/>
         <result property="promotionRequiresPmEvaluation" column="promotion_requires_pm_evaluation"/>
+        <result property="inactiveReason" column="inactive_reason"/>
+        <result property="excludedFromRollup" column="excluded_from_rollup"/>
         
         <association property="jobTitle" javaType="com.company.kpi.entity.JobTitle" autoMapping="true">
             <id property="id" column="job_title_id"/>
@@ -558,26 +598,37 @@
         SELECT 
             u.id AS user_id,
             u.full_name,
+            u.employment_status AS employment_status,
+            u.resigned_at AS resigned_at,
             jt.id AS job_title_id,
             jt.name AS job_title_name,
             tt.supervisor_id,
-            AVG(COALESCE(ka.end_self_score, ka.mid_self_score)) AS self_score,
-            AVG(ka.end_pm_score) AS pm_score,
+            AVG(COALESCE(ka.end_self_score, ka.mid_self_score)) FILTER (
+                WHERE COALESCE(ka.excluded_from_rollup, FALSE) = FALSE
+            ) AS self_score,
+            AVG(ka.end_pm_score) FILTER (
+                WHERE COALESCE(ka.excluded_from_rollup, FALSE) = FALSE
+            ) AS pm_score,
             AVG(COALESCE(ka.end_self_score, ka.mid_self_score)) FILTER (
                 WHERE UPPER(TRIM(sc.name)) IN ('INDIVIDUAL', 'TEAM')
+                  AND COALESCE(ka.excluded_from_rollup, FALSE) = FALSE
             ) AS portfolio_self_score,
             AVG(ka.end_pm_score) FILTER (
                 WHERE UPPER(TRIM(sc.name)) IN ('INDIVIDUAL', 'TEAM')
+                  AND COALESCE(ka.excluded_from_rollup, FALSE) = FALSE
             ) AS portfolio_pm_score,
             AVG(COALESCE(ka.end_self_score, ka.mid_self_score)) FILTER (
                 WHERE UPPER(TRIM(sc.name)) = 'PROMOTION'
+                  AND COALESCE(ka.excluded_from_rollup, FALSE) = FALSE
             ) AS promotion_self_score,
             AVG(ka.end_pm_score) FILTER (
                 WHERE UPPER(TRIM(sc.name)) = 'PROMOTION'
+                  AND COALESCE(ka.excluded_from_rollup, FALSE) = FALSE
             ) AS promotion_pm_score,
             <!-- user_kpi_summaries là /user+cycle: không hiển thị khi còn KPI ở giai đoạn giao/chấp nhận (404…) để tránh nhầm nhận xét từ KPI khác -->
             CASE
-                WHEN MIN(ka.status_code) IS NOT NULL AND MIN(ka.status_code) >= 501 THEN
+                WHEN MIN(ka.status_code) FILTER (WHERE COALESCE(ka.excluded_from_rollup, FALSE) = FALSE) IS NOT NULL
+                     AND MIN(ka.status_code) FILTER (WHERE COALESCE(ka.excluded_from_rollup, FALSE) = FALSE) >= 501 THEN
                     NULLIF(
                         TRIM(
                             CONCAT_WS(
@@ -591,29 +642,54 @@
                 ELSE NULL
             END AS pm_comment,
             CASE
-                WHEN MIN(ka.status_code) FILTER (WHERE UPPER(TRIM(sc.name)) IN ('INDIVIDUAL', 'TEAM')) IS NOT NULL
-                     AND MIN(ka.status_code) FILTER (WHERE UPPER(TRIM(sc.name)) IN ('INDIVIDUAL', 'TEAM')) >= 501 THEN
+                WHEN MIN(ka.status_code) FILTER (
+                         WHERE UPPER(TRIM(sc.name)) IN ('INDIVIDUAL', 'TEAM')
+                           AND COALESCE(ka.excluded_from_rollup, FALSE) = FALSE
+                     ) IS NOT NULL
+                     AND MIN(ka.status_code) FILTER (
+                         WHERE UPPER(TRIM(sc.name)) IN ('INDIVIDUAL', 'TEAM')
+                           AND COALESCE(ka.excluded_from_rollup, FALSE) = FALSE
+                     ) >= 501 THEN
                     NULLIF(TRIM(COALESCE(MAX(uks.evaluation_supervisor_comments), '')), '')
                 ELSE NULL
             END AS portfolio_pm_comment,
             CASE
-                WHEN MIN(ka.status_code) FILTER (WHERE UPPER(TRIM(sc.name)) = 'PROMOTION') IS NOT NULL
-                     AND MIN(ka.status_code) FILTER (WHERE UPPER(TRIM(sc.name)) = 'PROMOTION') >= 501 THEN
+                WHEN MIN(ka.status_code) FILTER (
+                         WHERE UPPER(TRIM(sc.name)) = 'PROMOTION'
+                           AND COALESCE(ka.excluded_from_rollup, FALSE) = FALSE
+                     ) IS NOT NULL
+                     AND MIN(ka.status_code) FILTER (
+                         WHERE UPPER(TRIM(sc.name)) = 'PROMOTION'
+                           AND COALESCE(ka.excluded_from_rollup, FALSE) = FALSE
+                     ) >= 501 THEN
                     NULLIF(TRIM(COALESCE(MAX(uks.evaluation_supervisor_comments_promotion), '')), '')
                 ELSE NULL
             END AS promotion_pm_comment,
-            MIN(ka.status_code) AS min_status_code,
-            MIN(ka.status_code) FILTER (WHERE UPPER(TRIM(sc.name)) IN ('INDIVIDUAL', 'TEAM')) AS portfolio_status_code,
-            MIN(ka.status_code) FILTER (WHERE UPPER(TRIM(sc.name)) = 'PROMOTION') AS promotion_status_code,
-            (COUNT(*) FILTER (WHERE ka.status_code IN (501, 601))) > 0 AS requires_pm_evaluation,
+            MIN(ka.status_code) FILTER (WHERE COALESCE(ka.excluded_from_rollup, FALSE) = FALSE) AS min_status_code,
+            MIN(ka.status_code) FILTER (
+                WHERE UPPER(TRIM(sc.name)) IN ('INDIVIDUAL', 'TEAM')
+                  AND COALESCE(ka.excluded_from_rollup, FALSE) = FALSE
+            ) AS portfolio_status_code,
+            MIN(ka.status_code) FILTER (
+                WHERE UPPER(TRIM(sc.name)) = 'PROMOTION'
+                  AND COALESCE(ka.excluded_from_rollup, FALSE) = FALSE
+            ) AS promotion_status_code,
             (COUNT(*) FILTER (
                 WHERE ka.status_code IN (501, 601)
+                  AND COALESCE(ka.excluded_from_rollup, FALSE) = FALSE
+            )) > 0 AS requires_pm_evaluation,
+            (COUNT(*) FILTER (
+                WHERE ka.status_code IN (501, 601)
+                  AND COALESCE(ka.excluded_from_rollup, FALSE) = FALSE
                   AND UPPER(TRIM(sc.name)) IN ('INDIVIDUAL', 'TEAM')
             )) > 0 AS portfolio_requires_pm_evaluation,
             (COUNT(*) FILTER (
                 WHERE ka.status_code IN (501, 601)
+                  AND COALESCE(ka.excluded_from_rollup, FALSE) = FALSE
                   AND UPPER(TRIM(sc.name)) = 'PROMOTION'
-            )) > 0 AS promotion_requires_pm_evaluation
+            )) > 0 AS promotion_requires_pm_evaluation,
+            MAX(ka.inactive_reason) FILTER (WHERE ka.inactive_reason IS NOT NULL) AS inactive_reason,
+            BOOL_OR(COALESCE(ka.excluded_from_rollup, FALSE)) AS excluded_from_rollup
         FROM team_tree tt
         JOIN users u ON u.id = tt.user_id
         LEFT JOIN job_titles jt ON u.job_title_id = jt.id
@@ -623,7 +699,7 @@
         LEFT JOIN sys_status_codes sc ON sc.code = km.type_code AND sc.category = 'KPI_TYPE'
         LEFT JOIN user_kpi_summaries uks ON uks.user_id = u.id AND uks.cycle_id = #{cycleId} AND uks.deleted_at IS NULL
         WHERE u.deleted_at IS NULL
-        GROUP BY u.id, u.full_name, jt.id, jt.name, tt.supervisor_id
+        GROUP BY u.id, u.full_name, u.employment_status, u.resigned_at, jt.id, jt.name, tt.supervisor_id
     </select>
 
     <select id="listPmPortfolioGateBlockingMembers" resultType="com.company.kpi.response.pm.PmPortfolioGatePendingMemberResponse">
@@ -692,6 +768,7 @@
             WHERE ka.user_id = u.id
               AND ka.cycle_id = #{cycleId}
               AND ka.deleted_at IS NULL
+              AND COALESCE(ka.excluded_from_rollup, FALSE) = FALSE
               AND UPPER(TRIM(sc.name)) IN ('INDIVIDUAL', 'TEAM')
               AND ka.status_code &lt; 501
         )
