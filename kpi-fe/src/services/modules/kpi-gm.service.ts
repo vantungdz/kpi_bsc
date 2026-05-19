@@ -399,6 +399,19 @@ export async function apiPostGmApprovedKpiDecision(
     .then((r) => r.data.data);
 }
 
+/** POST /kpi/gm/approved-kpi-queue/feedback-split — duyệt feedback Individual/Promotion bằng KPI mới cho member. */
+export async function apiPostGmFeedbackSplitKpi(body: {
+  cycleId: string
+  feedbackAssignmentId: string
+  newKpi: Record<string, unknown>
+}): Promise<GmApprovedKpiDecisionResultApi> {
+  return http
+    .post<
+      ApiResponse<GmApprovedKpiDecisionResultApi>
+    >("/kpi/gm/approved-kpi-queue/feedback-split", body)
+    .then((r) => r.data.data);
+}
+
 /** POST /kpi/strategic-kpis — GM tạo KPI chiến lược (201). */
 export async function apiCreateGmStrategicKpi(
   body: Record<string, unknown>,
@@ -695,6 +708,11 @@ export const gmKpiService = {
     kpiInformationId: string,
     body: Record<string, unknown>,
   ) => apiUpdateGmStrategicKpi(kpiInformationId, body),
+  splitFeedbackAssigneeToNewKpi: (body: {
+    cycleId: string
+    feedbackAssignmentId: string
+    newKpi: Record<string, unknown>
+  }) => apiPostGmFeedbackSplitKpi(body),
   getKpiTemplates: () => apiGetGmKpiTemplates(),
   getKpiTemplateItems: (templateId: string, year?: number | string) =>
     apiGetGmKpiTemplateItems(templateId, year),

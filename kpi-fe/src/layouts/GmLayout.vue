@@ -804,8 +804,14 @@ async function onStrategicKpiSaved(
   const items = Array.isArray(payload) ? payload : [payload];
   if (items.length === 0) return;
 
-  const edits = items.filter((p) => String(p.editingKpiId ?? "").trim());
-  const creates = items.filter((p) => !String(p.editingKpiId ?? "").trim());
+  const feedbackSplits = items.filter((p) =>
+    String(p.feedbackSplitAssignmentId ?? "").trim(),
+  );
+  const normalItems = items.filter(
+    (p) => !String(p.feedbackSplitAssignmentId ?? "").trim(),
+  );
+  const edits = normalItems.filter((p) => String(p.editingKpiId ?? "").trim());
+  const creates = normalItems.filter((p) => !String(p.editingKpiId ?? "").trim());
 
   const mockEdits = edits.filter(
     (p) => !String(p.editingKpiId).trim().startsWith("diag-kpi-"),
@@ -856,6 +862,27 @@ async function onStrategicKpiSaved(
     }
   }
 
+  const splitErrors: string[] = [];
+  for (const p of feedbackSplits) {
+    const assignmentId = String(p.feedbackSplitAssignmentId ?? "").trim();
+    const body = mapStrategicKpiCreatePayloadToApi(p);
+    const cycleId = String(body.cycleId ?? selectedCycleId.value).trim();
+    if (!assignmentId || !cycleId) {
+      splitErrors.push("Không có đủ thông tin feedback để tách KPI.");
+      continue;
+    }
+    try {
+      await gmKpiService.splitFeedbackAssigneeToNewKpi({
+        cycleId,
+        feedbackAssignmentId: assignmentId,
+        newKpi: body,
+      });
+      pendingGmFeedbackEdit.value = null;
+    } catch (e: unknown) {
+      splitErrors.push(getApiErrorMessage(e, "Lỗi không xác định"));
+    }
+  }
+
   try {
     await loadStrategicDiagnosticsFromApi();
   } catch {
@@ -864,8 +891,12 @@ async function onStrategicKpiSaved(
   if (dashboardWorkspaceTab.value === "personal") {
     void loadGmPersonalKpiRows();
   }
+  if (feedbackSplits.length > 0) {
+    await loadApprovedKpiQueueFromApi();
+    void loadProcessTimeline();
+  }
 
-  const allErr = [...editErrors, ...createErrors];
+  const allErr = [...editErrors, ...createErrors, ...splitErrors];
   if (allErr.length > 0) {
     showGmToast(
       allErr.slice(0, 2).join(" — ") + (allErr.length > 2 ? "…" : ""),
@@ -938,6 +969,12 @@ async function onStrategicKpiSaved(
     okParts.push(
       `Đã tạo ${creates.length} KPI${years.length ? ` — năm ${years.join(", ")}` : ""}`,
     );
+  }
+  if (feedbackSplits.length === 1) {
+    const title = String(feedbackSplits[0]!.kpiName ?? feedbackEdit?.kpiName ?? "KPI").trim() || "KPI";
+    okParts.push(`Đã tách feedback «${title}» thành KPI mới cho member`);
+  } else if (feedbackSplits.length > 1) {
+    okParts.push(`Đã tách ${feedbackSplits.length} feedback thành KPI mới cho member`);
   }
   if (okParts.length > 0) {
     showGmToast(okParts.join(" · "), 5000);

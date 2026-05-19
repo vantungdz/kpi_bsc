@@ -1,17 +1,21 @@
 package com.company.kpi.service.gm;
 
+import com.company.kpi.aggregate.KpiAssignmentUserTargetRow;
 import com.company.kpi.common.Constants;
 import com.company.kpi.common.exception.AppException;
 import com.company.kpi.mapper.KpiAssignmentMapper;
 import com.company.kpi.mapper.KpiCycleMapper;
 import com.company.kpi.request.gm.GmApprovedKpiDecisionRequest;
+import com.company.kpi.request.gm.GmFeedbackSplitKpiRequest;
 import com.company.kpi.response.gm.GmApprovedKpiDecisionResponse;
 import com.company.kpi.response.gm.GmApprovedKpiQueueItemResponse;
+import com.company.kpi.service.kpi.StrategicKpiService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 
 @Service
@@ -20,6 +24,7 @@ public class GmApprovedKpiService {
 
     private final KpiCycleMapper kpiCycleMapper;
     private final KpiAssignmentMapper kpiAssignmentMapper;
+    private final StrategicKpiService strategicKpiService;
 
     public List<GmApprovedKpiQueueItemResponse> listQueue(UUID cycleId) {
         kpiCycleMapper.findById(cycleId)
@@ -80,6 +85,61 @@ public class GmApprovedKpiService {
         }
         GmApprovedKpiDecisionResponse out = new GmApprovedKpiDecisionResponse();
         out.setUpdatedCount(updatedCount);
+        return out;
+    }
+
+    @Transactional
+    public GmApprovedKpiDecisionResponse splitFeedbackAssigneeToNewKpi(GmFeedbackSplitKpiRequest req, UUID gmUserId) {
+        UUID cycleId = req.getCycleId();
+        kpiCycleMapper.findById(cycleId)
+                .orElseThrow(() -> AppException.notFound("KPI cycle not found: " + cycleId));
+
+        KpiAssignmentUserTargetRow feedbackAssignment =
+                kpiAssignmentMapper.findAssignmentUserTargetByIdAndCycle(req.getFeedbackAssignmentId(), cycleId);
+        if (feedbackAssignment == null || feedbackAssignment.getUserId() == null) {
+            throw AppException.notFound("Feedback assignment not found: " + req.getFeedbackAssignmentId());
+        }
+        if (!Objects.equals(feedbackAssignment.getStatusCode(), Constants.AssignStatus.FEEDBACK_IN_PROGRESS)) {
+            throw AppException.badRequest("Feedback assignment is not at status 407.");
+        }
+        if (feedbackAssignment.getKpiTypeCode() == null
+                || (feedbackAssignment.getKpiTypeCode() != 101 && feedbackAssignment.getKpiTypeCode() != 103)) {
+            throw AppException.badRequest("Only Individual or Promotion feedback can be split into a new KPI.");
+        }
+
+        var newKpi = req.getNewKpi();
+        if (newKpi == null || newKpi.getTypeCode() == null
+                || (newKpi.getTypeCode() != 101 && newKpi.getTypeCode() != 103)) {
+            throw AppException.badRequest("Only Individual or Promotion feedback can be split into a new KPI.");
+        }
+        if (!Objects.equals(feedbackAssignment.getKpiTypeCode(), newKpi.getTypeCode())) {
+            throw AppException.badRequest("New KPI type must match the feedback KPI type.");
+        }
+        if (newKpi.getMemberIds() == null
+                || newKpi.getMemberIds().size() != 1
+                || !feedbackAssignment.getUserId().equals(newKpi.getMemberIds().get(0))) {
+            throw AppException.badRequest("New KPI must be assigned only to the member who sent feedback.");
+        }
+        if (!cycleId.equals(newKpi.getCycleId())) {
+            throw AppException.badRequest("New KPI cycleId must match the feedback cycle.");
+        }
+
+        strategicKpiService.create(newKpi, gmUserId, "");
+
+        int nFeedback = kpiAssignmentMapper.resolveActiveGmFeedback(
+                req.getFeedbackAssignmentId(), cycleId, gmUserId);
+        if (nFeedback < 1) {
+            throw AppException.badRequest("Feedback is not pending GM review or has already been resolved.");
+        }
+
+        int nDelete = kpiAssignmentMapper.softDeleteKpiAssignmentById(
+                req.getFeedbackAssignmentId(), cycleId, gmUserId);
+        if (nDelete < 1) {
+            throw AppException.badRequest("Could not remove the original feedback assignment.");
+        }
+
+        GmApprovedKpiDecisionResponse out = new GmApprovedKpiDecisionResponse();
+        out.setUpdatedCount(1);
         return out;
     }
 }

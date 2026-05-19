@@ -845,8 +845,15 @@
             ka.id,
             ka.user_id AS userId,
             ka.target_value AS targetValue,
-            ka.status_code AS statusCode
+            ka.status_code AS statusCode,
+            km.type_code AS kpiTypeCode
         FROM kpi_assignments ka
+        JOIN kpis_information ki
+          ON ki.id = ka.kpi_info_id
+         AND ki.deleted_at IS NULL
+        JOIN kpi_master km
+          ON km.id = ki.master_kpi_id
+         AND km.deleted_at IS NULL
         WHERE ka.id = #{assignmentId, jdbcType=OTHER}
           AND ka.cycle_id = #{cycleId, jdbcType=OTHER}
           AND ka.deleted_at IS NULL
@@ -2163,6 +2170,48 @@
     </update>
 
     <update id="updateMemberFeedbackStatusByPm">
+        WITH RECURSIVE pm_team AS (
+            SELECT ud.user_id
+            FROM user_departments ud
+            WHERE ud.supervisor_id = #{pmId, jdbcType=OTHER}
+            UNION ALL
+            SELECT ud.user_id
+            FROM user_departments ud
+            INNER JOIN pm_team pt ON ud.supervisor_id = pt.user_id
+        ),
+        pm_role AS (
+            SELECT r.id
+            FROM roles r
+            WHERE UPPER(TRIM(BOTH FROM r.code)) = 'PM'
+              AND r.deleted_at IS NULL
+            ORDER BY r.created_at ASC
+            LIMIT 1
+        ),
+        target_feedback AS (
+            SELECT f.id
+            FROM kpi_assignments ka
+            INNER JOIN kpi_assignment_feedbacks f
+                ON f.assignment_id = ka.id
+               AND f.cycle_id = ka.cycle_id
+               AND f.is_active = TRUE
+               AND f.deleted_at IS NULL
+               AND f.target_role_id = (SELECT id FROM pm_role)
+            WHERE ka.id = #{assignmentId, jdbcType=OTHER}
+              AND ka.cycle_id = #{cycleId, jdbcType=OTHER}
+              AND ka.deleted_at IS NULL
+              AND ka.status_code = 407
+              AND ka.user_id IS NOT NULL
+              AND EXISTS (SELECT 1 FROM pm_team pt WHERE pt.user_id = ka.user_id)
+        ),
+        resolved_feedback AS (
+            UPDATE kpi_assignment_feedbacks f
+            SET
+                is_active = FALSE,
+                resolved_by = #{updatedBy, jdbcType=OTHER},
+                resolved_at = NOW()
+            WHERE f.id IN (SELECT id FROM target_feedback)
+            RETURNING f.assignment_id, f.cycle_id
+        )
         UPDATE kpi_assignments ka
         SET
             status_code = 404,
@@ -2175,31 +2224,9 @@
           AND ka.user_id IS NOT NULL
           AND EXISTS (
               SELECT 1
-              FROM kpi_assignment_feedbacks f
-              WHERE f.assignment_id = ka.id
-                AND f.cycle_id = ka.cycle_id
-                AND f.is_active = TRUE
-                AND f.deleted_at IS NULL
-                AND f.target_role_id = (
-                    SELECT r.id
-                    FROM roles r
-                    WHERE UPPER(TRIM(BOTH FROM r.code)) = 'PM'
-                      AND r.deleted_at IS NULL
-                    ORDER BY r.created_at ASC
-                    LIMIT 1
-                )
-          )
-          AND EXISTS (
-              WITH RECURSIVE pm_team AS (
-                  SELECT ud.user_id
-                  FROM user_departments ud
-                  WHERE ud.supervisor_id = #{pmId, jdbcType=OTHER}
-                  UNION ALL
-                  SELECT ud.user_id
-                  FROM user_departments ud
-                  INNER JOIN pm_team pt ON ud.supervisor_id = pt.user_id
-              )
-              SELECT 1 FROM pm_team pt WHERE pt.user_id = ka.user_id
+              FROM resolved_feedback rf
+              WHERE rf.assignment_id = ka.id
+                AND rf.cycle_id = ka.cycle_id
           )
     </update>
 

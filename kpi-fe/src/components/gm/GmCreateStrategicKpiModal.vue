@@ -40,6 +40,7 @@ import {
   extractRawInputFromApiTargetDescription,
   validateScoringRulesDsl,
 } from '@/utils/kpiScoringRulesDsl'
+import { useAuthStore } from '@/stores/auth.store'
 
 interface DirectMemberOption {
   val: string
@@ -78,6 +79,8 @@ const props = withDefaults(
 )
 
 const isEditingFromDiagnostics = computed(() => props.editInitial != null)
+const authStore = useAuthStore()
+const gmUserId = computed(() => String(authStore.user?.id ?? '').trim())
 
 /**
  * UUID `users.id` của người gửi feedback đang được duyệt — duyệt cây `pmOwners` của KPI để map
@@ -114,6 +117,11 @@ function isFeedbackAssignee(userId: string | null | undefined): boolean {
   if (!target) return false
   return String(userId ?? '').trim() === target
 }
+
+const isDirectFeedbackSplitEdit = computed(() => {
+  return Boolean(props.feedbackAssignmentId && props.editInitial) &&
+    (kpiTypeCode.value === 101 || kpiTypeCode.value === 103)
+})
 
 const strategicEditDetailLoading = ref(false)
 const strategicEditDetailError = ref<string | null>(null)
@@ -470,6 +478,26 @@ const errorBannerRef = ref<HTMLElement | null>(null)
 function clearFormErrors() {
   formErrors.value = {}
 }
+
+function parseTargetInput(raw: string | number | null | undefined): number {
+  const n = Number(String(raw ?? '').trim())
+  return Number.isFinite(n) ? n : 0
+}
+
+const strategicTargetValueNum = computed(() => parseTargetInput(targetValue.value))
+
+const selectedPmTargetsTotal = computed(() =>
+  selectedPMs.value.reduce((sum, id) => sum + parseTargetInput(pmTargets.value[id]), 0),
+)
+
+const remainingTargetForGm = computed(() => {
+  const remaining = strategicTargetValueNum.value - selectedPmTargetsTotal.value
+  return remaining > 0 ? remaining : 0
+})
+
+const canShowAssignToMe = computed(
+  () => isEditingFromDiagnostics.value && kpiType.value === 'cascading' && gmUserId.value !== '',
+)
 
 /** Tránh watch(kpiType) xóa assignment khi đang áp template “Sao chép KPI”. */
 const isApplyingCopyTemplate = ref(false)
@@ -996,6 +1024,20 @@ function togglePm(val: string) {
   }
 }
 
+function assignRemainingToMe() {
+  if (!canShowAssignToMe.value || remainingTargetForGm.value <= 0) return
+  const me = gmUserId.value
+  if (!me) return
+  if (!selectedPMs.value.includes(me)) {
+    selectedPMs.value = [...selectedPMs.value, me]
+  }
+  const cur = parseTargetInput(pmTargets.value[me])
+  pmTargets.value = {
+    ...pmTargets.value,
+    [me]: String(cur + remainingTargetForGm.value),
+  }
+}
+
 const USER_ID_UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
@@ -1014,6 +1056,8 @@ function pmSelectionKey(pm: Pick<GmHierarchyPm, 'ownerUserId' | 'id' | 'name'>):
 
 function normalizeUniqueDepartmentManagerIds(ids: string[]): string[] {
   const validManagerIds = new Set(pmUsers.value.map((u) => String(u.id ?? '').trim()).filter(Boolean))
+  const selfId = gmUserId.value
+  if (selfId) validManagerIds.add(selfId)
   const fallbackKeepAll = validManagerIds.size === 0
   const seen = new Set<string>()
   const result: string[] = []
@@ -1028,6 +1072,9 @@ function normalizeUniqueDepartmentManagerIds(ids: string[]): string[] {
 }
 
 function pmChipLabel(id: string): string {
+  if (id === gmUserId.value) {
+    return authStore.user?.fullName?.trim() || authStore.user?.name || 'Me'
+  }
   const row = pmUsers.value.find((x) => x.id === id)
   if (row) return formatPmOptionLabel(row)
   if (USER_ID_UUID_RE.test(id)) return `User ${id.slice(0, 8)}…`
@@ -1276,10 +1323,16 @@ async function hydrateFormFromStrategicKpiEditData(data: GmStrategicKpiEditData,
     const fromMemberTargets = Object.keys((data as { memberTargets?: Record<string, unknown> }).memberTargets ?? {})
       .map((u) => String(u).trim())
       .filter(Boolean)
-    const merged = [...new Set([...fromMemberIds, ...fromMemberTargets])]
+    const splitMemberId = feedbackAssigneeUserId.value
+    const merged = splitMemberId
+      ? [splitMemberId]
+      : [...new Set([...fromMemberIds, ...fromMemberTargets])]
     await distributeIndividualMembersFromServerIds(merged)
   } else if (kpiTypeCode.value === 103) {
-    selectedMembers.value = (data.memberIds ?? []).map((u) => String(u).trim()).filter(Boolean)
+    const splitMemberId = feedbackAssigneeUserId.value
+    selectedMembers.value = splitMemberId
+      ? [splitMemberId]
+      : (data.memberIds ?? []).map((u) => String(u).trim()).filter(Boolean)
   }
 
   await nextTick(() => {
@@ -1583,6 +1636,10 @@ function validateForm(): boolean {
     }
   }
 
+  if (isDirectFeedbackSplitEdit.value && !feedbackAssigneeUserId.value) {
+    err.assign = 'Cannot identify the member who sent feedback.'
+  }
+
   formErrors.value = err
   return Object.keys(err).length === 0
 }
@@ -1632,8 +1689,24 @@ async function save() {
     payload.memberIds = [...selectedMembers.value]
   }
 
+  const feedbackSplitAssignmentId = String(props.feedbackAssignmentId ?? '').trim()
+  const feedbackSplitMemberId = feedbackAssigneeUserId.value
+  if (isDirectFeedbackSplitEdit.value && feedbackSplitAssignmentId && feedbackSplitMemberId) {
+    payload.memberIds = [feedbackSplitMemberId]
+    if (kpiType.value === 'individual') {
+      const filteredRankMemberIds: Record<string, string[]> = {}
+      for (const [rank, ids] of Object.entries(selectedRankMembers.value)) {
+        const picked = ids.filter((id) => id === feedbackSplitMemberId)
+        if (picked.length > 0) filteredRankMemberIds[rank] = picked
+      }
+      payload.rankMemberIds = filteredRankMemberIds
+      payload.ranks = Object.keys(filteredRankMemberIds)
+    }
+    payload.feedbackSplitAssignmentId = feedbackSplitAssignmentId
+  }
+
   const editSnap = editSessionSnapshot.value
-  if (editSnap) {
+  if (editSnap && !payload.feedbackSplitAssignmentId) {
     payload.editingKpiId = editSnap.id
     payload.previousInvestigateKpiName =
       editSnap.investigateKpiName?.trim() || extractPlainKpiName(editSnap.name)
@@ -2210,10 +2283,35 @@ async function save() {
             </div>
 
             <div>
-              <label class="mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                {{ assignLabel }}
-                <span class="text-[9px] font-semibold text-slate-400"> (Optional)</span>
-              </label>
+              <div class="mb-1 flex flex-wrap items-center justify-between gap-2">
+                <label class="block min-w-0 flex-1 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                  {{ assignLabel }}
+                  <span class="text-[9px] font-semibold text-slate-400"> (Optional)</span>
+                </label>
+                <button
+                  v-if="canShowAssignToMe"
+                  type="button"
+                  class="inline-flex shrink-0 items-center gap-1 rounded-md border border-indigo-200 bg-white px-2.5 py-1 text-[10px] font-bold text-indigo-700 shadow-sm transition-colors hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-60"
+                  :disabled="remainingTargetForGm <= 0"
+                  @click="assignRemainingToMe"
+                >
+                  <i class="fas fa-user-check text-[10px]" />
+                  Assign to me
+                </button>
+              </div>
+              <p
+                v-if="canShowAssignToMe"
+                class="mb-2 text-[10px] font-semibold tabular-nums leading-snug text-slate-600"
+                title="Target KPI · Assigned · For GM"
+              >
+                <span class="font-bold text-slate-800">{{ strategicTargetValueNum }}</span>
+                <span class="mx-1 text-slate-300">/</span>
+                <span>{{ selectedPmTargetsTotal }} Assigned</span>
+                <span class="mx-1 text-slate-300">·</span>
+                <span :class="remainingTargetForGm > 0 ? 'text-emerald-700' : 'text-slate-500'">
+                  GM +{{ remainingTargetForGm }}
+                </span>
+              </p>
 
               <!-- Cascading: PM multi — ref chỉ bọc trigger + list; khối target nằm ngoài để click đóng list -->
               <div v-if="kpiType === 'cascading'" class="space-y-3">

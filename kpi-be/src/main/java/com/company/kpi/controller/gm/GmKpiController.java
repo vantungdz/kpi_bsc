@@ -9,6 +9,7 @@ import com.company.kpi.request.gm.CreateKpiTemplateRequest;
 import com.company.kpi.request.gm.GmApprovedKpiDecisionRequest;
 import com.company.kpi.request.gm.GmEvaluationHubConfirmRequest;
 import com.company.kpi.request.gm.GmEvaluationHubUnlockRequest;
+import com.company.kpi.request.gm.GmFeedbackSplitKpiRequest;
 import com.company.kpi.request.gm.GmPersonalEvaluationSubmitRequest;
 import com.company.kpi.request.gm.UpdateDepartmentRequest;
 import com.company.kpi.request.gm.UpdateKpiTemplateItemRequest;
@@ -306,6 +307,14 @@ public class GmKpiController extends BaseController {
             @Valid @RequestBody GmApprovedKpiDecisionRequest body, Authentication authentication) {
         UUID gmUserId = UUID.fromString((String) authentication.getPrincipal());
         return success(gmApprovedKpiService.decide(body, gmUserId));
+    }
+
+    /** GM chấp nhận feedback Individual/Promotion bằng cách tách member đó sang KPI mới. */
+    @PostMapping("/approved-kpi-queue/feedback-split")
+    public ResponseEntity<BaseResponse<GmApprovedKpiDecisionResponse>> splitFeedbackAssigneeToNewKpi(
+            @Valid @RequestBody GmFeedbackSplitKpiRequest body, Authentication authentication) {
+        UUID gmUserId = UUID.fromString((String) authentication.getPrincipal());
+        return success(gmApprovedKpiService.splitFeedbackAssigneeToNewKpi(body, gmUserId));
     }
 
     @GetMapping("/dashboard")
