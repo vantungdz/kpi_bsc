@@ -18,9 +18,12 @@ export async function apiGetPmKpiDashboard(year?: number): Promise<ApiResponse<P
   return http.get('/kpi/pm/dashboard', { params: year ? { year } : {} }).then(r => r.data)
 }
 
-/** GET /api/pm/dashboard/init?year=... */
-export async function apiGetPmDashboardInit(year?: string): Promise<ApiResponse<PmKpiDashboard>> {
-  return http.get('/pm/dashboard/init', { params: year ? { year } : {} }).then(r => r.data)
+/** GET /api/pm/dashboard/init?year=...&scope=... */
+export async function apiGetPmDashboardInit(year?: string, scope?: string): Promise<ApiResponse<PmKpiDashboard>> {
+  const params: Record<string, string> = {}
+  if (year) params.year = year
+  if (scope) params.scope = scope
+  return http.get('/pm/dashboard/init', { params }).then(r => r.data)
 }
 
 /** GET /common/kpi-cycles — mọi chu kỳ trong kpi_cycles cho dropdown năm PM. */
@@ -228,7 +231,7 @@ export async function apiDeleteSelfCreatedPmKpi(assignmentId: string): Promise<A
 
 export const pmKpiService = {
   getDashboard: (year?: number) => apiGetPmKpiDashboard(year).then(r => r.data),
-  getInitialization: (year?: string) => apiGetPmDashboardInit(year).then(r => r.data),
+  getInitialization: (year?: string, scope?: string) => apiGetPmDashboardInit(year, scope).then(r => r.data),
   getKpiCyclesForHeader: () => apiGetPmKpiCyclesForHeader().then(r => r.data),
   getProcessTimeline: (year: number) => apiGetPmProcessTimeline(year),
   scoreItem: (memberId: string, itemId: string, score: number) => apiPmScore(memberId, itemId, score).then(r => r.data),

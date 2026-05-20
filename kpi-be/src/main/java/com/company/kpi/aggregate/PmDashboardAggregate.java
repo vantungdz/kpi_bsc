@@ -39,4 +39,9 @@ public class PmDashboardAggregate {
     private String childFeedbackTargetRoleCode;
     private User childUser;
     private JobTitle childJobTitle;
+
+    // Thông tin người sở hữu KPI cha (Dành cho tab KPI Department)
+    private java.util.UUID parentUserId;
+    private String parentUserName;
+    private String parentJobTitleName;
 }

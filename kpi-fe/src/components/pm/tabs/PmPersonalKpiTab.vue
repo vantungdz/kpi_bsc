@@ -28,7 +28,7 @@ import KpiScoringRulesPreviewTooltip from "@/components/kpi/KpiScoringRulesPrevi
 const props = withDefaults(
   defineProps<{
     /** Tab KPI Personal (individual + team) hoặc chỉ KPI Promotion. */
-    portfolioScope?: "portfolio" | "promotion";
+    portfolioScope?: "portfolio" | "promotion" | "department";
     year?: number | string;
     readonlyYear?: boolean;
   }>(),
@@ -249,6 +249,7 @@ const emit = defineEmits([
   "open-assign",
   "open-assign-after-member-feedback",
   "open-member-detail",
+  "open-member",
   "feedback-pending-count",
   "timeline-refresh",
 ]);
@@ -572,6 +573,7 @@ async function loadPmPortfolio(year?: string) {
   try {
     const data: any = await pmKpiService.getInitialization(
       year ?? selectedYearParam(),
+      props.portfolioScope,
     );
 
     const descMap: Record<number, string> = {};
@@ -653,6 +655,17 @@ async function loadPmPortfolio(year?: string) {
           String(kpi.creatorRoleCode).trim() !== ""
             ? String(kpi.creatorRoleCode).trim().toUpperCase()
             : undefined,
+        userName: kpi.userName,
+        userRole: kpi.userRole,
+        userId: kpi.userId != null ? String(kpi.userId) : undefined,
+        userAvatar: kpi.userName
+          ? kpi.userName
+              .split(" ")
+              .map((n: string) => n[0])
+              .join("")
+              .substring(0, 2)
+              .toUpperCase()
+          : "U",
         children: (kpi.children || []).map((c: any) => ({
           id: String(c.id),
           userId: c.userId != null ? String(c.userId) : undefined,
@@ -925,6 +938,9 @@ const scopedPersonalKpisRaw = computed(() => {
   if (props.portfolioScope === "promotion") {
     return rows.filter((kpi) => kpi.kpiType === "promotion");
   }
+  if (props.portfolioScope === "department") {
+    return rows;
+  }
   return rows.filter((kpi) => kpi.kpiType !== "promotion");
 });
 
@@ -948,15 +964,17 @@ watch(
   { immediate: true },
 );
 
-const sectionHeading = computed(() =>
-  props.portfolioScope === "promotion" ? "KPI Promotion" : "KPI Personal",
-);
+const sectionHeading = computed(() => {
+  if (props.portfolioScope === "promotion") return "KPI Promotion";
+  if (props.portfolioScope === "department") return "KPI Department";
+  return "KPI Personal";
+});
 
-const employeeCommentAnchorId = computed(() =>
-  props.portfolioScope === "promotion"
-    ? "pm-promotion-my-comment"
-    : "pm-portfolio-my-comment",
-);
+const employeeCommentAnchorId = computed(() => {
+  if (props.portfolioScope === "promotion") return "pm-promotion-my-comment";
+  if (props.portfolioScope === "department") return "pm-department-my-comment";
+  return "pm-portfolio-my-comment";
+});
 
 function compareKpiNameEn(a: any, b: any): number {
   return String(a?.name ?? "").localeCompare(String(b?.name ?? ""), "en", {
@@ -1242,6 +1260,13 @@ const feedbackDraftText = ref("");
 const openEvidenceDrawer = (item: any) => {
   selectedKpiItem.value = item;
   evidencePanelOpen.value = true;
+};
+
+const openDepartmentEvidenceDrawer = (item: any) => {
+  openEvidenceDrawer({
+    ...item,
+    name: item.userName ? `${item.name} · ${item.userName}` : item.name,
+  });
 };
 
 function isPmEvidenceReadonly(item: any): boolean {
@@ -1894,7 +1919,9 @@ async function confirmUnlockKpi() {
             :class="
               portfolioScope === 'promotion'
                 ? 'fas fa-arrow-trend-up text-purple-500'
-                : 'fas fa-list-alt text-slate-400'
+                : portfolioScope === 'department'
+                  ? 'fas fa-users text-indigo-500'
+                  : 'fas fa-list-alt text-slate-400'
             "
           ></i>
           {{ sectionHeading }}
@@ -2110,16 +2137,33 @@ async function confirmUnlockKpi() {
                       <i class="fas fa-chevron-down text-[10px]" />
                     </button>
                     <div v-else class="w-5 h-5 shrink-0"></div>
-                    <div class="flex flex-wrap items-center gap-2">
-                      <p class="font-bold text-slate-900 text-sm">
-                        {{ item.code }} {{ item.name }}
-                      </p>
-                      <GmStrategicKpiTypeTag :type="item.kpiType" size="sm" />
-                      <i
-                        v-if="item.isImportant"
-                        class="fas fa-star text-amber-400 text-xs"
-                        title="Important KPI"
-                      ></i>
+                    <div class="flex flex-col gap-1">
+                      <div class="flex flex-wrap items-center gap-2">
+                        <p class="font-bold text-slate-900 text-sm">
+                          {{ item.code }} {{ item.name }}
+                        </p>
+                        <GmStrategicKpiTypeTag :type="item.kpiType" size="sm" />
+                        <i
+                          v-if="item.isImportant"
+                          class="fas fa-star text-amber-400 text-xs"
+                          title="Important KPI"
+                        ></i>
+                      </div>
+                      <div v-if="portfolioScope === 'department' && item.userName" class="flex items-center gap-1.5 mt-0.5">
+                        <div
+                          class="w-5 h-5 shrink-0 rounded-full border border-slate-200 bg-slate-100 flex items-center justify-center text-[8px] font-bold text-slate-600"
+                        >
+                          {{ item.userAvatar }}
+                        </div>
+                        <div class="min-w-0 flex items-center gap-1.5">
+                          <p class="text-xs font-semibold text-slate-600">
+                            {{ item.userName }}
+                          </p>
+                          <span class="text-[9px] text-slate-400 uppercase bg-slate-50 px-1 border border-slate-200/60 rounded font-medium">
+                            {{ item.userRole }}
+                          </span>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </td>
@@ -2209,92 +2253,104 @@ async function confirmUnlockKpi() {
                 </td>
                 <td class="py-4 px-5 text-right align-middle">
                   <div class="flex items-center justify-end gap-2">
-                    <!-- Team KPI: phân bổ + Feedback GM (404/407); trước đây Feedback chỉ nằm trong nhánh !isTree nên PM team không thấy nút. -->
-                    <button
-                      v-if="canShowTeamAllocationButton(item)"
-                      type="button"
-                      @click.stop="$emit('open-assign', item)"
-                      :disabled="
-                        isPmGmFeedbackPending(item) ||
-                        isPmKpiLockedAfterPmAccept(item) ||
-                        isTeamAllocationEditLocked(item)
-                      "
-                      :title="teamAllocationEditLockReason(item)"
-                      class="flex h-8 items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-3 text-[10px] font-bold text-violet-800 shadow-sm hover:bg-violet-100"
-                      :class="
-                        isPmGmFeedbackPending(item) ||
-                        isPmKpiLockedAfterPmAccept(item) ||
-                        isTeamAllocationEditLocked(item)
-                          ? 'cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400 opacity-70 hover:bg-slate-100'
-                          : ''
-                      "
-                    >
-                      <i class="fas fa-sliders-h text-xs" />
-                      Edit allocation
-                    </button>
-                    <button
-                      v-if="canShowRejectedKpiEditButton(item)"
-                      type="button"
-                      @click.stop="$emit('open-assign', item)"
-                      class="flex h-8 items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 text-[10px] font-bold text-amber-800 shadow-sm hover:bg-amber-100"
-                    >
-                      <i class="fas fa-pen text-xs" />
-                      Edit KPI
-                    </button>
-                    <button
-                      v-if="canShowPmFeedbackToGmButton(item)"
-                      type="button"
-                      @click.stop="openFeedbackDrawer(item)"
-                      class="flex h-8 items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-3 text-[10px] font-bold text-violet-800 shadow-sm hover:bg-violet-100 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      <i class="fas fa-message text-xs" />
-                    </button>
-                    <!-- Individual (Portfolio) / Promotion (tab Promotion): chỉ Edit sau khi Accept KPI -->
-                    <button
-                      v-else-if="
-                        !item.isTree && !canShowRejectedKpiEditButton(item)
-                      "
-                      type="button"
-                      :disabled="
-                        isPmDirectAssignmentEditLockedBeforeAccept(item)
-                      "
-                      :title="pmDirectAssignmentEditLockReason(item)"
-                      @click.stop="openEvidenceDrawer(item)"
-                      class="flex h-8 items-center gap-1.5 rounded-lg border px-3 text-[10px] font-bold shadow-sm"
-                      :class="
-                        isPmDirectAssignmentEditLockedBeforeAccept(item)
-                          ? 'cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400 opacity-70'
-                          : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-blue-600'
-                      "
-                    >
-                      <i
-                        :class="
-                          props.readonlyYear
-                            ? 'far fa-eye text-xs'
-                            : 'fas fa-pen text-xs'
+                    <template v-if="props.portfolioScope === 'department'">
+                      <button
+                        v-if="item.userId"
+                        type="button"
+                        @click.stop="openDepartmentEvidenceDrawer(item)"
+                        class="flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-[10px] font-bold text-slate-600 shadow-sm hover:bg-slate-50 hover:text-blue-600"
+                      >
+                        <i class="far fa-eye text-xs" />
+                      </button>
+                    </template>
+                    <template v-else>
+                      <!-- Team KPI: phân bổ + Feedback GM (404/407); trước đây Feedback chỉ nằm trong nhánh !isTree nên PM team không thấy nút. -->
+                      <button
+                        v-if="canShowTeamAllocationButton(item)"
+                        type="button"
+                        @click.stop="$emit('open-assign', item)"
+                        :disabled="
+                          isPmGmFeedbackPending(item) ||
+                          isPmKpiLockedAfterPmAccept(item) ||
+                          isTeamAllocationEditLocked(item)
                         "
-                      />
-                    </button>
-                    <button
-                      v-if="canShowSelfCreatedDeleteButton(item)"
-                      type="button"
-                      :disabled="deletingSelfCreatedKpiIds.has(item.id)"
-                      @click.stop="promptDeleteSelfCreatedPmKpi(item)"
-                      class="flex h-8 items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-3 text-[10px] font-bold text-rose-700 shadow-sm hover:bg-rose-100"
-                      :class="
-                        deletingSelfCreatedKpiIds.has(item.id)
-                          ? 'cursor-not-allowed opacity-70'
-                          : ''
-                      "
-                    >
-                      <i
+                        :title="teamAllocationEditLockReason(item)"
+                        class="flex h-8 items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-3 text-[10px] font-bold text-violet-800 shadow-sm hover:bg-violet-100"
+                        :class="
+                          isPmGmFeedbackPending(item) ||
+                          isPmKpiLockedAfterPmAccept(item) ||
+                          isTeamAllocationEditLocked(item)
+                            ? 'cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400 opacity-70 hover:bg-slate-100'
+                            : ''
+                        "
+                      >
+                        <i class="fas fa-sliders-h text-xs" />
+                        Edit allocation
+                      </button>
+                      <button
+                        v-if="canShowRejectedKpiEditButton(item)"
+                        type="button"
+                        @click.stop="$emit('open-assign', item)"
+                        class="flex h-8 items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 text-[10px] font-bold text-amber-800 shadow-sm hover:bg-amber-100"
+                      >
+                        <i class="fas fa-pen text-xs" />
+                        Edit KPI
+                      </button>
+                      <button
+                        v-if="canShowPmFeedbackToGmButton(item)"
+                        type="button"
+                        @click.stop="openFeedbackDrawer(item)"
+                        class="flex h-8 items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-3 text-[10px] font-bold text-violet-800 shadow-sm hover:bg-violet-100 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        <i class="fas fa-message text-xs" />
+                      </button>
+                      <!-- Individual (Portfolio) / Promotion (tab Promotion): chỉ Edit sau khi Accept KPI -->
+                      <button
+                        v-else-if="
+                          !item.isTree && !canShowRejectedKpiEditButton(item)
+                        "
+                        type="button"
+                        :disabled="
+                          isPmDirectAssignmentEditLockedBeforeAccept(item)
+                        "
+                        :title="pmDirectAssignmentEditLockReason(item)"
+                        @click.stop="openEvidenceDrawer(item)"
+                        class="flex h-8 items-center gap-1.5 rounded-lg border px-3 text-[10px] font-bold shadow-sm"
+                        :class="
+                          isPmDirectAssignmentEditLockedBeforeAccept(item)
+                            ? 'cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400 opacity-70'
+                            : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-blue-600'
+                        "
+                      >
+                        <i
+                          :class="
+                            props.readonlyYear
+                              ? 'far fa-eye text-xs'
+                              : 'fas fa-pen text-xs'
+                          "
+                        />
+                      </button>
+                      <button
+                        v-if="canShowSelfCreatedDeleteButton(item)"
+                        type="button"
+                        :disabled="deletingSelfCreatedKpiIds.has(item.id)"
+                        @click.stop="promptDeleteSelfCreatedPmKpi(item)"
+                        class="flex h-8 items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-3 text-[10px] font-bold text-rose-700 shadow-sm hover:bg-rose-100"
                         :class="
                           deletingSelfCreatedKpiIds.has(item.id)
-                            ? 'fas fa-spinner fa-spin text-xs'
-                            : 'fas fa-trash text-xs'
+                            ? 'cursor-not-allowed opacity-70'
+                            : ''
                         "
-                      />
-                    </button>
+                      >
+                        <i
+                          :class="
+                            deletingSelfCreatedKpiIds.has(item.id)
+                              ? 'fas fa-spinner fa-spin text-xs'
+                              : 'fas fa-trash text-xs'
+                          "
+                        />
+                      </button>
+                    </template>
                   </div>
                 </td>
               </tr>
@@ -2425,89 +2481,101 @@ async function confirmUnlockKpi() {
                   </td>
                   <td class="py-3 px-5 text-right align-top">
                     <div class="inline-flex items-center gap-1.5">
-                      <button
-                        v-if="
-                          !props.readonlyYear &&
-                          isMemberFeedbackPendingForPm(child)
-                        "
-                        type="button"
-                        @click.stop="
-                          openMemberFeedbackReviewDrawer(child, item)
-                        "
-                        class="inline-flex h-7 items-center gap-1.5 rounded-md border border-violet-200 bg-violet-50 px-2.5 text-[10px] font-bold text-violet-700 shadow-sm hover:bg-violet-100"
-                      >
-                        <i class="far fa-comment-dots text-[10px]" /> Process
-                        feedback
-                      </button>
-                      <button
-                        v-if="!isChildOwnedByCurrentPm(child)"
-                        type="button"
-                        :disabled="
-                          props.readonlyYear ||
-                          isRemovingChildAssignment(child.id) ||
-                          hasMemberSubmittedActualForPmReview(child)
-                        "
-                        :title="
-                          props.readonlyYear
-                            ? 'Year is locked; data is read-only.'
-                            : hasMemberSubmittedActualForPmReview(child)
-                              ? 'Member has submitted actuals for PM approval; allocation cannot be edited.'
-                              : undefined
-                        "
-                        @click.stop="
-                          removeAssignedMemberFromTeamKpi(item, child)
-                        "
-                        class="inline-flex h-7 items-center gap-1.5 rounded-md border px-2.5 text-[10px] font-bold shadow-sm"
-                        :class="
-                          props.readonlyYear ||
-                          isRemovingChildAssignment(child.id) ||
-                          hasMemberSubmittedActualForPmReview(child)
-                            ? 'border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed opacity-70'
-                            : 'border-rose-100 bg-rose-50 text-rose-700 hover:bg-rose-100'
-                        "
-                      >
-                        <i
-                          class="text-[10px]"
-                          :class="
-                            isRemovingChildAssignment(child.id)
-                              ? 'fas fa-spinner fa-spin'
-                              : 'fas fa-trash'
+                      <template v-if="props.portfolioScope === 'department'">
+                        <button
+                          v-if="child.userId"
+                          type="button"
+                          @click.stop="openChildEvidenceDrawer(child, item)"
+                          class="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-bold text-slate-600 shadow-sm hover:bg-slate-50 hover:text-blue-600"
+                        >
+                          <i class="far fa-eye text-[10px]" />
+                        </button>
+                      </template>
+                      <template v-else>
+                        <button
+                          v-if="
+                            !props.readonlyYear &&
+                            isMemberFeedbackPendingForPm(child)
                           "
-                        />
-                      </button>
-                      <button
-                        v-if="isChildOwnedByCurrentPm(child)"
-                        type="button"
-                        :disabled="
-                          isPmTeamSelfRowActualEditLockedBeforeAccept(item)
-                        "
-                        :title="pmTeamSelfRowLockReason(item)"
-                        @click.stop="openChildEvidenceDrawer(child, item)"
-                        class="inline-flex h-7 items-center gap-1.5 rounded-md border px-2.5 text-[10px] font-bold shadow-sm"
-                        :class="
-                          isPmTeamSelfRowActualEditLockedBeforeAccept(item)
-                            ? 'cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400 opacity-70'
-                            : 'border-emerald-100 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                        "
-                      >
-                        <i
-                          :class="
+                          type="button"
+                          @click.stop="
+                            openMemberFeedbackReviewDrawer(child, item)
+                          "
+                          class="inline-flex h-7 items-center gap-1.5 rounded-md border border-violet-200 bg-violet-50 px-2.5 text-[10px] font-bold text-violet-700 shadow-sm hover:bg-violet-100"
+                        >
+                          <i class="far fa-comment-dots text-[10px]" /> Process
+                          feedback
+                        </button>
+                        <button
+                          v-if="!isChildOwnedByCurrentPm(child)"
+                          type="button"
+                          :disabled="
+                            props.readonlyYear ||
+                            isRemovingChildAssignment(child.id) ||
+                            hasMemberSubmittedActualForPmReview(child)
+                          "
+                          :title="
                             props.readonlyYear
-                              ? 'far fa-eye text-[10px]'
-                              : 'fas fa-pen text-[10px]'
+                              ? 'Year is locked; data is read-only.'
+                              : hasMemberSubmittedActualForPmReview(child)
+                                ? 'Member has submitted actuals for PM approval; allocation cannot be edited.'
+                                : undefined
                           "
-                        />
-                      </button>
-                      <button
-                        v-else
-                        type="button"
-                        @click.stop="
-                          $emit('open-member-detail', { child, parent: item })
-                        "
-                        class="inline-flex h-7 items-center gap-1.5 rounded-md border border-blue-100 bg-blue-50 px-2.5 text-[10px] font-bold text-blue-600 shadow-sm"
-                      >
-                        <i class="far fa-eye text-[10px]" />
-                      </button>
+                          @click.stop="
+                            removeAssignedMemberFromTeamKpi(item, child)
+                          "
+                          class="inline-flex h-7 items-center gap-1.5 rounded-md border px-2.5 text-[10px] font-bold shadow-sm"
+                          :class="
+                            props.readonlyYear ||
+                            isRemovingChildAssignment(child.id) ||
+                            hasMemberSubmittedActualForPmReview(child)
+                              ? 'border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed opacity-70'
+                              : 'border-rose-100 bg-rose-50 text-rose-700 hover:bg-rose-100'
+                          "
+                        >
+                          <i
+                            class="text-[10px]"
+                            :class="
+                              isRemovingChildAssignment(child.id)
+                                ? 'fas fa-spinner fa-spin'
+                                : 'fas fa-trash'
+                            "
+                          />
+                        </button>
+                        <button
+                          v-if="isChildOwnedByCurrentPm(child)"
+                          type="button"
+                          :disabled="
+                            isPmTeamSelfRowActualEditLockedBeforeAccept(item)
+                          "
+                          :title="pmTeamSelfRowLockReason(item)"
+                          @click.stop="openChildEvidenceDrawer(child, item)"
+                          class="inline-flex h-7 items-center gap-1.5 rounded-md border px-2.5 text-[10px] font-bold shadow-sm"
+                          :class="
+                            isPmTeamSelfRowActualEditLockedBeforeAccept(item)
+                              ? 'cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400 opacity-70'
+                              : 'border-emerald-100 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                          "
+                        >
+                          <i
+                            :class="
+                              props.readonlyYear
+                                ? 'far fa-eye text-[10px]'
+                                : 'fas fa-pen text-[10px]'
+                            "
+                          />
+                        </button>
+                        <button
+                          v-else
+                          type="button"
+                          @click.stop="
+                            $emit('open-member-detail', { child, parent: item })
+                          "
+                          class="inline-flex h-7 items-center gap-1.5 rounded-md border border-blue-100 bg-blue-50 px-2.5 text-[10px] font-bold text-blue-600 shadow-sm"
+                        >
+                          <i class="far fa-eye text-[10px]" />
+                        </button>
+                      </template>
                     </div>
                   </td>
                 </tr>
@@ -2601,7 +2669,7 @@ async function confirmUnlockKpi() {
     </div>
 
     <EvaluationCommentBlock
-      v-if="hasPortfolioKpiRows"
+      v-if="hasPortfolioKpiRows && portfolioScope !== 'department'"
       v-model:employeeComment="pmComments.selfComment"
       v-model:managerComment="pmComments.supervisorComment"
       :employee-comment-section-id="employeeCommentAnchorId"
@@ -2611,7 +2679,7 @@ async function confirmUnlockKpi() {
       :manager-readonly="true"
       :employee-highlight-error="sendReviewErrorComment"
     />
-    <div v-if="hasPortfolioKpiRows" class="mt-6 mb-8 flex justify-center">
+    <div v-if="hasPortfolioKpiRows && portfolioScope !== 'department'" class="mt-6 mb-8 flex justify-center">
       <button
         type="button"
         v-if="buttonState.show"
@@ -2630,7 +2698,11 @@ async function confirmUnlockKpi() {
     <EvaluationEvidenceDrawer
       :open="evidencePanelOpen"
       :item="selectedKpiItem"
-      :readonly="props.readonlyYear || isPmEvidenceReadonly(selectedKpiItem)"
+      :readonly="
+        props.readonlyYear ||
+        props.portfolioScope === 'department' ||
+        isPmEvidenceReadonly(selectedKpiItem)
+      "
       self-score-footer-readonly
       :save-evidence="saveEvidenceData"
       @close="evidencePanelOpen = false"

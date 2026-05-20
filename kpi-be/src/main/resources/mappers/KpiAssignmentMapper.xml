@@ -377,6 +377,9 @@
         <id property="pmAssignmentId" column="pm_asm_id"/>
         <result property="kpiCreatorRoleCode" column="kpi_creator_role_code"/>
         <result property="pmFeedbackNote" column="pm_feedback_note"/>
+        <result property="parentUserId" column="parent_user_id"/>
+        <result property="parentUserName" column="parent_user_name"/>
+        <result property="parentJobTitleName" column="parent_job_title_name"/>
         <association property="pmAssignment" javaType="com.company.kpi.entity.KpiAssignment">
             <id property="id" column="pm_asm_id"/>
             <result property="targetValue" column="pm_asm_target"/>
@@ -450,6 +453,9 @@
             pm_ka.evidences AS pm_evidences,
             pm_ka.created_by AS pm_created_by,
             pm_kf.feedback_note AS pm_feedback_note,
+            parent_u.id AS parent_user_id,
+            parent_u.full_name AS parent_user_name,
+            parent_jt.name AS parent_job_title_name,
 
             ki.id AS info_id,
             ki.target_description AS info_target_desc,
@@ -611,6 +617,8 @@
                     AND child_kas_cycle.year &lt; EXTRACT(YEAR FROM CURRENT_DATE)::int
               )
         LEFT JOIN job_titles child_jt ON child_u.job_title_id = child_jt.id AND child_jt.deleted_at IS NULL
+        LEFT JOIN users parent_u ON pm_ka.user_id = parent_u.id AND parent_u.deleted_at IS NULL
+        LEFT JOIN job_titles parent_jt ON parent_u.job_title_id = parent_jt.id AND parent_jt.deleted_at IS NULL
 
         WHERE pm_ka.cycle_id = #{cycleId}
           AND pm_ka.deleted_at IS NULL
@@ -618,6 +626,200 @@
           AND (
               pm_ka.user_id = #{pmId} 
               OR pm_ka.department_id IN (SELECT id FROM departments WHERE manager_id = #{pmId} AND deleted_at IS NULL)
+          )
+        ORDER BY km.code, child_u.full_name
+    </select>
+
+    <select id="findPmDepartmentPortfolioByPmIdAndCycleId" resultMap="PmDashboardAggregateResultMap">
+        SELECT
+            pm_ka.id AS pm_asm_id,
+            pm_ka.target_value AS pm_asm_target,
+            pm_ka.mid_self_score AS pm_mid_score,
+            pm_ka.end_self_score AS pm_end_score,
+            pm_ka.end_pm_score AS pm_end_pm_score,
+            pm_ka.end_gm_score AS pm_end_gm_score,
+            pm_ka.status_code AS pm_status_code,
+            pm_ka.update_reason AS pm_update_reason,
+            pm_ka.evidences AS pm_evidences,
+            pm_ka.created_by AS pm_created_by,
+            pm_kf.feedback_note AS pm_feedback_note,
+            parent_u.id AS parent_user_id,
+            parent_u.full_name AS parent_user_name,
+            parent_jt.name AS parent_job_title_name,
+
+            ki.id AS info_id,
+            ki.target_description AS info_target_desc,
+            ki.target_value AS info_target_val,
+            ki.weight AS info_weight,
+            ki.is_important AS info_is_important,
+
+            km.id AS master_id,
+            km.code AS master_code,
+            km.name AS master_name,
+            km.type_code AS master_type_code,
+            km.calculation_rule_code AS master_calc_rule,
+            km.calculation_type_code AS master_calc_type,
+            km.unit_code AS master_unit_code,
+            (
+                SELECT cr.code
+                FROM user_roles cur
+                INNER JOIN roles cr ON cr.id = cur.role_id AND cr.deleted_at IS NULL
+                WHERE cur.user_id = km.created_by
+                ORDER BY
+                    CASE UPPER(TRIM(cr.code))
+                        WHEN 'GM' THEN 1
+                        WHEN 'PM' THEN 2
+                        WHEN 'LEADER' THEN 3
+                        WHEN 'MEMBER' THEN 4
+                        ELSE 99
+                    END
+                LIMIT 1
+            ) AS kpi_creator_role_code,
+
+            kc.id AS cat_id,
+            kc.name AS cat_name,
+
+            child_ka.id AS child_asm_id,
+            child_ka.target_value AS child_asm_target,
+            child_ka.mid_self_score AS child_mid_score,
+            child_ka.end_self_score AS child_end_score,
+            child_ka.end_pm_score AS child_pm_score,
+            child_ka.end_gm_score AS child_end_gm_score,
+            child_ka.status_code AS child_status_code,
+            child_ka.update_reason AS child_update_reason,
+            child_ka.evidences AS child_evidences,
+            child_kf.feedback_note AS child_feedback_note,
+            child_fb_role.target_role_code AS child_feedback_target_role_code,
+
+            child_u.id AS child_user_id,
+            COALESCE(child_kas.user_full_name, child_u.full_name) AS child_full_name,
+
+            COALESCE(child_kas.job_title_id, child_jt.id) AS child_jt_id,
+            COALESCE(child_kas.job_title_name, child_jt.name) AS child_jt_name
+
+        FROM kpi_assignments pm_ka
+        JOIN kpis_information ki ON pm_ka.kpi_info_id = ki.id AND ki.deleted_at IS NULL
+        JOIN kpi_master km ON ki.master_kpi_id = km.id AND km.deleted_at IS NULL
+        LEFT JOIN kpi_categories kc ON km.category_id = kc.id AND kc.deleted_at IS NULL
+
+        LEFT JOIN LATERAL (
+            SELECT f.feedback_note
+            FROM kpi_assignment_feedbacks f
+            WHERE f.assignment_id = pm_ka.id
+              AND f.cycle_id = pm_ka.cycle_id
+              AND f.target_role_id = (
+                  SELECT r.id
+                  FROM roles r
+                  WHERE UPPER(TRIM(BOTH FROM r.code)) = 'GM'
+                    AND r.deleted_at IS NULL
+                  LIMIT 1
+              )
+              AND f.is_active = TRUE
+              AND f.deleted_at IS NULL
+            ORDER BY f.created_at DESC
+            LIMIT 1
+        ) pm_kf ON TRUE
+        LEFT JOIN kpi_assignments child_ka ON child_ka.cycle_id = pm_ka.cycle_id
+            AND child_ka.kpi_info_id = pm_ka.kpi_info_id
+            AND child_ka.id != pm_ka.id
+            AND child_ka.user_id IS NOT NULL
+            AND child_ka.deleted_at IS NULL
+            AND (
+                child_ka.user_id = #{pmId}
+                OR EXISTS (
+                    SELECT 1
+                    FROM kpi_assignment_snapshots child_scope
+                    INNER JOIN kpi_cycles child_scope_cycle
+                            ON child_scope_cycle.id = child_scope.cycle_id
+                           AND child_scope_cycle.deleted_at IS NULL
+                           AND child_scope_cycle.year &lt; EXTRACT(YEAR FROM CURRENT_DATE)::int
+                    LEFT JOIN departments child_sd
+                           ON child_sd.id = child_scope.department_id
+                          AND child_sd.deleted_at IS NULL
+                    WHERE child_scope.assignment_id = child_ka.id
+                      AND child_scope.cycle_id = child_ka.cycle_id
+                      AND (
+                          child_scope.supervisor_id = #{pmId}
+                          OR child_sd.manager_id = #{pmId}
+                      )
+                )
+                OR (
+                    NOT EXISTS (
+                    SELECT 1
+                    FROM kpi_assignment_snapshots child_scope_missing
+                    INNER JOIN kpi_cycles child_scope_missing_cycle
+                            ON child_scope_missing_cycle.id = child_scope_missing.cycle_id
+                           AND child_scope_missing_cycle.deleted_at IS NULL
+                           AND child_scope_missing_cycle.year &lt; EXTRACT(YEAR FROM CURRENT_DATE)::int
+                    WHERE child_scope_missing.assignment_id = child_ka.id
+                      AND child_scope_missing.cycle_id = child_ka.cycle_id
+                    )
+                    AND EXISTS (
+                        SELECT 1
+                        FROM user_departments child_ud
+                        INNER JOIN departments child_d
+                                ON child_d.id = child_ud.department_id
+                               AND child_d.deleted_at IS NULL
+                               AND child_d.manager_id = #{pmId}
+                        WHERE child_ud.user_id = child_ka.user_id
+                          AND child_ud.is_primary = TRUE
+                    )
+                )
+            )
+        LEFT JOIN LATERAL (
+            SELECT f.feedback_note
+            FROM kpi_assignment_feedbacks f
+            WHERE f.assignment_id = child_ka.id
+              AND f.cycle_id = child_ka.cycle_id
+              AND f.target_role_id = (
+                  SELECT r.id
+                  FROM roles r
+                  WHERE UPPER(TRIM(BOTH FROM r.code)) = 'PM'
+                    AND r.deleted_at IS NULL
+                  LIMIT 1
+              )
+              AND f.is_active = TRUE
+              AND f.deleted_at IS NULL
+            ORDER BY f.created_at DESC
+            LIMIT 1
+        ) child_kf ON TRUE
+        LEFT JOIN LATERAL (
+            SELECT UPPER(TRIM(BOTH FROM r.code)) AS target_role_code
+            FROM kpi_assignment_feedbacks f
+            INNER JOIN roles r ON r.id = f.target_role_id AND r.deleted_at IS NULL
+            WHERE child_ka.id IS NOT NULL
+              AND f.assignment_id = child_ka.id
+              AND f.cycle_id = child_ka.cycle_id
+              AND f.is_active = TRUE
+              AND f.deleted_at IS NULL
+            ORDER BY f.created_at DESC
+            LIMIT 1
+        ) child_fb_role ON TRUE
+        LEFT JOIN users child_u ON child_ka.user_id = child_u.id AND child_u.deleted_at IS NULL
+        LEFT JOIN kpi_assignment_snapshots child_kas
+               ON child_kas.assignment_id = child_ka.id
+              AND child_kas.cycle_id = child_ka.cycle_id
+              AND EXISTS (
+                  SELECT 1
+                  FROM kpi_cycles child_kas_cycle
+                  WHERE child_kas_cycle.id = child_kas.cycle_id
+                    AND child_kas_cycle.deleted_at IS NULL
+                    AND child_kas_cycle.year &lt; EXTRACT(YEAR FROM CURRENT_DATE)::int
+              )
+        LEFT JOIN job_titles child_jt ON child_u.job_title_id = child_jt.id AND child_jt.deleted_at IS NULL
+        LEFT JOIN users parent_u ON pm_ka.user_id = parent_u.id AND parent_u.deleted_at IS NULL
+        LEFT JOIN job_titles parent_jt ON parent_u.job_title_id = parent_jt.id AND parent_jt.deleted_at IS NULL
+
+        WHERE pm_ka.cycle_id = #{cycleId}
+          AND pm_ka.deleted_at IS NULL
+          AND pm_ka.parent_assignment_id IS NULL
+          AND pm_ka.user_id != #{pmId}
+          AND pm_ka.user_id IN (
+              SELECT ud.user_id
+              FROM user_departments ud
+              INNER JOIN departments d ON d.id = ud.department_id AND d.deleted_at IS NULL
+              WHERE d.manager_id = #{pmId}
+                AND ud.is_primary = TRUE
           )
         ORDER BY km.code, child_u.full_name
     </select>

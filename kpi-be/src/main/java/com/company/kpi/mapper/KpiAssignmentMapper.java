@@ -82,6 +82,10 @@ public interface KpiAssignmentMapper {
             @Param("pmId") UUID pmId,
             @Param("cycleId") UUID cycleId);
 
+    List<PmDashboardAggregate> findPmDepartmentPortfolioByPmIdAndCycleId(
+            @Param("pmId") UUID pmId,
+            @Param("cycleId") UUID cycleId);
+
     List<LeaderKpiAssignmentDTO> findDetailsByUserAndCycleAndRoleLeader(
             @Param("userId") UUID userId,
             @Param("cycleId") UUID cycleId,

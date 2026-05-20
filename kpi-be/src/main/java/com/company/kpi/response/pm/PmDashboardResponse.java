@@ -65,6 +65,11 @@ public class PmDashboardResponse {
         /** {@code roles.code} người tạo KPI master — màu nền dòng trên PM dashboard. */
         private String creatorRoleCode;
 
+        // Thông tin người sở hữu KPI cha (Dành cho tab KPI Department)
+        private UUID userId;
+        private String userName;
+        private String userRole;
+
         @Builder.Default
         private List<KpiChildDto> children = new ArrayList<>();
     }

@@ -31,7 +31,8 @@ import GmMemberKpiDrawer from '@/components/gm/GmMemberKpiDrawer.vue'
 
 const toast = useToast()
 const route = useRoute()
-const activeTab = ref('personal')
+const activeTab = ref('department')
+const activePersonalPromoSubTab = ref<'personal' | 'promotion'>('personal')
 const pmFeedbackPendingByScope = ref<{ portfolio: number; promotion: number }>({
   portfolio: 0,
   promotion: 0,
@@ -712,24 +713,24 @@ const handleRefresh = () => {
       
       <div class="flex bg-slate-50 border-b border-slate-200 px-4 pt-3 gap-2 overflow-x-auto hide-scrollbar">
         <button 
-          @click="activeTab = 'personal'" 
+          @click="activeTab = 'department'" 
           class="px-5 py-3 text-sm font-bold rounded-t-xl transition-all flex items-center gap-2 relative -bottom-[1px]" 
-          :class="activeTab === 'personal' ? 'bg-white text-blue-700 border border-slate-200 border-b-white z-10' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-200/50 border border-transparent'"
+          :class="activeTab === 'department' ? 'bg-white text-blue-700 border border-slate-200 border-b-white z-10' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-200/50 border border-transparent'"
         >
-          <i class="fas fa-list-alt text-base"></i> KPI Personal
-          <span
-            v-if="pmFeedbackPendingByScope.portfolio > 0"
-            class="flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-bold text-white shadow-sm ml-1">
-            {{ pmFeedbackPendingByScope.portfolio }}
-          </span>
+          <i class="fas fa-users text-base"></i> KPI Department
         </button>
 
         <button 
-          @click="activeTab = 'promotion'" 
+          @click="activeTab = 'personal_promotion'" 
           class="px-5 py-3 text-sm font-bold rounded-t-xl transition-all flex items-center gap-2 relative -bottom-[1px]" 
-          :class="activeTab === 'promotion' ? 'bg-white text-blue-700 border border-slate-200 border-b-white z-10' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-200/50 border border-transparent'"
+          :class="activeTab === 'personal_promotion' ? 'bg-white text-blue-700 border border-slate-200 border-b-white z-10' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-200/50 border border-transparent'"
         >
-          <i class="fas fa-arrow-trend-up text-base"></i> KPI Promotion
+          <i class="fas fa-list-alt text-base"></i> KPI Personal & Promotion
+          <span
+            v-if="pmFeedbackPendingByScope.portfolio + pmFeedbackPendingByScope.promotion > 0"
+            class="flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-bold text-white shadow-sm ml-1">
+            {{ pmFeedbackPendingByScope.portfolio + pmFeedbackPendingByScope.promotion }}
+          </span>
         </button>
         
         <button 
@@ -755,27 +756,74 @@ const handleRefresh = () => {
       </div>
 
       <div class="bg-white">
+        <div v-if="activeTab === 'personal_promotion'" class="flex flex-col">
+          <div class="border-b border-slate-200 bg-white px-5 pt-3">
+            <div class="flex gap-2">
+              <button
+                type="button"
+                class="rounded-t-lg border px-4 py-2 text-xs font-bold transition-colors cursor-pointer"
+                :class="activePersonalPromoSubTab === 'personal' ? 'border-slate-200 border-b-white bg-white text-blue-700' : 'border-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-800'"
+                @click="activePersonalPromoSubTab = 'personal'"
+              >
+                KPI Personal
+                <span
+                  v-if="pmFeedbackPendingByScope.portfolio > 0"
+                  class="ml-1 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-bold leading-none text-white shadow-sm"
+                >
+                  {{ pmFeedbackPendingByScope.portfolio }}
+                </span>
+              </button>
+              <button
+                type="button"
+                class="rounded-t-lg border px-4 py-2 text-xs font-bold transition-colors cursor-pointer"
+                :class="activePersonalPromoSubTab === 'promotion' ? 'border-slate-200 border-b-white bg-white text-purple-700' : 'border-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-800'"
+                @click="activePersonalPromoSubTab = 'promotion'"
+              >
+                KPI Promotion
+                <span
+                  v-if="pmFeedbackPendingByScope.promotion > 0"
+                  class="ml-1 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-bold leading-none text-white shadow-sm"
+                >
+                  {{ pmFeedbackPendingByScope.promotion }}
+                </span>
+              </button>
+            </div>
+          </div>
+          <PmPersonalKpiTab
+            v-if="activePersonalPromoSubTab === 'personal'"
+            :key="`pf-${personalKpiKey}`"
+            portfolio-scope="portfolio"
+            :year="approvalYear"
+            :readonly-year="selectedYearReadonly"
+            @open-assign="openAssignDrawer"
+            @open-assign-after-member-feedback="openAssignDrawerAfterMemberFeedback"
+            @open-member-detail="openKpiChildDetail"
+            @feedback-pending-count="onPmFeedbackPendingCount"
+            @timeline-refresh="() => void loadProcessTimeline()"
+          />
+          <PmPersonalKpiTab
+            v-if="activePersonalPromoSubTab === 'promotion'"
+            :key="`pm-${personalKpiKey}`"
+            portfolio-scope="promotion"
+            :year="approvalYear"
+            :readonly-year="selectedYearReadonly"
+            @open-assign="openAssignDrawer"
+            @open-assign-after-member-feedback="openAssignDrawerAfterMemberFeedback"
+            @open-member-detail="openKpiChildDetail"
+            @feedback-pending-count="onPmFeedbackPendingCount"
+            @timeline-refresh="() => void loadProcessTimeline()"
+          />
+        </div>
         <PmPersonalKpiTab
-          v-if="activeTab === 'personal'"
-          :key="`pf-${personalKpiKey}`"
-          portfolio-scope="portfolio"
+          v-if="activeTab === 'department'"
+          :key="`dept-${personalKpiKey}`"
+          portfolio-scope="department"
           :year="approvalYear"
           :readonly-year="selectedYearReadonly"
           @open-assign="openAssignDrawer"
           @open-assign-after-member-feedback="openAssignDrawerAfterMemberFeedback"
           @open-member-detail="openKpiChildDetail"
-          @feedback-pending-count="onPmFeedbackPendingCount"
-          @timeline-refresh="() => void loadProcessTimeline()"
-        />
-        <PmPersonalKpiTab
-          v-if="activeTab === 'promotion'"
-          :key="`pm-${personalKpiKey}`"
-          portfolio-scope="promotion"
-          :year="approvalYear"
-          :readonly-year="selectedYearReadonly"
-          @open-assign="openAssignDrawer"
-          @open-assign-after-member-feedback="openAssignDrawerAfterMemberFeedback"
-          @open-member-detail="openKpiChildDetail"
+          @open-member="openMemberDrawer"
           @feedback-pending-count="onPmFeedbackPendingCount"
           @timeline-refresh="() => void loadProcessTimeline()"
         />

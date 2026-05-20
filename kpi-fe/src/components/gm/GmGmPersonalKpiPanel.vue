@@ -10,6 +10,9 @@ import { pmKpiService } from '@/services/modules/kpi-pm.service'
 import { gmKpiService } from '@/services/modules/kpi-gm.service'
 import { KPI_STATUS } from '@/config/constants'
 import GmStrategicKpiTypeTag from '@/components/gm/GmStrategicKpiTypeTag.vue'
+import KpiCreatorRowLegend from '@/components/shared/KpiCreatorRowLegend.vue'
+import { kpiCreatorRowBgFromSource } from '@/utils/kpiCreatorRowBg'
+import { extractRawInputFromApiTargetDescription } from '@/utils/kpiScoringRulesDsl'
 import {
   appendEvidenceFilesUrlsToPayload,
   purgeRemovedUploadedEvidenceFiles,
@@ -382,6 +385,123 @@ function displayTableCell(v: string | number | null | undefined): string {
 function displayTargetWithUnit(row: GmPersonalKpiRowMock): string {
   return formatKpiTargetWithUnit(displayTableCell(row.target), row.unitCode)
 }
+
+const totalWeight = computed(() =>
+  scopedRows.value.reduce((sum, r) => sum + (r.weight || 0), 0)
+)
+
+const totalSelfWeightedScore = computed(() =>
+  scopedRows.value.reduce((sum, r) => {
+    const a = props.assignmentsById[r.id]
+    const selfScore = a?.endSelfScore ?? a?.midSelfScore ?? null
+    return selfScore !== null ? sum + selfScore * (r.weight || 0) : sum
+  }, 0)
+)
+
+const totalPmWeightedScore = computed(() =>
+  scopedRows.value.reduce((sum, r) => {
+    const a = props.assignmentsById[r.id]
+    const pmScore = a?.endPmScore ?? a?.endGmScore ?? null
+    return pmScore !== null ? sum + pmScore * (r.weight || 0) : sum
+  }, 0)
+)
+
+const selfWeightedAvg = computed((): number | null => {
+  const rows = scopedRows.value.filter(r => {
+    const a = props.assignmentsById[r.id]
+    return (a?.endSelfScore ?? a?.midSelfScore) != null
+  })
+  if (!rows.length) return null
+  let num = 0
+  let den = 0
+  for (const r of rows) {
+    const a = props.assignmentsById[r.id]
+    const selfScore = a?.endSelfScore ?? a?.midSelfScore ?? 0
+    num += selfScore * (r.weight || 0)
+    den += (r.weight || 0)
+  }
+  return den ? num / den : null
+})
+
+const pmWeightedAvg = computed((): number | null => {
+  const rows = scopedRows.value.filter(r => {
+    const a = props.assignmentsById[r.id]
+    return (a?.endPmScore ?? a?.endGmScore) != null
+  })
+  if (!rows.length) return null
+  let num = 0
+  let den = 0
+  for (const r of rows) {
+    const a = props.assignmentsById[r.id]
+    const pmScore = a?.endPmScore ?? a?.endGmScore ?? 0
+    num += pmScore * (r.weight || 0)
+    den += (r.weight || 0)
+  }
+  return den ? num / den : null
+})
+
+function scoreColorClass(score: number | string | null | undefined): string {
+  if (score == null || score === '' || score === '—' || score === '-') return 'text-slate-400'
+  const v = Number(score)
+  if (!Number.isFinite(v)) return 'text-slate-400'
+  if (v <= 2) return 'text-rose-600'
+  if (v < 4) return 'text-amber-600'
+  return 'text-emerald-600'
+}
+
+function statusPhaseClass(code: number | null | undefined): string {
+  if ([501, 502, 601, 602].includes(Number(code))) return 'text-sky-700'
+  if (Number(code) === 407) return 'text-violet-700'
+  if (Number(code) === 406) return 'text-orange-700'
+  if ([503, 603].includes(Number(code))) return 'text-emerald-700'
+  if ([402, 403, 404, 405].includes(Number(code))) return 'text-slate-700'
+  return 'text-slate-600'
+}
+
+function statusBadgeClass(code: number | null | undefined): string {
+  if ([501, 502, 601, 602].includes(Number(code))) return 'border-sky-200 bg-sky-50'
+  if (Number(code) === 407) return 'border-violet-200 bg-violet-50'
+  if (Number(code) === 406) return 'border-orange-200 bg-orange-50'
+  if ([503, 603].includes(Number(code))) return 'border-emerald-200 bg-emerald-50'
+  if ([402, 403, 404, 405].includes(Number(code))) return 'border-slate-200 bg-slate-55/40'
+  return 'border-slate-200 bg-slate-50'
+}
+
+function statusTooltip(row: GmPersonalKpiRowMock): string {
+  const status = Number(row.assignmentStatusCode ?? 0)
+  const a = props.assignmentsById[row.id]
+  const reason = String(a?.updateReason ?? a?.feedbackComment ?? '').trim()
+  if (status === 406 && reason) return `Rejection reason:\n${reason}`
+  return row.assignmentStatusName ?? ''
+}
+
+function hasRejectedReason(row: GmPersonalKpiRowMock): boolean {
+  const status = Number(row.assignmentStatusCode ?? 0)
+  const a = props.assignmentsById[row.id]
+  const reason = String(a?.updateReason ?? a?.feedbackComment ?? '').trim()
+  return status === 406 && reason.length > 0
+}
+
+function targetDataTooltip(row: GmPersonalKpiRowMock): string {
+  const a = props.assignmentsById[row.id]
+  const targetDesc = a?.targetDescription ?? ''
+  const rawRules = extractRawInputFromApiTargetDescription(targetDesc)
+  if (rawRules) return `Scoring rules:\n${rawRules}`
+  return String(a?.targetDescription ?? row.target ?? '').trim()
+}
+
+function sourceRowClass(row: GmPersonalKpiRowMock): string {
+  const a = props.assignmentsById[row.id]
+  if (!a) return ''
+  return kpiCreatorRowBgFromSource(a, { selfRole: 'GM' })
+}
+
+function rowClass(row: GmPersonalKpiRowMock): string {
+  const source = sourceRowClass(row)
+  if (source) return source
+  if (invalidRowIds.value.has(row.id)) return 'bg-red-50 ring-1 ring-inset ring-red-200'
+  return 'hover:bg-indigo-50/30'
+}
 </script>
 
 <template>
@@ -463,33 +583,39 @@ function displayTargetWithUnit(row: GmPersonalKpiRowMock): string {
           Personal KPI table
         </h2>
       </div>
+      <KpiCreatorRowLegend />
       <div class="overflow-x-auto">
         <table class="w-full min-w-[52rem] border-collapse text-left text-sm text-slate-800">
-          <thead class="border-b border-slate-200 bg-slate-50/80 text-xs font-semibold uppercase text-slate-500">
+          <thead class="border-b border-slate-200 bg-slate-200 text-[11px] font-bold uppercase tracking-wider text-slate-500">
             <tr>
-              <th class="w-16 px-6 py-4 text-center">#</th>
-              <th class="px-6 py-4">Objective</th>
-              <th class="px-6 py-4 text-center">Target</th>
-              <th class="px-6 py-4 text-center">Weight</th>
-              <th class="px-6 py-4 text-center">Actual</th>
-              <th class="px-6 py-4 text-center">Score</th>
-              <th class="px-6 py-4 text-center">Status</th>
-              <th class="px-6 py-4 text-right">Actions</th>
+              <th class="w-12 px-5 py-4 text-center">#</th>
+              <th class="min-w-[200px] px-5 py-4">Objectives</th>
+              <th class="min-w-[10rem] px-5 py-4 text-center">KPI Status</th>
+              <th class="px-5 py-4">Target</th>
+              <th class="w-24 px-5 py-4 text-center">Weight (W)</th>
+              <th class="min-w-[8rem] px-5 py-4 text-center">
+                <span class="inline-flex items-center gap-1">
+                  Actual Result
+                </span>
+              </th>
+              <th class="w-28 px-5 py-4 text-center">Self Score</th>
+              <th class="w-28 px-5 py-4 text-center">Final Score</th>
+              <th class="w-28 px-5 py-4 text-right">Actions</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-slate-100">
             <template v-for="group in groupedByBsc" :key="'pk-bsc-' + group.perspective">
-              <tr class="bg-slate-50/50 transition-colors hover:bg-slate-50">
-                <td colspan="8" class="p-0">
+              <tr class="border-y border-slate-200 bg-slate-50">
+                <td colspan="9" class="p-0">
                   <button type="button"
-                    class="flex w-full cursor-pointer items-center gap-3 px-6 py-3 text-left transition-colors"
+                    class="flex w-full cursor-pointer items-center gap-3 px-5 py-2.5 text-left text-xs font-bold text-slate-800 uppercase tracking-wider transition-colors hover:bg-slate-100"
                     :aria-expanded="expandedBscSections.has(group.perspective)"
                     :aria-controls="`gm-personal-bsc-${group.perspective}`"
                     @click="toggleBscSection(group.perspective)">
                     <i class="fas fa-chevron-down w-4 shrink-0 text-center text-xs text-slate-400 transition-transform duration-200 motion-reduce:transition-none"
                       :class="expandedBscSections.has(group.perspective) ? '' : '-rotate-90'" aria-hidden="true" />
-                    <span class="font-bold text-slate-700">{{ group.label }}</span>
-                    <span class="rounded-full bg-slate-200 px-2 py-0.5 text-xs font-medium text-slate-600">{{
+                    <span>{{ group.label }}</span>
+                    <span class="rounded-full bg-slate-200/80 px-2 py-0.5 text-[10px] font-bold text-slate-600 normal-case">{{
                       group.rows.length }} KPI</span>
                   </button>
                 </td>
@@ -497,52 +623,127 @@ function displayTargetWithUnit(row: GmPersonalKpiRowMock): string {
               <template v-if="expandedBscSections.has(group.perspective)">
                 <tr v-for="({ row, stt }, ri) in group.rows" :key="row.id"
                   :id="ri === 0 ? `gm-personal-bsc-${group.perspective}` : undefined"
-                  class="align-top transition-colors"
-                  :class="invalidRowIds.has(row.id) ? 'bg-red-50 ring-1 ring-inset ring-red-200' : 'hover:bg-indigo-50/30'">
-                  <td class="px-6 py-4 text-center text-sm font-medium text-slate-500">
+                  class="group align-middle transition-colors"
+                  :class="rowClass(row)">
+                  <td class="py-4 px-5 text-center text-sm font-semibold text-slate-400">
                     {{ stt }}
                   </td>
-                  <td class="min-w-0 px-6 py-4">
-                    <div class="flex flex-wrap items-center gap-3">
-                      <span class="font-medium leading-snug text-slate-900">{{ row.objective }}</span>
+                  <td class="py-4 px-5 align-middle">
+                    <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <p class="text-sm font-bold text-slate-900">
+                        <span v-if="props.assignmentsById[row.id]?.kpiCode" class="mr-1">{{ props.assignmentsById[row.id].kpiCode }}</span>
+                        <span>{{ props.assignmentsById[row.id]?.kpiName ?? row.objective }}</span>
+                      </p>
                       <GmStrategicKpiTypeTag :type="row.kpiType" size="sm" class="shrink-0" />
                     </div>
                   </td>
-                  <td class="min-w-0 px-6 py-4 text-center text-sm font-medium leading-snug text-slate-600">
-                    <span class="break-words">{{ displayTargetWithUnit(row) }}</span>
-                  </td>
-                  <td class="px-6 py-4 text-center text-sm text-slate-600">{{ row.weight }}%</td>
-                  <td class="px-6 py-4 text-center text-sm font-semibold tabular-nums text-slate-900">
-                    {{ displayTableCell(row.actual) }}
-                  </td>
-                  <td class="px-6 py-4 text-center text-sm font-bold tabular-nums text-indigo-600">
-                    {{ displayTableCell(row.finalScore) }}
-                  </td>
-                  <td class="min-w-0 px-6 py-4 text-center">
+                  <td class="max-w-[11rem] px-3 py-4 text-center align-middle">
                     <span
-                      class="inline-flex max-w-full items-center rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700"
-                      :title="assignmentStatusTooltip(row)">
-                      <span class="mr-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" aria-hidden="true" />
-                      <span class="line-clamp-2 text-center leading-snug">{{
-                        row.assignmentStatusDisplay
-                      }}</span>
+                      class="inline-flex max-w-full flex-col items-center gap-0.5 rounded-lg border px-2 py-1.5 text-[10px] font-semibold leading-tight"
+                      :class="statusBadgeClass(row.assignmentStatusCode)"
+                      :title="statusTooltip(row)">
+                      <span class="line-clamp-3 text-center" :class="statusPhaseClass(row.assignmentStatusCode)">{{ row.assignmentStatusDisplay }}</span>
+                    </span>
+                    <span
+                      v-if="hasRejectedReason(row)"
+                      :title="statusTooltip(row)"
+                      class="ml-1 mt-1 inline-flex max-w-full items-start gap-1 text-left text-[10px] font-medium text-orange-700 cursor-pointer hover:bg-orange-100 rounded">
+                      <span class="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-orange-300 text-[10px] font-bold leading-none text-orange-700 cursor-pointer">
+                        ?
+                      </span>
                     </span>
                   </td>
-                  <td class="px-6 py-4 text-right">
-                    <button v-if="Number(row.assignmentStatusCode) === KPI_STATUS.ACCEPTED || Number(row.assignmentStatusCode) === KPI_STATUS.FIRST_COMPLETED" type="button"
-                      class="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 shadow-sm transition-all hover:border-indigo-300 hover:bg-slate-50 hover:text-indigo-600"
-                      :class="invalidRowIds.has(row.id) ? 'border-red-300 text-red-600 hover:border-red-400 hover:bg-red-50 hover:text-red-700' : ''"
-                      @click.stop="openGmPersonalEvidence(row)">
-                      <i class="fas fa-exclamation-circle text-[13px]" v-if="invalidRowIds.has(row.id)"
-                        aria-hidden="true" />
-                      <i class="fas fa-eye text-[13px]" v-else aria-hidden="true" />
-                      Evaluate
-                    </button>
+                  <td class="max-w-xs py-4 px-5 align-middle">
+                    <div class="inline-flex items-center gap-1">
+                      <p class="text-sm font-medium text-slate-700 text-center">
+                        {{ displayTargetWithUnit(row) }}
+                      </p>
+                      <span
+                        class="inline-flex h-4 w-4 items-center justify-center rounded-full border border-slate-300 text-[10px] font-bold text-slate-500 cursor-help cursor-pointer"
+                        :title="targetDataTooltip(row)">
+                        ?
+                      </span>
+                    </div>
+                  </td>
+                  <td class="py-4 px-5 text-center align-middle">
+                    <span
+                      class="inline-block px-2.5 py-1 bg-slate-100 text-slate-700 font-bold text-sm rounded-md border border-slate-200">
+                      {{ row.weight }}
+                    </span>
+                  </td>
+                  <td class="py-4 px-5 text-center align-middle">
+                    <span class="text-sm font-semibold leading-snug text-slate-700 inline-block">
+                      {{ displayTableCell(row.actual) }}
+                    </span>
+                  </td>
+                  <td class="bg-sky-50/50 py-4 px-5 text-center align-middle">
+                    <span class="text-sm font-bold" :class="scoreColorClass(props.assignmentsById[row.id]?.endSelfScore ?? props.assignmentsById[row.id]?.midSelfScore)">
+                      {{ props.assignmentsById[row.id]?.endSelfScore ?? props.assignmentsById[row.id]?.midSelfScore ?? '-' }}
+                    </span>
+                  </td>
+                  <td class="py-4 px-5 text-center align-middle">
+                    <span class="text-sm font-bold" :class="scoreColorClass(props.assignmentsById[row.id]?.endPmScore ?? props.assignmentsById[row.id]?.endGmScore ?? row.finalScore)">
+                      {{ props.assignmentsById[row.id]?.endPmScore ?? props.assignmentsById[row.id]?.endGmScore ?? displayTableCell(row.finalScore) }}
+                    </span>
+                  </td>
+                  <td class="py-4 px-5 text-right align-middle">
+                    <div class="flex items-center justify-end gap-2">
+                      <button v-if="Number(row.assignmentStatusCode) === KPI_STATUS.ACCEPTED || Number(row.assignmentStatusCode) === KPI_STATUS.FIRST_COMPLETED" type="button"
+                        class="flex h-8 items-center gap-1.5 rounded-lg border px-3 text-[10px] font-bold shadow-sm transition-colors cursor-pointer"
+                        :class="invalidRowIds.has(row.id) 
+                          ? 'border-red-200 bg-rose-50 text-red-700 hover:bg-rose-100' 
+                          : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-indigo-600'"
+                        @click.stop="openGmPersonalEvidence(row)">
+                        <i class="fas fa-exclamation-circle text-[10px]" v-if="invalidRowIds.has(row.id)" />
+                        <i class="fas fa-pen text-[10px]" v-else />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               </template>
             </template>
           </tbody>
+          <tfoot class="bg-slate-100/80 border-t-2 border-slate-200 font-bold">
+            <!-- Tổng cộng -->
+            <tr>
+              <td colspan="4" class="py-4 px-5 text-right text-slate-700 uppercase text-xs tracking-wider">
+                Total (Total score):
+              </td>
+              <td class="py-4 px-5 text-center">
+                <span class="text-sm text-slate-800">{{ totalWeight }}</span>
+                <span class="text-xs text-slate-500 font-medium ml-1">pts</span>
+              </td>
+              <td class="py-4 px-5 text-center text-xs font-medium text-slate-400">-</td>
+              <td class="bg-sky-50/50 py-4 px-5 text-center text-sm text-slate-500">
+                {{ totalSelfWeightedScore > 0 ? totalSelfWeightedScore : '-' }}
+              </td>
+              <td class="py-4 px-5 text-center">
+                <span class="text-sm text-slate-800">
+                  {{ totalPmWeightedScore > 0 ? totalPmWeightedScore : '-' }}
+                </span>
+              </td>
+              <td class="py-4 px-5 text-center text-slate-500 text-sm"></td>
+            </tr>
+            <!-- Điểm trung bình -->
+            <tr class="bg-violet-50/50 border-t border-slate-200">
+              <td colspan="4" class="py-4 px-5 text-right text-violet-800 uppercase text-xs tracking-wider">
+                Average score:
+              </td>
+              <td class="py-4 px-5"></td>
+              <td class="py-4 px-5 text-center text-xs font-medium text-slate-400">-</td>
+              <td class="bg-sky-50/50 py-4 px-5 text-center text-sm text-slate-500">
+                <span class="text-sm text-violet-500">
+                  {{ selfWeightedAvg !== null ? selfWeightedAvg.toFixed(2) : '-' }}
+                </span>
+              </td>
+              <td class="py-4 px-5 text-center bg-violet-100/80">
+                <span class="text-lg text-violet-700 font-extrabold">
+                  {{ pmWeightedAvg !== null ? pmWeightedAvg.toFixed(2) : '-' }}
+                </span>
+              </td>
+              <td class="py-4 px-5 text-center text-slate-500 text-sm"></td>
+            </tr>
+          </tfoot>
         </table>
       </div>
       <div v-if="hasAcceptedKpis" class="flex justify-end border-t border-slate-100 bg-slate-50/50 px-6 py-5">

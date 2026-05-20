@@ -44,10 +44,11 @@ public class PmDashboardController extends BaseController {
     @GetMapping("/init")
     public ResponseEntity<BaseResponse<PmDashboardResponse>> initDashboard(
             @RequestParam("year") Integer year,
+            @RequestParam(value = "scope", required = false) String scope,
             Authentication authentication
     ) {
         UUID pmId = jwtUtil.resolveUserId(authentication);
-        PmDashboardResponse response = pmDashboardService.getDashboardInitialization(pmId, year);
+        PmDashboardResponse response = pmDashboardService.getDashboardInitialization(pmId, year, scope);
         return success(response);
     }
 

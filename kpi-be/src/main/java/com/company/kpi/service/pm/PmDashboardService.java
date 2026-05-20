@@ -214,6 +214,10 @@ public class PmDashboardService {
     }
 
     public PmDashboardResponse getDashboardInitialization(UUID pmId, Integer year) {
+        return getDashboardInitialization(pmId, year, null);
+    }
+
+    public PmDashboardResponse getDashboardInitialization(UUID pmId, Integer year, String scope) {
         
         // lấy cycle id từ mapper (sử dụng findByYear hiện có)
         var cycleOpt = kpiCycleMapper.findByYear(year);
@@ -224,7 +228,12 @@ public class PmDashboardService {
         UUID cycleId = cycleOpt.get().getId();
         UserKpiSummary summary = userKpiSummaryMapper.findByUserIdAndCycleId(pmId, cycleId).orElse(null);
 
-        List<PmDashboardAggregate> aggregates = kpiAssignmentMapper.findPmPortfolioByPmIdAndCycleId(pmId, cycleId);
+        List<PmDashboardAggregate> aggregates;
+        if ("department".equalsIgnoreCase(scope)) {
+            aggregates = kpiAssignmentMapper.findPmDepartmentPortfolioByPmIdAndCycleId(pmId, cycleId);
+        } else {
+            aggregates = kpiAssignmentMapper.findPmPortfolioByPmIdAndCycleId(pmId, cycleId);
+        }
 
         List<SysStatusCode> asmStatuses =
                 sysStatusCodeMapper.findByCategories(Arrays.asList("ASM_STATUS"));
@@ -271,6 +280,9 @@ public class PmDashboardService {
                         .expanded(true)
                         .isSelfCreated(pmId.equals(agg.getPmAssignment().getCreatedBy()))
                         .creatorRoleCode(trimUpperOrNull(agg.getKpiCreatorRoleCode()))
+                        .userId(agg.getParentUserId())
+                        .userName(agg.getParentUserName())
+                        .userRole(agg.getParentJobTitleName())
                         .build();
             });
 
