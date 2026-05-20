@@ -17,7 +17,7 @@ public class GmApprovedKpiDecisionRequest {
     /**
      * Quyết định của GM:
      * - Nếu assignment đang 403: {@code true} → 405, {@code false} → 406.
-     * - Nếu assignment đang 407 (feedback từ PM): resolve feedback và đưa về 404.
+     * - Nếu assignment đang 407 (feedback chờ GM): từ chối → 404; duyệt xử lý riêng (split / strategic).
      */
     @NotNull
     private Boolean approve;

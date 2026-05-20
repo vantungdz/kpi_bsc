@@ -1268,7 +1268,7 @@ async function onRejectAllGmApprovedQueue(payload: {
       await refreshGmApprovedKpiWorkspaceAfterDecision();
       showGmToast(
         ok === targets.length
-          ? `Đã từ chối ${ok} KPI (406).`
+          ? `Đã từ chối ${ok} KPI.`
           : `Đã từ chối ${ok}/${targets.length} KPI.`,
         5000,
         "info",
@@ -1309,7 +1309,7 @@ async function onRejectInactiveKpi(payload: {
       await refreshGmApprovedKpiWorkspaceAfterDecision();
       showGmToast(
         isFeedbackRow
-          ? `Đã đóng feedback và trả KPI về chờ chấp nhận — «${title}».`
+          ? `Đã từ chối feedback — «${title}».`
           : `Đã từ chối — «${title}».`,
         4500,
         "info",
@@ -1353,15 +1353,15 @@ async function onResolveDiagnosticsFeedback(payload: {
     await gmKpiService.decideApprovedKpiQueue({
       cycleId: cid,
       assignmentId: aid,
-      approve,
+      approve: false,
     });
     await loadStrategicDiagnosticsFromApi();
     await loadApprovedKpiQueueFromApi();
     void loadProcessTimeline();
     showGmToast(
-      approve ? "Đã duyệt Feedback" : "Đã từ chối Feedback",
+      "Đã từ chối feedback — KPI trở về chờ chấp nhận (404).",
       4500,
-      approve ? "success" : "info",
+      "info",
     );
   } catch (e: unknown) {
     showGmToast(
@@ -1500,7 +1500,7 @@ function closeModal() {
           >
             <i class="fas fa-sign-out-alt text-xs" />
           </span>
-          Đăng xuất
+          Logout
         </button>
       </div>
     </aside>
@@ -1527,7 +1527,7 @@ function closeModal() {
               v-if="activeCycleLabel && !isGmSettingsRoute"
               class="mt-0.5 text-xs font-medium text-slate-500"
             >
-              Đang xem:
+              Viewing:
               <span class="text-slate-700">{{ activeCycleLabel }}</span>
             </p>
           </div>
@@ -1536,7 +1536,7 @@ function closeModal() {
               <label
                 for="gm-year-select"
                 class="whitespace-nowrap text-xs font-bold text-slate-500"
-                >Năm</label
+                >Cycle</label
               >
               <div class="relative">
                 <select
@@ -1575,7 +1575,7 @@ function closeModal() {
               @click="gmOrgSectionDrawer.open()"
             >
               <i class="fas fa-plus text-xs" />
-              Thêm phòng ban mới
+              Add new department
             </button>
             <button
               v-else-if="isGmKpiTemplateRoute"
@@ -1584,7 +1584,7 @@ function closeModal() {
               @click="gmKpiTemplateLibrary?.openCreate?.()"
             >
               <i class="fas fa-plus text-xs" />
-              Tạo Bộ Template
+              Create Template
             </button>
             <div class="text-right pl-4 border-l border-slate-200">
               <p class="text-sm font-bold text-slate-800">
@@ -1923,17 +1923,17 @@ function closeModal() {
                         class="fas fa-triangle-exclamation text-rose-600"
                         aria-hidden="true"
                       />
-                      Xóa KPI?
+                      Delete KPI?
                     </h3>
                     <p
                       class="mt-2 text-xs font-medium leading-relaxed text-slate-600"
                     >
-                      KPI
+                      The KPI
                       <span class="font-bold text-slate-800"
                         >«{{ deleteKpiTarget.name }}»</span
                       >
-                      sẽ bị gỡ khỏi bảng Strategic KPIs Tracking và Diagnostics.
-                      Thao tác này không thể hoàn tác.
+                      will be removed from the Strategic KPIs Tracking and Diagnostics table.
+                      This action cannot be undone.
                     </p>
                   </div>
                   <div class="flex justify-end gap-2 bg-white px-5 py-4">
@@ -1943,7 +1943,7 @@ function closeModal() {
                       :disabled="deleteKpiSaving"
                       @click="closeDeleteKpiModal"
                     >
-                      Hủy
+                      Cancel
                     </button>
                     <button
                       type="button"
@@ -1951,7 +1951,7 @@ function closeModal() {
                       :disabled="deleteKpiSaving"
                       @click="confirmDeleteKpi"
                     >
-                      {{ deleteKpiSaving ? "Đang xóa…" : "Xác nhận xóa" }}
+                      {{ deleteKpiSaving ? "Deleting…" : "Confirm deletion" }}
                     </button>
                   </div>
                 </div>

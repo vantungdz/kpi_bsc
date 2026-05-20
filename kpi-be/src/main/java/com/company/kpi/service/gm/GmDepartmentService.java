@@ -1,5 +1,6 @@
 package com.company.kpi.service.gm;
 
+import com.company.kpi.common.constant.Constant;
 import com.company.kpi.common.exception.AppException;
 import com.company.kpi.mapper.DepartmentMapper;
 import com.company.kpi.mapper.UserMapper;
@@ -60,6 +61,9 @@ public class GmDepartmentService {
         if (n != 1) {
             throw new AppException("Failed to create department", HttpStatus.INTERNAL_SERVER_ERROR);
         }
+        if (request.getManagerId() != null) {
+            syncManagerDepartmentMembership(id, request.getManagerId(), actorId);
+        }
         GmDepartmentResponse created = departmentMapper.selectActiveById(id);
         if (created == null) {
             throw new AppException("Department not found after create", HttpStatus.INTERNAL_SERVER_ERROR);
@@ -86,6 +90,17 @@ public class GmDepartmentService {
                 actorId);
         if (n != 1) {
             throw AppException.notFound("Department not found or already deleted");
+        }
+        UUID oldManagerId = existing.getManagerId();
+        UUID newManagerId = request.getManagerId();
+        if (!Objects.equals(oldManagerId, newManagerId)) {
+            if (oldManagerId != null) {
+                removeManagerDepartmentMembership(departmentId, oldManagerId);
+            }
+            if (newManagerId != null) {
+                syncManagerDepartmentMembership(departmentId, newManagerId, actorId);
+                departmentMapper.updateMemberSupervisorsForDepartment(departmentId, newManagerId, newManagerId);
+            }
         }
         GmDepartmentResponse updated = departmentMapper.selectActiveById(departmentId);
         hydrateDepartmentPayloads(List.of(updated), kpiYearDefault());
@@ -119,6 +134,7 @@ public class GmDepartmentService {
 
     /**
      * Thêm user vào phòng: user được gỡ khỏi mọi phòng ban khác (chỉ còn membership phòng đích).
+     * {@code supervisor_id} = PM ({@code departments.manager_id}).
      * Nếu user đang là {@code MANAGER_ID} của một phòng khác thì từ chối (phải đổi manager trước).
      */
     @Transactional
@@ -128,6 +144,9 @@ public class GmDepartmentService {
             throw AppException.notFound("Department not found");
         }
         UUID supervisorId = dept.getManagerId();
+        if (supervisorId == null) {
+            throw AppException.badRequest("Assign a department manager before adding members.");
+        }
         Set<UUID> seen = new HashSet<>();
         Set<UUID> insertedUserIds = new HashSet<>();
         for (UUID userId : request.getUserIds()) {
@@ -138,6 +157,7 @@ public class GmDepartmentService {
                     .findById(userId)
                     .orElseThrow(() -> AppException.badRequest("User does not exist or is inactive: " + userId));
             if (departmentMapper.countUserDepartmentMembership(departmentId, userId) > 0) {
+                departmentMapper.updateUserDepartmentSupervisor(userId, departmentId, supervisorId);
                 continue;
             }
             List<UUID> managedElsewhere =
@@ -325,9 +345,38 @@ public class GmDepartmentService {
         if (managerId == null) {
             return;
         }
+        if (!userMapper.existsActiveUserWithRoleCode(managerId, Constant.ROLE_PM)) {
+            throw AppException.badRequest("Manager must be an active user with PM role");
+        }
+    }
+
+    /**
+     * Gán PM làm manager: thêm/ cập nhật {@code user_departments} với {@code supervisor_id} = GM (actor).
+     */
+    private void syncManagerDepartmentMembership(UUID departmentId, UUID managerId, UUID gmSupervisorId) {
         userMapper
                 .findById(managerId)
                 .orElseThrow(() -> AppException.badRequest("Manager user does not exist or is inactive"));
+        userMapper
+                .findById(gmSupervisorId)
+                .orElseThrow(() -> AppException.badRequest("GM supervisor user does not exist or is inactive"));
+
+        departmentMapper.deleteUserDepartmentsExcept(managerId, departmentId);
+        if (departmentMapper.countUserDepartmentMembership(departmentId, managerId) > 0) {
+            departmentMapper.updateUserDepartmentSupervisor(managerId, departmentId, gmSupervisorId);
+        } else {
+            boolean isPrimary = departmentMapper.countDepartmentsForUser(managerId) == 0;
+            int ins = departmentMapper.insertUserDepartment(managerId, departmentId, gmSupervisorId, isPrimary);
+            if (ins != 1) {
+                throw new AppException("Failed to add manager to department membership", HttpStatus.INTERNAL_SERVER_ERROR);
+            }
+        }
+        applyPrimaryNormalization(managerId);
+    }
+
+    private void removeManagerDepartmentMembership(UUID departmentId, UUID managerId) {
+        departmentMapper.deleteUserDepartment(departmentId, managerId);
+        applyPrimaryNormalization(managerId);
     }
 
     private void validateParentNotDescendantOf(UUID departmentId, UUID newParentId) {

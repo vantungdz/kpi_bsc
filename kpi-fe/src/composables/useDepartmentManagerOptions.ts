@@ -2,7 +2,7 @@ import { ref } from 'vue'
 import { apiGetDepartmentManagers } from '@/services/modules/kpi-reference.service'
 import type { DepartmentManagerOption } from '@/types/department-manager'
 
-/** Tải quản lý department (`departments.manager_id`) cho form KPI cascading. */
+/** Tải user role PM (active) — gán manager department, KPI cascading. */
 export function useDepartmentManagerOptions() {
   const users = ref<DepartmentManagerOption[]>([])
   const loading = ref(false)
@@ -15,7 +15,7 @@ export function useDepartmentManagerOptions() {
       const rows = await apiGetDepartmentManagers()
       users.value = Array.isArray(rows) ? rows : []
     } catch (e: unknown) {
-      error.value = e instanceof Error ? e.message : 'Không tải được danh sách quản lý department'
+      error.value = e instanceof Error ? e.message : 'Không tải được danh sách PM'
       users.value = []
     } finally {
       loading.value = false

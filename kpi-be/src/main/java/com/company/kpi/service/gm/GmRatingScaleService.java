@@ -78,7 +78,7 @@ public class GmRatingScaleService {
             }
             if (kpiCycleMapper.countOtherOpenCycles(cycleId) > 0) {
                 throw AppException.badRequest(
-                        "Đã có một năm đánh giá đang mở (201). Vui lòng đóng năm đó trước khi mở năm khác.");
+                        "Đã có một năm đánh giá đang mở. Vui lòng đóng năm đó trước khi mở năm khác.");
             }
             kpiCycleMapper.updateCycleStatus(cycleId, Constants.CycleStatus.OPEN, actorId);
         } else {
@@ -217,14 +217,14 @@ public class GmRatingScaleService {
     private static void assertEditable(GmRatingScaleSummaryResponse row) {
         if (!Boolean.TRUE.equals(row.getEditable())) {
             throw AppException.forbidden(
-                    "Kỳ đánh giá đã đóng (202). Chỉ kỳ đang mở (201) mới được chỉnh sửa khung điểm.");
+                    "Kỳ đánh giá đã đóng. Chỉ kỳ đang mở mới được chỉnh sửa khung điểm.");
         }
     }
 
     private static void assertOpenStatus(int statusCode) {
         if (statusCode != Constants.CycleStatus.OPEN) {
             throw AppException.forbidden(
-                    "Kỳ đánh giá đã đóng (202). Chỉ kỳ đang mở (201) mới được chỉnh sửa khung điểm.");
+                    "Kỳ đánh giá đã đóng. Chỉ kỳ đang mở mới được chỉnh sửa khung điểm.");
         }
     }
 

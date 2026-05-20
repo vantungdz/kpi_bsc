@@ -47,6 +47,15 @@ export function useMemberKpiFormatters() {
               })
               .filter(Boolean)
           : []),
+        ...(Array.isArray(parsed.urls)
+          ? (parsed.urls as unknown[])
+              .map((row) => {
+                if (!row || typeof row !== 'object') return undefined
+                const r = row as Record<string, unknown>
+                return String(r.name ?? '').trim() || String(r.url ?? '').trim()
+              })
+              .filter(Boolean)
+          : []),
       ]
 
       if (item.group === 'B') {

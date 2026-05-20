@@ -68,7 +68,7 @@ const BSC_SECTION_LABEL: Record<string, string> = {
   customer: '👥 Customer',
   internal: '⚙️ Internal Process',
   learning: '🎓 Learning & Growth',
-  _unassigned: 'Chưa gán BSC',
+  _unassigned: 'Unassigned BSC',
 }
 
 function perspectiveKeyFromDef(def: TemplateKpiDef): string {
@@ -132,11 +132,11 @@ function groupDetailKpisByBsc(kpis: TemplateKpiDef[]): BscDetailGroup[] {
 
 /** Nhãn công thức đã lưu trong `draftPayload.calculationMethod` (đồng bộ với form Strategic KPI). */
 const CALC_METHOD_LABELS: Record<string, string> = {
-  manual_member_input: 'Tự nhập — theo số member nhập',
-  mean_actual_plan: 'Trung bình — theo tỉ lệ Actual/Plan',
-  mean_plan_actual: 'Trung bình — theo tỉ lệ Plan/Actual',
-  mean_plan_actual_pct: 'Trung bình — gộp AVG',
-  mean_plan_actual_sum: 'Trung bình — gộp SUM',
+  manual_member_input: 'Manual input - by entered member count',
+  mean_actual_plan: 'Average - by Actual/Plan ratio',
+  mean_plan_actual: 'Average - by Plan/Actual ratio',
+  mean_plan_actual_pct: 'Average - aggregate AVG',
+  mean_plan_actual_sum: 'Average - aggregate SUM',
 }
 
 function detailSuiteKpiType(kpi: TemplateKpiDef): GmStrategicKpiKind | null {
@@ -209,7 +209,7 @@ async function loadTemplateSuitesFromApi() {
   } catch (e: unknown) {
     templateSuites.value = []
     const msg =
-      e instanceof Error ? e.message : 'Không tải được danh sách gói template KPI từ máy chủ.'
+      e instanceof Error ? e.message : 'Could not load KPI template packages from the server.'
     pushGmNotification(msg, { variant: 'error', durationMs: 9000 })
   } finally {
     templateSuitesLoading.value = false
@@ -349,7 +349,7 @@ async function onTemplateKpiDraftAdded(payload: Record<string, unknown>) {
     const itemId = prevKpi?.templateItemId
     if (!suite || !prevKpi || !itemId) {
       pushGmNotification(
-        'Không có mã KPI trên máy chủ (templateItemId). Hãy tải lại trang hoặc tạo KPI mới từ «Thêm KPI».',
+        'Missing KPI id on the server (templateItemId). Reload the page or create a new KPI from "Add KPI".',
         { variant: 'error', durationMs: 9000 },
       )
       return
@@ -361,10 +361,10 @@ async function onTemplateKpiDraftAdded(payload: Record<string, unknown>) {
       await loadTemplateSuitesFromApi()
       showKpiDraftDrawer.value = false
       const title = String(payload.kpiName ?? '').trim() || 'KPI'
-      pushGmNotification(`Đã cập nhật KPI mẫu «${title}».`)
+      pushGmNotification(`Template KPI "${title}" has been updated.`)
     } catch (e: unknown) {
       const msg =
-        e instanceof Error ? e.message : 'Không cập nhật được KPI trên máy chủ.'
+        e instanceof Error ? e.message : 'Could not update the KPI on the server.'
       pushGmNotification(msg, { variant: 'error' })
     } finally {
       detailMutating.value = false
@@ -374,7 +374,7 @@ async function onTemplateKpiDraftAdded(payload: Record<string, unknown>) {
   const appendSid = kpiAppendSuiteId.value
   if (appendSid != null) {
     const suiteLabel =
-      templateSuites.value.find((s) => s.id === appendSid)?.name?.trim() || 'bộ mẫu'
+      templateSuites.value.find((s) => s.id === appendSid)?.name?.trim() || 'template suite'
     detailMutating.value = true
     try {
       const body = mapDraftPayloadToCreateTemplateItemBody(payload)
@@ -382,9 +382,9 @@ async function onTemplateKpiDraftAdded(payload: Record<string, unknown>) {
       await loadTemplateSuitesFromApi()
       showKpiDraftDrawer.value = false
       const title = String(payload.kpiName ?? '').trim() || 'KPI'
-      pushGmNotification(`Đã thêm KPI mẫu «${title}» vào «${suiteLabel}».`)
+      pushGmNotification(`Template KPI "${title}" has been added to "${suiteLabel}".`)
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Không thêm được KPI trên máy chủ.'
+      const msg = e instanceof Error ? e.message : 'Could not add the KPI on the server.'
       pushGmNotification(msg, { variant: 'error' })
     } finally {
       detailMutating.value = false
@@ -448,13 +448,13 @@ async function confirmDeleteExecute() {
       await gmKpiService.deleteKpiTemplate(d.suiteId)
       await loadTemplateSuitesFromApi()
       closeDetail()
-      pushGmNotification(`Đã xóa bộ mẫu «${d.suiteName}».`)
+      pushGmNotification(`Template suite "${d.suiteName}" has been deleted.`)
     } else {
       const suite = templateSuites.value.find((t) => t.id === d.suiteId)
       const kpi = suite?.kpis[d.kpiIndex]
       const itemId = kpi?.templateItemId
       if (!itemId) {
-        pushGmNotification('Không có mã KPI trên máy chủ để xóa. Hãy tải lại trang.', {
+        pushGmNotification('Missing KPI id on the server. Reload the page.', {
           variant: 'error',
           durationMs: 9000,
         })
@@ -463,11 +463,11 @@ async function confirmDeleteExecute() {
       }
       await gmKpiService.deleteKpiTemplateItem(d.suiteId, itemId)
       await loadTemplateSuitesFromApi()
-      pushGmNotification(`Đã xóa KPI mẫu «${d.kpiName}».`)
+      pushGmNotification(`Template KPI "${d.kpiName}" has been deleted.`)
     }
     closeDeleteConfirmModal()
   } catch (e: unknown) {
-    pushGmNotification(e instanceof Error ? e.message : 'Không xóa được trên máy chủ.', {
+    pushGmNotification(e instanceof Error ? e.message : 'Could not delete on the server.', {
       variant: 'error',
     })
     closeDeleteConfirmModal()
@@ -514,7 +514,7 @@ async function saveSuiteMetaFromModal() {
   if (!id) return
   const name = suiteMetaName.value.trim()
   if (!name) {
-    suiteMetaNameError.value = 'Vui lòng nhập tên bộ mẫu (trường bắt buộc).'
+    suiteMetaNameError.value = 'Enter a template suite name (required).'
     return
   }
   suiteMetaNameError.value = ''
@@ -526,10 +526,10 @@ async function saveSuiteMetaFromModal() {
     })
     await loadTemplateSuitesFromApi()
     closeSuiteMetaModal()
-    pushGmNotification(`Đã cập nhật thông tin bộ mẫu «${name}».`)
+    pushGmNotification(`Template suite "${name}" has been updated.`)
   } catch (e: unknown) {
     pushGmNotification(
-      e instanceof Error ? e.message : 'Không cập nhật được bộ mẫu trên máy chủ.',
+      e instanceof Error ? e.message : 'Could not update the template suite on the server.',
       { variant: 'error' },
     )
   } finally {
@@ -613,9 +613,9 @@ function closeCreateDrawer() {
 }
 
 function validateCreate(): string | null {
-  if (!tplName.value.trim()) return 'Vui lòng nhập tên bộ template (trường bắt buộc).'
+  if (!tplName.value.trim()) return 'Enter a template suite name (required).'
   for (const r of draftKpis.value) {
-    if (!r.def.name.trim()) return 'Mỗi KPI phải có tên (trường bắt buộc) — kiểm tra danh sách bên dưới.'
+    if (!r.def.name.trim()) return 'Each KPI must have a name (required) - check the list below.'
   }
   return null
 }
@@ -644,9 +644,9 @@ async function saveTemplateSuite() {
     await loadTemplateSuitesFromApi()
     const createdName = tplName.value.trim()
     closeCreateDrawer()
-    pushGmNotification(`Đã tạo bộ template «${createdName}».`)
+    pushGmNotification(`Template suite "${createdName}" has been created.`)
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : 'Không lưu được bộ template trên máy chủ.'
+    const msg = e instanceof Error ? e.message : 'Could not save the template suite on the server.'
     pushGmNotification(msg, { variant: 'error', durationMs: 9000 })
     if (createdTemplateId) {
       try {
@@ -686,13 +686,13 @@ onUnmounted(() => {
         <input
           v-model="templateSearch"
           type="search"
-          placeholder="Tìm kiếm bộ template..."
+          placeholder="Search template suites..."
           class="w-full rounded-lg border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm font-medium text-slate-800 shadow-sm outline-none transition-all placeholder:text-slate-400 focus:border-purple-500 focus:ring-1 focus:ring-purple-500"
         />
       </div>
 
       <p v-if="templateSuitesLoading" class="text-sm font-medium text-slate-500">
-        Đang tải bộ template từ cơ sở dữ liệu…
+        Loading template suites from the database...
       </p>
 
       <template v-else>
@@ -738,7 +738,7 @@ onUnmounted(() => {
             <span
               class="flex items-center gap-1 text-xs font-bold text-purple-600 transition-colors group-hover:text-purple-800"
             >
-              Chi tiết
+              Details
               <i class="fas fa-arrow-right text-[10px] transition-transform group-hover:translate-x-0.5" />
             </span>
           </div>
@@ -750,8 +750,8 @@ onUnmounted(() => {
         class="rounded-2xl border border-dashed border-slate-200 bg-white px-6 py-14 text-center shadow-sm"
       >
         <i class="fas fa-magnifying-glass mb-3 text-3xl text-slate-300" aria-hidden="true" />
-        <p class="text-sm font-bold text-slate-600">Không có bộ template khớp tìm kiếm</p>
-        <p class="mt-1 text-xs text-slate-400">Thử đổi từ khóa theo tên, mã hoặc mô tả.</p>
+        <p class="text-sm font-bold text-slate-600">No template suites match your search</p>
+        <p class="mt-1 text-xs text-slate-400">Try a different keyword by name, code, or description.</p>
       </div>
       </template>
     </div>
@@ -781,7 +781,7 @@ onUnmounted(() => {
             >
               <span class="flex items-center gap-2 text-sm font-semibold text-slate-600">
                 <i class="fas fa-spinner fa-spin" aria-hidden="true" />
-                Đang đồng bộ với máy chủ…
+                Syncing with the server...
               </span>
             </div>
             <div
@@ -792,12 +792,12 @@ onUnmounted(() => {
                 class="flex items-center gap-2 text-sm font-bold text-slate-800"
               >
                 <i class="fas fa-table-columns text-purple-500" aria-hidden="true" />
-                Chi tiết Bộ KPI Mẫu
+                KPI Template Suite Details
               </h2>
               <button
                 type="button"
                 class="rounded-full p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-800"
-                aria-label="Đóng"
+                aria-label="Close"
                 @click="closeDetail"
               >
                 <i class="fas fa-times text-sm" aria-hidden="true" />
@@ -823,7 +823,7 @@ onUnmounted(() => {
                       <button
                         type="button"
                         class="rounded border border-white/20 bg-white/10 p-1.5 text-white transition-colors hover:bg-white/20"
-                        title="Sửa tên và mô tả bộ mẫu"
+                        title="Edit template suite name and description"
                         @click.stop="openSuiteMetaModalFromDetail()"
                       >
                         <i class="fas fa-pen text-[11px]" aria-hidden="true" />
@@ -831,7 +831,7 @@ onUnmounted(() => {
                       <button
                         type="button"
                         class="rounded border border-white/20 bg-white/10 p-1.5 text-white transition-colors hover:bg-rose-500/20 hover:text-rose-200"
-                        title="Xóa bộ mẫu"
+                        title="Delete template suite"
                         @click.stop="openDeleteSuiteConfirm()"
                       >
                         <i class="fas fa-trash-can text-[11px]" aria-hidden="true" />
@@ -851,7 +851,7 @@ onUnmounted(() => {
               >
                 <h4 class="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-800">
                   <i class="fas fa-list-check text-purple-500" aria-hidden="true" />
-                  Các chỉ số thành phần ({{ detailSuite.kpis.length }})
+                  Component KPIs ({{ detailSuite.kpis.length }})
                 </h4>
                 <div class="flex flex-wrap items-center justify-end gap-2 sm:shrink-0">
                   <button
@@ -860,7 +860,7 @@ onUnmounted(() => {
                     @click="openAppendKpiFromDetail"
                   >
                     <i class="fas fa-plus text-xs" aria-hidden="true" />
-                    Thêm KPI
+                    Add KPI
                   </button>
                 </div>
               </div>
@@ -884,7 +884,7 @@ onUnmounted(() => {
                         <button
                           type="button"
                           class="rounded border border-slate-200 bg-white p-1.5 text-slate-500 shadow-sm transition-colors hover:border-purple-300 hover:bg-purple-50 hover:text-purple-700 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white disabled:hover:border-slate-200 disabled:hover:text-slate-500"
-                          title="Sửa KPI (cần snapshot form)"
+                          title="Edit KPI (requires form snapshot)"
                           :disabled="!item.kpi.draftPayload"
                           @click.stop="editKpiFromDetailSuite(item.index)"
                         >
@@ -893,7 +893,7 @@ onUnmounted(() => {
                         <button
                           type="button"
                           class="rounded border border-slate-200 bg-white p-1.5 text-slate-500 shadow-sm transition-colors hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600"
-                          title="Xóa KPI"
+                          title="Delete KPI"
                           @click.stop="openDeleteKpiConfirm(item.index)"
                         >
                           <i class="fas fa-trash-can text-[10px]" aria-hidden="true" />
@@ -909,7 +909,7 @@ onUnmounted(() => {
                           <i
                             v-if="item.kpi.draftPayload?.isImportant === true"
                             class="fas fa-star shrink-0 text-[11px] text-amber-500"
-                            title="KPI quan trọng"
+                            title="Important KPI"
                             aria-hidden="true"
                           />
                           <span class="text-sm font-bold leading-snug text-slate-800">{{ item.kpi.name }}</span>
@@ -924,7 +924,7 @@ onUnmounted(() => {
                         >
                           <div class="min-w-0">
                             <p class="mb-1 text-[9px] font-bold uppercase tracking-wide text-slate-400">
-                              Trọng số
+                              Weight
                             </p>
                             <p class="text-sm font-bold text-slate-800">
                               {{ detailSuiteKpiWeightDisplay(item.kpi) }}
@@ -940,7 +940,7 @@ onUnmounted(() => {
                           </div>
                           <div class="min-w-0">
                             <p class="mb-1 text-[9px] font-bold uppercase tracking-wide text-slate-400">
-                              Công thức tính
+                              Formula
                             </p>
                             <p class="break-words text-sm font-semibold leading-snug text-slate-800">
                               {{ detailSuiteKpiFormulaDisplay(item.kpi) }}
@@ -986,17 +986,17 @@ onUnmounted(() => {
                 </div>
                 <div class="min-w-0 pt-0.5">
                   <h2 id="gm-create-tpl-title" class="text-xl font-bold leading-tight text-slate-800">
-                    Tạo bộ KPI mẫu
+                    Create KPI Template Suite
                   </h2>
                   <p class="mt-1 text-[10px] font-bold uppercase tracking-widest text-slate-500">
-                    Tạo bộ KPI mẫu cho thư viện doanh nghiệp
+                    Create a KPI template suite for the enterprise library
                   </p>
                 </div>
               </div>
               <button
                 type="button"
                 class="shrink-0 rounded-full p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-800"
-                aria-label="Đóng"
+                aria-label="Close"
                 @click="closeCreateDrawer"
               >
                 <i class="fas fa-times text-lg" aria-hidden="true" />
@@ -1017,14 +1017,14 @@ onUnmounted(() => {
 
               <section class="space-y-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
                 <h3 class="border-b border-slate-100 pb-3 text-sm font-bold text-slate-800">
-                  Thông tin Bộ Template
+                  Template Suite Information
                 </h3>
                 <div>
                   <label
                     for="gm-tpl-name"
                     class="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500"
                   >
-                    Tên Bộ Template <span class="text-rose-500">*</span>
+                    Template Suite Name <span class="text-rose-500">*</span>
                   </label>
                   <input
                     id="gm-tpl-name"
@@ -1044,13 +1044,13 @@ onUnmounted(() => {
                     for="gm-tpl-desc"
                     class="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500"
                   >
-                    Mô tả mục đích sử dụng
+                    Usage Description
                   </label>
                   <textarea
                     id="gm-tpl-desc"
                     v-model="tplDesc"
                     rows="2"
-                    placeholder="Ghi chú rõ bộ KPI này nên dùng cho phòng ban nào..."
+                    placeholder="Note which department this KPI suite should be used for..."
                     class="w-full resize-none rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition-all placeholder:text-slate-400 focus:border-purple-500 focus:ring-1 focus:ring-purple-500"
                   />
                 </div>
@@ -1059,9 +1059,9 @@ onUnmounted(() => {
               <section class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
                 <div class="mb-4 flex flex-col gap-3 border-b border-slate-100 pb-3 sm:flex-row sm:items-end sm:justify-between">
                   <div>
-                    <h3 class="text-sm font-bold text-slate-800">Danh sách KPIs cấu thành</h3>
+                    <h3 class="text-sm font-bold text-slate-800">Component KPI List</h3>
                     <p class="mt-1 text-[10px] text-slate-500">
-                      Thêm các KPI vào bộ template.
+                      Add KPIs to the template suite.
                     </p>
                   </div>
                   <button
@@ -1070,7 +1070,7 @@ onUnmounted(() => {
                     @click="openAddKpiDraft"
                   >
                     <i class="fas fa-plus text-xs" aria-hidden="true" />
-                    Thêm KPI
+                    Add KPI
                   </button>
                 </div>
 
@@ -1078,7 +1078,7 @@ onUnmounted(() => {
                   v-if="draftKpis.length === 0"
                   class="rounded-lg border border-dashed border-slate-200 bg-slate-50/80 px-4 py-8 text-center text-xs font-medium text-slate-500"
                 >
-                  Chưa có KPI. Bấm «Thêm KPI» để mở form đầy đủ (giống tạo Strategic KPI, không phân bổ).
+                  No KPIs yet. Click "Add KPI" to open the full form (same as Strategic KPI creation, without allocation).
                 </p>
 
                 <div v-else class="space-y-5">
@@ -1101,7 +1101,7 @@ onUnmounted(() => {
                           <button
                             type="button"
                             class="rounded border border-slate-200 bg-white p-1.5 text-slate-500 shadow-sm transition-colors hover:border-purple-300 hover:bg-purple-50 hover:text-purple-700 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white disabled:hover:border-slate-200 disabled:hover:text-slate-500"
-                            title="Sửa KPI (cần snapshot form)"
+                            title="Edit KPI (requires form snapshot)"
                             :disabled="!row.def.draftPayload"
                             @click="openEditDraftKpi(row)"
                           >
@@ -1110,7 +1110,7 @@ onUnmounted(() => {
                           <button
                             type="button"
                             class="rounded border border-slate-200 bg-white p-1.5 text-slate-500 shadow-sm transition-colors hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600"
-                            title="Xóa KPI"
+                            title="Delete KPI"
                             @click="removeDraftKpi(row.id)"
                           >
                             <i class="fas fa-trash-can text-[10px]" aria-hidden="true" />
@@ -1126,7 +1126,7 @@ onUnmounted(() => {
                             <i
                               v-if="row.def.draftPayload?.isImportant === true"
                               class="fas fa-star shrink-0 text-[11px] text-amber-500"
-                              title="KPI quan trọng"
+                              title="Important KPI"
                               aria-hidden="true"
                             />
                             <span class="text-sm font-bold leading-snug text-slate-800">{{ row.def.name }}</span>
@@ -1141,7 +1141,7 @@ onUnmounted(() => {
                           >
                             <div class="min-w-0">
                               <p class="mb-1 text-[9px] font-bold uppercase tracking-wide text-slate-400">
-                                Trọng số
+                                Weight
                               </p>
                               <p class="text-sm font-bold text-slate-800">
                                 {{ detailSuiteKpiWeightDisplay(row.def) }}
@@ -1157,7 +1157,7 @@ onUnmounted(() => {
                             </div>
                             <div class="min-w-0">
                               <p class="mb-1 text-[9px] font-bold uppercase tracking-wide text-slate-400">
-                                Công thức tính
+                                Formula
                               </p>
                               <p class="break-words text-sm font-semibold leading-snug text-slate-800">
                                 {{ detailSuiteKpiFormulaDisplay(row.def) }}
@@ -1181,7 +1181,7 @@ onUnmounted(() => {
                 :disabled="saving"
                 @click="closeCreateDrawer"
               >
-                Hủy
+                Cancel
               </button>
               <button
                 type="button"
@@ -1191,7 +1191,7 @@ onUnmounted(() => {
               >
                 <i v-if="saving" class="fas fa-spinner fa-spin text-sm" aria-hidden="true" />
                 <i v-else class="fas fa-save text-sm" aria-hidden="true" />
-                {{ saving ? 'Đang lưu...' : 'Lưu Template Suite' }}
+                {{ saving ? 'Saving...' : 'Save Template Suite' }}
               </button>
             </div>
           </div>
@@ -1220,7 +1220,7 @@ onUnmounted(() => {
           <button
             type="button"
             class="absolute inset-0 cursor-default bg-slate-900/50 backdrop-blur-[2px]"
-            aria-label="Đóng"
+            aria-label="Close"
             @click="closeSuiteMetaModal"
           />
           <div
@@ -1228,13 +1228,13 @@ onUnmounted(() => {
             @click.stop
           >
             <div class="border-b border-slate-200 bg-slate-50 px-5 py-4">
-              <h2 id="gm-tpl-meta-title" class="text-base font-bold text-slate-800">Sửa thông tin bộ mẫu</h2>
-              <p class="mt-1 text-xs text-slate-500">Chỉnh sửa tên và mô tả hiển thị của bộ KPI mẫu.</p>
+              <h2 id="gm-tpl-meta-title" class="text-base font-bold text-slate-800">Edit Template Suite Information</h2>
+              <p class="mt-1 text-xs text-slate-500">Edit the display name and description for this KPI template suite.</p>
             </div>
             <div class="space-y-4 p-5">
               <div>
                 <label for="gm-tpl-meta-name" class="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-600">
-                  Tên bộ mẫu <span class="text-rose-500">*</span>
+                  Template Suite Name <span class="text-rose-500">*</span>
                 </label>
                 <input
                   id="gm-tpl-meta-name"
@@ -1246,20 +1246,20 @@ onUnmounted(() => {
                       ? 'border-rose-400 ring-2 ring-rose-100 focus:border-rose-500 focus:ring-rose-200'
                       : 'border-slate-200 focus:border-purple-400 focus:ring-purple-200'
                   "
-                  placeholder="Nhập tên..."
+                  placeholder="Enter name..."
                 />
                 <p v-if="suiteMetaNameError" class="mt-1.5 text-xs font-semibold text-rose-600">{{ suiteMetaNameError }}</p>
               </div>
               <div>
                 <label for="gm-tpl-meta-desc" class="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-600">
-                  Mô tả
+                  Description
                 </label>
                 <textarea
                   id="gm-tpl-meta-desc"
                   v-model="suiteMetaDesc"
                   rows="4"
                   class="w-full resize-y rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-purple-400 focus:outline-none focus:ring-2 focus:ring-purple-200"
-                  placeholder="Mô tả ngắn..."
+                  placeholder="Short description..."
                 />
               </div>
             </div>
@@ -1270,7 +1270,7 @@ onUnmounted(() => {
                 :disabled="suiteMetaSaving"
                 @click="closeSuiteMetaModal"
               >
-                Hủy
+                Cancel
               </button>
               <button
                 type="button"
@@ -1279,7 +1279,7 @@ onUnmounted(() => {
                 @click="saveSuiteMetaFromModal"
               >
                 <i v-if="suiteMetaSaving" class="fas fa-spinner fa-spin mr-2" aria-hidden="true" />
-                {{ suiteMetaSaving ? 'Đang lưu…' : 'Lưu' }}
+                {{ suiteMetaSaving ? 'Saving...' : 'Save' }}
               </button>
             </div>
           </div>
@@ -1299,7 +1299,7 @@ onUnmounted(() => {
           <button
             type="button"
             class="absolute inset-0 cursor-default bg-slate-900/50 backdrop-blur-[2px]"
-            aria-label="Đóng"
+            aria-label="Close"
             @click="closeDeleteConfirmModal"
           />
           <div
@@ -1308,19 +1308,19 @@ onUnmounted(() => {
           >
             <div class="border-b border-slate-200 bg-slate-50 px-5 py-4">
               <template v-if="deleteConfirmPayload.kind === 'suite'">
-                <h2 id="gm-tpl-del-suite-title" class="text-base font-bold text-slate-800">Xóa bộ KPI mẫu?</h2>
+                <h2 id="gm-tpl-del-suite-title" class="text-base font-bold text-slate-800">Delete KPI template suite?</h2>
                 <p class="mt-2 text-sm leading-relaxed text-slate-600">
-                  Bạn sắp xóa bộ
-                  <span class="font-bold text-slate-800">«{{ deleteConfirmPayload.suiteName }}»</span>.
-                  Các KPI trong bộ sẽ bị gỡ. Thao tác này không thể hoàn tác.
+                  You are about to delete
+                  <span class="font-bold text-slate-800">"{{ deleteConfirmPayload.suiteName }}"</span>.
+                  KPIs in this suite will be removed. This action cannot be undone.
                 </p>
               </template>
               <template v-else>
-                <h2 id="gm-tpl-del-kpi-title" class="text-base font-bold text-slate-800">Xóa KPI khỏi bộ mẫu?</h2>
+                <h2 id="gm-tpl-del-kpi-title" class="text-base font-bold text-slate-800">Delete KPI from template suite?</h2>
                 <p class="mt-2 text-sm leading-relaxed text-slate-600">
-                  Xóa KPI
-                  <span class="font-bold text-slate-800">«{{ deleteConfirmPayload.kpiName }}»</span>
-                  khỏi bộ mẫu? Thao tác này không thể hoàn tác.
+                  Delete KPI
+                  <span class="font-bold text-slate-800">"{{ deleteConfirmPayload.kpiName }}"</span>
+                  from the template suite? This action cannot be undone.
                 </p>
               </template>
             </div>
@@ -1330,7 +1330,7 @@ onUnmounted(() => {
                 class="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-600 shadow-sm hover:bg-slate-50"
                 @click="closeDeleteConfirmModal"
               >
-                Hủy
+                Cancel
               </button>
               <button
                 type="button"
@@ -1339,7 +1339,7 @@ onUnmounted(() => {
                 @click="confirmDeleteExecute"
               >
                 <i v-if="deleteExecuting" class="fas fa-spinner fa-spin mr-2" aria-hidden="true" />
-                {{ deleteExecuting ? 'Đang xóa…' : 'Xóa' }}
+                {{ deleteExecuting ? 'Deleting...' : 'Delete' }}
               </button>
             </div>
           </div>

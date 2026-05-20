@@ -385,6 +385,7 @@
             <result property="endPmScore" column="pm_end_pm_score"/>
             <result property="endGmScore" column="pm_end_gm_score"/>
             <result property="statusCode" column="pm_status_code"/>
+            <result property="updateReason" column="pm_update_reason"/>
             <result property="evidences" column="pm_evidences"/>
             <result property="createdBy" column="pm_created_by"/>
         </association>
@@ -422,6 +423,7 @@
                 <result property="endPmScore" column="child_pm_score"/>
                 <result property="endGmScore" column="child_end_gm_score"/>
                 <result property="statusCode" column="child_status_code"/>
+                <result property="updateReason" column="child_update_reason"/>
                 <result property="evidences" column="child_evidences"/>
             </association>
             <association property="childUser" javaType="com.company.kpi.entity.User">
@@ -444,6 +446,7 @@
             pm_ka.end_pm_score AS pm_end_pm_score,
             pm_ka.end_gm_score AS pm_end_gm_score,
             pm_ka.status_code AS pm_status_code,
+            pm_ka.update_reason AS pm_update_reason,
             pm_ka.evidences AS pm_evidences,
             pm_ka.created_by AS pm_created_by,
             pm_kf.feedback_note AS pm_feedback_note,
@@ -487,6 +490,7 @@
             child_ka.end_pm_score AS child_pm_score,
             child_ka.end_gm_score AS child_end_gm_score,
             child_ka.status_code AS child_status_code,
+            child_ka.update_reason AS child_update_reason,
             child_ka.evidences AS child_evidences,
             child_kf.feedback_note AS child_feedback_note,
             child_fb_role.target_role_code AS child_feedback_target_role_code,
@@ -819,11 +823,33 @@
           AND ka.user_id IS NOT NULL
     </select>
 
+    <select id="findSourceAssignmentForGmCopy"
+            resultType="com.company.kpi.aggregate.KpiAssignmentUserTargetRow">
+        SELECT
+            ka.id,
+            ka.user_id AS userId,
+            ka.parent_assignment_id AS parentAssignmentId,
+            ka.status_code AS statusCode,
+            km.type_code AS kpiTypeCode
+        FROM kpi_assignments ka
+        JOIN kpis_information ki ON ka.kpi_info_id = ki.id AND ki.deleted_at IS NULL
+        JOIN kpi_master km ON ki.master_kpi_id = km.id AND km.deleted_at IS NULL
+        WHERE ka.user_id = #{userId, jdbcType=OTHER}
+          AND ka.cycle_id = #{cycleId, jdbcType=OTHER}
+          AND ka.kpi_info_id = #{kpiInfoId, jdbcType=OTHER}
+          AND ka.deleted_at IS NULL
+        ORDER BY
+            CASE WHEN ka.parent_assignment_id IS NOT NULL THEN 0 ELSE 1 END,
+            ka.created_at DESC
+        LIMIT 1
+    </select>
+
     <select id="listChildAssignmentsByParentId" resultType="com.company.kpi.aggregate.KpiAssignmentUserTargetRow">
         SELECT
             ka.id,
             ka.user_id AS userId,
-            ka.target_value AS targetValue
+            ka.target_value AS targetValue,
+            ka.status_code AS statusCode
         FROM kpi_assignments ka
         WHERE ka.parent_assignment_id = #{parentAssignmentId, jdbcType=OTHER}
           AND ka.deleted_at IS NULL
@@ -1371,6 +1397,7 @@
         UPDATE kpi_assignments
         SET
             status_code = 404,
+            update_reason = #{updateReason, jdbcType=VARCHAR},
             updated_at = NOW(),
             updated_by = #{updatedBy, jdbcType=OTHER}
         WHERE id = #{assignmentId, jdbcType=OTHER}
@@ -1766,7 +1793,10 @@
                       WHERE ch.parent_assignment_id = parent.id AND ch.deleted_at IS NULL
                         AND ch.user_id IS NOT NULL
                         AND ch.user_id &lt;&gt; #{pmId, jdbcType=OTHER}
-                        AND COALESCE(ch.status_code, 0) &lt; 405
+                        AND (
+                            COALESCE(ch.status_code, 0) &lt; 405
+                            OR ch.status_code = 406
+                        )
                   )
               )
         )
@@ -1815,9 +1845,16 @@
             )
             AND ka.cycle_id = #{cycleId}
             AND ka.deleted_at IS NULL
-            <!-- PM Personal accept: 404→403 để GM duyệt trước khi KPI chạy. -->
+            <!-- PM Personal accept: 404 hoặc 406 (từ chối KPI GM queue) → 403. -->
             <if test="onlyFromStatusCode != null">
-                AND ka.status_code = #{onlyFromStatusCode}
+                <choose>
+                    <when test="onlyFromStatusCode == 404">
+                        AND ka.status_code IN (404, 406)
+                    </when>
+                    <otherwise>
+                        AND ka.status_code = #{onlyFromStatusCode}
+                    </otherwise>
+                </choose>
                 <if test="promotion">
                     AND sys.name = 'PROMOTION'
                 </if>
@@ -1859,7 +1896,14 @@
             AND ka.cycle_id = #{cycleId}
             AND ka.deleted_at IS NULL
             <if test="onlyFromStatusCode != null">
-                AND ka.status_code = #{onlyFromStatusCode}
+                <choose>
+                    <when test="onlyFromStatusCode == 404">
+                        AND ka.status_code IN (404, 406)
+                    </when>
+                    <otherwise>
+                        AND ka.status_code = #{onlyFromStatusCode}
+                    </otherwise>
+                </choose>
                 <if test="promotion">
                     AND sys.name = 'PROMOTION'
                 </if>
@@ -1902,7 +1946,14 @@
             AND ka.cycle_id = #{cycleId}
             AND ka.deleted_at IS NULL
             <if test="onlyFromStatusCode != null">
-                AND ka.status_code = #{onlyFromStatusCode}
+                <choose>
+                    <when test="onlyFromStatusCode == 404">
+                        AND ka.status_code IN (404, 406)
+                    </when>
+                    <otherwise>
+                        AND ka.status_code = #{onlyFromStatusCode}
+                    </otherwise>
+                </choose>
                 <if test="promotion">
                     AND sys.name = 'PROMOTION'
                 </if>

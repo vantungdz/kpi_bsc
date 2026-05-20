@@ -64,6 +64,17 @@ export interface Section {
   id: string;
   name: string;
   parentId?: string | null;
+  managerId?: string | null;
+  managerName?: string | null;
+}
+
+export type EmployeeSystemRole = "MEMBER" | "LEADER" | "PM";
+
+export interface LeaderMemberCandidate {
+  id: string;
+  name: string;
+  email: string;
+  rankCode?: string;
 }
 
 /** Cấp bậc — lấy từ bảng ranks trong DB */

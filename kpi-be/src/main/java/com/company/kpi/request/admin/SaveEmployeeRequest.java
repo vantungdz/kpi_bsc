@@ -38,4 +38,16 @@ public class SaveEmployeeRequest {
 
     /** Trạng thái: "active" | "inactive" */
     private String status;
+
+    /** Vai trò hệ thống: MEMBER | LEADER | PM (mặc định MEMBER). */
+    private String roleCode;
+
+    /**
+     * Bộ phận PM quản lý ({@code departments.manager_id}) — bắt buộc khi {@code roleCode = PM}.
+     * Nếu trống, backend fallback {@link #sectionId}.
+     */
+    private String managedDepartmentId;
+
+    /** Leader: danh sách member (UUID) gán {@code supervisor_id} — tùy chọn. */
+    private java.util.List<String> memberIds;
 }

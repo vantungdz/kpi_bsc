@@ -7,6 +7,12 @@ export interface UploadResponse {
 }
 
 export const fileService = {
+  deleteUploadedFile: async (storedName: string): Promise<void> => {
+    const name = storedName.trim()
+    if (!name) return
+    await http.delete<ApiResponse<null>>(`/upload/${encodeURIComponent(name)}`)
+  },
+
   uploadFile: async (file: File): Promise<UploadResponse> => {
     const formData = new FormData()
     formData.append('file', file)

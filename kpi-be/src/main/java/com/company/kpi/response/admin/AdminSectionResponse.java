@@ -8,4 +8,7 @@ public class AdminSectionResponse {
     private String id;
     private String name;
     private String parentId;
+    /** PM hiện tại của phòng (departments.manager_id). */
+    private String managerId;
+    private String managerName;
 }

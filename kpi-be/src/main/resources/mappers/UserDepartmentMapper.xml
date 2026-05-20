@@ -63,4 +63,48 @@
             AND d.deleted_at IS NULL
         LIMIT 1
     </select>
+
+    <select id="findLeaderAssignableMembersInDepartment"
+            resultType="com.company.kpi.response.admin.AdminEmployeeCandidateResponse">
+        SELECT
+            CAST(u.id AS VARCHAR) AS id,
+            u.full_name AS name,
+            u.email AS email,
+            r.code AS rankCode
+        FROM user_departments ud
+        INNER JOIN users u ON u.id = ud.user_id
+            AND u.deleted_at IS NULL
+            AND COALESCE(u.is_active, TRUE) = TRUE
+        INNER JOIN user_roles ur ON ur.user_id = u.id
+        INNER JOIN roles ro ON ro.id = ur.role_id
+            AND ro.deleted_at IS NULL
+            AND ro.code = 'MEMBER'
+        LEFT JOIN job_titles jt ON jt.id = u.job_title_id AND jt.deleted_at IS NULL
+        LEFT JOIN ranks r ON r.id = jt.rank_id AND r.deleted_at IS NULL
+        WHERE ud.department_id = #{departmentId, jdbcType=OTHER}
+          AND u.id IS DISTINCT FROM (
+              SELECT d.manager_id
+              FROM departments d
+              WHERE d.id = #{departmentId, jdbcType=OTHER}
+                AND d.deleted_at IS NULL
+          )
+        ORDER BY u.full_name
+    </select>
+
+    <update id="updateSupervisorForUsersInDepartment">
+        UPDATE user_departments
+        SET supervisor_id = #{supervisorId, jdbcType=OTHER, typeHandler=com.company.kpi.common.mybatis.UUIDTypeHandler}
+        WHERE department_id = #{departmentId, jdbcType=OTHER, typeHandler=com.company.kpi.common.mybatis.UUIDTypeHandler}
+          AND user_id IN
+        <foreach collection="memberIds" item="mid" open="(" separator="," close=")">
+            #{mid, jdbcType=OTHER, typeHandler=com.company.kpi.common.mybatis.UUIDTypeHandler}
+        </foreach>
+    </update>
+
+    <select id="countUsersInDepartment" resultType="int">
+        SELECT COUNT(*)
+        FROM user_departments
+        WHERE department_id = #{departmentId, jdbcType=OTHER}
+          AND user_id = #{userId, jdbcType=OTHER}
+    </select>
 </mapper>

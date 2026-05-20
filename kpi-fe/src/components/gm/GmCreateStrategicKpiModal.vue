@@ -31,6 +31,12 @@ import {
 } from '@/utils/strategicKpiTypeCodes'
 import type { GmKpiTemplateItemRow, GmKpiTemplatePackageRow } from '@/types/gm-kpi-template'
 import type { DepartmentManagerOption } from '@/types/department-manager'
+import {
+  parseTrimmedTargetNumber,
+  targetRowHasValidationIssue,
+  validateNonNegativeTargetBatch,
+  validateNonNegativeTargetValue,
+} from '@/utils/kpiTargetValidation'
 import GmStrategicKpiTypeTag from '@/components/gm/GmStrategicKpiTypeTag.vue'
 import ScoringRulesHelpTooltip from '@/components/kpi/ScoringRulesHelpTooltip.vue'
 import { GM_BSC_LABELS, GM_BSC_ORDER, normalizeGmBscPerspective } from '@/utils/gm-bsc-diagnostics'
@@ -83,15 +89,19 @@ const authStore = useAuthStore()
 const gmUserId = computed(() => String(authStore.user?.id ?? '').trim())
 
 /**
- * UUID `users.id` của người gửi feedback đang được duyệt — duyệt cây `pmOwners` của KPI để map
- * `assignmentId` → user id, dùng làm khoá highlight cho các dòng assignee trong drawer.
+ * Map `kpi_assignments.id` (feedback) → `users.id` để highlight đúng dòng assignee trong drawer.
+ * Gồm assignment của PM (PM feedback GM) và member/leader trong cây cascade.
  */
-const feedbackAssigneeUserId = computed<string | null>(() => {
-  const aid = String(props.feedbackAssignmentId ?? '').trim()
-  if (!aid) return null
-  const kpi = props.editInitial
-  if (!kpi || !Array.isArray(kpi.pmOwners)) return null
+function resolveFeedbackAssigneeUserIdFromKpi(
+  kpi: GmHierarchyKpi | null | undefined,
+  assignmentId: string,
+): string | null {
+  const aid = String(assignmentId ?? '').trim()
+  if (!aid || !kpi || !Array.isArray(kpi.pmOwners)) return null
   for (const pm of kpi.pmOwners) {
+    if (String(pm.assignmentId ?? '').trim() === aid) {
+      return pmSelectionKey(pm)
+    }
     for (const m of pm.members ?? []) {
       if (String(m.assignmentId ?? '').trim() === aid) {
         return String(m.id ?? '').trim() || null
@@ -110,6 +120,12 @@ const feedbackAssigneeUserId = computed<string | null>(() => {
     }
   }
   return null
+}
+
+const feedbackAssigneeUserId = computed<string | null>(() => {
+  const aid = String(props.feedbackAssignmentId ?? '').trim()
+  if (!aid) return null
+  return resolveFeedbackAssigneeUserIdFromKpi(props.editInitial, aid)
 })
 
 function isFeedbackAssignee(userId: string | null | undefined): boolean {
@@ -121,6 +137,58 @@ function isFeedbackAssignee(userId: string | null | undefined): boolean {
 const isDirectFeedbackSplitEdit = computed(() => {
   return Boolean(props.feedbackAssignmentId && props.editInitial) &&
     (kpiTypeCode.value === 101 || kpiTypeCode.value === 103)
+})
+
+/** GM duyệt feedback PM (KPI Team): chỉ hiển thị PM gửi feedback, không sửa/xóa. */
+const isGmFeedbackCascadingAllocationReview = computed(() => {
+  return (
+    Boolean(props.feedbackAssignmentId && props.editInitial) &&
+    kpiType.value === 'cascading' &&
+    !isDirectFeedbackSplitEdit.value
+  )
+})
+
+const visibleSelectedPMs = computed(() => {
+  if (!isGmFeedbackCascadingAllocationReview.value) {
+    return selectedPMs.value
+  }
+  const uid = feedbackAssigneeUserId.value
+  if (!uid) return []
+  return selectedPMs.value.filter((id) => String(id).trim() === uid)
+})
+
+const visibleSelectedMembers = computed(() => {
+  if (!isDirectFeedbackSplitEdit.value) return selectedMembers.value
+  const uid = feedbackAssigneeUserId.value
+  if (!uid) return []
+  return selectedMembers.value.filter((id) => String(id).trim() === uid)
+})
+
+const feedbackIndividualMemberCard = computed(() => {
+  if (!isDirectFeedbackSplitEdit.value) return null
+  const uid = feedbackAssigneeUserId.value
+  if (!uid) return null
+  for (const rank of selectedRanks.value) {
+    const ids = selectedRankMembers.value[rank] ?? []
+    if (!ids.includes(uid)) continue
+    const rankMeta = rankRows.value.find((item) => item.code === rank)
+    const member = membersByRank(rank).find((m) => m.val === uid)
+    if (member) {
+      return { rank, rankLabel: rankMeta?.name ?? rank, member }
+    }
+  }
+  return {
+    rank: selectedRanks.value[0] ?? '',
+    rankLabel: '',
+    member: {
+      val: uid,
+      short: `User ${uid.slice(0, 8)}…`,
+      dept: '',
+      rank: '',
+      avatar: '?',
+      label: uid,
+    },
+  }
 })
 
 const strategicEditDetailLoading = ref(false)
@@ -480,8 +548,8 @@ function clearFormErrors() {
 }
 
 function parseTargetInput(raw: string | number | null | undefined): number {
-  const n = Number(String(raw ?? '').trim())
-  return Number.isFinite(n) ? n : 0
+  const n = parseTrimmedTargetNumber(raw)
+  return n != null && n >= 0 ? n : 0
 }
 
 const strategicTargetValueNum = computed(() => parseTargetInput(targetValue.value))
@@ -1012,7 +1080,43 @@ function typeCardClassForCode(code: number) {
   return `${base} border-blue-500 bg-blue-50`
 }
 
+function applyFeedbackPmOnlyToAssignSelection() {
+  if (!isGmFeedbackCascadingAllocationReview.value) return
+  const uid = feedbackAssigneeUserId.value
+  if (!uid) return
+  selectedPMs.value = [uid]
+  const tv = String(pmTargets.value[uid] ?? '').trim()
+  pmTargets.value = { [uid]: tv }
+  assignDropdown.value = null
+}
+
+function applyFeedbackMemberOnlyToAssignSelection() {
+  if (!isDirectFeedbackSplitEdit.value) return
+  const uid = feedbackAssigneeUserId.value
+  if (!uid) return
+  if (kpiType.value === 'promotion') {
+    selectedMembers.value = [uid]
+    assignDropdown.value = null
+    return
+  }
+  if (kpiType.value !== 'individual') return
+  const nextRanks: string[] = []
+  const nextMap: Record<string, string[]> = {}
+  for (const rank of selectedRanks.value) {
+    const picked = (selectedRankMembers.value[rank] ?? []).filter((id) => id === uid)
+    if (picked.length) {
+      nextRanks.push(rank)
+      nextMap[rank] = picked
+    }
+  }
+  selectedRanks.value = nextRanks
+  selectedRankMembers.value = nextMap
+  expandedRankSections.value = [...nextRanks]
+  assignDropdown.value = null
+}
+
 function togglePm(val: string) {
+  if (isGmFeedbackCascadingAllocationReview.value) return
   const i = selectedPMs.value.indexOf(val)
   if (i === -1) {
     selectedPMs.value = [...selectedPMs.value, val]
@@ -1082,6 +1186,7 @@ function pmChipLabel(id: string): string {
 }
 
 async function toggleRank(val: string) {
+  if (isDirectFeedbackSplitEdit.value) return
   const i = selectedRanks.value.indexOf(val)
   if (i === -1) {
     if (!rankHasMembers(val)) return
@@ -1106,12 +1211,14 @@ async function toggleRank(val: string) {
 }
 
 function toggleMember(val: string) {
+  if (isDirectFeedbackSplitEdit.value) return
   const i = selectedMembers.value.indexOf(val)
   if (i === -1) selectedMembers.value = [...selectedMembers.value, val]
   else selectedMembers.value = selectedMembers.value.filter((v) => v !== val)
 }
 
 function toggleRankMember(rank: string, memberId: string) {
+  if (isDirectFeedbackSplitEdit.value) return
   const current = selectedRankMembers.value[rank] ?? []
   const exists = current.includes(memberId)
   selectedRankMembers.value = {
@@ -1306,18 +1413,32 @@ async function hydrateFormFromStrategicKpiEditData(data: GmStrategicKpiEditData,
   memberAssignSearch.value = ''
 
   if (kpiTypeCode.value === 102) {
-    selectedPMs.value = normalizeUniqueDepartmentManagerIds(
-      (data.assignPMs ?? []).map((u) => String(u).trim()).filter(Boolean),
-    )
-    const selectedPmSet = new Set(selectedPMs.value)
     const rawPm = data.pmTargets ?? {}
-    const nextPm: Record<string, string> = {}
-    for (const [k, v] of Object.entries(rawPm)) {
-      const key = String(k ?? '').trim()
-      if (!key || !selectedPmSet.has(key) || v == null || v === '') continue
-      nextPm[key] = typeof v === 'number' && Number.isFinite(v) ? String(v) : String(v).trim()
+    const feedbackUid = feedbackAssigneeUserId.value
+    if (isGmFeedbackCascadingAllocationReview.value && feedbackUid) {
+      selectedPMs.value = [feedbackUid]
+      const v = rawPm[feedbackUid]
+      pmTargets.value = {
+        [feedbackUid]:
+          v != null && v !== ''
+            ? typeof v === 'number' && Number.isFinite(v)
+              ? String(v)
+              : String(v).trim()
+            : '',
+      }
+    } else {
+      selectedPMs.value = normalizeUniqueDepartmentManagerIds(
+        (data.assignPMs ?? []).map((u) => String(u).trim()).filter(Boolean),
+      )
+      const selectedPmSet = new Set(selectedPMs.value)
+      const nextPm: Record<string, string> = {}
+      for (const [k, v] of Object.entries(rawPm)) {
+        const key = String(k ?? '').trim()
+        if (!key || !selectedPmSet.has(key) || v == null || v === '') continue
+        nextPm[key] = typeof v === 'number' && Number.isFinite(v) ? String(v) : String(v).trim()
+      }
+      pmTargets.value = nextPm
     }
-    pmTargets.value = nextPm
   } else if (kpiTypeCode.value === 101) {
     const fromMemberIds = (data.memberIds ?? []).map((u) => String(u).trim()).filter(Boolean)
     const fromMemberTargets = Object.keys((data as { memberTargets?: Record<string, unknown> }).memberTargets ?? {})
@@ -1337,6 +1458,12 @@ async function hydrateFormFromStrategicKpiEditData(data: GmStrategicKpiEditData,
 
   await nextTick(() => {
     isHydratingFromEdit.value = false
+    if (isGmFeedbackCascadingAllocationReview.value) {
+      applyFeedbackPmOnlyToAssignSelection()
+    }
+    if (isDirectFeedbackSplitEdit.value) {
+      applyFeedbackMemberOnlyToAssignSelection()
+    }
   })
 }
 
@@ -1572,13 +1699,8 @@ function validateForm(): boolean {
   }
 
   if (needsStrategicTargetInput.value) {
-    const tvRaw = targetValue.value
-    const tvStr = String(tvRaw ?? '').trim()
-    if (tvStr === '' || Number.isNaN(Number(tvRaw))) {
-      err.targetValue = 'Enter a numeric target.'
-    } else if (Number(tvRaw) < 0) {
-      err.targetValue = 'Target must be ≥ 0.'
-    }
+    const targetErr = validateNonNegativeTargetValue(targetValue.value, { required: true })
+    if (targetErr) err.targetValue = targetErr
   }
 
   const wStr = String(weightPct.value).trim()
@@ -1613,26 +1735,21 @@ function validateForm(): boolean {
   }
 
   if (kpiType.value === 'cascading' && selectedPMs.value.length > 0) {
-    const missingLabels: string[] = []
-    const invalidLabels: string[] = []
-    for (const pmId of selectedPMs.value) {
-      const raw = String(pmTargets.value[pmId] ?? '').trim()
-      if (raw === '') {
-        missingLabels.push(pmChipLabel(pmId))
-      } else {
-        const n = Number(raw)
-        if (!Number.isFinite(n) || Number.isNaN(n) || n < 0) {
-          invalidLabels.push(pmChipLabel(pmId))
-        }
-      }
-    }
-    if (missingLabels.length > 0) {
+    const pmsToValidate = isGmFeedbackCascadingAllocationReview.value
+      ? visibleSelectedPMs.value
+      : selectedPMs.value
+    const batchErr = validateNonNegativeTargetBatch(
+      pmsToValidate.map((pmId) => ({
+        raw: pmTargets.value[pmId],
+        label: pmChipLabel(pmId),
+      })),
+      { requireAllFilled: true },
+    )
+    if (batchErr) {
       err.pmTargets =
-        missingLabels.length === selectedPMs.value.length
+        batchErr === 'Enter a target for each selected assignee.'
           ? 'PMs selected — enter a separate target for each PM'
-          : `Enter targets for: ${missingLabels.join(', ')}.`
-    } else if (invalidLabels.length > 0) {
-      err.pmTargets = `PM targets must be numbers ≥ 0: ${invalidLabels.join(', ')}.`
+          : batchErr
     }
   }
 
@@ -1646,10 +1763,7 @@ function validateForm(): boolean {
 
 function pmTargetRowHasValidationIssue(pmId: string): boolean {
   if (!formErrors.value.pmTargets) return false
-  const raw = String(pmTargets.value[pmId] ?? '').trim()
-  if (raw === '') return true
-  const n = Number(raw)
-  return !Number.isFinite(n) || Number.isNaN(n) || n < 0
+  return targetRowHasValidationIssue(pmTargets.value[pmId], { required: true })
 }
 
 async function save() {
@@ -2044,15 +2158,6 @@ async function save() {
                       :class="typeCardClassForCode(opt.code)"
                       @click="kpiTypeCode = opt.code"
                     >
-                      <span
-                        class="absolute right-2.5 top-2.5 transition-all"
-                        :class="[
-                          opt.code === 103 ? 'text-purple-600' : 'text-blue-600',
-                          kpiTypeCode === opt.code ? 'opacity-100 scale-100' : 'scale-50 opacity-0',
-                        ]"
-                      >
-                        <i class="fas fa-check-circle text-base" />
-                      </span>
                       <div class="mb-1.5 flex items-center gap-2">
                         <span class="rounded border border-slate-100 bg-slate-50 p-1 shadow-sm">
                           <i :class="strategicKpiTypeIconClass(opt.code)" />
@@ -2283,38 +2388,47 @@ async function save() {
             </div>
 
             <div>
-              <div class="mb-1 flex flex-wrap items-center justify-between gap-2">
-                <label class="block min-w-0 flex-1 text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                  {{ assignLabel }}
-                  <span class="text-[9px] font-semibold text-slate-400"> (Optional)</span>
-                </label>
-                <button
+              <template v-if="!isGmFeedbackCascadingAllocationReview && !isDirectFeedbackSplitEdit">
+                <div class="mb-1 flex flex-wrap items-center justify-between gap-2">
+                  <label class="block min-w-0 flex-1 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                    {{ assignLabel }}
+                    <span class="text-[9px] font-semibold text-slate-400"> (Optional)</span>
+                  </label>
+                  <button
+                    v-if="canShowAssignToMe"
+                    type="button"
+                    class="inline-flex shrink-0 items-center gap-1 rounded-md border border-indigo-200 bg-white px-2.5 py-1 text-[10px] font-bold text-indigo-700 shadow-sm transition-colors hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    :disabled="remainingTargetForGm <= 0"
+                    @click="assignRemainingToMe"
+                  >
+                    <i class="fas fa-user-check text-[10px]" />
+                    Assign to me
+                  </button>
+                </div>
+                <p
                   v-if="canShowAssignToMe"
-                  type="button"
-                  class="inline-flex shrink-0 items-center gap-1 rounded-md border border-indigo-200 bg-white px-2.5 py-1 text-[10px] font-bold text-indigo-700 shadow-sm transition-colors hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-60"
-                  :disabled="remainingTargetForGm <= 0"
-                  @click="assignRemainingToMe"
+                  class="mb-2 text-[10px] font-semibold tabular-nums leading-snug text-slate-600"
+                  title="Target KPI · Assigned · For GM"
                 >
-                  <i class="fas fa-user-check text-[10px]" />
-                  Assign to me
-                </button>
-              </div>
-              <p
-                v-if="canShowAssignToMe"
-                class="mb-2 text-[10px] font-semibold tabular-nums leading-snug text-slate-600"
-                title="Target KPI · Assigned · For GM"
-              >
-                <span class="font-bold text-slate-800">{{ strategicTargetValueNum }}</span>
-                <span class="mx-1 text-slate-300">/</span>
-                <span>{{ selectedPmTargetsTotal }} Assigned</span>
-                <span class="mx-1 text-slate-300">·</span>
-                <span :class="remainingTargetForGm > 0 ? 'text-emerald-700' : 'text-slate-500'">
-                  GM +{{ remainingTargetForGm }}
-                </span>
-              </p>
+                  <span class="font-bold text-slate-800">{{ strategicTargetValueNum }}</span>
+                  <span class="mx-1 text-slate-300">/</span>
+                  <span>{{ selectedPmTargetsTotal }} Assigned</span>
+                  <span class="mx-1 text-slate-300">·</span>
+                  <span :class="remainingTargetForGm > 0 ? 'text-emerald-700' : 'text-slate-500'">
+                    GM +{{ remainingTargetForGm }}
+                  </span>
+                </p>
+              </template>
 
               <!-- Cascading: PM multi — ref chỉ bọc trigger + list; khối target nằm ngoài để click đóng list -->
               <div v-if="kpiType === 'cascading'" class="space-y-3">
+                <p
+                  v-if="isGmFeedbackCascadingAllocationReview"
+                  class="rounded-lg border border-amber-200 bg-amber-50/80 px-3 py-2 text-[11px] font-semibold leading-snug text-amber-900"
+                >
+                  Only the PM who sent feedback is shown. You may adjust their target; other managers cannot be added or removed.
+                </p>
+                <template v-if="!isGmFeedbackCascadingAllocationReview">
                 <div ref="assignPmSurfaceRef" class="relative">
                   <button
                     type="button"
@@ -2350,7 +2464,12 @@ async function save() {
                       <label
                         v-for="opt in pmUsers"
                         :key="opt.id"
-                        class="group flex cursor-pointer items-center border-b border-slate-100 px-4 py-2.5 transition-colors last:border-0 hover:bg-slate-50"
+                        class="group flex cursor-pointer items-center border-b border-slate-100 px-4 py-2.5 transition-colors last:border-0"
+                        :class="
+                          isFeedbackAssignee(opt.id)
+                            ? 'bg-amber-50/90 hover:bg-amber-100/70'
+                            : 'hover:bg-slate-50'
+                        "
                       >
                         <input
                           type="checkbox"
@@ -2358,9 +2477,19 @@ async function save() {
                           :checked="pmSelected(opt.id)"
                           @change="togglePm(opt.id)"
                         />
-                        <span class="text-sm font-bold text-slate-700 group-hover:text-blue-600">{{
-                          formatPmOptionLabel(opt)
-                        }}</span>
+                        <span
+                          class="flex min-w-0 flex-1 items-center gap-1.5 text-sm font-bold text-slate-700 group-hover:text-blue-600"
+                        >
+                          <span class="truncate">{{ formatPmOptionLabel(opt) }}</span>
+                          <span
+                            v-if="isFeedbackAssignee(opt.id)"
+                            class="inline-flex shrink-0 items-center gap-1 rounded-md border border-amber-300 bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-800"
+                            title="Processing feedback for this person"
+                          >
+                            <i class="fas fa-comment-dots text-[8px]" />
+                            Feedback
+                          </span>
+                        </span>
                       </label>
                       <p v-if="pmUsers.length === 0" class="px-4 py-3 text-xs text-slate-500">
                         No departments have an assigned manager.
@@ -2368,20 +2497,26 @@ async function save() {
                     </template>
                   </div>
                 </div>
+                </template>
 
                 <div
-                  v-if="selectedPMs.length > 0"
+                  v-if="visibleSelectedPMs.length > 0"
                   class="space-y-2 rounded-xl border border-blue-100 bg-blue-50/50 p-4 shadow-inner"
+                  :class="isGmFeedbackCascadingAllocationReview ? 'border-amber-200 bg-amber-50/40' : ''"
                 >
                   <p class="mb-2 flex items-center gap-1.5 text-[10px] font-bold uppercase text-blue-800">
                     <i class="fas fa-crosshairs text-[10px]" />
-                    Targets per manager
+                    {{
+                      isGmFeedbackCascadingAllocationReview
+                        ? 'PM feedback — assigned manager'
+                        : 'Targets per manager'
+                    }}
                   </p>
                   <p v-if="formErrors.pmTargets" class="mb-2 text-[11px] font-semibold leading-snug text-rose-600">
                     {{ formErrors.pmTargets }}
                   </p>
                   <div
-                    v-for="pm in selectedPMs"
+                    v-for="pm in visibleSelectedPMs"
                     :key="pm"
                     class="flex flex-col justify-between gap-2 rounded-lg border p-2.5 shadow-sm sm:flex-row sm:items-center sm:gap-3"
                     :class="
@@ -2409,6 +2544,7 @@ async function save() {
                         min="0"
                         step="any"
                         placeholder="Enter target..."
+                        :disabled="isGmFeedbackCascadingAllocationReview && !isFeedbackAssignee(pm)"
                         class="min-w-0 flex-1 rounded-md border bg-white px-2 py-1 text-xs font-bold text-slate-800 outline-none transition-all focus:ring-1 focus:ring-blue-100"
                         :class="
                           pmTargetRowHasValidationIssue(pm)
@@ -2418,6 +2554,7 @@ async function save() {
                       />
                       <span class="shrink-0 text-[10px] font-bold text-slate-400">{{ unit }}</span>
                       <button
+                        v-if="!isGmFeedbackCascadingAllocationReview"
                         type="button"
                         class="shrink-0 rounded-md border border-rose-200 bg-rose-50 px-2.5 py-1 text-[10px] font-bold text-rose-700 transition-colors hover:bg-rose-100"
                         @click="togglePm(pm)"
@@ -2431,6 +2568,13 @@ async function save() {
 
               <!-- Independent: rank chips + member override -->
               <div v-else-if="kpiType === 'individual'" class="space-y-4">
+                <p
+                  v-if="isDirectFeedbackSplitEdit"
+                  class="rounded-lg border border-amber-200 bg-amber-50/80 px-3 py-2 text-[11px] font-semibold leading-snug text-amber-900"
+                >
+                  Only the member who sent feedback is shown. You cannot assign other ranks or members.
+                </p>
+                <template v-if="!isDirectFeedbackSplitEdit">
                 <p v-if="ranksError" class="text-[11px] font-semibold text-amber-800">{{ ranksError }}</p>
                 <p v-else-if="ranksLoading" class="text-[11px] font-medium text-slate-500">Loading ranks…</p>
                 <div class="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-5">
@@ -2580,10 +2724,63 @@ async function save() {
                     No members match the keyword by name or section.
                   </div>
                 </div>
+                </template>
+                <div
+                  v-else-if="feedbackIndividualMemberCard"
+                  class="rounded-xl border border-amber-200 bg-amber-50/40 p-4 shadow-inner"
+                >
+                  <p class="mb-2 text-[10px] font-bold uppercase tracking-wider text-amber-800">
+                    Member feedback — assignee
+                  </p>
+                  <div
+                    class="flex items-center gap-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2.5 ring-1 ring-amber-200"
+                  >
+                    <div
+                      class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-slate-100 text-[10px] font-bold text-slate-500"
+                    >
+                      {{ feedbackIndividualMemberCard.member.avatar }}
+                    </div>
+                    <div class="min-w-0 flex-1">
+                      <p class="truncate text-xs font-bold text-slate-700">
+                        {{ feedbackIndividualMemberCard.member.short }}
+                      </p>
+                      <p class="truncate text-[10px] text-slate-500">
+                        {{ feedbackIndividualMemberCard.member.dept }}
+                        <span
+                          v-if="feedbackIndividualMemberCard.rank"
+                          class="text-slate-400"
+                        >
+                          ·
+                        </span>
+                        <span
+                          v-if="feedbackIndividualMemberCard.rank"
+                          class="text-indigo-500"
+                        >
+                          {{ feedbackIndividualMemberCard.rank }}
+                          {{ feedbackIndividualMemberCard.rankLabel ? `(${feedbackIndividualMemberCard.rankLabel})` : '' }}
+                        </span>
+                      </p>
+                    </div>
+                    <span
+                      class="ml-1 inline-flex shrink-0 items-center gap-1 rounded-md border border-amber-300 bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-800"
+                      title="Processing feedback for this person"
+                    >
+                      <i class="fas fa-comment-dots text-[8px]" />
+                      Feedback
+                    </span>
+                  </div>
+                </div>
               </div>
 
               <!-- Direct: members — ref chỉ trigger + list -->
               <div v-else ref="assignMemberSurfaceRef" class="relative">
+                <p
+                  v-if="isDirectFeedbackSplitEdit"
+                  class="mb-3 rounded-lg border border-amber-200 bg-amber-50/80 px-3 py-2 text-[11px] font-semibold leading-snug text-amber-900"
+                >
+                  Only the member who sent feedback is shown. You cannot add or remove other members.
+                </p>
+                <template v-if="!isDirectFeedbackSplitEdit">
                 <button
                   type="button"
                   class="input-optional relative flex min-h-[38px] w-full flex-wrap items-center gap-1.5 rounded-md py-1.5 pl-8 pr-7 text-left text-xs font-bold text-slate-700 transition-all"
@@ -2639,7 +2836,12 @@ async function save() {
                       <label
                         v-for="m in filteredMemberOptions"
                         :key="m.val"
-                        class="group flex cursor-pointer items-center rounded-md border-b border-slate-50 px-3 py-2 transition-colors last:border-0 hover:bg-slate-50"
+                        class="group flex cursor-pointer items-center rounded-md border-b border-slate-50 px-3 py-2 transition-colors last:border-0"
+                        :class="
+                          isFeedbackAssignee(m.val)
+                            ? 'bg-amber-50/90 hover:bg-amber-100/70'
+                            : 'hover:bg-slate-50'
+                        "
                       >
                         <input
                           type="checkbox"
@@ -2665,6 +2867,14 @@ async function save() {
                               <span class="text-indigo-500">{{ m.rank }}</span>
                             </span>
                           </div>
+                          <span
+                            v-if="isFeedbackAssignee(m.val)"
+                            class="ml-1 inline-flex shrink-0 items-center gap-1 rounded-md border border-amber-300 bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-800"
+                            title="Processing feedback for this person"
+                          >
+                            <i class="fas fa-comment-dots text-[8px]" />
+                            Feedback
+                          </span>
                         </div>
                       </label>
                     </template>
@@ -2680,14 +2890,29 @@ async function save() {
                     </p>
                   </div>
                 </div>
+                </template>
 
                 <div
-                  v-if="selectedMembers.length > 0"
-                  class="mt-2 space-y-1.5 rounded-lg border border-blue-100 bg-blue-50/50 p-3"
+                  v-if="visibleSelectedMembers.length > 0"
+                  class="mt-2 space-y-1.5 rounded-lg border p-3"
+                  :class="
+                    isDirectFeedbackSplitEdit
+                      ? 'border-amber-200 bg-amber-50/40'
+                      : 'border-blue-100 bg-blue-50/50'
+                  "
                 >
-                  <p class="mb-1 text-[10px] font-bold uppercase tracking-wide text-blue-800">Selected members</p>
+                  <p
+                    class="mb-1 text-[10px] font-bold uppercase tracking-wide"
+                    :class="isDirectFeedbackSplitEdit ? 'text-amber-800' : 'text-blue-800'"
+                  >
+                    {{
+                      isDirectFeedbackSplitEdit
+                        ? 'Member feedback — assignee'
+                        : 'Selected members'
+                    }}
+                  </p>
                   <div
-                    v-for="id in selectedMembers"
+                    v-for="id in visibleSelectedMembers"
                     :key="id"
                     class="flex items-center justify-between gap-2 rounded-md border px-3 py-2 shadow-sm"
                     :class="
@@ -2710,6 +2935,7 @@ async function save() {
                       </span>
                     </span>
                     <button
+                      v-if="!isDirectFeedbackSplitEdit"
                       type="button"
                       class="shrink-0 rounded-md border border-rose-200 bg-rose-50 px-2.5 py-1 text-[10px] font-bold text-rose-700 transition-colors hover:bg-rose-100"
                       @click="toggleMember(id)"

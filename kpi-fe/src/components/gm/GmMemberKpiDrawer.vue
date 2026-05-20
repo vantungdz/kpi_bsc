@@ -7,7 +7,14 @@ import type {
   GmStrategicKpiKind,
 } from '@/types/gm-workspace'
 import type { GmEvidenceTable } from '@/types/gm-employee-evaluation'
-import { isEvidenceImageUrl, isRecordStyleCalcRule, normalizeEvidenceHref } from '@/utils/memberKpiHelpers'
+import {
+  activateEvidenceAttachment,
+  evidenceAttachmentLabel,
+  evidenceAttachmentTitle,
+  isEvidenceImageUrl,
+  isRecordStyleCalcRule,
+  normalizeEvidenceHref,
+} from '@/utils/memberKpiHelpers'
 
 const props = withDefaults(
   defineProps<{
@@ -28,6 +35,10 @@ const emit = defineEmits<{
 
 function onRemind(item: GmModalKpiItemMock) {
   emit('remind', item)
+}
+
+function onEvidenceAttachmentClick(att: { url: string; name?: string }) {
+  void activateEvidenceAttachment(att)
 }
 
 const SECTION_ORDER: GmStrategicKpiKind[] = ['cascading', 'individual', 'promotion']
@@ -641,12 +652,12 @@ watch(
                                       class="rounded-md border border-slate-100 bg-slate-50/80 p-2"
                                     >
                                       <a
-                                        :href="normalizeEvidenceHref(att.url)"
-                                        target="_blank"
-                                        rel="noopener noreferrer"
+                                        href="#"
                                         class="break-all text-xs font-semibold text-indigo-600 underline hover:text-indigo-800"
+                                        :title="evidenceAttachmentTitle(att)"
+                                        @click.prevent="onEvidenceAttachmentClick(att)"
                                       >
-                                        {{ att.name || att.url }}
+                                        {{ evidenceAttachmentLabel(att) }}
                                       </a>
                                       <div v-if="isEvidenceImageUrl(att.url)" class="mt-2">
                                         <img
@@ -740,12 +751,12 @@ watch(
                               </span>
                               <div class="min-w-0 flex-1 space-y-2">
                                 <a
-                                  :href="normalizeEvidenceHref(att.url)"
-                                  target="_blank"
-                                  rel="noopener noreferrer"
+                                  href="#"
                                   class="break-all text-[13px] font-semibold text-indigo-700 hover:text-indigo-900 hover:underline"
+                                  :title="evidenceAttachmentTitle(att)"
+                                  @click.prevent="onEvidenceAttachmentClick(att)"
                                 >
-                                  {{ att.name || att.url }}
+                                  {{ evidenceAttachmentLabel(att) }}
                                 </a>
                                 <div v-if="isEvidenceImageUrl(att.url)" class="overflow-hidden rounded-lg border border-slate-100 bg-slate-50">
                                   <img

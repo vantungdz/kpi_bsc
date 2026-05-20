@@ -87,19 +87,19 @@
 
         /** ASM_STATUS labels — đồng bộ document/db/init-db.sql */
         private static final Map<Integer, String> ASM_STATUS_LABEL = Map.ofEntries(
-                Map.entry(401, "Newly Created KPI (Inactive)"),
+                Map.entry(401, "New KPI"),
                 Map.entry(402, "Pending PM Approval"),
                 Map.entry(403, "Pending GM Approval"),
-                Map.entry(404, "Pending Member Acceptance"),
-                Map.entry(407, "Feedback Pending PM/GM Review"),
-                Map.entry(405, "Goal Confirmed (In Progress)"),
+                Map.entry(404, "Pending Acceptance"),
+                Map.entry(405, "In progress"),
                 Map.entry(406, "Rejected"),
-                Map.entry(501, "Member Submitted Mid-Year Evidence, Pending PM Approval"),
-                Map.entry(502, "PM Approved Mid-Year, Pending GM Score"),
-                Map.entry(503, "GM Finalized Mid-Year Score"),
-                Map.entry(601, "Pending PM Final Score"),
-                Map.entry(602, "Pending GM Final Score"),
-                Map.entry(603, "Fully Closed (Lifecycle Completed)"));
+                Map.entry(407, "Processing Feedback"),
+                Map.entry(501, "Pending  PM evaluation (Mid-Year)"),
+                Map.entry(502, "Pending  GM evaluation (Mid-Year)"),
+                Map.entry(503, "Completed (Mid-Year)"),
+                Map.entry(601, "Pending  PM evaluation (Final)"),
+                Map.entry(602, "Pending  GM evaluation (Final)"),
+                Map.entry(603, "Completed"));
 
         private final KpiCycleMapper kpiCycleMapper;
         private final UserMapper userMapper;

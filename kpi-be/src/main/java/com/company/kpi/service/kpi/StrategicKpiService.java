@@ -124,7 +124,7 @@ public class StrategicKpiService {
                     .jobTitleId(null)
                     .parentAssignmentId(null)
                     .targetValue(targetNum)
-                    .statusCode(Constants.AssignStatus.WAITING_GM_APPROVAL)
+                    .statusCode(Constants.AssignStatus.PENDING_ACCEPTANCE)
                     .createdBy(actorId)
                     .build());
         }
@@ -246,7 +246,7 @@ public class StrategicKpiService {
                         .jobTitleId(null)
                         .parentAssignmentId(null)
                         .targetValue(targetNum)
-                        .statusCode(Constants.AssignStatus.WAITING_GM_APPROVAL)
+                        .statusCode(Constants.AssignStatus.PENDING_ACCEPTANCE)
                         .createdBy(actorId)
                         .build());
             }
@@ -269,7 +269,7 @@ public class StrategicKpiService {
                     existing.getCycleId(),
                     actorId,
                     Constants.AssignStatus.REJECTED,
-                    Constants.AssignStatus.WAITING_GM_APPROVAL);
+                    Constants.AssignStatus.PENDING_ACCEPTANCE);
         }
 
         int assignmentCount = kpiAssignmentMapper.listAssignmentUserTargets(kpiInformationId, existing.getCycleId())
@@ -519,7 +519,7 @@ public class StrategicKpiService {
                         .jobTitleId(null)
                         .parentAssignmentId(null)
                         .targetValue(targetNum)
-                        .statusCode(Constants.AssignStatus.WAITING_GM_APPROVAL)
+                        .statusCode(Constants.AssignStatus.PENDING_ACCEPTANCE)
                         .createdBy(actorId)
                         .build());
                 kpiAssignmentMapper.insertKpiAssignments(pmRow);
@@ -542,9 +542,6 @@ public class StrategicKpiService {
         if (userIds.isEmpty())
             return new ArrayList<>();
         int initialStatus = initialAssignmentStatusForStrategicCreate(type, role);
-        if (Constant.ROLE_PM.equals(role)) {
-            initialStatus = Constants.AssignStatus.WAITING_GM_APPROVAL;
-        }
         Map<UUID, UUID> jobByUser = loadJobTitleByUserId(userIds);
         List<KpiAssignmentInsertRow> rows = new ArrayList<>();
         for (UUID uid : userIds) {
@@ -565,16 +562,13 @@ public class StrategicKpiService {
 
     /**
      * Member/Leader + KPI individual: chờ PM duyệt (402).
-     * PM tạo qua strategic-kpis: chờ GM duyệt (403).
+     * PM tạo / sửa sau GM reject: chờ chấp nhận (404) — PM gửi GM qua bulk 404→403.
      * GM và các role khác: chờ chấp nhận mục tiêu (404).
      */
     private static int initialAssignmentStatusForStrategicCreate(int type, String role) {
         if ((Constant.ROLE_MEMBER.equals(role) || Constant.ROLE_LEADER.equals(role))
                 && type == TYPE_INDIVIDUAL) {
             return Constants.AssignStatus.PENDING_ACCEPTANCE;
-        }
-        if (Constant.ROLE_PM.equals(role)) {
-            return Constants.AssignStatus.WAITING_GM_APPROVAL;
         }
         return Constants.AssignStatus.PENDING_ACCEPTANCE;
     }
@@ -783,15 +777,27 @@ public class StrategicKpiService {
             // Phần target chưa phân không tự gán cho PM khi lưu — chỉ khi PM có trong
             // payload (vd. bấm «Assign to me» trên FE).
 
-            // Đồng bộ danh sách: gỡ cascade cũ rồi tạo lại (PM bỏ chọn member → không còn
-            // bản ghi / không insert trùng).
-            kpiAssignmentMapper.softDeleteChildAssignmentsByParentAndCycle(
-                    req.getParentAssignmentId(), req.getCycleId(), userId);
+            // Đồng bộ có chọn lọc: chỉ gỡ member bỏ chọn; member còn lại giữ assignment + status.
+            List<KpiAssignmentUserTargetRow> existingChildren =
+                    kpiAssignmentMapper.listChildAssignmentsByParentId(req.getParentAssignmentId());
+            LinkedHashSet<UUID> requestedUserIds = new LinkedHashSet<>(requestedTargets.keySet());
+            for (KpiAssignmentUserTargetRow child : existingChildren) {
+                UUID memberId = child.getUserId();
+                if (memberId == null) {
+                    continue;
+                }
+                if (!requestedUserIds.contains(memberId)) {
+                    kpiAssignmentMapper.softDeleteKpiAssignmentById(child.getId(), req.getCycleId(), userId);
+                    continue;
+                }
+                BigDecimal newTarget = normalizeTargetValue(requestedTargets.get(memberId));
+                kpiAssignmentMapper.updateKpiAssignmentTarget(
+                        child.getId(), req.getCycleId(), newTarget, userId);
+                requestedTargets.remove(memberId);
+            }
         }
 
         if (requestedTargets.isEmpty()) {
-            // Cho phép PM lưu phân bổ rỗng: nếu có parentAssignmentId thì các assignment
-            // con cũ đã được soft-delete ở trên.
             return;
         }
 
@@ -842,6 +848,62 @@ public class StrategicKpiService {
             kpiAssignmentMapper.insertKpiAssignmentsWithEntity(rowsToInsert);
             kpiAssignmentSnapshotService.createSnapshotsForAssignmentEntities(rowsToInsert, userId);
         }
+    }
+
+    /**
+     * Sau khi PM duyệt feedback member (407→404): chỉ soft-delete và tạo lại assignment của member đó.
+     * Các assignment cascade khác (vd. member đã Accept 405) giữ nguyên.
+     */
+    @Transactional
+    public void replaceFeedbackMemberCascadeAssignment(
+            UUID pmId,
+            UUID cycleId,
+            UUID kpiInformationId,
+            UUID parentAssignmentId,
+            UUID memberFeedbackAssignmentId,
+            UUID memberUserId,
+            BigDecimal targetValue) {
+        if (parentAssignmentId == null) {
+            throw AppException.badRequest("parentAssignmentId is required for team cascade feedback.");
+        }
+        int owned = kpiAssignmentMapper.countAssignmentOwnedByUserForKpiInfo(
+                parentAssignmentId, pmId, kpiInformationId);
+        if (owned < 1) {
+            throw AppException.forbidden(
+                    "Parent assignment is invalid, not owned by you, or does not match this KPI.");
+        }
+        int submittedChildren = kpiAssignmentMapper.countChildAssignmentsSubmittedActualForPmReview(
+                parentAssignmentId, cycleId, pmId);
+        if (submittedChildren > 0) {
+            throw AppException.badRequest(
+                    "Cannot save allocation because the member has already submitted actuals for PM review.");
+        }
+        boolean childUnderParent = kpiAssignmentMapper.listChildAssignmentsByParentId(parentAssignmentId).stream()
+                .anyMatch(row -> memberFeedbackAssignmentId.equals(row.getId()));
+        if (!childUnderParent) {
+            throw AppException.badRequest("Feedback assignment is not a child of this team KPI.");
+        }
+        List<UUID> assigneeUserIds = List.of(memberUserId);
+        List<UUID> existingActiveUserIds = userMapper.listExistingActiveUserIds(assigneeUserIds);
+        if (existingActiveUserIds.size() != assigneeUserIds.size()) {
+            throw AppException.badRequest("Feedback member is invalid or inactive.");
+        }
+        kpiAssignmentMapper.softDeleteKpiAssignmentById(memberFeedbackAssignmentId, cycleId, pmId);
+        Map<UUID, UUID> jobByUser = userMapper.listUserJobTitlesByIds(assigneeUserIds).stream()
+                .collect(Collectors.toMap(UserJobTitlePair::getUserId, UserJobTitlePair::getJobTitleId, (a, b) -> a));
+        KpiAssignment assignment = new KpiAssignment();
+        assignment.setId(UUID.randomUUID());
+        assignment.setCycleId(cycleId);
+        assignment.setKpiInfoId(kpiInformationId);
+        assignment.setUserId(memberUserId);
+        assignment.setJobTitleId(jobByUser.get(memberUserId));
+        assignment.setParentAssignmentId(parentAssignmentId);
+        assignment.setTargetValue(normalizeTargetValue(targetValue));
+        assignment.setStatusCode(Constants.AssignStatus.PENDING_ACCEPTANCE);
+        assignment.setCreatedBy(pmId);
+        List<KpiAssignment> rowsToInsert = List.of(assignment);
+        kpiAssignmentMapper.insertKpiAssignmentsWithEntity(rowsToInsert);
+        kpiAssignmentSnapshotService.createSnapshotsForAssignmentEntities(rowsToInsert, pmId);
     }
 
     @Transactional

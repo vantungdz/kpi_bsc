@@ -7,4 +7,14 @@
         SELECT #{userId}, r.id FROM roles r WHERE r.code = 'MEMBER'
         ON CONFLICT DO NOTHING
     </insert>
+
+    <delete id="deleteAllRolesForUser">
+        DELETE FROM user_roles WHERE user_id = #{userId}
+    </delete>
+
+    <insert id="assignRoleByCode">
+        INSERT INTO user_roles (user_id, role_id)
+        SELECT #{userId}, r.id FROM roles r WHERE r.code = #{roleCode}
+        ON CONFLICT DO NOTHING
+    </insert>
 </mapper>

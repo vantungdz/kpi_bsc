@@ -144,7 +144,7 @@ function isPhaseCompleted(idx: number): boolean {
 
 function phaseStatusText(idx: number): string {
   const status = effectivePhaseStatus(idx)
-  if (status === 'complete') return 'Done'
+  if (status === 'complete') return '100% Complete'
   if (status === 'active') return 'In Progress'
   if (idx === 1) return 'Mid-Year not started'
   if (idx === 2) return 'Year-End not started'

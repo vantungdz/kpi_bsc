@@ -10,7 +10,10 @@ import { pmKpiService } from '@/services/modules/kpi-pm.service'
 import { gmKpiService } from '@/services/modules/kpi-gm.service'
 import { KPI_STATUS } from '@/config/constants'
 import GmStrategicKpiTypeTag from '@/components/gm/GmStrategicKpiTypeTag.vue'
-import { fileService } from '@/services/modules/file.service'
+import {
+  appendEvidenceFilesUrlsToPayload,
+  purgeRemovedUploadedEvidenceFiles,
+} from '@/utils/evidenceFileStorage'
 import EvaluationEvidenceDrawer from '@/components/evaluation/EvaluationEvidenceDrawer.vue'
 import { kpiCycleService } from '@/services/shared/kpi-cycle.service'
 import type { KpiCycleResponse } from '@/types/shared/kpi-cycle.type'
@@ -239,27 +242,14 @@ async function onGmPersonalEvidenceSaved(data: {
   actualResult: string
   selfScore: number | null
   evidenceNote?: string
-  files?: { id: string; file: File }[]
+  storedFiles?: { id: string; url: string; name?: string }[]
   urls?: { id: string; url: string; name?: string }[]
+  openedEvidencesJson?: string
 }) {
   const id = String(data.id ?? gmPersonalEvidenceAssign.value?.assignmentId ?? '').trim()
   if (!id) {
     closeGmPersonalEvidence()
     return
-  }
-
-  const finalUrls = [...(data.urls ?? [])]
-  if (data.files && data.files.length > 0) {
-    try {
-      toast.info('Uploading file…')
-      for (const item of data.files) {
-        const res = await fileService.uploadFile(item.file)
-        finalUrls.push({ id: Math.random().toString(), url: res.url, name: res.name })
-      }
-    } catch (e) {
-      toast.error('Upload failed')
-      return
-    }
   }
 
   const body: UpdateMemberSheetItemBody = {}
@@ -268,17 +258,21 @@ async function onGmPersonalEvidenceSaved(data: {
     if (Number.isFinite(n)) body.selfScore = Math.round(n)
   }
 
-  let evJson: Record<string, any> = {}
+  let evJson: Record<string, unknown> = {}
   if (typeof data.actualResult === 'string' && data.actualResult.trim() !== '') {
     try {
-      evJson = JSON.parse(data.actualResult)
-    } catch (e) { }
+      evJson = JSON.parse(data.actualResult) as Record<string, unknown>
+    } catch {
+      /* ignore */
+    }
   }
-  if (finalUrls.length > 0) {
-    delete evJson.urls
-    delete evJson.evd
-    evJson.files = finalUrls.map(u => ({ url: u.url, name: u.name || '' }))
-  }
+
+  const filePairs: { url: string; name?: string }[] = (data.storedFiles ?? []).map(u => ({
+    url: u.url,
+    name: u.name,
+  }))
+  const urlPairs = (data.urls ?? []).map(u => ({ url: u.url, name: u.name }))
+  appendEvidenceFilesUrlsToPayload(evJson, filePairs, urlPairs)
 
   const finalActualResult = Object.keys(evJson).length > 0 ? JSON.stringify(evJson) : ''
   if (finalActualResult !== '') body.evidences = finalActualResult
@@ -289,8 +283,20 @@ async function onGmPersonalEvidenceSaved(data: {
     return
   }
 
+  const prevJson =
+    data.openedEvidencesJson
+    ?? gmPersonalEvidenceAssign.value?.evidences
+    ?? ''
+
   try {
     const sheet = (await memberKpiService.updateSheetItem(id, body)) as KpiSheet
+    if (finalActualResult !== '') {
+      try {
+        await purgeRemovedUploadedEvidenceFiles(String(prevJson), evJson)
+      } catch (error) {
+        console.error('Failed to purge removed evidence files from disk', error)
+      }
+    }
     toast.success('Evidence and self-assessment score saved.')
     const updated = sheet?.items?.find((it) => String(it.id) === id)
     const a = gmPersonalEvidenceAssign.value
@@ -550,7 +556,12 @@ function displayTargetWithUnit(row: GmPersonalKpiRowMock): string {
       </div>
     </div>
 
-    <EvaluationEvidenceDrawer :open="gmPersonalEvidenceOpen" :item="gmPersonalEvidenceDrawerItem"
-      self-score-footer-readonly @close="closeGmPersonalEvidence" @save="onGmPersonalEvidenceSaved" />
+    <EvaluationEvidenceDrawer
+      :open="gmPersonalEvidenceOpen"
+      :item="gmPersonalEvidenceDrawerItem"
+      self-score-footer-readonly
+      :save-evidence="onGmPersonalEvidenceSaved"
+      @close="closeGmPersonalEvidence"
+    />
   </div>
 </template>

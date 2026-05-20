@@ -17,6 +17,7 @@ import type {
   GmPmKpiRolloutPayload,
 } from '@/types/gm-workspace'
 import { GM_BSC_LABELS, GM_BSC_ORDER, normalizeGmBscPerspective } from '@/utils/gm-bsc-diagnostics'
+import KpiCreatorRowLegend from '@/components/shared/KpiCreatorRowLegend.vue'
 import { kpiCreatorRowBgClass } from '@/utils/kpiCreatorRowBg'
 import { formatKpiTargetWithUnit } from '@/utils/kpiUnitCodes'
 import {
@@ -226,7 +227,11 @@ function closeFeedbackDrawer() {
 function resolvePendingFeedback(assignmentId: string, approve: boolean) {
   const aid = String(assignmentId ?? '').trim()
   if (!aid) return
-  emit('resolve-feedback', { assignmentId: aid, approve, kpi: feedbackDrawerKpi.value ?? undefined })
+  emit('resolve-feedback', {
+    assignmentId: aid,
+    approve,
+    kpi: feedbackDrawerKpi.value ?? undefined,
+  })
   closeFeedbackDrawer()
 }
 
@@ -461,15 +466,15 @@ function asmStatusLabel(code: number | null | undefined): string {
     case KPI_STATUS.FEEDBACK_IN_PROGRESS:
       return 'Processing Feedback'
     case KPI_STATUS.FIRST_WAITING_PM_APPROVAL:
-      return 'Pending PM Approval (Mid-Year)'
+      return 'Pending PM Evaluation (Mid-Year)'
     case KPI_STATUS.FIRST_WAITING_GM_APPROVAL:
-      return 'Pending GM Approval (Mid-Year)'
+      return 'Pending GM Evaluation (Mid-Year)'
     case KPI_STATUS.FIRST_COMPLETED:
       return 'Completed (Mid-Year)'
     case KPI_STATUS.SECOND_WAITING_PM_APPROVAL:
-      return 'Pending PM Approval (Final)'
+      return 'Pending PM Evaluation (Final)'
     case KPI_STATUS.SECOND_WAITING_GM_APPROVAL:
-      return 'Pending GM Approval (Final)'
+      return 'Pending GM Evaluation (Final)'
     case KPI_STATUS.COMPLETED:
       return 'Completed'
     default:
@@ -500,22 +505,6 @@ function asmStatusPillClass(code: number | null | undefined): string {
       return 'border-amber-200 bg-amber-50 text-amber-700'
     default:
       return 'border-slate-200 bg-slate-50 text-slate-500'
-  }
-}
-
-function asmStatusIconClass(code: number | null | undefined): string {
-  switch (normalizeAsmStatusCode(code)) {
-    case KPI_STATUS.REJECTED:
-      return 'fa-times-circle'
-    case KPI_STATUS.FIRST_COMPLETED:
-    case KPI_STATUS.COMPLETED:
-      return 'fa-check-circle'
-    case KPI_STATUS.FEEDBACK_IN_PROGRESS:
-      return 'fa-comment-dots'
-    case KPI_STATUS.INACTIVE:
-      return 'fa-circle'
-    default:
-      return normalizeAsmStatusCode(code) == null ? 'fa-minus-circle' : 'fa-clock'
   }
 }
 
@@ -718,7 +707,8 @@ function memberDiagnosticsScoreTooltip(member: GmHierarchyMember): string | unde
 function memberStatusForUi(member: GmHierarchyMember | null | undefined): GmHierarchyStatus {
   if (!member) return 'warning'
   const pl = String(member.performanceLabel ?? '').trim().toLowerCase()
-  if (pl.includes('chưa cấu hình mục tiêu') || pl.includes('target not configured')) return 'warning'
+  const normalizedLabel = pl.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\u0111/g, 'd')
+  if (normalizedLabel.includes('chua cau hinh muc tieu') || pl.includes('target not configured')) return 'warning'
   return member.status
 }
 
@@ -1662,7 +1652,7 @@ function buildDisplayGroups(list: GmHierarchyKpi[]): DiagnosticsTableGroup[] {
       meta.get(id)!.rows.push(k)
     }
     return [...meta.entries()]
-      .sort((a, b) => a[1].label.localeCompare(b[1].label, 'vi'))
+      .sort((a, b) => a[1].label.localeCompare(b[1].label, 'en'))
       .map(([key, v]) => ({ key, label: v.label, rows: sortImportantKpisFirst(v.rows) }))
   }
   const m = new Map<GmBscPerspective, GmHierarchyKpi[]>()
@@ -2052,6 +2042,8 @@ export default {
         </div>
       </div>
 
+      <KpiCreatorRowLegend />
+
       <div class="overflow-x-auto">
         <div class="min-w-[1080px] divide-y divide-slate-200">
           <!-- 4+1+2+2+1+2+2+1 - Thêm cột Actual nằm giữa Target và Tiến độ -->
@@ -2152,7 +2144,7 @@ export default {
                         "
                         :title="
                           kpi.kpiType === 'cascading'
-                            ? 'Completion: (Actual / Target) × 100, capped at 100%.'
+                            ? 'Completion: (Actual / Target) x 100, capped at 100%.'
                             : kpiHasNonCascadingRollupMembers(kpi)
                               ? 'Individual/Promotion: average completion % for members with a numeric target (max 100% per person).'
                               : undefined
@@ -2170,10 +2162,9 @@ export default {
                       </div>
                       <div class="col-span-2 flex justify-center">
                         <span
-                          class="inline-flex max-w-full cursor-default items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold leading-tight"
+                          class="inline-flex max-w-full cursor-default items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold leading-tight"
                           :class="asmStatusPillClass(kpiAsmStatusCode(kpi))"
                           :title="asmStatusTitleForKpi(kpi)">
-                          <i class="fas shrink-0 text-[11px]" :class="asmStatusIconClass(kpiAsmStatusCode(kpi))" />
                           <span class="truncate">{{ asmStatusLabelForKpi(kpi) }}</span>
                         </span>
                       </div>
@@ -2186,7 +2177,7 @@ export default {
                               : 'text-slate-600 hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-800'
                           "
                           :disabled="readonly"
-                          :title="readonly ? 'Chế độ chỉ xem — năm chu kỳ đã khóa' : 'Edit KPI'"
+                          :title="readonly ? 'Read-only mode - the cycle year is locked' : 'Edit KPI'"
                           aria-label="Edit KPI"
                           @click="onEditKpiClick(kpi)">
                           <i class="fas fa-pen text-[9px]" aria-hidden="true" />
@@ -2199,7 +2190,7 @@ export default {
                               : 'text-slate-600 hover:border-rose-200 hover:bg-rose-50 hover:text-rose-800'
                           "
                           :disabled="readonly"
-                          :title="readonly ? 'Chế độ chỉ xem — năm chu kỳ đã khóa' : 'Delete KPI'"
+                          :title="readonly ? 'Read-only mode - the cycle year is locked' : 'Delete KPI'"
                           aria-label="Delete KPI"
                           @click="onDeleteKpiClick(kpi)">
                           <i class="fas fa-trash text-[9px]" aria-hidden="true" />
@@ -2275,7 +2266,7 @@ export default {
                                   "
                                   :title="
                                     kpi.kpiType === 'cascading'
-                                      ? 'Completion: (Actual / Target) × 100, capped at 100%.'
+                                      ? 'Completion: (Actual / Target) x 100, capped at 100%.'
                                       : pmHasNonCascadingRollupMembers(pm, kpi)
                                         ? 'Individual/Promotion: average completion % for members with a numeric target under this PM (max 100% per person).'
                                         : undefined
@@ -2294,10 +2285,9 @@ export default {
                                 </div>
                                 <div class="col-span-2 flex justify-center">
                                   <span
-                                    class="inline-flex max-w-full cursor-default items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold leading-tight"
+                                    class="inline-flex max-w-full cursor-default items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold leading-tight"
                                     :class="asmStatusPillClass(pmAsmStatusCode(pm, kpi))"
                                     :title="asmStatusTitleForDepartment(pm, pmAsmStatusCode(pm, kpi), kpi)">
-                                    <i class="fas shrink-0 text-[11px]" :class="asmStatusIconClass(pmAsmStatusCode(pm, kpi))" />
                                     <span class="truncate">{{ asmStatusLabelForDepartment(pm, pmAsmStatusCode(pm, kpi), kpi) }}</span>
                                   </span>
                                 </div>
@@ -2360,7 +2350,7 @@ export default {
                                       <div
                                         class="col-span-1 text-center text-xs font-bold tabular-nums"
                                         :class="diagnosticsMemberProgressTextClass(member, kpi)"
-                                        title="Completion: (Actual / Target) × 100, capped at 100%.">
+                                        title="Completion: (Actual / Target) x 100, capped at 100%.">
                                         {{ diagnosticsMemberProgressPct(member, kpi) }}
                                       </div>
                                       <div class="col-span-2 text-center text-xs font-bold tabular-nums" :class="memberStatusForUiMidYear(member, kpi) === 'danger'
@@ -2373,10 +2363,9 @@ export default {
                                       </div>
                                       <div class="col-span-2 flex justify-center items-center text-xs font-semibold">
                                         <span
-                                          class="inline-flex max-w-full cursor-default items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold leading-tight"
+                                          class="inline-flex max-w-full cursor-default items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold leading-tight"
                                           :class="asmStatusPillClass(memberAsmStatusCode(member))"
                                           :title="asmStatusTitle(memberAsmStatusCode(member))">
-                                          <i class="fas shrink-0 text-[11px]" :class="asmStatusIconClass(memberAsmStatusCode(member))" />
                                           <span class="truncate">{{ asmStatusLabel(memberAsmStatusCode(member)) }}</span>
                                         </span>
                                       </div>
@@ -2422,10 +2411,11 @@ export default {
       <Transition name="gm-diag-feedback-drawer">
         <div
           v-if="feedbackDrawerOpen && feedbackDrawerKpi"
-          class="fixed inset-0 z-[220] flex justify-end"
+          class="relative fixed inset-0 z-[220] flex justify-end"
           role="dialog"
           aria-modal="true"
-          aria-labelledby="gm-diag-feedback-title">
+          aria-labelledby="gm-diag-feedback-title"
+        >
           <div class="absolute inset-0 bg-slate-950/55 backdrop-blur-[1px]" @click="closeFeedbackDrawer" />
           <aside
             class="relative z-10 flex h-full w-full max-w-xl flex-col border-l border-slate-200 bg-white shadow-2xl">
@@ -2481,9 +2471,11 @@ export default {
                     </div>
                   </div>
                   <div class="flex justify-end gap-2 pt-1">
-                    <button type="button"
+                    <button
+                      type="button"
                       class="rounded-md border border-rose-200 bg-white px-4 py-2 text-sm font-semibold text-rose-700 transition-colors hover:bg-rose-50"
-                      @click="resolvePendingFeedback(activeFeedbackItem.assignmentId, false)">
+                      @click="resolvePendingFeedback(activeFeedbackItem.assignmentId, false)"
+                    >
                       Reject feedback
                     </button>
                     <button

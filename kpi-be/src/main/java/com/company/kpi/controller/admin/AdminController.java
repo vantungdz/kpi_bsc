@@ -11,6 +11,7 @@ import com.company.kpi.request.admin.UpdateAdminKpiCyclePhaseDatesRequest;
 import com.company.kpi.response.admin.AdminKpiCycleResponse;
 import com.company.kpi.response.admin.AdminCampaignResponse;
 import com.company.kpi.response.admin.AdminEmailTemplateResponse;
+import com.company.kpi.response.admin.AdminEmployeeCandidateResponse;
 import com.company.kpi.response.admin.AdminEmployeeProgressResponse;
 import com.company.kpi.response.admin.AdminEmployeeResponse;
 import com.company.kpi.response.admin.AdminJobTitleResponse;
@@ -142,6 +143,12 @@ public class AdminController extends BaseController {
     @GetMapping("/employees")
     public ResponseEntity<BaseResponse<List<AdminEmployeeResponse>>> getEmployees() {
         return success(adminService.getEmployees());
+    }
+
+    @GetMapping("/employees/leader-member-candidates")
+    public ResponseEntity<BaseResponse<List<AdminEmployeeCandidateResponse>>> getLeaderMemberCandidates(
+            @RequestParam String departmentId) {
+        return success(adminService.getLeaderMemberCandidates(departmentId));
     }
 
     @PostMapping("/employees")

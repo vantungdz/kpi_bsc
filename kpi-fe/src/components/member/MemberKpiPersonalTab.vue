@@ -7,6 +7,8 @@ import {
 import { useMemberKpiFormatters } from '@/composables/useMemberKpiFormatters'
 import { extractRawInputFromApiTargetDescription } from '@/utils/kpiScoringRulesDsl'
 import { formatTargetDisplayForMemeber } from '@/utils/strategicKpiTypeCodes'
+import KpiCreatorRowLegend from '@/components/shared/KpiCreatorRowLegend.vue'
+import { kpiCreatorRowBgFromSource } from '@/utils/kpiCreatorRowBg'
 
 type KpiCategorySection = { key: string; headerLabel: string; items: KpiItem[] }
 
@@ -122,11 +124,7 @@ function shouldOpenSelfCreatedEditForm(item: KpiItem): boolean {
 }
 
 function sourceRowClass(item: KpiItem): string {
-  if (item.createdByCurrentUser === true) return 'bg-fuchsia-50 hover:bg-fuchsia-100'
-  const role = String(item.createdByRoleCode ?? '').trim().toUpperCase()
-  if (role === 'GM') return 'bg-amber-50 hover:bg-amber-100'
-  if (role === 'PM') return 'bg-blue-50 hover:bg-sky-100'
-  return ''
+  return kpiCreatorRowBgFromSource(item, { selfRole: 'MEMBER' })
 }
 
 function rowClass(item: KpiItem): string {
@@ -243,7 +241,9 @@ const pmWeightedAvg = computed((): number | null => {
     </p>
   </div>
 
-  <div v-else class="overflow-x-auto">
+  <div v-else>
+    <KpiCreatorRowLegend />
+    <div class="overflow-x-auto">
     <table class="w-full text-left">
       <thead class="border-b border-slate-200 bg-slate-200">
         <tr class="text-[11px] font-bold uppercase tracking-wider text-slate-500">
@@ -436,6 +436,7 @@ const pmWeightedAvg = computed((): number | null => {
         </tr>
       </tfoot>
     </table>
+    </div>
   </div>
 
   <!-- Comments section -->

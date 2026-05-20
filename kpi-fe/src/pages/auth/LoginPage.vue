@@ -46,10 +46,10 @@ function fillDemo(role: "gm" | "pm" | "leader" | "member" | "admin") {
           </div>
         </div>
         <h2 class="text-3xl font-bold leading-snug mb-4">
-          Quản lý &amp;<br />Đánh giá KPI<br />nhân viên
+          Employee KPI Management &amp;<br />Evaluation<br />for Staff
         </h2>
         <p class="text-blue-200 text-sm leading-relaxed">
-          Hệ thống đánh giá hiệu suất toàn diện cho GM, PM, Leader và nhân viên.
+          Comprehensive performance evaluation system for GM, PM, Leader and staff.
         </p>
       </div>
 
@@ -84,9 +84,9 @@ function fillDemo(role: "gm" | "pm" | "leader" | "member" | "admin") {
         <h1 class="text-2xl font-black text-slate-800">KPI System</h1>
       </div>
 
-      <h2 class="text-2xl font-bold text-slate-800 mb-1">Đăng nhập</h2>
+      <h2 class="text-2xl font-bold text-slate-800 mb-1">Sign In</h2>
       <p class="text-slate-500 text-sm mb-8">
-        Chào mừng trở lại! Vui lòng đăng nhập để tiếp tục.
+        Welcome back! Please sign in to continue.
       </p>
 
       <form class="space-y-5" @submit.prevent="handleSubmit">
@@ -112,7 +112,7 @@ function fillDemo(role: "gm" | "pm" | "leader" | "member" | "admin") {
         <!-- Password -->
         <div>
           <label class="block text-sm font-semibold text-slate-700 mb-1.5"
-            >Mật khẩu</label
+            >Password</label
           >
           <div class="relative">
             <i
@@ -154,7 +154,7 @@ function fillDemo(role: "gm" | "pm" | "leader" | "member" | "admin") {
         >
           <i v-if="isLoading" class="fas fa-spinner fa-spin text-sm" />
           <i v-else class="fas fa-sign-in-alt text-sm" />
-          {{ isLoading ? "Đang đăng nhập..." : "Đăng nhập" }}
+          {{ isLoading ? "Signing in..." : "Sign In" }}
         </button>
       </form>
     </div>

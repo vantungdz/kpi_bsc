@@ -84,7 +84,7 @@ function closeRejectDialog() {
 function confirmReject() {
   const reason = rejectReason.value.trim()
   if (!reason) {
-    rejectError.value = 'Vui lòng nhập lý do từ chối.'
+    rejectError.value = 'Enter a rejection reason.'
     return
   }
   if (rejectDialog.value.targetId === 'all') {
@@ -140,7 +140,7 @@ function parseScoringRuleBands(text: string): ScoringRuleBand[] {
       const num = m[1]
       let range = m[2].trim()
       range = range.replace(/\s+/g, ' ')
-      bands.push({ levelLabel: `MỨC ${num}`, rangeText: range })
+      bands.push({ levelLabel: `LEVEL ${num}`, rangeText: range })
     }
   }
   bands.sort((a, b) => {
@@ -155,7 +155,7 @@ function parseScoringRuleBands(text: string): ScoringRuleBand[] {
 function weightDisplayShort(weightLabel: string): string {
   const m = weightLabel.match(/([\d.]+\s*%)/)
   if (m) return m[1].replace(/\s+/g, '')
-  return weightLabel.replace(/\s*trọng số\s*/gi, '').trim() || weightLabel
+  return weightLabel.replace(/\s*weight\s*/gi, '').trim() || weightLabel
 }
 </script>
 
@@ -175,13 +175,13 @@ function weightDisplayShort(weightLabel: string): string {
                 <span class="rounded-lg bg-orange-100 p-1.5 text-orange-600 shadow-sm">
                   <i class="fas fa-inbox text-sm"></i>
                 </span>
-                Đề xuất chờ duyệt
+                Pending Proposals
               </h2>
             </div>
             <button
               type="button"
               class="rounded-full p-2 text-slate-400 hover:bg-slate-100"
-              aria-label="Đóng"
+              aria-label="Close"
               @click="emit('close')"
             >
               <i class="fas fa-times text-base"></i>
@@ -198,7 +198,7 @@ function weightDisplayShort(weightLabel: string): string {
               <div class="min-w-0">
                 <p class="truncate text-base font-bold text-slate-800">{{ memberApproval.userFullName }}</p>
                 <p class="text-xs font-semibold uppercase text-slate-500">
-                  {{ pendingKpis.length }} KPI chờ xử lý
+                  {{ pendingKpis.length }} KPIs pending action
                 </p>
               </div>
             </div>
@@ -211,7 +211,7 @@ function weightDisplayShort(weightLabel: string): string {
                 @click="emit('approve-all', pendingKpis)"
               >
                 <i class="fas fa-list-check mr-1.5 text-xs" />
-                Duyệt tất cả
+                Approve all
               </button>
               <button
                 type="button"
@@ -220,12 +220,12 @@ function weightDisplayShort(weightLabel: string): string {
                 @click="initiateReject('all')"
               >
                 <i class="fas fa-circle-xmark mr-1.5 text-xs" />
-                Từ chối tất cả
+                Reject all
               </button>
             </div>
 
             <div v-if="memberApproval.kpis.length === 0" class="rounded-xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">
-              Không còn KPI chờ duyệt cho thành viên này.
+              No pending KPIs remain for this member.
             </div>
 
             <div
@@ -242,7 +242,7 @@ function weightDisplayShort(weightLabel: string): string {
                     {{ req.status }}
                   </span>
                   <h4 class="mt-2 truncate text-sm font-bold text-slate-800">{{ req.kpiName }}</h4>
-                  <p class="mt-1 text-[10px] font-medium text-slate-400">Gửi: {{ req.date }}</p>
+                  <p class="mt-1 text-[10px] font-medium text-slate-400">Sent: {{ req.date }}</p>
                 </div>
                 <button
                   type="button"
@@ -261,7 +261,7 @@ function weightDisplayShort(weightLabel: string): string {
                   class="rounded-md px-3 py-1.5 text-sm font-semibold text-rose-600 hover:bg-rose-50 disabled:opacity-50"
                   @click="initiateReject(req.id)"
                 >
-                  Từ chối
+                  Reject
                 </button>
                 <button
                   type="button"
@@ -269,7 +269,7 @@ function weightDisplayShort(weightLabel: string): string {
                   class="rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
                   @click="emit('approve', req)"
                 >
-                  Duyệt
+                  Approve
                 </button>
               </div>
               -->
@@ -290,7 +290,7 @@ function weightDisplayShort(weightLabel: string): string {
                 <div class="flex shrink-0 items-start justify-between border-b border-slate-100 px-4 py-3">
                   <div class="min-w-0 pr-2">
                     <p class="text-[11px] font-bold uppercase tracking-wide text-slate-500">
-                      Chi tiết KPI chờ duyệt
+                      Pending KPI Details
                     </p>
                     <h2 class="mt-0.5 text-lg font-bold leading-snug text-slate-900">
                       {{ selectedKpi.kpiName }}
@@ -310,7 +310,7 @@ function weightDisplayShort(weightLabel: string): string {
                   <button
                     type="button"
                     class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
-                    aria-label="Đóng chi tiết KPI"
+                    aria-label="Close KPI details"
                     @click="closeKpiDetail"
                   >
                     <i class="fas fa-times text-sm leading-none" />
@@ -323,28 +323,28 @@ function weightDisplayShort(weightLabel: string): string {
                   <div class="divide-y divide-slate-100 overflow-hidden rounded-lg border border-slate-200 bg-white">
                     <div class="flex items-center gap-3 px-3 py-2.5">
                       <i class="fas fa-bullseye w-4 shrink-0 text-center text-[13px] text-slate-400" />
-                      <span class="min-w-0 flex-1 text-xs font-medium text-slate-500">Target của Member</span>
+                      <span class="min-w-0 flex-1 text-xs font-medium text-slate-500">Member Target</span>
                       <span class="max-w-[55%] text-right text-sm font-bold text-slate-900">{{
                         selectedKpi.memberTarget
                       }}</span>
                     </div>
                     <div class="flex items-center gap-3 px-3 py-2.5">
                       <i class="fas fa-percent w-4 shrink-0 text-center text-[13px] text-slate-400" />
-                      <span class="min-w-0 flex-1 text-xs font-medium text-slate-500">Trọng số</span>
+                      <span class="min-w-0 flex-1 text-xs font-medium text-slate-500">Weight</span>
                       <span class="text-right text-sm font-bold text-blue-600">{{
                         weightDisplayShort(selectedKpi.weightLabel)
                       }}</span>
                     </div>
                     <div class="flex items-center gap-3 px-3 py-2.5">
                       <i class="fas fa-book w-4 shrink-0 text-center text-[13px] text-slate-400" />
-                      <span class="min-w-0 flex-1 text-xs font-medium text-slate-500">Khía cạnh BSC</span>
+                      <span class="min-w-0 flex-1 text-xs font-medium text-slate-500">BSC Aspect</span>
                       <span class="max-w-[58%] text-right text-xs font-bold leading-snug text-slate-900">{{
                         selectedKpi.bscAspect
                       }}</span>
                     </div>
                     <div class="flex items-center gap-3 px-3 py-2.5">
                       <i class="fas fa-calculator w-4 shrink-0 text-center text-[13px] text-slate-400" />
-                      <span class="min-w-0 flex-1 text-xs font-medium text-slate-500">Cách tính</span>
+                      <span class="min-w-0 flex-1 text-xs font-medium text-slate-500">Calculation Method</span>
                       <span class="max-w-[58%] text-right text-xs font-bold leading-snug text-slate-900">{{
                         selectedKpi.calculationMethodLabel
                       }}</span>
@@ -356,7 +356,7 @@ function weightDisplayShort(weightLabel: string): string {
                     <div class="flex items-center gap-2 border-b border-slate-100 px-3 py-2">
                       <i class="fas fa-list-check text-[13px] text-slate-600" />
                       <span class="text-[11px] font-bold uppercase tracking-wide text-slate-600">
-                        Quy tắc tính điểm
+                        Scoring Rules
                       </span>
                     </div>
                     <div class="px-3 py-3">
@@ -397,7 +397,7 @@ function weightDisplayShort(weightLabel: string): string {
                     class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-50"
                     @click="closeKpiDetail"
                   >
-                    Đóng
+                    Close
                   </button>
                   <!-- <button
                     v-if="selectedKpi.status === 'PENDING'"
@@ -407,7 +407,7 @@ function weightDisplayShort(weightLabel: string): string {
                     @click="initiateReject(selectedKpi.id)"
                   >
                     <i class="fas fa-circle-xmark text-sm leading-none" />
-                    Từ chối
+                    Reject
                   </button> -->
                   <!-- <button
                     v-if="selectedKpi.status === 'PENDING'"
@@ -417,7 +417,7 @@ function weightDisplayShort(weightLabel: string): string {
                     @click="emit('approve', selectedKpi)"
                   >
                     <i class="fas fa-circle-check text-sm leading-none" />
-                    Duyệt (Approved)
+                    Approve
                   </button> -->
                 </div>
               </div>
@@ -435,23 +435,23 @@ function weightDisplayShort(weightLabel: string): string {
                   <div class="rounded-full bg-rose-100 p-2 text-rose-600">
                     <i class="fas fa-circle-exclamation text-lg" />
                   </div>
-                  <h3 class="text-lg font-bold text-slate-900">Xác nhận từ chối</h3>
+                  <h3 class="text-lg font-bold text-slate-900">Confirm Rejection</h3>
                 </div>
                 <p class="mb-3 text-sm text-slate-600">
                   {{
                     rejectDialog.targetId === 'all'
-                      ? 'Bạn đang từ chối TẤT CẢ KPI chờ duyệt. Vui lòng nhập lý do.'
-                      : 'Vui lòng nhập lý do từ chối KPI này.'
+                      ? 'You are rejecting ALL pending KPIs. Enter a reason.'
+                      : 'Enter the reason for rejecting this KPI.'
                   }}
                 </p>
                 <label class="mb-1 block text-sm font-semibold text-slate-700">
-                  Lý do từ chối <span class="text-rose-500">*</span>
+                  Rejection Reason <span class="text-rose-500">*</span>
                 </label>
                 <textarea
                   v-model="rejectReason"
                   class="min-h-[110px] w-full resize-none rounded-lg border p-3 text-sm outline-none focus:ring-2"
                   :class="rejectError ? 'border-rose-400 focus:ring-rose-100' : 'border-slate-300 focus:ring-rose-100'"
-                  placeholder="Nhập lý do chi tiết..."
+                  placeholder="Enter detailed reason..."
                 />
                 <p v-if="rejectError" class="mt-1 text-xs font-medium text-rose-600">{{ rejectError }}</p>
                 <div class="mt-4 flex justify-end gap-2">
@@ -460,7 +460,7 @@ function weightDisplayShort(weightLabel: string): string {
                     class="rounded-lg px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100"
                     @click="closeRejectDialog"
                   >
-                    Hủy
+                    Cancel
                   </button>
                   <button
                     type="button"
@@ -468,7 +468,7 @@ function weightDisplayShort(weightLabel: string): string {
                     class="rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-50"
                     @click="confirmReject"
                   >
-                    Xác nhận từ chối
+                    Confirm rejection
                   </button>
                 </div>
               </div>
@@ -481,7 +481,7 @@ function weightDisplayShort(weightLabel: string): string {
               class="w-full rounded-lg border border-slate-200 bg-slate-50 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-100"
               @click="emit('close')"
             >
-              Đóng
+              Close
             </button>
           </div>
         </div>

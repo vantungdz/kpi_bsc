@@ -42,6 +42,8 @@ public class PmDashboardResponse {
         private String targetDescriptionJson;
         private BigDecimal weight;
         private Integer statusCode;
+        /** Lý do GM từ chối KPI (406) hoặc từ chối feedback PM (404). */
+        private String updateReason;
         /** {@code kpi_master.calculation_rule_code} — 802 average / 803 comment, v.v. */
         private Integer calculationRuleCode;
         /** {@code kpi_master.calculation_type_code} — 701/702 hướng tỉ lệ khi rule = average */
@@ -87,5 +89,7 @@ public class PmDashboardResponse {
         /** Nhận xét GM — {@code kpi_assignments.evidences.gmComment}. */
         private String gmEvaluationComment;
         private Integer statusCode;
+        /** Lý do GM từ chối KPI cascade (406). */
+        private String updateReason;
     }
 }

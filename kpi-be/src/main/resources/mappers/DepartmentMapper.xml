@@ -210,6 +210,20 @@
         VALUES (#{userId}, #{departmentId}, #{supervisorId, jdbcType=OTHER}, #{isPrimary})
     </insert>
 
+    <update id="updateUserDepartmentSupervisor">
+        UPDATE USER_DEPARTMENTS
+        SET SUPERVISOR_ID = #{supervisorId, jdbcType=OTHER}
+        WHERE USER_ID = #{userId}
+          AND DEPARTMENT_ID = #{departmentId}
+    </update>
+
+    <update id="updateMemberSupervisorsForDepartment">
+        UPDATE USER_DEPARTMENTS
+        SET SUPERVISOR_ID = #{supervisorId, jdbcType=OTHER}
+        WHERE DEPARTMENT_ID = #{departmentId}
+          AND USER_ID != #{excludeUserId, jdbcType=OTHER}
+    </update>
+
     <delete id="deleteUserDepartment">
         DELETE FROM USER_DEPARTMENTS
         WHERE DEPARTMENT_ID = #{departmentId}
@@ -273,13 +287,32 @@
     <select id="getSections"
             resultType="com.company.kpi.response.admin.AdminSectionResponse">
         SELECT
-            CAST(id AS VARCHAR)        AS id,
-            name                       AS name,
-            CAST(parent_id AS VARCHAR) AS parentId
-        FROM departments
-        WHERE deleted_at IS NULL
-        ORDER BY name
+            CAST(d.id AS VARCHAR)        AS id,
+            d.name                       AS name,
+            CAST(d.parent_id AS VARCHAR) AS parentId,
+            CAST(d.manager_id AS VARCHAR) AS managerId,
+            m.full_name                  AS managerName
+        FROM departments d
+        LEFT JOIN users m ON m.id = d.manager_id AND m.deleted_at IS NULL
+        WHERE d.deleted_at IS NULL
+        ORDER BY d.name
     </select>
+
+    <select id="getParentIdByDepartmentId" resultType="java.util.UUID">
+        SELECT parent_id
+        FROM departments
+        WHERE id = #{departmentId}
+          AND deleted_at IS NULL
+        LIMIT 1
+    </select>
+
+    <update id="updateDepartmentManager">
+        UPDATE departments
+        SET manager_id = #{managerId, jdbcType=OTHER},
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = #{departmentId}
+          AND deleted_at IS NULL
+    </update>
 
     <select id="getManagerIdByDepartmentId" resultType="java.util.UUID">
         SELECT manager_id

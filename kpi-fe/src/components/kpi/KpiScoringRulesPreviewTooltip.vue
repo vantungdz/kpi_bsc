@@ -94,7 +94,7 @@ onUnmounted(() => {
       ref="triggerRef"
       type="button"
       class="cursor-help rounded p-0.5 text-slate-400 transition-colors focus-visible:outline focus-visible:ring-2 focus-visible:ring-slate-300"
-      aria-label="Quy tắc chấm điểm"
+      aria-label="Scoring rules"
       @click.stop
     >
       <span class="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-slate-300 text-[10px] font-bold leading-none text-slate-700 cursor-pointer">
@@ -109,7 +109,7 @@ onUnmounted(() => {
         class="pointer-events-none rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-left shadow-lg"
       >
         <p class="mb-1 text-[10px] font-bold uppercase tracking-wide text-slate-500">
-          Quy tắc chấm điểm
+          Scoring rules
         </p>
         <p class="whitespace-pre-line text-[10px] font-medium leading-snug text-slate-700">
           {{ scoringRulesText }}

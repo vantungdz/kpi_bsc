@@ -23,6 +23,7 @@ import com.company.kpi.response.admin.AdminKpiCycleResponse;
 import com.company.kpi.response.admin.AdminCampaignResponse;
 import com.company.kpi.response.admin.AdminCampaignResponse.CampaignStats;
 import com.company.kpi.response.admin.AdminEmailTemplateResponse;
+import com.company.kpi.response.admin.AdminEmployeeCandidateResponse;
 import com.company.kpi.response.admin.AdminEmployeeProgressResponse;
 import com.company.kpi.response.admin.AdminEmployeeResponse;
 import com.company.kpi.response.admin.AdminJobTitleResponse;
@@ -526,26 +527,154 @@ public class AdminService {
         return userMapper.getEmployees();
     }
 
+    public List<AdminEmployeeCandidateResponse> getLeaderMemberCandidates(String departmentId) {
+        UUID deptId = toUuid(departmentId);
+        if (deptId == null) {
+            throw AppException.badRequest("departmentId is required");
+        }
+        return userDepartmentMapper.findLeaderAssignableMembersInDepartment(deptId);
+    }
+
+    @Transactional
     public AdminEmployeeResponse createEmployee(SaveEmployeeRequest req) {
+        String roleCode = normalizeEmployeeRoleCode(req.getRoleCode());
+
+        UUID jobTitleId = resolveJobTitleId(req);
+        boolean isActive = !"inactive".equalsIgnoreCase(req.getStatus());
+
+        if ("PM".equals(roleCode)) {
+            UUID managedDeptId = resolveManagedDepartmentId(req);
+            if (managedDeptId == null) {
+                throw AppException.badRequest("PM phải chọn bộ phận quản lý.");
+            }
+            validateChildDepartment(managedDeptId);
+            validatePmManagedDepartmentAvailable(managedDeptId, null);
+        }
+
+        UUID sectionId = toUuid(req.getSectionId());
+        if ("LEADER".equals(roleCode) && sectionId == null) {
+            throw AppException.badRequest("Leader phải chọn phòng ban (Section).");
+        }
+        if ("LEADER".equals(roleCode) && sectionId != null) {
+            validateChildDepartment(sectionId);
+        }
+
         UUID newId = UUID.randomUUID();
         String hash = (req.getPassword() != null && !req.getPassword().isBlank())
                 ? passwordEncoder.encode(req.getPassword())
                 : passwordEncoder.encode("Abc@12345");
 
-        UUID jobTitleId = resolveJobTitleId(req);
-        boolean isActive = !"inactive".equalsIgnoreCase(req.getStatus());
-
         userMapper.insertEmployee(newId, req.getCode(), req.getEmail(),
                 hash, req.getName(), jobTitleId, isActive);
 
-        UUID deptId = toUuid(req.getSectionId());
-        if (deptId != null) {
-            UUID supervisorId = departmentMapper.getManagerIdByDepartmentId(deptId);
-            userDepartmentMapper.insertUserDepartment(newId, deptId, supervisorId);
+        switch (roleCode) {
+            case "PM" -> setupNewPm(newId, resolveManagedDepartmentId(req));
+            case "LEADER" -> setupNewLeader(newId, sectionId, req.getMemberIds());
+            default -> setupNewMember(newId, sectionId);
         }
-        userRoleMapper.assignMemberRole(newId);
+
+        assignSystemRole(newId, roleCode);
 
         return userMapper.getEmployeeById(newId);
+    }
+
+    private void setupNewMember(UUID userId, UUID sectionId) {
+        if (sectionId == null) {
+            return;
+        }
+        UUID supervisorId = departmentMapper.getManagerIdByDepartmentId(sectionId);
+        userDepartmentMapper.insertUserDepartment(userId, sectionId, supervisorId);
+    }
+
+    private void setupNewPm(UUID userId, UUID managedDeptId) {
+        int updated = departmentMapper.updateDepartmentManager(managedDeptId, userId);
+        if (updated != 1) {
+            throw AppException.badRequest("Không thể gán PM cho bộ phận đã chọn.");
+        }
+        UUID supervisorId = resolveSupervisorForDepartmentMember(managedDeptId);
+        userDepartmentMapper.insertUserDepartment(userId, managedDeptId, supervisorId);
+    }
+
+    private void setupNewLeader(UUID userId, UUID sectionId, List<String> memberIdStrings) {
+        if (sectionId == null) {
+            return;
+        }
+        UUID supervisorId = departmentMapper.getManagerIdByDepartmentId(sectionId);
+        userDepartmentMapper.insertUserDepartment(userId, sectionId, supervisorId);
+
+        List<UUID> memberIds = parseMemberIds(memberIdStrings);
+        if (memberIds.isEmpty()) {
+            return;
+        }
+        for (UUID memberId : memberIds) {
+            if (memberId.equals(userId)) {
+                throw AppException.badRequest("Leader không thể tự gán chính mình vào danh sách member.");
+            }
+            if (userDepartmentMapper.countUsersInDepartment(sectionId, memberId) < 1) {
+                throw AppException.badRequest("Member không thuộc phòng ban đã chọn: " + memberId);
+            }
+        }
+        userDepartmentMapper.updateSupervisorForUsersInDepartment(sectionId, userId, memberIds);
+    }
+
+    private UUID resolveSupervisorForDepartmentMember(UUID departmentId) {
+        UUID parentId = departmentMapper.getParentIdByDepartmentId(departmentId);
+        if (parentId != null) {
+            return departmentMapper.getManagerIdByDepartmentId(parentId);
+        }
+        return null;
+    }
+
+    /** PM/Leader chỉ gán vào phòng con (có parent_id), không gán khối cấp cao. */
+    private void validateChildDepartment(UUID departmentId) {
+        UUID parentId = departmentMapper.getParentIdByDepartmentId(departmentId);
+        if (parentId == null) {
+            throw AppException.badRequest(
+                    "Chỉ được chọn bộ phận cấp Section (có bộ phận cha), không chọn bộ phận cấp cao.");
+        }
+    }
+
+    private void validatePmManagedDepartmentAvailable(UUID managedDeptId, UUID exceptUserId) {
+        UUID currentManager = departmentMapper.getManagerIdByDepartmentId(managedDeptId);
+        if (currentManager != null && (exceptUserId == null || !currentManager.equals(exceptUserId))) {
+            throw AppException.badRequest(
+                    "Bộ phận này đã có PM quản lý. Vui lòng chọn bộ phận khác hoặc đổi PM tại màn GM Organization.");
+        }
+    }
+
+    private UUID resolveManagedDepartmentId(SaveEmployeeRequest req) {
+        UUID managed = toUuid(req.getManagedDepartmentId());
+        if (managed != null) {
+            return managed;
+        }
+        return toUuid(req.getSectionId());
+    }
+
+    private List<UUID> parseMemberIds(List<String> raw) {
+        if (raw == null || raw.isEmpty()) {
+            return List.of();
+        }
+        return raw.stream()
+                .map(this::toUuid)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+    }
+
+    private String normalizeEmployeeRoleCode(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return "MEMBER";
+        }
+        String code = raw.trim().toUpperCase();
+        return switch (code) {
+            case "PM", "LEADER", "MEMBER" -> code;
+            default -> throw AppException.badRequest("Vai trò không hợp lệ. Chọn MEMBER, LEADER hoặc PM.");
+        };
+    }
+
+    private void assignSystemRole(UUID userId, String roleCode) {
+        userRoleMapper.deleteAllRolesForUser(userId);
+        userRoleMapper.assignRoleByCode(userId, roleCode);
     }
 
     public AdminEmployeeResponse updateEmployee(UUID id, SaveEmployeeRequest req) {

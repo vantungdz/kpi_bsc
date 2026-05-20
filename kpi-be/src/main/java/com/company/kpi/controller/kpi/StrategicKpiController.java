@@ -73,8 +73,7 @@ public class StrategicKpiController extends BaseController {
 
     /**
      * Member/Leader (KPI individual): 402.
-     * PM: 403.
-     * GM và các role khác: 404 (logic trong {@link com.company.kpi.service.kpi.StrategicKpiService}).
+     * PM / GM và các role khác: 404 (PM gửi GM qua bulk 404→403 khi goal setting).
      */
     private static String resolveStrategicActorRole(Authentication authentication) {
         Set<String> authorities =

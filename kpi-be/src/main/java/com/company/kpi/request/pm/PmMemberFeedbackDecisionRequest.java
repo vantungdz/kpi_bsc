@@ -14,7 +14,7 @@ public class PmMemberFeedbackDecisionRequest {
     @NotNull
     private UUID assignmentId;
 
-    /** true/false đều đóng feedback và trả KPI về 404; chỉ khác thông điệp nghiệp vụ. */
+    /** {@code true}/{@code false}: đóng feedback, assignment 407→404 (không bắt buộc lý do). */
     @NotNull
     private Boolean approve;
 }

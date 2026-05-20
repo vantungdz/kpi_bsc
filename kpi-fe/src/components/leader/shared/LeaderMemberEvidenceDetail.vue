@@ -1,6 +1,13 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { formatKpiTargetWithUnit } from '@/utils/kpiUnitCodes'
+import {
+  activateEvidenceAttachment,
+  evidenceAttachmentLabel,
+  evidenceAttachmentTitle,
+  mergeEvidenceAttachments,
+  splitEvidenceFilesAndUrls,
+} from '@/utils/memberKpiHelpers'
 
 const props = withDefaults(
   defineProps<{
@@ -39,39 +46,8 @@ const parsed = computed(() => {
         }))
       : []
 
-    const fromFiles = Array.isArray(o.files)
-      ? (o.files as unknown[])
-          .map((f) => {
-            if (!f || typeof f !== 'object') return null
-            const rec = f as Record<string, unknown>
-            const url = String(rec.url ?? '').trim()
-            if (!url) return null
-            const name = String(rec.name ?? rec.fileName ?? '').trim()
-            return { url, name: name || url }
-          })
-          .filter((x): x is Attachment => x != null)
-      : []
-
-    const fromEvd = Array.isArray(o.evd)
-      ? (o.evd as unknown[])
-          .map((f) => {
-            if (!f || typeof f !== 'object') return null
-            const rec = f as Record<string, unknown>
-            const url = String(rec.url ?? '').trim()
-            if (!url) return null
-            const name = String(rec.name ?? '').trim()
-            return { url, name: name || url }
-          })
-          .filter((x): x is Attachment => x != null)
-      : []
-
-    const seen = new Set<string>()
-    const attachments: Attachment[] = []
-    for (const a of [...fromFiles, ...fromEvd]) {
-      if (seen.has(a.url)) continue
-      seen.add(a.url)
-      attachments.push(a)
-    }
+    const split = splitEvidenceFilesAndUrls(o)
+    const attachments = mergeEvidenceAttachments(split.files, split.urls)
 
     return {
       rows,
@@ -112,6 +88,10 @@ function formatActualCell(actual: string): string {
 const hasTable = computed(() => parsed.value.rows.length > 0)
 const hasComment = computed(() => !!parsed.value.note)
 const hasAttachments = computed(() => parsed.value.attachments.length > 0)
+
+function onAttachmentClick(att: Attachment) {
+  void activateEvidenceAttachment(att)
+}
 </script>
 
 <template>
@@ -187,7 +167,7 @@ const hasAttachments = computed(() => parsed.value.attachments.length > 0)
                 class="border-l border-slate-100 px-3 py-2.5 text-center"
                 :class="actualCellClass"
               >
-                {{ formatActualCell(row.actual) }}
+                {{ row.actual || '-' }}
               </td>
             </tr>
             <tr v-if="!hasTable">
@@ -226,12 +206,12 @@ const hasAttachments = computed(() => parsed.value.attachments.length > 0)
             class="rounded-md border border-slate-100 bg-slate-50/80 px-3 py-2"
           >
             <a
-              :href="att.url"
-              target="_blank"
-              rel="noopener noreferrer"
+              href="#"
               class="break-all text-xs font-semibold text-indigo-600 underline hover:text-indigo-800"
+              :title="evidenceAttachmentTitle(att)"
+              @click.prevent="onAttachmentClick(att)"
             >
-              {{ att.name }}
+              {{ evidenceAttachmentLabel(att) }}
             </a>
           </li>
         </ul>

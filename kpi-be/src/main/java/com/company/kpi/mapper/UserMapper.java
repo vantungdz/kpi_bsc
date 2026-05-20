@@ -69,8 +69,10 @@ public interface UserMapper {
 
     List<PmMemberOptionAggregate> findMembersByPmDepartment(@Param("pmUserId") UUID pmUserId);
 
-     /** User active là {@code departments.manager_id} của ít nhất một department chưa xóa. */
+    /** User active có role PM — kèm tên department đang quản lý (nếu có). */
     List<DepartmentManagerOptionResponse> listActiveDepartmentManagers();
+
+    boolean existsActiveUserWithRoleCode(@Param("userId") UUID userId, @Param("roleCode") String roleCode);
 
     /** User có {@code job_titles} → {@code ranks.code} = {@code rankCode}. */
     List<MemberByRankOptionResponse> listActiveUsersByRankCode(@Param("rankCode") String rankCode);

@@ -155,6 +155,17 @@ export function parseNumericFromField(s: string): number | null {
   return Number.isFinite(v) ? v : null
 }
 
+/** Chỉ giữ ký tự hợp lệ khi gõ số nguyên / số thực không âm (một dấu thập phân). */
+export function sanitizeNumericDecimalInput(raw: string): string {
+  if (!raw) return ''
+  let s = raw.replace(/,/g, '.').replace(/-/g, '').replace(/[^\d.]/g, '')
+  const dotIdx = s.indexOf('.')
+  if (dotIdx !== -1) {
+    s = s.slice(0, dotIdx) + '.' + s.slice(dotIdx + 1).replace(/\./g, '')
+  }
+  return s
+}
+
 // ── Evidence form mode ───────────────────────────────────────────────────────
 /** Chuẩn hóa mã rule từ API (number, string, BigDecimal JSON). */
 export function normalizeCalculationRuleCode(raw: unknown): number | null {
@@ -175,26 +186,69 @@ export function resolveFormMode(item: KpiItem): EvidenceFormMode {
 /** PM portfolio — parse chuỗi lưu ở assignment (JSON hoặc text thuần legacy). */
 export type PmEvidencePlanRow = { plan: string; actual: string; comment: string; content: string }
 
-/** Link/file đính kèm trong evidences (member có thể lưu `urls`, `files`, hoặc legacy `evd`). */
+/** Link/file đính kèm trong evidences (`files` = upload, `urls` = link; legacy `evd`). */
 export type PmEvidenceAttachment = { url: string; name: string }
 
-function extractPmEvidenceAttachments(o: Record<string, unknown>): PmEvidenceAttachment[] {
-  const out: PmEvidenceAttachment[] = []
-  const pushArr = (arr: unknown) => {
-    if (!Array.isArray(arr)) return
-    for (const x of arr) {
-      if (!x || typeof x !== 'object') continue
-      const r = x as Record<string, unknown>
-      const url = String(r.url ?? '').trim()
-      if (!url) continue
-      const name = String(r.name ?? '').trim()
-      out.push({ url, name })
-    }
+export function isUploadedEvidenceFileUrl(url: string): boolean {
+  return /\/uploads\//i.test(String(url ?? '').trim())
+}
+
+function mapEvidencePair(x: unknown): PmEvidenceAttachment | null {
+  if (!x || typeof x !== 'object') return null
+  const r = x as Record<string, unknown>
+  const url = String(r.url ?? '').trim()
+  if (!url) return null
+  const name = String(r.name ?? r.fileName ?? '').trim()
+  return { url, name: name || url }
+}
+
+function mapEvidencePairArray(arr: unknown): PmEvidenceAttachment[] {
+  if (!Array.isArray(arr)) return []
+  return arr.map(mapEvidencePair).filter((x): x is PmEvidenceAttachment => x != null)
+}
+
+/** Tách `files` (upload) và `urls` (link); dữ liệu cũ gộp trong `files` được chuyển sang `urls` nếu không phải upload. */
+export function splitEvidenceFilesAndUrls(o: Record<string, unknown>): {
+  files: PmEvidenceAttachment[]
+  urls: PmEvidenceAttachment[]
+} {
+  const files: PmEvidenceAttachment[] = []
+  const urls: PmEvidenceAttachment[] = []
+  const seen = new Set<string>()
+
+  const push = (target: PmEvidenceAttachment[], item: PmEvidenceAttachment) => {
+    if (seen.has(item.url)) return
+    seen.add(item.url)
+    target.push(item)
   }
-  pushArr(o.urls)
-  pushArr(o.files)
-  pushArr(o.evd)
+
+  for (const item of mapEvidencePairArray(o.files)) {
+    if (isUploadedEvidenceFileUrl(item.url)) push(files, item)
+    else push(urls, item)
+  }
+  for (const item of [...mapEvidencePairArray(o.urls), ...mapEvidencePairArray(o.evd)]) {
+    push(urls, item)
+  }
+  return { files, urls }
+}
+
+export function mergeEvidenceAttachments(
+  files: PmEvidenceAttachment[],
+  urls: PmEvidenceAttachment[],
+): PmEvidenceAttachment[] {
+  const seen = new Set<string>()
+  const out: PmEvidenceAttachment[] = []
+  for (const a of [...files, ...urls]) {
+    if (seen.has(a.url)) continue
+    seen.add(a.url)
+    out.push(a)
+  }
   return out
+}
+
+function extractPmEvidenceAttachments(o: Record<string, unknown>): PmEvidenceAttachment[] {
+  const { files, urls } = splitEvidenceFilesAndUrls(o)
+  return mergeEvidenceAttachments(files, urls)
 }
 
 export function parsePmPortfolioEvidenceString(raw: string | null | undefined): {
@@ -246,10 +300,141 @@ export function parsePmPortfolioEvidenceString(raw: string | null | undefined): 
 
 /** Chuẩn hoá href cho link evidence (giữ path tuyệt đối `/api/...`). */
 export function normalizeEvidenceHref(url: string): string {
+  const internal = resolveEvidenceDownloadUrl(url)
+  if (internal.startsWith('/api/uploads/')) return internal
   const u = url.trim()
   if (!u) return '#'
   if (/^https?:\/\//i.test(u) || u.startsWith('/')) return u
   return `https://${u}`
+}
+
+/** Lấy tên file đã lưu trên server từ URL `/api/uploads/{uuid}.ext`. */
+export function extractStoredEvidenceFileName(url: string): string | null {
+  const u = url.trim()
+  const m = u.match(/\/uploads\/([^/?#]+)/i)
+  return m?.[1] ?? null
+}
+
+/**
+ * Chuẩn hoá URL tải file nội bộ về cùng origin (tránh CORS khi DB lưu http://localhost:8081/...).
+ */
+export function resolveEvidenceDownloadUrl(url: string): string {
+  const u = url.trim()
+  if (!u) return '#'
+  const pathMatch = u.match(/\/api\/uploads\/[^?#]+/i)
+  if (pathMatch) return pathMatch[0]
+  if (u.startsWith('/api/uploads/')) return u
+  if (/^https?:\/\//i.test(u)) {
+    try {
+      const pathname = new URL(u).pathname
+      const idx = pathname.indexOf('/api/uploads/')
+      if (idx >= 0) return pathname.slice(idx)
+    } catch {
+      /* ignore */
+    }
+  }
+  return u
+}
+
+export type EvidenceAttachmentRef = { url: string; name?: string }
+
+/** Nhãn hiển thị: file upload → tên file; link ngoài → URL hoặc tên. */
+export function evidenceAttachmentLabel(att: EvidenceAttachmentRef): string {
+  const url = String(att.url ?? '').trim()
+  const name = String(att.name ?? '').trim()
+  if (isUploadedEvidenceFileUrl(url) && name) return name
+  return name || url || 'evidence'
+}
+
+export function evidenceAttachmentTitle(att: EvidenceAttachmentRef): string {
+  const url = String(att.url ?? '').trim()
+  const name = String(att.name ?? '').trim()
+  if (name && url && name !== url) return `${name} — ${url}`
+  return url || name
+}
+
+/** File upload → tải xuống; link ngoài → mở tab mới. */
+export async function activateEvidenceAttachment(att: EvidenceAttachmentRef): Promise<void> {
+  const url = String(att.url ?? '').trim()
+  if (!url) return
+  if (isUploadedEvidenceFileUrl(url)) {
+    await downloadEvidenceAttachment(url, evidenceAttachmentLabel(att))
+    return
+  }
+  window.open(normalizeEvidenceHref(url), '_blank', 'noopener,noreferrer')
+}
+
+/** Tải file minh chứng (upload nội bộ hoặc URL ngoài). */
+export async function downloadEvidenceAttachment(
+  url: string,
+  filename?: string,
+): Promise<void> {
+  const name = (filename ?? '').trim() || 'evidence'
+  const storedName = extractStoredEvidenceFileName(url)
+
+  if (storedName) {
+    try {
+      const token = localStorage.getItem('kpi_accessToken')
+      const headers: Record<string, string> = {}
+      if (token) headers.Authorization = `Bearer ${token}`
+      const apiBase = (import.meta.env.VITE_API_BASE_URL ?? '/api/v1').replace(/\/$/, '')
+      const downloadUrl =
+        `${apiBase}/upload/download/${encodeURIComponent(storedName)}?as=${encodeURIComponent(name)}`
+      const response = await fetch(downloadUrl, { headers })
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+      const blob = await response.blob()
+      const objectUrl = URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      anchor.href = objectUrl
+      anchor.download = name
+      anchor.style.display = 'none'
+      document.body.appendChild(anchor)
+      anchor.click()
+      anchor.remove()
+      URL.revokeObjectURL(objectUrl)
+      return
+    } catch {
+      // fallback: static file cùng origin
+    }
+  }
+
+  const href = resolveEvidenceDownloadUrl(url)
+  if (!href || href === '#') return
+
+  const isInternalUpload = href.includes('/uploads/')
+
+  if (isInternalUpload) {
+    try {
+      const token = localStorage.getItem('kpi_accessToken')
+      const headers: Record<string, string> = {}
+      if (token) headers.Authorization = `Bearer ${token}`
+      const response = await fetch(href, { headers })
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+      const blob = await response.blob()
+      const objectUrl = URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      anchor.href = objectUrl
+      anchor.download = name
+      anchor.style.display = 'none'
+      document.body.appendChild(anchor)
+      anchor.click()
+      anchor.remove()
+      URL.revokeObjectURL(objectUrl)
+      return
+    } catch {
+      /* fallback below */
+    }
+  }
+
+  const anchor = document.createElement('a')
+  anchor.href = href.startsWith('/') ? href : normalizeEvidenceHref(href)
+  anchor.download = name
+  anchor.target = '_blank'
+  anchor.rel = 'noopener noreferrer'
+  anchor.style.display = 'none'
+  document.body.appendChild(anchor)
+  anchor.click()
+  anchor.remove()
 }
 
 export function isEvidenceImageUrl(url: string): boolean {
@@ -365,9 +550,9 @@ export function ratioLabels(calcTypeCode: number | null | undefined): {
   formula: string
 } {
   if (calcTypeCode === CALC_TYPE_PLAN_OVER_ACTUAL) {
-    return { plan: 'Plan (số)', actual: 'Actual (số)', formula: 'Plan / Actual × 100%' }
+    return { plan: 'Plan (number)', actual: 'Actual (number)', formula: 'Plan / Actual × 100%' }
   }
-  return { plan: 'Plan (số)', actual: 'Actual (số)', formula: 'Actual / Plan × 100%' }
+  return { plan: 'Plan (number)', actual: 'Actual (number)', formula: 'Actual / Plan × 100%' }
 }
 
 // ── KPI guideline tooltips ───────────────────────────────────────────────────

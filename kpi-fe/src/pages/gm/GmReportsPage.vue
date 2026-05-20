@@ -208,7 +208,7 @@ async function loadLevelDistribution() {
     renderScoreChart();
   } catch (e) {
     errorMsg.value =
-      e instanceof Error ? e.message : "Không tải được Performance Levels";
+      e instanceof Error ? e.message : "Could not load Performance Levels";
   } finally {
     loading.value = false;
   }
@@ -232,7 +232,7 @@ async function loadBellCurve() {
     renderBellChart();
   } catch (e) {
     errorMsg.value =
-      e instanceof Error ? e.message : "Không tải được Bell Curve";
+      e instanceof Error ? e.message : "Could not load Bell Curve";
   } finally {
     loading.value = false;
   }
@@ -249,7 +249,7 @@ async function loadSectionAnalytics() {
     renderRadarChart();
   } catch (e) {
     errorMsg.value =
-      e instanceof Error ? e.message : "Không tải được Section Analytics";
+      e instanceof Error ? e.message : "Could not load Section Analytics";
   } finally {
     loading.value = false;
   }
@@ -264,7 +264,7 @@ async function loadCompliance() {
     renderDoughnutChart();
   } catch (e) {
     errorMsg.value =
-      e instanceof Error ? e.message : "Không tải được Compliance";
+      e instanceof Error ? e.message : "Could not load Compliance";
   } finally {
     loading.value = false;
   }
@@ -293,7 +293,7 @@ function renderScoreChart() {
   const datasets = visibleSeries.map((y) => {
     const op = yearOpacities[String(y.year)] ?? 1.0;
     return {
-      label: `Năm ${y.year}`,
+      label: `Year ${y.year}`,
       data: y.counts,
       backgroundColor: ld.levels.map((_, i) =>
         rgba(LEVEL_COLORS[i % LEVEL_COLORS.length]!, op),
@@ -315,13 +315,13 @@ function renderScoreChart() {
           position: "top",
           labels: { usePointStyle: true, boxWidth: 8 },
         },
-        tooltip: { callbacks: { title: (c) => "Mức đánh giá: " + c[0].label } },
+        tooltip: { callbacks: { title: (c) => "Rating level: " + c[0].label } },
       },
       scales: {
         y: {
           beginAtZero: true,
           grid: { color: "#f1f5f9" },
-          title: { display: true, text: "Số lượng NS" },
+          title: { display: true, text: "Employee Count" },
         },
         x: { grid: { display: false }, ticks: { font: { size: 10 } } },
       },
@@ -373,7 +373,7 @@ function renderBellChart() {
         x: { grid: { display: false } },
         y: {
           beginAtZero: true,
-          title: { display: true, text: "Số lượng Nhân sự" },
+          title: { display: true, text: "Employee Count" },
         },
       },
     },
@@ -394,7 +394,7 @@ function renderSectionBarChart() {
       labels,
       datasets: [
         {
-          label: "Điểm Trung Bình Bộ Phận",
+          label: "Section Average Score",
           data,
           backgroundColor: "#3b82f6",
           borderRadius: 6,
@@ -452,7 +452,7 @@ function renderDoughnutChart() {
   const cfg: ChartConfiguration<"doughnut"> = {
     type: "doughnut",
     data: {
-      labels: ["Đang chờ Quản lý duyệt", "NS chưa nộp Evidence"],
+      labels: ["Pending Manager Approval", "Missing Employee Evidence"],
       datasets: [
         {
           data: [s.pendingApproval, s.missingEvidence],
@@ -522,10 +522,10 @@ onBeforeUnmount(() => {
 });
 
 const reportLabel: Record<ReportKey, string> = {
-  levels: "1. Phân Bổ Khung Điểm Đánh Giá (Performance Levels)",
-  bell: "2. Phân Bổ Xếp Loại Theo Bộ Phận (Section Bell Curve)",
-  sections: "3. So Sánh Hiệu Suất Các Bộ Phận (Section Analytics)",
-  compliance: "4. Tình Trạng Chốt Điểm & Nút Thắt (Compliance)",
+  levels: "1. Performance Level Distribution",
+  bell: "2. Section Bell Curve",
+  sections: "3. Section Performance Comparison",
+  compliance: "4. Scoring Closure & Bottlenecks",
 };
 
 const levelTagClass = (code: string) => {
@@ -618,10 +618,10 @@ function levelCountForDetailYear(idx: number): number {
         </div>
         <div>
           <h1 class="text-lg font-bold text-slate-900 leading-tight">
-            Trung Tâm Báo Cáo Chuyên Sâu
+            Advanced Reporting Center
           </h1>
           <p class="text-xs text-slate-500 font-medium">
-            Dành cho C-Level &amp; General Manager
+            For C-Level &amp; General Manager
           </p>
         </div>
       </div>
@@ -631,7 +631,7 @@ function levelCountForDetailYear(idx: number): number {
         <span
           class="text-sm font-bold text-slate-700 whitespace-nowrap hidden md:block pl-2"
         >
-          <i class="fas fa-filter mr-1" /> Chọn loại Báo cáo:
+          <i class="fas fa-filter mr-1" /> Select report type:
         </span>
         <select
           v-model="selectedReport"
@@ -657,7 +657,7 @@ function levelCountForDetailYear(idx: number): number {
     <!-- ============================================================ -->
     <div v-if="selectedReport === 'levels'" class="space-y-6">
       <h2 class="text-xl font-bold text-slate-900">
-        Phân Bổ Khung Điểm Đánh Giá (Performance Distribution)
+        Performance Level Distribution
       </h2>
 
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -668,7 +668,7 @@ function levelCountForDetailYear(idx: number): number {
             class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6"
           >
             <h3 class="text-sm font-bold text-slate-700">
-              Biểu đồ phân bổ điểm số nhân sự theo tiêu chuẩn
+              Employee score distribution by rating standard
             </h3>
             <div class="flex flex-wrap items-center gap-3">
               <div
@@ -679,7 +679,7 @@ function levelCountForDetailYear(idx: number): number {
                   v-model="sectionFilter"
                   class="bg-transparent text-sm font-semibold text-slate-700 outline-none cursor-pointer pr-2"
                 >
-                  <option value="all">Toàn Công Ty</option>
+                  <option value="all">Company-wide</option>
                   <option
                     v-for="s in levelSectionOptions"
                     :key="s.id"
@@ -694,7 +694,7 @@ function levelCountForDetailYear(idx: number): number {
               >
                 <span
                   class="text-xs font-bold text-slate-500 uppercase tracking-wider"
-                  >Năm:</span
+                  >Year:</span
                 >
                 <label
                   v-for="y in LEVEL_YEAR_SLOTS.map(String)"
@@ -723,14 +723,14 @@ function levelCountForDetailYear(idx: number): number {
         >
           <div class="flex justify-between items-center mb-4">
             <h3 class="text-sm font-bold text-slate-700">
-              Chi Tiết Mức Đánh Giá (Levels)
+              Rating Level Details
             </h3>
             <span class="text-xs font-medium text-slate-500">
               <template v-if="levelDetailYear != null">
-                Khung {{ levelData?.scaleYear ?? levelDetailYear }} · Kỳ
-                {{ levelDetailYear }}: {{ levelData?.totalCount ?? 0 }} NS
+                Scale {{ levelData?.scaleYear ?? levelDetailYear }} · Period
+                {{ levelDetailYear }}: {{ levelData?.totalCount ?? 0 }} employees
               </template>
-              <template v-else>Chọn ít nhất một năm để xem báo cáo</template>
+              <template v-else>Select at least one year to view the report</template>
             </span>
           </div>
           <div class="space-y-2 overflow-y-auto flex-1 pr-2 min-h-[300px]">
@@ -753,14 +753,14 @@ function levelCountForDetailYear(idx: number): number {
                   <p
                     class="text-[10px] text-slate-700 font-semibold uppercase tracking-wider"
                   >
-                    Bậc (Pitch): {{ lv.pitch }}
+                    Pitch: {{ lv.pitch }}
                   </p>
                 </div>
               </div>
               <span class="font-bold text-slate-800 text-sm">
                 {{ levelCountForDetailYear(idx) }}
                 <span class="text-[10px] text-slate-500 font-normal ml-1"
-                  >NS</span
+                  >employees</span
                 >
               </span>
             </div>
@@ -773,7 +773,7 @@ function levelCountForDetailYear(idx: number): number {
       >
         <div class="p-5 border-b border-slate-100 bg-slate-50/50">
           <h3 class="text-sm font-bold text-slate-800">
-            Danh sách Cán bộ Cốt cán đạt mức Đánh giá Cao (O1, A1, A2)
+            Key Employees with High Ratings (O1, A1, A2)
           </h3>
         </div>
         <table class="w-full text-left">
@@ -781,11 +781,11 @@ function levelCountForDetailYear(idx: number): number {
             class="bg-white text-[11px] uppercase tracking-wider text-slate-400 font-bold border-b border-slate-200"
           >
             <tr>
-              <th class="py-3 px-5">Nhân sự</th>
-              <th class="py-3 px-5">Bộ Phận</th>
-              <th class="py-3 px-5 text-center">Xếp Loại (Level)</th>
+              <th class="py-3 px-5">Employee</th>
+              <th class="py-3 px-5">Section</th>
+              <th class="py-3 px-5 text-center">Rating Level</th>
               <th class="py-3 px-5 text-right">
-                Điểm KPI {{ levelDetailYear ?? "—" }}
+                KPI Score {{ levelDetailYear ?? "—" }}
               </th>
             </tr>
           </thead>
@@ -795,7 +795,7 @@ function levelCountForDetailYear(idx: number): number {
                 colspan="4"
                 class="py-6 px-5 text-center text-sm text-slate-400"
               >
-                Chưa có nhân sự đạt mức cao trong kỳ này
+                No employees reached a high rating in this period
               </td>
             </tr>
             <tr
@@ -839,11 +839,11 @@ function levelCountForDetailYear(idx: number): number {
       >
         <div class="flex items-center gap-2">
           <h2 class="text-xl font-bold text-slate-900">
-            Phân Bổ Xếp Loại Theo Bộ Phận (Section Bell Curve)
+            Section Bell Curve
           </h2>
           <span
             class="bg-indigo-100 text-indigo-700 text-xs font-bold px-2 py-0.5 rounded"
-            >Kỳ đánh giá: {{ currentYear }}</span
+            >Evaluation period: {{ currentYear }}</span
           >
         </div>
       </div>
@@ -856,11 +856,11 @@ function levelCountForDetailYear(idx: number): number {
         >
           <div>
             <h3 class="text-sm font-bold text-slate-700">
-              Biểu Đồ Đường Chuông (Phân Khúc Chất Lượng)
+              Bell Curve Chart (Quality Segments)
             </h3>
             <p class="text-xs text-slate-500 mt-1">
-              Mỗi đường đại diện cho một Bộ Phận (Section), trục ngang là các
-              mức đánh giá từ Kém đến Xuất Sắc.
+              Each line represents one section; the horizontal axis shows
+              rating levels from low to excellent.
             </p>
           </div>
           <div
@@ -868,7 +868,7 @@ function levelCountForDetailYear(idx: number): number {
           >
             <span
               class="text-xs font-bold text-slate-500 uppercase tracking-wider mr-2 hidden sm:block"
-              >Hiển thị Bộ Phận:</span
+              >Show Sections:</span
             >
             <label
               class="flex items-center gap-1.5 cursor-pointer hover:bg-slate-100 px-2 py-1 rounded"
@@ -878,7 +878,7 @@ function levelCountForDetailYear(idx: number): number {
                 v-model="bellSectionEnabled.all"
                 class="w-4 h-4 text-indigo-600 rounded border-slate-300"
               />
-              <span class="text-sm font-bold text-slate-800">Toàn C.Ty</span>
+              <span class="text-sm font-bold text-slate-800">Company-wide</span>
             </label>
             <div class="w-px h-4 bg-slate-300 mx-1 hidden sm:block"></div>
             <label
@@ -909,7 +909,7 @@ function levelCountForDetailYear(idx: number): number {
           <p
             class="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1"
           >
-            Điểm TB Hệ Thống
+            System Average Score
           </p>
           <p class="text-3xl font-bold text-slate-800">
             {{
@@ -919,7 +919,7 @@ function levelCountForDetailYear(idx: number): number {
             }}
           </p>
           <p class="text-xs text-slate-400 mt-2">
-            Tổng {{ bellData?.summary.totalCount ?? 0 }} NS có điểm
+            Total {{ bellData?.summary.totalCount ?? 0 }} employees with scores
           </p>
         </div>
         <div
@@ -928,13 +928,13 @@ function levelCountForDetailYear(idx: number): number {
           <p
             class="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1"
           >
-            Bộ Phận Hiệu Suất Cao Nhất
+            Highest Performing Section
           </p>
           <p class="text-2xl font-bold text-slate-800">
             {{ bellData?.summary.bestSectionName || "—" }}
           </p>
           <p class="text-xs text-emerald-600 font-semibold mt-2">
-            Điểm tập trung phía Xuất Sắc
+            Scores concentrated near excellent
           </p>
         </div>
         <div
@@ -943,14 +943,14 @@ function levelCountForDetailYear(idx: number): number {
           <p
             class="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1"
           >
-            Nhóm Xuất Sắc (≥ A2)
+            Excellent Group (>= A2)
           </p>
           <p class="text-3xl font-bold text-slate-800">
-            {{ bellData?.summary.topGroupCount ?? 0 }} NS
+            {{ bellData?.summary.topGroupCount ?? 0 }} employees
           </p>
           <p class="text-xs text-slate-400 mt-2">
             {{ Number(bellData?.summary.topGroupPercent ?? 0).toFixed(1) }}%
-            tổng
+            total
           </p>
         </div>
         <div
@@ -959,13 +959,13 @@ function levelCountForDetailYear(idx: number): number {
           <p
             class="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1"
           >
-            Bộ Phận Cần Cải Thiện
+            Section Needing Improvement
           </p>
           <p class="text-2xl font-bold text-slate-800">
             {{ bellData?.summary.worstSectionName || "—" }}
           </p>
           <p class="text-xs text-rose-500 font-semibold mt-2">
-            Điểm tập trung phía thấp
+            Scores concentrated on the low side
           </p>
         </div>
       </div>
@@ -976,14 +976,14 @@ function levelCountForDetailYear(idx: number): number {
     <!-- ============================================================ -->
     <div v-if="selectedReport === 'sections'" class="space-y-6">
       <h2 class="text-xl font-bold text-slate-900">
-        Đánh Giá &amp; So Sánh Hiệu Suất Các Bộ Phận (Sections)
+        Section Performance Evaluation &amp; Comparison
       </h2>
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div
           class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col items-center"
         >
           <h3 class="text-sm font-bold text-slate-700 mb-4 w-full text-left">
-            Độ bao phủ Kỹ năng/Nghiệp vụ giữa các Bộ Phận
+            Skills/Business Coverage Across Sections
           </h3>
           <div class="relative w-full max-w-[400px] aspect-square">
             <canvas ref="radarCanvas"></canvas>
@@ -991,7 +991,7 @@ function levelCountForDetailYear(idx: number): number {
         </div>
         <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
           <h3 class="text-sm font-bold text-slate-700 mb-4">
-            Điểm Trung Bình Cuối Năm Của Các Bộ Phận
+            Year-End Average Scores by Section
           </h3>
           <div class="relative h-80 w-full">
             <canvas ref="sectionBarCanvas"></canvas>
@@ -1005,14 +1005,14 @@ function levelCountForDetailYear(idx: number): number {
     <!-- ============================================================ -->
     <div v-if="selectedReport === 'compliance'" class="space-y-6">
       <h2 class="text-xl font-bold text-slate-900">
-        Tình Trạng Chốt Điểm &amp; Nghẽn Cổ Chai (Bottlenecks)
+        Scoring Closure Status &amp; Bottlenecks
       </h2>
       <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div
           class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col items-center"
         >
           <h3 class="text-sm font-bold text-slate-700 mb-4 w-full text-left">
-            Tiến Độ Chấm Điểm Cuối Năm
+            Year-End Scoring Progress
           </h3>
           <div class="flex w-full flex-col items-center">
             <div class="relative h-64 w-64 shrink-0">
@@ -1030,21 +1030,21 @@ function levelCountForDetailYear(idx: number): number {
             </div>
             <ul
               class="mt-3 flex max-w-xs flex-wrap justify-center gap-x-4 gap-y-1.5 text-left text-[11px] font-medium text-slate-600"
-              aria-label="Chú thích biểu đồ tiến độ"
+              aria-label="Progress chart legend"
             >
               <li class="flex items-center gap-1.5">
                 <span
                   class="h-2 w-2 shrink-0 rounded-full bg-amber-500"
                   aria-hidden="true"
                 />
-                Đang chờ Quản lý duyệt
+                Pending Manager Approval
               </li>
               <li class="flex items-center gap-1.5">
                 <span
                   class="h-2 w-2 shrink-0 rounded-full bg-rose-500"
                   aria-hidden="true"
                 />
-                NS chưa nộp Evidence
+                Missing Employee Evidence
               </li>
             </ul>
           </div>
@@ -1057,7 +1057,7 @@ function levelCountForDetailYear(idx: number): number {
           >
             <i class="fas fa-triangle-exclamation text-rose-500" />
             <h3 class="text-sm font-bold text-slate-900">
-              Danh Sách Vi Phạm Quy Trình / Quá Hạn Chấm Điểm
+              Process Violations / Overdue Scoring List
             </h3>
           </div>
           <div class="min-h-0 flex-1 overflow-y-auto overscroll-y-contain">
@@ -1066,10 +1066,10 @@ function levelCountForDetailYear(idx: number): number {
                 class="sticky top-0 z-10 border-b border-slate-200 bg-white text-[11px] font-bold uppercase tracking-wider text-slate-400 shadow-sm"
               >
                 <tr>
-                  <th class="py-3 px-5">Nhân sự / Quản lý</th>
-                  <th class="py-3 px-5">Bộ Phận</th>
-                  <th class="py-3 px-5">Trạng thái tắc nghẽn</th>
-                  <th class="py-3 px-5 text-right">Trạng thái</th>
+                  <th class="py-3 px-5">Employee / Manager</th>
+                  <th class="py-3 px-5">Section</th>
+                  <th class="py-3 px-5">Bottleneck Status</th>
+                  <th class="py-3 px-5 text-right">Status</th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-slate-100">
@@ -1078,7 +1078,7 @@ function levelCountForDetailYear(idx: number): number {
                     colspan="4"
                     class="py-6 px-5 text-center text-sm text-slate-400"
                   >
-                    Không có nút thắt nào trong kỳ này
+                    No bottlenecks in this period
                   </td>
                 </tr>
                 <tr

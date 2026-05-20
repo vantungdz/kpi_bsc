@@ -252,7 +252,11 @@ export const pmKpiService = {
     apiPmMemberKpiApprovalDecision(body).then((r) => r.data),
   submitFeedbackToGm: (body: { year: number; assignmentId: string; feedbackNote: string }) =>
     apiPmSubmitFeedbackToGm(body).then((r) => r.data),
-  decideMemberFeedback: (body: { year: number; assignmentId: string; approve: boolean }) =>
+  decideMemberFeedback: (body: {
+    year: number
+    assignmentId: string
+    approve: boolean
+  }) =>
     apiPmMemberFeedbackDecision(body).then((r) => r.data),
   acceptMemberFeedbackWithCascade: (body: Parameters<typeof apiPmAcceptMemberFeedbackWithCascade>[0]) =>
     apiPmAcceptMemberFeedbackWithCascade(body).then((r) => r.data),

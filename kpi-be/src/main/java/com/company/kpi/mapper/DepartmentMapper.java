@@ -56,6 +56,17 @@ public interface DepartmentMapper {
             @Param("supervisorId") UUID supervisorId,
             @Param("isPrimary") boolean isPrimary);
 
+    int updateUserDepartmentSupervisor(
+            @Param("userId") UUID userId,
+            @Param("departmentId") UUID departmentId,
+            @Param("supervisorId") UUID supervisorId);
+
+    /** Cập nhật supervisor cho mọi thành viên phòng (trừ manager). */
+    int updateMemberSupervisorsForDepartment(
+            @Param("departmentId") UUID departmentId,
+            @Param("supervisorId") UUID supervisorId,
+            @Param("excludeUserId") UUID excludeUserId);
+
     int deleteUserDepartment(@Param("departmentId") UUID departmentId, @Param("userId") UUID userId);
 
     /** Xóa mọi membership của user trừ phòng {@code keepDepartmentId} (dùng khi “chuyển” sang phòng mới). */
@@ -86,5 +97,11 @@ public interface DepartmentMapper {
 
     /** Lấy manager_id (PM) của phòng ban (departments.manager_id). */
     UUID getManagerIdByDepartmentId(@Param("departmentId") UUID departmentId);
+
+    UUID getParentIdByDepartmentId(@Param("departmentId") UUID departmentId);
+
+    int updateDepartmentManager(
+            @Param("departmentId") UUID departmentId,
+            @Param("managerId") UUID managerId);
 }
 

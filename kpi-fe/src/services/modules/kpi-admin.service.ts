@@ -14,6 +14,7 @@ import type {
   RankOption,
   JobTitleOption,
   AdminKpiCycle,
+  LeaderMemberCandidate,
 } from "@/mocks/admin.mock";
 
 /** Chuẩn hóa list từ BaseResponse hoặc mảng thô. */
@@ -181,6 +182,16 @@ export async function apiGetEmployees(): Promise<Employee[]> {
   return http.get("/admin/employees").then(unwrapList<Employee>);
 }
 
+export async function apiGetLeaderMemberCandidates(
+  departmentId: string,
+): Promise<LeaderMemberCandidate[]> {
+  return http
+    .get("/admin/employees/leader-member-candidates", {
+      params: { departmentId },
+    })
+    .then(unwrapList<LeaderMemberCandidate>);
+}
+
 export async function apiCreateEmployee(
   data: Record<string, unknown>,
 ): Promise<Employee> {
@@ -254,6 +265,8 @@ export const adminKpiService = {
   getRanks: () => apiGetRanks(),
   getJobTitles: () => apiGetJobTitles(),
   getEmployees: () => apiGetEmployees(),
+  getLeaderMemberCandidates: (departmentId: string) =>
+    apiGetLeaderMemberCandidates(departmentId),
   createEmployee: (data: Record<string, unknown>) => apiCreateEmployee(data),
   updateEmployee: (id: string, data: Record<string, unknown>) =>
     apiUpdateEmployee(id, data),

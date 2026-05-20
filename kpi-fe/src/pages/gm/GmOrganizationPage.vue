@@ -129,7 +129,7 @@ async function loadDepartments() {
     departmentsLocal.value = rows.map(mapGmDepartmentApiRowToWorkspaceMock)
     employeesLocal.value = members.map(mapGmMemberApiRowToEmployee)
   } catch (e: unknown) {
-    listError.value = e instanceof Error ? e.message : 'Không tải được dữ liệu tổ chức'
+    listError.value = e instanceof Error ? e.message : 'Could not load organization data'
     departmentsLocal.value = []
     employeesLocal.value = []
   } finally {
@@ -140,7 +140,7 @@ async function loadDepartments() {
 function mapGmMemberApiRowToEmployee(
   row: GmMemberApiRow,
 ): GmEmployeeRow {
-  const deptName = row.departmentName?.trim() || 'Chưa gán'
+  const deptName = row.departmentName?.trim() || 'Unassigned'
   const roleCode = row.roleCode?.trim().toUpperCase() || ''
   return {
     id: row.userId,
@@ -170,7 +170,7 @@ function employeeSearchText(m: GmEmployeeRow): string {
     m.rank,
     m.deptName,
     m.roleCode,
-    m.isDepartmentManager ? 'manager quản lý' : '',
+    m.isDepartmentManager ? 'department manager' : '',
     m.managingDepartmentName,
   ]
     .filter(Boolean)
@@ -425,8 +425,8 @@ function validateEdit(): boolean {
   editFormErrors.value = {}
   const err: typeof editFormErrors.value = {}
   const name = editSectionName.value.trim()
-  if (!name) err.name = 'Vui lòng nhập tên phòng ban.'
-  if (!editSectionManagerId.value.trim()) err.manager = 'Vui lòng chọn người quản lý.'
+  if (!name) err.name = 'Enter a department name.'
+  if (!editSectionManagerId.value.trim()) err.manager = 'Select a manager.'
   editFormErrors.value = err
   return Object.keys(err).length === 0
 }
@@ -444,9 +444,9 @@ async function saveEditSection() {
     })
     await refreshOrgListAndStrategicDiagnostics()
     closeEditSectionModal()
-    showPageToast(`Đã cập nhật phòng ban «${editSectionName.value.trim()}».`)
+    showPageToast(`Department "${editSectionName.value.trim()}" has been updated.`)
   } catch (e: unknown) {
-    showPageToast(e instanceof Error ? e.message : 'Không lưu được phòng ban', 'error')
+    showPageToast(e instanceof Error ? e.message : 'Could not save department', 'error')
   } finally {
     savingEdit.value = false
   }
@@ -487,10 +487,10 @@ function addMemberRankOrderIdx(r: string): number {
 
 const addMemberRankFilterButtonText = computed(() => {
   const sel = addMemberFilterRanks.value
-  if (!sel.length) return 'Tất cả rank'
+  if (!sel.length) return 'All ranks'
   const sorted = [...sel].sort((a, b) => addMemberRankOrderIdx(a) - addMemberRankOrderIdx(b))
   if (sorted.length <= 4) return `Rank: ${sorted.join(', ')}`
-  return `Rank: ${sorted.length} đã chọn`
+  return `Rank: ${sorted.length} selected`
 })
 
 const addMemberRankPopoverOpen = ref(false)
@@ -576,7 +576,7 @@ async function openAddMemberFromDetail() {
     addMemberCandidates.value = await apiListGmDepartmentMemberCandidates(deptId)
   } catch (e: unknown) {
     addMemberBulkError.value =
-      e instanceof Error ? e.message : 'Không tải được danh sách ứng viên từ server.'
+      e instanceof Error ? e.message : 'Could not load candidate list from the server.'
   } finally {
     addMemberCandidatesLoading.value = false
   }
@@ -598,7 +598,7 @@ async function saveAddMember() {
   if (!deptId) return
   const ids = [...addMemberSelectedIds.value]
   if (ids.length === 0) {
-    addMemberBulkError.value = 'Vui lòng chọn ít nhất một người.'
+    addMemberBulkError.value = 'Select at least one person.'
     return
   }
   addMemberBulkError.value = ''
@@ -608,9 +608,9 @@ async function saveAddMember() {
     await refreshOrgListAndStrategicDiagnostics()
     closeAddMemberModal()
     const n = ids.length
-    showPageToast(n === 1 ? `Đã thêm thành viên vào phòng ban.` : `Đã thêm ${n} thành viên vào phòng ban.`)
+    showPageToast(n === 1 ? `Member has been added to the department.` : `${n} members have been added to the department.`)
   } catch (e: unknown) {
-    addMemberBulkError.value = e instanceof Error ? e.message : 'Không thêm được thành viên.'
+    addMemberBulkError.value = e instanceof Error ? e.message : 'Could not add member.'
   } finally {
     savingMember.value = false
   }
@@ -623,7 +623,7 @@ const removingMember = ref(false)
 function openRemoveMemberModal(m: GmMemberDetailMock) {
   const isManager = departmentsLocal.value.some((d) => d.managerUserId === m.id)
   if (isManager) {
-    showPageToast('Không thể gỡ nhân viên đang là Quản lý của một phòng ban.', 'error')
+    showPageToast('Cannot remove an employee who is currently a department manager.', 'error')
     return
   }
   removeMemberTarget.value = m
@@ -644,10 +644,10 @@ async function confirmRemoveMember() {
   try {
     await apiRemoveGmDepartmentMember(deptId, m.id)
     await refreshOrgListAndStrategicDiagnostics()
-    showPageToast(`Đã gỡ «${m.name}» khỏi phòng ban.`)
+    showPageToast(`"${m.name}" has been removed from the department.`)
     closeRemoveMemberModal()
   } catch (e: unknown) {
-    showPageToast(e instanceof Error ? e.message : 'Không xóa được thành viên', 'error')
+    showPageToast(e instanceof Error ? e.message : 'Could not remove member', 'error')
     closeRemoveMemberModal()
   } finally {
     removingMember.value = false
@@ -687,9 +687,9 @@ async function confirmDeleteSection() {
     await refreshOrgListAndStrategicDiagnostics()
     const label = row.name
     closeDeleteSectionModal()
-    showPageToast(`Đã xóa phòng ban «${label}».`)
+    showPageToast(`Department "${label}" has been deleted.`)
   } catch (e: unknown) {
-    showPageToast(e instanceof Error ? e.message : 'Không xóa được phòng ban', 'error')
+    showPageToast(e instanceof Error ? e.message : 'Could not delete department', 'error')
     closeDeleteSectionModal()
   }
 }
@@ -714,7 +714,7 @@ function validate(): boolean {
   clearErrors()
   const err: typeof formErrors.value = {}
   const name = sectionName.value.trim()
-  if (!name) err.name = 'Vui lòng nhập tên phòng ban.'
+  if (!name) err.name = 'Enter a department name.'
   formErrors.value = err
   return Object.keys(err).length === 0
 }
@@ -730,10 +730,10 @@ async function onSubmit() {
       managerId: managerId.value.trim() || null,
     })
     await refreshOrgListAndStrategicDiagnostics()
-    showPageToast(`Đã thêm phòng ban «${name}»${managerLabel.value ? ` — ${managerLabel.value}` : ''}.`)
+    showPageToast(`Department "${name}" has been added${managerLabel.value ? ` - ${managerLabel.value}` : ''}.`)
     closeDrawer()
   } catch (e: unknown) {
-    showPageToast(e instanceof Error ? e.message : 'Không tạo được phòng ban', 'error')
+    showPageToast(e instanceof Error ? e.message : 'Could not create department', 'error')
   } finally {
     saving.value = false
   }
@@ -761,7 +761,7 @@ const deletingEmployee = ref(false)
 function onEmployeeTabRemoveMember(emp: GmEmployeeRow) {
   const isManager = departmentsLocal.value.some((d) => d.managerUserId === emp.id)
   if (isManager) {
-    showPageToast('Không thể xóa nhân viên đang là Quản lý của một phòng ban.', 'error')
+    showPageToast('Cannot delete an employee who is currently a department manager.', 'error')
     return
   }
   deleteEmployeeTarget.value = emp
@@ -782,10 +782,10 @@ async function confirmDeleteEmployee() {
     await apiDeleteGmMember(emp.id)
     await loadDepartments()
     gmRequestStrategicDiagnosticsReload?.()
-    showPageToast(`Đã xóa nhân viên «${emp.name}» khỏi hệ thống.`)
+    showPageToast(`Employee "${emp.name}" has been deleted from the system.`)
     closeDeleteEmployeeModal()
   } catch (e: unknown) {
-    showPageToast(e instanceof Error ? e.message : 'Không xóa được nhân viên', 'error')
+    showPageToast(e instanceof Error ? e.message : 'Could not delete employee', 'error')
     closeDeleteEmployeeModal()
   }
 }
@@ -816,7 +816,7 @@ function openCopyKpiDrawer(emp: GmEmployeeRow) {
           @click="activeTab = 'departments'"
         >
           <i class="fas fa-building text-xs" aria-hidden="true" />
-          Danh sách Phòng ban
+          Department List
         </button>
         <button
           type="button"
@@ -827,7 +827,7 @@ function openCopyKpiDrawer(emp: GmEmployeeRow) {
           @click="activeTab = 'employees'"
         >
           <i class="fas fa-users text-xs" aria-hidden="true" />
-          Danh sách Nhân viên
+          Employee List
           <span v-if="allMembers.length > 0"
             class="rounded-full px-1.5 py-0.5 text-[10px] font-bold"
             :class="activeTab === 'employees' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'"
@@ -845,7 +845,7 @@ function openCopyKpiDrawer(emp: GmEmployeeRow) {
 
       <div v-if="listLoading" class="flex justify-center py-8 text-sm font-medium text-slate-500">
         <i class="fas fa-spinner fa-spin mr-2 text-indigo-500" aria-hidden="true" />
-        Đang tải danh sách phòng ban…
+        Loading department list...
       </div>
 
       <!-- Tab: Phòng ban -->
@@ -861,7 +861,7 @@ function openCopyKpiDrawer(emp: GmEmployeeRow) {
           <input
             v-model="orgSearch"
             type="search"
-            placeholder="Tìm kiếm tên phòng ban hoặc quản lý..."
+            placeholder="Search department name or manager..."
             class="w-full rounded-lg border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm font-medium text-slate-800 shadow-sm outline-none transition-all placeholder:text-slate-400 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
           />
         </div>
@@ -909,8 +909,8 @@ function openCopyKpiDrawer(emp: GmEmployeeRow) {
             <button
               type="button"
               class="shrink-0 rounded p-1 text-slate-400 transition-colors hover:bg-rose-50 hover:text-rose-600"
-              aria-label="Xóa phòng ban"
-              title="Xóa phòng ban"
+              aria-label="Delete department"
+              title="Delete department"
               @click.stop="openDeleteSectionModal(sectionCard.row)"
             >
               <i class="fas fa-trash-can text-sm" aria-hidden="true" />
@@ -942,7 +942,7 @@ function openCopyKpiDrawer(emp: GmEmployeeRow) {
 
             <div>
               <p class="mb-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 sm:text-[11px]">
-                Nhân sự
+                Employees
               </p>
               <p class="flex items-center gap-1.5 text-xs font-bold text-slate-800 sm:text-sm">
                 <i class="fas fa-users text-sm text-blue-500" aria-hidden="true" />
@@ -956,7 +956,7 @@ function openCopyKpiDrawer(emp: GmEmployeeRow) {
           >
             <div class="flex min-w-0 flex-1 items-center">
               <template v-if="sectionCard.row.employeeCount <= 0">
-                <span class="text-xs font-medium text-slate-400">Chưa có nhân sự</span>
+                <span class="text-xs font-medium text-slate-400">No employees yet</span>
               </template>
               <div v-else class="flex -space-x-1.5">
                 <div
@@ -980,7 +980,7 @@ function openCopyKpiDrawer(emp: GmEmployeeRow) {
               class="inline-flex shrink-0 items-center gap-1 text-xs font-bold text-indigo-600 underline-offset-2 transition-colors hover:text-indigo-800 group-hover:underline sm:text-sm"
               @click.stop="openSectionDetail(sectionCard.row)"
             >
-              Quản lý
+              Manage
               <i
                 class="fas fa-arrow-right text-[11px] transition-transform group-hover:translate-x-0.5 sm:text-xs"
                 aria-hidden="true"
@@ -996,8 +996,8 @@ function openCopyKpiDrawer(emp: GmEmployeeRow) {
         class="rounded-2xl border border-dashed border-slate-200 bg-white px-6 py-14 text-center shadow-sm"
       >
         <i class="fas fa-magnifying-glass mb-3 text-3xl text-slate-300" aria-hidden="true" />
-        <p class="text-sm font-bold text-slate-600">Không có phòng ban khớp tìm kiếm</p>
-        <p class="mt-1 text-xs text-slate-400">Thử đổi từ khóa tìm kiếm theo tên, role hoặc quản lý.</p>
+        <p class="text-sm font-bold text-slate-600">No departments match your search</p>
+        <p class="mt-1 text-xs text-slate-400">Try a different keyword by name, role, or manager.</p>
       </div>
 
       <!-- Empty state -->
@@ -1007,9 +1007,9 @@ function openCopyKpiDrawer(emp: GmEmployeeRow) {
       >
         <div class="mx-auto flex max-w-md flex-col items-center">
           <i class="fas fa-sitemap mb-4 text-5xl text-slate-300 sm:text-6xl" aria-hidden="true" />
-          <h2 class="text-lg font-bold text-slate-600">Chưa có dữ liệu hiển thị</h2>
+          <h2 class="text-lg font-bold text-slate-600">No data to display yet</h2>
           <p class="mt-2 text-sm leading-relaxed text-slate-400">
-            Bấm &quot;Thêm phòng ban mới&quot; để bắt đầu thiết lập sơ đồ tổ chức.
+            Click &quot;Add new department&quot; to start setting up the organization chart.
           </p>
         </div>
       </div>
@@ -1025,7 +1025,7 @@ function openCopyKpiDrawer(emp: GmEmployeeRow) {
           <input
             v-model="employeeSearch"
             type="search"
-            placeholder="Tìm theo tên, phòng ban, rank..."
+            placeholder="Search by name, department, rank..."
             class="w-full rounded-lg border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm font-medium text-slate-800 shadow-sm outline-none transition-all placeholder:text-slate-400 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
           />
         </div>
@@ -1035,11 +1035,11 @@ function openCopyKpiDrawer(emp: GmEmployeeRow) {
           <table class="w-full text-sm">
             <thead>
               <tr class="border-b border-slate-100 bg-slate-50">
-                <th class="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500">Họ tên</th>
-                <th class="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500">Phòng ban</th>
+                <th class="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500">Full Name</th>
+                <th class="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500">Department</th>
                 <th class="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500">Rank</th>
-                <th class="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500">Vai trò</th>
-                <th class="px-4 py-3 text-center text-[11px] font-bold uppercase tracking-wider text-slate-500">Thao tác</th>
+                <th class="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500">Role</th>
+                <th class="px-4 py-3 text-center text-[11px] font-bold uppercase tracking-wider text-slate-500">Actions</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-slate-100">
@@ -1059,7 +1059,7 @@ function openCopyKpiDrawer(emp: GmEmployeeRow) {
                     <div class="min-w-0">
                       <p class="font-semibold text-slate-800">{{ emp.name }}</p>
                       <p v-if="emp.isDepartmentManager && emp.managingDepartmentName" class="mt-0.5 truncate text-[11px] font-medium text-emerald-700">
-                        Quản lý: {{ emp.managingDepartmentName }}
+                        Manager: {{ emp.managingDepartmentName }}
                       </p>
                     </div>
                   </div>
@@ -1079,7 +1079,7 @@ function openCopyKpiDrawer(emp: GmEmployeeRow) {
                     <span
                       v-if="emp.roleCode === 'ADMIN'"
                       class="inline-flex items-center gap-1 rounded-md border border-violet-200 bg-violet-50 px-2 py-0.5 text-[11px] font-bold text-violet-700"
-                      title="Tài khoản quản trị hệ thống"
+                      title="System administrator account"
                     >
                       <i class="fas fa-shield-halved text-[10px]" aria-hidden="true" />
                       Admin
@@ -1087,7 +1087,7 @@ function openCopyKpiDrawer(emp: GmEmployeeRow) {
                     <span
                       v-if="emp.isDepartmentManager"
                       class="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700"
-                      :title="emp.managingDepartmentName ? `Manager của ${emp.managingDepartmentName}` : 'Manager của department'"
+                      :title="emp.managingDepartmentName ? `Manager of ${emp.managingDepartmentName}` : 'Department manager'"
                     >
                       <i class="fas fa-user-tie text-[10px]" aria-hidden="true" />
                       Manager
@@ -1107,7 +1107,7 @@ function openCopyKpiDrawer(emp: GmEmployeeRow) {
                     <button
                       type="button"
                       class="inline-flex items-center gap-1 rounded-md border border-indigo-200 bg-indigo-50 px-2.5 py-1.5 text-[11px] font-semibold text-indigo-700 transition-colors hover:bg-indigo-100 hover:text-indigo-900"
-                      title="Sao chép KPI cho nhân viên này"
+                      title="Copy KPI for this employee"
                       @click.stop="openCopyKpiDrawer(emp)"
                     >
                       <i class="fas fa-copy text-[10px]" aria-hidden="true" />
@@ -1117,11 +1117,11 @@ function openCopyKpiDrawer(emp: GmEmployeeRow) {
                     <button
                       type="button"
                       class="inline-flex items-center gap-1 rounded-md border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-[11px] font-semibold text-rose-700 transition-colors hover:bg-rose-100 hover:text-rose-900"
-                      title="Xóa nhân viên khỏi hệ thống"
+                      title="Delete employee from the system"
                       @click.stop="onEmployeeTabRemoveMember(emp)"
                     >
                       <i class="fas fa-user-minus text-[10px]" aria-hidden="true" />
-                      Xóa
+                      Delete
                     </button>
                   </div>
                 </td>
@@ -1137,7 +1137,7 @@ function openCopyKpiDrawer(emp: GmEmployeeRow) {
         >
           <i class="fas fa-users mb-3 text-4xl text-slate-300" aria-hidden="true" />
           <p class="text-sm font-bold text-slate-500">
-            {{ employeeSearch ? 'Không tìm thấy nhân viên khớp tìm kiếm' : 'Chưa có nhân viên nào trong hệ thống' }}
+            {{ employeeSearch ? 'No employees match your search' : 'No employees in the system yet' }}
           </p>
         </div>
       </div>
@@ -1181,14 +1181,14 @@ function openCopyKpiDrawer(emp: GmEmployeeRow) {
                   <p
                     class="mt-1 text-[10px] font-bold uppercase tracking-widest text-slate-500"
                   >
-                    Thiết lập phòng ban / đội nhóm mới
+                    Set up a new department / team
                   </p>
                 </div>
               </div>
               <button
                 type="button"
                 class="shrink-0 rounded-full p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-800"
-                aria-label="Đóng"
+                aria-label="Close"
                 @click="closeDrawer"
               >
                 <i class="fas fa-times text-lg" aria-hidden="true" />
@@ -1203,7 +1203,7 @@ function openCopyKpiDrawer(emp: GmEmployeeRow) {
                   <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
                     <i class="fas fa-circle-info text-sm" aria-hidden="true" />
                   </div>
-                  <h3 class="text-sm font-bold text-slate-800">Thông tin Cơ bản</h3>
+                  <h3 class="text-sm font-bold text-slate-800">Basic Information</h3>
                 </div>
 
                 <div>
@@ -1211,7 +1211,7 @@ function openCopyKpiDrawer(emp: GmEmployeeRow) {
                     for="gm-section-name"
                     class="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500"
                   >
-                    Tên phòng ban <span class="text-rose-500">*</span>
+                    Department Name <span class="text-rose-500">*</span>
                   </label>
                   <input
                     id="gm-section-name"
@@ -1230,14 +1230,14 @@ function openCopyKpiDrawer(emp: GmEmployeeRow) {
                     for="gm-section-desc"
                     class="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500"
                   >
-                    Mô tả chức năng
+                    Function Description
                     <span class="font-medium normal-case text-slate-400">(Optional)</span>
                   </label>
                   <textarea
                     id="gm-section-desc"
                     v-model="description"
                     rows="3"
-                    placeholder="Mô tả nhiệm vụ chính của phòng ban này..."
+                    placeholder="Describe this department's main responsibilities..."
                     class="w-full resize-none rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800 outline-none transition-all placeholder:text-slate-400 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                   />
                 </div>
@@ -1249,7 +1249,7 @@ function openCopyKpiDrawer(emp: GmEmployeeRow) {
                   <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
                     <i class="fas fa-user-check text-sm" aria-hidden="true" />
                   </div>
-                  <h3 class="text-sm font-bold text-slate-800">Quản lý &amp; Nhân sự</h3>
+                  <h3 class="text-sm font-bold text-slate-800">Manager &amp; Employees</h3>
                 </div>
 
                 <div>
@@ -1257,7 +1257,7 @@ function openCopyKpiDrawer(emp: GmEmployeeRow) {
                     for="gm-section-manager"
                     class="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500"
                   >
-                    Người quản lý (Manager / PM)
+                    Manager (Manager / PM)
                     <span class="font-medium normal-case text-slate-400">(Optional)</span>
                   </label>
                   <div class="group relative">
@@ -1271,7 +1271,7 @@ function openCopyKpiDrawer(emp: GmEmployeeRow) {
                       class="w-full cursor-pointer appearance-none rounded-lg border border-indigo-200 bg-indigo-50/50 py-2 pl-9 pr-9 text-sm font-medium text-slate-800 outline-none transition-all focus:border-indigo-500 focus:bg-white focus:ring-1 focus:ring-indigo-500"
                       :disabled="managersLoading"
                     >
-                      <option value="">{{ managersLoading ? 'Đang tải…' : '— Không gán —' }}</option>
+                      <option value="">{{ managersLoading ? 'Loading...' : '- Unassigned -' }}</option>
                       <option v-for="m in departmentManagers" :key="m.id" :value="m.id">{{ m.fullName }}</option>
                     </select>
                     <i
@@ -1286,9 +1286,9 @@ function openCopyKpiDrawer(emp: GmEmployeeRow) {
                 >
                   <i class="fas fa-circle-exclamation mt-0.5 shrink-0 text-amber-500" aria-hidden="true" />
                   <p>
-                    Người quản lý được chọn sẽ chịu trách nhiệm nhận và phân bổ các
+                    The selected manager will be responsible for receiving and allocating
                     <span class="font-bold">Cascading KPI</span>
-                    xuống cho các thành viên trong phòng ban này.
+                    to members in this department.
                   </p>
                 </div>
               </section>
@@ -1304,7 +1304,7 @@ function openCopyKpiDrawer(emp: GmEmployeeRow) {
                 :disabled="saving"
                 @click="closeDrawer"
               >
-                Hủy
+                Cancel
               </button>
               <button
                 type="button"
@@ -1314,7 +1314,7 @@ function openCopyKpiDrawer(emp: GmEmployeeRow) {
               >
                 <i v-if="!saving" class="fas fa-floppy-disk text-sm" aria-hidden="true" />
                 <i v-else class="fas fa-spinner fa-spin text-sm" aria-hidden="true" />
-                {{ saving ? 'Đang lưu…' : 'Tạo phòng ban' }}
+                {{ saving ? 'Saving...' : 'Create Department' }}
               </button>
             </div>
           </div>
@@ -1348,12 +1348,12 @@ function openCopyKpiDrawer(emp: GmEmployeeRow) {
                 class="flex items-center gap-2 text-sm font-bold text-slate-800"
               >
                 <i class="fas fa-network-wired text-indigo-500" aria-hidden="true" />
-                Quản lý phòng ban
+                Manage Department
               </h2>
               <button
                 type="button"
                 class="rounded-full p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-800"
-                aria-label="Đóng"
+                aria-label="Close"
                 @click="closeSectionDetail"
               >
                 <i class="fas fa-times text-sm" aria-hidden="true" />
@@ -1395,7 +1395,7 @@ function openCopyKpiDrawer(emp: GmEmployeeRow) {
                     {{
                       sectionDetailDept?.managerRoleCode
                         ? formatManagerRoleCode(sectionDetailDept.managerRoleCode)
-                        : 'Quản lý'
+                        : 'Manager'
                     }}:
                     <span class="font-bold text-white">{{ sectionDetailRow.manager }}</span>
                   </p>
@@ -1411,7 +1411,7 @@ function openCopyKpiDrawer(emp: GmEmployeeRow) {
                 >
                   <h3 class="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-800">
                     <i class="fas fa-users text-indigo-500" aria-hidden="true" />
-                    Nhân sự ( {{ sectionDetailMembers.length }} )
+                    Employees ( {{ sectionDetailMembers.length }} )
                   </h3>
                   <button
                     type="button"
@@ -1419,7 +1419,7 @@ function openCopyKpiDrawer(emp: GmEmployeeRow) {
                     @click="openAddMemberFromDetail"
                   >
                     <i class="fas fa-user-plus text-[9px]" aria-hidden="true" />
-                    Thêm thành viên
+                    Add Member
                   </button>
                 </div>
                 <div class="space-y-1 p-2">
@@ -1444,8 +1444,8 @@ function openCopyKpiDrawer(emp: GmEmployeeRow) {
                       <button
                         type="button"
                         class="p-1 text-slate-400 opacity-0 transition-all hover:text-rose-500 group-hover:opacity-100"
-                        title="Xóa khỏi nhóm"
-                        aria-label="Xóa khỏi nhóm"
+                        title="Remove from group"
+                        aria-label="Remove from group"
                         @click.stop="openRemoveMemberModal(m)"
                       >
                         <i class="fas fa-user-minus text-xs" aria-hidden="true" />
@@ -1461,7 +1461,7 @@ function openCopyKpiDrawer(emp: GmEmployeeRow) {
                         class="w-full flex-1 rounded-lg border border-slate-200 bg-white py-2.5 text-center text-[10px] font-bold text-indigo-600 transition-colors hover:border-indigo-200 hover:bg-indigo-50/60"
                         @click="showAllSectionDetailMembers"
                       >
-                        Xem tất cả thành viên
+                        View all members
                       </button>
                       <button
                         v-if="sectionDetailMembersCanCollapse"
@@ -1469,12 +1469,12 @@ function openCopyKpiDrawer(emp: GmEmployeeRow) {
                         class="w-full flex-1 rounded-lg border border-slate-300 bg-slate-50 py-2.5 text-center text-[10px] font-bold text-slate-600 transition-colors hover:border-slate-400 hover:bg-slate-100"
                         @click="collapseSectionDetailMembers"
                       >
-                        Ẩn bớt
+                        Show less
                       </button>
                     </div>
                   </template>
                   <p v-else class="px-2 py-6 text-center text-xs text-slate-400">
-                    Chưa có nhân sự trong phòng ban này.
+                    No employees in this department yet.
                   </p>
                 </div>
               </div>
@@ -1506,12 +1506,12 @@ function openCopyKpiDrawer(emp: GmEmployeeRow) {
               class="flex items-center gap-2 text-sm font-bold text-slate-800"
             >
               <i class="fas fa-pen text-indigo-600" aria-hidden="true" />
-              Chỉnh sửa phòng ban
+              Edit Department
             </h3>
             <button
               type="button"
               class="text-slate-400 transition-colors hover:text-slate-700"
-              aria-label="Đóng"
+              aria-label="Close"
               @click="closeEditSectionModal"
             >
               <i class="fas fa-times" aria-hidden="true" />
@@ -1523,7 +1523,7 @@ function openCopyKpiDrawer(emp: GmEmployeeRow) {
                 for="gm-edit-section-name"
                 class="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500"
               >
-                Tên phòng ban <span class="text-rose-500">*</span>
+                Department Name <span class="text-rose-500">*</span>
               </label>
               <input
                 id="gm-edit-section-name"
@@ -1541,7 +1541,7 @@ function openCopyKpiDrawer(emp: GmEmployeeRow) {
                 for="gm-edit-section-manager"
                 class="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500"
               >
-                Người quản lý (PM) <span class="text-rose-500">*</span>
+                Manager (PM) <span class="text-rose-500">*</span>
               </label>
               <div class="relative">
                 <select
@@ -1551,7 +1551,7 @@ function openCopyKpiDrawer(emp: GmEmployeeRow) {
                   :class="editFormErrors.manager ? 'border-rose-300 ring-1 ring-rose-200' : ''"
                   :disabled="managersLoading"
                 >
-                  <option disabled value="">{{ managersLoading ? 'Đang tải…' : '-- Chọn Quản lý --' }}</option>
+                  <option disabled value="">{{ managersLoading ? 'Loading...' : '-- Select Manager --' }}</option>
                   <option v-for="m in editManagerChoices" :key="m.id" :value="m.id">{{ m.fullName }}</option>
                 </select>
                 <i
@@ -1571,7 +1571,7 @@ function openCopyKpiDrawer(emp: GmEmployeeRow) {
               :disabled="savingEdit"
               @click="closeEditSectionModal"
             >
-              Hủy
+              Cancel
             </button>
             <button
               type="button"
@@ -1581,7 +1581,7 @@ function openCopyKpiDrawer(emp: GmEmployeeRow) {
             >
               <i v-if="!savingEdit" class="fas fa-floppy-disk text-xs" aria-hidden="true" />
               <i v-else class="fas fa-spinner fa-spin text-xs" aria-hidden="true" />
-              {{ savingEdit ? 'Đang lưu…' : 'Lưu thay đổi' }}
+              {{ savingEdit ? 'Saving...' : 'Save changes' }}
             </button>
           </div>
         </div>
@@ -1610,13 +1610,13 @@ function openCopyKpiDrawer(emp: GmEmployeeRow) {
               class="flex min-w-0 flex-1 flex-wrap items-center gap-2 text-sm font-bold text-slate-800"
             >
               <i class="fas fa-user-plus shrink-0 text-violet-600" aria-hidden="true" />
-              <span class="shrink-0">Thêm nhân sự vào</span>
-              <span class="truncate text-violet-600">{{ sectionDetailRow?.name ?? 'Phòng ban' }}</span>
+              <span class="shrink-0">Add employees to</span>
+              <span class="truncate text-violet-600">{{ sectionDetailRow?.name ?? 'Department' }}</span>
             </h3>
             <button
               type="button"
               class="ml-2 shrink-0 text-slate-400 transition-colors hover:text-slate-700"
-              aria-label="Đóng"
+              aria-label="Close"
               @click="closeAddMemberModal"
             >
               <i class="fas fa-times" aria-hidden="true" />
@@ -1632,7 +1632,7 @@ function openCopyKpiDrawer(emp: GmEmployeeRow) {
               <input
                 v-model="addMemberSearch"
                 type="search"
-                placeholder="Tìm kiếm tên, email, chức vụ..."
+                placeholder="Search name, email, job title..."
                 class="w-full rounded-lg border border-slate-200 py-2 pl-9 pr-3 text-sm font-medium text-slate-800 shadow-sm outline-none transition-all placeholder:text-slate-400 focus:border-violet-500 focus:ring-1 focus:ring-violet-500"
               />
             </div>
@@ -1673,14 +1673,14 @@ function openCopyKpiDrawer(emp: GmEmployeeRow) {
                   v-if="addMemberRankPopoverOpen"
                   class="absolute left-0 right-0 top-full z-20 mt-1 flex min-h-0 max-h-[min(16rem,calc(100vh-12rem))] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl"
                   role="dialog"
-                  aria-label="Chọn rank"
+                  aria-label="Select rank"
                   @click.stop
                 >
                   <div
                     class="flex shrink-0 items-center justify-between border-b border-slate-100 bg-slate-50 px-3 py-2"
                   >
                     <span class="text-[11px] font-bold uppercase tracking-wider text-slate-600">
-                      Chọn rank
+                      Select rank
                     </span>
                     <button
                       v-if="addMemberFilterRanks.length > 0"
@@ -1688,7 +1688,7 @@ function openCopyKpiDrawer(emp: GmEmployeeRow) {
                       class="text-[10px] font-bold text-blue-600 hover:text-blue-800 hover:underline"
                       @click="resetAddMemberRankFilters"
                     >
-                      Đặt lại
+                      Reset
                     </button>
                   </div>
                   <div
@@ -1717,7 +1717,7 @@ function openCopyKpiDrawer(emp: GmEmployeeRow) {
                       class="rounded-lg bg-blue-600 px-4 py-1.5 text-xs font-bold text-white shadow-sm transition-colors hover:bg-blue-700"
                       @click="closeAddMemberRankPopover"
                     >
-                      Xong
+                      Done
                     </button>
                   </div>
                 </div>
@@ -1733,7 +1733,7 @@ function openCopyKpiDrawer(emp: GmEmployeeRow) {
               v-if="addMemberCandidatesLoading"
               class="px-3 py-8 text-center text-xs font-medium text-slate-500"
             >
-              Đang tải danh sách ứng viên…
+              Loading candidate list...
             </p>
             <template v-else-if="addMemberFilteredCandidates.length">
               <label
@@ -1761,7 +1761,7 @@ function openCopyKpiDrawer(emp: GmEmployeeRow) {
               </label>
             </template>
             <p v-else class="px-3 py-8 text-center text-xs font-medium text-slate-400">
-              Không có nhân sự phù hợp. Thử đổi từ khóa tìm kiếm hoặc bộ lọc rank.
+              No matching employees. Try a different search keyword or rank filter.
             </p>
           </div>
 
@@ -1769,7 +1769,7 @@ function openCopyKpiDrawer(emp: GmEmployeeRow) {
             class="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 p-4"
           >
             <span class="text-xs font-bold text-slate-500">
-              Đã chọn:
+              Selected:
               <span class="text-violet-600">{{ addMemberSelectedCount }}</span>
             </span>
             <div class="flex shrink-0 gap-2">
@@ -1779,7 +1779,7 @@ function openCopyKpiDrawer(emp: GmEmployeeRow) {
                 :disabled="savingMember"
                 @click="closeAddMemberModal"
               >
-                Hủy
+                Cancel
               </button>
               <button
                 type="button"
@@ -1789,7 +1789,7 @@ function openCopyKpiDrawer(emp: GmEmployeeRow) {
               >
                 <i v-if="!savingMember" class="fas fa-check text-xs" aria-hidden="true" />
                 <i v-else class="fas fa-spinner fa-spin text-xs" aria-hidden="true" />
-                {{ savingMember ? 'Đang xử lý…' : 'Thêm vào khối' }}
+                {{ savingMember ? 'Processing...' : 'Add to department' }}
               </button>
             </div>
           </div>
@@ -1819,12 +1819,12 @@ function openCopyKpiDrawer(emp: GmEmployeeRow) {
               class="flex items-center gap-2 text-sm font-bold text-slate-900"
             >
               <i class="fas fa-triangle-exclamation text-rose-600" aria-hidden="true" />
-              Xóa phòng ban?
+              Delete department?
             </h3>
             <p class="mt-2 text-xs font-medium leading-relaxed text-slate-600">
-              Bạn có chắc muốn xóa phòng ban
-              <span class="font-bold text-slate-800">«{{ deleteSectionTarget.name }}»</span>
-              không? Toàn bộ nhân sự thuộc phòng ban này cũng sẽ bị gỡ.
+              Are you sure you want to delete department
+              <span class="font-bold text-slate-800">"{{ deleteSectionTarget.name }}"</span>?
+              All employees in this department will also be removed from it.
             </p>
           </div>
           <div class="flex justify-end gap-2 bg-white px-5 py-4">
@@ -1833,14 +1833,14 @@ function openCopyKpiDrawer(emp: GmEmployeeRow) {
               class="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-600 shadow-sm transition-colors hover:bg-slate-50"
               @click="closeDeleteSectionModal"
             >
-              Hủy
+              Cancel
             </button>
             <button
               type="button"
               class="rounded-lg bg-rose-600 px-4 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:bg-rose-700"
               @click="confirmDeleteSection"
             >
-              Xác nhận xóa
+              Confirm delete
             </button>
           </div>
         </div>
@@ -1869,13 +1869,13 @@ function openCopyKpiDrawer(emp: GmEmployeeRow) {
               class="flex items-center gap-2 text-sm font-bold text-slate-900"
             >
               <i class="fas fa-user-minus text-rose-600" aria-hidden="true" />
-              Gỡ thành viên?
+              Remove member?
             </h3>
             <p class="mt-2 text-xs font-medium leading-relaxed text-slate-600">
-              Bạn có chắc muốn gỡ
-              <span class="font-bold text-slate-800">«{{ removeMemberTarget.name }}»</span>
-              khỏi phòng ban
-              <span class="font-bold text-slate-800">«{{ sectionDetailRow?.name ?? '—' }}»</span>?
+              Are you sure you want to remove
+              <span class="font-bold text-slate-800">"{{ removeMemberTarget.name }}"</span>
+              from department
+              <span class="font-bold text-slate-800">"{{ sectionDetailRow?.name ?? '—' }}"</span>?
             </p>
           </div>
           <div class="flex justify-end gap-2 bg-white px-5 py-4">
@@ -1885,7 +1885,7 @@ function openCopyKpiDrawer(emp: GmEmployeeRow) {
               :disabled="removingMember"
               @click="closeRemoveMemberModal"
             >
-              Hủy
+              Cancel
             </button>
             <button
               type="button"
@@ -1898,7 +1898,7 @@ function openCopyKpiDrawer(emp: GmEmployeeRow) {
                 class="fas fa-spinner fa-spin mr-1.5 text-[10px]"
                 aria-hidden="true"
               />
-              {{ removingMember ? 'Đang xử lý…' : 'Xác nhận gỡ' }}
+              {{ removingMember ? 'Processing...' : 'Confirm remove' }}
             </button>
           </div>
         </div>
@@ -1925,13 +1925,13 @@ function openCopyKpiDrawer(emp: GmEmployeeRow) {
               class="flex items-center gap-2 text-sm font-bold text-slate-900"
             >
               <i class="fas fa-trash-can text-rose-600" aria-hidden="true" />
-              Xóa nhân viên khỏi hệ thống?
+              Delete employee from the system?
             </h3>
             <p class="mt-2 text-xs font-medium leading-relaxed text-slate-600">
-              Bạn có chắc muốn xóa hoàn toàn nhân viên
-              <span class="font-bold text-slate-800">«{{ deleteEmployeeTarget.name }}»</span>
-              (phòng ban: <span class="font-bold text-slate-800">{{ deleteEmployeeTarget.deptName }}</span>)
-              khỏi hệ thống? Hành động này <span class="font-bold text-rose-600">không thể hoàn tác</span>.
+              Are you sure you want to permanently delete employee
+              <span class="font-bold text-slate-800">"{{ deleteEmployeeTarget.name }}"</span>
+              (department: <span class="font-bold text-slate-800">{{ deleteEmployeeTarget.deptName }}</span>)
+              from the system? This action <span class="font-bold text-rose-600">cannot be undone</span>.
             </p>
           </div>
           <div class="flex justify-end gap-2 bg-white px-5 py-4">
@@ -1941,7 +1941,7 @@ function openCopyKpiDrawer(emp: GmEmployeeRow) {
               :disabled="deletingEmployee"
               @click="closeDeleteEmployeeModal"
             >
-              Hủy
+              Cancel
             </button>
             <button
               type="button"
@@ -1951,7 +1951,7 @@ function openCopyKpiDrawer(emp: GmEmployeeRow) {
             >
               <i v-if="deletingEmployee" class="fas fa-spinner fa-spin text-[10px]" aria-hidden="true" />
               <i v-else class="fas fa-trash-can text-[10px]" aria-hidden="true" />
-              {{ deletingEmployee ? 'Đang xóa…' : 'Xác nhận xóa' }}
+              {{ deletingEmployee ? 'Deleting...' : 'Confirm delete' }}
             </button>
           </div>
         </div>

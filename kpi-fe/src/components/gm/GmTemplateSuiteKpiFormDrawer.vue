@@ -26,6 +26,7 @@ import {
   extractRawInputFromApiTargetDescription,
   validateScoringRulesDsl,
 } from '@/utils/kpiScoringRulesDsl'
+import { validateNonNegativeTargetValue } from '@/utils/kpiTargetValidation'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -85,7 +86,7 @@ async function loadKpiTypes() {
     }
   } catch (e: unknown) {
     kpiTypeRows.value = []
-    kpiTypesError.value = e instanceof Error ? e.message : 'Không tải được loại hình KPI'
+    kpiTypesError.value = e instanceof Error ? e.message : 'Unable to load KPI types'
   } finally {
     kpiTypesLoading.value = false
   }
@@ -121,7 +122,7 @@ const perspectiveOptions = computed((): { value: string; label: string }[] => {
   }
   const pid = String(rec.perspective ?? '').trim()
   if (UUID_RE.test(pid) && !opts.some((o) => o.value === pid)) {
-    opts.unshift({ value: pid, label: cname || `Nhóm (${pid.slice(0, 8)}…)` })
+    opts.unshift({ value: pid, label: cname || `Group (${pid.slice(0, 8)}...)` })
   }
   return opts
 })
@@ -149,13 +150,13 @@ const typesForSelectedRule = computed(
 
 const selectedFormulaExpression = computed(() => {
   const ruleRow = calcRulesWithTypes.value.find((row) => row.code === calculationRuleCode.value)
-  if (!ruleRow) return 'Chọn quy tắc tính toán.'
+  if (!ruleRow) return 'Select a calculation rule.'
   const parts = [ruleRow.label]
   const types = typesForSelectedRule.value
   const typeRow = types.find((t) => t.code === calculationTypeCode.value)
-  if (types.length > 1 && typeRow) parts.push(`Chiều tính: ${typeRow.label}.`)
-  else if (types.length === 1 && typeRow) parts.push(`Chiều tính: ${typeRow.label}.`)
-  return parts.join(' — ')
+  if (types.length > 1 && typeRow) parts.push(`Calculation direction: ${typeRow.label}.`)
+  else if (types.length === 1 && typeRow) parts.push(`Calculation direction: ${typeRow.label}.`)
+  return parts.join(' - ')
 })
 
 /** Rule COMMENT (803) — không dùng CALC_TYPE. */
@@ -279,8 +280,8 @@ const isEditing = computed(() => {
   return !!(raw && typeof raw === 'object' && !Array.isArray(raw) && Object.keys(raw).length > 0)
 })
 
-const drawerTitle = computed(() => (isEditing.value ? 'Sửa KPI trong bộ mẫu' : 'Thêm KPI vào bộ mẫu'))
-const confirmButtonLabel = computed(() => (isEditing.value ? 'Cập nhật KPI' : 'Thêm vào bộ mẫu'))
+const drawerTitle = computed(() => (isEditing.value ? 'Edit Template KPI' : 'Add KPI to Template'))
+const confirmButtonLabel = computed(() => (isEditing.value ? 'Update KPI' : 'Add to Template'))
 
 watch(open, async (v) => {
   if (!v) return
@@ -304,50 +305,45 @@ function validateForm(): boolean {
   const allowedPerspective = new Set(perspectiveOptions.value.map((o) => o.value))
   const pid = String(perspective.value ?? '').trim()
   if (!pid || !allowedPerspective.has(pid)) {
-    err.perspective = 'Chọn nhóm KPI (kpi_categories).'
+    err.perspective = 'Select a KPI group (kpi_categories).'
   }
 
   const allowedTypeCodes = new Set(kpiTypeRows.value.map((r) => r.code))
   if (!allowedTypeCodes.has(kpiTypeCode.value)) {
-    err.kpiType = 'Chọn loại hình KPI từ danh sách hệ thống.'
+    err.kpiType = 'Select a KPI type from the system list.'
   }
 
   if (!kpiName.value.trim()) {
-    err.kpiName = 'Vui lòng nhập tên KPI.'
+    err.kpiName = 'Enter a KPI name.'
   }
 
-  const tvRaw = targetValue.value
-  const tvStr = String(tvRaw ?? '').trim()
-  if (tvStr === '' || Number.isNaN(Number(tvRaw))) {
-    err.targetValue = 'Nhập mục tiêu (số).'
-  } else if (Number(tvRaw) < 0) {
-    err.targetValue = 'Mục tiêu phải ≥ 0.'
-  }
+  const targetErr = validateNonNegativeTargetValue(targetValue.value, { required: true })
+  if (targetErr) err.targetValue = targetErr
 
   const wStr = String(weightPct.value).trim()
   const wNum = Number.parseFloat(wStr)
   if (!wStr) {
-    err.weightPct = 'Nhập trọng số (%).'
+    err.weightPct = 'Enter a weight (%).'
   } else if (!Number.isFinite(wNum) || wNum <= 0 || wNum > 100) {
-    err.weightPct = 'Trọng số phải từ 1 đến 100.'
+    err.weightPct = 'Weight must be between 1 and 100.'
   }
 
   const ruleOpts = calcRulesWithTypes.value
   if (!ruleOpts.some((row) => row.code === calculationRuleCode.value)) {
-    err.calculationMethod = 'Chọn quy tắc tính toán.'
+    err.calculationMethod = 'Select a calculation rule.'
   } else {
     const types = typesForSelectedRule.value
     if (types.length > 0) {
       const tc = calculationTypeCode.value
       if (tc == null || !types.some((t) => t.code === tc)) {
-        err.calculationMethod = 'Chọn chiều tính toán.'
+        err.calculationMethod = 'Select a calculation direction.'
       }
     }
   }
 
   const descTrim = description.value.trim()
   if (!descTrim) {
-    err.scoringRules = 'Vui lòng nhập quy tắc chấm điểm (đủ các mức 1–5 theo cú pháp).'
+    err.scoringRules = 'Enter scoring rules for levels 1-5 using the required syntax.'
   } else {
     const vr = validateScoringRulesDsl(description.value)
     if (!vr.ok) {
@@ -433,7 +429,7 @@ async function confirmAdd() {
             <button
               type="button"
               class="rounded-full p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-800"
-              aria-label="Đóng"
+              aria-label="Close"
               @click="close"
             >
               <i class="fas fa-times text-base" aria-hidden="true" />
@@ -449,7 +445,7 @@ async function confirmAdd() {
             >
               <p class="mb-2 flex items-center gap-2 font-bold">
                 <i class="fas fa-circle-exclamation text-rose-600" aria-hidden="true" />
-                Vui lòng sửa các lỗi sau.
+                Please fix the following errors.
               </p>
               <ul class="list-inside list-disc space-y-0.5 text-[11px] font-semibold text-rose-800">
                 <li v-for="(msg, key) in formErrors" :key="key">{{ msg }}</li>
@@ -461,13 +457,13 @@ async function confirmAdd() {
                 <span class="rounded-lg bg-slate-100 p-1.5 text-indigo-600">
                   <i class="fas fa-file-lines text-sm" aria-hidden="true" />
                 </span>
-                Thông tin cơ bản &amp; phân loại
+                Basic Information &amp; Classification
               </label>
               <div class="space-y-4">
                 <div class="flex flex-col gap-3 sm:flex-row">
                   <div class="sm:w-1/3">
                     <label class="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                      Nhóm KPI (kpi_categories) <span class="text-rose-500">*</span>
+                      KPI Group (kpi_categories) <span class="text-rose-500">*</span>
                     </label>
                     <p v-if="kpiCategoriesError" class="mb-1 text-[10px] font-semibold text-rose-600">
                       {{ kpiCategoriesError }}
@@ -479,7 +475,7 @@ async function confirmAdd() {
                         class="input-required w-full cursor-pointer appearance-none rounded-md py-2 pl-3 pr-8 text-xs font-bold text-slate-800 outline-none transition-all disabled:cursor-not-allowed disabled:opacity-60"
                         :class="formErrors.perspective ? '!border-rose-400 !bg-rose-50/50' : ''"
                       >
-                        <option value="" disabled>{{ kpiCategoriesLoading ? 'Đang tải…' : '— Chọn nhóm —' }}</option>
+                        <option value="" disabled>{{ kpiCategoriesLoading ? 'Loading...' : '- Select group -' }}</option>
                         <option v-for="o in perspectiveOptions" :key="o.value" :value="o.value">{{ o.label }}</option>
                       </select>
                       <i
@@ -510,11 +506,11 @@ async function confirmAdd() {
 
                 <div>
                   <label class="mb-2 block text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                    Loại hình KPI (cách thức giao) <span class="text-rose-500">*</span>
+                    KPI Type (assignment method) <span class="text-rose-500">*</span>
                   </label>
                   <p v-if="kpiTypesError" class="mb-2 text-[10px] font-semibold text-rose-600">{{ kpiTypesError }}</p>
                   <p v-else-if="kpiTypesLoading" class="mb-2 text-[10px] font-medium text-slate-500">
-                    Đang tải loại hình KPI từ hệ thống…
+                    Loading KPI types from the system...
                   </p>
                   <div
                     class="grid grid-cols-1 gap-3"
@@ -530,15 +526,6 @@ async function confirmAdd() {
                       :class="typeCardClassForCode(opt.code)"
                       @click="kpiTypeCode = opt.code"
                     >
-                      <span
-                        class="absolute right-2.5 top-2.5 transition-all"
-                        :class="[
-                          opt.code === 103 ? 'text-purple-600' : 'text-blue-600',
-                          kpiTypeCode === opt.code ? 'opacity-100 scale-100' : 'scale-50 opacity-0',
-                        ]"
-                      >
-                        <i class="fas fa-check-circle text-base" aria-hidden="true" />
-                      </span>
                       <div class="mb-1.5 flex items-center gap-2">
                         <span class="rounded border border-slate-100 bg-slate-50 p-1 shadow-sm">
                           <i :class="strategicKpiTypeIconClass(opt.code)" aria-hidden="true" />
@@ -553,7 +540,7 @@ async function confirmAdd() {
                     v-if="!kpiTypesLoading && !kpiTypesError && kpiTypeRows.length === 0"
                     class="mt-2 text-[11px] font-medium text-amber-800"
                   >
-                    Chưa có dữ liệu loại KPI (nhóm KPI_TYPE trong hệ thống).
+                    No KPI type data is available (KPI_TYPE group in the system).
                   </p>
                   <p v-if="formErrors.kpiType" class="mt-1 text-[10px] font-semibold text-rose-600">
                     {{ formErrors.kpiType }}
@@ -582,7 +569,7 @@ async function confirmAdd() {
                   </div>
                   <div class="min-w-0">
                     <label class="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                      Trọng số (Weight) <span class="text-rose-500">*</span>
+                      Weight <span class="text-rose-500">*</span>
                     </label>
                     <div class="relative">
                       <input
@@ -636,7 +623,7 @@ async function confirmAdd() {
                       type="checkbox"
                       class="h-3.5 w-3.5 shrink-0 rounded border-slate-300 text-indigo-600 focus:ring-indigo-400/40"
                     />
-                    <span>KPI quan trọng</span>
+                    <span>Important KPI</span>
                   </label>
                 </div>
 
@@ -646,14 +633,14 @@ async function confirmAdd() {
                   </p>
                   <div class="mb-1.5 flex items-center gap-1.5">
                     <label class="block flex-1 text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                      Phân loại cách tính <span class="text-rose-500">*</span>
+                      Calculation Method <span class="text-rose-500">*</span>
                     </label>
                     <span
                       class="inline-flex shrink-0 cursor-help text-slate-400 transition-colors hover:text-blue-600"
                       :title="selectedFormulaExpression"
                       tabindex="0"
                       role="note"
-                      aria-label="Biểu thức công thức đang chọn"
+                      aria-label="Selected formula expression"
                     >
                       <i class="fas fa-circle-question text-[12px]" aria-hidden="true" />
                     </span>
@@ -719,9 +706,9 @@ async function confirmAdd() {
                 <div>
                   <div class="mb-1.5 flex items-center gap-1.5">
                     <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                      Quy tắc chấm điểm <span class="text-rose-500">*</span>
+                      Scoring Rules <span class="text-rose-500">*</span>
                     </label>
-                    <ScoringRulesHelpTooltip aria-label="Ví dụ cú pháp quy tắc chấm điểm" />
+                    <ScoringRulesHelpTooltip aria-label="Scoring rule syntax examples" />
                   </div>
                   <textarea
                     v-model="description"
@@ -749,7 +736,7 @@ async function confirmAdd() {
               :disabled="saving"
               @click="close"
             >
-              Hủy
+              Cancel
             </button>
             <button
               type="button"
@@ -759,7 +746,7 @@ async function confirmAdd() {
             >
               <i v-if="saving" class="fas fa-spinner fa-spin text-sm" aria-hidden="true" />
               <i v-else class="fas fa-plus text-sm" aria-hidden="true" />
-              {{ saving ? 'Đang xử lý...' : confirmButtonLabel }}
+              {{ saving ? 'Processing...' : confirmButtonLabel }}
             </button>
           </div>
         </div>

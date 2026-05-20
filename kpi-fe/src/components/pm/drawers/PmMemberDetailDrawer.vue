@@ -9,6 +9,9 @@ import {
   formatNumericTarget,
   parsePmPortfolioEvidenceString,
   normalizeEvidenceHref,
+  activateEvidenceAttachment,
+  evidenceAttachmentLabel,
+  evidenceAttachmentTitle,
   isEvidenceImageUrl,
   isRecordStyleCalcRule,
   pmPortfolioActualDisplayMode,
@@ -155,7 +158,7 @@ async function fetchMemberKpis() {
       const parsedEvidences = parsePmPortfolioEvidenceString(item.evidences)
       return {
         id: String(item.id),
-        group: item.group || 'Khác',
+        group: item.group || 'Other',
         code: item.code || '',
         kpiType: item.kpiTypeCode === KPI_TYPE.PROMOTION ? 'promotion'
           : item.kpiTypeCode === KPI_TYPE.TEAM ? 'cascading'
@@ -375,6 +378,10 @@ function hasEvidence(item: any): boolean {
   )
 }
 
+function onEvidenceAttachmentClick(att: { url: string; name?: string }) {
+  void activateEvidenceAttachment(att)
+}
+
 const expandedCommentRows = ref(new Set<string>())
 
 function statusLabel(item: any): string {
@@ -434,7 +441,7 @@ async function confirmUnlockForActiveTab() {
   )
   if (unlockFromStatuses.length === 0) {
     unlockConfirmOpen.value = false
-    toast.info('Không còn KPI nào ở trạng thái chờ GM duyệt để mở khóa.')
+    toast.info('No KPIs are pending GM approval to unlock.')
     return
   }
 
@@ -444,7 +451,7 @@ async function confirmUnlockForActiveTab() {
     const initData = await pmKpiService.getInitialization(String(year))
     const cycleId = String(initData?.kpiCycle?.id ?? '').trim()
     if (!cycleId) {
-      throw new Error('Không xác định được chu kỳ KPI để mở khóa.')
+      throw new Error('Could not determine KPI cycle to unlock.')
     }
 
     for (const status of unlockFromStatuses) {
@@ -460,10 +467,10 @@ async function confirmUnlockForActiveTab() {
 
     unlockConfirmOpen.value = false
     await Promise.all([fetchMemberKpis(), fetchReviewMeta()])
-    toast.success('Đã mở khóa KPI thành công.')
+    toast.success('KPI unlocked successfully.')
   } catch (err) {
     console.error('Failed to unlock KPI before GM approval:', err)
-    toast.error('Mở khóa KPI thất bại. Vui lòng thử lại.')
+    toast.error('KPI unlock failed. Please try again.')
   } finally {
     unlocking.value = false
   }
@@ -479,13 +486,13 @@ const sendEvaluationForActiveTab = async () => {
 
   if (tab === 'main' && (!props.portfolioGateLoaded || !props.portfolioGateOpen)) {
     toast.error(
-      'Chưa thể gửi: còn nhân viên chưa nộp KPI Member (individual/team) cho PM. Xem danh sách phía trên bảng Team Hierarchy & Performance.',
+      'Cannot submit yet: some employees have not submitted Member KPI (individual/team) results to PM. See the list above Team Hierarchy & Performance.',
     )
     return
   }
 
   if (!rows.length) {
-    toast.error(isPromo ? 'Không có Promotion KPI để gửi.' : 'Không có KPI Member để gửi.')
+    toast.error(isPromo ? 'No Promotion KPIs to submit.' : 'No Member KPIs to submit.')
     return
   }
 
@@ -493,8 +500,8 @@ const sendEvaluationForActiveTab = async () => {
   if (!rowsPendingPm.length) {
     toast.error(
       isPromo
-        ? 'Chưa có Promotion KPI nào đang chờ PM. Member cần gửi đánh giá phần Promotion trước.'
-        : 'Chưa có KPI Member nào đang chờ PM trên tab này.',
+        ? 'No Promotion KPIs are pending PM. The member must submit the Promotion evaluation first.'
+        : 'No Member KPIs are pending PM on this tab.',
     )
     return
   }
@@ -505,8 +512,8 @@ const sendEvaluationForActiveTab = async () => {
   if (!String(rc.pmComment ?? '').trim()) {
     toast.error(
       hasFinalYear
-        ? 'Vui lòng nhập nhận xét supervisor (bắt buộc cuối kỳ).'
-        : 'Vui lòng nhập nhận xét supervisor (bắt buộc giữa kỳ).',
+        ? 'Enter supervisor comment (required at year-end).'
+        : 'Enter supervisor comment (required at mid-year).',
     )
     return
   }
@@ -516,7 +523,7 @@ const sendEvaluationForActiveTab = async () => {
       if (Number(item.statusCode) !== KPI_STATUS.SECOND_WAITING_PM_APPROVAL) continue
       const score = item.pmScore != null ? Number(item.pmScore) : NaN
       if (!Number.isFinite(score) || score < 1 || score > 5) {
-        toast.error('Cuối kỳ: cần chấm điểm PM (1–5) cho mọi KPI trên tab này.')
+        toast.error('Year-end: PM score (1-5) is required for every KPI on this tab.')
         return
       }
     }
@@ -580,11 +587,11 @@ const sendEvaluationForActiveTab = async () => {
       kpis: memberKpis.value,
       comments: { main: reviewCommentsMain.value.pmComment, promo: reviewCommentsPromo.value.pmComment },
     })
-    toast.success('Đã gửi đánh giá tới GM.')
+    toast.success('Evaluation sent to GM.')
     emit('close')
   } catch (err) {
     console.error('Failed to send PM evaluation:', err)
-    toast.error('Gửi đánh giá thất bại (điểm, nhận xét hoặc trạng thái KPI).')
+    toast.error('Evaluation submission failed (score, comment, or KPI status).')
   } finally {
     saving.value = false
   }
@@ -609,7 +616,7 @@ const sendEvaluationForActiveTab = async () => {
                 </div>
                 <div>
                   <h2 class="text-lg font-bold text-slate-800 flex items-center gap-2">
-                    Đánh giá KPI: <span class="text-indigo-700">{{ member.name }}</span>
+                    KPI Evaluation: <span class="text-indigo-700">{{ member.name }}</span>
                   </h2>
                   <div class="flex items-center gap-2 mt-1">
                     <span
@@ -617,7 +624,7 @@ const sendEvaluationForActiveTab = async () => {
                       {{ member.role || member.rank }}
                     </span>
                     <span class="text-xs text-slate-400">•</span>
-                    <span class="text-xs text-slate-500 font-medium">Kỳ đánh giá: {{ selectedYearValue() }}</span>
+                    <span class="text-xs text-slate-500 font-medium">Evaluation period: {{ selectedYearValue() }}</span>
                   </div>
                 </div>
               </div>
@@ -632,7 +639,7 @@ const sendEvaluationForActiveTab = async () => {
 
             <div v-if="isLoadingKpis" class="flex items-center justify-center py-16 text-slate-400">
               <i class="fas fa-circle-notch fa-spin mr-3 text-xl text-indigo-500"></i>
-              <span class="text-sm font-medium">Đang tải dữ liệu KPI...</span>
+              <span class="text-sm font-medium">Loading KPI data...</span>
             </div>
 
             <div v-else class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-x-auto">
@@ -641,10 +648,10 @@ const sendEvaluationForActiveTab = async () => {
                   class="text-xs text-slate-500 uppercase bg-slate-50/80 border-b border-slate-200">
                   <tr>
                     <th class="px-4 py-3 font-semibold text-center w-12">STT</th>
-                    <th class="px-4 py-3 font-semibold w-1/4">HẠNG MỤC (OBJECTIVES)</th>
-                    <th class="px-4 py-3 font-semibold text-center w-48">CHỈ TIÊU (TARGET)</th>
-                    <th class="px-4 py-3 font-semibold text-center w-40">THỰC TẾ (ACTUAL)</th>
-                    <th class="px-4 py-3 font-semibold text-center w-20">TRỌNG SỐ (W)</th>
+                    <th class="px-4 py-3 font-semibold w-1/4">OBJECTIVES</th>
+                    <th class="px-4 py-3 font-semibold text-center w-48">TARGET</th>
+                    <th class="px-4 py-3 font-semibold text-center w-40">ACTUAL</th>
+                    <th class="px-4 py-3 font-semibold text-center w-20">WEIGHT (W)</th>
                     <th class="px-4 py-3 font-semibold text-center w-32">EVIDENCE</th>
                     <th class="px-4 py-3 font-semibold text-center w-32">SELF SCORE</th>
                     <th class="px-4 py-3 font-semibold text-center w-32">FINAL SCORE</th>
@@ -741,12 +748,11 @@ const sendEvaluationForActiveTab = async () => {
                                   </tr>
                                   <tr v-if="(!item.evidenceData || item.evidenceData.length === 0) && !item.evidenceContent">
                                     <td :colspan="isRecordStyleCalcRule(item.calcRuleCode) ? 2 : 3"
-                                      class="px-3 py-3 text-center text-slate-400 font-medium italic">Không có dữ liệu
-                                      khai báo chi tiết.</td>
+                                      class="px-3 py-3 text-center text-slate-400 font-medium italic">No detailed declaration data.</td>
                                   </tr>
                                   <tr v-if="item.evidenceContent">
                                     <td :colspan="isRecordStyleCalcRule(item.calcRuleCode) ? 2 : 3" class="px-4 py-3 text-slate-700 whitespace-pre-wrap bg-yellow-50/30 border-t border-yellow-100">
-                                      <p class="font-bold text-[10px] uppercase text-yellow-700/70 mb-1">Nội dung nhận xét / diễn giải:</p>
+                                      <p class="font-bold text-[10px] uppercase text-yellow-700/70 mb-1">Comment / explanation:</p>
                                       {{ item.evidenceContent }}
                                     </td>
                                   </tr>
@@ -758,7 +764,7 @@ const sendEvaluationForActiveTab = async () => {
                               class="mt-3 rounded-lg border border-slate-200 bg-white p-3 shadow-sm"
                             >
                               <p class="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                                Minh chứng đính kèm (URL / file)
+                                Attached Evidence (URL / file)
                               </p>
                               <ul class="flex flex-col gap-3">
                                 <li
@@ -767,12 +773,12 @@ const sendEvaluationForActiveTab = async () => {
                                   class="rounded-md border border-slate-100 bg-slate-50/80 p-2"
                                 >
                                   <a
-                                    :href="normalizeEvidenceHref(att.url)"
-                                    target="_blank"
-                                    rel="noopener noreferrer"
+                                    href="#"
                                     class="break-all text-xs font-semibold text-indigo-600 underline hover:text-indigo-800"
+                                    :title="evidenceAttachmentTitle(att)"
+                                    @click.prevent="onEvidenceAttachmentClick(att)"
                                   >
-                                    {{ att.name || att.url }}
+                                    {{ evidenceAttachmentLabel(att) }}
                                   </a>
                                   <div v-if="isEvidenceImageUrl(att.url)" class="mt-2">
                                     <img
@@ -793,7 +799,7 @@ const sendEvaluationForActiveTab = async () => {
                                 :disabled="props.readonlyYear || !isPmPendingAssignmentStatus(item.statusCode)"
                                 class="w-full px-3 py-2.5 text-sm font-normal text-slate-700 bg-white border border-slate-300 rounded-lg shadow-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 disabled:opacity-50 disabled:bg-slate-50 disabled:cursor-not-allowed resize-vertical"
                                 rows="4"
-                                placeholder="Nhập nhận xét / đánh giá cho KPI này..."
+                                placeholder="Enter comment / evaluation for this KPI..."
                               />
                             </div>
                           </div>
@@ -810,7 +816,7 @@ const sendEvaluationForActiveTab = async () => {
                               :disabled="props.readonlyYear || !isPmPendingAssignmentStatus(item.statusCode)"
                               class="w-full px-3 py-2.5 text-sm font-normal text-slate-700 bg-white border border-slate-300 rounded-lg shadow-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 disabled:opacity-50 disabled:bg-slate-50 disabled:cursor-not-allowed resize-vertical"
                               rows="4"
-                              placeholder="Nhập nhận xét / đánh giá cho KPI này..."
+                              placeholder="Enter comment / evaluation for this KPI..."
                             />
                           </div>
                         </td>
@@ -827,7 +833,7 @@ const sendEvaluationForActiveTab = async () => {
                 <tbody v-if="hasCurrentTabKpis" class="border-t-2 border-slate-200">
                   <tr class="bg-slate-50">
                     <td colspan="4" class="px-4 py-3 text-right font-bold text-slate-600 text-xs tracking-wider">
-                      TỔNG CỘNG (TOTAL SCORE):
+                      TOTAL SCORE:
                     </td>
                     <td class="px-4 py-3 text-center font-bold text-slate-800">{{ totalWeight }} <span class="text-[10px] text-slate-400 font-normal">pts</span></td>
                     <td class="px-4 py-3 text-center font-bold text-slate-400">-</td>
@@ -836,7 +842,7 @@ const sendEvaluationForActiveTab = async () => {
                   </tr>
                   <tr class="bg-purple-50 border-t border-purple-100">
                     <td colspan="5" class="px-4 py-4 text-right font-bold text-purple-700 text-xs tracking-wider">
-                      ĐIỂM TRUNG BÌNH (AVERAGE SCORE):
+                      AVERAGE SCORE:
                     </td>
                     <td class="px-4 py-4 text-center font-bold text-slate-300">-</td>
                     <td class="px-4 py-4 text-center text-lg font-black text-purple-700">{{ averageWeightedSelfDisplay }}</td>
@@ -851,7 +857,7 @@ const sendEvaluationForActiveTab = async () => {
               class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950 mb-3"
             >
               <i class="fas fa-user-clock mr-2 text-amber-600" aria-hidden="true" />
-              Chỉ gửi đánh giá KPI Member lên GM khi toàn team đã nộp kết quả cho PM. Xem tên còn thiếu ở thông báo phía trên bảng
+              Only submit Member KPI evaluation to GM after the whole team has submitted results to PM. See missing names in the notice above
               <strong>Team Hierarchy & Performance</strong>.
             </div>
 
@@ -882,7 +888,7 @@ const sendEvaluationForActiveTab = async () => {
           <div class="bg-white border-t border-slate-200 p-4 px-6 flex justify-end gap-3 sticky bottom-0 z-10 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
             <button @click="$emit('close')"
               class="px-5 py-2.5 text-sm font-semibold text-slate-600 bg-white border border-slate-300 rounded-xl hover:bg-slate-50 hover:text-slate-900 transition-colors">
-              Hủy
+              Cancel
             </button>
             <button
               v-if="canUnlockActiveTab"
@@ -891,13 +897,13 @@ const sendEvaluationForActiveTab = async () => {
               class="px-5 py-2.5 text-sm font-semibold text-amber-800 bg-amber-50 border border-amber-200 rounded-xl hover:bg-amber-100 transition-colors flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed">
               <i v-if="unlocking" class="fas fa-spinner fa-spin" />
               <i v-else class="fas fa-lock-open" />
-              {{ unlocking ? 'Đang mở khóa...' : 'Unlock' }}
+              {{ unlocking ? 'Unlocking...' : 'Unlock' }}
             </button>
             <button @click="sendEvaluationForActiveTab" :disabled="props.readonlyYear || saving || !canSubmitPmEvaluationToGm"
               class="px-6 py-2.5 text-sm font-semibold text-white bg-slate-900 rounded-xl hover:bg-indigo-600 hover:shadow-lg transition-all flex items-center gap-2 focus:ring-4 focus:ring-indigo-500/20 disabled:opacity-60 disabled:cursor-not-allowed">
               <i v-if="saving" class="fas fa-spinner fa-spin" />
               <i v-else class="fas fa-paper-plane" />
-              {{ saving ? 'Đang gửi...' : 'Gửi đánh giá' }}
+              {{ saving ? 'Sending...' : 'Submit evaluation' }}
             </button>
           </div>
 
@@ -911,9 +917,9 @@ const sendEvaluationForActiveTab = async () => {
               >
                 <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" @click="closeUnlockConfirm" />
                 <div class="relative w-full max-w-md rounded-xl border border-slate-200 bg-white p-6 shadow-2xl">
-                  <h3 class="text-lg font-bold text-slate-900">Xác nhận mở khóa KPI</h3>
+                  <h3 class="text-lg font-bold text-slate-900">Confirm KPI Unlock</h3>
                   <p class="mt-3 text-sm text-slate-700">
-                    Bạn có chắc chắn muốn mở khóa toàn bộ KPI của <span class="font-bold">{{ member.name }}</span> này không?
+                    Are you sure you want to unlock all KPIs for <span class="font-bold">{{ member.name }}</span>?
                   </p>
                   <div class="mt-6 flex justify-end gap-3">
                     <button
@@ -922,7 +928,7 @@ const sendEvaluationForActiveTab = async () => {
                       class="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
                       @click="closeUnlockConfirm"
                     >
-                      Không
+                      No
                     </button>
                     <button
                       type="button"
@@ -932,7 +938,7 @@ const sendEvaluationForActiveTab = async () => {
                     >
                       <i v-if="unlocking" class="fas fa-spinner fa-spin text-xs" />
                       <i v-else class="fas fa-lock-open text-xs" />
-                      Có
+                      Yes
                     </button>
                   </div>
                 </div>

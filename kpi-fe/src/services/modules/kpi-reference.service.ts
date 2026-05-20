@@ -26,7 +26,7 @@ export async function apiGetCalculationReference(): Promise<KpiCalculationRefere
     .then((r) => r.data.data)
 }
 
-/** GET /kpi/reference/department-managers — user là `departments.manager_id` (đơn vị active). */
+/** GET /kpi/reference/department-managers — user active có role PM. */
 export async function apiGetDepartmentManagers(): Promise<DepartmentManagerOption[]> {
   return http
     .get<ApiResponse<DepartmentManagerOption[]>>('/kpi/reference/department-managers')

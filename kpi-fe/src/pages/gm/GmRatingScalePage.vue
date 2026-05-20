@@ -105,8 +105,8 @@ async function onCycleStatusToggle(s: GmRatingScaleSummary, ev: Event) {
     });
     showMessage(
       wantOpen
-        ? `Đã mở kỳ đánh giá ${s.name}`
-        : `Đã đóng kỳ đánh giá ${s.name}`,
+        ? `Evaluation cycle ${s.name} has been opened`
+        : `Evaluation cycle ${s.name} has been closed`,
     );
     await loadSummaries();
     await loadDetail(selectedYear.value);
@@ -114,7 +114,7 @@ async function onCycleStatusToggle(s: GmRatingScaleSummary, ev: Event) {
     showMessage(
       isAxiosError(e)
         ? String(e.response?.data?.message ?? e.message)
-        : "Không thể đổi trạng thái chu kỳ.",
+        : "Could not change the cycle status.",
     );
   } finally {
     statusSavingId.value = null;
@@ -135,7 +135,7 @@ async function loadSummaries() {
     showMessage(
       isAxiosError(e)
         ? String(e.response?.data?.message ?? e.message)
-        : "Không tải được danh sách năm.",
+        : "Could not load the year list.",
     );
   } finally {
     loadingList.value = false;
@@ -151,7 +151,7 @@ async function loadDetail(year: number) {
     showMessage(
       isAxiosError(e)
         ? String(e.response?.data?.message ?? e.message)
-        : "Không tải được khung điểm.",
+        : "Could not load the rating scale.",
     );
   } finally {
     loadingDetail.value = false;
@@ -228,17 +228,17 @@ function buildLevelBody(): SaveGmRatingScaleLevelBody | null {
   const min = parseNum(formMinScore.value);
   const pitch = parseNum(formPitch.value);
   if (min == null || pitch == null) {
-    showMessage("Vui lòng nhập điểm tối thiểu và pitch hợp lệ.");
+    showMessage("Enter a valid minimum score and pitch.");
     return null;
   }
   if (!formLevelCode.value.trim() || !formLabel.value.trim()) {
-    showMessage("Vui lòng nhập mã mức và nhãn hiển thị.");
+    showMessage("Enter a level code and display label.");
     return null;
   }
   const maxRaw = formMaxScore.value.trim();
   const max = maxRaw === "" ? null : parseNum(maxRaw);
   if (maxRaw !== "" && max == null) {
-    showMessage("Điểm tối đa không hợp lệ.");
+    showMessage("Maximum score is invalid.");
     return null;
   }
   return {
@@ -263,14 +263,14 @@ async function saveLevel() {
   try {
     if (levelDrawerMode.value === "create") {
       await gmKpiService.addRatingScaleLevel(cycleId, body);
-      showMessage("Đã thêm mức điểm.");
+      showMessage("Rating level has been added.");
     } else if (editingLevelId.value) {
       await gmKpiService.updateRatingScaleLevel(
         cycleId,
         editingLevelId.value,
         body,
       );
-      showMessage("Đã cập nhật mức điểm.");
+      showMessage("Rating level has been updated.");
     }
     showLevelDrawer.value = false;
     editingLevelId.value = null;
@@ -280,7 +280,7 @@ async function saveLevel() {
     showMessage(
       isAxiosError(e)
         ? String(e.response?.data?.message ?? e.message)
-        : "Không lưu được mức điểm.",
+        : "Could not save the rating level.",
     );
   } finally {
     saving.value = false;
@@ -307,7 +307,7 @@ async function confirmDeleteLevel() {
   deletingId.value = lv.id;
   try {
     await gmKpiService.deleteRatingScaleLevel(cycleId, lv.id);
-    showMessage(`Đã xóa mức ${lv.levelCode}.`);
+    showMessage(`Level ${lv.levelCode} has been deleted.`);
     showDeleteModal.value = false;
     deleteTarget.value = null;
     await loadSummaries();
@@ -316,7 +316,7 @@ async function confirmDeleteLevel() {
     showMessage(
       isAxiosError(e)
         ? String(e.response?.data?.message ?? e.message)
-        : "Không xóa được mức điểm.",
+        : "Could not delete the rating level.",
     );
   } finally {
     deletingId.value = null;
@@ -331,7 +331,7 @@ async function initScaleForSelectedYear() {
     initCopyEnabled.value &&
     (initCopyFromCycleId.value == null || !initCopySourceOptions.value.length)
   ) {
-    showMessage("Vui lòng chọn năm nguồn để sao chép.");
+    showMessage("Select a source year to copy from.");
     return;
   }
   saving.value = true;
@@ -342,7 +342,7 @@ async function initScaleForSelectedYear() {
       copyFromCycleId?: string;
     } = {
       cycleId,
-      name: `Khung điểm ${selectedYear.value}`,
+      name: `Rating Scale ${selectedYear.value}`,
     };
     if (initCopyEnabled.value && initCopyFromCycleId.value) {
       body.copyFromCycleId = initCopyFromCycleId.value;
@@ -353,16 +353,16 @@ async function initScaleForSelectedYear() {
     )?.year;
     const copied =
       initCopyEnabled.value && sourceYear != null
-        ? ` (sao chép từ năm ${sourceYear})`
+        ? ` (copied from year ${sourceYear})`
         : "";
-    showMessage(`Đã tạo khung năm ${selectedYear.value}${copied}.`);
+    showMessage(`Rating scale for ${selectedYear.value} has been created${copied}.`);
     await loadSummaries();
     await loadDetail(selectedYear.value);
   } catch (e) {
     showMessage(
       isAxiosError(e)
         ? String(e.response?.data?.message ?? e.message)
-        : "Không tạo được khung.",
+        : "Could not create the rating scale.",
     );
   } finally {
     saving.value = false;
@@ -389,7 +389,7 @@ function chipStyle(hex: string | null | undefined) {
       >
         <div class="border-b border-slate-100 px-4 py-3">
           <h2 class="text-xs font-bold uppercase tracking-wider text-slate-500">
-            Năm đánh giá
+            Evaluation Year
           </h2>
         </div>
         <div v-if="loadingList" class="p-4 text-center text-sm text-slate-400">
@@ -421,13 +421,13 @@ function chipStyle(hex: string | null | undefined) {
                         : 'text-slate-400'
                   "
                 >
-                  {{ s.statusCode === CYCLE_OPEN ? "Đang mở" : "Đã đóng" }}
+                  {{ s.statusCode === CYCLE_OPEN ? "Open" : "Closed" }}
                 </span>
               </button>
               <label
                 class="relative inline-flex shrink-0 cursor-pointer items-center"
                 :title="
-                  s.statusCode === CYCLE_OPEN ? 'Đóng kỳ (202)' : 'Mở kỳ (201)'
+                  s.statusCode === CYCLE_OPEN ? 'Close cycle (202)' : 'Open cycle (201)'
                 "
                 @click.stop
               >
@@ -457,8 +457,8 @@ function chipStyle(hex: string | null | undefined) {
           v-if="!loadingList && summaries.length && !hasAnyOpenCycle"
           class="border-t border-amber-100 bg-amber-50 px-3 py-2 text-[11px] text-amber-800"
         >
-          Không có năm nào đang mở. Bật toggle để mở kỳ trước khi chỉnh khung
-          điểm.
+          No year is currently open. Turn on the toggle to open a cycle before editing
+          the rating scale.
         </p>
       </aside>
 
@@ -471,16 +471,16 @@ function chipStyle(hex: string | null | undefined) {
         >
           <div>
             <h1 class="text-lg font-bold text-slate-900">
-              {{ detail?.name ?? `Năm ${selectedYear}` }}
+              {{ detail?.name ?? `Year ${selectedYear}` }}
             </h1>
             <p class="mt-0.5 text-xs text-slate-500">
-              {{ detail?.levels?.length ?? 0 }} mức
+              {{ detail?.levels?.length ?? 0 }} levels
               <span
                 v-if="!selectedEditable"
                 class="ml-2 inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 font-semibold text-slate-600"
               >
                 <i class="fas fa-lock mr-1 text-[10px]" />
-                Chỉ xem
+                Read-only
               </span>
             </p>
           </div>
@@ -492,7 +492,7 @@ function chipStyle(hex: string | null | undefined) {
             @click="openCreateLevel"
           >
             <i class="fas fa-plus text-xs" />
-            Thêm mức
+            Add Level
           </button>
         </div>
 
@@ -508,7 +508,7 @@ function chipStyle(hex: string | null | undefined) {
           class="flex flex-1 flex-col items-center justify-center gap-4 p-8 sm:p-12"
         >
           <p class="text-center text-sm text-slate-600">
-            Chưa có khung điểm cho năm {{ selectedYear }}.
+            No rating scale exists for {{ selectedYear }}.
           </p>
           <div
             v-if="selectedEditable && initCopySourceOptions.length"
@@ -522,14 +522,14 @@ function chipStyle(hex: string | null | undefined) {
               />
               <span class="text-sm text-slate-700">
                 <span class="font-semibold text-slate-800"
-                  >Sao chép mức điểm</span
+                  >Copy rating levels</span
                 >
-                từ năm khác khi khởi tạo
+                from another year during initialization
               </span>
             </label>
             <div v-if="initCopyEnabled" class="mt-3">
               <label class="mb-1 block text-xs font-bold text-slate-500"
-                >Năm nguồn</label
+                >Source Year</label
               >
               <select
                 v-model="initCopyFromCycleId"
@@ -540,7 +540,7 @@ function chipStyle(hex: string | null | undefined) {
                   :key="s.cycleId"
                   :value="s.cycleId"
                 >
-                  {{ s.year }} — {{ s.levelCount }} mức
+                  {{ s.year }} - {{ s.levelCount }} levels
                 </option>
               </select>
             </div>
@@ -552,7 +552,7 @@ function chipStyle(hex: string | null | undefined) {
             :disabled="saving"
             @click="initScaleForSelectedYear"
           >
-            Khởi tạo khung năm {{ selectedYear }}
+            Initialize scale for {{ selectedYear }}
           </button>
         </div>
 
@@ -563,13 +563,13 @@ function chipStyle(hex: string | null | undefined) {
             >
               <tr>
                 <th class="px-4 py-3">#</th>
-                <th class="px-4 py-3">Mã</th>
-                <th class="px-4 py-3">Nhãn</th>
+                <th class="px-4 py-3">Code</th>
+                <th class="px-4 py-3">Label</th>
                 <th class="px-4 py-3">Min</th>
                 <th class="px-4 py-3">Max</th>
                 <th class="px-4 py-3">Pitch %</th>
                 <th class="px-4 py-3">Top</th>
-                <th class="px-4 py-3 text-right">Thao tác</th>
+                <th class="px-4 py-3 text-right">Actions</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-slate-100">
@@ -603,7 +603,7 @@ function chipStyle(hex: string | null | undefined) {
                   <i
                     v-if="lv.topTier"
                     class="fas fa-star text-amber-500"
-                    title="Nhóm xuất sắc"
+                    title="Top tier"
                   />
                   <span v-else class="text-slate-300">—</span>
                 </td>
@@ -612,7 +612,7 @@ function chipStyle(hex: string | null | undefined) {
                     type="button"
                     class="mr-2 rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-indigo-600 disabled:opacity-40"
                     :disabled="!selectedEditable"
-                    title="Sửa"
+                    title="Edit"
                     @click="openEditLevel(lv)"
                   >
                     <i class="fas fa-pen text-xs" />
@@ -621,7 +621,7 @@ function chipStyle(hex: string | null | undefined) {
                     type="button"
                     class="rounded-lg p-2 text-slate-500 hover:bg-rose-50 hover:text-rose-600 disabled:opacity-40"
                     :disabled="!selectedEditable || deletingId === lv.id"
-                    title="Xóa"
+                    title="Delete"
                     @click="openDeleteModal(lv)"
                   >
                     <i
@@ -659,16 +659,16 @@ function chipStyle(hex: string | null | undefined) {
         <div class="border-b border-slate-100 px-5 py-4">
           <h3 class="text-lg font-bold text-slate-900">
             {{
-              levelDrawerMode === "create" ? "Thêm mức điểm" : "Sửa mức điểm"
+              levelDrawerMode === "create" ? "Add Rating Level" : "Edit Rating Level"
             }}
           </h3>
-          <p class="text-xs text-slate-500">Năm {{ selectedYear }}</p>
+          <p class="text-xs text-slate-500">Year {{ selectedYear }}</p>
         </div>
         <div class="flex-1 space-y-4 overflow-y-auto p-5">
           <div class="grid grid-cols-2 gap-3">
             <div>
               <label class="mb-1 block text-xs font-bold text-slate-500"
-                >Thứ tự</label
+                >Order</label
               >
               <input
                 v-model.number="formSortOrder"
@@ -679,7 +679,7 @@ function chipStyle(hex: string | null | undefined) {
             </div>
             <div>
               <label class="mb-1 block text-xs font-bold text-slate-500"
-                >Mã mức</label
+                >Level Code</label
               >
               <input
                 v-model="formLevelCode"
@@ -692,7 +692,7 @@ function chipStyle(hex: string | null | undefined) {
           </div>
           <div>
             <label class="mb-1 block text-xs font-bold text-slate-500"
-              >Nhãn hiển thị</label
+              >Display Label</label
             >
             <input
               v-model="formLabel"
@@ -704,7 +704,7 @@ function chipStyle(hex: string | null | undefined) {
           <div class="grid grid-cols-2 gap-3">
             <div>
               <label class="mb-1 block text-xs font-bold text-slate-500"
-                >Điểm min</label
+                >Min Score</label
               >
               <input
                 v-model="formMinScore"
@@ -715,14 +715,14 @@ function chipStyle(hex: string | null | undefined) {
             </div>
             <div>
               <label class="mb-1 block text-xs font-bold text-slate-500"
-                >Điểm max</label
+                >Max Score</label
               >
               <input
                 v-model="formMaxScore"
                 type="text"
                 inputmode="decimal"
                 class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono"
-                placeholder="Để trống = không giới hạn"
+                placeholder="Leave blank = no limit"
               />
             </div>
           </div>
@@ -740,7 +740,7 @@ function chipStyle(hex: string | null | undefined) {
             </div>
             <div>
               <label class="mb-1 block text-xs font-bold text-slate-500"
-                >Màu</label
+                >Color</label
               >
               <input
                 v-model="formColorHex"
@@ -755,7 +755,7 @@ function chipStyle(hex: string | null | undefined) {
               type="checkbox"
               class="rounded border-slate-300"
             />
-            Thuộc nhóm xuất sắc (Top tier)
+            Belongs to top tier
           </label>
         </div>
         <div class="flex justify-end gap-3 border-t border-slate-100 p-4">
@@ -765,7 +765,7 @@ function chipStyle(hex: string | null | undefined) {
             :disabled="saving"
             @click="closeLevelDrawer"
           >
-            Hủy
+            Cancel
           </button>
           <button
             type="button"
@@ -777,7 +777,7 @@ function chipStyle(hex: string | null | undefined) {
               class="fas mr-1"
               :class="saving ? 'fa-spinner fa-spin' : 'fa-save'"
             />
-            Lưu
+            Save
           </button>
         </div>
       </div>
@@ -796,7 +796,7 @@ function chipStyle(hex: string | null | undefined) {
         @click.stop
       >
         <h3 class="font-bold text-slate-900">
-          Xóa mức {{ deleteTarget.levelCode }}?
+          Delete level {{ deleteTarget.levelCode }}?
         </h3>
         <p class="mt-2 text-sm text-slate-600">{{ deleteTarget.label }}</p>
         <div class="mt-6 flex justify-end gap-3">
@@ -806,7 +806,7 @@ function chipStyle(hex: string | null | undefined) {
             :disabled="!!deletingId"
             @click="closeDeleteModal"
           >
-            Hủy
+            Cancel
           </button>
           <button
             type="button"
@@ -814,7 +814,7 @@ function chipStyle(hex: string | null | undefined) {
             :disabled="!!deletingId"
             @click="confirmDeleteLevel"
           >
-            Xóa
+            Delete
           </button>
         </div>
       </div>

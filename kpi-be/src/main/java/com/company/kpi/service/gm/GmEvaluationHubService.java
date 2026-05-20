@@ -106,7 +106,7 @@ public class GmEvaluationHubService {
                         aid, cycleId, evaluationUserId, gmUserId);
                 if (n != 1) {
                     throw AppException.badRequest(
-                            "Assignment không ở trạng thái chờ review GM (502) hoặc đã xử lý: " + aid);
+                            "Assignment không ở trạng thái chờ review GM hoặc đã xử lý: " + aid);
                 }
                 persistLineGmCommentIfPresent(line, aid, cycleId, evaluationUserId, gmUserId);
                 syncCompletedTeamParentFromChildIfReady(aid, cycleId, 502, 503, gmUserId);
@@ -114,13 +114,13 @@ public class GmEvaluationHubService {
             } else if (st == 602) {
                 BigDecimal score = line.getEndGmScore();
                 if (score == null) {
-                    throw AppException.badRequest("Thiếu điểm GM (endGmScore) cho assignment cuối kỳ (602): " + aid);
+                    throw AppException.badRequest("Thiếu điểm GM cho assignment cuối kỳ: " + aid);
                 }
                 int n = kpiAssignmentMapper.updateGmEvaluationHubConfirmGrade602(
                         aid, cycleId, evaluationUserId, score, gmUserId);
                 if (n != 1) {
                     throw AppException.badRequest(
-                            "Assignment không ở trạng thái chờ chấm GM (602) hoặc đã xử lý: " + aid);
+                            "Assignment không ở trạng thái chờ chấm GM hoặc đã xử lý: " + aid);
                 }
                 persistLineGmCommentIfPresent(line, aid, cycleId, evaluationUserId, gmUserId);
                 syncCompletedTeamParentFromChildIfReady(aid, cycleId, 602, 603, gmUserId);
@@ -128,7 +128,7 @@ public class GmEvaluationHubService {
                 updated++;
             } else {
                 throw AppException.badRequest(
-                        "Assignment không ở trạng thái chờ GM (502/602), status=" + st + ": " + aid);
+                        "Assignment không ở trạng thái chờ GM, status=" + st + ": " + aid);
             }
         }
 
@@ -138,7 +138,7 @@ public class GmEvaluationHubService {
         if (wrote602) {
             if (rawSupervisorComment == null || rawSupervisorComment.isBlank()) {
                 throw AppException.badRequest(
-                        "Vui lòng nhập nhận xét supervisor khi chấm điểm cuối kỳ (ASM 602).");
+                        "Please enter a supervisor comment when grading the end of the year.");
             }
             shouldPersistSupervisorComment = true;
         }

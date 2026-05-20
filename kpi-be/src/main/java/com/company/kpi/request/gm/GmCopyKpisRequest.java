@@ -14,6 +14,10 @@ public class GmCopyKpisRequest {
     @NotNull(message = "Cycle ID is required")
     private UUID cycleId;
 
+    /** Member nguồn — dùng để lấy {@code parent_assignment_id} nhánh PM cho KPI Team (102). */
+    @NotNull(message = "Source user ID is required")
+    private UUID sourceUserId;
+
     @NotEmpty(message = "KPI items list cannot be empty")
     @Valid
     private List<GmCopyKpiItemRequest> items;

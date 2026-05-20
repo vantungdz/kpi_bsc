@@ -7,6 +7,8 @@ import {
 import { useMemberKpiFormatters } from '@/composables/useMemberKpiFormatters'
 import { extractRawInputFromApiTargetDescription } from '@/utils/kpiScoringRulesDsl'
 import { formatTargetDisplayForMemeber } from '@/utils/strategicKpiTypeCodes'
+import KpiCreatorRowLegend from '@/components/shared/KpiCreatorRowLegend.vue'
+import { kpiCreatorRowBgFromSource } from '@/utils/kpiCreatorRowBg'
 
 type KpiCategorySection = { key: string; headerLabel: string; items: KpiItem[] }
 
@@ -100,11 +102,7 @@ function shouldOpenSelfCreatedEditForm(item: KpiItem): boolean {
 }
 
 function sourceRowClass(item: KpiItem): string {
-  if (item.createdByCurrentUser === true) return 'bg-fuchsia-50 hover:bg-fuchsia-100'
-  const role = String(item.createdByRoleCode ?? '').trim().toUpperCase()
-  if (role === 'GM') return 'bg-amber-50 hover:bg-amber-100'
-  if (role === 'PM') return 'bg-blue-50 hover:bg-blue-100'
-  return ''
+  return kpiCreatorRowBgFromSource(item, { selfRole: 'MEMBER' })
 }
 
 function rowClass(item: KpiItem): string {
@@ -197,6 +195,7 @@ const hasPromotionAssignments = computed(() => props.promotionItemsFlat.length >
   </div>
 
   <div v-else>
+    <KpiCreatorRowLegend />
     <div class="overflow-x-auto">
     <table class="w-full text-left">
       <thead class="border-b border-slate-200 bg-slate-200">

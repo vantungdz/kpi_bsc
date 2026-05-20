@@ -197,7 +197,17 @@ async function confirmCopy() {
 
   submitting.value = true
   try {
-    await gmKpiService.copyKpisToMember(props.targetMember.id, activeCycleId.value, items)
+    const sourceId = String(selectedSourceMember.value?.id ?? '').trim()
+    if (!sourceId) {
+      pushGmNotification('Select a source member to copy from.', { variant: 'error' })
+      return
+    }
+    await gmKpiService.copyKpisToMember(
+      props.targetMember.id,
+      activeCycleId.value,
+      sourceId,
+      items,
+    )
     pushGmNotification('KPIs copied successfully.', { variant: 'success' })
     emit('copied')
     closeDrawer()

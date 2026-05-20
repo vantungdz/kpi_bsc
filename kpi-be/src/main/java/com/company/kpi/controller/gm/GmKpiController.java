@@ -62,7 +62,7 @@ import java.util.UUID;
  *   GET /api/v1/kpi/gm/evaluation-hub/assignments?cycleId= — tab đánh giá: assignments ASM 501/502/503/601/602/603
  *   POST /api/v1/kpi/gm/evaluation-hub/confirm — GM xác nhận drawer: 502→503, 602→603
  *   GET /api/v1/kpi/gm/approved-kpi-queue?cycleId= — KPI cá nhân ASM 401/402/403
- *   POST /api/v1/kpi/gm/approved-kpi-queue/decision — 403→405/406 hoặc 407→404 (resolve feedback)
+ *   POST /api/v1/kpi/gm/approved-kpi-queue/decision — 403→405/406; từ chối feedback 407→404
  *   GET /api/v1/kpi/gm/sections/:sectionId/members?year=2025
  *   GET /api/v1/kpi/gm/kpi-templates — {@code kpi_templates}
  *   POST /api/v1/kpi/gm/kpi-templates — tạo gói template
@@ -301,7 +301,7 @@ public class GmKpiController extends BaseController {
         return success(gmApprovedKpiService.listQueue(cycleId));
     }
 
-    /** GM duyệt/từ chối đề xuất KPI (403) hoặc xử lý feedback chờ GM (407→404). */
+    /** GM duyệt/từ chối đề xuất KPI (403) hoặc xử lý feedback chờ GM (407→404 khi từ chối). */
     @PostMapping("/approved-kpi-queue/decision")
     public ResponseEntity<BaseResponse<GmApprovedKpiDecisionResponse>> decideApprovedKpi(
             @Valid @RequestBody GmApprovedKpiDecisionRequest body, Authentication authentication) {

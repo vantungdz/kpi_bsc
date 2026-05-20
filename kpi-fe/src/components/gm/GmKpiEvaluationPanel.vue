@@ -23,6 +23,9 @@ import type {
 import { isReadonlyKpiYear } from "@/utils/kpi-year";
 import { gmKpiService } from "@/services/modules/kpi-gm.service";
 import {
+  activateEvidenceAttachment,
+  evidenceAttachmentLabel,
+  evidenceAttachmentTitle,
   isEvidenceImageUrl,
   isRecordStyleCalcRule,
   normalizeEvidenceHref,
@@ -116,6 +119,10 @@ const unlockConfirmTarget = ref<{ emp: GmEvalMember; tab: "cascade" | "promotion
 const pageLoading = ref(true);
 
 const isReadonly = computed(() => isReadonlyKpiYear(effectiveYear.value));
+
+function onEvidenceAttachmentClick(att: { url: string; name?: string }) {
+  void activateEvidenceAttachment(att)
+}
 
 function gmKpiSortText(item: GmKpiItem): string {
   return String(item?.title ?? "").trim();
@@ -2366,11 +2373,11 @@ async function confirmDone(
           >
             <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" @click="closeUnlockConfirm" />
             <div class="relative w-full max-w-md rounded-xl border border-slate-200 bg-white p-6 shadow-2xl">
-              <h3 class="text-lg font-bold text-slate-900">Xác nhận mở khóa KPI</h3>
+              <h3 class="text-lg font-bold text-slate-900">Confirm KPI Unlock</h3>
               <p class="mt-3 text-sm text-slate-700">
-                Bạn có chắc chắn muốn mở khóa toàn bộ KPI của
+                Are you sure you want to unlock all KPIs for
                 <span class="font-bold">{{ unlockConfirmTarget.emp.name }}</span>
-                này không?
+                ?
               </p>
               <div class="mt-6 flex justify-end gap-3">
                 <button
@@ -2379,7 +2386,7 @@ async function confirmDone(
                   class="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
                   @click="closeUnlockConfirm"
                 >
-                  Không
+                  No
                 </button>
                 <button
                   type="button"
@@ -2389,7 +2396,7 @@ async function confirmDone(
                 >
                   <i v-if="unlockBusy" class="fas fa-spinner fa-spin text-xs" aria-hidden="true" />
                   <i v-else class="fas fa-lock-open text-xs" aria-hidden="true" />
-                  Có
+                  Yes
                 </button>
               </div>
             </div>
@@ -2801,12 +2808,12 @@ async function confirmDone(
                                               class="rounded-md border border-slate-100 bg-slate-50/80 p-2"
                                             >
                                               <a
-                                                :href="normalizeEvidenceHref(att.url)"
-                                                target="_blank"
-                                                rel="noopener noreferrer"
+                                                href="#"
                                                 class="break-all text-xs font-semibold text-indigo-600 underline hover:text-indigo-800"
+                                                :title="evidenceAttachmentTitle(att)"
+                                                @click.prevent="onEvidenceAttachmentClick(att)"
                                               >
-                                                {{ att.name || att.url }}
+                                                {{ evidenceAttachmentLabel(att) }}
                                               </a>
                                               <div
                                                 v-if="isEvidenceImageUrl(att.url)"

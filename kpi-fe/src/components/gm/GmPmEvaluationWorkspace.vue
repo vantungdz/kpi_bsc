@@ -126,8 +126,8 @@ const filterSubtitle = computed(() => {
   const id = pmBrokerId.value
   if (!id) return ''
   const b = getGmEvalBroker(id)
-  if (b) return `Đang lọc: ${b.name} (từ Diagnostics).`
-  return 'Đang lọc 1 PM (từ Diagnostics).'
+  if (b) return `Filtering: ${b.name} (from Diagnostics).`
+  return 'Filtering 1 PM (from Diagnostics).'
 })
 </script>
 
@@ -147,7 +147,7 @@ const filterSubtitle = computed(() => {
         :to="{ path: '/gm/dashboard', query: { tab: 'pm' } }"
         class="shrink-0 text-[11px] font-bold text-indigo-700 underline-offset-2 hover:underline sm:text-xs"
       >
-        Xem tất cả PM
+        View all PMs
       </RouterLink>
     </div>
     <div
@@ -155,7 +155,7 @@ const filterSubtitle = computed(() => {
       class="px-4 py-10 text-center text-sm font-medium text-slate-500 sm:px-5"
     >
       <i class="fas fa-spinner fa-spin mr-2 text-indigo-500" aria-hidden="true" />
-      Đang tải dữ liệu đánh giá…
+      Loading evaluation data...
     </div>
     <GmKpiEvaluationPanel
       v-else

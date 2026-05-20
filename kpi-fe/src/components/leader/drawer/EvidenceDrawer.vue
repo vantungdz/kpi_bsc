@@ -13,20 +13,33 @@ import {
   ratioLabels,
   computeRatioPreview,
   parseNumericFromField,
+  sanitizeNumericDecimalInput,
   isRecordStyleFormMode,
+  splitEvidenceFilesAndUrls,
+  activateEvidenceAttachment,
+  evidenceAttachmentLabel,
+  evidenceAttachmentTitle,
   WA_MONTH_OPTIONS,
   type EvidenceFormMode,
 } from '@/utils/memberKpiHelpers'
+import {
+  appendEvidenceFilesUrlsToPayload,
+  mapEvidencePairsToPending,
+  uploadPendingEvidenceFiles,
+} from '@/utils/evidenceFileStorage'
 import {
   parseRulesFromTargetDescription,
   extractRawInputFromApiTargetDescription,
   resolveScoringScoreForMetric,
 } from '@/utils/kpiScoringRulesDsl'
+import EvidenceSavingOverlay from '@/components/shared/EvidenceSavingOverlay.vue'
 
 const props = defineProps<{
   open: boolean
   item: any | null
   mode?: 'detail' | 'feedback'
+  /** Gọi API lưu (async) — overlay chờ đến khi hoàn tất. */
+  saveEvidence?: (payload: Record<string, unknown>) => Promise<void>
 }>()
 
 const emit = defineEmits<{
@@ -35,6 +48,14 @@ const emit = defineEmits<{
 }>()
 const toast = useToast()
 const isFeedbackMode = computed(() => props.mode === 'feedback')
+
+/** Full-screen overlay — chỉ Save Evidence, không Send Feedback. */
+const savingEvidenceOverlay = computed(() => saving.value && !isFeedbackMode.value)
+
+function requestClose() {
+  if (savingEvidenceOverlay.value) return
+  emit('close')
+}
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const EVIDENCE_MAX_FILES = 5
@@ -56,7 +77,9 @@ const evidenceUploadHint = ref('')
 type PendingEvidenceFile = { id: string; file: File }
 type PendingEvidenceUrl = { id: string; url: string; name?: string }
 const pendingEvidenceFiles = ref<PendingEvidenceFile[]>([])
+const pendingEvidenceStoredFiles = ref<PendingEvidenceUrl[]>([])
 const pendingEvidenceUrls = ref<PendingEvidenceUrl[]>([])
+const openedEvidencesJson = ref('')
 
 type PlanActualRow = { id: string; comment: string; plan: string; actual: string }
 const generalPlanActualRows = ref<PlanActualRow[]>([])
@@ -166,18 +189,22 @@ const attachmentHubTitle = computed(() => {
 })
 
 const hasEvidenceAttachments = computed(
-  () => pendingEvidenceFiles.value.length > 0 || pendingEvidenceUrls.value.length > 0,
-)
-const pendingEvidenceNamedRows = computed(() =>
-  pendingEvidenceUrls.value.filter(r => (r.name ?? '').trim().length > 0),
+  () =>
+    pendingEvidenceFiles.value.length > 0
+    || pendingEvidenceStoredFiles.value.length > 0
+    || pendingEvidenceUrls.value.length > 0,
 )
 const evidenceFileSectionCount = computed(
-  () => pendingEvidenceFiles.value.length + pendingEvidenceNamedRows.value.length,
+  () => pendingEvidenceFiles.value.length + pendingEvidenceStoredFiles.value.length,
 )
 const hasFileAttachmentsSection = computed(
-  () => pendingEvidenceFiles.value.length > 0 || pendingEvidenceNamedRows.value.length > 0,
+  () => pendingEvidenceFiles.value.length > 0 || pendingEvidenceStoredFiles.value.length > 0,
 )
 const hasEvidenceUrlList = computed(() => pendingEvidenceUrls.value.length > 0)
+
+function onStoredFileClick(row: PendingEvidenceUrl) {
+  void activateEvidenceAttachment(row)
+}
 const rejectedReasonNote = computed(() => {
   if (Number(props.item?.statusCode ?? 0) !== 406) return ''
   return String(props.item?.updateReason ?? props.item?.feedbackComment ?? '').trim()
@@ -278,6 +305,9 @@ function initForm() {
   evidenceUrlDraft.value = ''
   contentDraft.value = ''
   pendingEvidenceFiles.value = []
+  pendingEvidenceStoredFiles.value = []
+  pendingEvidenceUrls.value = []
+  openedEvidencesJson.value = jsonSource
 
   detailSelfScore.value = initialSelfScoreFromItem(it)
   evidenceNoteDraft.value = it.evidenceNote || ''
@@ -322,16 +352,20 @@ function initForm() {
     leaderFeedbackDraft.value = String(it.feedbackComment ?? parsed.leaderFeedback ?? '')
     gmCommentDraft.value = String(parsed.gmComment ?? '')
 
-    const files = parsed.files || parsed.evd || []
-    pendingEvidenceUrls.value = files
-      .map((f: any, i: number) => {
-        const url = String(f.url ?? '').trim()
-        return url ? { id: `u-${i}`, url, name: f.name || '' } : null
-      })
-      .filter(Boolean)
+    const split = splitEvidenceFilesAndUrls(parsed)
+    const prefix = String(it.assignmentId ?? it.id ?? 'ev')
+    pendingEvidenceStoredFiles.value = mapEvidencePairsToPending(
+      split.files.map(f => ({ url: f.url, name: f.name })),
+      `${prefix}-f`,
+    )
+    pendingEvidenceUrls.value = mapEvidencePairsToPending(
+      split.urls.map(f => ({ url: f.url, name: f.name })),
+      `${prefix}-u`,
+    )
   } catch {
     generalPlanActualRows.value = [{ id: 'p-0', comment: '', plan: '', actual: '' }]
     waTimeRows.value = [{ id: 'w-0', month: '1', spent: '', standard: '' }]
+    pendingEvidenceStoredFiles.value = []
     pendingEvidenceUrls.value = []
     contentDraft.value = ''
     leaderFeedbackDraft.value = ''
@@ -378,7 +412,10 @@ function onEvidenceFilesChange(e: Event) {
   if (!picked.length) return
 
   evidenceUploadHint.value = ''
-  let slot = EVIDENCE_MAX_FILES - pendingEvidenceFiles.value.length
+  let slot =
+    EVIDENCE_MAX_FILES
+    - pendingEvidenceFiles.value.length
+    - pendingEvidenceStoredFiles.value.length
   if (slot <= 0) {
     evidenceUploadHint.value = `Maximum ${EVIDENCE_MAX_FILES} files reached. Remove some files to add new ones.`
     return
@@ -406,6 +443,10 @@ function onEvidenceFilesChange(e: Event) {
 function removePendingEvidenceFile(id: string) {
   pendingEvidenceFiles.value = pendingEvidenceFiles.value.filter(f => f.id !== id)
   if (pendingEvidenceFiles.value.length < EVIDENCE_MAX_FILES) evidenceUploadHint.value = ''
+}
+
+function removePendingEvidenceStoredFile(id: string) {
+  pendingEvidenceStoredFiles.value = pendingEvidenceStoredFiles.value.filter(f => f.id !== id)
 }
 
 // ── URL handling ──────────────────────────────────────────────────────────────
@@ -476,10 +517,20 @@ function addWaRow() {
 async function handleSave() {
   if (!props.item || !canSaveEvidence.value) return
   if (isFeedbackMode.value) {
-    emit('save', {
-      feedbackMode: true,
-      feedbackComment: String(leaderFeedbackDraft.value ?? '').trim(),
-    })
+    saving.value = true
+    try {
+      const feedbackPayload = {
+        feedbackMode: true,
+        feedbackComment: String(leaderFeedbackDraft.value ?? '').trim(),
+      }
+      if (props.saveEvidence) {
+        await props.saveEvidence(feedbackPayload)
+      } else {
+        emit('save', feedbackPayload)
+      }
+    } finally {
+      saving.value = false
+    }
     return
   }
   if (metricOutOfDslRule.value) {
@@ -561,14 +612,32 @@ async function handleSave() {
           : Boolean(r.plan || r.actual),
       )
 
+    if (pendingEvidenceFiles.value.length > 0) {
+      try {
+        const uploaded = await uploadPendingEvidenceFiles(pendingEvidenceFiles.value)
+        pendingEvidenceStoredFiles.value.push(
+          ...mapEvidencePairsToPending(uploaded, `up-${Date.now()}`),
+        )
+        pendingEvidenceFiles.value = []
+      } catch (error) {
+        console.error('Failed to upload evidence files', error)
+        toast.error('Failed to upload files')
+        return
+      }
+    }
+
     const evidencesObj: Record<string, unknown> = {
       note: evidenceNoteDraft.value,
       gmComment: gmCommentDraft.value,
       content: contentDraft.value,
-      files: pendingEvidenceUrls.value.map(u => ({ url: u.url, name: u.name })),
       planActualRecords: planRows,
       waTimeRecords: waTimeRows.value.filter(r => r.spent || r.standard),
     }
+    appendEvidenceFilesUrlsToPayload(
+      evidencesObj,
+      pendingEvidenceStoredFiles.value.map(u => ({ url: u.url, name: u.name })),
+      pendingEvidenceUrls.value.map(u => ({ url: u.url, name: u.name })),
+    )
     if (isRecordStyleFormMode(drawerFormMode.value)) {
       const metricDisplay = recordStyleResultDisplay(drawerFormMode.value, generalPlanActualRows.value)
       if (metricDisplay != null) {
@@ -583,11 +652,15 @@ async function handleSave() {
       evidenceNote: evidenceNoteDraft.value,
       gmComment: gmCommentDraft.value,
       certificateOutcomeNote: certificateOutcomeDraft.value,
-      pendingEvidenceFiles: pendingEvidenceFiles.value,
       actualResult,
       evidencesJson: JSON.stringify(evidencesObj),
+      openedEvidencesJson: openedEvidencesJson.value,
     }
-    emit('save', payload)
+    if (props.saveEvidence) {
+      await props.saveEvidence(payload)
+    } else {
+      emit('save', payload)
+    }
   } finally {
     saving.value = false
   }
@@ -597,6 +670,8 @@ async function handleSave() {
 
 <template>
   <Teleport to="body">
+    <EvidenceSavingOverlay :show="savingEvidenceOverlay" />
+
     <Transition name="evidence-drawer">
       <div
         v-if="open && item"
@@ -607,7 +682,7 @@ async function handleSave() {
       >
         <div
           class="evidence-drawer-backdrop absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
-          @click="$emit('close')"
+          @click="requestClose"
         />
         <aside
           class="evidence-drawer-panel relative flex h-full max-h-[100dvh] w-full max-w-[700px] min-h-0 flex-col overflow-hidden bg-slate-50 shadow-2xl"
@@ -631,7 +706,7 @@ async function handleSave() {
               type="button"
               class="rounded-full p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
               aria-label="Close"
-              @click="$emit('close')"
+              @click="requestClose"
             >
               <i class="fas fa-times text-lg" />
             </button>
@@ -865,12 +940,13 @@ async function handleSave() {
                                 {{ ratioLabels(item?.calculationTypeCode).plan }}
                               </label>
                               <input
-                                v-model="row.plan"
+                                :value="row.plan"
                                 type="text"
                                 inputmode="decimal"
                                 placeholder="0"
                                 :readonly="isReadOnly"
                                 class="w-full rounded border border-slate-300 px-3 py-2 text-sm focus:ring-1 focus:ring-blue-500 read-only:bg-slate-50"
+                                @input="row.plan = sanitizeNumericDecimalInput(($event.target as HTMLInputElement).value)"
                               />
                             </div>
                             <div>
@@ -882,13 +958,14 @@ async function handleSave() {
                                 }}
                               </label>
                               <input
-                                v-model="row.actual"
+                                :value="row.actual"
                                 type="text"
                                 inputmode="decimal"
                                 :placeholder="isRecordStyleFormMode(drawerFormMode) ? 'Enter actual data...' : '0'"
                                 :readonly="isReadOnly"
                                 class="w-full rounded border border-slate-300 px-3 py-2 text-sm focus:ring-1 read-only:bg-slate-50"
                                 :class="drawerFormMode === 'average' ? 'focus:ring-blue-500' : 'focus:ring-teal-500'"
+                                @input="row.actual = sanitizeNumericDecimalInput(($event.target as HTMLInputElement).value)"
                               />
                             </div>
                             <div class="flex items-end justify-end md:pb-[2px]">
@@ -966,13 +1043,13 @@ async function handleSave() {
                       <label
                         class="group relative block rounded-lg border-2 border-dashed border-slate-300 bg-white p-5 text-center transition-colors"
                         :class="
-                          pendingEvidenceFiles.length >= EVIDENCE_MAX_FILES || isReadOnly
+                          evidenceFileSectionCount >= EVIDENCE_MAX_FILES || isReadOnly
                             ? 'cursor-not-allowed opacity-60'
                             : 'cursor-pointer hover:border-indigo-400 hover:bg-slate-50'
                         "
                       >
                         <input
-                          v-if="pendingEvidenceFiles.length < EVIDENCE_MAX_FILES"
+                          v-if="evidenceFileSectionCount < EVIDENCE_MAX_FILES"
                           type="file"
                           multiple
                           :accept="EVIDENCE_ACCEPT_ATTR"
@@ -1050,10 +1127,10 @@ async function handleSave() {
                           </span>
                         </span>
                         <span
-                          v-if="pendingEvidenceFiles.length >= EVIDENCE_MAX_FILES || pendingEvidenceUrls.length >= EVIDENCE_MAX_URLS"
+                          v-if="evidenceFileSectionCount >= EVIDENCE_MAX_FILES || pendingEvidenceUrls.length >= EVIDENCE_MAX_URLS"
                           class="ml-auto flex flex-wrap gap-2 text-[11px] font-medium text-amber-700"
                         >
-                          <span v-if="pendingEvidenceFiles.length >= EVIDENCE_MAX_FILES">File limit reached</span>
+                          <span v-if="evidenceFileSectionCount >= EVIDENCE_MAX_FILES">File limit reached</span>
                           <span v-if="pendingEvidenceUrls.length >= EVIDENCE_MAX_URLS">URL limit reached</span>
                         </span>
                       </div>
@@ -1093,8 +1170,8 @@ async function handleSave() {
                             </button>
                           </li>
                           <li
-                            v-for="row in pendingEvidenceNamedRows"
-                            :key="'evname-' + row.id"
+                            v-for="row in pendingEvidenceStoredFiles"
+                            :key="'stored-' + row.id"
                             class="flex items-center gap-3 px-3 py-2.5"
                           >
                             <span
@@ -1102,18 +1179,20 @@ async function handleSave() {
                             >FILE</span>
                             <i class="fas fa-file-alt shrink-0 text-slate-400" />
                             <div class="min-w-0 flex-1">
-                              <p
-                                class="truncate text-sm font-medium text-slate-800"
-                                :title="(row.name ?? '').trim()"
+                              <a
+                                href="#"
+                                class="block truncate text-sm font-medium text-indigo-700 hover:underline"
+                                :title="evidenceAttachmentTitle(row)"
+                                @click.prevent="onStoredFileClick(row)"
                               >
-                                {{ (row.name ?? '').trim() }}
-                              </p>
+                                {{ evidenceAttachmentLabel(row) }}
+                              </a>
                             </div>
                             <button
                               type="button"
                               class="shrink-0 rounded p-1.5 text-slate-400 transition-colors hover:bg-rose-50 hover:text-rose-600"
-                              title="Remove evidence"
-                              @click="removePendingEvidenceUrl(row.id)"
+                              title="Remove file"
+                              @click="removePendingEvidenceStoredFile(row.id)"
                             >
                               <i class="fas fa-times" />
                             </button>
@@ -1311,8 +1390,9 @@ async function handleSave() {
             <div class="flex items-center gap-3">
               <button
                 type="button"
-                class="rounded-lg border border-slate-300 bg-white px-5 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50"
-                @click="$emit('close')"
+                class="rounded-lg border border-slate-300 bg-white px-5 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                :disabled="savingEvidenceOverlay"
+                @click="requestClose"
               >
                 Cancel
               </button>
@@ -1321,7 +1401,7 @@ async function handleSave() {
                 v-if="!isReadOnly"
                 type="button"
                 class="flex items-center gap-2 rounded-lg bg-slate-900 px-5 py-2 text-sm font-bold text-white shadow-sm transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-45"
-                :disabled="!canSaveEvidence || saving"
+                :disabled="!canSaveEvidence || saving || savingEvidenceOverlay"
                 :title="!canSaveEvidence
                   ? (isFeedbackMode
                     ? 'Please enter feedback before sending'

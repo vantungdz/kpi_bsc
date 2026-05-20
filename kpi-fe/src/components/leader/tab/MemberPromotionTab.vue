@@ -169,8 +169,9 @@ function parseEvidence(raw: string | null | undefined): {
           comment: String((r as Record<string, unknown>)?.comment ?? ''),
         }))
       : []
-    const files = Array.isArray(o.files) ? o.files : []
-    const urls = files
+    const fileRows = Array.isArray(o.files) ? o.files : []
+    const urlRows = Array.isArray(o.urls) ? o.urls : Array.isArray(o.evd) ? o.evd : []
+    const urls = [...fileRows, ...urlRows]
       .map((f) => String((f as Record<string, unknown>)?.url ?? '').trim())
       .filter((u) => !!u)
     return {

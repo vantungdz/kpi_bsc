@@ -1,5 +1,6 @@
 package com.company.kpi.mapper;
 
+import com.company.kpi.response.admin.AdminEmployeeCandidateResponse;
 import com.company.kpi.response.leader.LeaderMemberInfoDTO;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
@@ -23,4 +24,16 @@ public interface UserDepartmentMapper {
     void deletePrimaryDepartment(@Param("userId") UUID userId);
 
     UUID getDepartmentIdByUserId(@Param("userId") UUID userId);
+
+    List<AdminEmployeeCandidateResponse> findLeaderAssignableMembersInDepartment(
+            @Param("departmentId") UUID departmentId);
+
+    int updateSupervisorForUsersInDepartment(
+            @Param("departmentId") UUID departmentId,
+            @Param("supervisorId") UUID supervisorId,
+            @Param("memberIds") List<UUID> memberIds);
+
+    int countUsersInDepartment(
+            @Param("departmentId") UUID departmentId,
+            @Param("userId") UUID userId);
 }

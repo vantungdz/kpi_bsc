@@ -6,13 +6,13 @@
 
 /** Nội dung tooltip «Ví dụ» (GM/PM form) — hiển thị khi hover icon trợ giúp. */
 export const SCORING_RULES_EXAMPLE_TOOLTIP = [
-  'Ví dụ (mỗi dòng một mức điểm 1–5):',
+  'Example (each line one score level 1–5):',
   '5: >125',
   '4: >110',
   '3: >90',
   '2: >80',
   '1: <=80',
-  'Hoặc khoảng nửa-mở (không lỗ hổng giữa các mức):',
+  'Or half-open interval (no gaps between levels):',
   '5: >4.5',
   '4: (3.6, 4.5]',
   '3: (3.0, 3.6]',
@@ -76,7 +76,7 @@ function requireNumAfterMatch(score: number, cond: string, raw: string | undefin
   const v = Number.parseFloat(String(raw ?? '').trim())
   if (!Number.isFinite(v)) {
     throw new Error(
-      `Điểm ${score}: sau toán tử cần một số hợp lệ trong «${truncateOneLine(cond, 48)}».`,
+      `Score ${score}: a valid number after the operator in «${truncateOneLine(cond, 48)}».`,
     )
   }
   return v
@@ -90,14 +90,14 @@ function parseCondition(score: number, cond: string): ScoringRuleNormalized {
     const right = m[4]
     if ((left !== '(' && left !== '[') || (right !== ')' && right !== ']')) {
       throw new Error(
-        `Điểm ${score}: khoảng «${truncateOneLine(c, 48)}» — chỉ dùng ( hoặc [ ở đầu và ) hoặc ] ở cuối.`,
+        `Score ${score}: interval «${truncateOneLine(c, 48)}» — only use ( or [ at the start and ) or ] at the end.`,
       )
     }
     const a = Number.parseFloat(m[2])
     const b = Number.parseFloat(m[3])
     if (!Number.isFinite(a) || !Number.isFinite(b) || a > b) {
       throw new Error(
-        `Điểm ${score}: khoảng «${truncateOneLine(c, 48)}» không hợp lệ — hai số phải hợp lệ và trái ≤ phải.`,
+        `Score ${score}: interval «${truncateOneLine(c, 48)}» is invalid — both numbers must be valid and left ≤ right.`,
       )
     }
     return {
@@ -115,7 +115,7 @@ function parseCondition(score: number, cond: string): ScoringRuleNormalized {
     const max = Number.parseFloat(m[2])
     if (!Number.isFinite(min) || !Number.isFinite(max) || min > max) {
       throw new Error(
-        `Điểm ${score}: khoảng «${truncateOneLine(c, 48)}» không hợp lệ — số trái phải ≤ số phải (vd. 50-70).`,
+        `Score ${score}: interval «${truncateOneLine(c, 48)}» is invalid — left number ≤ right number (e.g. 50-70).`,
       )
     }
     return { score, min, max }
@@ -131,7 +131,7 @@ function parseCondition(score: number, cond: string): ScoringRuleNormalized {
   m = EQ.exec(c)
   if (m) return { score, operator: '=', value: requireNumAfterMatch(score, c, m[1]) }
   throw new Error(
-    `Điểm ${score}: điều kiện «${truncateOneLine(c, 56)}» không hợp lệ — dùng (a,b] / [a,b); khoảng 50-70; hoặc <, <=, >, >=, =.`,
+    `Score ${score}: condition «${truncateOneLine(c, 56)}» is invalid — use (a,b] / [a,b); interval 50-70; or <, <=, >, >=, =.`,
   )
 }
 
@@ -150,24 +150,24 @@ export function parseScoringRulesDsl(rawInput: string): ScoringRuleNormalized[] 
     const m = LINE.exec(toParse)
     if (!m) {
       throw new Error(
-        `Dòng ${i + 1}: mỗi dòng phải có dạng «số_điểm:điều_kiện» (vd. 1: <50). Nội dung: «${truncateOneLine(line, 80)}».`,
+        `Line ${i + 1}: each line must have the format «score:condition» (e.g. 1: <50). Content: «${truncateOneLine(line, 80)}».`,
       )
     }
     const score = Number.parseInt(m[1], 10)
     if (!Number.isFinite(score) || score < 1 || score > 5) {
       throw new Error(
-        `Dòng ${i + 1}: điểm phải từ 1 đến 5 (đang ghi «${m[1]}»). Nội dung: «${truncateOneLine(line, 80)}».`,
+        `Line ${i + 1}: score must be from 1 to 5 (currently writing «${m[1]}»). Content: «${truncateOneLine(line, 80)}».`,
       )
     }
     if (seen.has(score)) {
       throw new Error(
-        `Dòng ${i + 1}: trùng điểm ${score} — mỗi mức (1–5) chỉ được khai báo một lần.`,
+        `Line ${i + 1}: duplicate score ${score} — each level (1–5) can only be declared once.`,
       )
     }
     seen.add(score)
     const condPart = (m[2] ?? '').trim()
     if (!condPart) {
-      throw new Error(`Dòng ${i + 1}: thiếu phần điều kiện sau dấu «:» (vd. ${score}: <50).`)
+      throw new Error(`Line ${i + 1}: missing condition after «:» (e.g. ${score}: <50).`)
     }
     rules.push(parseCondition(score, condPart))
   }
@@ -179,7 +179,7 @@ export function validateScoringRulesDsl(rawInput: string): { ok: boolean; errors
     parseScoringRulesDsl(rawInput)
     return { ok: true, errors: [] }
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : 'Không hợp lệ.'
+    const msg = e instanceof Error ? e.message : 'Invalid.'
     return { ok: false, errors: [msg] }
   }
 }

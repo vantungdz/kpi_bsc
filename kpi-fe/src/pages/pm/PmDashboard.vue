@@ -284,11 +284,11 @@ function formatRequestedAt(iso: string | null | undefined): string {
 function calcMethodLabel(ruleCode: number | null | undefined, typeCode: number | null | undefined): string {
   const r = Number(ruleCode)
   const t = Number(typeCode)
-  if (r === 801) return 'Tổng Plan/Actual'
-  if (r === 802 && t === 701) return 'Trung bình Actual / Plan'
-  if (r === 802 && t === 702) return 'Trung bình Plan / Actual'
-  if (r === 802) return 'Trung bình Plan/Actual (%)'
-  if (r === 803) return 'Nhập tay theo nhận xét'
+  if (r === 801) return 'Total Plan/Actual'
+  if (r === 802 && t === 701) return 'Average Actual / Plan'
+  if (r === 802 && t === 702) return 'Average Plan / Actual'
+  if (r === 802) return 'Average Plan/Actual (%)'
+  if (r === 803) return 'Manual input by comment'
   return '—'
 }
 
@@ -307,7 +307,7 @@ function scoringRulesText(targetDescription: string | null | undefined): string 
 
 function mapApprovalToUi(r: PmMemberKpiApprovalItem): PmRequestUiRow {
   const w = r.weight != null ? Number(r.weight) : null
-  const weightLabel = w != null && Number.isFinite(w) ? `${w}% trọng số` : '—'
+  const weightLabel = w != null && Number.isFinite(w) ? `${w}% weight` : '—'
   const newValueParts = [weightLabel]
   if (r.categoryName) newValueParts.push(r.categoryName)
   const just = (r.justification && r.justification.trim()) || ''
@@ -371,7 +371,7 @@ async function loadApprovalRequests() {
     }
   } catch (e) {
     console.error(e)
-    toast.error('Không tải được danh sách đề xuất KPI')
+    toast.error('Could not load KPI proposal list')
     approvalRawItems.value = []
   } finally {
     approvalLoading.value = false
@@ -385,7 +385,7 @@ function apiErrorMessage(err: unknown): string {
     if (m != null && String(m).trim() !== '') return String(m)
   }
   if (err instanceof Error) return err.message
-  return 'Thao tác thất bại'
+  return 'Action failed'
 }
 
 async function submitApprovalDecision(req: PmRequestUiRow, approve: boolean, rejectReason?: string) {
@@ -400,7 +400,7 @@ async function submitApprovalDecision(req: PmRequestUiRow, approve: boolean, rej
       rejectReason: approve ? undefined : (rejectReason ?? ''),
     })
     toast.success(
-      approve ? 'Đã duyệt — KPI chuyển sang chờ GM.' : 'Đã từ chối đề xuất KPI.',
+      approve ? 'Approved - KPI moved to pending GM.' : 'KPI proposal rejected.',
     )
     await loadApprovalRequests()
     void loadProcessTimeline()
@@ -438,12 +438,12 @@ async function submitApprovalDecisionBatch(
     if (ok > 0) {
       toast.success(
         approve
-          ? `Đã duyệt ${ok} KPI — chuyển sang chờ GM.`
-          : `Đã từ chối ${ok} KPI.`,
+          ? `Approved ${ok} KPIs - moved to pending GM.`
+          : `Rejected ${ok} KPIs.`,
       )
     }
     if (ok < targets.length) {
-      toast.warning(`Có ${targets.length - ok} KPI chưa cập nhật được. Vui lòng thử lại.`)
+      toast.warning(`${targets.length - ok} KPIs could not be updated. Please try again.`)
     }
     await loadApprovalRequests()
     void loadProcessTimeline()
@@ -642,7 +642,7 @@ const openKpiChildDetail = (payload: { child: any; parent: any }) => {
   const parsed = parsePmPortfolioEvidenceString(rawEvidences)
   const evidenceNote =
     [parsed.note.trim(), parsed.content.trim()].filter(Boolean).join(' · ') || '—'
-  const targetSummary = `Đóng góp trong KPI «${parent.name}» · Minh chứng / ghi chú: ${evidenceNote}`
+  const targetSummary = `Contribution in KPI "${parent.name}" · Evidence / note: ${evidenceNote}`
 
   const w = parent.weight
   const weightNum = typeof w === 'number' ? w : Number(w)
@@ -679,7 +679,7 @@ const openKpiChildDetail = (payload: { child: any; parent: any }) => {
         profile: {
           name: String(child.name ?? ''),
           rank: child.role != null ? String(child.role) : undefined,
-          departmentLabel: 'CÔNG TY',
+          departmentLabel: 'COMPANY',
         },
         item: modalItem,
       },

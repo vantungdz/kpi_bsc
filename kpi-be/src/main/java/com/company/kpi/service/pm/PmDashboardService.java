@@ -1,6 +1,7 @@
 package com.company.kpi.service.pm;
 
 import com.company.kpi.aggregate.KpiAssignmentDetailAggregate;
+import com.company.kpi.aggregate.KpiAssignmentUserTargetRow;
 import com.company.kpi.aggregate.PmDashboardAggregate;
 import com.company.kpi.aggregate.PmPortfolioCascadeChildRow;
 import com.company.kpi.aggregate.UserTeamHierarchyAggregate;
@@ -13,7 +14,6 @@ import com.company.kpi.mapper.KpisInformationMapper;
 import com.company.kpi.mapper.SysStatusCodeMapper;
 import com.company.kpi.mapper.UserKpiSummaryMapper;
 import com.company.kpi.mapper.UserMapper;
-import com.company.kpi.request.kpi.AssignMemberRequest;
 import com.company.kpi.request.pm.PmAcceptMemberFeedbackWithCascadeRequest;
 import com.company.kpi.request.pm.PmMemberKpiApprovalDecisionRequest;
 import com.company.kpi.request.pm.PmMemberFeedbackDecisionRequest;
@@ -257,6 +257,7 @@ public class PmDashboardService {
                                 agg.getKpiInfo() != null ? agg.getKpiInfo().getTargetDescription() : null)
                         .weight(agg.getKpiInfo() != null ? agg.getKpiInfo().getWeight() : null)
                         .statusCode(agg.getPmAssignment() != null ? agg.getPmAssignment().getStatusCode() : null)
+                        .updateReason(agg.getPmAssignment() != null ? agg.getPmAssignment().getUpdateReason() : null)
                         .actualResult(agg.getPmAssignment().getEvidences())
                         .feedbackNote(agg.getPmFeedbackNote())
                         .selfScore(pmSelfScore)
@@ -295,6 +296,7 @@ public class PmDashboardService {
                             .pmScore(supervisorPortfolioScore(slice.getChildAssignment()))
                             .gmEvaluationComment(gmCommentFromEvidencesJson(slice.getChildAssignment().getEvidences()))
                             .statusCode(slice.getChildAssignment().getStatusCode())
+                            .updateReason(slice.getChildAssignment().getUpdateReason())
                             .build());
                 }
             }
@@ -489,7 +491,7 @@ public class PmDashboardService {
                 req.getAssignmentId(), cycleId, pmId, newStatus, pmId, rejectReason);
         if (n == 0) {
             throw AppException.badRequest(
-                    "Update failed: no pending KPI (402) found or not under PM's authority.");
+                    "Update failed: no pending KPI found or not under PM's authority.");
         }
     }
 
@@ -504,13 +506,13 @@ public class PmDashboardService {
                 req.getAssignmentId(), cycleId, pmId, pmId);
         if (n == 0) {
             throw AppException.badRequest(
-                    "Failed to update feedback: assignment is not at 407, not under PM's authority, or feedback is pending GM review.");
+                    "Failed to update feedback: assignment is not at feedback in progress, not under PM's authority, or feedback is pending GM review.");
         }
     }
 
     /**
-     * Chấp nhận feedback member và lưu phân bổ KPI Team trong một transaction.
-     * Tránh gọi tách hai API (duyệt rồi cascade): cascade soft-delete assignment con làm mất UUID 407 trước khi duyệt.
+     * Chấp nhận feedback member (407→404) và cập nhật target chỉ cho member gửi feedback.
+     * Không gọi {@code assignToMembers} (xóa hết cascade) — các member khác giữ nguyên assignment/trạng thái.
      */
     @Transactional
     public void acceptMemberFeedbackWithCascade(UUID pmId, PmAcceptMemberFeedbackWithCascadeRequest req) {
@@ -522,12 +524,15 @@ public class PmDashboardService {
         if (!cycleId.equals(req.getCycleId())) {
             throw AppException.badRequest("cycleId does not match the cycle year.");
         }
-        int n = kpiAssignmentMapper.updateMemberFeedbackStatusByPm(
-                req.getMemberFeedbackAssignmentId(), cycleId, pmId, pmId);
-        if (n == 0) {
-            throw AppException.badRequest(
-                    "Failed to update feedback: assignment is not at 407, not under PM's authority, or feedback is pending GM review.");
+        if (req.getParentAssignmentId() == null) {
+            throw AppException.badRequest("parentAssignmentId is required for team cascade feedback.");
         }
+        KpiAssignmentUserTargetRow feedbackRow = kpiAssignmentMapper.findAssignmentUserTargetByIdAndCycle(
+                req.getMemberFeedbackAssignmentId(), cycleId);
+        if (feedbackRow == null || feedbackRow.getUserId() == null) {
+            throw AppException.badRequest("Feedback assignment not found in this cycle.");
+        }
+        UUID memberUserId = feedbackRow.getUserId();
         Map<UUID, BigDecimal> targets = new LinkedHashMap<>();
         for (Map.Entry<String, BigDecimal> e : req.getMemberTargets().entrySet()) {
             String key = e.getKey() == null ? "" : e.getKey().trim();
@@ -544,12 +549,24 @@ public class PmDashboardService {
                 throw AppException.badRequest("memberTargets has an invalid UUID key: " + key);
             }
         }
-        AssignMemberRequest cascade = new AssignMemberRequest();
-        cascade.setKpiInformationId(req.getKpiInformationId());
-        cascade.setCycleId(req.getCycleId());
-        cascade.setParentAssignmentId(req.getParentAssignmentId());
-        cascade.setMemberTargets(targets);
-        strategicKpiService.assignToMembers(cascade, pmId);
+        BigDecimal memberTarget = targets.get(memberUserId);
+        if (memberTarget == null) {
+            throw AppException.badRequest("Missing target for the member who sent feedback.");
+        }
+        int n = kpiAssignmentMapper.updateMemberFeedbackStatusByPm(
+                req.getMemberFeedbackAssignmentId(), cycleId, pmId, pmId);
+        if (n == 0) {
+            throw AppException.badRequest(
+                    "Failed to update feedback: assignment is not at feedback in progress, not under PM's authority, or feedback is pending GM review.");
+        }
+        strategicKpiService.replaceFeedbackMemberCascadeAssignment(
+                pmId,
+                cycleId,
+                req.getKpiInformationId(),
+                req.getParentAssignmentId(),
+                req.getMemberFeedbackAssignmentId(),
+                memberUserId,
+                memberTarget);
     }
 
     @Transactional
@@ -567,7 +584,7 @@ public class PmDashboardService {
                 req.getAssignmentId(), cycleId, pmId, pmId);
         if (moved != 1) {
             throw AppException.badRequest(
-                    "Cannot send feedback: KPI does not belong to PM, wrong cycle, or not at status 404.");
+                    "Cannot send feedback: KPI does not belong to PM, wrong cycle");
         }
         kpiAssignmentMapper.insertAssignmentFeedbackForGm(req.getAssignmentId(), cycleId, note, pmId);
     }
@@ -703,7 +720,7 @@ public class PmDashboardService {
                 assignmentId, memberUserId, pmId, java.math.BigDecimal.valueOf(pmScore));
         if (n != 1) {
             throw AppException.badRequest(
-                    "Failed to save PM score: assignment does not belong to a member under PM's authority, is not at year-end evaluation status (601), or does not exist.");
+                    "Failed to save PM score: assignment does not belong to a member under PM's authority, or does not exist.");
         }
     }
 

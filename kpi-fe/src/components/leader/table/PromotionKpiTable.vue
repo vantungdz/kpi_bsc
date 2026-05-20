@@ -9,7 +9,10 @@ import {getSubmitButtonState, shouldCollapseKpiProcessTimelineToYearEndOnly} fro
 import { formatActualResultFromEvidencesJson } from '@/utils/memberKpiHelpers'
 import { extractRawInputFromApiTargetDescription } from "@/utils/kpiScoringRulesDsl";
 import EvidenceDrawer from '@/components/leader/drawer/EvidenceDrawer.vue';
+import { purgeRemovedUploadedEvidenceFiles } from '@/utils/evidenceFileStorage';
 import { displayTargetValue, formatTargetDisplay } from "@/utils/strategicKpiTypeCodes";
+import KpiCreatorRowLegend from '@/components/shared/KpiCreatorRowLegend.vue'
+import { kpiCreatorRowBgFromSource } from '@/utils/kpiCreatorRowBg'
 
 const toast = useToast();
 
@@ -119,6 +122,18 @@ async function onEvidenceSaved(payload: any) {
       selfScore: scorePayload,
       evidences: payload.evidencesJson,
     })
+    if (payload.evidencesJson) {
+      let evObj: Record<string, unknown> = {}
+      try {
+        evObj = JSON.parse(payload.evidencesJson) as Record<string, unknown>
+      } catch { /* ignore */ }
+      const prev =
+        payload.openedEvidencesJson
+        ?? selectedKpi.value.evidencesJson
+        ?? selectedKpi.value.evidences
+        ?? ''
+      await purgeRemovedUploadedEvidenceFiles(String(prev), evObj)
+    }
   } catch (error) {
     console.error('Failed to save Promotion KPI evidence', error)
     toast.error('Failed to save evidence')
@@ -365,11 +380,7 @@ function shouldOpenSelfCreatedEditForm(assign: any): boolean {
 }
 
 function sourceRowClass(assign: any): string {
-  if (assign?.createdByCurrentUser === true) return 'bg-emerald-50 hover:bg-emerald-100'
-  const role = String(assign?.createdByRoleCode ?? '').trim().toUpperCase()
-  if (role === 'GM') return 'bg-amber-50 hover:bg-amber-100'
-  if (role === 'PM') return 'bg-blue-50 hover:bg-blue-100'
-  return ''
+  return kpiCreatorRowBgFromSource(assign, { selfRole: 'LEADER' })
 }
 
 function rowClass(assign: any): string {
@@ -509,7 +520,9 @@ function parseActualResultFromEvidences(
         </p>
       </div>
 
-      <div v-else class="overflow-x-auto">
+      <template v-else>
+        <KpiCreatorRowLegend />
+        <div class="overflow-x-auto">
         <table class="w-full text-left border-collapse text-sm">
           <thead class="border-b border-slate-200 bg-slate-200">
           <tr class="text-[11px] font-bold uppercase tracking-wider text-slate-500">
@@ -752,6 +765,7 @@ function parseActualResultFromEvidences(
           Year {{ year }} data is view-only
         </div>
       </div>
+      </template>
 
     </div>
 
@@ -759,8 +773,8 @@ function parseActualResultFromEvidences(
         :open="isDrawerOpen"
         :item="selectedKpi"
         :mode="drawerMode"
+        :save-evidence="onEvidenceSaved"
         @close="isDrawerOpen = false"
-        @save="onEvidenceSaved"
     />
 
     <Teleport to="body">

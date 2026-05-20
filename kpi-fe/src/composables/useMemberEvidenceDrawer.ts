@@ -16,6 +16,7 @@ import type { KpiItem, EvidenceFormCase } from '@/types/kpi'
 import type { UrlNamePair } from '@/utils/memberKpiEvidenceDetail'
 import { useMemberKpiDraftStore } from '@/stores/member-kpi-drafts.store'
 import { memberKpiService } from '@/services/modules/kpi-member.service'
+import { fileService } from '@/services/modules/file.service'
 import {
   resolveFormMode,
   computeRatioPreview,
@@ -31,6 +32,8 @@ import {
   recordStyleResultDisplay,
   planActualRowPartiallyFilled,
   requiredPlanActualFields,
+  splitEvidenceFilesAndUrls,
+  extractStoredEvidenceFileName,
   WA_MONTH_OPTIONS,
   type EvidenceFormMode,
   type PlanActualField,
@@ -104,6 +107,7 @@ function parseEvidencesJson(jsonSource: string): {
   content: string
   actual: string
   planActualRecords: Array<{ plan: string; actual: string; comment: string }>
+  filePairs: UrlNamePair[]
   urlPairs: UrlNamePair[]
 } {
   const raw = (jsonSource ?? '').trim()
@@ -115,6 +119,7 @@ function parseEvidencesJson(jsonSource: string): {
     content: '',
     actual: '',
     planActualRecords: [],
+    filePairs: [],
     urlPairs: [],
   }
   if (!raw || raw === '{}' || raw === 'null') return empty
@@ -139,17 +144,10 @@ function parseEvidencesJson(jsonSource: string): {
           })
           .filter((r): r is { plan: string; actual: string; comment: string } => r !== null)
       : []
-    const rawEvd = Array.isArray(o.evd) ? (o.evd as unknown[]) : []
-    const rawFiles = Array.isArray(o.files) ? (o.files as unknown[]) : []
-    const urlPairs = [...rawEvd, ...rawFiles]
-      .map(x => {
-        if (!x || typeof x !== 'object') return null
-        const r = x as Record<string, unknown>
-        const url = String(r.url ?? '').trim()
-        return url ? { url, name: String(r.name ?? '').trim() } : null
-      })
-      .filter((r): r is UrlNamePair => r !== null)
-    return { note, memberFeedback, leaderFeedback, gmComment, content, actual, planActualRecords, urlPairs }
+    const split = splitEvidenceFilesAndUrls(o)
+    const filePairs = split.files.map(a => ({ url: a.url, name: a.name }))
+    const urlPairs = split.urls.map(a => ({ url: a.url, name: a.name }))
+    return { note, memberFeedback, leaderFeedback, gmComment, content, actual, planActualRecords, filePairs, urlPairs }
   } catch {
     return empty
   }
@@ -229,6 +227,42 @@ function isValidEvidenceReference(s: string): boolean {
   return isValidEvidenceHttpUrl(t)
 }
 
+function storedNamesFromUrlPairs(pairs: UrlNamePair[]): string[] {
+  return pairs
+    .map(p => extractStoredEvidenceFileName(p.url))
+    .filter((n): n is string => Boolean(n))
+}
+
+async function deleteUploadedFilesFromDisk(storedNames: Iterable<string>) {
+  const unique = [...new Set(storedNames)]
+  for (const name of unique) {
+    try {
+      await fileService.deleteUploadedFile(name)
+    } catch (error) {
+      console.error('Failed to delete uploaded evidence file from disk', name, error)
+    }
+  }
+}
+
+async function purgeRemovedUploadedFiles(previousJson: string, newPayload: Record<string, unknown>) {
+  const prev = parseEvidencesJson(previousJson)
+  const previousNames = new Set(storedNamesFromUrlPairs(prev.filePairs))
+
+  const newFiles = Array.isArray(newPayload.files) ? (newPayload.files as unknown[]) : []
+  const newNames = new Set(
+    newFiles
+      .map(x => {
+        if (!x || typeof x !== 'object') return null
+        const url = String((x as Record<string, unknown>).url ?? '').trim()
+        return extractStoredEvidenceFileName(url)
+      })
+      .filter((n): n is string => Boolean(n)),
+  )
+
+  const toDelete = [...previousNames].filter(n => !newNames.has(n))
+  await deleteUploadedFilesFromDisk(toDelete)
+}
+
 function urlPairsToPendingUrls(pairs: UrlNamePair[], idPrefix: string): PendingEvidenceUrl[] {
   return pairs
     .map(p => {
@@ -292,6 +326,9 @@ export function useMemberEvidenceDrawer() {
   const gmCommentDraft = ref('')
   const certificateOutcomeDraft = ref('')
   const pendingEvidenceFiles = ref<PendingEvidenceFile[]>([])
+  /** File đã upload (lưu DB key `files`). */
+  const pendingEvidenceStoredFiles = ref<PendingEvidenceUrl[]>([])
+  /** Link URL (lưu DB key `urls`). */
   const pendingEvidenceUrls = ref<PendingEvidenceUrl[]>([])
   const evidenceUrlDraft = ref('')
   const evidenceUploadHint = ref('')
@@ -303,6 +340,13 @@ export function useMemberEvidenceDrawer() {
   const waTimeRows = ref<WaTimeDraftRow[]>([newWaTimeRow()])
   const waFormError = ref('')
   const saving = ref(false)
+  /** JSON evidences khi mở drawer — dùng so sánh file upload đã bị xóa khi Save. */
+  const openedEvidencesJson = ref('')
+
+  /** Full-screen loading overlay — chỉ khi Save Evidence, không áp dụng Send Feedback. */
+  const savingEvidenceOverlay = computed(
+    () => saving.value && panelMode.value !== 'feedback',
+  )
 
   // Computed
   const drawerCase = computed<EvidenceFormCase>(() => {
@@ -415,6 +459,7 @@ export function useMemberEvidenceDrawer() {
       || certificateOutcomeDraft.value.trim().length > 0
       || pendingEvidenceUrls.value.length > 0
       || pendingEvidenceFiles.value.length > 0
+      || pendingEvidenceStoredFiles.value.length > 0
       || generalPlanActualRows.value.some(r =>
         !!r.plan.trim() || !!r.actual.trim() || !!r.comment.trim(),
       )
@@ -453,19 +498,18 @@ export function useMemberEvidenceDrawer() {
   })
 
   const hasEvidenceAttachments = computed(
-    () => pendingEvidenceFiles.value.length > 0 || pendingEvidenceUrls.value.length > 0,
-  )
-
-  const pendingEvidenceNamedRows = computed(() =>
-    pendingEvidenceUrls.value.filter(r => (r.name ?? '').trim().length > 0),
+    () =>
+      pendingEvidenceFiles.value.length > 0
+      || pendingEvidenceStoredFiles.value.length > 0
+      || pendingEvidenceUrls.value.length > 0,
   )
 
   const evidenceFileSectionCount = computed(
-    () => pendingEvidenceFiles.value.length + pendingEvidenceNamedRows.value.length,
+    () => pendingEvidenceFiles.value.length + pendingEvidenceStoredFiles.value.length,
   )
 
   const hasFileAttachmentsSection = computed(
-    () => pendingEvidenceFiles.value.length > 0 || pendingEvidenceNamedRows.value.length > 0,
+    () => pendingEvidenceFiles.value.length > 0 || pendingEvidenceStoredFiles.value.length > 0,
   )
 
   const hasEvidenceUrlList = computed(() => pendingEvidenceUrls.value.length > 0)
@@ -543,6 +587,10 @@ export function useMemberEvidenceDrawer() {
     if (truncated)
       parts.push(`Maximum ${EVIDENCE_MAX_FILES} files allowed; some files were not added.`)
     if (parts.length) evidenceUploadHint.value = parts.join(' ')
+  }
+
+  function removePendingEvidenceStoredFile(id: string) {
+    pendingEvidenceStoredFiles.value = pendingEvidenceStoredFiles.value.filter(f => f.id !== id)
   }
 
   function removePendingEvidenceFile(id: string) {
@@ -646,6 +694,7 @@ export function useMemberEvidenceDrawer() {
 
     const draft = memberKpiDraftStore.getDraft(item.id)
     const jsonSource = draft?.evidencesJson ?? item.evidencesJson ?? ''
+    openedEvidencesJson.value = jsonSource
     detailSelfScore.value =
       draft?.selfScore != null && Number.isFinite(Number(draft.selfScore))
         ? Math.min(5, Math.max(1, Math.round(Number(draft.selfScore))))
@@ -653,6 +702,7 @@ export function useMemberEvidenceDrawer() {
 
     certificateOutcomeDraft.value = item.certificateOutcomeNote ?? ''
     pendingEvidenceFiles.value = []
+    pendingEvidenceStoredFiles.value = []
     evidenceUrlDraft.value = ''
     evidenceUploadHint.value = ''
     evidenceUrlHint.value = ''
@@ -697,6 +747,7 @@ export function useMemberEvidenceDrawer() {
       generalPlanActualRows.value = [newPlanActualRow()]
     }
 
+    pendingEvidenceStoredFiles.value = urlPairsToPendingUrls(p.filePairs, `${item.id}-f`)
     pendingEvidenceUrls.value = urlPairsToPendingUrls(p.urlPairs, `${item.id}-u`)
     evidencePanelOpen.value = true
   }
@@ -705,7 +756,8 @@ export function useMemberEvidenceDrawer() {
     openEvidencePanel(item, 'feedback')
   }
 
-  function closeEvidencePanel() {
+  function closeEvidencePanel(options?: { force?: boolean }) {
+    if (!options?.force && savingEvidenceOverlay.value) return
     evidencePanelOpen.value = false
     panelMode.value = 'detail'
     selectedDrawerItem.value = null
@@ -720,10 +772,22 @@ export function useMemberEvidenceDrawer() {
     waTimeRows.value = [newWaTimeRow()]
     waFormError.value = ''
     pendingEvidenceFiles.value = []
+    pendingEvidenceStoredFiles.value = []
     pendingEvidenceUrls.value = []
     evidenceUrlDraft.value = ''
     evidenceUploadHint.value = ''
     evidenceUrlHint.value = ''
+  }
+
+  function appendFilesAndUrlsToPayload(out: Record<string, unknown>) {
+    const filePairs = pendingEvidenceStoredFiles.value
+      .map(u => ({ url: u.url, name: (u.name ?? '').trim() }))
+      .filter(r => r.url)
+    const urlPairs = pendingEvidenceUrls.value
+      .map(u => ({ url: u.url, name: (u.name ?? '').trim() }))
+      .filter(r => r.url)
+    if (filePairs.length) out.files = filePairs
+    if (urlPairs.length) out.urls = urlPairs
   }
 
   // ── Build payload ────────────────────────────────────────────────────────
@@ -737,10 +801,7 @@ export function useMemberEvidenceDrawer() {
       if (noteTrim) out.note = noteTrim
     const gmComment = gmCommentDraft.value.trim()
     if (gmComment) out.gmComment = gmComment
-      const filePairs = pendingEvidenceUrls.value
-        .map(u => ({ url: u.url, name: (u.name ?? '').trim() }))
-        .filter(r => r.url)
-      if (filePairs.length) out.files = filePairs
+      appendFilesAndUrlsToPayload(out)
       const cert = certificateOutcomeDraft.value.trim()
       if (cert) out.certificateOutcomeNote = cert
       return out
@@ -782,10 +843,7 @@ export function useMemberEvidenceDrawer() {
     const gmComment = gmCommentDraft.value.trim()
     if (gmComment) out.gmComment = gmComment
 
-    const filePairs = pendingEvidenceUrls.value
-      .map(u => ({ url: u.url, name: (u.name ?? '').trim() }))
-      .filter(r => r.url)
-    if (filePairs.length) out.files = filePairs
+    appendFilesAndUrlsToPayload(out)
 
     const cert = certificateOutcomeDraft.value.trim()
     if (cert) out.certificateOutcomeNote = cert
@@ -813,7 +871,7 @@ export function useMemberEvidenceDrawer() {
             : 'Waiting for PM feedback review')
         item.feedbackComment = feedbackComment
         item.memberFeedback = feedbackComment
-        closeEvidencePanel()
+        closeEvidencePanel({ force: true })
       } catch (error) {
         console.error('Failed to submit member feedback', error)
         toast.error('Failed to send feedback')
@@ -875,6 +933,24 @@ export function useMemberEvidenceDrawer() {
     }
     saving.value = true
     try {
+      if (pendingEvidenceFiles.value.length > 0) {
+        try {
+          for (const item of pendingEvidenceFiles.value) {
+            const res = await fileService.uploadFile(item.file)
+            pendingEvidenceStoredFiles.value.push({
+              id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+              url: res.url,
+              name: res.name,
+            })
+          }
+          pendingEvidenceFiles.value = []
+        } catch (error) {
+          console.error('Failed to upload evidence files', error)
+          toast.error('Lỗi khi tải file lên')
+          return
+        }
+      }
+
       const payloadObj = buildDrawerEvidencesPayload(item)
       const evidencesJson = JSON.stringify(payloadObj)
       memberKpiDraftStore.setDraft(item.id, {
@@ -890,6 +966,12 @@ export function useMemberEvidenceDrawer() {
         console.error('Failed to save member evidence', error)
         toast.error('Failed to save evidence')
         return
+      }
+
+      try {
+        await purgeRemovedUploadedFiles(openedEvidencesJson.value, payloadObj)
+      } catch (error) {
+        console.error('Failed to purge removed evidence files from disk', error)
       }
 
       if (score != null) item.selfScore = score
@@ -923,7 +1005,7 @@ export function useMemberEvidenceDrawer() {
       item.actual = undefined
 
       if (item.evidenceStatus === 'missing') item.evidenceStatus = 'submitted'
-      closeEvidencePanel()
+      closeEvidencePanel({ force: true })
     } finally {
       saving.value = false
     }
@@ -940,6 +1022,7 @@ export function useMemberEvidenceDrawer() {
     gmCommentDraft,
     certificateOutcomeDraft,
     pendingEvidenceFiles,
+    pendingEvidenceStoredFiles,
     pendingEvidenceUrls,
     evidenceUrlDraft,
     evidenceUploadHint,
@@ -951,6 +1034,7 @@ export function useMemberEvidenceDrawer() {
     waTimeRows,
     waFormError,
     saving,
+    savingEvidenceOverlay,
     // Computed
     drawerCase,
     isUploadOnlyDrawer,
@@ -967,7 +1051,6 @@ export function useMemberEvidenceDrawer() {
     evidenceDrawerReadOnly,
     attachmentHubTitle,
     hasEvidenceAttachments,
-    pendingEvidenceNamedRows,
     evidenceFileSectionCount,
     hasFileAttachmentsSection,
     hasEvidenceUrlList,
@@ -986,6 +1069,7 @@ export function useMemberEvidenceDrawer() {
     // Form handlers
     onEvidenceFilesChange,
     removePendingEvidenceFile,
+    removePendingEvidenceStoredFile,
     addPendingEvidenceUrl,
     removePendingEvidenceUrl,
     onEvidenceUrlDraftKeydown,

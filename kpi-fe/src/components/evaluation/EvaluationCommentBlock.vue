@@ -2,8 +2,8 @@
 defineProps({
   employeeComment: { type: String, default: '' },
   managerComment: { type: String, default: '' },
-  employeeTitle: { type: String, default: 'Nhân viên tự đánh giá' },
-  managerTitle: { type: String, default: 'Quản lý nhận xét' },
+  employeeTitle: { type: String, default: 'Employee self-assessment' },
+  managerTitle: { type: String, default: 'Manager comment' },
   /** Anchor cho scroll validation (vd PM có 2 tab Portfolio / Promotion). */
   employeeCommentSectionId: { type: String, default: 'pm-portfolio-my-comment' },
   /** Viền đỏ (validation) cho ô Employee's Comment */
@@ -32,7 +32,7 @@ defineEmits(['update:employeeComment', 'update:managerComment'])
           :value="employeeComment"
           @input="$emit('update:employeeComment', ($event.target as HTMLTextAreaElement).value)"
           :readonly="employeeReadonly"
-          :placeholder="employeeReadonly ? '' : 'Nhập tự đánh giá của bạn...'"
+          :placeholder="employeeReadonly ? '' : 'Enter your self-assessment...'"
           class="w-full h-24 p-3 rounded-lg text-sm outline-none resize-none transition-colors"
           :class="employeeReadonly 
             ? 'bg-slate-100 border border-slate-200 text-slate-600 cursor-not-allowed shadow-inner' 
@@ -50,7 +50,7 @@ defineEmits(['update:employeeComment', 'update:managerComment'])
           :value="managerComment"
           @input="$emit('update:managerComment', ($event.target as HTMLTextAreaElement).value)"
           :readonly="managerReadonly"
-          :placeholder="managerReadonly ? '' : 'Nhập đánh giá và nhận xét của bạn...'"
+          :placeholder="managerReadonly ? '' : 'Enter your evaluation and comments...'"
           class="w-full h-24 p-3 rounded-lg text-sm outline-none resize-none transition-colors"
           :class="managerReadonly 
             ? 'bg-slate-100 border border-slate-200 text-slate-600 cursor-not-allowed shadow-inner' 

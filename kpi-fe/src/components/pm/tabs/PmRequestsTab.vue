@@ -104,7 +104,7 @@ function closeRejectDialog() {
 function confirmRejectSelected() {
   const reason = rejectReason.value.trim()
   if (!reason) {
-    rejectError.value = 'Vui lòng nhập lý do từ chối.'
+    rejectError.value = 'Enter a rejection reason.'
     return
   }
   const ids = [...selectedUserIds.value]
@@ -132,7 +132,7 @@ function confirmRejectSelected() {
       <div class="flex shrink-0 flex-wrap items-center justify-end gap-2">
         <template v-if="selectedMemberCount > 0">
           <span class="text-[11px] font-semibold text-slate-500">
-            Đã chọn {{ selectedMemberCount }} thành viên
+            {{ selectedMemberCount }} members selected
           </span>
           <button
             type="button"
@@ -141,7 +141,7 @@ function confirmRejectSelected() {
             @click.stop="onApproveSelected"
           >
             <i class="fas fa-check text-[11px]" aria-hidden="true" />
-            Duyệt
+            Approve
           </button>
           <button
             type="button"
@@ -150,14 +150,14 @@ function confirmRejectSelected() {
             @click.stop="openRejectDialog"
           >
             <i class="fas fa-times text-[11px]" aria-hidden="true" />
-            Từ chối
+            Reject
           </button>
         </template>
         <button
           type="button"
           class="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-sm transition-colors hover:border-slate-300 hover:bg-slate-50 hover:text-slate-700"
-          aria-label="Tìm kiếm"
-          title="Tìm kiếm"
+          aria-label="Search"
+          title="Search"
           @click.stop
         >
           <i class="fas fa-search text-sm" />
@@ -165,8 +165,8 @@ function confirmRejectSelected() {
         <button
           type="button"
           class="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-sm transition-colors hover:border-slate-300 hover:bg-slate-50 hover:text-slate-700"
-          aria-label="Lọc"
-          title="Lọc"
+          aria-label="Filter"
+          title="Filter"
           @click.stop
         >
           <i class="fas fa-filter text-sm" />
@@ -176,7 +176,7 @@ function confirmRejectSelected() {
 
     <div v-if="loading" class="flex items-center justify-center gap-2 py-16 text-sm text-slate-500">
       <i class="fas fa-spinner fa-spin" />
-      Đang tải danh sách…
+      Loading list...
     </div>
 
     <div v-else class="overflow-x-auto">
@@ -189,34 +189,34 @@ function confirmRejectSelected() {
                 class="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                 :checked="isAllSelected"
                 :disabled="!selectableMembers.length || actionBusy"
-                aria-label="Chọn tất cả"
+                aria-label="Select all"
                 @click.stop="toggleSelectAll"
               />
             </th>
             <th class="py-3.5 pl-2 pr-3 text-[11px] font-bold uppercase tracking-wide text-slate-500">
-              Thành viên
+              Member
             </th>
             <th
               class="w-[9.5rem] px-3 py-3.5 text-center text-[11px] font-bold uppercase tracking-wide text-slate-500"
             >
-              Số KPI chờ duyệt
+              Pending KPI Count
             </th>
             <th
               class="w-[11rem] px-3 py-3.5 text-[11px] font-bold uppercase tracking-wide text-slate-500"
             >
-              Gửi gần nhất
+              Latest Submission
             </th>
             <th
               class="w-[10rem] py-3.5 pl-3 pr-5 text-right text-[11px] font-bold uppercase tracking-wide text-slate-500"
             >
-              Thao tác
+              Actions
             </th>
           </tr>
         </thead>
         <tbody class="divide-y divide-slate-100">
           <tr v-if="!members.length">
             <td colspan="5" class="py-14 text-center text-sm text-slate-500">
-              Không có KPI nào chờ PM duyệt.
+              No KPIs are pending PM approval.
             </td>
           </tr>
           <tr
@@ -231,7 +231,7 @@ function confirmRejectSelected() {
                 class="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                 :checked="selectedUserIds.has(m.userId)"
                 :disabled="!m.pendingCount || actionBusy"
-                :aria-label="`Chọn ${m.userFullName}`"
+                :aria-label="`Select ${m.userFullName}`"
                 @click.stop="toggleMemberSelection(m.userId, $event)"
               />
             </td>
@@ -278,7 +278,7 @@ function confirmRejectSelected() {
                 class="inline-flex items-center justify-center rounded-lg border border-blue-200 bg-white px-3.5 py-2 text-xs font-bold text-blue-700 shadow-sm transition-colors hover:border-blue-300 hover:bg-blue-50/80 hover:text-blue-800"
                 @click.stop="emit('open-member', m)"
               >
-                Xem &amp; duyệt
+                View &amp; Approve
               </button>
             </td>
           </tr>
@@ -297,15 +297,15 @@ function confirmRejectSelected() {
             <div class="rounded-full bg-rose-100 p-2 text-rose-600">
               <i class="fas fa-circle-exclamation text-lg" />
             </div>
-            <h3 class="text-lg font-bold text-slate-900">Từ chối KPI đã chọn</h3>
+            <h3 class="text-lg font-bold text-slate-900">Reject Selected KPIs</h3>
           </div>
           <p class="mb-3 text-sm text-slate-600">
-            Bạn sắp từ chối tất cả KPI chờ duyệt (402) của
+            You are about to reject all pending KPIs (402) for
             <strong>{{ selectedMemberCount }}</strong>
-            thành viên. Nhập lý do áp dụng cho tất cả.
+            members. Enter a reason that applies to all.
           </p>
           <label class="mb-1 block text-sm font-semibold text-slate-700">
-            Lý do từ chối <span class="text-rose-500">*</span>
+            Rejection Reason <span class="text-rose-500">*</span>
           </label>
           <textarea
             v-model="rejectReason"
@@ -313,7 +313,7 @@ function confirmRejectSelected() {
             :class="
               rejectError ? 'border-rose-400 focus:ring-rose-100' : 'border-slate-300 focus:ring-rose-100'
             "
-            placeholder="Nhập lý do chi tiết..."
+            placeholder="Enter detailed reason..."
           />
           <p v-if="rejectError" class="mt-1 text-xs font-medium text-rose-600">{{ rejectError }}</p>
           <div class="mt-4 flex justify-end gap-2">
@@ -322,7 +322,7 @@ function confirmRejectSelected() {
               class="rounded-lg px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100"
               @click="closeRejectDialog"
             >
-              Hủy
+              Cancel
             </button>
             <button
               type="button"
@@ -330,7 +330,7 @@ function confirmRejectSelected() {
               class="rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-50"
               @click="confirmRejectSelected"
             >
-              Xác nhận từ chối
+              Confirm rejection
             </button>
           </div>
         </div>

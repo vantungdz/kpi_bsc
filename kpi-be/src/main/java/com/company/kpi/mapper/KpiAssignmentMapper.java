@@ -25,6 +25,14 @@ public interface KpiAssignmentMapper {
             @Param("userId") UUID userId,
             @Param("cycleId") UUID cycleId);
 
+    /**
+     * Assignment nguồn khi GM copy KPI: ưu tiên dòng cascade (parent không null) nếu trùng kpi_info.
+     */
+    KpiAssignmentUserTargetRow findSourceAssignmentForGmCopy(
+            @Param("userId") UUID userId,
+            @Param("cycleId") UUID cycleId,
+            @Param("kpiInfoId") UUID kpiInfoId);
+
     int updateEvidence(
             @Param("id") UUID id,
             @Param("evidences") String evidences);
@@ -247,11 +255,12 @@ public interface KpiAssignmentMapper {
             @Param("cycleId") UUID cycleId,
             @Param("resolvedBy") UUID resolvedBy);
 
-    /** 407→404 sau khi GM xử lý feedback PM. */
+    /** 407→404 sau khi GM/PM xử lý feedback (đóng feedback, không bắt buộc lý do). */
     int updateAssignmentStatusFromFeedbackToPendingAcceptance(
             @Param("assignmentId") UUID assignmentId,
             @Param("cycleId") UUID cycleId,
-            @Param("updatedBy") UUID updatedBy);
+            @Param("updatedBy") UUID updatedBy,
+            @Param("updateReason") String updateReason);
 
     /**
      * Timeline issues: tất cả {@code kpi_assignments} có status 401–603 trong chu kỳ.
@@ -364,7 +373,7 @@ public interface KpiAssignmentMapper {
             @Param("updatedBy") UUID updatedBy,
             @Param("updateReason") String updateReason);
 
-    /** PM xử lý feedback member: 407→404 cho assignment thuộc cây báo cáo dưới PM. */
+    /** PM xử lý feedback member (chấp nhận / từ chối): 407→404. */
     int updateMemberFeedbackStatusByPm(
             @Param("assignmentId") UUID assignmentId,
             @Param("cycleId") UUID cycleId,

@@ -301,10 +301,10 @@ const portfolioGatePendingLabel = computed(() => {
     >
       <p class="font-semibold leading-snug">
         <i class="fas fa-user-clock mr-2 text-amber-600" aria-hidden="true" />
-        Để gửi đánh giá KPI Member lên GM từng nhân viên, toàn bộ thành viên trong team phải đã nộp kết quả KPI Member
+        To submit each member's KPI evaluation to GM, every team member must have submitted their Member KPI results.
       </p>
       <p v-if="portfolioGatePendingLabel" class="mt-2 text-amber-900">
-        Còn thiếu kết quả từ: <strong>{{ portfolioGatePendingLabel }}</strong>
+        Missing results from: <strong>{{ portfolioGatePendingLabel }}</strong>
       </p>
     </div>
 
@@ -334,8 +334,8 @@ const portfolioGatePendingLabel = computed(() => {
           ]"
           :title="
             isPmEvaluationSubject(member)
-              ? 'Đang chờ PM đánh giá: '
-              : 'Không có KPI đang chờ PM đánh giá — chỉ hiển thị trong org chart.'
+              ? 'Pending PM evaluation: '
+              : 'No KPIs are pending PM evaluation - shown in org chart only.'
           "
           @click="openMemberDetail(member)">
 

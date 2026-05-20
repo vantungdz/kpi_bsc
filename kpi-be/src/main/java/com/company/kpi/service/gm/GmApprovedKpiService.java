@@ -41,18 +41,20 @@ public class GmApprovedKpiService {
         int updatedCount = 0;
         int nFeedback = kpiAssignmentMapper.resolveActiveGmFeedback(req.getAssignmentId(), cycleId, gmUserId);
         if (nFeedback > 0) {
+            // Từ chối feedback: 407→404, không bắt buộc lý do (khác từ chối KPI 403→406).
+            String updateReason = "";
             int nReset = kpiAssignmentMapper.updateAssignmentStatusFromFeedbackToPendingAcceptance(
-                    req.getAssignmentId(), cycleId, gmUserId);
+                    req.getAssignmentId(), cycleId, gmUserId, updateReason);
             if (nReset != 1) {
                 throw AppException.badRequest(
-                        "Không thể cập nhật: feedback không hợp lệ hoặc assignment không ở trạng thái 407.");
+                        "Không thể cập nhật: feedback không hợp lệ hoặc assignment không ở trạng thái feedback in progress.");
             }
             updatedCount = 1;
         } else {
             Integer currentStatus = kpiAssignmentMapper.findAssignmentStatusCode(req.getAssignmentId(), cycleId);
             if (currentStatus != null && currentStatus == Constants.AssignStatus.FEEDBACK_IN_PROGRESS) {
                 throw AppException.badRequest(
-                        "KPI đang ở trạng thái feedback (407) nhưng không có feedback chờ GM. "
+                        "KPI đang ở trạng thái feedback nhưng không có feedback chờ GM. "
                                 + "Nếu feedback dành cho PM, GM xử lý từ tab Strategic; nếu đã xử lý, hãy làm mới danh sách.");
             }
             int newStatus = Boolean.TRUE.equals(req.getApprove())
@@ -64,7 +66,7 @@ public class GmApprovedKpiService {
             } else {
                 String rr = req.getRejectReason() != null ? req.getRejectReason().trim() : "";
                 if (rr.isEmpty()) {
-                    throw AppException.badRequest("Vui lòng nhập lý do từ chối.");
+                    throw AppException.badRequest("Please enter a rejection reason.");
                 }
                 updateReason = rr;
             }
@@ -100,7 +102,7 @@ public class GmApprovedKpiService {
             throw AppException.notFound("Feedback assignment not found: " + req.getFeedbackAssignmentId());
         }
         if (!Objects.equals(feedbackAssignment.getStatusCode(), Constants.AssignStatus.FEEDBACK_IN_PROGRESS)) {
-            throw AppException.badRequest("Feedback assignment is not at status 407.");
+            throw AppException.badRequest("Feedback assignment is not at feedback in progress.");
         }
         if (feedbackAssignment.getKpiTypeCode() == null
                 || (feedbackAssignment.getKpiTypeCode() != 101 && feedbackAssignment.getKpiTypeCode() != 103)) {

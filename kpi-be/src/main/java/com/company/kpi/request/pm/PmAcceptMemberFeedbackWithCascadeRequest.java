@@ -8,7 +8,8 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * PM chấp nhận feedback member (407→404) và lưu phân bổ cascade trong <strong>một</strong> transaction.
+ * PM chấp nhận feedback member (407→404) và cập nhật target cascade chỉ cho member đó trong <strong>một</strong> transaction.
+ * {@code memberTargets} có thể gửi đủ danh sách từ FE; BE chỉ dùng target của user gắn với {@code memberFeedbackAssignmentId}.
  */
 @Data
 public class PmAcceptMemberFeedbackWithCascadeRequest {

@@ -214,7 +214,7 @@ function saveDraft(emp: PmManagerEmployee) {
   if (isReadonly.value) return
   banner.value = {
     type: 'info',
-    text: `Đã lưu nháp (mock) cho ${emp.name} — năm ${selectedYear.value}.`,
+    text: `Draft saved (mock) for ${emp.name} - year ${selectedYear.value}.`,
   }
   setTimeout(() => {
     banner.value = null
@@ -225,7 +225,7 @@ function confirmDone(emp: PmManagerEmployee) {
   if (isReadonly.value) return
   const c = (supervisorComments[emp.id] ?? '').trim()
   if (!c) {
-    banner.value = { type: 'info', text: 'Vui lòng nhập Supervisor Comment trước khi hoàn tất.' }
+    banner.value = { type: 'info', text: 'Enter a Supervisor Comment before completing.' }
     setTimeout(() => {
       banner.value = null
     }, 3200)
@@ -233,7 +233,7 @@ function confirmDone(emp: PmManagerEmployee) {
   }
   banner.value = {
     type: 'ok',
-    text: `Xác nhận hoàn tất (mock) cho ${emp.name}. Điểm TB PM: ${pmAvgInPanel(emp)}.`,
+    text: `Completion confirmed (mock) for ${emp.name}. PM average score: ${pmAvgInPanel(emp)}.`,
   }
   setTimeout(() => {
     banner.value = null
@@ -248,7 +248,7 @@ function confirmDone(emp: PmManagerEmployee) {
       class="flex flex-col items-center justify-center py-28 text-slate-500 gap-3"
     >
       <i class="fas fa-spinner fa-spin text-indigo-500 text-3xl" />
-      <span class="text-sm font-semibold">Đang tải dữ liệu...</span>
+      <span class="text-sm font-semibold">Loading data...</span>
     </div>
 
     <template v-else>
@@ -268,7 +268,7 @@ function confirmDone(emp: PmManagerEmployee) {
     >
       <i class="fas fa-lock text-slate-500 mt-0.5 shrink-0" />
       <p>
-        <span class="font-bold">Chế độ chỉ xem:</span> năm {{ selectedYear }} đã khóa kỳ. Không thể chỉnh điểm PM hay ghi chú supervisor.
+        <span class="font-bold">Read-only mode:</span> year {{ selectedYear }} is locked. PM scores and supervisor comments cannot be edited.
       </p>
     </div>
 
@@ -276,10 +276,10 @@ function confirmDone(emp: PmManagerEmployee) {
     <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-2">
       <div>
         <h2 class="text-2xl font-bold text-slate-900 tracking-tight">
-          Quản lý &amp; Đánh giá KPI (PM Manager)
+          KPI Management &amp; Evaluation (PM Manager)
         </h2>
         <p class="text-slate-500 text-sm mt-1">
-          Bấm vào nhân viên để xổ bảng đánh giá chi tiết.
+          Click an employee to expand the detailed evaluation table.
         </p>
       </div>
       <div class="flex flex-wrap gap-3">
@@ -288,13 +288,13 @@ function confirmDone(emp: PmManagerEmployee) {
           class="px-4 py-2 bg-white border border-slate-200 rounded-lg text-sm font-bold text-slate-700 shadow-sm outline-none cursor-pointer focus:ring-2 focus:ring-indigo-100"
         >
           <option :value="2024">
-            Năm: 2024
+            Year: 2024
           </option>
           <option :value="2025">
-            Năm: 2025
+            Year: 2025
           </option>
           <option :value="2026">
-            Năm: 2026
+            Year: 2026
           </option>
         </select>
       </div>
@@ -308,7 +308,7 @@ function confirmDone(emp: PmManagerEmployee) {
           <input
             v-model="nameFilter"
             type="text"
-            placeholder="Lọc theo tên nhân viên (vd: Huy, Phước)..."
+            placeholder="Filter by employee name (e.g. Huy, Phuoc)..."
             class="pl-9 pr-4 py-2 bg-white border border-slate-300 shadow-sm rounded-lg text-sm focus:ring-2 focus:ring-indigo-100 outline-none w-full text-slate-700"
           >
         </div>
@@ -319,7 +319,7 @@ function confirmDone(emp: PmManagerEmployee) {
             :class="listFilter === 'all' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50'"
             @click="listFilter = 'all'"
           >
-            Tất cả ({{ totalCount }})
+            All ({{ totalCount }})
           </button>
           <button
             type="button"
@@ -328,7 +328,7 @@ function confirmDone(emp: PmManagerEmployee) {
             @click="listFilter = 'pending'"
           >
             <span class="w-2 h-2 rounded-full bg-current opacity-80" />
-            Chờ chấm điểm ({{ pendingCount }})
+            Pending scoring ({{ pendingCount }})
           </button>
         </div>
       </div>
@@ -338,25 +338,25 @@ function confirmDone(emp: PmManagerEmployee) {
           <thead>
             <tr class="bg-white border-b border-slate-200 text-[11px] uppercase tracking-wider text-slate-500 font-bold">
               <th class="py-4 px-6 w-16">
-                Mã NV
+                Employee ID
               </th>
               <th class="py-4 px-6 min-w-[250px]">
-                Tên Nhân viên
+                Employee Name
               </th>
               <th class="py-4 px-6 text-center">
                 Rank
               </th>
               <th class="py-4 px-6 text-center">
-                Tiến độ (Status)
+                Progress (Status)
               </th>
               <th class="py-4 px-6 text-center bg-slate-50">
-                Điểm Tự chấm
+                Self Score
               </th>
               <th class="py-4 px-6 text-center bg-indigo-50/50 text-indigo-800">
-                Điểm PM
+                PM Score
               </th>
               <th class="py-4 px-6 text-right w-44">
-                Thao tác
+                Actions
               </th>
             </tr>
           </thead>
@@ -426,7 +426,7 @@ function confirmDone(emp: PmManagerEmployee) {
                     :class="expandedId === emp.id ? 'ring-2 ring-slate-300' : ''"
                     @click="toggleExpand(emp)"
                   >
-                    <span>Chi tiết</span>
+                    <span>Details</span>
                     <i
                       class="fas fa-chevron-down text-xs transition-transform duration-200"
                       :class="expandedId === emp.id ? 'rotate-180' : ''"
@@ -439,7 +439,7 @@ function confirmDone(emp: PmManagerEmployee) {
                     :class="expandedId === emp.id ? 'bg-indigo-100 text-indigo-700 border-indigo-200' : 'bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700'"
                     @click="toggleExpand(emp)"
                   >
-                    <span>Xem &amp; Chấm</span>
+                    <span>View &amp; Score</span>
                     <i
                       class="fas fa-chevron-down text-xs transition-transform duration-200"
                       :class="expandedId === emp.id ? 'rotate-180' : ''"
@@ -451,7 +451,7 @@ function confirmDone(emp: PmManagerEmployee) {
                     disabled
                     class="inline-flex items-center justify-center px-4 py-1.5 bg-white border border-slate-300 text-slate-400 text-xs font-bold rounded-lg shadow-sm cursor-not-allowed w-full"
                   >
-                    Chưa thể chấm
+                    Cannot score yet
                   </button>
                 </td>
               </tr>
@@ -464,7 +464,7 @@ function confirmDone(emp: PmManagerEmployee) {
                       <div class="p-4 border-b border-slate-200 bg-slate-50/80 flex justify-between items-center">
                         <h3 class="font-bold text-slate-800 flex items-center gap-2 text-base">
                           <i class="fas fa-list text-indigo-600" />
-                          Bảng Đánh giá chi tiết ({{ flattenKpiItems(emp).length }} Hạng mục) — {{ selectedYear }}
+                          Detailed Evaluation Table ({{ flattenKpiItems(emp).length }} items) - {{ selectedYear }}
                         </h3>
                       </div>
 
@@ -476,13 +476,13 @@ function confirmDone(emp: PmManagerEmployee) {
                                 #
                               </th>
                               <th class="py-3 px-4 min-w-[220px]">
-                                Hạng Mục (Objectives)
+                                Objectives
                               </th>
                               <th class="py-3 px-4 text-center w-20">
-                                Trọng số
+                                Weight
                               </th>
                               <th class="py-3 px-4 text-center w-36">
-                                Bằng Chứng
+                                Evidence
                               </th>
                               <th class="py-3 px-4 text-center w-24">
                                 Self Score
@@ -616,7 +616,7 @@ function confirmDone(emp: PmManagerEmployee) {
                           <tfoot class="bg-slate-100/80 border-t-2 border-slate-200 font-bold text-sm">
                             <tr>
                               <td colspan="2" class="py-4 px-4 text-right text-slate-500 uppercase tracking-wider text-[11px]">
-                                Tổng Trọng số (Total Weight):
+                                Total Weight:
                               </td>
                               <td class="py-4 px-4 text-center text-slate-800">
                                 {{ PM_MANAGER_TOTAL_WEIGHT }} <span class="text-[10px] text-slate-500 font-medium">pts</span>
@@ -625,7 +625,7 @@ function confirmDone(emp: PmManagerEmployee) {
                             </tr>
                             <tr class="bg-white border-t border-slate-200">
                               <td colspan="4" class="py-4 px-4 text-right text-slate-600 uppercase tracking-wider">
-                                Điểm TB tự chấm (Self-Avg):
+                                Self Average Score:
                               </td>
                               <td class="py-4 px-4 text-center border-x border-slate-200">
                                 <span class="text-xl text-slate-700 font-black">{{ selfAvgInPanel(emp) }}</span>
@@ -634,7 +634,7 @@ function confirmDone(emp: PmManagerEmployee) {
                             </tr>
                             <tr class="bg-indigo-50 border-t border-slate-200">
                               <td colspan="4" class="py-5 px-4 text-right text-indigo-900 uppercase tracking-wider">
-                                Điểm Trung Bình (PM Avg Score):
+                                PM Average Score:
                               </td>
                                <td class="py-5 px-4 text-right text-indigo-900 uppercase tracking-wider">
                               </td>
@@ -649,7 +649,7 @@ function confirmDone(emp: PmManagerEmployee) {
                       <div class="p-6 border-t border-slate-200 bg-white">
                         <h4 class="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
                           <i class="fas fa-comment-dots text-indigo-600" />
-                          Tổng kết đánh giá &amp; Xác nhận (Final Review)
+                          Evaluation Summary &amp; Confirmation (Final Review)
                         </h4>
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8">
                           <div class="space-y-2 opacity-80 pointer-events-none">
@@ -664,7 +664,7 @@ function confirmDone(emp: PmManagerEmployee) {
                               v-model="supervisorComments[emp.id]"
                               class="w-full h-24 p-3 bg-white border-2 border-indigo-200 rounded-lg text-sm text-slate-800 focus:ring-2 focus:ring-indigo-100 outline-none resize-none shadow-sm disabled:bg-slate-50 disabled:text-slate-500"
                               :disabled="isReadonly"
-                              placeholder="Nhập ý kiến nhận xét tổng thể để giải thích cho mức điểm bạn vừa chấm..."
+                              placeholder="Enter an overall comment to explain the score you just gave..."
                             />
                           </div>
                         </div>
@@ -675,7 +675,7 @@ function confirmDone(emp: PmManagerEmployee) {
                             :disabled="isReadonly"
                             @click="saveDraft(emp)"
                           >
-                            Lưu Nháp
+                            Save Draft
                           </button>
                           <button
                             type="button"
@@ -683,7 +683,7 @@ function confirmDone(emp: PmManagerEmployee) {
                             :disabled="isReadonly"
                             @click="confirmDone(emp)"
                           >
-                            <i class="fas fa-check-circle text-sm" /> Xác nhận Hoàn tất
+                            <i class="fas fa-check-circle text-sm" /> Confirm Completion
                           </button>
                         </div>
                       </div>
@@ -700,7 +700,7 @@ function confirmDone(emp: PmManagerEmployee) {
         v-if="filteredEmployees.length === 0"
         class="p-12 text-center text-slate-500 text-sm font-medium"
       >
-        Không có nhân viên khớp bộ lọc.
+        No employees match the filter.
       </div>
     </div>
     </template>

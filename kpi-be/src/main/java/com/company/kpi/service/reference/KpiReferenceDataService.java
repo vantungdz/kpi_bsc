@@ -65,7 +65,7 @@ public class KpiReferenceDataService {
         return KpiCalculationReferenceResponse.builder().calcRulesWithTypes(out).build();
     }
 
-    /** User active là {@code departments.manager_id} — form KPI cascading «Giao cho quản lý department». */
+    /** User active có role PM — dropdown manager department / KPI cascading. */
     public List<DepartmentManagerOptionResponse> listDepartmentManagers() {
         return userMapper.listActiveDepartmentManagers();
     }

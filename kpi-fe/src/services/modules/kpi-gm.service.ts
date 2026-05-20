@@ -222,11 +222,13 @@ export async function apiGetMemberKpiAssignments(
 export async function apiCopyKpisToMember(
   targetUserId: string,
   cycleId: string,
+  sourceUserId: string,
   items: GmCopyKpiItemPayload[],
 ): Promise<void> {
   const uid = encodeURIComponent(targetUserId.trim())
   await http.post<ApiResponse<null>>(`/kpi/gm/members/${uid}/copy-kpis`, {
     cycleId,
+    sourceUserId,
     items,
   })
 }
@@ -683,8 +685,12 @@ export const gmKpiService = {
   listMembers: () => apiListGmMembers(),
   getMemberKpiAssignments: (userId: string, cycleId: string) =>
     apiGetMemberKpiAssignments(userId, cycleId),
-  copyKpisToMember: (targetUserId: string, cycleId: string, items: GmCopyKpiItemPayload[]) =>
-    apiCopyKpisToMember(targetUserId, cycleId, items),
+  copyKpisToMember: (
+    targetUserId: string,
+    cycleId: string,
+    sourceUserId: string,
+    items: GmCopyKpiItemPayload[],
+  ) => apiCopyKpisToMember(targetUserId, cycleId, sourceUserId, items),
   createDepartment: (body: GmCreateDepartmentBody) =>
     apiCreateGmDepartment(body),
   updateDepartment: (departmentId: string, body: GmUpdateDepartmentBody) =>

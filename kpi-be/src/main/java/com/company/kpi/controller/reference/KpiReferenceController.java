@@ -72,7 +72,7 @@ public class KpiReferenceController extends BaseController {
         return success(kpiReferenceDataService.listCalculationReference());
     }
 
-    /** User là {@code departments.manager_id} của ít nhất một đơn vị — KPI cascading (thay lọc role PM). */
+    /** User active có role PM — gán manager department, KPI cascading. */
     @GetMapping("/department-managers")
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<BaseResponse<List<DepartmentManagerOptionResponse>>> listDepartmentManagers() {
