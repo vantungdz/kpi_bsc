@@ -12,6 +12,7 @@ import {
   resolveFormMode,
   ratioLabels,
   parsePmPortfolioEvidenceString,
+  parseKpiSupervisorEvaluationComments,
   normalizeDetailSelfScore,
   isRecordStyleFormMode,
   parseNumericFromField,
@@ -307,6 +308,42 @@ const averageRatioPreview = computed(() => {
   );
   return value == null ? null : `${value.toFixed(1)}%`;
 });
+
+const supervisorEvalComments = computed(() => {
+  const it = props.item;
+  if (!it) return { pmComment: "", gmComment: "" };
+  const raw = evidenceJsonRawFromItem(it);
+  const pmScore = it.pmScore ?? it.endPmScore;
+  const gmScore = it.gmScore ?? it.endGmScore;
+  return parseKpiSupervisorEvaluationComments(raw, {
+    statusCode:
+      it.statusCode != null && Number.isFinite(Number(it.statusCode))
+        ? Number(it.statusCode)
+        : null,
+    pmScore:
+      pmScore != null && Number.isFinite(Number(pmScore))
+        ? Number(pmScore)
+        : null,
+    gmScore:
+      gmScore != null && Number.isFinite(Number(gmScore))
+        ? Number(gmScore)
+        : null,
+    pmEvaluationComment:
+      typeof it.pmEvaluationComment === "string"
+        ? it.pmEvaluationComment
+        : null,
+    gmEvaluationComment:
+      typeof it.gmEvaluationComment === "string"
+        ? it.gmEvaluationComment
+        : null,
+  });
+});
+
+const showSupervisorEvalCommentsSection = computed(
+  () =>
+    supervisorEvalComments.value.pmComment.length > 0 ||
+    supervisorEvalComments.value.gmComment.length > 0,
+);
 
 /** Chuỗi JSON evidences: ưu tiên `evidences`, fallback `actualResult`; object (axios đã parse JSON) → stringify. */
 function evidenceJsonRawFromItem(it: Record<string, unknown>): string {
@@ -1194,6 +1231,44 @@ const selfScoreInFooter = computed(() => !!props.selfScoreFooterReadonly);
                   placeholder="Enter additional explanation for your evidence..."
                   class="w-full resize-y rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:ring-1 focus:ring-indigo-500"
                 />
+              </div>
+            </div>
+
+            <div
+              v-if="showSupervisorEvalCommentsSection"
+              class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"
+            >
+              <div class="border-b border-slate-100 bg-slate-50 px-4 py-3">
+                <h4 class="text-sm font-bold text-slate-700">
+                  <i class="fas fa-user-check mr-2 text-violet-500" />
+                  PM / GM evaluation comments
+                </h4>
+              </div>
+              <div class="space-y-4 p-4">
+                <div v-if="supervisorEvalComments.pmComment">
+                  <p
+                    class="mb-1.5 text-[10px] font-bold uppercase tracking-wide text-slate-500"
+                  >
+                    PM
+                  </p>
+                  <p
+                    class="whitespace-pre-line rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm leading-relaxed text-slate-700"
+                  >
+                    {{ supervisorEvalComments.pmComment }}
+                  </p>
+                </div>
+                <div v-if="supervisorEvalComments.gmComment">
+                  <p
+                    class="mb-1.5 text-[10px] font-bold uppercase tracking-wide text-slate-500"
+                  >
+                    GM
+                  </p>
+                  <p
+                    class="whitespace-pre-line rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm leading-relaxed text-slate-700"
+                  >
+                    {{ supervisorEvalComments.gmComment }}
+                  </p>
+                </div>
               </div>
             </div>
           </fieldset>

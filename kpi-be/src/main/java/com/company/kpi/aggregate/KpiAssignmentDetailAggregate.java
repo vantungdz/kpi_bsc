@@ -14,4 +14,8 @@ public class KpiAssignmentDetailAggregate extends KpiAssignment {
     private KpiMaster kpiMaster;
     private KpiCategory kpiCategory;
     private String unitName;
+    /** Team cascade: {@code status_code} assignment cha (PM hub), null nếu không phải con Team. */
+    private Integer teamPmParentStatusCode;
+    /** {@code roles.code} của người tạo KPI master. */
+    private String kpiCreatorRoleCode;
 }

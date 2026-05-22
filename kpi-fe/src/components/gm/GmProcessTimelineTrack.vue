@@ -8,7 +8,7 @@ defineProps<{
   nowMarkerLabel: string
   milestones: { idx: number; outerClass: string; status: GmProcessTimelineMilestoneStatus }[]
   /** Left % tuyệt đối cho mỗi milestone (cùng thứ tự với milestones[]). Nếu có → dùng absolute positioning. */
-  milestoneLeftPcts?: number[]
+  milestoneLeftPcts?: (number | undefined)[]
   /** false: ẩn chấm «hôm nay» để không đè icon tick khi mọi mốc đã complete. Mặc định true. */
   showNowMarker?: boolean
 }>()

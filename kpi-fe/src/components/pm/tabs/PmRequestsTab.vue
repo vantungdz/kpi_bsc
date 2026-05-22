@@ -194,7 +194,7 @@ function confirmRejectSelected() {
               />
             </th>
             <th class="py-3.5 pl-2 pr-3 text-[11px] font-bold uppercase tracking-wide text-slate-500">
-              Member
+              All
             </th>
             <th
               class="w-[9.5rem] px-3 py-3.5 text-center text-[11px] font-bold uppercase tracking-wide text-slate-500"

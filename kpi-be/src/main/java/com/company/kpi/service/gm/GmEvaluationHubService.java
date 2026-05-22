@@ -217,9 +217,12 @@ public class GmEvaluationHubService {
         a.setEndGmScore(r.getEndGmScore());
         a.setEvidences(r.getEvidences());
         a.setTargetDescription(r.getTargetDescription());
+        a.setTargetValue(r.getTargetValue());
         a.setWeight(r.getWeight());
         a.setMasterCode(r.getMasterCode());
         a.setMasterName(r.getMasterName());
+        a.setUnitCode(r.getUnitCode());
+        a.setUnitName(r.getUnitName());
         a.setCalculationRuleCode(r.getCalculationRuleCode());
         a.setCalculationTypeCode(r.getCalculationTypeCode());
         a.setCategoryName(r.getCategoryName());
@@ -240,7 +243,16 @@ public class GmEvaluationHubService {
         a.setEvaluationCommentsPromotion(r.getEvaluationCommentsPromotion());
         a.setSupervisorCommentPortfolio(r.getSupervisorCommentPortfolio());
         a.setSupervisorCommentPromotion(r.getSupervisorCommentPromotion());
+        a.setCreatorRoleCode(trimRoleCode(r.getCreatorRoleCode()));
         return a;
+    }
+
+    private static String trimRoleCode(String raw) {
+        if (raw == null) {
+            return null;
+        }
+        String t = raw.trim();
+        return t.isEmpty() ? null : t.toUpperCase();
     }
 
     private static String activePhase(KpiCycle cycle) {

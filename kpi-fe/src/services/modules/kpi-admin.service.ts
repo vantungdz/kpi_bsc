@@ -182,6 +182,12 @@ export async function apiGetEmployees(): Promise<Employee[]> {
   return http.get("/admin/employees").then(unwrapList<Employee>);
 }
 
+export async function apiGetEmployeeById(id: string): Promise<Employee> {
+  return http
+    .get(`/admin/employees/${id}`)
+    .then((r) => r.data?.data ?? r.data);
+}
+
 export async function apiGetLeaderMemberCandidates(
   departmentId: string,
 ): Promise<LeaderMemberCandidate[]> {
@@ -265,6 +271,7 @@ export const adminKpiService = {
   getRanks: () => apiGetRanks(),
   getJobTitles: () => apiGetJobTitles(),
   getEmployees: () => apiGetEmployees(),
+  getEmployeeById: (id: string) => apiGetEmployeeById(id),
   getLeaderMemberCandidates: (departmentId: string) =>
     apiGetLeaderMemberCandidates(departmentId),
   createEmployee: (data: Record<string, unknown>) => apiCreateEmployee(data),

@@ -349,6 +349,11 @@ function initForm() {
     }
 
     if (parsed.content) contentDraft.value = parsed.content
+    // Leader API chỉ trả evidences JSON (không có evidenceNote) — đồng bộ với member drawer.
+    const noteFromJson = String(parsed.note ?? parsed.text ?? '').trim()
+    evidenceNoteDraft.value = noteFromJson || String(it.evidenceNote ?? '').trim()
+    const certFromJson = String(parsed.certificateOutcomeNote ?? '').trim()
+    if (certFromJson) certificateOutcomeDraft.value = certFromJson
     leaderFeedbackDraft.value = String(it.feedbackComment ?? parsed.leaderFeedback ?? '')
     gmCommentDraft.value = String(parsed.gmComment ?? '')
 
@@ -368,6 +373,7 @@ function initForm() {
     pendingEvidenceStoredFiles.value = []
     pendingEvidenceUrls.value = []
     contentDraft.value = ''
+    evidenceNoteDraft.value = String(it.evidenceNote ?? '').trim()
     leaderFeedbackDraft.value = ''
     gmCommentDraft.value = ''
   }

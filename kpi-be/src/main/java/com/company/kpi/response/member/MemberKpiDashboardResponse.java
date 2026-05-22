@@ -19,7 +19,7 @@ import java.util.List;
 public class MemberKpiDashboardResponse {
 
     private Integer year;
-    /** ISO-8601 — {@code users.created_at}; onboard sau {@code mid_year_end} → FE thu timeline Year-End only. */
+    /** ISO-8601 — {@code users.created_at}; onboard từ {@code mid_year_start} → FE thu timeline Year-End only (bỏ 1H). */
     private String accountCreatedAt;
     /** target_setup | mid_year | year_end */
     private String phase;

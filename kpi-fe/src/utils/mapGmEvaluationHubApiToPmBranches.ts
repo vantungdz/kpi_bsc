@@ -9,7 +9,216 @@ import type {
 } from '@/types/gm-employee-evaluation'
 import type { GmEvaluationHubApiResponse, GmEvaluationHubAssignmentApiRow } from '@/types/gm-evaluation-hub-api'
 import { codesFromPersistedCalculationMethod } from '@/utils/kpiCalculationCodes'
-import { isRecordStyleCalcRule, parsePmPortfolioEvidenceString } from '@/utils/memberKpiHelpers'
+import {
+  fallbackKpiUnitSelectOptions,
+  formatKpiTargetWithUnit,
+  KPI_UNIT_CODE,
+} from '@/utils/kpiUnitCodes'
+import { extractRawInputFromApiTargetDescription } from '@/utils/kpiScoringRulesDsl'
+import {
+  CALC_RULE_AVERAGE,
+  CALC_RULE_SUM,
+  formatNumericTarget,
+  formatPmPortfolioActualCell,
+  isRecordStyleCalcRule,
+  normalizeCalculationRuleCode,
+  parseNumericFromField,
+  parsePmPortfolioEvidenceString,
+  pmPortfolioActualDisplayMode,
+} from '@/utils/memberKpiHelpers'
+
+/** Ngữ cảnh suy đơn vị cho drawer đánh giá GM. */
+export type GmDrawerUnitContext = {
+  unitCode?: number | null
+  unitName?: string | null
+  calculationTypeCode?: number | null
+  calcRuleCode?: number | null
+  evidenceData?: Array<{ plan?: string; actual?: string }>
+  evidencesJson?: string | null
+}
+
+function unitCodeFromUnitName(name: string | null | undefined): number | null {
+  const raw = String(name ?? '').trim()
+  if (!raw) return null
+  const lower = raw.toLowerCase()
+  if (lower.includes('percent') || lower === '%') return KPI_UNIT_CODE.PERCENT
+  for (const opt of fallbackKpiUnitSelectOptions()) {
+    if (opt.label.toLowerCase() === lower || opt.value.toLowerCase() === lower) {
+      return opt.unitCode
+    }
+  }
+  return null
+}
+
+/** Suy `unit_code` khi API/DB thiếu — đồng bộ PM member drawer. */
+export function resolveGmDrawerUnitCode(ctx: GmDrawerUnitContext): number | null {
+  const direct = ctx.unitCode
+  const n = typeof direct === 'number' ? direct : Number(direct)
+  if (Number.isFinite(n) && n > 0) return Math.trunc(n)
+
+  const fromName = unitCodeFromUnitName(ctx.unitName)
+  if (fromName != null) return fromName
+
+  return null
+}
+
+const BSC_GROUP_LABELS: Record<string, string> = {
+  A: '(A) Core Operations & Technical Excellence',
+  B: '(B) People Development & Knowledge Sharing',
+  C: '(C) Strategic Management & Governance',
+}
+
+function categoryToGroupKey(categoryName: string): string {
+  const t = categoryName.trim()
+  if (!t) return 'Other'
+  if (/^\(A\)|^A[\s.:)/-]/i.test(t) || /core operations/i.test(t)) return 'A'
+  if (/^\(B\)|^B[\s.:)/-]/i.test(t) || /people development/i.test(t)) return 'B'
+  if (/^\(C\)|^C[\s.:)/-]/i.test(t) || /strategic management/i.test(t)) return 'C'
+  return t
+}
+
+function groupLabelForCategory(categoryName: string): string {
+  const key = categoryToGroupKey(categoryName)
+  return BSC_GROUP_LABELS[key] ?? (categoryName.trim() || 'Other')
+}
+
+function unitCodeFromTargetDescription(td: string | null | undefined): number | null {
+  const raw = String(td ?? '').trim()
+  if (!raw.startsWith('{')) return null
+  try {
+    const o = JSON.parse(raw) as Record<string, unknown>
+    const u = o.unitCode ?? o.unit_code
+    const n = typeof u === 'number' ? u : Number(u)
+    return Number.isFinite(n) ? Math.trunc(n) : null
+  } catch {
+    return null
+  }
+}
+
+function parseHubNumericField(raw: unknown): number | null {
+  if (raw == null || raw === '') return null
+  const n = typeof raw === 'number' ? raw : Number.parseFloat(String(raw).replace(',', '.'))
+  return Number.isFinite(n) ? n : null
+}
+
+function calculationTypeFromHubRow(row: GmEvaluationHubAssignmentApiRow): number | null {
+  const raw = row.calculationTypeCode
+  const n = typeof raw === 'number' ? raw : Number(raw)
+  return Number.isFinite(n) ? Math.trunc(n) : null
+}
+
+function hubRowUnitContext(row: GmEvaluationHubAssignmentApiRow): GmDrawerUnitContext {
+  const raw = row.unitCode
+  const n = typeof raw === 'number' ? raw : Number(raw)
+  return {
+    unitCode: Number.isFinite(n) && n > 0 ? Math.trunc(n) : unitCodeFromTargetDescription(row.targetDescription),
+    unitName: row.unitName ?? null,
+    calculationTypeCode: calculationTypeFromHubRow(row),
+    calcRuleCode: rowCalcRuleCode(row),
+    evidenceData: parsePmPortfolioEvidenceString(row.evidences).rows,
+    evidencesJson: row.evidences ?? null,
+  }
+}
+
+function unitCodeFromHubRow(row: GmEvaluationHubAssignmentApiRow): number | null {
+  return resolveGmDrawerUnitCode(hubRowUnitContext(row))
+}
+
+function hubItemTargetRaw(row: GmEvaluationHubAssignmentApiRow): string {
+  const tv = parseHubNumericField(row.targetValue)
+  if (tv != null) return formatNumericTarget(tv)
+  const rawInput = extractRawInputFromApiTargetDescription(row.targetDescription)
+  const n = parseNumericFromField(rawInput)
+  if (n != null) return formatNumericTarget(n)
+  const t = rawInput.trim()
+  return t || '-'
+}
+
+function hubItemTargetDisplay(row: GmEvaluationHubAssignmentApiRow): string {
+  return formatKpiTargetWithUnit(hubItemTargetRaw(row), unitCodeFromHubRow(row))
+}
+
+/** Dùng chung drawer GM — gắn đơn vị cho target/actual (cột Plan trong Evidences không dùng). */
+export function formatGmDrawerValueWithUnit(
+  value: unknown,
+  ctx: GmDrawerUnitContext,
+): string {
+  const text = String(value ?? '').trim() || '-'
+  if (text === '-') return '-'
+  return formatKpiTargetWithUnit(text, resolveGmDrawerUnitCode(ctx))
+}
+
+export function gmDrawerUnitContextFromItem(item: GmKpiItem): GmDrawerUnitContext {
+  return {
+    unitCode: item.unitCode ?? null,
+    unitName: item.unitName ?? null,
+    calculationTypeCode: item.calculationTypeCode ?? null,
+    calcRuleCode: item.calcRuleCode ?? null,
+    evidenceData: item.evidenceData,
+    evidencesJson: null,
+  }
+}
+
+/** Tổng hợp Actual dạng số — dùng khi đơn vị KPI không phải % (vd MM, Point). */
+function hubItemActualNumericSummary(row: GmEvaluationHubAssignmentApiRow): string {
+  const parsed = parsePmPortfolioEvidenceString(row.evidences)
+  const rows = parsed.rows
+  if (!rows.length) return '-'
+  const nums = rows
+    .map((r) => parseNumericFromField(String(r.actual ?? '')))
+    .filter((n): n is number => n != null)
+  if (!nums.length) {
+    return '-'
+  }
+  const rule = rowCalcRuleCode(row)
+  if (rule === CALC_RULE_SUM) {
+    const total = nums.reduce((a, c) => a + c, 0)
+    return formatNumericTarget(total)
+  }
+  const avg = nums.reduce((a, c) => a + c, 0) / nums.length
+  return formatNumericTarget(avg)
+}
+
+function hubItemActualRaw(row: GmEvaluationHubAssignmentApiRow): string {
+  const unitCtx = hubRowUnitContext(row)
+  const unitCode = resolveGmDrawerUnitCode(unitCtx)
+  if (unitCode != null && unitCode !== KPI_UNIT_CODE.PERCENT) {
+    return hubItemActualNumericSummary(row)
+  }
+  const rule = rowCalcRuleCode(row)
+  const calcType = calculationTypeFromHubRow(row)
+  return (
+    formatPmPortfolioActualCell(
+      row.evidences,
+      calcType,
+      pmPortfolioActualDisplayMode(rule),
+      { actualOnly: true },
+    ) || '-'
+  )
+}
+
+function buildKpiGroupsFromRows(
+  rows: GmEvaluationHubAssignmentApiRow[],
+  isPromotion: boolean,
+): GmKpiGroup[] {
+  const byCat = new Map<string, GmEvaluationHubAssignmentApiRow[]>()
+  for (const r of rows) {
+    const cat = (r.categoryName ?? '').trim() || 'Other'
+    if (!byCat.has(cat)) byCat.set(cat, [])
+    byCat.get(cat)!.push(r)
+  }
+  const sortedCats = [...byCat.keys()].sort((a, b) => a.localeCompare(b, 'en', { sensitivity: 'base' }))
+  return sortedCats.map((cat) => {
+    const catRows = byCat.get(cat)!
+    const groupKey = categoryToGroupKey(cat)
+    const baseLabel = groupLabelForCategory(cat)
+    return {
+      groupKey,
+      groupTitle: isPromotion ? `Promotion · ${baseLabel}` : baseLabel,
+      items: catRows.map((r, i) => toKpiItem(r, i)),
+    }
+  })
+}
 
 function initialsFromName(name: string): string {
   const p = String(name ?? '')
@@ -377,6 +586,9 @@ function toKpiItem(row: GmEvaluationHubAssignmentApiRow, index: number): GmKpiIt
   const evidenceObject = parseEvidenceObject(String(row.evidences ?? '').trim())
   const calcRuleCode = rowCalcRuleCode(row)
   const parsedEvidences = parsePmPortfolioEvidenceString(row.evidences)
+  const unitCtx = hubRowUnitContext(row)
+  const unitCode = resolveGmDrawerUnitCode(unitCtx)
+  const calculationTypeCode = calculationTypeFromHubRow(row)
   const gmComment =
     evidenceObject && typeof evidenceObject.gmComment === 'string'
       ? evidenceObject.gmComment.trim()
@@ -385,8 +597,20 @@ function toKpiItem(row: GmEvaluationHubAssignmentApiRow, index: number): GmKpiIt
     id: String(row.assignmentId),
     index: index + 1,
     title,
-    /** Không gán mô tả target JSON dài vào drawer — chỉ hiển thị tiêu đề KPI (UI GM). */
-    target: '',
+    code,
+    name: name || title,
+    target: hubItemTargetDisplay(row),
+    targetRaw: hubItemTargetRaw(row),
+    actualRaw: hubItemActualRaw(row),
+    actualResult: formatGmDrawerValueWithUnit(hubItemActualRaw(row), unitCtx),
+    unitCode,
+    unitName: row.unitName ?? null,
+    calculationTypeCode,
+    statusCode:
+      typeof row.statusCode === 'number' && Number.isFinite(row.statusCode)
+        ? row.statusCode
+        : null,
+    statusDesc: asmProgressLabel(row) || undefined,
     weight: parseWeight(row),
     calcRuleCode,
     evidenceButtonLabel: 'Evidence',
@@ -407,6 +631,10 @@ function toKpiItem(row: GmEvaluationHubAssignmentApiRow, index: number): GmKpiIt
         ? row.statusCode
         : null,
     assignmentStatusDisplay: asmProgressLabel(row) || null,
+    creatorRoleCode:
+      row.creatorRoleCode != null && String(row.creatorRoleCode).trim() !== ''
+        ? String(row.creatorRoleCode).trim().toUpperCase()
+        : undefined,
   }
 }
 
@@ -454,25 +682,11 @@ function buildUserMember(
   const groups: GmKpiGroup[] = []
 
   if (nonPromotionRows.length > 0) {
-    const items = nonPromotionRows.map((r, i) => toKpiItem(r, i))
-    const cats = [
-      ...new Set(nonPromotionRows.map((r) => r.categoryName).filter((x): x is string => Boolean(x?.trim()))),
-    ]
-    groups.push({
-      groupTitle: cats.length ? cats.join(' · ') : 'KPI Individual / Cascading',
-      items,
-    })
+    groups.push(...buildKpiGroupsFromRows(nonPromotionRows, false))
   }
 
   if (promotionRows.length > 0) {
-    const items = promotionRows.map((r, i) => toKpiItem(r, i))
-    const cats = [
-      ...new Set(promotionRows.map((r) => r.categoryName).filter((x): x is string => Boolean(x?.trim()))),
-    ]
-    groups.push({
-      groupTitle: cats.length ? `Promotion · ${cats.join(' · ')}` : 'Promotion',
-      items,
-    })
+    groups.push(...buildKpiGroupsFromRows(promotionRows, true))
   }
 
   if (groups.length === 0) {

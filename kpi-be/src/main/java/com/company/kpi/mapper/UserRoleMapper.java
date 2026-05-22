@@ -11,4 +11,7 @@ public interface UserRoleMapper {
     void deleteAllRolesForUser(@Param("userId") UUID userId);
 
     void assignRoleByCode(@Param("userId") UUID userId, @Param("roleCode") String roleCode);
+
+    /** Vai trò KPI (MEMBER / LEADER / PM), bỏ qua ADMIN. */
+    String findPrimaryRoleCodeByUserId(@Param("userId") UUID userId);
 }

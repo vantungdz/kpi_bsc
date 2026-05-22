@@ -54,6 +54,13 @@ export function kpiCreatorDotClass(roleCode?: string | null): string {
 /**
  * Nền dòng KPI theo `roles.code` của người tạo KPI master (đồng bộ GM diagnostics + PM portfolio).
  */
+/** Nền thẻ KPI trong drawer (không hover); không xác định role → trắng. */
+export function kpiCreatorCardBgClass(roleCode?: string | null): string {
+  const code = normalizeCreatorRole(roleCode)
+  if (!KNOWN_CREATOR_ROLES.has(code as KpiCreatorRoleCode)) return 'bg-white'
+  return kpiCreatorRowBgClass(code, true)
+}
+
 export function kpiCreatorRowBgClass(roleCode?: string | null, expanded = false): string {
   switch (normalizeCreatorRole(roleCode)) {
     case 'GM':

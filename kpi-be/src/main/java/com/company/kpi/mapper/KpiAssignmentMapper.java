@@ -33,6 +33,16 @@ public interface KpiAssignmentMapper {
             @Param("cycleId") UUID cycleId,
             @Param("kpiInfoId") UUID kpiInfoId);
 
+    Integer findKpiTypeCodeByKpiInfoId(@Param("kpiInfoId") UUID kpiInfoId);
+
+    /**
+     * Assignment gốc GM→PM (parent null) cho KPI Team khi GM copy sang member.
+     */
+    UUID findPmRootAssignmentIdForGmCopy(
+            @Param("pmUserId") UUID pmUserId,
+            @Param("cycleId") UUID cycleId,
+            @Param("kpiInfoId") UUID kpiInfoId);
+
     int updateEvidence(
             @Param("id") UUID id,
             @Param("evidences") String evidences);
@@ -152,6 +162,27 @@ public interface KpiAssignmentMapper {
             @Param("assignmentId") UUID assignmentId,
             @Param("cycleId") UUID cycleId,
             @Param("targetValue") BigDecimal targetValue,
+            @Param("updatedBy") UUID updatedBy);
+
+    /**
+     * GM sửa target catalog: cập nhật các assignment còn giữ target cũ (trùng {@code kpis_information} trước khi sửa).
+     */
+    int updateAssignmentTargetsMatchingCatalog(
+            @Param("kpiInfoId") UUID kpiInfoId,
+            @Param("cycleId") UUID cycleId,
+            @Param("oldTargetValue") BigDecimal oldTargetValue,
+            @Param("newTargetValue") BigDecimal newTargetValue,
+            @Param("updatedBy") UUID updatedBy);
+
+    int countRootAssignmentsForKpi(
+            @Param("kpiInfoId") UUID kpiInfoId,
+            @Param("cycleId") UUID cycleId);
+
+    /** GM sửa target catalog: đồng bộ dòng gốc (PM hub) khi assignment đã lệch catalog (vd. ki=33, ka=10). */
+    int updateRootAssignmentTargetsToCatalog(
+            @Param("kpiInfoId") UUID kpiInfoId,
+            @Param("cycleId") UUID cycleId,
+            @Param("newTargetValue") BigDecimal newTargetValue,
             @Param("updatedBy") UUID updatedBy);
 
     int resubmitRejectedSelfCreatedAssignments(
@@ -293,7 +324,8 @@ public interface KpiAssignmentMapper {
             @Param("pmId") UUID pmId);
 
     /**
-     * MEMBER-role users (primary dept) không có bản ghi {@code kpi_assignments} cá nhân trong chu kỳ.
+     * Users (MEMBER / LEADER / PM, primary dept) không có bất kỳ {@code kpi_assignments} hợp lệ trong chu kỳ
+     * (gốc hoặc cascade; nguồn PM / leader / member tự tạo). Loại trừ status 406.
      */
     List<GmUnassignedMemberRow> listMembersWithoutKpiAssignment(@Param("cycleId") UUID cycleId);
 
@@ -319,6 +351,12 @@ public interface KpiAssignmentMapper {
      * PM Personal Send Review: all member Team child assignments must already be sent to GM
      * for the corresponding phase before PM submits PM-owned KPIs.
      */
+    boolean existsTeamMemberReviewBlockedByPmPendingAcceptance(
+            @Param("pmId") UUID pmId,
+            @Param("cycleId") UUID cycleId,
+            @Param("memberUserId") UUID memberUserId,
+            @Param("childStatusCode") int childStatusCode);
+
     int countBlockingPmTeamMemberReviewsForSendReview(
             @Param("pmId") UUID pmId,
             @Param("cycleId") UUID cycleId,
@@ -385,14 +423,14 @@ public interface KpiAssignmentMapper {
             @Param("updatedBy") UUID updatedBy);
 
     /**
-     * PM lưu comment theo từng KPI vào {@code kpi_assignments.evidences.gmComment}.
+     * PM lưu comment theo từng KPI vào {@code kpi_assignments.evidences.pmComment}.
      * Chỉ cho phép assignment của member thuộc cây báo cáo dưới PM trong cùng chu kỳ.
      */
     int updatePmComment(
             @Param("assignmentId") UUID assignmentId,
             @Param("cycleId") UUID cycleId,
             @Param("pmId") UUID pmId,
-            @Param("gmComment") String gmComment);
+            @Param("pmComment") String pmComment);
 
     /**
      * PM lưu {@code end_pm_score} cho assignment của member ở giai đoạn cuối kỳ (ASM {@code 601} chờ PM) —
@@ -404,4 +442,7 @@ public interface KpiAssignmentMapper {
             @Param("memberUserId") UUID memberUserId,
             @Param("pmId") UUID pmId,
             @Param("pmScoreValue") java.math.BigDecimal pmScoreValue);
+
+    /** Năm chu kỳ có assignment của user (dropdown Member / Leader dashboard). */
+    List<Integer> listDistinctAssignmentYearsForUser(@Param("userId") UUID userId);
 }

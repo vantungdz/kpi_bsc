@@ -83,6 +83,8 @@ public class LeaderKpiInformationResponse {
         private String updateReason;
         private Boolean createdByCurrentUser;
         private String createdByRoleCode;
+        /** Khi ASM 407: role cần xử lý feedback — PM hoặc GM. */
+        private String feedbackTargetRoleCode;
         private String evaluationStatus;
         private String evaluationState;
         /** kpi_master.calculation_rule_code — 801 (none) | 802 (average/ratio) | 803 (comment/text) */

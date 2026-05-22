@@ -36,6 +36,8 @@ public class LeaderKpiAssignmentDTO {
     private Boolean createdByCurrentUser;
     /** Vai trò người tạo assignment (GM / PM / LEADER / MEMBER). */
     private String createdByRoleCode;
+    /** Khi ASM 407: role cần xử lý feedback — PM hoặc GM. */
+    private String feedbackTargetRoleCode;
     /** Trạng thái đánh giá FE (not_started/pending_approval/approved/overdue/feedback). */
     private String evaluationStatus;
     /** Nhãn hiển thị trạng thái đánh giá. */

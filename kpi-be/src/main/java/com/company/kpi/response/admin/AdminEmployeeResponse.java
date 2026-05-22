@@ -18,4 +18,13 @@ public class AdminEmployeeResponse {
     private String jobTitleId;
     /** Giá trị: "active" | "inactive" */
     private String status;
+
+    /** Vai trò hệ thống: MEMBER | LEADER | PM */
+    private String roleCode;
+
+    /** Phòng PM quản lý ({@code departments.manager_id}) — chỉ khi role PM */
+    private String managedDepartmentId;
+
+    /** Leader: user id các member đang có {@code supervisor_id} = leader trong phòng primary */
+    private java.util.List<String> memberIds;
 }

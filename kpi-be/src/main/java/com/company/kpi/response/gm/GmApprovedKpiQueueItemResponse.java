@@ -38,4 +38,6 @@ public class GmApprovedKpiQueueItemResponse {
     private Integer unitCode;
     /** Legacy field: queue không còn hiển thị 407; giữ để tương thích response cũ. */
     private String feedbackNote;
+    /** {@code roles.code} của người tạo KPI master ({@code kpi_master.created_by}). */
+    private String creatorRoleCode;
 }

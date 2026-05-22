@@ -223,7 +223,7 @@ function actualPreview(raw: string | null | undefined): string {
       <table class="w-full text-left">
         <thead class="sticky top-0 z-10 border-b border-slate-200 bg-slate-50 text-[10px] font-bold uppercase tracking-wider text-slate-500 shadow-sm">
           <tr>
-            <th class="w-10 px-4 py-3 text-center">Num</th>
+            <th class="w-10 px-4 py-3 text-center">No</th>
             <th class="px-4 py-3">Objectives</th>
             <th class="px-4 py-3">Target</th>
             <th class="px-4 py-3">Actual</th>

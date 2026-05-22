@@ -27,6 +27,9 @@ public class StrategicKpiEditResponse {
     private String calculationMethod;
     private Boolean isImportant;
 
+    /** Role người tạo KPI — GM chỉ sửa assignment khi giá trị là GM. */
+    private String creatorRoleCode;
+
     private List<UUID> assignPMs;
     private Map<String, Object> pmTargets;
     private List<UUID> memberIds;

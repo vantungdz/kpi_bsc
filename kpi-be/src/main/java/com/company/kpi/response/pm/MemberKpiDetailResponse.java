@@ -17,8 +17,17 @@ public class MemberKpiDetailResponse {
     private String pmComment;
     private Integer statusCode;
     private Integer kpiTypeCode;
+    /** 801/802/803 — quy tắc tổng hợp (tổng / TB / comment); FE dùng cho layout evidence & mode gộp Actual. */
     private Integer calcRuleCode;
+    /** 701 Actual/Plan, 702 Plan/Actual — chiều công thức tỷ lệ %; dùng cùng calcRuleCode, không thay thế. */
+    private Integer calculationTypeCode;
     private Integer unitCode;
     private String unitName;
     private String evidences;
+    /**
+     * Team KPI (102): trạng thái assignment PM cha — FE khóa duyệt kết quả member khi 404/406.
+     */
+    private Integer teamPmParentStatusCode;
+    /** {@code roles.code} của người tạo KPI master. */
+    private String creatorRoleCode;
 }

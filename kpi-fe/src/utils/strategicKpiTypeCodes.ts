@@ -1,5 +1,8 @@
 import type { GmStrategicKpiKind } from '@/types/gm-workspace'
 import { KpiItem } from '@/types/kpi'
+import { kpiTypeDisplayLabel } from '@/types/kpi-type-option'
+
+export { kpiTypeDisplayLabel }
 
 /** 102 TEAM → UI «Cascading»; 101 INDIVIDUAL; 103 PROMOTION — đồng bộ BE diagnostics. */
 export function strategicKpiKindFromTypeCode(code: number | null | undefined): GmStrategicKpiKind {

@@ -4,10 +4,12 @@ import com.company.kpi.common.constant.Constant;
 import com.company.kpi.common.dto.BaseResponse;
 import com.company.kpi.controller.base.BaseController;
 import com.company.kpi.request.leader.LeaderScoreRequest;
+import com.company.kpi.response.common.KpiDashboardOptionsResponse;
 import com.company.kpi.response.leader.LeaderKpiInformationResponse;
 import com.company.kpi.response.leader.LeaderMemberListResponse;
 import com.company.kpi.response.pm.KpiSheetResponse;
 import com.company.kpi.response.leader.LeaderKpiDashboardResponse;
+import com.company.kpi.service.common.KpiDashboardOptionsService;
 import com.company.kpi.service.leader.LeaderKpiService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -30,6 +32,14 @@ import java.util.UUID;
 public class LeaderKpiController extends BaseController {
 
     private final LeaderKpiService leaderKpiService;
+    private final KpiDashboardOptionsService kpiDashboardOptionsService;
+
+    @GetMapping("/dashboard-options")
+    public ResponseEntity<BaseResponse<KpiDashboardOptionsResponse>> getDashboardOptions(
+            Authentication authentication) {
+        UUID userId = UUID.fromString((String) authentication.getPrincipal());
+        return success(kpiDashboardOptionsService.getOptionsForUser(userId));
+    }
 
     @GetMapping("/kpi-info")
     public ResponseEntity<BaseResponse<LeaderKpiInformationResponse>> getKpiInfo(

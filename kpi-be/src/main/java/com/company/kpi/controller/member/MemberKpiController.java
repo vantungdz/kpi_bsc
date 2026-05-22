@@ -9,9 +9,11 @@ import com.company.kpi.request.member.SubmitFeedbackRequest;
 import com.company.kpi.request.member.SubmitEvalRequest;
 import com.company.kpi.request.member.SubmitMemberSheetRequest;
 import com.company.kpi.response.member.MemberFeedbackSubmitResponse;
+import com.company.kpi.response.common.KpiDashboardOptionsResponse;
 import com.company.kpi.response.member.MemberKpiDashboardResponse;
 import com.company.kpi.response.member.MemberKpiFormMetaResponse;
 import com.company.kpi.response.pm.KpiSheetResponse;
+import com.company.kpi.service.common.KpiDashboardOptionsService;
 import com.company.kpi.service.member.MemberKpiService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -34,6 +36,14 @@ import java.util.UUID;
 public class MemberKpiController extends BaseController {
 
     private final MemberKpiService memberKpiService;
+    private final KpiDashboardOptionsService kpiDashboardOptionsService;
+
+    @GetMapping("/dashboard-options")
+    public ResponseEntity<BaseResponse<KpiDashboardOptionsResponse>> getDashboardOptions(
+            Authentication authentication) {
+        UUID userId = UUID.fromString((String) authentication.getPrincipal());
+        return success(kpiDashboardOptionsService.getOptionsForUser(userId));
+    }
 
     @GetMapping("/dashboard")
     public ResponseEntity<BaseResponse<MemberKpiDashboardResponse>> getDashboard(

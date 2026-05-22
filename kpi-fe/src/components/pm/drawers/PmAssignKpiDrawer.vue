@@ -21,6 +21,8 @@ import {
   validateWeightPctValue,
 } from '@/utils/kpiTargetValidation'
 import { useAuthStore } from '@/stores/auth.store'
+import { kpiTypeDisplayLabel } from '@/types/kpi-type-option'
+import { strategicKpiTypeIconClass } from '@/utils/strategicKpiTypeCodes'
 
 // --- INTERFACES ---
 interface KpiCategory {
@@ -43,10 +45,20 @@ const authStore = useAuthStore()
 
 // --- COMPUTED STATES ---
 const isCreate = computed(() => props.mode === 'create')
+/** PM tự tạo KPI — 404 (chờ gửi GM) hoặc 406 (GM từ chối): cho sửa định nghĩa trước khi phân bổ-only. */
+const isSelfCreatedDefinitionEdit = computed(() => {
+  if (isCreate.value || !Boolean(props.kpi?.isSelfCreated)) return false
+  const sc = Number(props.kpi?.statusCode)
+  return sc === KPI_STATUS.PENDING_ACCEPTANCE || sc === KPI_STATUS.REJECTED
+})
 const isRejectedSelfCreatedEdit = computed(
-  () => !isCreate.value && Boolean(props.kpi?.isSelfCreated) && Number(props.kpi?.statusCode) === 406,
+  () =>
+    isSelfCreatedDefinitionEdit.value &&
+    Number(props.kpi?.statusCode) === KPI_STATUS.REJECTED,
 )
-const canEditKpiDefinition = computed(() => isCreate.value || isRejectedSelfCreatedEdit.value)
+const canEditKpiDefinition = computed(
+  () => isCreate.value || isSelfCreatedDefinitionEdit.value,
+)
 
 const completingMemberFeedbackAllocation = computed(() => {
   const id = props.pendingMemberFeedbackAssignmentId
@@ -119,23 +131,49 @@ const showTeamAssignPoolEmpty = computed(
     memberOptions.value.length === 0,
 )
 
-function hasMemberSubmittedActualForPmReview(kpi: Record<string, unknown> | null | undefined): boolean {
-  if (!isPortfolioTeamKpi(kpi)) return false
-  const children = Array.isArray(kpi?.children) ? kpi.children : []
-  return children.some((child) => {
-    const uid = String(child?.userId ?? '').trim()
-    if (uid && uid === pmUserId.value) return false
-    const sc = Number(child?.statusCode)
-    return Number.isFinite(sc) && sc >= 501
-  })
+/** Đồng bộ BE: chỉ 404/406 được gỡ hoặc đổi target; member mới (chưa có dòng cascade) vẫn thêm được sau GM unlock. */
+function isCascadeChildAllocationLocked(statusCode: number): boolean {
+  return (
+    statusCode !== KPI_STATUS.PENDING_ACCEPTANCE &&
+    statusCode !== KPI_STATUS.REJECTED
+  )
+}
+
+function canPersistCascadeChildAllocation(
+  child: Record<string, unknown> | null | undefined,
+): boolean {
+  if (!child) return true
+  const sc = Number(child.statusCode)
+  if (!Number.isFinite(sc)) return true
+  return !isCascadeChildAllocationLocked(sc)
 }
 
 const allocationSaveBlockedReason = computed(() => {
   if (isCreate.value) return null
-  if (hasMemberSubmittedActualForPmReview(props.kpi as Record<string, unknown> | null | undefined)) {
-    return 'Cannot save allocation because the member has submitted actuals for PM approval.'
+  if (completingMemberFeedbackAllocation.value) return null
+  /** PM sửa KPI tự tạo (404/406): cho lưu định nghĩa mà không bắt buộc phân bổ member. */
+  if (isSelfCreatedDefinitionEdit.value) return null
+  const kpi = props.kpi as Record<string, unknown> | null | undefined
+  if (!isPortfolioTeamKpi(kpi)) return null
+
+  const canPersistFromSelection = selectedMembers.value.some((memberId) =>
+    canPersistCascadeChildAllocation(findPortfolioChildForUser(kpi, memberId)),
+  )
+  if (canPersistFromSelection) return null
+
+  /** Gỡ member khỏi danh sách (vd. PM tự bỏ khỏi Team sau GM unlock) — BE soft-delete nếu child còn 404/406. */
+  const children = (kpi as { children?: Array<Record<string, unknown>> }).children
+  if (Array.isArray(children)) {
+    const selectedNorm = new Set(selectedMembers.value.map(normalizeMemberId))
+    const canPersistFromRemovals = children.some((c) => {
+      const uid = String(c.userId ?? '').trim()
+      if (!uid || selectedNorm.has(normalizeMemberId(uid))) return false
+      return canPersistCascadeChildAllocation(c)
+    })
+    if (canPersistFromRemovals) return null
   }
-  return null
+
+  return 'Cannot save allocation: no assignee changes can be saved. Add new members, update pending assignees, or unlock from GM.'
 })
 
 function normalizeMemberId(id: string): string {
@@ -219,7 +257,7 @@ function parseTargetInput(raw: string | null | undefined): number {
 
 function parseOptionalMemberTarget(raw: string | null | undefined): number | null {
   const n = parseTrimmedTargetNumber(raw)
-  return n != null && n >= 0 ? n : null
+  return n != null && n > 0 ? n : null
 }
 
 const pmUserId = computed(() => String(authStore.user?.id ?? '').trim())
@@ -234,12 +272,6 @@ const showsPmTargetField = computed(
     typeCode.value === KPI_TYPE.INDIVIDUAL ||
     (!isCreate.value && typeCode.value === KPI_TYPE.PROMOTION),
 )
-
-const pmTargetFieldLabel = computed(() => {
-  if (typeCode.value === KPI_TYPE.TEAM) return 'Target (Team)'
-  if (typeCode.value === KPI_TYPE.PROMOTION) return 'Target (Promotion)'
-  return 'Target (Individual)'
-})
 
 /** KPI Team & Individual: ô chỉ placeholder + dropdown; danh sách đã chọn & Xóa ở khối dưới (không chip trong ô). Promotion: chip trong ô. */
 const useMemberAssignListBelow = computed(
@@ -287,6 +319,15 @@ const typeCardClass = (code: number) => {
   
   return `${baseClasses} ${cursorClasses} border-slate-200 bg-white`
 }
+
+/** PM tạo KPI: TEAM + INDIVIDUAL — nhãn từ `sys_status_codes.description`. */
+const pmCreatableKpiTypeOptions = computed(() => {
+  const order = [KPI_TYPE.TEAM, KPI_TYPE.INDIVIDUAL] as const
+  const byCode = new Map(kpiTypeOptions.value.map((t) => [t.code, t]))
+  return order
+    .map((code) => byCode.get(code))
+    .filter((t): t is SysStatusCode => Boolean(t))
+})
 
 // --- METHODS ---
 /** Target hiển thị trên portfolio (đã ưu tiên assignment PM) — dùng cho KPI Team thay cho target catalog từ GET strategic. */
@@ -753,9 +794,18 @@ function buildStrategicKpiPayload(): Record<string, unknown> {
   }
 
   if (typeCode.value === KPI_TYPE.TEAM) {
-    payload.assignPMs = selectedMembers.value
+    /**
+     * KPI Team PM tự tạo (404/406): phân bổ qua cascade — không gửi PM trong assignPMs
+     * (tránh sync ghi đè assignment cha; phần «Assign to me» cần dòng cascade con).
+     */
+    const teamAssigneeIds = isSelfCreatedDefinitionEdit.value
+      ? selectedMembers.value.filter(
+          (id) => normalizeMemberId(id) !== normalizeMemberId(pmUserId.value),
+        )
+      : selectedMembers.value
+    payload.assignPMs = teamAssigneeIds
     payload.pmTargets = Object.fromEntries(
-      Object.entries(memberTargets.value).map(([k, v]) => [k, String(v)])
+      teamAssigneeIds.map((id) => [id, String(memberTargets.value[id] ?? '')]),
     )
   } else if (typeCode.value === KPI_TYPE.INDIVIDUAL) {
     payload.memberIds = selectedMembers.value
@@ -840,8 +890,14 @@ const handleSave = async () => {
   try {
     if (isCreate.value) {
       await registerKPI()
-    } else if (isRejectedSelfCreatedEdit.value) {
+    } else if (isSelfCreatedDefinitionEdit.value) {
       await updateRejectedKpiAndResubmit()
+      if (
+        typeCode.value === KPI_TYPE.TEAM &&
+        selectedMembers.value.length > 0
+      ) {
+        await handleAssignMember()
+      }
     } else if (completingMemberFeedbackAllocation.value) {
       const fid = String(props.pendingMemberFeedbackAssignmentId ?? '').trim()
       const y = activeCycle.value?.year
@@ -895,12 +951,37 @@ const handleSave = async () => {
             <div>
               <h2 class="flex items-center gap-2 text-lg font-bold text-slate-800">
                 <span class="p-1.5 rounded-lg bg-blue-100 text-blue-700 shadow-sm">
-                  <i class="fas" :class="isCreate ? 'fa-plus' : 'fa-sliders-h'" />
+                  <i
+                    class="fas"
+                    :class="
+                      isCreate
+                        ? 'fa-plus'
+                        : isSelfCreatedDefinitionEdit
+                          ? 'fa-pen'
+                          : 'fa-sliders-h'
+                    "
+                  />
                 </span>
-                {{ isCreate ? 'Create KPI' : isRejectedSelfCreatedEdit ? 'Edit rejected KPI' : 'Allocate KPI' }}
+                {{
+                  isCreate
+                    ? 'Create KPI'
+                    : isRejectedSelfCreatedEdit
+                      ? 'Edit rejected KPI'
+                      : isSelfCreatedDefinitionEdit
+                        ? 'Edit KPI'
+                        : 'Allocate KPI'
+                }}
               </h2>
               <p class="mt-1 text-[10px] font-bold tracking-wider text-slate-500 uppercase">
-                {{ isCreate ? 'Define a new KPI for your team' : isRejectedSelfCreatedEdit ? 'Edit KPI information and resubmit to GM' : 'Edit or add assignees and targets' }}
+                {{
+                  isCreate
+                    ? 'Define a new KPI for your team'
+                    : isRejectedSelfCreatedEdit
+                      ? 'Edit KPI information and resubmit to GM'
+                      : isSelfCreatedDefinitionEdit
+                        ? 'Edit KPI details before sending to GM for approval'
+                        : 'Edit or add assignees and targets'
+                }}
               </p>
             </div>
             <button 
@@ -984,26 +1065,35 @@ const handleSave = async () => {
                 <!-- KPI Type Selection -->
                 <div>
                   <label class="mb-2 block text-[10px] font-bold tracking-wider text-slate-500 uppercase">
-                    KPI Type (assignment method) <span v-if="canEditKpiDefinition" class="text-rose-500">*</span>
+                    KPI assignment type <span v-if="canEditKpiDefinition" class="text-rose-500">*</span>
                   </label>
-                  <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
-                    <!-- Team -->
-                    <button type="button" :class="typeCardClass(KPI_TYPE.TEAM)" @click="canEditKpiDefinition ? typeCode = KPI_TYPE.TEAM : null">
-                      <div class="mb-1.5 flex items-center gap-2">
-                        <span class="p-1 rounded bg-slate-50 border border-slate-100"><i class="fas fa-code-branch text-xs text-blue-600" /></span>
-                        <span class="text-xs font-bold text-slate-800">Team / Cascading</span>
+                  <div
+                    class="grid grid-cols-1 gap-3"
+                    :class="pmCreatableKpiTypeOptions.length <= 1 ? '' : 'md:grid-cols-2'"
+                  >
+                    <button
+                      v-for="opt in pmCreatableKpiTypeOptions"
+                      :key="opt.code"
+                      type="button"
+                      :class="typeCardClass(opt.code)"
+                      @click="canEditKpiDefinition ? (typeCode = opt.code) : null"
+                    >
+                      <div class="flex items-center gap-2">
+                        <span class="rounded border border-slate-100 bg-slate-50 p-1 shadow-sm">
+                          <i :class="strategicKpiTypeIconClass(opt.code)" aria-hidden="true" />
+                        </span>
+                        <span class="text-xs font-bold leading-snug text-slate-800">{{
+                          kpiTypeDisplayLabel(opt)
+                        }}</span>
                       </div>
-                      <p class="text-[11px] font-medium leading-tight text-slate-500">Assign to subordinates for cascading.</p>
-                    </button>
-                    <!-- Individual -->
-                    <button type="button" :class="typeCardClass(KPI_TYPE.INDIVIDUAL)" @click="canEditKpiDefinition ? typeCode = KPI_TYPE.INDIVIDUAL : null">
-                      <div class="mb-1.5 flex items-center gap-2">
-                        <span class="p-1 rounded bg-slate-50 border border-slate-100"><i class="fas fa-crosshairs text-xs text-slate-600" /></span>
-                        <span class="text-xs font-bold text-slate-800">Individual KPI</span>
-                      </div>
-                      <p class="text-[11px] font-medium leading-tight text-slate-500">Bulk assign by rank.</p>
                     </button>
                   </div>
+                  <p
+                    v-if="!isLoadingInit && pmCreatableKpiTypeOptions.length === 0"
+                    class="mt-2 text-[11px] font-medium text-amber-800"
+                  >
+                    No KPI type data (KPI_TYPE group in the system).
+                  </p>
                   <p
                     v-if="!isCreate && typeCode === KPI_TYPE.PROMOTION"
                     class="mt-2 rounded-lg border border-purple-200 bg-purple-50/80 px-3 py-2 text-[11px] font-semibold text-purple-900"
@@ -1012,31 +1102,16 @@ const handleSave = async () => {
                   </p>
                 </div>
 
-                <!-- Important KPI Checkbox -->
-                <div class="flex items-center gap-2 mb-2 px-2.5 py-1.5 w-max rounded-md border border-slate-200/90" :class="canEditKpiDefinition ? 'bg-slate-50/60' : 'bg-slate-100'">
-                  <input 
-                    id="pm-kpi-important" 
-                    v-model="isImportantKpi" 
-                    :disabled="!canEditKpiDefinition" 
-                    type="checkbox" 
-                    class="w-3.5 h-3.5 shrink-0 rounded border-slate-300 text-amber-500 focus:ring-amber-400/50 disabled:cursor-not-allowed disabled:opacity-60" 
-                  />
-                  <label for="pm-kpi-important" class="text-[11px] font-semibold text-slate-600" :class="canEditKpiDefinition ? 'cursor-pointer' : 'cursor-not-allowed'">
-                    Important KPI
-                  </label>
-                </div>
-
                 <!-- Target & Weight -->
                 <div class="grid grid-cols-1 gap-4" :class="showsPmTargetField ? 'sm:grid-cols-2 sm:gap-x-6' : ''">
                   <div v-if="showsPmTargetField" class="min-w-0">
                     <label class="mb-1.5 block text-[10px] font-bold tracking-wider text-slate-500 uppercase">
-                      {{ pmTargetFieldLabel }} <span v-if="canEditKpiDefinition" class="text-rose-500">*</span>
+                      Target <span v-if="canEditKpiDefinition" class="text-rose-500">*</span>
                     </label>
                     <input 
                       v-model="targetValue" 
                       :disabled="!canEditKpiDefinition" 
                       type="number" 
-                      min="0"
                       step="any"
                       placeholder="e.g. 100" 
                       class="px-3 py-2 min-h-[38px]"
@@ -1096,7 +1171,7 @@ const handleSave = async () => {
                   
                   <div class="min-w-0">
                     <label class="mb-1.5 block text-[10px] font-bold tracking-wider text-slate-500 uppercase">
-                      Evaluation Year (Cycle) <span class="text-rose-500">*</span>
+                      Evaluation Year <span class="text-rose-500">*</span>
                     </label>
                     <div class="relative w-full">
                       <input 
@@ -1109,6 +1184,26 @@ const handleSave = async () => {
                     </div>
                   </div>
                 </div>
+
+                <!-- Important KPI — full width, đồng bộ GM create drawer -->
+                <label
+                  for="pm-kpi-important"
+                  class="flex w-full items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-[11px] font-semibold transition"
+                  :class="
+                    canEditKpiDefinition
+                      ? 'cursor-pointer bg-slate-50/80 text-slate-700 hover:bg-slate-100'
+                      : 'cursor-not-allowed bg-slate-100 text-slate-500'
+                  "
+                >
+                  <input
+                    id="pm-kpi-important"
+                    v-model="isImportantKpi"
+                    :disabled="!canEditKpiDefinition"
+                    type="checkbox"
+                    class="h-3.5 w-3.5 shrink-0 rounded border-slate-300 text-indigo-600 focus:ring-indigo-400/40 disabled:cursor-not-allowed disabled:opacity-60"
+                  />
+                  <span>Important KPI</span>
+                </label>
 
                 <!-- Calculation Rule -->
                 <div>
@@ -1417,7 +1512,6 @@ const handleSave = async () => {
                         v-if="typeCode === KPI_TYPE.TEAM || typeCode === KPI_TYPE.PROMOTION"
                         v-model="memberTargets[mem]" 
                         type="number" 
-                        min="0"
                         step="any"
                         placeholder="Enter target assigned to user..." 
                         :disabled="isMemberAllocationTargetLocked(mem)"
@@ -1481,7 +1575,13 @@ const handleSave = async () => {
               @click="handleSave"
             >
               <i v-if="saving" class="fas fa-spinner fa-spin text-sm" />
-              <i v-else class="fas" :class="isCreate || isRejectedSelfCreatedEdit ? 'fa-paper-plane' : 'fa-save'" />
+              <i
+                v-else
+                class="fas"
+                :class="
+                  isCreate || isSelfCreatedDefinitionEdit ? 'fa-paper-plane' : 'fa-save'
+                "
+              />
               {{
                 saving
                   ? 'Saving…'
@@ -1489,9 +1589,11 @@ const handleSave = async () => {
                     ? 'Create & Assign'
                     : isRejectedSelfCreatedEdit
                       ? 'Resubmit KPI'
-                      : completingMemberFeedbackAllocation
-                      ? 'Confirm allocation and close feedback'
-                      : 'Save allocation'
+                      : isSelfCreatedDefinitionEdit
+                        ? 'Save changes'
+                        : completingMemberFeedbackAllocation
+                          ? 'Confirm allocation and close feedback'
+                          : 'Save allocation'
               }}
             </button>
           </div>

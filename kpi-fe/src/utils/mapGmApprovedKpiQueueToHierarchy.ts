@@ -128,6 +128,10 @@ export function mapGmApprovedKpiQueueItemsToHierarchyRows(items: GmApprovedKpiQu
       isImportant: Boolean(row.important),
       isGlobal: false,
       pmOwners: [],
+      creatorRoleCode:
+        row.creatorRoleCode != null && String(row.creatorRoleCode).trim() !== ''
+          ? String(row.creatorRoleCode).trim().toUpperCase()
+          : undefined,
     }
   })
 }

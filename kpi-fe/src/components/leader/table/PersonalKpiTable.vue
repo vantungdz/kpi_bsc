@@ -14,6 +14,7 @@ import { purgeRemovedUploadedEvidenceFiles } from '@/utils/evidenceFileStorage';
 import { displayTargetValue, formatTargetDisplay } from "@/utils/strategicKpiTypeCodes";
 import KpiCreatorRowLegend from '@/components/shared/KpiCreatorRowLegend.vue'
 import { kpiCreatorRowBgFromSource } from '@/utils/kpiCreatorRowBg'
+import { feedback407StatusLabel } from "@/utils/feedbackStatus";
 
 const toast = useToast();
 
@@ -116,10 +117,8 @@ function openEvidence(assign: any, mode: 'detail' | 'feedback' = 'detail') {
 }
 
 function feedbackPendingStatusDesc(assign: any): string {
-  const createdByRole = String(assign?.createdByRoleCode ?? '').trim().toUpperCase()
-  return createdByRole === 'GM'
-    ? 'Feedback Pending GM Review'
-    : 'Feedback Pending PM Review'
+  return feedback407StatusLabel(assign?.feedbackTargetRoleCode)
+      
 }
 
 async function onEvidenceSaved(payload: any) {
@@ -276,7 +275,7 @@ const buttonState = computed(() => {
   }
   const skipMid = shouldCollapseKpiProcessTimelineToYearEndOnly(
     apiData.value.accountCreatedAt,
-    apiData.value.kpiCycle.midYearEnd,
+    apiData.value.kpiCycle.midYearStart,
   )
   return getSubmitButtonState(apiData.value.kpiCycle, currentStatusCode.value, new Date(), {
     treatMidYearAsSkipped: skipMid,

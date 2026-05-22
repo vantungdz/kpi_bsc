@@ -3,6 +3,7 @@
  * Can be imported by any component or composable.
  */
 import type { KpiItem, MemberKpiEvaluationStatus } from '@/types/kpi'
+import { KPI_STATUS } from '@/config/constants'
 
 // ── Calculation rule / type codes (mirrors sys_status_codes in DB) ──────────
 export const CALC_RULE_SUM = 801
@@ -251,6 +252,75 @@ function extractPmEvidenceAttachments(o: Record<string, unknown>): PmEvidenceAtt
   return mergeEvidenceAttachments(files, urls)
 }
 
+export type KpiSupervisorEvaluationCommentsOpts = {
+  statusCode?: number | null
+  pmScore?: number | null
+  gmScore?: number | null
+  pmEvaluationComment?: string | null
+  gmEvaluationComment?: string | null
+}
+
+/** Nhận xét PM/GM theo KPI — `evidences.pmComment` / `evidences.gmComment` (legacy: chỉ `gmComment`). */
+export function parseKpiSupervisorEvaluationComments(
+  raw: string | null | undefined,
+  opts?: KpiSupervisorEvaluationCommentsOpts,
+): { pmComment: string; gmComment: string } {
+  let pm = String(opts?.pmEvaluationComment ?? '').trim()
+  let gm = String(opts?.gmEvaluationComment ?? '').trim()
+
+  const trimmed = (raw ?? '').trim()
+  if (trimmed) {
+    try {
+      const o = JSON.parse(trimmed) as Record<string, unknown>
+      const jsonPm = typeof o.pmComment === 'string' ? o.pmComment.trim() : ''
+      const jsonGm = typeof o.gmComment === 'string' ? o.gmComment.trim() : ''
+      if (jsonPm) pm = jsonPm
+      if (jsonGm) gm = jsonGm
+
+      if (!jsonPm && jsonGm && !pm && !gm) {
+        const legacy = jsonGm
+        const sc = Number(opts?.statusCode)
+        const hasGmScore =
+          opts?.gmScore != null && Number.isFinite(Number(opts.gmScore))
+        const hasPmScore =
+          opts?.pmScore != null && Number.isFinite(Number(opts.pmScore))
+        const waitingGm =
+          sc === KPI_STATUS.FIRST_WAITING_GM_APPROVAL ||
+          sc === KPI_STATUS.SECOND_WAITING_GM_APPROVAL
+        const gmDone = (Number.isFinite(sc) && sc >= KPI_STATUS.COMPLETED) || hasGmScore
+
+        if (gmDone) gm = legacy
+        else if (waitingGm || (hasPmScore && !hasGmScore)) pm = legacy
+        else gm = legacy
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  if (!pm && !gm) {
+    const apiGm = String(opts?.gmEvaluationComment ?? '').trim()
+    const apiPm = String(opts?.pmEvaluationComment ?? '').trim()
+    if (apiPm) pm = apiPm
+    else if (apiGm) {
+      const sc = Number(opts?.statusCode)
+      const hasGmScore =
+        opts?.gmScore != null && Number.isFinite(Number(opts.gmScore))
+      const hasPmScore =
+        opts?.pmScore != null && Number.isFinite(Number(opts.pmScore))
+      const waitingGm =
+        sc === KPI_STATUS.FIRST_WAITING_GM_APPROVAL ||
+        sc === KPI_STATUS.SECOND_WAITING_GM_APPROVAL
+      const gmDone = (Number.isFinite(sc) && sc >= KPI_STATUS.COMPLETED) || hasGmScore
+      if (gmDone) gm = apiGm
+      else if (waitingGm || (hasPmScore && !hasGmScore)) pm = apiGm
+      else gm = apiGm
+    }
+  }
+
+  return { pmComment: pm, gmComment: gm }
+}
+
 export function parsePmPortfolioEvidenceString(raw: string | null | undefined): {
   rows: PmEvidencePlanRow[]
   content: string
@@ -474,12 +544,19 @@ function meanPercentFromRatioPreviewStrings(bits: string[]): string {
   return `${safe.toFixed(1)}%`
 }
 
+export type FormatPmPortfolioActualCellOpts = {
+  /** Chỉ hiển thị khi có Actual thật — không dùng comment/note/plan làm thay thế. */
+  actualOnly?: boolean
+}
+
 /** Tóm tắt một dòng cho cột Thực tế bảng PM (JSON hoặc text). */
 export function formatPmPortfolioActualCell(
   raw: string | null | undefined,
   calculationTypeCode: number | null | undefined,
   displayMode: PmPortfolioActualDisplayMode = 'list',
+  opts?: FormatPmPortfolioActualCellOpts,
 ): string {
+  const actualOnly = opts?.actualOnly === true
   const trimmed = (raw ?? '').trim()
   if (!trimmed) return ''
   try {
@@ -507,24 +584,39 @@ export function formatPmPortfolioActualCell(
         const avgStr = Number.isInteger(avg) ? String(avg) : avg.toFixed(2)
         return displayMode === 'mean' ? avgStr : avgStr
       }
-      const texts = rows
-        .map((r) => String(r.actual ?? r.plan ?? '').trim())
-        .filter(Boolean)
-      if (texts.length) return texts.slice(0, 2).join(' · ') + (texts.length > 2 ? '…' : '')
+      if (!actualOnly) {
+        const texts = rows
+          .map((r) => String(r.actual ?? r.plan ?? '').trim())
+          .filter(Boolean)
+        if (texts.length) return texts.slice(0, 2).join(' · ') + (texts.length > 2 ? '…' : '')
+      }
     }
     // KPI 801/803: ưu tiên actual/result đã tổng hợp khi lưu drawer.
     const actual = String(o.actual ?? o.result ?? '').trim()
     if (actual) return actual
-    // Fallback nhẹ để không trống hoàn toàn khi chưa có actual nhưng có nội dung.
-    const content = String(o.content ?? '').trim()
-    if (content) return content
-    const note = String(o.note ?? '').trim()
-    if (note) return note
+    if (!actualOnly) {
+      const content = String(o.content ?? '').trim()
+      if (content) return content
+      const note = String(o.note ?? '').trim()
+      if (note) return note
+    }
   } catch {
-    // Legacy plain text evidences.
-    return trimmed
+    if (!actualOnly) return trimmed
   }
   return ''
+}
+
+/** Có ít nhất một giá trị Actual hợp lệ trong evidences (dùng roll-up node cha / validation). */
+export function pmPortfolioHasActualInEvidences(
+  raw: string | null | undefined,
+  calculationTypeCode: number | null | undefined,
+  displayMode: PmPortfolioActualDisplayMode = 'list',
+): boolean {
+  return (
+    formatPmPortfolioActualCell(raw, calculationTypeCode, displayMode, {
+      actualOnly: true,
+    }).trim() !== ''
+  )
 }
 
 /** Compute Actual/Plan or Plan/Actual ratio preview for a single record row */

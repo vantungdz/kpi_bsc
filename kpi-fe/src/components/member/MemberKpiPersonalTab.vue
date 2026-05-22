@@ -247,7 +247,7 @@ const pmWeightedAvg = computed((): number | null => {
     <table class="w-full text-left">
       <thead class="border-b border-slate-200 bg-slate-200">
         <tr class="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-          <th class="w-12 px-5 py-4 text-center">#</th>
+          <th class="w-12 px-5 py-4 text-center">No</th>
           <th class="min-w-[200px] px-5 py-4">Objectives</th>
           <th class="min-w-[10rem] px-5 py-4 text-center">KPI Status</th>
           <th class="px-5 py-4">Target</th>

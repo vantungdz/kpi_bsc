@@ -40,7 +40,7 @@ public class CreateStrategicKpiRequest {
      * Giá trị mục tiêu số — lưu vào {@code kpis_information.target_value} / assignment.
      * JSON nên gửi kiểu số (vd. {@code 95}, {@code 95.5}); có thể {@code null} (vd. KPI không có target số trên form).
      */
-    @DecimalMin(value = "0", message = "targetValue must be >= 0")
+    @DecimalMin(value = "0", inclusive = false, message = "targetValue must be greater than 0")
     private BigDecimal targetValue;
 
     @NotNull

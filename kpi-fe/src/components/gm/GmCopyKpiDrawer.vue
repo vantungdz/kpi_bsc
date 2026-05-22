@@ -471,90 +471,104 @@ async function confirmCopy() {
   </Transition>
 
   <Teleport to="body">
-    <div
-      v-if="editModalOpen && editTargetKpi"
-      class="fixed inset-0 z-[200] flex items-center justify-center p-4"
-    >
-      <div class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" @click="closeEditModal" />
+    <Transition name="gm-edit-target-modal">
       <div
-        class="relative w-full max-w-sm overflow-hidden rounded-2xl bg-white shadow-xl"
-        @click.stop
+        v-if="editModalOpen && editTargetKpi"
+        class="gm-edit-target-modal-root fixed inset-0 z-[200] flex items-center justify-center p-4"
       >
-        <div class="border-b border-slate-200 px-6 py-5">
-          <h3 class="text-base font-bold text-slate-800">
-            Edit target
+        <div
+          class="gm-edit-target-modal-backdrop absolute inset-0 bg-slate-900/50 backdrop-blur-sm"
+          @click="closeEditModal"
+        />
+        <div
+          class="gm-edit-target-modal-panel relative w-full max-w-xl overflow-hidden rounded-2xl bg-white shadow-2xl"
+          @click.stop
+        >
+        <div class="border-b border-slate-200 px-8 py-6">
+          <h3 class="text-lg font-bold text-slate-800">
+            Edit Target
           </h3>
         </div>
 
-        <div class="p-6">
-          <div class="mb-6 rounded-xl border border-slate-200 bg-slate-50 p-4">
-            <div class="mb-3">
-              <span
-                class="mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-500"
-              >KPI name</span>
-              <p class="text-sm font-semibold text-slate-800">
-                {{ editTargetKpi.masterName }}
-              </p>
-            </div>
-            <div class="grid grid-cols-3 gap-4">
-              <div>
-                <span
-                  class="mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-500"
-                >Weight</span>
-                <p class="text-sm font-medium text-slate-700">
-                  {{ editTargetKpi.weight ?? 0 }}%
-                </p>
-              </div>
-              <div>
-                <span
-                  class="mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-500"
-                >Unit</span>
-                <p class="text-sm font-medium text-slate-700">
-                  {{ editTargetKpi.unitName ?? '—' }}
-                </p>
-              </div>
-              <div>
-                <span
-                  class="mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-500"
-                >Original target</span>
-                <p class="text-sm font-medium text-slate-700">
-                  {{ originalTargetForKpi(editTargetKpi) }}
-                </p>
-              </div>
-            </div>
+        <div class="px-8 py-7">
+          <div
+            class="mb-8 grid grid-cols-2 gap-x-8 gap-y-5 rounded-xl border border-slate-200 bg-slate-50 p-5 text-sm text-slate-700"
+          >
+            <p class="flex min-w-0 items-start gap-3">
+              <i
+                class="fas fa-chart-line mt-0.5 shrink-0 text-base text-slate-400"
+                aria-hidden="true"
+              />
+              <span class="min-w-0 leading-relaxed">
+                <span class="font-semibold text-slate-600">Name KPI:</span>
+                <span class="font-medium text-slate-800">{{ editTargetKpi.masterName }}</span>
+              </span>
+            </p>
+            <p class="flex items-start gap-3">
+              <i
+                class="fas fa-sort-amount-up mt-0.5 shrink-0 text-base text-slate-400"
+                aria-hidden="true"
+              />
+              <span class="leading-relaxed">
+                <span class="font-semibold text-slate-600">Unit:</span>
+                {{ editTargetKpi.unitName ?? '—' }}
+              </span>
+            </p>
+            <p class="flex items-start gap-3">
+              <i
+                class="fas fa-weight-hanging mt-0.5 shrink-0 text-base text-slate-400"
+                aria-hidden="true"
+              />
+              <span class="leading-relaxed">
+                <span class="font-semibold text-slate-600">Weight:</span>
+                {{ editTargetKpi.weight ?? 0 }}%
+              </span>
+            </p>
+            <p class="flex items-start gap-3">
+              <i
+                class="fas fa-bullseye mt-0.5 shrink-0 text-base text-slate-400"
+                aria-hidden="true"
+              />
+              <span class="leading-relaxed">
+                <span class="font-semibold text-slate-600">Original Target:</span>
+                {{ originalTargetForKpi(editTargetKpi) }}
+              </span>
+            </p>
           </div>
 
           <div>
-            <label class="mb-2 block text-xs font-semibold text-slate-600">
-              New target to assign:
+            <label class="mb-3 block text-sm font-semibold text-slate-700">
+              New target
             </label>
             <input
               v-model="editTargetInput"
               type="number"
-              class="w-full rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-lg font-bold text-slate-800 transition-all focus:border-transparent focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              placeholder="Enter new target value..."
+              class="w-full rounded-xl border border-slate-300 bg-white px-5 py-3.5 text-base text-slate-800 transition-all placeholder:font-normal placeholder:text-slate-400 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-indigo-500"
               @keyup.enter="saveCustomTarget"
             />
           </div>
         </div>
 
-        <div class="flex justify-end gap-3 border-t border-slate-200 bg-slate-50 px-6 py-4">
+        <div class="flex justify-end gap-3 border-t border-slate-200 bg-slate-50 px-8 py-5">
           <button
             type="button"
-            class="rounded-lg px-4 py-2 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-200"
+            class="rounded-lg px-5 py-2.5 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-200"
             @click="closeEditModal"
           >
             Cancel
           </button>
           <button
             type="button"
-            class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-indigo-700"
+            class="rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-indigo-700"
             @click="saveCustomTarget"
           >
             Save changes
           </button>
         </div>
+        </div>
       </div>
-    </div>
+    </Transition>
   </Teleport>
 </template>
 
@@ -582,5 +596,55 @@ async function confirmCopy() {
 .gm-copy-kpi-drawer-enter-from .relative,
 .gm-copy-kpi-drawer-leave-to .relative {
   transform: translateX(100%);
+}
+
+.gm-edit-target-modal-enter-active,
+.gm-edit-target-modal-leave-active {
+  transition-duration: 0.26s;
+}
+
+.gm-edit-target-modal-enter-active .gm-edit-target-modal-backdrop,
+.gm-edit-target-modal-leave-active .gm-edit-target-modal-backdrop {
+  transition: opacity 0.26s ease;
+}
+
+.gm-edit-target-modal-enter-active .gm-edit-target-modal-panel,
+.gm-edit-target-modal-leave-active .gm-edit-target-modal-panel {
+  transition:
+    opacity 0.26s ease,
+    transform 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.gm-edit-target-modal-enter-from .gm-edit-target-modal-backdrop,
+.gm-edit-target-modal-leave-to .gm-edit-target-modal-backdrop {
+  opacity: 0;
+}
+
+.gm-edit-target-modal-enter-to .gm-edit-target-modal-backdrop,
+.gm-edit-target-modal-leave-from .gm-edit-target-modal-backdrop {
+  opacity: 1;
+}
+
+.gm-edit-target-modal-enter-from .gm-edit-target-modal-panel,
+.gm-edit-target-modal-leave-to .gm-edit-target-modal-panel {
+  opacity: 0;
+  transform: scale(0.94) translateY(14px);
+}
+
+.gm-edit-target-modal-enter-to .gm-edit-target-modal-panel,
+.gm-edit-target-modal-leave-from .gm-edit-target-modal-panel {
+  opacity: 1;
+  transform: scale(1) translateY(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gm-edit-target-modal-enter-active,
+  .gm-edit-target-modal-leave-active,
+  .gm-edit-target-modal-enter-active .gm-edit-target-modal-backdrop,
+  .gm-edit-target-modal-leave-active .gm-edit-target-modal-backdrop,
+  .gm-edit-target-modal-enter-active .gm-edit-target-modal-panel,
+  .gm-edit-target-modal-leave-active .gm-edit-target-modal-panel {
+    transition-duration: 0.01ms !important;
+  }
 }
 </style>

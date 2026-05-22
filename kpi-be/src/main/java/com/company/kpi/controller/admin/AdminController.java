@@ -151,6 +151,12 @@ public class AdminController extends BaseController {
         return success(adminService.getLeaderMemberCandidates(departmentId));
     }
 
+    @GetMapping("/employees/{id}")
+    public ResponseEntity<BaseResponse<AdminEmployeeResponse>> getEmployee(
+            @PathVariable UUID id) {
+        return success(adminService.getEmployeeDetail(id));
+    }
+
     @PostMapping("/employees")
     public ResponseEntity<BaseResponse<AdminEmployeeResponse>> createEmployee(
             @RequestBody SaveEmployeeRequest req) {

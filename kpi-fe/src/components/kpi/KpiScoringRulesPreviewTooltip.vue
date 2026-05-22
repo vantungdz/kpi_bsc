@@ -83,8 +83,8 @@ onUnmounted(() => {
 
 <template>
   <span
-    v-if="hasContent"
-    class="inline-flex shrink-0 mt-[-5px]"
+    class="inline-flex h-4 w-4 shrink-0 items-center justify-center"
+    :class="hasContent ? '' : 'invisible pointer-events-none'"
     @mouseenter="showTooltip"
     @mouseleave="hideTooltip"
     @focusin="showTooltip"
@@ -93,8 +93,10 @@ onUnmounted(() => {
     <button
       ref="triggerRef"
       type="button"
-      class="cursor-help rounded p-0.5 text-slate-400 transition-colors focus-visible:outline focus-visible:ring-2 focus-visible:ring-slate-300"
+      class="cursor-help rounded p-0.5 text-slate-400 transition-colors focus-visible:outline focus-visible:ring-2 focus-visible:ring-slate-300 disabled:pointer-events-none"
       aria-label="Scoring rules"
+      :tabindex="hasContent ? 0 : -1"
+      :disabled="!hasContent"
       @click.stop
     >
       <span class="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-slate-300 text-[10px] font-bold leading-none text-slate-700 cursor-pointer">

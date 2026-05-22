@@ -21,5 +21,7 @@ public class KpiStrategicEditMasterRow {
     private Integer calculationRuleCode;
     private Integer calculationTypeCode;
     private Boolean isGlobal;
+    /** `roles.code` của user tạo `kpi_master` (GM / PM / LEADER / MEMBER). */
+    private String creatorRoleCode;
 }
 

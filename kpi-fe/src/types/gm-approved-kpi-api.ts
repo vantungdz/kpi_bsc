@@ -23,6 +23,8 @@ export interface GmApprovedKpiQueueItemApi {
   typeCode: number | null
   unitCode: number | null
   feedbackNote: string | null
+  /** roles.code của người tạo KPI master */
+  creatorRoleCode?: string | null
 }
 
 export interface GmApprovedKpiDecisionBody {

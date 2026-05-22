@@ -64,6 +64,15 @@
         LIMIT 1
     </select>
 
+    <select id="findPrimaryDepartmentIdByUserId" resultType="java.util.UUID">
+        SELECT ud.department_id
+        FROM public.user_departments ud
+            JOIN public.departments d ON ud.department_id = d.id AND d.deleted_at IS NULL
+        WHERE ud.user_id = #{userId, jdbcType=OTHER}
+          AND ud.is_primary = TRUE
+        LIMIT 1
+    </select>
+
     <select id="findLeaderAssignableMembersInDepartment"
             resultType="com.company.kpi.response.admin.AdminEmployeeCandidateResponse">
         SELECT
@@ -107,4 +116,25 @@
         WHERE department_id = #{departmentId, jdbcType=OTHER}
           AND user_id = #{userId, jdbcType=OTHER}
     </select>
+
+    <select id="findMemberIdsSupervisedByLeader" resultType="java.util.UUID">
+        SELECT ud.user_id
+        FROM user_departments ud
+        INNER JOIN users u ON u.id = ud.user_id
+            AND u.deleted_at IS NULL
+            AND COALESCE(u.is_active, TRUE) = TRUE
+        WHERE ud.department_id = #{departmentId, jdbcType=OTHER}
+          AND ud.supervisor_id = #{leaderId, jdbcType=OTHER}
+        ORDER BY u.full_name
+    </select>
+
+    <update id="resetSupervisorForLeaderInDepartment">
+        UPDATE user_departments ud
+        SET supervisor_id = d.manager_id
+        FROM departments d
+        WHERE ud.department_id = d.id
+          AND d.id = #{departmentId, jdbcType=OTHER}
+          AND d.deleted_at IS NULL
+          AND ud.supervisor_id = #{leaderId, jdbcType=OTHER}
+    </update>
 </mapper>

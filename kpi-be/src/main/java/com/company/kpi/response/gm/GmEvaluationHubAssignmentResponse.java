@@ -22,9 +22,12 @@ public class GmEvaluationHubAssignmentResponse {
     private BigDecimal endGmScore;
     private String evidences;
     private String targetDescription;
+    private BigDecimal targetValue;
     private BigDecimal weight;
     private String masterCode;
     private String masterName;
+    private Integer unitCode;
+    private String unitName;
     /** Explicit calc rule for FE rendering (803 = comment/manual input). */
     private Integer calculationRuleCode;
     /** Optional calc type (701/702) for completeness. */
@@ -51,4 +54,6 @@ public class GmEvaluationHubAssignmentResponse {
     private String supervisorCommentPortfolio;
     /** Nhận xét PM tổng promotion. */
     private String supervisorCommentPromotion;
+    /** {@code roles.code} của người tạo KPI master. */
+    private String creatorRoleCode;
 }

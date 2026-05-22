@@ -26,6 +26,7 @@ import type { MemberByRankOption } from '@/types/member-by-rank'
 import {
   strategicKpiKindFromCreatePayload,
   strategicKpiKindFromTypeCode,
+  kpiTypeDisplayLabel,
   strategicKpiTypeIconClass,
   typeCodeFromStrategicKpiKind,
 } from '@/utils/strategicKpiTypeCodes'
@@ -85,6 +86,22 @@ const props = withDefaults(
 )
 
 const isEditingFromDiagnostics = computed(() => props.editInitial != null)
+
+const NON_GM_KPI_CREATOR_ROLES = new Set(['PM', 'LEADER', 'MEMBER'])
+
+function normalizeKpiCreatorRoleCode(code: unknown): string {
+  return String(code ?? '').trim().toUpperCase()
+}
+
+/** Role người tạo KPI (từ diagnostics hoặc GET edit). */
+const strategicEditCreatorRoleCode = ref('')
+
+const kpiCreatorRoleCode = computed(() => {
+  const fromDiagnostics = normalizeKpiCreatorRoleCode(props.editInitial?.creatorRoleCode)
+  if (fromDiagnostics) return fromDiagnostics
+  return normalizeKpiCreatorRoleCode(strategicEditCreatorRoleCode.value)
+})
+
 const authStore = useAuthStore()
 const gmUserId = computed(() => String(authStore.user?.id ?? '').trim())
 
@@ -146,6 +163,17 @@ const isGmFeedbackCascadingAllocationReview = computed(() => {
     kpiType.value === 'cascading' &&
     !isDirectFeedbackSplitEdit.value
   )
+})
+
+/** KPI do PM/Leader/Member tạo — GM chỉ sửa định nghĩa, không đổi phân bổ. */
+const isGmAssignSectionReadonly = computed(() => {
+  if (!isEditingFromDiagnostics.value) return false
+  if (isGmFeedbackCascadingAllocationReview.value || isDirectFeedbackSplitEdit.value) {
+    return false
+  }
+  const role = kpiCreatorRoleCode.value
+  if (!role || role === 'GM') return false
+  return NON_GM_KPI_CREATOR_ROLES.has(role)
 })
 
 const visibleSelectedPMs = computed(() => {
@@ -1322,6 +1350,7 @@ function fillCreateFormFieldsFromHierarchyKpi(kpi: GmHierarchyKpi) {
 function hydrateFormFromHierarchyKpi(kpi: GmHierarchyKpi) {
   isHydratingFromEdit.value = true
   editSessionSnapshot.value = kpi
+  strategicEditCreatorRoleCode.value = normalizeKpiCreatorRoleCode(kpi.creatorRoleCode)
   copyFromId.value = ''
   copyKpiPickerOpen.value = false
   copyKpiFilterQuery.value = ''
@@ -1403,6 +1432,9 @@ async function hydrateFormFromStrategicKpiEditData(data: GmStrategicKpiEditData,
   unit.value = kpiUnitCodeToFormUnit(data.unitCode)
   hydrateCalculationFromPersisted(String(data.calculationMethod ?? 'mean_actual_plan').trim())
   isImportantKpi.value = data.isImportant === true
+  strategicEditCreatorRoleCode.value = normalizeKpiCreatorRoleCode(
+    (data as { creatorRoleCode?: string | null }).creatorRoleCode,
+  )
   selectedPMs.value = []
   pmTargets.value = {}
   selectedRanks.value = []
@@ -1573,6 +1605,7 @@ function resetForm() {
   templateItems.value = []
   templateApiError.value = null
   templateSelectedKeys.value = new Set()
+  strategicEditCreatorRoleCode.value = ''
   clearFormErrors()
 }
 
@@ -1688,7 +1721,7 @@ function validateForm(): boolean {
   }
 
   if (!String(perspective.value).trim()) {
-    err.perspective = 'Select a KPI group (kpi_categories).'
+    err.perspective = 'Select a Perspective (Category).'
   }
 
   if (evaluationYearOptions.value.length === 0) {
@@ -1734,7 +1767,11 @@ function validateForm(): boolean {
     }
   }
 
-  if (kpiType.value === 'cascading' && selectedPMs.value.length > 0) {
+  if (
+    !isGmAssignSectionReadonly.value &&
+    kpiType.value === 'cascading' &&
+    selectedPMs.value.length > 0
+  ) {
     const pmsToValidate = isGmFeedbackCascadingAllocationReview.value
       ? visibleSelectedPMs.value
       : selectedPMs.value
@@ -1792,15 +1829,17 @@ async function save() {
     calculationMethod: resolvePersistedCalculationMethod(),
     isImportant: isImportantKpi.value,
   }
-  if (kpiType.value === 'cascading') {
-    payload.assignPMs = [...selectedPMs.value]
-    payload.pmTargets = { ...pmTargets.value }
-  } else if (kpiType.value === 'individual') {
-    payload.ranks = [...selectedRanks.value]
-    payload.rankMemberIds = { ...selectedRankMembers.value }
-    payload.memberIds = Object.values(selectedRankMembers.value).flat()
-  } else {
-    payload.memberIds = [...selectedMembers.value]
+  if (!isGmAssignSectionReadonly.value) {
+    if (kpiType.value === 'cascading') {
+      payload.assignPMs = [...selectedPMs.value]
+      payload.pmTargets = { ...pmTargets.value }
+    } else if (kpiType.value === 'individual') {
+      payload.ranks = [...selectedRanks.value]
+      payload.rankMemberIds = { ...selectedRankMembers.value }
+      payload.memberIds = Object.values(selectedRankMembers.value).flat()
+    } else {
+      payload.memberIds = [...selectedMembers.value]
+    }
   }
 
   const feedbackSplitAssignmentId = String(props.feedbackAssignmentId ?? '').trim()
@@ -2098,7 +2137,7 @@ async function save() {
                 <div class="flex flex-col gap-3 sm:flex-row">
                   <div class="sm:w-1/3">
                     <label class="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                      KPI group (kpi_categories) <span class="text-rose-500">*</span>
+                      Perspective (Category) <span class="text-rose-500">*</span>
                     </label>
                     <p v-if="kpiCategoriesError" class="mb-1 text-[10px] font-semibold text-rose-600">
                       {{ kpiCategoriesError }}
@@ -2154,16 +2193,20 @@ async function save() {
                       v-for="opt in kpiTypeRows"
                       :key="opt.code"
                       type="button"
-                      :disabled="kpiTypesLoading || strategicEditDetailLoading"
+                      :disabled="
+                        kpiTypesLoading ||
+                        strategicEditDetailLoading ||
+                        isGmAssignSectionReadonly
+                      "
                       :class="typeCardClassForCode(opt.code)"
-                      @click="kpiTypeCode = opt.code"
+                      @click="!isGmAssignSectionReadonly && (kpiTypeCode = opt.code)"
                     >
                       <div class="mb-1.5 flex items-center gap-2">
                         <span class="rounded border border-slate-100 bg-slate-50 p-1 shadow-sm">
                           <i :class="strategicKpiTypeIconClass(opt.code)" />
                         </span>
                         <span class="text-xs font-bold leading-snug text-slate-800">{{
-                          opt.description || opt.name
+                          kpiTypeDisplayLabel(opt)
                         }}</span>
                       </div>
                     </button>
@@ -2188,7 +2231,6 @@ async function save() {
                       v-model="targetValue"
                       type="number"
                       placeholder="95"
-                      min="0"
                       class="input-required min-h-[38px] w-full rounded-md px-2.5 py-2 text-xs font-bold text-slate-800 outline-none transition-all"
                       :class="formErrors.targetValue ? '!border-rose-400 !bg-rose-50/50' : ''"
                     />
@@ -2373,9 +2415,12 @@ async function save() {
               </div>
             </div>
 
-          <!-- Phân bổ / Giao việc -->
+          <!-- Phân bổ / Giao việc — ẩn khi GM sửa KPI do PM/Leader/Member tạo (chỉ sửa định nghĩa). -->
           <div
-            v-show="isEditingFromDiagnostics || createTab === 'custom'"
+            v-show="
+              (isEditingFromDiagnostics || createTab === 'custom') &&
+              !isGmAssignSectionReadonly
+            "
             class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm"
           >
             <div class="mb-3 flex items-center justify-between gap-2">
@@ -2541,7 +2586,6 @@ async function save() {
                       <input
                         v-model="pmTargets[pm]"
                         type="number"
-                        min="0"
                         step="any"
                         placeholder="Enter target..."
                         :disabled="isGmFeedbackCascadingAllocationReview && !isFeedbackAssignee(pm)"

@@ -125,7 +125,23 @@
             km.unit_code,
             km.calculation_rule_code,
             km.calculation_type_code,
-            km.is_global
+            km.is_global,
+            (
+                SELECT r.code
+                FROM user_roles ur
+                INNER JOIN roles r ON r.id = ur.role_id AND r.deleted_at IS NULL
+                WHERE ur.user_id = km.created_by
+                ORDER BY
+                    CASE UPPER(TRIM(r.code))
+                        WHEN 'GM' THEN 1
+                        WHEN 'PM' THEN 2
+                        WHEN 'LEADER' THEN 3
+                        WHEN 'MEMBER' THEN 4
+                        ELSE 99
+                    END,
+                    r.code
+                LIMIT 1
+            ) AS creator_role_code
         FROM kpis_information ki
         INNER JOIN kpi_master km ON km.id = ki.master_kpi_id
         WHERE ki.id = #{kpiInfoId}

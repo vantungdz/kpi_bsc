@@ -5,6 +5,7 @@
 import http from '@/services/api'
 import type { ApiResponse } from '@/types/api'
 import type { MemberKpiDashboard, KpiSheet, MemberKpiFormMeta } from '@/types/kpi'
+import type { KpiDashboardOptions } from '@/types/kpi-dashboard-options'
 
 export type MemberSheetSubmitType = 'INDIVIDUAL' | 'PROMOTION'
 
@@ -36,6 +37,11 @@ export interface CreateIndividualKpiBody {
   calculationRuleCode: number
   /** CALC_TYPE: 701 ACTUAL_OVER_PLAN | 702 PLAN_OVER_ACTUAL — null khi CALC_RULE = 803 */
   calculationTypeCode?: number | null
+}
+
+/** GET …/kpi/member/dashboard-options */
+export async function apiGetMemberDashboardOptions(): Promise<ApiResponse<KpiDashboardOptions>> {
+  return http.get('/kpi/member/dashboard-options').then(r => r.data)
 }
 
 /** GET …/kpi/member/dashboard?year= */
@@ -92,6 +98,7 @@ export async function apiDeleteSelfCreatedKpi(
 }
 
 export const memberKpiService = {
+  getDashboardOptions: () => apiGetMemberDashboardOptions().then(r => r.data),
   getDashboard: (year?: number) => apiGetMemberKpiDashboard(year).then(r => r.data),
   getFormMeta: (year?: number) => apiGetMemberKpiFormMeta(year).then(r => r.data),
   updateSheetItem: (assignmentId: string, body: UpdateMemberSheetItemBody) =>

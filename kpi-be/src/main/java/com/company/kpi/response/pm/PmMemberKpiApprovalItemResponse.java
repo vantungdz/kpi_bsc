@@ -33,4 +33,6 @@ public class PmMemberKpiApprovalItemResponse {
     private OffsetDateTime requestedAt;
     /** Phần mô tả member (bỏ dòng tên KPI và dòng Unit) — hiển thị cột Reason. */
     private String justification;
+    /** {@code roles.code} của người tạo KPI master ({@code kpi_master.created_by}). */
+    private String creatorRoleCode;
 }

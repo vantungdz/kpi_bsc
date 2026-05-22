@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, ref, watch, onUnmounted } from 'vue'
+import GmStrategicKpiTypeTag from '@/components/gm/GmStrategicKpiTypeTag.vue'
 import type { GmHierarchyKpi } from '@/types/gm-workspace'
+import { kpiCreatorCardBgClass } from '@/utils/kpiCreatorRowBg'
 
 const props = withDefaults(
   defineProps<{
@@ -566,7 +568,7 @@ watch(drawerKpisSorted, (kpis) => {
                 />
               </th>
               <th class="py-3.5 pl-2 pr-3 text-[11px] font-bold uppercase tracking-wide text-slate-500">
-                Member
+                All
               </th>
               <th
                 class="w-[9.5rem] px-3 py-3.5 text-center text-[11px] font-bold uppercase tracking-wide text-slate-500"
@@ -744,7 +746,8 @@ watch(drawerKpisSorted, (kpis) => {
               <div
                 v-for="kpi in drawerKpisSorted"
                 :key="kpi.id"
-                class="rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm"
+                class="rounded-xl border border-slate-200 p-4 text-left shadow-sm"
+                :class="kpiCreatorCardBgClass(kpi.creatorRoleCode)"
               >
                 <div class="flex items-start justify-between gap-3">
                   <div class="min-w-0 flex-1">
@@ -762,6 +765,7 @@ watch(drawerKpisSorted, (kpis) => {
                         aria-label="Important KPI"
                       />
                       <h4 class="truncate text-sm font-bold text-slate-800">{{ kpi.name }}</h4>
+                      <GmStrategicKpiTypeTag :type="kpi.kpiType" size="sm" />
                     </div>
                     <p class="mt-1 text-[10px] font-medium text-slate-400">
                       Sent: {{ formatKpiSentLine(kpi) }}
@@ -835,8 +839,12 @@ watch(drawerKpisSorted, (kpis) => {
                       <p class="text-[11px] font-bold uppercase tracking-wide text-slate-500">
                         Pending KPI details
                       </p>
-                      <h2 class="mt-0.5 text-lg font-bold leading-snug text-slate-900">
-                        {{ selectedKpiDetail.name }}
+                      <h2 class="mt-0.5 flex flex-wrap items-center gap-2 text-lg font-bold leading-snug text-slate-900">
+                        <span class="min-w-0 truncate">{{ selectedKpiDetail.name }}</span>
+                        <GmStrategicKpiTypeTag
+                          :type="selectedKpiDetail.kpiType"
+                          size="sm"
+                        />
                       </h2>
                       <div class="mt-2 flex flex-wrap items-center gap-1.5">
                         <span :class="approvedKpiStatusBadgeClass(selectedKpiDetail)">

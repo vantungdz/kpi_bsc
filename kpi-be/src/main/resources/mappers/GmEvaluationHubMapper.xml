@@ -30,9 +30,12 @@
             ka.end_gm_score,
             ka.evidences::text AS evidences,
             ki.target_description,
+            COALESCE(ka.target_value, ki.target_value) AS target_value,
             ki.weight,
             km.code AS master_code,
             km.name AS master_name,
+            km.unit_code AS unit_code,
+            unit_sc.name AS unit_name,
             km.calculation_rule_code AS calculation_rule_code,
             km.calculation_type_code AS calculation_type_code,
             kc.name AS category_name,
@@ -82,7 +85,22 @@
             NULLIF(TRIM(COALESCE(uks.evaluation_comments, '')), '') AS evaluation_comments,
             NULLIF(TRIM(COALESCE(uks.evaluation_comments_promotion, '')), '') AS evaluation_comments_promotion,
             NULLIF(TRIM(COALESCE(uks.evaluation_supervisor_comments, '')), '') AS supervisor_comment_portfolio,
-            NULLIF(TRIM(COALESCE(uks.evaluation_supervisor_comments_promotion, '')), '') AS supervisor_comment_promotion
+            NULLIF(TRIM(COALESCE(uks.evaluation_supervisor_comments_promotion, '')), '') AS supervisor_comment_promotion,
+            (
+                SELECT cr.code
+                FROM user_roles cur
+                INNER JOIN roles cr ON cr.id = cur.role_id AND cr.deleted_at IS NULL
+                WHERE cur.user_id = km.created_by
+                ORDER BY
+                    CASE UPPER(TRIM(cr.code))
+                        WHEN 'GM' THEN 1
+                        WHEN 'PM' THEN 2
+                        WHEN 'LEADER' THEN 3
+                        WHEN 'MEMBER' THEN 4
+                        ELSE 99
+                    END
+                LIMIT 1
+            ) AS creator_role_code
         FROM users u
         INNER JOIN kpi_cycles cyc
                 ON cyc.id = #{cycleId, jdbcType=OTHER}
@@ -127,6 +145,8 @@
         ) child_self ON TRUE
         LEFT JOIN kpis_information ki ON ka.kpi_info_id = ki.id AND ki.deleted_at IS NULL
         LEFT JOIN kpi_master km ON ki.master_kpi_id = km.id AND km.deleted_at IS NULL
+        LEFT JOIN sys_status_codes unit_sc
+               ON unit_sc.code = km.unit_code AND unit_sc.category = 'KPI_UNIT'
         LEFT JOIN kpi_categories kc ON km.category_id = kc.id AND kc.deleted_at IS NULL
         LEFT JOIN sys_status_codes sc_type ON sc_type.code = km.type_code AND sc_type.category = 'KPI_TYPE'
         LEFT JOIN sys_status_codes asm ON asm.code = ka.status_code AND asm.category = 'ASM_STATUS'

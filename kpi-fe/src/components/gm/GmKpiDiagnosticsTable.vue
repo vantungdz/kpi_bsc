@@ -32,6 +32,18 @@ import {
 import { evidenceTableFromEvidencesJson } from '@/utils/mapGmEvaluationHubApiToPmBranches'
 import type { KpiCycleResponse } from '@/types/shared/kpi-cycle.type'
 import { KPI_STATUS } from '@/config/constants'
+import {
+  gmAsmStatusPillClass,
+  minGmAsmStatusCode,
+  normalizeGmAsmStatusCode,
+} from '@/utils/gmAsmStatusUi'
+import {
+  diagnosticsActualNumericColorClass,
+  diagnosticsActualTextColorClass,
+  diagnosticsMemberActualColorClass,
+  isDiagnosticsMidYearPhase,
+} from '@/utils/diagnosticsActualColor'
+import { formatScoreDisplay } from '@/utils/formatScoreDisplay'
 
 const props = withDefaults(
   defineProps<{
@@ -340,20 +352,8 @@ function kpiStatusLabel(status: GmHierarchyStatus) {
   return 'Behind plan / Not met'
 }
 
-function normalizeAsmStatusCode(code: unknown): number | null {
-  const n = typeof code === 'number' ? code : Number(code)
-  return Number.isFinite(n) && n > 0 ? Math.round(n) : null
-}
-
-function minAsmStatusCode(codes: Array<number | null | undefined>): number | null {
-  const valid = codes
-    .map(normalizeAsmStatusCode)
-    .filter((n): n is number => n != null)
-  if (valid.includes(KPI_STATUS.FEEDBACK_IN_PROGRESS)) {
-    return KPI_STATUS.FEEDBACK_IN_PROGRESS
-  }
-  return valid.length > 0 ? Math.min(...valid) : null
-}
+const normalizeAsmStatusCode = normalizeGmAsmStatusCode
+const minAsmStatusCode = minGmAsmStatusCode
 
 function memberAsmStatusCode(member: GmHierarchyMember | null | undefined): number | null {
   return normalizeAsmStatusCode(member?.assignmentStatusCode)
@@ -482,31 +482,7 @@ function asmStatusLabel(code: number | null | undefined): string {
   }
 }
 
-function asmStatusPillClass(code: number | null | undefined): string {
-  switch (normalizeAsmStatusCode(code)) {
-    case KPI_STATUS.INACTIVE:
-      return 'border-slate-200 bg-slate-50 text-slate-700'
-    case KPI_STATUS.REJECTED:
-      return 'border-rose-200 bg-rose-50 text-rose-700'
-    case KPI_STATUS.FEEDBACK_IN_PROGRESS:
-      return 'border-violet-200 bg-violet-50 text-violet-700'
-    case KPI_STATUS.ACCEPTED:
-      return 'border-blue-200 bg-blue-50 text-blue-700'
-    case KPI_STATUS.FIRST_COMPLETED:
-    case KPI_STATUS.COMPLETED:
-      return 'border-emerald-200 bg-emerald-50 text-emerald-700'
-    case KPI_STATUS.WAITING_PM_APPROVAL:
-    case KPI_STATUS.WAITING_GM_APPROVAL:
-    case KPI_STATUS.PENDING_ACCEPTANCE:
-    case KPI_STATUS.FIRST_WAITING_PM_APPROVAL:
-    case KPI_STATUS.FIRST_WAITING_GM_APPROVAL:
-    case KPI_STATUS.SECOND_WAITING_PM_APPROVAL:
-    case KPI_STATUS.SECOND_WAITING_GM_APPROVAL:
-      return 'border-amber-200 bg-amber-50 text-amber-700'
-    default:
-      return 'border-slate-200 bg-slate-50 text-slate-500'
-  }
-}
+const asmStatusPillClass = gmAsmStatusPillClass
 
 function asmStatusTitle(code: number | null | undefined): string {
   const normalized = normalizeAsmStatusCode(code)
@@ -661,15 +637,6 @@ function togglePm(id: string) {
   toggleSet(expandedPms, id)
 }
 
-function parseNumPct(s: string) {
-  const raw = String(s ?? '').trim()
-  if (!raw) return 0
-  const fromHelper = parseNumericFromField(raw)
-  if (fromHelper != null && Number.isFinite(fromHelper)) return fromHelper
-  const fallback = Number.parseFloat(raw.replace(/[^0-9.,-]/g, '').replace(',', '.'))
-  return Number.isFinite(fallback) ? fallback : 0
-}
-
 /** Ô Target / Score / placeholder trên bảng: chỉ dùng gạch ngắn (-), không dùng em dash (—). */
 function diagnosticsTableCellText(raw: string | null | undefined): string {
   const s = String(raw ?? '').trim()
@@ -681,13 +648,20 @@ function diagnosticsTableCellText(raw: string | null | undefined): string {
  * Cột Score: điểm đánh giá (BE map `submissionActual`/`actual` từ mid_self_score hoặc điểm cuối kỳ GM→PM→self).
  * Không dùng (submissionActual/submissionTarget)×100 — chỉ tiêu năm và điểm có thể khác đơn vị (vd. cert vs điểm).
  */
-function memberTableScoreDisplay(member: GmHierarchyMember): string {
+function memberScoreRawNumeric(member: GmHierarchyMember): number | null {
   const raw = member.submissionActual
-  if (raw != null && Number.isFinite(Number(raw))) {
-    const n = Number(raw)
-    const scaled = Math.round(n * 10) / 10
-    return scaled.toFixed(1)
-  }
+  if (raw != null && Number.isFinite(Number(raw))) return Number(raw)
+  const fallback = Number(
+    String(diagnosticsTableCellText(member.actual))
+      .trim()
+      .replace(',', '.'),
+  )
+  return Number.isFinite(fallback) ? fallback : null
+}
+
+function memberTableScoreDisplay(member: GmHierarchyMember): string {
+  const n = memberScoreRawNumeric(member)
+  if (n != null) return formatScoreDisplay(n)
   return diagnosticsTableCellText(member.actual)
 }
 
@@ -746,6 +720,21 @@ function memberActualDisplayRaw(member: GmHierarchyMember, kpi: GmHierarchyKpi):
   const fromEvidence = formatPmPortfolioActualCell(member.evidences, kpi.calculationTypeCode, mode).trim()
   if (fromEvidence) return diagnosticsTableCellText(fromEvidence)
   return diagnosticsTableCellText(member.actual)
+}
+
+/** Actual node member trên bảng diagnostics: làm tròn, không hiển thị phần thập phân. */
+function formatDiagnosticsMemberActualText(raw: string): string {
+  const s = diagnosticsTableCellText(raw)
+  if (s === '-') return s
+  return s
+    .replace(/(\d+(?:[.,]\d+)?)\s*%/gi, (_match, num) => {
+      const n = Number(String(num).replace(',', '.'))
+      return Number.isFinite(n) ? `${Math.round(n)}%` : _match
+    })
+    .replace(/(\d+)[.,](\d+)/g, (_match, intPart, decPart) => {
+      const n = Number(`${intPart}.${decPart}`)
+      return Number.isFinite(n) ? String(Math.round(n)) : _match
+    })
 }
 
 function memberActualNumericForProgress(member: GmHierarchyMember, kpi: GmHierarchyKpi): number | null {
@@ -876,18 +865,13 @@ function completionPctFromActualTarget(actual: number | null, target: number | n
  * Đang trong giai đoạn Mid-Year không? So sánh now với midYearStart và midYearEnd.
  * Dùng để áp dụng công thức target/2 cho KPI 803.
  */
-const isMidYearPhase = computed(() => {
-  const cycle = props.kpiCycle
-  if (!cycle) return false
-  const now = Date.now()
-  const start = cycle.midYearStart ? new Date(cycle.midYearStart).getTime() : null
-  const end = cycle.midYearEnd ? new Date(cycle.midYearEnd).getTime() : null
-  if (start == null || end == null) return false
-  return now >= start && now <= end
-})
+const isMidYearPhase = computed(() => isDiagnosticsMidYearPhase(props.kpiCycle))
 
 function memberActualWithUnit(member: GmHierarchyMember, kpi: GmHierarchyKpi): string {
-  return diagnosticsActualWithUnit(kpi, memberActualDisplayRaw(member, kpi))
+  return diagnosticsActualWithUnit(
+    kpi,
+    formatDiagnosticsMemberActualText(memberActualDisplayRaw(member, kpi)),
+  )
 }
 
 function pmActualWithUnit(pm: GmHierarchyPm, kpi: GmHierarchyKpi): string {
@@ -895,18 +879,16 @@ function pmActualWithUnit(pm: GmHierarchyPm, kpi: GmHierarchyKpi): string {
 }
 
 function memberScoreNumeric(member: GmHierarchyMember): number | null {
-  const raw = memberTableScoreDisplay(member)
-  const n = Number(String(raw).trim().replace(',', '.'))
-  return Number.isFinite(n) ? n : null
+  return memberScoreRawNumeric(member)
 }
 
 function averageScoreDisplay(members: GmHierarchyMember[]): string {
   const nums = members
-    .map(memberScoreNumeric)
+    .map(memberScoreRawNumeric)
     .filter((n): n is number => n != null && Number.isFinite(n))
   if (!nums.length) return '-'
   const avg = nums.reduce((sum, n) => sum + n, 0) / nums.length
-  return (Math.round(avg * 10) / 10).toFixed(1)
+  return formatScoreDisplay(avg)
 }
 
 function pmSectionScoreDisplayForKpi(pm: GmHierarchyPm, _kpi: GmHierarchyKpi): string {
@@ -978,36 +960,19 @@ function memberDrawerActualProgressPct(member: GmHierarchyMember, kpi: GmHierarc
   return null
 }
 
-function actualBelowTarget(actual: string, target: string) {
-  return parseNumPct(actual) < parseNumPct(target)
-}
+const diagnosticsActualTextClass = diagnosticsActualTextColorClass
 
-function diagnosticsActualTextClass(actual: string, target: string): string {
-  const actualNum = parseNumericFromField(String(actual ?? ''))
-  const targetNum = parseNumericFromField(String(target ?? ''))
-  if (actualNum == null || !Number.isFinite(actualNum) || targetNum == null || !Number.isFinite(targetNum) || targetNum <= 0) {
-    return 'text-slate-400'
-  }
-  return actualNum < targetNum ? 'text-red-600' : 'text-green-600'
-}
-
-/**
- * Xanh/đỏ cột Actual khi đã có actual & target số (node KPI / Department).
- * Mid-year + CALC_RULE 803: ngưỡng = target/2 — đồng bộ với member và cột % tiến độ.
- */
 function diagnosticsActualColorClassFromNumeric(
   actualNum: number | null,
   targetFull: number | null,
   kpi: GmHierarchyKpi,
 ): string | null {
-  if (actualNum == null || !Number.isFinite(actualNum)) return null
-  if (targetFull == null || !Number.isFinite(targetFull) || targetFull <= 0) return null
-  const isMidYear803 =
-    isMidYearPhase.value &&
-    Number(kpi.calculationRuleCode) === CALC_RULE_COMMENT &&
-    targetFull > 0
-  const threshold = isMidYear803 ? targetFull / 2 : targetFull
-  return actualNum < threshold ? 'text-red-600' : 'text-green-600'
+  return diagnosticsActualNumericColorClass(
+    actualNum,
+    targetFull,
+    kpi.calculationRuleCode,
+    isMidYearPhase.value,
+  )
 }
 
 function kpiRowDiagnosticsActualColorClass(kpi: GmHierarchyKpi): string {
@@ -1040,22 +1005,14 @@ function pmRowDiagnosticsActualColorClass(pm: GmHierarchyPm, kpi: GmHierarchyKpi
  * Với CALC_RULE 803 ở giai đoạn Mid-Year: actual >= target/2 → xanh.
  */
 function memberActualColorClass(member: GmHierarchyMember, kpi: GmHierarchyKpi): string {
-  const targetFull = memberTargetNumericForProgress(member)
-  const actualNum = memberActualNumericForProgress(member, kpi)
-
-  const isMidYear803 =
-    isMidYearPhase.value &&
-    Number(kpi.calculationRuleCode) === CALC_RULE_COMMENT &&
-    targetFull != null &&
-    targetFull > 0
-
-  if (isMidYear803) {
-    // Đúng/vượt tiến độ khi actual >= target/2
-    return actualNum != null && actualNum >= targetFull / 2 ? 'text-green-600' : 'text-red-600'
-  }
-  return actualBelowTarget(memberActualDisplayRaw(member, kpi), member.target)
-    ? 'text-red-600'
-    : 'text-green-600'
+  return diagnosticsMemberActualColorClass({
+    actualRaw: memberActualDisplayRaw(member, kpi),
+    targetRaw: String(member.target ?? ''),
+    calculationRuleCode: kpi.calculationRuleCode,
+    isMidYear: isMidYearPhase.value,
+    actualNum: memberActualNumericForProgress(member, kpi),
+    targetNum: memberTargetNumericForProgress(member),
+  })
 }
 
 /**
@@ -1776,6 +1733,10 @@ function pmWeightDisplayRaw(pm: GmHierarchyPm, kpi: GmHierarchyKpi): string {
  * Dùng cho node KPI (`kpi.targetBalance`) và node department (`pm.targetBalance`).
  * Dòng assignee (MEMBER / PM / LEADER) dưới department: `diagnosticsAssigneeTargetPillClass()`.
  */
+/** Cột Actual / Completion — cùng cỡ chữ trên mọi node (KPI, department, member). */
+const diagnosticsActualCompletionCellClass =
+  'text-center text-xs font-bold tabular-nums leading-tight'
+
 function diagnosticsTargetPillClass(balance: GmHierarchyTargetBalance | null | undefined): string {
   const base =
     'inline-block max-w-full min-w-[2.25rem] rounded-md px-1.5 py-1 text-xs font-semibold tabular-nums leading-tight'
@@ -2046,18 +2007,18 @@ export default {
 
       <div class="overflow-x-auto">
         <div class="min-w-[1080px] divide-y divide-slate-200">
-          <!-- 4+1+2+2+1+2+2+1 - Thêm cột Actual nằm giữa Target và Tiến độ -->
+          <!-- 4+2+2+1+2+1+2+1 — Name, Status, Target, Weight, Actual Result, Completion, Score, Actions -->
           <div
             class="sticky top-0 z-10 grid grid-cols-15 gap-2 border-b border-slate-200 bg-slate-100 px-3 py-2 text-xs font-bold uppercase tracking-wider text-slate-600 sm:gap-3">
             <div class="col-span-4 pl-6">KPI target &amp; Department / Member</div>
-            <div class="col-span-1 text-center">Weight</div>
+            <div class="col-span-2 text-center">Status</div>
             <div class="col-span-2 text-center">Target</div>
-            <div class="col-span-2 text-center">Actual</div>
+            <div class="col-span-1 text-center">Weight</div>
+            <div class="col-span-2 text-center">Actual Result</div>
             <div class="col-span-1 text-center leading-tight" title="Completion progress.">
               Completion
             </div>
             <div class="col-span-2 text-center">Score</div>
-            <div class="col-span-2 text-center">Status</div>
             <div class="col-span-1 text-center">Actions</div>
           </div>
 
@@ -2115,10 +2076,13 @@ export default {
                           </div>
                         </div>
                       </div>
-                      <div class="col-span-1 text-center">
+                      <div class="col-span-2 flex justify-center">
                         <span
-                          class="inline-block min-w-[2.25rem] rounded-md bg-slate-100 px-1.5 py-1 text-xs font-semibold tabular-nums text-slate-700">{{
-                          diagnosticsWeightDisplay(kpi.weight) }}</span>
+                          class="inline-flex max-w-full cursor-default items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold leading-tight"
+                          :class="asmStatusPillClass(kpiAsmStatusCode(kpi))"
+                          :title="asmStatusTitleForKpi(kpi)">
+                          <span class="truncate">{{ asmStatusLabelForKpi(kpi) }}</span>
+                        </span>
                       </div>
                       <div class="col-span-2 grid grid-cols-[1fr_auto_1fr] items-center text-center">
                         <span
@@ -2129,19 +2093,27 @@ export default {
                           <KpiScoringRulesPreviewTooltip :target-description="kpi.scoringRulesText" />
                         </span>
                       </div>
-                      <div class="col-span-2 text-center text-sm font-bold tabular-nums"
-                        :class="kpiRowDiagnosticsActualColorClass(kpi)">
+                      <div class="col-span-1 text-center">
+                        <span
+                          class="inline-block min-w-[2.25rem] rounded-md bg-slate-100 px-1.5 py-1 text-xs font-semibold tabular-nums text-slate-700">{{
+                          diagnosticsWeightDisplay(kpi.weight) }}</span>
+                      </div>
+                      <div
+                        class="col-span-2"
+                        :class="[diagnosticsActualCompletionCellClass, kpiRowDiagnosticsActualColorClass(kpi)]"
+                      >
                         {{ kpiActualWithUnit(kpi) }}
                       </div>
                       <div
-                        class="col-span-1 text-center text-xs font-bold tabular-nums"
-                        :class="
+                        class="col-span-1"
+                        :class="[
+                          diagnosticsActualCompletionCellClass,
                           kpi.kpiType === 'cascading'
                             ? completionPctTextClass(kpiCompletionPct(kpi))
                             : kpiHasNonCascadingRollupMembers(kpi)
                               ? completionPctTextClass(kpiNonCascadingRollupCompletionPct(kpi))
-                              : 'text-slate-400'
-                        "
+                              : 'text-slate-400',
+                        ]"
                         :title="
                           kpi.kpiType === 'cascading'
                             ? 'Completion: (Actual / Target) x 100, capped at 100%.'
@@ -2159,14 +2131,6 @@ export default {
                       </div>
                       <div class="col-span-2 text-center text-xs font-bold tabular-nums" :class="kpiScoreClass(kpi)">
                         {{ kpiScoreDisplay(kpi) }}
-                      </div>
-                      <div class="col-span-2 flex justify-center">
-                        <span
-                          class="inline-flex max-w-full cursor-default items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold leading-tight"
-                          :class="asmStatusPillClass(kpiAsmStatusCode(kpi))"
-                          :title="asmStatusTitleForKpi(kpi)">
-                          <span class="truncate">{{ asmStatusLabelForKpi(kpi) }}</span>
-                        </span>
                       </div>
                       <div class="col-span-1 flex flex-wrap items-center justify-center gap-1" @click.stop>
                         <button type="button"
@@ -2240,30 +2204,41 @@ export default {
                                     </div>
                                   </div>
                                 </div>
-                                <div class="col-span-1 text-center">
+                                <div class="col-span-2 flex justify-center">
                                   <span
-                                    class="inline-block min-w-[2.25rem] rounded-md bg-slate-100 px-1.5 py-1 text-xs font-semibold tabular-nums text-slate-700">{{
-                                      pmWeightDisplayRaw(pm, kpi)
-                                    }}</span>
+                                    class="inline-flex max-w-full cursor-default items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold leading-tight"
+                                    :class="asmStatusPillClass(pmAsmStatusCode(pm, kpi))"
+                                    :title="asmStatusTitleForDepartment(pm, pmAsmStatusCode(pm, kpi), kpi)">
+                                    <span class="truncate">{{ asmStatusLabelForDepartment(pm, pmAsmStatusCode(pm, kpi), kpi) }}</span>
+                                  </span>
                                 </div>
                                 <div class="col-span-2 flex justify-center text-center">
                                   <span
                                     :class="diagnosticsTargetPillClass(pm.targetBalance)"
                                     :title="diagnosticsTargetTitle(pm.targetBalance)">{{ pmTargetWithUnit(pm, kpi) }}</span>
                                 </div>
-                                <div class="col-span-2 text-center text-xs font-bold tabular-nums"
-                                  :class="pmRowDiagnosticsActualColorClass(pm, kpi)">
+                                <div class="col-span-1 text-center">
+                                  <span
+                                    class="inline-block min-w-[2.25rem] rounded-md bg-slate-100 px-1.5 py-1 text-xs font-semibold tabular-nums text-slate-700">{{
+                                      pmWeightDisplayRaw(pm, kpi)
+                                    }}</span>
+                                </div>
+                                <div
+                                  class="col-span-2"
+                                  :class="[diagnosticsActualCompletionCellClass, pmRowDiagnosticsActualColorClass(pm, kpi)]"
+                                >
                                   {{ pmActualWithUnit(pm, kpi) }}
                                 </div>
                                 <div
-                                  class="col-span-1 text-center text-xs font-bold tabular-nums"
-                                  :class="
+                                  class="col-span-1"
+                                  :class="[
+                                    diagnosticsActualCompletionCellClass,
                                     kpi.kpiType === 'cascading'
                                       ? completionPctTextClass(pmCompletionPct(pm, kpi))
                                       : pmHasNonCascadingRollupMembers(pm, kpi)
                                         ? completionPctTextClass(pmNonCascadingRollupCompletionPct(pm, kpi))
-                                        : 'text-slate-400'
-                                  "
+                                        : 'text-slate-400',
+                                  ]"
                                   :title="
                                     kpi.kpiType === 'cascading'
                                       ? 'Completion: (Actual / Target) x 100, capped at 100%.'
@@ -2282,14 +2257,6 @@ export default {
                                 <div class="col-span-2 text-center text-xs font-bold tabular-nums"
                                   :class="pmSectionScoreClassForKpi(pm, kpi)">
                                   {{ pmSectionScoreDisplayForKpi(pm, kpi) }}
-                                </div>
-                                <div class="col-span-2 flex justify-center">
-                                  <span
-                                    class="inline-flex max-w-full cursor-default items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold leading-tight"
-                                    :class="asmStatusPillClass(pmAsmStatusCode(pm, kpi))"
-                                    :title="asmStatusTitleForDepartment(pm, pmAsmStatusCode(pm, kpi), kpi)">
-                                    <span class="truncate">{{ asmStatusLabelForDepartment(pm, pmAsmStatusCode(pm, kpi), kpi) }}</span>
-                                  </span>
                                 </div>
                                 <div class="col-span-1 flex flex-wrap items-center justify-center gap-1 pr-0.5">
                                   <button
@@ -2332,24 +2299,34 @@ export default {
                                           </template>
                                         </div>
                                       </div>
-                                      <div class="col-span-1 text-center">
+                                      <div class="col-span-2 flex justify-center items-center text-xs font-semibold">
                                         <span
-                                          class="inline-block min-w-[2.25rem] rounded-md bg-slate-100 px-1.5 py-1 text-xs font-semibold tabular-nums text-slate-700">{{
-                                            diagnosticsWeightDisplay(member.weight)
-                                          }}</span>
+                                          class="inline-flex max-w-full cursor-default items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold leading-tight"
+                                          :class="asmStatusPillClass(memberAsmStatusCode(member))"
+                                          :title="asmStatusTitle(memberAsmStatusCode(member))">
+                                          <span class="truncate">{{ asmStatusLabel(memberAsmStatusCode(member)) }}</span>
+                                        </span>
                                       </div>
                                       <div class="col-span-2 flex justify-center text-center">
                                         <span :class="diagnosticsAssigneeTargetPillClass()">{{
                                           memberTableTargetDisplayWithUnit(member, kpi)
                                         }}</span>
                                       </div>
-                                      <div class="col-span-2 text-center text-xs font-bold tabular-nums"
-                                        :class="memberActualColorClass(member, kpi)">
+                                      <div class="col-span-1 text-center">
+                                        <span
+                                          class="inline-block min-w-[2.25rem] rounded-md bg-slate-100 px-1.5 py-1 text-xs font-semibold tabular-nums text-slate-700">{{
+                                            diagnosticsWeightDisplay(member.weight)
+                                          }}</span>
+                                      </div>
+                                      <div
+                                        class="col-span-2"
+                                        :class="[diagnosticsActualCompletionCellClass, memberActualColorClass(member, kpi)]"
+                                      >
                                         {{ memberActualWithUnit(member, kpi) }}
                                       </div>
                                       <div
-                                        class="col-span-1 text-center text-xs font-bold tabular-nums"
-                                        :class="diagnosticsMemberProgressTextClass(member, kpi)"
+                                        class="col-span-1"
+                                        :class="[diagnosticsActualCompletionCellClass, diagnosticsMemberProgressTextClass(member, kpi)]"
                                         title="Completion: (Actual / Target) x 100, capped at 100%.">
                                         {{ diagnosticsMemberProgressPct(member, kpi) }}
                                       </div>
@@ -2360,14 +2337,6 @@ export default {
                                             : 'text-green-600'
                                         " :title="memberDiagnosticsScoreTooltip(member)">
                                         {{ memberTableScoreDisplay(member) }}
-                                      </div>
-                                      <div class="col-span-2 flex justify-center items-center text-xs font-semibold">
-                                        <span
-                                          class="inline-flex max-w-full cursor-default items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold leading-tight"
-                                          :class="asmStatusPillClass(memberAsmStatusCode(member))"
-                                          :title="asmStatusTitle(memberAsmStatusCode(member))">
-                                          <span class="truncate">{{ asmStatusLabel(memberAsmStatusCode(member)) }}</span>
-                                        </span>
                                       </div>
                                       <div class="col-span-1 flex justify-center">
                                         <button
@@ -2411,7 +2380,7 @@ export default {
       <Transition name="gm-diag-feedback-drawer">
         <div
           v-if="feedbackDrawerOpen && feedbackDrawerKpi"
-          class="relative fixed inset-0 z-[220] flex justify-end"
+          class="fixed inset-0 z-[220] flex justify-end"
           role="dialog"
           aria-modal="true"
           aria-labelledby="gm-diag-feedback-title"

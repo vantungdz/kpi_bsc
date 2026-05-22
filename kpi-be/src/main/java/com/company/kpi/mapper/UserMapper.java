@@ -15,7 +15,6 @@ import com.company.kpi.aggregate.PmMemberOptionAggregate;
 import com.company.kpi.entity.User;
 import com.company.kpi.aggregate.UserJobTitlePair;
 import com.company.kpi.aggregate.UserTeamHierarchyAggregate;
-import com.company.kpi.response.pm.PmPortfolioGatePendingMemberResponse;
 import com.company.kpi.response.admin.AdminEmployeeProgressResponse;
 import com.company.kpi.response.admin.AdminEmployeeResponse;
 import com.company.kpi.response.gm.GmMemberResponse;
@@ -132,11 +131,4 @@ public interface UserMapper {
             """)
     boolean userHasRoleCode(@Param("userId") UUID userId, @Param("roleCode") String roleCode);
 
-    /**
-     * Member dưới PM còn KPI individual/team (không promotion) với {@code status_code} dưới 501
-     * (chưa vào nhánh chờ PM giữa kỳ / cuối kỳ).
-     */
-    List<PmPortfolioGatePendingMemberResponse> listPmPortfolioGateBlockingMembers(
-            @Param("pmId") UUID pmId,
-            @Param("cycleId") UUID cycleId);
 }

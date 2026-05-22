@@ -11,7 +11,6 @@ import com.company.kpi.response.pm.MemberKpiDetailResponse;
 import com.company.kpi.response.pm.PmDashboardResponse;
 import com.company.kpi.response.pm.PmMemberKpiApprovalItemResponse;
 import com.company.kpi.response.pm.PmMemberReviewMetaResponse;
-import com.company.kpi.response.pm.PmPortfolioGateResponse;
 import com.company.kpi.response.pm.TeamMemberResponse;
 import com.company.kpi.service.pm.PmDashboardService;
 import jakarta.validation.Valid;
@@ -67,15 +66,6 @@ public class PmDashboardController extends BaseController {
             Authentication authentication) {
         UUID pmId = jwtUtil.resolveUserId(authentication);
         return success(pmDashboardService.getTeamHierarchy(pmId, year));
-    }
-
-    /** Tab Team Review: còn member nào chưa nộp KPI Member (individual/team, status &lt; 501) cho PM thì chưa gửi đánh giá lên GM. */
-    @GetMapping("/pm-portfolio-evaluation-gate")
-    public ResponseEntity<BaseResponse<PmPortfolioGateResponse>> getPmPortfolioEvaluationGate(
-            @RequestParam Integer year,
-            Authentication authentication) {
-        UUID pmId = jwtUtil.resolveUserId(authentication);
-        return success(pmDashboardService.getPmPortfolioEvaluationGate(pmId, year));
     }
 
     @GetMapping("/team-members/{memberId}/kpis")

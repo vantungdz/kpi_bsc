@@ -5,6 +5,7 @@ import { useToast } from 'vue-toastification'
 import { useAuthStore } from '@/stores/auth.store'
 import { pmKpiService } from '@/services/modules/kpi-pm.service'
 import type { PmMemberKpiApprovalItem } from '@/services/modules/kpi-pm.service'
+import { strategicKpiKindFromTypeCode } from '@/utils/strategicKpiTypeCodes'
 import type { GmKpiCycleOption } from '@/types/gm-kpi-cycle'
 import type {
   GmMidYearIssuesData,
@@ -28,6 +29,7 @@ import PmMemberDetailDrawer from '@/components/pm/drawers/PmMemberDetailDrawer.v
 import PmRequestDetailDrawer from '@/components/pm/drawers/PmRequestDetailDrawer.vue'
 import GmProcessTimeline from '@/components/gm/GmProcessTimeline.vue'
 import GmMemberKpiDrawer from '@/components/gm/GmMemberKpiDrawer.vue'
+import { shouldCollapseKpiProcessTimelineToYearEndOnly } from '@/utils/common'
 
 const toast = useToast()
 const route = useRoute()
@@ -38,8 +40,12 @@ const pmFeedbackPendingByScope = ref<{ portfolio: number; promotion: number }>({
   promotion: 0,
 })
 
-function onPmFeedbackPendingCount(payload: { scope: 'portfolio' | 'promotion'; count: number }) {
-  const scope = payload?.scope === 'promotion' ? 'promotion' : 'portfolio'
+function onPmFeedbackPendingCount(payload: {
+  scope: 'portfolio' | 'promotion' | 'department'
+  count: number
+}) {
+  const scope = payload?.scope
+  if (scope !== 'portfolio' && scope !== 'promotion') return
   const count = Number.isFinite(Number(payload?.count)) ? Math.max(0, Number(payload.count)) : 0
   pmFeedbackPendingByScope.value = {
     ...pmFeedbackPendingByScope.value,
@@ -75,16 +81,18 @@ async function refreshPmDashboardForYear() {
   memberKpisCache.value = {}
   approvalRawItems.value = []
   processTimelineData.value = null
+  pmPortfolioInit.value = null
   rightPanelVisible.value = false
   rightPanelMode.value = 'none'
   activeItem.value = null
+  pmFeedbackPendingByScope.value = { portfolio: 0, promotion: 0 }
   personalKpiKey.value += 1
   teamReviewReloadNonce.value += 1
   await Promise.all([
+    loadPmPortfolioTimelineContext(),
     loadProcessTimeline(),
     loadApprovalRequests(),
     loadTeamReviewPendingCount(),
-    loadPmPortfolioEvaluationGate(),
   ])
 }
 
@@ -98,25 +106,6 @@ async function loadCycleOptions() {
   }
 }
 
-/** Điều kiện gửi đánh giá KPI Member lên GM: mọi member trong cây đã nộp individual/team (≥501) cho PM. */
-const pmPortfolioEvalGate = ref<{
-  loaded: boolean
-  open: boolean
-  pending: { userId: string; fullName: string }[]
-}>({ loaded: false, open: false, pending: [] })
-
-async function loadPmPortfolioEvaluationGate() {
-  try {
-    const data = await pmKpiService.getPmPortfolioEvaluationGate(approvalYear.value)
-    pmPortfolioEvalGate.value = {
-      loaded: true,
-      open: Boolean(data?.allPortfolioSubmittedToPm),
-      pending: Array.isArray(data?.pendingMembers) ? data.pendingMembers : [],
-    }
-  } catch {
-    pmPortfolioEvalGate.value = { loaded: true, open: false, pending: [] }
-  }
-}
 /** Số member đang chờ PM đánh giá (501 / 601) — badge tab Team Review + đồng bộ khi mở tab. */
 const teamPmEvaluationPendingCount = ref(0)
 
@@ -148,6 +137,39 @@ const EMPTY_PM_PROCESS_TIMELINE_MID: GmMidYearIssuesData = {
 
 const processTimelineData = ref<GmProcessTimelineApiResponse | null>(null)
 
+/** Portfolio + Promotion KPI của PM (khớp Leader: ẩn timeline khi chưa có KPI). */
+const pmPortfolioInit = ref<{
+  accountCreatedAt: string | null
+  kpiCount: number
+  midYearStart: string | null
+} | null>(null)
+
+async function loadPmPortfolioTimelineContext() {
+  try {
+    const data: { kpis?: { kpiType?: number }[]; accountCreatedAt?: string | null; kpiCycle?: { midYearStart?: string | null } } =
+      await pmKpiService.getInitialization(String(approvalYear.value))
+    const rows = Array.isArray(data?.kpis) ? data.kpis : []
+    pmPortfolioInit.value = {
+      accountCreatedAt: data?.accountCreatedAt ?? null,
+      kpiCount: rows.length,
+      midYearStart: data?.kpiCycle?.midYearStart ?? null,
+    }
+  } catch (e) {
+    console.error(e)
+    pmPortfolioInit.value = null
+  }
+}
+
+const hasAnyPmKpi = computed(() => (pmPortfolioInit.value?.kpiCount ?? 0) > 0)
+
+/** Onboard từ mid_year_start → timeline 2 mốc (KPI Setting + Year-End). */
+const pmTimelineYearEndOnly = computed(() =>
+  shouldCollapseKpiProcessTimelineToYearEndOnly(
+    pmPortfolioInit.value?.accountCreatedAt,
+    pmPortfolioInit.value?.midYearStart,
+  ),
+)
+
 async function loadProcessTimeline() {
   try {
     processTimelineData.value = await pmKpiService.getProcessTimeline(approvalYear.value)
@@ -157,12 +179,18 @@ async function loadProcessTimeline() {
   }
 }
 
+function refreshPmProcessTimeline() {
+  void loadPmPortfolioTimelineContext()
+  void loadProcessTimeline()
+}
+
 type PmRequestUiRow = {
   id: string
   userId: string
   user: string
   avatar: string
   type: string
+  kpiType: GmStrategicKpiKind
   kpiName: string
   oldValue: string | null
   newValue: string
@@ -175,6 +203,7 @@ type PmRequestUiRow = {
   unitLabel: string
   calculationMethodLabel: string
   scoringRuleText: string
+  creatorRoleCode?: string
 }
 
 /** Dữ liệu gốc từ API — nhóm theo member ở tab Request Approval. */
@@ -325,6 +354,7 @@ function mapApprovalToUi(r: PmMemberKpiApprovalItem): PmRequestUiRow {
     user: name,
     avatar: initialsFromName(name),
     type: 'CREATE_KPI',
+    kpiType: strategicKpiKindFromTypeCode(r.typeCode),
     kpiName: r.kpiName ?? '—',
     oldValue: null,
     newValue: newValueParts.join(' · '),
@@ -337,6 +367,10 @@ function mapApprovalToUi(r: PmMemberKpiApprovalItem): PmRequestUiRow {
     unitLabel,
     calculationMethodLabel: calcMethodLabel(r.calculationRuleCode, r.calculationTypeCode),
     scoringRuleText: scoringRulesText(r.targetDescription),
+    creatorRoleCode:
+      r.creatorRoleCode != null && String(r.creatorRoleCode).trim() !== ''
+        ? String(r.creatorRoleCode).trim().toUpperCase()
+        : undefined,
   }
 }
 
@@ -404,7 +438,7 @@ async function submitApprovalDecision(req: PmRequestUiRow, approve: boolean, rej
       approve ? 'Approved - KPI moved to pending GM.' : 'KPI proposal rejected.',
     )
     await loadApprovalRequests()
-    void loadProcessTimeline()
+    refreshPmProcessTimeline()
   } catch (err: unknown) {
     toast.error(apiErrorMessage(err))
   } finally {
@@ -447,7 +481,7 @@ async function submitApprovalDecisionBatch(
       toast.warning(`${targets.length - ok} KPIs could not be updated. Please try again.`)
     }
     await loadApprovalRequests()
-    void loadProcessTimeline()
+    refreshPmProcessTimeline()
   } catch (err: unknown) {
     toast.error(apiErrorMessage(err))
   } finally {
@@ -457,7 +491,6 @@ async function submitApprovalDecisionBatch(
 
 watch(activeTab, (t) => {
   if (t === 'requests') loadApprovalRequests()
-  if (t === 'team') void loadPmPortfolioEvaluationGate()
 })
 
 watch(
@@ -470,7 +503,6 @@ watch(
 
 watch(teamReviewReloadNonce, () => {
   void loadTeamReviewPendingCount()
-  void loadPmPortfolioEvaluationGate()
 })
 
 const clearPmEvaluationStorage = () => {
@@ -482,10 +514,10 @@ onMounted(() => {
   syncYearFromRoute()
   clearPmEvaluationStorage()
   void loadCycleOptions()
-  void loadProcessTimeline()
+  void loadPmPortfolioTimelineContext()
+  refreshPmProcessTimeline()
   void loadApprovalRequests()
   void loadTeamReviewPendingCount()
-  void loadPmPortfolioEvaluationGate()
   window.addEventListener('pm-kpi-created', handleRefresh)
 })
 
@@ -597,7 +629,7 @@ const handleMemberEvalSubmitted = (payload: {
 
   teamReviewReloadNonce.value += 1
   personalKpiKey.value += 1
-  void loadProcessTimeline()
+  refreshPmProcessTimeline()
 }
 
 const authStore = useAuthStore()
@@ -693,7 +725,8 @@ const openKpiChildDetail = (payload: { child: any; parent: any }) => {
 
 const handleRefresh = () => {
   personalKpiKey.value += 1
-  void loadProcessTimeline()
+  void loadPmPortfolioTimelineContext()
+  refreshPmProcessTimeline()
 }
 </script>
 
@@ -702,10 +735,12 @@ const handleRefresh = () => {
     
     <div class="space-y-4 p-3 sm:p-4 lg:p-6">
       <GmProcessTimeline
+        v-if="hasAnyPmKpi && pmPortfolioInit !== null"
         :mid-year-issues="processTimelineData?.midYear ?? EMPTY_PM_PROCESS_TIMELINE_MID"
         :setting-issues="processTimelineData?.setting ?? undefined"
         :year-end-issues="processTimelineData?.yearEnd ?? undefined"
         :year="approvalYear"
+        :year-end-only="pmTimelineYearEndOnly"
       />
     </div>
 
@@ -756,8 +791,12 @@ const handleRefresh = () => {
       </div>
 
       <div class="bg-white">
-        <div v-if="activeTab === 'personal_promotion'" class="flex flex-col">
-          <div class="border-b border-slate-200 bg-white px-5 pt-3">
+        <div v-show="activeTab === 'personal_promotion'" class="flex flex-col">
+          <div class="border-b border-slate-200 bg-white px-5 pt-4 pb-0">
+            <h3 class="mb-3 flex items-center gap-2 text-lg font-bold text-slate-800">
+              <i class="fas fa-list-alt text-slate-400" />
+              KPI Personal & Promotion
+            </h3>
             <div class="flex gap-2">
               <button
                 type="button"
@@ -790,7 +829,7 @@ const handleRefresh = () => {
             </div>
           </div>
           <PmPersonalKpiTab
-            v-if="activePersonalPromoSubTab === 'personal'"
+            v-show="activePersonalPromoSubTab === 'personal'"
             :key="`pf-${personalKpiKey}`"
             portfolio-scope="portfolio"
             :year="approvalYear"
@@ -799,10 +838,10 @@ const handleRefresh = () => {
             @open-assign-after-member-feedback="openAssignDrawerAfterMemberFeedback"
             @open-member-detail="openKpiChildDetail"
             @feedback-pending-count="onPmFeedbackPendingCount"
-            @timeline-refresh="() => void loadProcessTimeline()"
+            @timeline-refresh="refreshPmProcessTimeline"
           />
           <PmPersonalKpiTab
-            v-if="activePersonalPromoSubTab === 'promotion'"
+            v-show="activePersonalPromoSubTab === 'promotion'"
             :key="`pm-${personalKpiKey}`"
             portfolio-scope="promotion"
             :year="approvalYear"
@@ -811,7 +850,7 @@ const handleRefresh = () => {
             @open-assign-after-member-feedback="openAssignDrawerAfterMemberFeedback"
             @open-member-detail="openKpiChildDetail"
             @feedback-pending-count="onPmFeedbackPendingCount"
-            @timeline-refresh="() => void loadProcessTimeline()"
+            @timeline-refresh="refreshPmProcessTimeline"
           />
         </div>
         <PmPersonalKpiTab
@@ -824,8 +863,7 @@ const handleRefresh = () => {
           @open-assign-after-member-feedback="openAssignDrawerAfterMemberFeedback"
           @open-member-detail="openKpiChildDetail"
           @open-member="openMemberDrawer"
-          @feedback-pending-count="onPmFeedbackPendingCount"
-          @timeline-refresh="() => void loadProcessTimeline()"
+          @timeline-refresh="refreshPmProcessTimeline"
         />
         <PmTeamMembersTab
           v-if="activeTab === 'team'"
@@ -833,9 +871,6 @@ const handleRefresh = () => {
           :reload-nonce="teamReviewReloadNonce"
           :kpis-cache="memberKpisCache"
           :comments-cache="memberComments"
-          :portfolio-gate-loaded="pmPortfolioEvalGate.loaded"
-          :portfolio-gate-open="pmPortfolioEvalGate.open"
-          :portfolio-gate-pending="pmPortfolioEvalGate.pending"
           @open-member="openMemberDrawer"
           @pending-pm-evaluation-count="onTeamPendingPmEvaluationCount"
         />
@@ -865,8 +900,6 @@ const handleRefresh = () => {
       :member="activeItem"
       :year="approvalYear"
       :readonly-year="selectedYearReadonly"
-      :portfolio-gate-loaded="pmPortfolioEvalGate.loaded"
-      :portfolio-gate-open="pmPortfolioEvalGate.open"
       :cached-supervisor-comments="
         activeItem?.id
           ? (memberComments[activeItem.id] ?? { main: '', promo: '' })

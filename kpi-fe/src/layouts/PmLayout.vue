@@ -1,10 +1,14 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useAuth } from "@/composables/useAuth";
 import PmAssignKpiDrawer from "@/components/pm/drawers/PmAssignKpiDrawer.vue";
 import { pmKpiService } from "@/services/modules/kpi-pm.service";
 import type { GmKpiCycleOption } from "@/types/gm-kpi-cycle";
+import {
+  PM_CREATE_KPI_ALLOWED_EVENT,
+  type PmCreateKpiAllowedDetail,
+} from "@/utils/pmCreateKpiGate";
 
 const route = useRoute();
 const router = useRouter();
@@ -26,6 +30,42 @@ const selectedCycle = computed(() =>
 );
 
 const canEditSelectedYear = computed(() => Number(selectedCycle.value?.statusCode) === 201);
+
+/** Gate từ tab KPI Personal — mặc định khóa đến khi portfolio load xong. */
+const pmPortfolioCreateGateLoaded = ref(false);
+const canCreatePmKpiByPortfolio = ref(false);
+
+const canUseCreateKpiButton = computed(
+  () =>
+    canEditSelectedYear.value &&
+    pmPortfolioCreateGateLoaded.value &&
+    canCreatePmKpiByPortfolio.value,
+);
+
+const createKpiButtonTitle = computed(() => {
+  if (!canEditSelectedYear.value) {
+    return "Only create KPI in the current cycle.";
+  }
+  if (!pmPortfolioCreateGateLoaded.value) {
+    return "Loading KPI list…";
+  }
+  if (!canCreatePmKpiByPortfolio.value) {
+    return "Only create KPI when there is no Personal KPI or all Personal KPIs are in Pending Acceptance status";
+  }
+  return undefined;
+});
+
+function onPmCreateKpiAllowed(ev: Event) {
+  const detail = (ev as CustomEvent<PmCreateKpiAllowedDetail>).detail;
+  if (!detail || Number(detail.year) !== Number(selectedYear.value)) return;
+  pmPortfolioCreateGateLoaded.value = true;
+  canCreatePmKpiByPortfolio.value = Boolean(detail.allowed);
+}
+
+function resetPmPortfolioCreateGate() {
+  pmPortfolioCreateGateLoaded.value = false;
+  canCreatePmKpiByPortfolio.value = false;
+}
 
 async function loadCycleOptions() {
   try {
@@ -57,7 +97,7 @@ async function syncSelectedYearToRoute() {
 }
 
 function openCreateDrawer() {
-  if (!canEditSelectedYear.value) return;
+  if (!canUseCreateKpiButton.value) return;
   showCreateDrawer.value = true;
 }
 
@@ -69,6 +109,7 @@ watch(selectedYear, () => {
   if (!canEditSelectedYear.value) {
     showCreateDrawer.value = false;
   }
+  resetPmPortfolioCreateGate();
   void syncSelectedYearToRoute();
 });
 
@@ -83,7 +124,12 @@ watch(
 );
 
 onMounted(() => {
+  window.addEventListener(PM_CREATE_KPI_ALLOWED_EVENT, onPmCreateKpiAllowed);
   void loadCycleOptions();
+});
+
+onUnmounted(() => {
+  window.removeEventListener(PM_CREATE_KPI_ALLOWED_EVENT, onPmCreateKpiAllowed);
 });
 </script>
 
@@ -155,7 +201,7 @@ onMounted(() => {
           >
             <i class="fas fa-sign-out-alt text-xs" />
           </span>
-          Đăng xuất
+          Logout
         </button>
       </div>
     </aside>
@@ -187,8 +233,8 @@ onMounted(() => {
             </option>
           </select>
           <button
-            :disabled="!canEditSelectedYear"
-            :title="canEditSelectedYear ? undefined : 'Chỉ được tạo KPI trong kỳ đang mở.'"
+            :disabled="!canUseCreateKpiButton"
+            :title="createKpiButtonTitle"
             class="flex shrink-0 items-center gap-1.5 rounded-lg bg-purple-600 px-3 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:bg-purple-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500 disabled:shadow-none"
             @click="openCreateDrawer"
           >

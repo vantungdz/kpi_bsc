@@ -25,6 +25,9 @@ public interface UserDepartmentMapper {
 
     UUID getDepartmentIdByUserId(@Param("userId") UUID userId);
 
+    /** Phòng ban chính ({@code user_departments.is_primary = true}) của user. */
+    UUID findPrimaryDepartmentIdByUserId(@Param("userId") UUID userId);
+
     List<AdminEmployeeCandidateResponse> findLeaderAssignableMembersInDepartment(
             @Param("departmentId") UUID departmentId);
 
@@ -36,4 +39,13 @@ public interface UserDepartmentMapper {
     int countUsersInDepartment(
             @Param("departmentId") UUID departmentId,
             @Param("userId") UUID userId);
+
+    List<UUID> findMemberIdsSupervisedByLeader(
+            @Param("leaderId") UUID leaderId,
+            @Param("departmentId") UUID departmentId);
+
+    /** Gỡ supervisor leader khỏi member trong phòng (trả về supervisor = PM của phòng). */
+    int resetSupervisorForLeaderInDepartment(
+            @Param("departmentId") UUID departmentId,
+            @Param("leaderId") UUID leaderId);
 }

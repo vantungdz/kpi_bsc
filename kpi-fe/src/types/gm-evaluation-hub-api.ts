@@ -12,9 +12,12 @@ export interface GmEvaluationHubAssignmentApiRow {
   endGmScore: number | string | null
   evidences: string | null
   targetDescription: string | null
+  targetValue?: number | string | null
   weight: number | string | null
   masterCode: string | null
   masterName: string | null
+  unitCode?: number | string | null
+  unitName?: string | null
   categoryName: string | null
   kpiTypeName: string | null
   userId: string
@@ -49,6 +52,8 @@ export interface GmEvaluationHubAssignmentApiRow {
   supervisorCommentPortfolio: string | null
   /** PM tổng — evaluation_supervisor_comments_promotion. */
   supervisorCommentPromotion: string | null
+  /** roles.code của người tạo KPI master */
+  creatorRoleCode?: string | null
 }
 
 export interface GmEvaluationHubApiResponse {

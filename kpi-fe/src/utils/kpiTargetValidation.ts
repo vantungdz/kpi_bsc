@@ -1,6 +1,8 @@
 /** Messages for KPI target fields (catalog + allocation). */
 export const KPI_TARGET_NUMERIC_MSG = 'Enter a numeric target.'
-export const KPI_TARGET_NON_NEGATIVE_MSG = 'Target must be ≥ 0.'
+export const KPI_TARGET_POSITIVE_MSG = 'Target must be greater than 0.'
+/** @deprecated Use {@link KPI_TARGET_POSITIVE_MSG}; kept for imports. */
+export const KPI_TARGET_NON_NEGATIVE_MSG = KPI_TARGET_POSITIVE_MSG
 
 /** Parse trimmed target input; returns null if empty or not a finite number. */
 export function parseTrimmedTargetNumber(
@@ -14,7 +16,7 @@ export function parseTrimmedTargetNumber(
 }
 
 /**
- * Validate a single target field.
+ * Validate a single target field (must be a finite number &gt; 0).
  * @returns error message, or null when valid
  */
 export function validateNonNegativeTargetValue(
@@ -28,7 +30,7 @@ export function validateNonNegativeTargetValue(
   }
   const n = parseTrimmedTargetNumber(s)
   if (n === null) return KPI_TARGET_NUMERIC_MSG
-  if (n < 0) return KPI_TARGET_NON_NEGATIVE_MSG
+  if (n <= 0) return KPI_TARGET_POSITIVE_MSG
   return null
 }
 
@@ -58,7 +60,7 @@ export function validateNonNegativeTargetBatch(
       continue
     }
     const n = parseTrimmedTargetNumber(s)
-    if (n === null || n < 0) invalid.push(label)
+    if (n === null || n <= 0) invalid.push(label)
   }
 
   if (missing.length > 0) {
@@ -67,7 +69,7 @@ export function validateNonNegativeTargetBatch(
       : `Enter targets for: ${missing.join(', ')}.`
   }
   if (invalid.length > 0) {
-    return `Targets must be numbers ≥ 0: ${invalid.join(', ')}.`
+    return `Targets must be numbers greater than 0: ${invalid.join(', ')}.`
   }
   return null
 }
@@ -90,7 +92,7 @@ export function validateWeightPctValue(
   return null
 }
 
-/** Whether a row should show invalid styling (empty, non-numeric, or negative). */
+/** Whether a row should show invalid styling (empty, non-numeric, or ≤ 0). */
 export function targetRowHasValidationIssue(
   raw: string | number | null | undefined,
   options?: { required?: boolean },
@@ -99,5 +101,5 @@ export function targetRowHasValidationIssue(
   const s = String(raw ?? '').trim()
   if (!s) return required
   const n = parseTrimmedTargetNumber(s)
-  return n === null || n < 0
+  return n === null || n <= 0
 }

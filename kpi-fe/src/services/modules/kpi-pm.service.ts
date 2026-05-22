@@ -89,22 +89,6 @@ export async function apiBulkUpdateKpiStatus(payload: any): Promise<any> {
   return http.put('/kpi/strategic-kpis/status/bulk-update', payload).then(r => r.data)
 }
 
-/** GET /v1/pm/dashboard/pm-portfolio-evaluation-gate?year= — toàn team đã nộp KPI Member (individual/team ≥501) cho PM chưa. */
-export type PmPortfolioEvaluationGate = {
-  allPortfolioSubmittedToPm: boolean
-  pendingMembers: { userId: string; fullName: string }[]
-}
-
-export async function apiGetPmPortfolioEvaluationGate(
-  year: number,
-): Promise<ApiResponse<PmPortfolioEvaluationGate>> {
-  return http
-    .get<ApiResponse<PmPortfolioEvaluationGate>>('/pm/dashboard/pm-portfolio-evaluation-gate', {
-      params: { year },
-    })
-    .then((r) => r.data)
-}
-
 /** GET /api/pm/dashboard/team-members?year=... — Get team hierarchy (Used in PmTeamMembersTab.vue) */
 export async function apiGetTeamHierarchy(year?: string): Promise<ApiResponse<any>> {
   return http.get('/pm/dashboard/team-members', { params: year ? { year } : {} }).then(r => r.data)
@@ -139,6 +123,8 @@ export interface PmMemberKpiApprovalItem {
   typeCode: number | null
   requestedAt: string | null
   justification: string | null
+  /** roles.code của người tạo KPI master */
+  creatorRoleCode?: string | null
 }
 
 export async function apiListPmMemberKpiApprovals(
@@ -245,8 +231,6 @@ export const pmKpiService = {
   cascadeKpi: (payload: any) => apiCascadeKpi(payload).then(r => r.data),
   bulkUpdateKpiStatus: (payload: any) => apiBulkUpdateKpiStatus(payload).then(r => r.data),
   getTeamHierarchy: (year?: string) => apiGetTeamHierarchy(year).then(r => r.data),
-  getPmPortfolioEvaluationGate: (year: number) =>
-    apiGetPmPortfolioEvaluationGate(year).then((r) => r.data),
   getMemberKpi: (year?: string) => apiGetMemberKpi(year).then(r => r.data),
   getMemberKpiDetails: (memberId: string, year: number) => apiGetMemberKpiDetails(memberId, year).then(r => r.data),
   listMemberKpiApprovals: (year: number) =>

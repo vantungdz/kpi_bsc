@@ -81,6 +81,9 @@ public class StrategicKpiController extends BaseController {
                         .map(GrantedAuthority::getAuthority)
                         .map(r -> r.replace("ROLE_", ""))
                         .collect(Collectors.toSet());
+        if (authorities.contains(Constant.ROLE_GM)) {
+            return Constant.ROLE_GM;
+        }
         if (authorities.contains(Constant.ROLE_MEMBER)) {
             return Constant.ROLE_MEMBER;
         }

@@ -6,6 +6,7 @@ public class Constant {
     // -----------------------------------------------
     // CONSTANT
     // -----------------------------------------------
+    public static final String ROLE_GM = "GM";
     public static final String ROLE_MEMBER = "MEMBER";
     public static final String ROLE_LEADER = "LEADER";
     public static final String ROLE_PM = "PM";

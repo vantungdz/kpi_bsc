@@ -12,26 +12,25 @@ export const generateInitials = (fullName?: string) => {
 };
 
 /**
- * Chỉ user tạo tài khoản sau {@code mid_year_end} của chu kỳ mới thu timeline / bỏ nợ giữa kỳ
- * (đồng bộ backend {@code lateOnboardUserForCycle} / {@code hasLateMidYearSubmitCandidate}).
- * Thiếu {@code accountCreatedAt} từ API → không collapse (an toàn cho dữ liệu cũ).
+ * User tạo tài khoản từ {@code mid_year_start} trở đi → thu timeline / bỏ nợ giữa kỳ (chỉ Accept KPI + Year-End).
+ * Đồng bộ backend {@code lateOnboardUserForCycle}. Thiếu {@code accountCreatedAt} → không collapse.
  */
 export function shouldCollapseKpiProcessTimelineToYearEndOnly(
   accountCreatedAtIso: string | null | undefined,
-  midYearEndIso: string | null | undefined,
+  midYearStartIso: string | null | undefined,
 ): boolean {
-  if (!midYearEndIso) return false
-  const midEnd = new Date(midYearEndIso).getTime()
-  if (!Number.isFinite(midEnd)) return false
+  if (!midYearStartIso) return false
+  const midStart = new Date(midYearStartIso).getTime()
+  if (!Number.isFinite(midStart)) return false
   if (accountCreatedAtIso == null || accountCreatedAtIso === '') return false
   const created = new Date(accountCreatedAtIso).getTime()
   if (!Number.isFinite(created)) return false
-  return created > midEnd
+  return created >= midStart
 }
 
 export type GetSubmitButtonOptions = {
   /**
-   * User tạo tài khoản sau mid_year_end → không còn nợ nộp giữa kỳ (chờ cuối kỳ).
+   * User tạo tài khoản từ mid_year_start → không còn nợ nộp giữa kỳ (chờ cuối kỳ).
    * Khớp backend {@code lateOnboardUserForCycle}.
    */
   treatMidYearAsSkipped?: boolean

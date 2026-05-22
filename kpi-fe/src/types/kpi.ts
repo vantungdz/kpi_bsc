@@ -376,6 +376,8 @@ export interface LeaderKpiAssignment {
   updateReason?: string | null;
   createdByCurrentUser?: boolean | null;
   createdByRoleCode?: string | null;
+  /** Khi ASM 407: role cần xử lý feedback — PM hoặc GM. */
+  feedbackTargetRoleCode?: string | null;
   evaluationStatus?: MemberKpiEvaluationStatus | string | null;
   evaluationState?: string | null;
   /** kpi_master.calculation_rule_code — 802 = ratio/average, 803 = comment/text */

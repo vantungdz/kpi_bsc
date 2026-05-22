@@ -15,6 +15,7 @@ import {
 } from '@/utils/kpiCalculationCodes'
 import {
   strategicKpiKindFromTypeCode,
+  kpiTypeDisplayLabel,
   strategicKpiTypeIconClass,
   typeCodeFromStrategicKpiKind,
 } from '@/utils/strategicKpiTypeCodes'
@@ -463,7 +464,7 @@ async function confirmAdd() {
                 <div class="flex flex-col gap-3 sm:flex-row">
                   <div class="sm:w-1/3">
                     <label class="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                      KPI Group (kpi_categories) <span class="text-rose-500">*</span>
+                      Perspective (Category) <span class="text-rose-500">*</span>
                     </label>
                     <p v-if="kpiCategoriesError" class="mb-1 text-[10px] font-semibold text-rose-600">
                       {{ kpiCategoriesError }}
@@ -506,7 +507,7 @@ async function confirmAdd() {
 
                 <div>
                   <label class="mb-2 block text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                    KPI Type (assignment method) <span class="text-rose-500">*</span>
+                    KPI assignment type <span class="text-rose-500">*</span>
                   </label>
                   <p v-if="kpiTypesError" class="mb-2 text-[10px] font-semibold text-rose-600">{{ kpiTypesError }}</p>
                   <p v-else-if="kpiTypesLoading" class="mb-2 text-[10px] font-medium text-slate-500">
@@ -531,7 +532,7 @@ async function confirmAdd() {
                           <i :class="strategicKpiTypeIconClass(opt.code)" aria-hidden="true" />
                         </span>
                         <span class="text-xs font-bold leading-snug text-slate-800">{{
-                          opt.description || opt.name
+                          kpiTypeDisplayLabel(opt)
                         }}</span>
                       </div>
                     </button>
@@ -559,7 +560,6 @@ async function confirmAdd() {
                       v-model="targetValue"
                       type="number"
                       placeholder="95"
-                      min="0"
                       class="input-required min-h-[38px] w-full rounded-md px-2.5 py-2 text-xs font-bold text-slate-800 outline-none transition-all"
                       :class="formErrors.targetValue ? '!border-rose-400 !bg-rose-50/50' : ''"
                     />

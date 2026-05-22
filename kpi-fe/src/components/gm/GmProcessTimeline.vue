@@ -29,6 +29,8 @@ const props = defineProps<{
   yearEndIssues?: GmMidYearIssuesData | null
   /** Năm dương lịch — dùng để load dates từ kpi_cycles DB. Mặc định là năm hiện tại. */
   year?: number
+  /** Late entry: KPI Setting + Year-End only (Mid-Year omitted). PM dashboard only. */
+  yearEndOnly?: boolean
 }>()
 
 // ── Cycle dates từ DB ──────────────────────────────────────────────────────────
@@ -231,6 +233,7 @@ function effectivePhaseStatus(idx: number): PhaseStatus {
 
 const showMidViewIssues = computed(
   () =>
+    !props.yearEndOnly &&
     !isHistoricalCycle.value &&
     midYearStatus.value !== 'upcoming' &&
     gmTimelinePhaseHasOpenIssues(props.midYearIssues),
@@ -388,6 +391,40 @@ const cycleProgressFraction = computed(() => {
   return Math.min(1, Math.max(0, (now.valueOf() - t0) / (t1 - t0)))
 })
 
+/** Onboard sau mid_year_start: tiến độ trên đoạn KPI Setting → Year-End (bỏ Mid-Year). */
+const cycleProgressFractionYearEndOnly = computed((): number => {
+  const cd = cycleData.value
+  const now = dayjs()
+  const y = resolvedTimelineYear()
+  const yNow = now.year()
+  if (y < yNow) return 1
+  if (y > yNow) return 0
+
+  const ge = cd.goalSettingEnd ? dayjs(cd.goalSettingEnd) : null
+  const ee = cd.endYearEnd ? dayjs(cd.endYearEnd) : null
+  if (ge && ee && ee.isAfter(ge)) {
+    if (now.isBefore(ge)) return 0
+    if (!now.isAfter(ee)) {
+      return (now.valueOf() - ge.valueOf()) / (ee.valueOf() - ge.valueOf())
+    }
+    return 1
+  }
+
+  const es = cd.endYearStart ? dayjs(cd.endYearStart) : null
+  if (es && ee && ee.isAfter(es)) {
+    if (now.isBefore(es)) return 0
+    if (!now.isAfter(ee)) {
+      return (now.valueOf() - es.valueOf()) / (ee.valueOf() - es.valueOf())
+    }
+    return 1
+  }
+  return cycleProgressFraction.value
+})
+
+const cycleProgressFractionEffective = computed(() =>
+  props.yearEndOnly ? cycleProgressFractionYearEndOnly.value : cycleProgressFraction.value,
+)
+
 /**
  * Vị trí % (0→1) của mỗi milestone — CỐ ĐỊNH tại 0, 0.5, 1.0.
  * Milestone dots luôn ở 16.67%, 50%, 83.33% (khớp với grid-cols-3).
@@ -400,7 +437,7 @@ function fractionToLeftPct(fraction: number): number {
 }
 
 const nowMarkerLeftPct = computed(() =>
-  fractionToLeftPct(cycleProgressFraction.value),
+  fractionToLeftPct(cycleProgressFractionEffective.value),
 )
 
 const nowMarkerPositionStyle = computed(() => ({
@@ -418,10 +455,17 @@ const trackBarStyle = {
 
 const progressFillStyle = computed(() => ({
   left: `${TRACK_LEFT_PCT}%`,
-  width: `${Math.max(0, cycleProgressFraction.value) * TRACK_SPAN_PCT}%`,
+  width: `${Math.max(0, cycleProgressFractionEffective.value) * TRACK_SPAN_PCT}%`,
   top: '50%',
   transform: 'translateY(-50%)',
 }))
+
+const milestoneLeftPctsYearEndOnly = computed((): (number | undefined)[] | undefined => {
+  if (!props.yearEndOnly) return undefined
+  const L0 = TRACK_LEFT_PCT + 0 * TRACK_SPAN_PCT
+  const L2 = TRACK_LEFT_PCT + 1 * TRACK_SPAN_PCT
+  return [L0, undefined, L2]
+})
 
 const nowMarkerLabel = computed(() => {
   const d = new Date()
@@ -612,16 +656,30 @@ function issueBlockerShortLabel(g: GmTimelineIssueGroup): string {
   }
 }
 
-const trackMilestones = computed(() =>
-  [0, 1, 2].map((idx) => ({
+const trackMilestones = computed(() => {
+  if (props.yearEndOnly) {
+    return [
+      {
+        idx: 0,
+        outerClass: milestoneOuterClass(0),
+        status: effectivePhaseStatus(0) as 'complete' | 'active' | 'upcoming',
+      },
+      {
+        idx: 2,
+        outerClass: milestoneOuterClass(2),
+        status: effectivePhaseStatus(2) as 'complete' | 'active' | 'upcoming',
+      },
+    ]
+  }
+  return [0, 1, 2].map((idx) => ({
     idx,
     outerClass: milestoneOuterClass(idx),
     status: effectivePhaseStatus(idx) as 'complete' | 'active' | 'upcoming',
-  })),
-)
+  }))
+})
 
-/** Milestone dots dùng grid layout cố định — không cần absolute positioning. */
-const milestoneLeftPcts = computed((): number[] | undefined => undefined)
+/** Milestone dots: grid 3 cột hoặc absolute 2 mốc khi yearEndOnly. */
+const milestoneLeftPcts = computed(() => milestoneLeftPctsYearEndOnly.value)
 
 const timelineCardClass = computed(() =>
   timelineCollapsed.value ? 'py-2' : 'pb-6 pt-4',
@@ -716,8 +774,277 @@ onUnmounted(() => {
     </div>
 
     <div class="text-center">
-      <Transition name="gm-timeline-fold">
-        <div v-if="showExpandedTimeline" key="tl-phases" class="grid grid-cols-3 gap-1.5">
+
+      <!-- yearEndOnly: căn title + notes theo dot đầu/cuối track (khớp ProcessTimeline Leader/Member) -->
+      <Transition name="gm-timeline-fold" mode="out-in">
+        <div
+          v-if="showExpandedTimeline && yearEndOnly"
+          key="tl-year-end-only-stack"
+          class="relative mx-auto w-full pb-1 pt-0"
+        >
+          <div class="relative z-[2] min-h-[2.75rem] w-full">
+            <div
+              class="absolute top-0 max-w-[min(11rem,40vw)] -translate-x-1/2 text-center"
+              :style="{ left: `${TRACK_LEFT_PCT}%` }"
+            >
+              <span class="text-xs font-bold" :class="phaseTitleClass(0)">KPI Setting</span>
+              <p class="mt-0.5 text-[15px] leading-tight" :class="phaseSubLabelClass(0)">
+                <span v-if="cycleLoading" class="inline-block h-4 w-16 animate-pulse rounded bg-slate-200" />
+                <span v-else>{{ phaseLabels.setting }}</span>
+              </p>
+            </div>
+            <div
+              class="absolute top-0 max-w-[min(11rem,40vw)] -translate-x-1/2 text-center"
+              :style="{ left: `${TRACK_RIGHT_PCT}%` }"
+            >
+              <span class="text-xs font-bold" :class="phaseTitleClass(2)">Year-End Review</span>
+              <p class="mt-0.5 text-[15px] leading-tight" :class="phaseSubLabelClass(2)">
+                <span v-if="cycleLoading" class="inline-block h-4 w-16 animate-pulse rounded bg-slate-200" />
+                <span v-else>{{ phaseLabels.yearEnd }}</span>
+              </p>
+            </div>
+          </div>
+          <div class="relative z-0 mt-1 w-full">
+            <GmProcessTimelineTrack
+              :track-bar-style="trackBarStyle"
+              :progress-fill-style="progressFillStyle"
+              :now-marker-position-style="nowMarkerPositionStyle"
+              :now-marker-label="nowMarkerLabel"
+              :milestones="trackMilestones"
+              :milestone-left-pcts="milestoneLeftPcts"
+            />
+          </div>
+          <div class="relative z-[2] mt-2 min-h-[5rem] w-full pb-0.5">
+            <div
+              class="absolute top-0 max-w-[min(11rem,40vw)] -translate-x-1/2 text-center"
+              :style="{ left: `${TRACK_LEFT_PCT}%` }"
+            >
+              <div class="relative z-20 flex flex-col items-center gap-1.5">
+                <template v-if="settingStatus === 'upcoming'">
+                  <div class="flex flex-col items-center gap-0.5 text-slate-400">
+                    <div class="flex items-center justify-center gap-1">
+                      <i class="fas fa-calendar-xmark text-[13px] opacity-80" aria-hidden="true" />
+                      <span class="text-[13px] font-semibold leading-snug">KPI Setting not started</span>
+                    </div>
+                    <span class="text-[11px] font-medium leading-tight">Starts in January</span>
+                  </div>
+                </template>
+                <template v-else>
+                  <template v-if="settingStatus === 'active'">
+                    <div
+                      v-if="showSettingViewIssues && settingIssues"
+                      class="flex items-center justify-center gap-1.5 text-amber-800/90"
+                    >
+                      <span class="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-600" />
+                      <span class="text-[13px] font-semibold">{{ settingIssues.pendingKpisLine }}</span>
+                    </div>
+                    <div v-else class="flex items-center justify-center gap-1 text-emerald-700">
+                      <span class="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />
+                      <span class="text-[13px] font-semibold">In progress</span>
+                    </div>
+                  </template>
+                  <template v-else>
+                    <div
+                      v-if="showSettingViewIssues && settingIssues"
+                      class="flex items-center justify-center gap-1.5 text-amber-800/90"
+                    >
+                      <span class="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-600" />
+                      <span class="text-[13px] font-semibold">{{ settingIssues.pendingKpisLine }}</span>
+                    </div>
+                    <div v-else class="flex items-center justify-center gap-1 text-emerald-600">
+                      <i class="fas fa-check text-[15px]" />
+                      <span class="text-[13px] font-semibold">100% Complete</span>
+                    </div>
+                  </template>
+                  <div
+                    v-if="showSettingViewIssues && settingIssues"
+                    ref="settingIssuesPopoverRoot"
+                    class="relative inline-flex flex-col items-center gap-1.5"
+                  >
+                    <button
+                      type="button"
+                      class="inline-flex items-center gap-1 rounded-full border bg-white px-2 py-0.5 text-[10px] font-semibold transition-colors"
+                      :class="
+                        settingStatus === 'active'
+                          ? 'border-amber-700/40 text-amber-900/90 hover:bg-amber-50'
+                          : 'border-emerald-600/35 text-emerald-900/90 hover:bg-emerald-50'
+                      "
+                      :aria-expanded="issuesPopoverPhase === 'setting'"
+                      aria-controls="issues-popover-setting"
+                      aria-haspopup="dialog"
+                      @click.stop="toggleIssuesPhase('setting')"
+                    >
+                      <i class="fas fa-eye text-[11px]" />
+                      View Issues
+                    </button>
+                    <div
+                      v-if="issuesPopoverPhase === 'setting'"
+                      id="issues-popover-setting"
+                      class="absolute left-1/2 top-[calc(100%+0.625rem)] z-[70] w-[min(19rem,calc(100vw-2rem))] -translate-x-1/2"
+                      role="dialog"
+                      aria-modal="true"
+                      aria-labelledby="issues-popover-title-setting"
+                      @click.stop
+                    >
+                      <div
+                        class="pointer-events-none absolute -top-1.5 left-1/2 z-[1] h-3 w-3 -translate-x-1/2 rotate-45 border-l border-t border-amber-200/95 bg-orange-50"
+                      />
+                      <div class="relative rounded-lg border border-amber-200/95 bg-orange-50 shadow-lg">
+                        <div class="flex items-start gap-2 border-b border-slate-200/80 px-3 pb-2 pt-2.5">
+                          <i class="fas fa-exclamation-triangle mt-0.5 shrink-0 text-xs text-amber-600" />
+                          <h4
+                            id="issues-popover-title-setting"
+                            class="text-xs font-bold leading-snug text-amber-950"
+                          >
+                            {{ popoverTitleForOpen }}
+                          </h4>
+                        </div>
+                        <ul
+                          class="max-h-72 space-y-1 overflow-y-auto px-2 py-2 text-xs font-medium leading-snug text-amber-950/90"
+                        >
+                          <li v-for="it in issuePopoverRows" :key="it.id">
+                            <button
+                              type="button"
+                              class="group flex w-full items-start justify-between gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-orange-100/70"
+                              @click="openIssueDrawer(it.id)"
+                            >
+                              <span class="min-w-0 flex-1">
+                                <span class="flex items-start gap-1.5">
+                                  <span class="mt-0.5 shrink-0 text-[11px]" :class="it.dotClass">●</span>
+                                  <span>
+                                    <span class="block font-semibold leading-snug">{{ it.title }}</span>
+                                    <span
+                                      v-if="it.subline"
+                                      class="mt-0.5 block text-[10px] font-normal opacity-80"
+                                    >{{ it.subline }}</span>
+                                  </span>
+                                </span>
+                              </span>
+                              <i
+                                class="fas fa-chevron-right mt-0.5 shrink-0 text-[10px] text-amber-500 transition-colors group-hover:text-amber-700"
+                              />
+                            </button>
+                          </li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                </template>
+              </div>
+            </div>
+            <div
+              class="absolute top-0 max-w-[min(11rem,40vw)] -translate-x-1/2 text-center"
+              :style="{ left: `${TRACK_RIGHT_PCT}%` }"
+            >
+              <div class="relative z-20 flex flex-col items-center gap-1.5">
+                <template v-if="yearEndStatus === 'upcoming'">
+                  <div class="flex flex-col items-center gap-0.5 text-slate-400">
+                    <div class="flex items-center justify-center gap-1">
+                      <i class="fas fa-calendar-xmark text-[13px] opacity-80" aria-hidden="true" />
+                      <span class="text-[13px] font-semibold leading-snug">Year-End not started</span>
+                    </div>
+                    <span class="text-[11px] font-medium leading-tight">Starts in November</span>
+                  </div>
+                </template>
+                <template v-else>
+                  <template v-if="yearEndStatus === 'active'">
+                    <div
+                      v-if="showYearEndViewIssues && yearEndIssues"
+                      class="flex items-center justify-center gap-1.5 text-amber-800/90"
+                    >
+                      <span class="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-600" />
+                      <span class="text-[13px] font-semibold">{{ yearEndIssues.pendingKpisLine }}</span>
+                    </div>
+                    <div v-else class="flex items-center justify-center gap-1 text-blue-700">
+                      <span class="h-1.5 w-1.5 shrink-0 rounded-full bg-blue-500" />
+                      <span class="text-[13px] font-semibold">In progress</span>
+                    </div>
+                  </template>
+                  <template v-else>
+                    <div class="flex items-center justify-center gap-1 text-emerald-600">
+                      <i class="fas fa-check text-[15px]" />
+                      <span class="text-[13px] font-semibold">100% Complete</span>
+                    </div>
+                  </template>
+                  <div
+                    v-if="showYearEndViewIssues"
+                    ref="yearEndIssuesPopoverRoot"
+                    class="relative inline-flex flex-col items-center gap-1.5"
+                  >
+                    <button
+                      type="button"
+                      class="inline-flex items-center gap-1 rounded-full border bg-white px-2 py-0.5 text-[10px] font-semibold transition-colors"
+                      :class="
+                        yearEndStatus === 'active'
+                          ? 'border-amber-700/40 text-amber-900/90 hover:bg-amber-50'
+                          : 'border-emerald-600/35 text-emerald-900/90 hover:bg-emerald-50'
+                      "
+                      :aria-expanded="issuesPopoverPhase === 'yearEnd'"
+                      aria-controls="issues-popover-ye"
+                      aria-haspopup="dialog"
+                      @click.stop="toggleIssuesPhase('yearEnd')"
+                    >
+                      <i class="fas fa-eye text-[11px]" />
+                      View Issues
+                    </button>
+                    <div
+                      v-if="issuesPopoverPhase === 'yearEnd'"
+                      id="issues-popover-ye"
+                      class="absolute left-1/2 top-[calc(100%+0.625rem)] z-[70] w-[min(19rem,calc(100vw-2rem))] -translate-x-1/2"
+                      role="dialog"
+                      aria-modal="true"
+                      aria-labelledby="issues-popover-title-ye"
+                      @click.stop
+                    >
+                      <div
+                        class="pointer-events-none absolute -top-1.5 left-1/2 z-[1] h-3 w-3 -translate-x-1/2 rotate-45 border-l border-t border-amber-200/95 bg-orange-50"
+                      />
+                      <div class="relative rounded-lg border border-amber-200/95 bg-orange-50 shadow-lg">
+                        <div class="flex items-start gap-2 border-b border-slate-200/80 px-3 pb-2 pt-2.5">
+                          <i class="fas fa-exclamation-triangle mt-0.5 shrink-0 text-xs text-amber-600" />
+                          <h4 id="issues-popover-title-ye" class="text-xs font-bold leading-snug text-amber-950">
+                            {{ popoverTitleForOpen }}
+                          </h4>
+                        </div>
+                        <ul
+                          class="max-h-72 space-y-1 overflow-y-auto px-2 py-2 text-xs font-medium leading-snug text-amber-950/90"
+                        >
+                          <li v-for="it in issuePopoverRows" :key="it.id">
+                            <button
+                              type="button"
+                              class="group flex w-full items-start justify-between gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-orange-100/70"
+                              @click="openIssueDrawer(it.id)"
+                            >
+                              <span class="min-w-0 flex-1">
+                                <span class="flex items-start gap-1.5">
+                                  <span class="mt-0.5 shrink-0 text-[11px]" :class="it.dotClass">●</span>
+                                  <span>
+                                    <span class="block font-semibold leading-snug">{{ it.title }}</span>
+                                    <span
+                                      v-if="it.subline"
+                                      class="mt-0.5 block text-[10px] font-normal opacity-80"
+                                    >{{ it.subline }}</span>
+                                  </span>
+                                </span>
+                              </span>
+                              <i
+                                class="fas fa-chevron-right mt-0.5 shrink-0 text-[10px] text-amber-500 transition-colors group-hover:text-amber-700"
+                              />
+                            </button>
+                          </li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                </template>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Transition>
+
+      <Transition v-if="!yearEndOnly" name="gm-timeline-fold">
+        <div v-if="showExpandedTimeline" key="tl-phases-3" class="grid grid-cols-3 gap-1.5">
           <div class="min-w-0">
             <span class="text-xs font-bold" :class="phaseTitleClass(0)">KPI Setting</span>
             <p class="mt-0.5 text-[15px]" :class="phaseSubLabelClass(0)">
@@ -742,16 +1069,21 @@ onUnmounted(() => {
         </div>
       </Transition>
 
-      <Transition name="gm-tl-track-slot">
-        <div v-if="showExpandedTimeline" key="track-below" class="mt-4">
-          <GmProcessTimelineTrack :track-bar-style="trackBarStyle" :progress-fill-style="progressFillStyle"
-            :now-marker-position-style="nowMarkerPositionStyle" :now-marker-label="nowMarkerLabel"
-            :milestones="trackMilestones" :milestone-left-pcts="milestoneLeftPcts" />
+      <Transition v-if="!yearEndOnly" name="gm-tl-track-slot">
+        <div v-if="showExpandedTimeline" key="track-below-3" class="mt-4">
+          <GmProcessTimelineTrack
+            :track-bar-style="trackBarStyle"
+            :progress-fill-style="progressFillStyle"
+            :now-marker-position-style="nowMarkerPositionStyle"
+            :now-marker-label="nowMarkerLabel"
+            :milestones="trackMilestones"
+            :milestone-left-pcts="milestoneLeftPcts"
+          />
         </div>
       </Transition>
 
-      <Transition name="gm-timeline-fold">
-        <div v-if="showExpandedTimeline" key="tl-notes" class="mt-3 grid grid-cols-3 gap-1.5">
+      <Transition v-if="!yearEndOnly" name="gm-timeline-fold">
+        <div v-if="showExpandedTimeline" key="tl-notes-3" class="mt-3 grid grid-cols-3 gap-1.5">
           <div class="relative z-20 flex flex-col items-center gap-1.5">
             <template v-if="settingStatus === 'upcoming'">
               <div class="flex flex-col items-center gap-0.5 text-slate-400">
@@ -835,8 +1167,11 @@ onUnmounted(() => {
             </template>
           </div>
 
-          <div class="relative z-20 flex flex-col items-center gap-1.5"
-            :class="midYearStatus === 'upcoming' ? 'opacity-95' : ''">
+          <div
+            v-if="!yearEndOnly"
+            class="relative z-20 flex flex-col items-center gap-1.5"
+            :class="midYearStatus === 'upcoming' ? 'opacity-95' : ''"
+          >
             <template v-if="midYearStatus === 'upcoming'">
               <div class="flex flex-col items-center gap-0.5 text-slate-400">
                 <div class="flex items-center justify-center gap-1">

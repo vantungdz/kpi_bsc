@@ -5,6 +5,12 @@
 import http from '@/services/api'
 import type { ApiResponse } from '@/types/api'
 import {LeaderKpiDashboard, KpiItem, LeaderKpiInformationResponse} from '@/types/kpi'
+import type { KpiDashboardOptions } from '@/types/kpi-dashboard-options'
+
+/** GET /api/kpi/leader/dashboard-options */
+export async function apiGetLeaderDashboardOptions(): Promise<ApiResponse<KpiDashboardOptions>> {
+  return http.get('/kpi/leader/dashboard-options').then(r => r.data)
+}
 
 /** GET /api/kpi/leader/members?year=2025 */
 export async function apiGetLeaderMemberList(year: number): Promise<ApiResponse<LeaderMemberListResponse>> {
@@ -27,6 +33,7 @@ export async function apiLeaderScore(memberId: string, itemId: string, leaderSco
 }
 
 export const leaderKpiService = {
+  getDashboardOptions: () => apiGetLeaderDashboardOptions().then(r => r.data),
   getMemberList: (year: number) => apiGetLeaderMemberList(year).then(r => r.data),
   getKpiInfo: (year: number, type: 'INDIVIDUAL' | 'PROMOTION', userId?: string) => apiGetLeaderKpiInfo(year, type, userId).then(r => r.data),
   getDashboard: (year?: number) => apiGetLeaderKpiDashboard(year).then(r => r.data),

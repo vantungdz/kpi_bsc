@@ -17,16 +17,15 @@ import {
   pmPortfolioActualDisplayMode,
 } from '@/utils/memberKpiHelpers'
 import { formatKpiTargetWithUnit } from '@/utils/kpiUnitCodes'
+import { pmAsmStatusPillClass } from '@/utils/pmAsmStatusUi'
+import { formatScoreDisplay, formatScoreDisplayOrDash } from '@/utils/formatScoreDisplay'
+import { kpiCreatorRowBgClass } from '@/utils/kpiCreatorRowBg'
 
 const props = defineProps({
   open: { type: Boolean, default: false },
   member: { type: Object, default: null },
   year: { type: [Number, String], default: () => new Date().getFullYear() },
   readonlyYear: { type: Boolean, default: false },
-  /** Đã load xong API “cổng” portfolio — tab KPI Member chờ gate trước khi bật Gửi đánh giá. */
-  portfolioGateLoaded: { type: Boolean, default: false },
-  /** true = mọi member đã nộp individual/team ≥501 cho PM. */
-  portfolioGateOpen: { type: Boolean, default: false },
   /** Draft PM nhận xét tổng theo tab từ cache runtime của parent. */
   cachedSupervisorComments: {
     type: Object,
@@ -171,7 +170,7 @@ async function fetchMemberKpis() {
           formatActualWithUnit(
             formatPmPortfolioActualCell(
               item.evidences,
-              item.calcRuleCode,
+              item.calculationTypeCode,
               pmPortfolioActualDisplayMode(item.calcRuleCode),
             ) || '-',
             item.unitCode,
@@ -184,13 +183,20 @@ async function fetchMemberKpis() {
         unitName: item.unitName ?? '',
 
         statusCode: item.statusCode,
+        pmParentStatusCode:
+          item.teamPmParentStatusCode != null ? Number(item.teamPmParentStatusCode) : null,
         statusName: item.statusName ?? '',
         statusDesc: item.statusDesc ?? item.statusDescription ?? '',
         calcRuleCode: item.calcRuleCode,
+        calculationTypeCode: item.calculationTypeCode ?? null,
         evidences: item.evidences || '',
         evidenceData: parsedEvidences.rows,
         evidenceContent: parsedEvidences.content || parsedEvidences.note || parsedEvidences.legacyPlain || '',
         evidenceAttachments: parsedEvidences.attachments ?? [],
+        creatorRoleCode:
+          item.creatorRoleCode != null && String(item.creatorRoleCode).trim() !== ''
+            ? String(item.creatorRoleCode).trim().toUpperCase()
+            : undefined,
       }
     })
   } catch (err) {
@@ -253,9 +259,7 @@ const totalWeight = computed(() => {
 })
 
 function formatWeightedTotalDisplay(sum: number): string {
-  const rounded = Math.round(sum * 100) / 100
-  if (rounded % 1 === 0) return String(rounded)
-  return String(rounded.toFixed(2).replace(/\.?0+$/, ''))
+  return formatScoreDisplay(sum)
 }
 
 /** Σ(score × weight) và số dòng có điểm — giống portfolioWeightedTotals. */
@@ -321,6 +325,39 @@ function isPmPendingAssignmentStatus(statusCode: unknown): boolean {
   return sc === KPI_STATUS.FIRST_WAITING_PM_APPROVAL || sc === KPI_STATUS.SECOND_WAITING_PM_APPROVAL
 }
 
+/** Team KPI: PM chưa Accept (404/406) trên assignment cha — không duyệt kết quả member. */
+function isTeamKpiBlockedByPmPendingAcceptance(item: {
+  kpiType?: string
+  pmParentStatusCode?: number | null
+}): boolean {
+  if (item.kpiType !== 'cascading') return false
+  const ps = Number(item.pmParentStatusCode)
+  return (
+    ps === KPI_STATUS.PENDING_ACCEPTANCE || ps === KPI_STATUS.REJECTED
+  )
+}
+
+function tabHasBlockedTeamPendingRows(rows: { statusCode?: unknown; kpiType?: string; pmParentStatusCode?: number | null }[]): boolean {
+  return rows.some(
+    (k) =>
+      isPmPendingAssignmentStatus(k.statusCode) &&
+      isTeamKpiBlockedByPmPendingAcceptance(k),
+  )
+}
+
+/** FINAL SCORE — chỉnh sửa khi chờ PM chấm cuối kỳ (601) và PM đã Accept KPI Team. */
+function isPmFinalScoreRowEditable(item: {
+  statusCode?: unknown
+  kpiType?: string
+  pmParentStatusCode?: number | null
+}): boolean {
+  return (
+    !props.readonlyYear &&
+    Number(item.statusCode) === KPI_STATUS.SECOND_WAITING_PM_APPROVAL &&
+    !isTeamKpiBlockedByPmPendingAcceptance(item)
+  )
+}
+
 function tabHasPmPendingRows(rows: { statusCode?: unknown }[]): boolean {
   return rows.some((k) => isPmPendingAssignmentStatus(k.statusCode))
 }
@@ -334,33 +371,29 @@ const canEvaluateActiveTab = computed(() =>
 const unlocking = ref(false)
 const unlockConfirmOpen = ref(false)
 const unlockTabAtPrompt = ref<'main' | 'promotion'>('main')
-const UNLOCK_FROM_GM_WAITING_STATUSES = [
-  KPI_STATUS.WAITING_GM_APPROVAL,
-  KPI_STATUS.FIRST_WAITING_PM_APPROVAL,
-  KPI_STATUS.FIRST_WAITING_GM_APPROVAL,
-  KPI_STATUS.SECOND_WAITING_PM_APPROVAL,
-  KPI_STATUS.SECOND_WAITING_GM_APPROVAL,
-] as const
-
 function rowsByTab(tab: 'main' | 'promotion') {
   return tab === 'promotion' ? promoKpis.value : mainKpis.value
 }
 
+/** Unlock chỉ khi KPI đang chờ GM duyệt mục tiêu (403). */
 function hasUnlockableWaitingGmRows(rows: { statusCode?: unknown }[]): boolean {
-  return rows.some((row) => UNLOCK_FROM_GM_WAITING_STATUSES.includes(Number(row.statusCode) as any))
+  return rows.some((row) => Number(row.statusCode) === KPI_STATUS.WAITING_GM_APPROVAL)
 }
 
 const canUnlockActiveTab = computed(() => hasUnlockableWaitingGmRows(rowsByTab(activeTab.value)))
 
-/** Tab KPI Member: chỉ gửi lên GM khi cả team đã nộp portfolio cho PM; tab Promotion không áp dụng cổng này. */
-const canSubmitPmEvaluationToGm = computed(() => {
-  if (!canEvaluateActiveTab.value) return false
-  if (activeTab.value === 'main') {
-    if (!props.portfolioGateLoaded) return false
-    if (!props.portfolioGateOpen) return false
-  }
-  return true
-})
+const teamReviewBlockedOnMainTab = computed(() => tabHasBlockedTeamPendingRows(mainKpis.value))
+const teamReviewBlockedOnPromoTab = computed(() => tabHasBlockedTeamPendingRows(promoKpis.value))
+const teamReviewBlockedOnActiveTab = computed(() =>
+  activeTab.value === 'promotion' ? teamReviewBlockedOnPromoTab.value : teamReviewBlockedOnMainTab.value,
+)
+
+const canSubmitPmEvaluationToGm = computed(
+  () => canEvaluateActiveTab.value && !teamReviewBlockedOnActiveTab.value,
+)
+
+const teamReviewBlockedMessage =
+  'Accept the Team KPI on your portfolio before reviewing member evaluation results.'
 
 const expandedEvidenceRows = ref(new Set<string>())
 function toggleEvidence(id: string) {
@@ -389,33 +422,28 @@ function statusLabel(item: any): string {
   if (direct) return direct
   const code = Number(item?.statusCode ?? 0)
   const labels: Record<number, string> = {
-    [KPI_STATUS.WAITING_PM_APPROVAL]: 'Waiting PM Approval',
-    [KPI_STATUS.WAITING_GM_APPROVAL]: 'Waiting GM Approval',
+    [KPI_STATUS.WAITING_PM_APPROVAL]: 'Pending PM Approval',
+    [KPI_STATUS.WAITING_GM_APPROVAL]: 'Pending GM Approval',
     [KPI_STATUS.PENDING_ACCEPTANCE]: 'Pending Acceptance',
-    [KPI_STATUS.ACCEPTED]: 'Accepted',
+    [KPI_STATUS.ACCEPTED]: 'In progress',
     [KPI_STATUS.REJECTED]: 'Rejected',
-    [KPI_STATUS.FEEDBACK_IN_PROGRESS]: 'Feedback In Progress',
-    [KPI_STATUS.FIRST_WAITING_PM_APPROVAL]: 'Waiting PM Review (1st)',
-    [KPI_STATUS.FIRST_WAITING_GM_APPROVAL]: 'Waiting GM Approval (1st)',
-    [KPI_STATUS.FIRST_COMPLETED]: 'GM Approved (1st)',
-    [KPI_STATUS.SECOND_WAITING_PM_APPROVAL]: 'Waiting PM Review (Final)',
-    [KPI_STATUS.SECOND_WAITING_GM_APPROVAL]: 'Waiting GM Approval (Final)',
-    [KPI_STATUS.COMPLETED]: 'GM Approved (Final)',
+    [KPI_STATUS.FEEDBACK_IN_PROGRESS]: 'Processing Feedback',
+    [KPI_STATUS.FIRST_WAITING_PM_APPROVAL]: 'Pending PM Evaluation (Mid-Year)',
+    [KPI_STATUS.FIRST_WAITING_GM_APPROVAL]: 'Pending GM Evaluation (Mid-Year)',
+    [KPI_STATUS.FIRST_COMPLETED]: 'Completed (Mid-Year)',
+    [KPI_STATUS.SECOND_WAITING_PM_APPROVAL]: 'Pending PM Evaluation (Final)',
+    [KPI_STATUS.SECOND_WAITING_GM_APPROVAL]: 'Pending GM Evaluation (Final)',
+    [KPI_STATUS.COMPLETED]: 'Completed',
   }
   return labels[code] ?? (code ? `Status ${code}` : '-')
 }
 
 function statusClass(statusCode: unknown): string {
   const c = Number(statusCode ?? 0)
-  if ([KPI_STATUS.FIRST_WAITING_PM_APPROVAL, KPI_STATUS.FIRST_WAITING_GM_APPROVAL, KPI_STATUS.SECOND_WAITING_PM_APPROVAL, KPI_STATUS.SECOND_WAITING_GM_APPROVAL].includes(c as any)) {
-    return 'border-sky-200 bg-sky-50 text-sky-700'
+  if (!Number.isFinite(c) || c <= 0) {
+    return 'border-slate-200 bg-slate-50 text-slate-600'
   }
-  if (c === KPI_STATUS.FEEDBACK_IN_PROGRESS) return 'border-violet-200 bg-violet-50 text-violet-700'
-  if (c === KPI_STATUS.REJECTED) return 'border-orange-200 bg-orange-50 text-orange-700'
-  if ([KPI_STATUS.FIRST_COMPLETED, KPI_STATUS.COMPLETED].includes(c as any)) {
-    return 'border-emerald-200 bg-emerald-50 text-emerald-700'
-  }
-  return 'border-slate-200 bg-slate-50 text-slate-700'
+  return pmAsmStatusPillClass(c)
 }
 
 const saving = ref(false)
@@ -436,10 +464,10 @@ async function confirmUnlockForActiveTab() {
   const tab = unlockTabAtPrompt.value
   const isPromo = tab === 'promotion'
   const rows = rowsByTab(tab)
-  const unlockFromStatuses = UNLOCK_FROM_GM_WAITING_STATUSES.filter((status) =>
-    rows.some((row) => Number(row.statusCode) === status),
+  const hasWaitingGmApproval = rows.some(
+    (row) => Number(row.statusCode) === KPI_STATUS.WAITING_GM_APPROVAL,
   )
-  if (unlockFromStatuses.length === 0) {
+  if (!hasWaitingGmApproval) {
     unlockConfirmOpen.value = false
     toast.info('No KPIs are pending GM approval to unlock.')
     return
@@ -454,16 +482,14 @@ async function confirmUnlockForActiveTab() {
       throw new Error('Could not determine KPI cycle to unlock.')
     }
 
-    for (const status of unlockFromStatuses) {
-      await pmKpiService.bulkUpdateKpiStatus({
-        cycleId,
-        statusCode: KPI_STATUS.PENDING_ACCEPTANCE,
-        onlyFromStatusCode: status,
-        promotion: isPromo,
-        bulkForManagedMembers: true,
-        managedMemberUserId: String(props.member.id),
-      })
-    }
+    await pmKpiService.bulkUpdateKpiStatus({
+      cycleId,
+      statusCode: KPI_STATUS.PENDING_ACCEPTANCE,
+      onlyFromStatusCode: KPI_STATUS.WAITING_GM_APPROVAL,
+      promotion: isPromo,
+      bulkForManagedMembers: true,
+      managedMemberUserId: String(props.member.id),
+    })
 
     unlockConfirmOpen.value = false
     await Promise.all([fetchMemberKpis(), fetchReviewMeta()])
@@ -484,15 +510,13 @@ const sendEvaluationForActiveTab = async () => {
   const rows = isPromo ? promoKpis.value : mainKpis.value
   const rc = isPromo ? reviewCommentsPromo.value : reviewCommentsMain.value
 
-  if (tab === 'main' && (!props.portfolioGateLoaded || !props.portfolioGateOpen)) {
-    toast.error(
-      'Cannot submit yet: some employees have not submitted Member KPI (individual/team) results to PM. See the list above Team Hierarchy & Performance.',
-    )
+  if (!rows.length) {
+    toast.error(isPromo ? 'No Promotion KPIs to submit.' : 'No Member KPIs to submit.')
     return
   }
 
-  if (!rows.length) {
-    toast.error(isPromo ? 'No Promotion KPIs to submit.' : 'No Member KPIs to submit.')
+  if (tabHasBlockedTeamPendingRows(rows)) {
+    toast.error(teamReviewBlockedMessage)
     return
   }
 
@@ -559,8 +583,11 @@ const sendEvaluationForActiveTab = async () => {
     }
     await Promise.all(requests)
 
-    const initData = await pmKpiService.getRegistrationInitData()
-    const cycleId = initData.activeCycle.id
+    const initData = await pmKpiService.getInitialization(String(year))
+    const cycleId = String(initData?.kpiCycle?.id ?? '').trim()
+    if (!cycleId) {
+      throw new Error('Could not determine KPI cycle to submit evaluation.')
+    }
     if (hasMidYear) {
       await pmKpiService.bulkUpdateKpiStatus({
         cycleId,
@@ -591,7 +618,11 @@ const sendEvaluationForActiveTab = async () => {
     emit('close')
   } catch (err) {
     console.error('Failed to send PM evaluation:', err)
-    toast.error('Evaluation submission failed (score, comment, or KPI status).')
+    const msg =
+      err instanceof Error && err.message.trim()
+        ? err.message.trim()
+        : 'Evaluation submission failed (score, comment, or KPI status).'
+    toast.error(msg)
   } finally {
     saving.value = false
   }
@@ -666,7 +697,10 @@ const sendEvaluationForActiveTab = async () => {
                     </tr>
 
                     <template v-for="(item, idx) in groupData.items" :key="item.id">
-                      <tr class="hover:bg-slate-50/50 transition-colors">
+                      <tr
+                        class="transition-colors"
+                        :class="kpiCreatorRowBgClass(item.creatorRoleCode, expandedEvidenceRows.has(item.id))"
+                      >
                         <td class="px-4 py-4 text-center font-medium text-slate-400">{{ Number(idx) + 1 }}</td>
 
                         <td class="px-4 py-4">
@@ -704,15 +738,23 @@ const sendEvaluationForActiveTab = async () => {
                             <i class="fas fa-chevron-down text-[10px] text-slate-500 transition-transform" :class="expandedEvidenceRows.has(item.id) ? 'rotate-180' : ''" />
                           </button>
                         </td>
-                        <td class="px-4 py-4 text-center font-bold text-slate-900">{{ item.selfScore ?? '-' }}</td>
+                        <td class="px-4 py-4 text-center font-bold text-slate-600">{{ item.selfScore ?? '-' }}</td>
 
                         <td class="px-4 py-4 text-center">
-                          <select v-model="item.pmScore" @click.stop
-                            :disabled="props.readonlyYear || Number(item.statusCode) !== KPI_STATUS.SECOND_WAITING_PM_APPROVAL"
-                            class="w-14 rounded border border-slate-300 bg-white px-1 py-1 text-xs font-bold text-slate-800 outline-none focus:border-blue-500 shadow-sm cursor-pointer text-center disabled:opacity-50 disabled:bg-slate-50 disabled:cursor-not-allowed">
+                          <select
+                            v-if="isPmFinalScoreRowEditable(item)"
+                            v-model="item.pmScore"
+                            @click.stop
+                            class="w-14 rounded border border-slate-300 bg-white px-1 py-1 text-xs font-bold text-slate-800 outline-none focus:border-blue-500 shadow-sm cursor-pointer text-center"
+                          >
                             <option :value="null">-</option>
                             <option v-for="n in 5" :key="n" :value="n">{{ n }}</option>
                           </select>
+                          <span
+                            v-else
+                            class="inline-block min-w-[3.5rem] font-bold text-slate-600 cursor-not-allowed"
+                            :title="String(item.pmScore ?? '-')"
+                          >{{ formatScoreDisplayOrDash(item.pmScore) }}</span>
                         </td>
                       </tr>
 
@@ -744,7 +786,7 @@ const sendEvaluationForActiveTab = async () => {
                                         ev.plan }}</td>
                                     <td
                                       class="px-3 py-2.5 text-center font-bold text-emerald-600 border-l border-slate-100">
-                                      {{ formatActualWithUnit(ev.actual, item.unitCode) }}</td>
+                                      {{ ev.actual }}</td>
                                   </tr>
                                   <tr v-if="(!item.evidenceData || item.evidenceData.length === 0) && !item.evidenceContent">
                                     <td :colspan="isRecordStyleCalcRule(item.calcRuleCode) ? 2 : 3"
@@ -797,7 +839,7 @@ const sendEvaluationForActiveTab = async () => {
                               <textarea
                                 v-model="item.pmComment"
                                 :disabled="props.readonlyYear || !isPmPendingAssignmentStatus(item.statusCode)"
-                                class="w-full px-3 py-2.5 text-sm font-normal text-slate-700 bg-white border border-slate-300 rounded-lg shadow-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 disabled:opacity-50 disabled:bg-slate-50 disabled:cursor-not-allowed resize-vertical"
+                                class="w-full px-3 py-2.5 text-sm bg-white border border-slate-300 rounded-lg shadow-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 resize-vertical font-normal text-slate-700 disabled:bg-slate-50 disabled:font-semibold disabled:text-slate-600 disabled:cursor-not-allowed disabled:opacity-100"
                                 rows="4"
                                 placeholder="Enter comment / evaluation for this KPI..."
                               />
@@ -814,7 +856,7 @@ const sendEvaluationForActiveTab = async () => {
                             <textarea
                               v-model="item.pmComment"
                               :disabled="props.readonlyYear || !isPmPendingAssignmentStatus(item.statusCode)"
-                              class="w-full px-3 py-2.5 text-sm font-normal text-slate-700 bg-white border border-slate-300 rounded-lg shadow-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 disabled:opacity-50 disabled:bg-slate-50 disabled:cursor-not-allowed resize-vertical"
+                              class="w-full px-3 py-2.5 text-sm bg-white border border-slate-300 rounded-lg shadow-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 resize-vertical font-normal text-slate-700 disabled:bg-slate-50 disabled:font-semibold disabled:text-slate-600 disabled:cursor-not-allowed disabled:opacity-100"
                               rows="4"
                               placeholder="Enter comment / evaluation for this KPI..."
                             />
@@ -837,28 +879,25 @@ const sendEvaluationForActiveTab = async () => {
                     </td>
                     <td class="px-4 py-3 text-center font-bold text-slate-800">{{ totalWeight }} <span class="text-[10px] text-slate-400 font-normal">pts</span></td>
                     <td class="px-4 py-3 text-center font-bold text-slate-400">-</td>
-                    <td class="px-4 py-3 text-center font-bold text-slate-800">{{ totalWeightedSelfDisplay }}</td>
-                    <td class="px-4 py-3 text-center font-bold text-slate-400">{{ totalWeightedPmDisplay }}</td>
+                    <td class="px-4 py-3 text-center font-bold text-slate-600">{{ totalWeightedSelfDisplay }}</td>
+                    <td
+                      class="px-4 py-3 text-center font-bold"
+                      :class="canEvaluateActiveTab ? 'text-slate-800' : 'text-slate-600'"
+                    >{{ totalWeightedPmDisplay }}</td>
                   </tr>
                   <tr class="bg-purple-50 border-t border-purple-100">
                     <td colspan="5" class="px-4 py-4 text-right font-bold text-purple-700 text-xs tracking-wider">
                       AVERAGE SCORE:
                     </td>
                     <td class="px-4 py-4 text-center font-bold text-slate-300">-</td>
-                    <td class="px-4 py-4 text-center text-lg font-black text-purple-700">{{ averageWeightedSelfDisplay }}</td>
-                    <td class="px-4 py-4 text-center font-bold text-purple-300">{{ averageWeightedPmDisplay }}</td>
+                    <td class="px-4 py-4 text-center font-bold text-slate-600">{{ averageWeightedSelfDisplay }}</td>
+                    <td
+                      class="px-4 py-4 text-center font-bold"
+                      :class="canEvaluateActiveTab ? 'text-lg font-black text-purple-700' : 'text-slate-600'"
+                    >{{ averageWeightedPmDisplay }}</td>
                   </tr>
                 </tbody>
               </table>
-            </div>
-
-            <div
-              v-if="hasCurrentTabKpis && activeTab === 'main' && portfolioGateLoaded && !portfolioGateOpen"
-              class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950 mb-3"
-            >
-              <i class="fas fa-user-clock mr-2 text-amber-600" aria-hidden="true" />
-              Only submit Member KPI evaluation to GM after the whole team has submitted results to PM. See missing names in the notice above
-              <strong>Team Hierarchy & Performance</strong>.
             </div>
 
             <div v-if="hasCurrentTabKpis && activeTab === 'main'" class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
@@ -868,7 +907,7 @@ const sendEvaluationForActiveTab = async () => {
                 employeeTitle="Employee's Comment"
                 managerTitle="Supervisor Comment"
                 :employeeReadonly="true"
-                :managerReadonly="props.readonlyYear || !canEvaluateMainTab"
+                :managerReadonly="props.readonlyYear || !canEvaluateMainTab || teamReviewBlockedOnMainTab"
               />
             </div>
             <div v-if="hasCurrentTabKpis && activeTab === 'promotion'" class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
@@ -878,11 +917,19 @@ const sendEvaluationForActiveTab = async () => {
                 employeeTitle="Employee's Comment (Promotion)"
                 managerTitle="Supervisor Comment (Promotion)"
                 :employeeReadonly="true"
-                :managerReadonly="props.readonlyYear || !canEvaluatePromotionTab"
+                :managerReadonly="props.readonlyYear || !canEvaluatePromotionTab || teamReviewBlockedOnPromoTab"
               />
             </div>
 
             <div class="h-4"></div>
+          </div>
+
+          <div
+            v-if="teamReviewBlockedOnActiveTab && canEvaluateActiveTab"
+            class="mx-6 mb-0 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+          >
+            <i class="fas fa-info-circle mr-2 text-amber-700" />
+            {{ teamReviewBlockedMessage }}
           </div>
 
           <div class="bg-white border-t border-slate-200 p-4 px-6 flex justify-end gap-3 sticky bottom-0 z-10 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">

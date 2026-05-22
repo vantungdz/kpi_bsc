@@ -1554,6 +1554,34 @@ const routes: Route[] = [
     },
   },
 
+  // ── GET /kpi/member/dashboard-options ─────────────────────────────────────
+  {
+    method: "get",
+    test: (p) => p === "/kpi/member/dashboard-options",
+    handler: async (cfg) => {
+      await sleep(120);
+      const y = new Date().getFullYear();
+      return ok(cfg, {
+        yearsWithAssignments: [y, y - 1],
+        hasOrgMembership: true,
+      });
+    },
+  },
+
+  // ── GET /kpi/leader/dashboard-options ─────────────────────────────────────
+  {
+    method: "get",
+    test: (p) => p === "/kpi/leader/dashboard-options",
+    handler: async (cfg) => {
+      await sleep(120);
+      const y = new Date().getFullYear();
+      return ok(cfg, {
+        yearsWithAssignments: [y, y - 1],
+        hasOrgMembership: true,
+      });
+    },
+  },
+
   // ── GET /kpi/leader/dashboard?year=YYYY ──────────────────────────────────
   {
     method: "get",

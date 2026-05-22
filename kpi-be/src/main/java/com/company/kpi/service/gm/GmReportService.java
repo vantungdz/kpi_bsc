@@ -218,17 +218,17 @@ public class GmReportService {
             b.setRoleCode(r.getUserRoleCode());
             b.setSectionName(r.getSectionName());
             if (sc == 501 || sc == 601) {
-                b.setReason("Chưa duyệt điểm Member");
+                b.setReason("Member score awaiting approval");
                 b.setSeverity("critical");
-                b.setDelayLabel("Chờ PM");
+                b.setDelayLabel("Pending PM evaluation");
             } else if (sc == 502 || sc == 602) {
-                b.setReason("PM đã duyệt — chờ GM chốt");
+                b.setReason("Approved by PM — awaiting GM evaluation");
                 b.setSeverity("warning");
-                b.setDelayLabel("Chờ GM");
+                b.setDelayLabel("Pending GM evaluation");
             } else if ((sc == 404 || sc == 405) && r.getEvidenceFlag() == null) {
-                b.setReason("Chưa nộp Evidence");
+                b.setReason("No evidence submitted");
                 b.setSeverity("warning");
-                b.setDelayLabel("Đang chạy");
+                b.setDelayLabel("In progress");
             } else {
                 continue;
             }

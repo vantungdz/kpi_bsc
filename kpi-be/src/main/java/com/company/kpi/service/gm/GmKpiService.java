@@ -1,11 +1,12 @@
 package com.company.kpi.service.gm;
 
 import com.company.kpi.aggregate.KpiAssignmentInsertRow;
-import com.company.kpi.aggregate.KpiAssignmentUserTargetRow;
 import com.company.kpi.aggregate.UserJobTitlePair;
 import com.company.kpi.common.Constants;
 import com.company.kpi.common.exception.AppException;
+import com.company.kpi.mapper.DepartmentMapper;
 import com.company.kpi.mapper.KpiAssignmentMapper;
+import com.company.kpi.mapper.UserDepartmentMapper;
 import com.company.kpi.mapper.UserMapper;
 import com.company.kpi.request.gm.GmCopyKpiItemRequest;
 import com.company.kpi.request.gm.GmCopyKpisRequest;
@@ -19,6 +20,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -32,11 +34,15 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class GmKpiService {
 
+    private static final int KPI_TYPE_INDIVIDUAL = 101;
     private static final int KPI_TYPE_TEAM = 102;
+    private static final int KPI_TYPE_PROMOTION = 103;
 
     private final KpiAssignmentMapper kpiAssignmentMapper;
     private final KpiAssignmentSnapshotService kpiAssignmentSnapshotService;
     private final UserMapper userMapper;
+    private final UserDepartmentMapper userDepartmentMapper;
+    private final DepartmentMapper departmentMapper;
 
     public GmKpiDashboardResponse getDashboard(Integer year) {
         throw new UnsupportedOperationException("GmKpiService.getDashboard() not yet implemented. Use mock mode.");
@@ -67,46 +73,71 @@ public class GmKpiService {
         Map<UUID, UUID> jobByUser = userMapper.listUserJobTitlesByIds(assigneeIds).stream()
                 .collect(Collectors.toMap(UserJobTitlePair::getUserId, UserJobTitlePair::getJobTitleId, (a, b) -> a));
 
-        List<KpiAssignmentInsertRow> rows = new ArrayList<>();
-        for (GmCopyKpiItemRequest item : request.getItems()) {
-            if (item.getKpiInfoId() == null) {
-                continue;
-            }
-            UUID parentAssignmentId = resolveParentAssignmentIdForCopy(
-                    sourceUserId, cycleId, item.getKpiInfoId());
+        List<GmCopyKpiItemRequest> itemsToCopy = request.getItems().stream()
+                .filter(item -> item.getKpiInfoId() != null)
+                .toList();
+        if (itemsToCopy.isEmpty()) {
+            return;
+        }
 
+        Map<UUID, UUID> parentByKpiInfoId = new HashMap<>();
+        for (GmCopyKpiItemRequest item : itemsToCopy) {
+            UUID kpiInfoId = item.getKpiInfoId();
+            parentByKpiInfoId.computeIfAbsent(kpiInfoId,
+                    id -> resolveParentAssignmentIdForCopy(targetUserId, cycleId, id));
+        }
+
+        List<KpiAssignmentInsertRow> rows = new ArrayList<>();
+        for (GmCopyKpiItemRequest item : itemsToCopy) {
             rows.add(KpiAssignmentInsertRow.builder()
                     .id(UUID.randomUUID())
                     .cycleId(cycleId)
                     .kpiInfoId(item.getKpiInfoId())
                     .userId(targetUserId)
                     .jobTitleId(jobByUser.get(targetUserId))
-                    .parentAssignmentId(parentAssignmentId)
+                    .parentAssignmentId(parentByKpiInfoId.get(item.getKpiInfoId()))
                     .targetValue(item.getTargetValue())
                     .statusCode(Constants.AssignStatus.PENDING_ACCEPTANCE)
                     .createdBy(gmUserId)
                     .build());
         }
 
-        if (!rows.isEmpty()) {
-            kpiAssignmentMapper.insertKpiAssignments(rows);
-            kpiAssignmentSnapshotService.createSnapshotsForInsertRows(rows, gmUserId);
-        }
+        kpiAssignmentMapper.insertKpiAssignments(rows);
+        kpiAssignmentSnapshotService.createSnapshotsForInsertRows(rows, gmUserId);
     }
 
     /**
-     * Team (102): giữ {@code parent_assignment_id} của member nguồn (= id assignment gốc PM nhánh đó).
-     * Individual / Promotion: {@code null}.
+     * Team (102): {@code parent_assignment_id} = assignment gốc PM của phòng ban chính của member đích
+     * (bắt buộc không null). Individual (101) / Promotion (103): {@code null}.
      */
-    private UUID resolveParentAssignmentIdForCopy(UUID sourceUserId, UUID cycleId, UUID kpiInfoId) {
-        KpiAssignmentUserTargetRow source = kpiAssignmentMapper.findSourceAssignmentForGmCopy(
-                sourceUserId, cycleId, kpiInfoId);
-        if (source == null || source.getKpiTypeCode() == null) {
+    private UUID resolveParentAssignmentIdForCopy(UUID targetUserId, UUID cycleId, UUID kpiInfoId) {
+        Integer typeCode = kpiAssignmentMapper.findKpiTypeCodeByKpiInfoId(kpiInfoId);
+        if (typeCode == null) {
+            throw AppException.badRequest("KPI not found or invalid.");
+        }
+        if (typeCode == KPI_TYPE_INDIVIDUAL || typeCode == KPI_TYPE_PROMOTION) {
             return null;
         }
-        if (source.getKpiTypeCode() != KPI_TYPE_TEAM) {
-            return null;
+        if (typeCode != KPI_TYPE_TEAM) {
+            throw AppException.badRequest("Unsupported KPI type for copy: " + typeCode);
         }
-        return source.getParentAssignmentId();
+
+        UUID primaryDeptId = userDepartmentMapper.findPrimaryDepartmentIdByUserId(targetUserId);
+        if (primaryDeptId == null) {
+            throw AppException.badRequest("Target member has no primary department.");
+        }
+
+        UUID pmId = departmentMapper.getManagerIdByDepartmentId(primaryDeptId);
+        if (pmId == null) {
+            throw AppException.badRequest("Target department has no manager (PM).");
+        }
+
+        UUID pmRootAssignmentId = kpiAssignmentMapper.findPmRootAssignmentIdForGmCopy(pmId, cycleId, kpiInfoId);
+        if (pmRootAssignmentId == null) {
+            throw AppException.badRequest(
+                    "Team KPI is not assigned to this department's PM in this cycle. "
+                            + "Assign the team KPI to the PM before copying to a member.");
+        }
+        return pmRootAssignmentId;
     }
 }

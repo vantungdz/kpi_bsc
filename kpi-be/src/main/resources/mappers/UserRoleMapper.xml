@@ -17,4 +17,14 @@
         SELECT #{userId}, r.id FROM roles r WHERE r.code = #{roleCode}
         ON CONFLICT DO NOTHING
     </insert>
+
+    <select id="findPrimaryRoleCodeByUserId" resultType="java.lang.String">
+        SELECT r.code
+        FROM user_roles ur
+        INNER JOIN roles r ON r.id = ur.role_id AND r.deleted_at IS NULL
+        WHERE ur.user_id = #{userId}
+          AND r.code IN ('MEMBER', 'LEADER', 'PM')
+        ORDER BY CASE r.code WHEN 'PM' THEN 1 WHEN 'LEADER' THEN 2 ELSE 3 END
+        LIMIT 1
+    </select>
 </mapper>

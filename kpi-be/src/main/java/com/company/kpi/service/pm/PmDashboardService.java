@@ -24,8 +24,6 @@ import com.company.kpi.response.gm.GmProcessTimelineResponse;
 import com.company.kpi.response.pm.PmDashboardResponse;
 import com.company.kpi.response.pm.PmMemberKpiApprovalItemResponse;
 import com.company.kpi.response.pm.PmMemberReviewMetaResponse;
-import com.company.kpi.response.pm.PmPortfolioGatePendingMemberResponse;
-import com.company.kpi.response.pm.PmPortfolioGateResponse;
 import com.company.kpi.response.pm.TeamMemberResponse;
 import com.company.kpi.service.gm.GmProcessTimelineService;
 import com.company.kpi.service.kpi.StrategicKpiService;
@@ -174,8 +172,7 @@ public class PmDashboardService {
         return statuses.stream().min(Integer::compareTo).orElse(null);
     }
 
-    /** Trích {@code gmComment} từ JSON evidences assignment (GM đánh giá cuối kỳ). */
-    private static String gmCommentFromEvidencesJson(String evidences) {
+    private static String commentFromEvidencesJson(String evidences, String key) {
         if (evidences == null) {
             return null;
         }
@@ -185,14 +182,49 @@ public class PmDashboardService {
         }
         try {
             JsonNode root = PM_DASHBOARD_JSON.readTree(trimmed);
-            if (root == null || !root.has("gmComment") || root.get("gmComment").isNull()) {
+            if (root == null || !root.has(key) || root.get(key).isNull()) {
                 return null;
             }
-            String c = root.get("gmComment").asText("").trim();
+            String c = root.get(key).asText("").trim();
             return c.isEmpty() ? null : c;
         } catch (Exception ignored) {
             return null;
         }
+    }
+
+    private static String pmCommentFromEvidencesJson(String evidences) {
+        return commentFromEvidencesJson(evidences, "pmComment");
+    }
+
+    private static String gmCommentFromEvidencesJson(String evidences) {
+        return commentFromEvidencesJson(evidences, "gmComment");
+    }
+
+    private record SupervisorEvalComments(String pmEvaluationComment, String gmEvaluationComment) {}
+
+    /** Tách PM/GM từ evidences; legacy chỉ {@code gmComment} suy theo trạng thái & điểm. */
+    private static SupervisorEvalComments supervisorEvalCommentsFromAssignment(
+            String evidences, Integer statusCode, BigDecimal endPmScore, BigDecimal endGmScore) {
+        String pmKey = pmCommentFromEvidencesJson(evidences);
+        String gmKey = gmCommentFromEvidencesJson(evidences);
+        if (pmKey != null && gmKey != null) {
+            return new SupervisorEvalComments(pmKey, gmKey);
+        }
+        if (pmKey != null) {
+            return new SupervisorEvalComments(pmKey, null);
+        }
+        if (gmKey == null) {
+            return new SupervisorEvalComments(null, null);
+        }
+        boolean gmDone = endGmScore != null || (statusCode != null && statusCode >= 603);
+        boolean waitingGm = statusCode != null && (statusCode == 502 || statusCode == 602);
+        if (gmDone) {
+            return new SupervisorEvalComments(null, gmKey);
+        }
+        if (waitingGm || endPmScore != null) {
+            return new SupervisorEvalComments(gmKey, null);
+        }
+        return new SupervisorEvalComments(null, gmKey);
     }
 
     private final KpiCycleMapper kpiCycleMapper;
@@ -227,6 +259,9 @@ public class PmDashboardService {
 
         UUID cycleId = cycleOpt.get().getId();
         UserKpiSummary summary = userKpiSummaryMapper.findByUserIdAndCycleId(pmId, cycleId).orElse(null);
+        String accountCreatedAt = userMapper.findById(pmId)
+                .map(u -> u.getCreatedAt() != null ? u.getCreatedAt().toString() : null)
+                .orElse(null);
 
         List<PmDashboardAggregate> aggregates;
         if ("department".equalsIgnoreCase(scope)) {
@@ -249,6 +284,11 @@ public class PmDashboardService {
                 BigDecimal pmSelfScore = agg.getPmAssignment().getEndSelfScore() != null
                         ? agg.getPmAssignment().getEndSelfScore()
                         : agg.getPmAssignment().getMidSelfScore();
+                SupervisorEvalComments evalComments = supervisorEvalCommentsFromAssignment(
+                        agg.getPmAssignment().getEvidences(),
+                        agg.getPmAssignment().getStatusCode(),
+                        agg.getPmAssignment().getEndPmScore(),
+                        agg.getPmAssignment().getEndGmScore());
 
                 return PmDashboardResponse.KpiGroupDto.builder()
                         .id(pmAsmId)
@@ -275,7 +315,8 @@ public class PmDashboardService {
                                 agg.getCascadeChildren(),
                                 pmId,
                                 agg.getKpiMaster() != null ? agg.getKpiMaster().getTypeCode() : null))
-                        .gmEvaluationComment(gmCommentFromEvidencesJson(agg.getPmAssignment().getEvidences()))
+                        .pmEvaluationComment(evalComments.pmEvaluationComment())
+                        .gmEvaluationComment(evalComments.gmEvaluationComment())
                         .isTree(agg.getKpiMaster() != null && agg.getKpiMaster().getTypeCode() != null && agg.getKpiMaster().getTypeCode() == 102)
                         .expanded(true)
                         .isSelfCreated(pmId.equals(agg.getPmAssignment().getCreatedBy()))
@@ -295,6 +336,12 @@ public class PmDashboardService {
                             ? slice.getChildAssignment().getEndSelfScore()
                             : slice.getChildAssignment().getMidSelfScore();
 
+                    SupervisorEvalComments childEvalComments = supervisorEvalCommentsFromAssignment(
+                            slice.getChildAssignment().getEvidences(),
+                            slice.getChildAssignment().getStatusCode(),
+                            slice.getChildAssignment().getEndPmScore(),
+                            slice.getChildAssignment().getEndGmScore());
+
                     groupDto.getChildren().add(PmDashboardResponse.KpiChildDto.builder()
                             .id(slice.getChildAssignment().getId())
                             .userId(slice.getChildUser() != null ? slice.getChildUser().getId() : null)
@@ -306,7 +353,8 @@ public class PmDashboardService {
                             .feedbackTargetRoleCode(slice.getChildFeedbackTargetRoleCode())
                             .selfScore(childSelfScore)
                             .pmScore(supervisorPortfolioScore(slice.getChildAssignment()))
-                            .gmEvaluationComment(gmCommentFromEvidencesJson(slice.getChildAssignment().getEvidences()))
+                            .pmEvaluationComment(childEvalComments.pmEvaluationComment())
+                            .gmEvaluationComment(childEvalComments.gmEvaluationComment())
                             .statusCode(slice.getChildAssignment().getStatusCode())
                             .updateReason(slice.getChildAssignment().getUpdateReason())
                             .build());
@@ -334,8 +382,13 @@ public class PmDashboardService {
             .kpis(new ArrayList<>(kpiGroupMap.values()))
             .asmStatuses(asmStatuses != null ? asmStatuses : List.of())
             .kpiCycle(cycleResponse)
+            .accountCreatedAt(accountCreatedAt)
             .evaluationCommentsPortfolio(summary != null ? summary.getEvaluationComments() : null)
             .evaluationCommentsPromotion(summary != null ? summary.getEvaluationCommentsPromotion() : null)
+            .evaluationSupervisorComments(
+                    summary != null ? summary.getEvaluationSupervisorComments() : null)
+            .evaluationSupervisorCommentsPromotion(
+                    summary != null ? summary.getEvaluationSupervisorCommentsPromotion() : null)
             .build();
     }
 
@@ -407,24 +460,6 @@ public class PmDashboardService {
         return roots;
     }
 
-    /**
-     * Kiểm tra toàn bộ member trong cây PM đã nộp xong KPI Member (individual/team, status ≥ 501) cho PM hay chưa —
-     * điều kiện trước khi PM gửi đánh giá lên GM từng member (tab KPI Member).
-     */
-    public PmPortfolioGateResponse getPmPortfolioEvaluationGate(UUID pmId, Integer year) {
-        var cycleOpt = kpiCycleMapper.findByYear(year);
-        if (cycleOpt.isEmpty()) {
-            throw new IllegalArgumentException("Can't find KPI cycle for year: " + year);
-        }
-        UUID cycleId = cycleOpt.get().getId();
-        List<PmPortfolioGatePendingMemberResponse> pending =
-                userMapper.listPmPortfolioGateBlockingMembers(pmId, cycleId);
-        return PmPortfolioGateResponse.builder()
-                .allPortfolioSubmittedToPm(pending.isEmpty())
-                .pendingMembers(pending)
-                .build();
-    }
-
     public List<MemberKpiDetailResponse> getMemberKpiDetails(UUID memberId, Integer year) {
         var cycleOpt = kpiCycleMapper.findByYear(year);
         if (cycleOpt.isEmpty()) {
@@ -458,9 +493,16 @@ public class PmDashboardService {
             res.setStatusCode(agg.getStatusCode());
             res.setKpiTypeCode(agg.getKpiMaster().getTypeCode());
             res.setCalcRuleCode(agg.getKpiMaster().getCalculationRuleCode());
+            res.setCalculationTypeCode(agg.getKpiMaster().getCalculationTypeCode());
             res.setUnitCode(agg.getKpiMaster().getUnitCode());
             res.setUnitName(agg.getUnitName());
             res.setEvidences(agg.getEvidences());
+            if (agg.getKpiMaster() != null
+                    && Objects.equals(agg.getKpiMaster().getTypeCode(), 102)
+                    && agg.getParentAssignmentId() != null) {
+                res.setTeamPmParentStatusCode(agg.getTeamPmParentStatusCode());
+            }
+            res.setCreatorRoleCode(trimUpperOrNull(agg.getKpiCreatorRoleCode()));
             result.add(res);
         }
 
@@ -727,6 +769,13 @@ public class PmDashboardService {
     public void savePmEndPmScoreForManagedMember(UUID pmId, UUID memberUserId, UUID assignmentId, Integer pmScore) {
         if (pmScore == null || pmScore < 1 || pmScore > 5) {
             throw AppException.badRequest("PM score must be between 1 and 5.");
+        }
+        UUID cycleId = kpiAssignmentMapper.findCycleIdByAssignmentId(assignmentId);
+        if (cycleId != null
+                && kpiAssignmentMapper.existsTeamMemberReviewBlockedByPmPendingAcceptance(
+                        pmId, cycleId, memberUserId, 601)) {
+            throw AppException.badRequest(
+                    "Accept the Team KPI before reviewing member evaluation results.");
         }
         int n = kpiAssignmentMapper.updateEndPmScoreForPmManagedMember(
                 assignmentId, memberUserId, pmId, java.math.BigDecimal.valueOf(pmScore));

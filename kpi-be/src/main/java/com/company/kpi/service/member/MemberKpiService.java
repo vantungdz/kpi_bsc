@@ -380,6 +380,11 @@
                     throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Incomplete KPI rows: " + pending.size());
                 }
             if (Constant.MID_YEAR_PHASE.equals(submitPhase)) {
+                    if (lateOnboardUserForCycle(submitUser.getCreatedAt(), cycle)) {
+                        throw new ResponseStatusException(
+                                HttpStatus.BAD_REQUEST,
+                                "Mid-year submission is not required for accounts created on or after the mid-year period start");
+                    }
                     int n = kpiAssignmentMapper.updateKpiStatuses(userId, cycle.getId(), 501, promotionSubmit, ASM_ACCEPTED, false);
                     if (n == 0) {
                         throw new ResponseStatusException(
@@ -1099,8 +1104,8 @@
          * <ul>
      *   <li>Nếu còn ASM {@code 404} (PENDING_ACCEPTANCE) thì luôn ưu tiên submit {@code target_setup}
      *       (hỗ trợ member nộp muộn đầu năm, vẫn ghi nhận ở phase target).</li>
-     *   <li>Nếu chưa nộp vòng mid-year và còn ASM {@code 405} (user không phải onboard sau {@code mid_year_end})
-     *       thì cho phép nộp muộn ở {@code mid_year}. User tạo sau hết giữa kỳ → không ép nộp 1H, chờ cửa sổ cuối kỳ.</li>
+     *   <li>Nếu chưa nộp vòng mid-year và còn ASM {@code 405} (user không phải onboard từ {@code mid_year_start})
+     *       thì cho phép nộp muộn ở {@code mid_year}. User tạo từ đầu kỳ 1H trở đi → không ép nộp 1H, chờ cửa sổ cuối kỳ.</li>
      *   <li>Nếu không có {@code 404}: ưu tiên phase đang mở cửa sổ thời gian.</li>
      *   <li>Ngoài cửa sổ và không đủ điều kiện nộp muộn: không cho submit.</li>
          * </ul>
@@ -1118,6 +1123,12 @@
             return Constant.MID_YEAR_PHASE;
         }
             if (isWithinPhaseSubmitWindow(cycle, currentPhase, now)) {
+                if (Constant.MID_YEAR_PHASE.equals(currentPhase) && lateOnboardUserForCycle(accountCreatedAt, cycle)) {
+                    if (isWithinPhaseSubmitWindow(cycle, Constant.END_YEAR_PHASE, now)) {
+                        return Constant.END_YEAR_PHASE;
+                    }
+                    return null;
+                }
                 return currentPhase;
             }
             return null;
@@ -1166,14 +1177,14 @@
     }
 
         /**
-         * {@code users.created_at} sau {@code kpi_cycles.mid_year_end} → không còn lộ trình nộp giữa kỳ
-         * (đồng bộ FE timeline Year-End only).
+         * {@code users.created_at >= kpi_cycles.mid_year_start} → bỏ nộp giữa kỳ, chỉ Accept KPI + Year-End
+         * (đồng bộ FE {@code shouldCollapseKpiProcessTimelineToYearEndOnly}).
          */
         private static boolean lateOnboardUserForCycle(OffsetDateTime accountCreatedAt, KpiCycle cycle) {
-            if (accountCreatedAt == null || cycle == null || cycle.getMidYearEnd() == null) {
+            if (accountCreatedAt == null || cycle == null || cycle.getMidYearStart() == null) {
                 return false;
             }
-            return accountCreatedAt.isAfter(cycle.getMidYearEnd());
+            return !accountCreatedAt.isBefore(cycle.getMidYearStart());
         }
 
         /**
@@ -1212,6 +1223,9 @@
                 }
                 if (hasLateMidYearSubmitCandidate(cycle, OffsetDateTime.now(), rows, accountCreatedAt)) {
                     return Constant.MID_YEAR_PHASE;
+                }
+                if (lateOnboardUserForCycle(accountCreatedAt, cycle)) {
+                    return Constant.END_YEAR_PHASE;
                 }
             }
             return getCurrentPhase(cycle);

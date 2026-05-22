@@ -393,8 +393,8 @@ async function save() {
                     <input
                       v-model="targetInput"
                       type="number"
-                      placeholder="95"
                       min="0"
+                      placeholder="95"
                       class="input-required min-h-[38px] w-full rounded-md px-2.5 py-2 text-xs font-bold text-slate-800 outline-none transition-all"
                       :class="formErrors.targetInput ? '!border-rose-400 !bg-rose-50/50' : ''"
                     />

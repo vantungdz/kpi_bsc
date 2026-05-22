@@ -103,5 +103,11 @@ public interface DepartmentMapper {
     int updateDepartmentManager(
             @Param("departmentId") UUID departmentId,
             @Param("managerId") UUID managerId);
+
+    int clearDepartmentManager(@Param("departmentId") UUID departmentId);
+
+    List<UUID> selectActiveDepartmentIdsManagedByUser(@Param("userId") UUID userId);
+
+    UUID findManagedDepartmentIdByUserId(@Param("userId") UUID userId);
 }
 

@@ -507,24 +507,12 @@ function rowClass(row: GmPersonalKpiRowMock): string {
 <template>
   <div class="animate-fade-in">
     <!-- Tiêu đề trang — đồng bộ mock a.ts / screenshot -->
-    <div class="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-      <div class="flex items-center gap-3">
-        <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-indigo-100 text-indigo-700"
-          aria-hidden="true">
-          <i class="fas fa-bullseye text-lg" />
-        </div>
-        <h1 class="text-lg font-bold uppercase tracking-wide text-slate-800">Personal KPI (GM)</h1>
+    <div class="mb-6 flex items-center gap-3">
+      <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-indigo-100 text-indigo-700"
+        aria-hidden="true">
+        <i class="fas fa-bullseye text-lg" />
       </div>
-      <div v-if="hasPendingAcceptanceKpis && cycleIdTrimmed"
-        class="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
-        <button type="button"
-          class="inline-flex items-center gap-2 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-900 shadow-sm transition-colors hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
-          :disabled="loading || acceptKpisLoading" @click="acceptPendingKpis">
-          <i class="fas text-[11px]" :class="acceptKpisLoading ? 'fa-spinner fa-spin' : 'fa-check'"
-            aria-hidden="true" />
-          {{ acceptKpisLoading ? 'Processing…' : 'Accept KPIs' }}
-        </button>
-      </div>
+      <h1 class="text-lg font-bold uppercase tracking-wide text-slate-800">Personal KPI (GM)</h1>
     </div>
 
     <div class="flex gap-2 border-b border-slate-200 bg-white px-4 pt-3 sm:px-5">
@@ -588,7 +576,7 @@ function rowClass(row: GmPersonalKpiRowMock): string {
         <table class="w-full min-w-[52rem] border-collapse text-left text-sm text-slate-800">
           <thead class="border-b border-slate-200 bg-slate-200 text-[11px] font-bold uppercase tracking-wider text-slate-500">
             <tr>
-              <th class="w-12 px-5 py-4 text-center">#</th>
+              <th class="w-12 px-5 py-4 text-center">STT</th>
               <th class="min-w-[200px] px-5 py-4">Objectives</th>
               <th class="min-w-[10rem] px-5 py-4 text-center">KPI Status</th>
               <th class="px-5 py-4">Target</th>
@@ -755,6 +743,16 @@ function rowClass(row: GmPersonalKpiRowMock): string {
           {{ submitGmPersonalEvalLoading ? 'Sending…' : 'Submit evaluation' }}
         </button>
       </div>
+    </div>
+
+    <div v-if="!loading && scopedRows.length > 0 && hasPendingAcceptanceKpis && cycleIdTrimmed"
+      class="mt-6 mb-8 flex justify-center">
+      <button type="button"
+        class="inline-flex items-center gap-2 rounded-lg bg-slate-800 px-6 py-2.5 text-sm font-bold text-white shadow-md transition-colors hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
+        :disabled="loading || acceptKpisLoading" @click="acceptPendingKpis">
+        <i class="fas fa-paper-plane text-sm" aria-hidden="true" />
+        {{ acceptKpisLoading ? 'Processing…' : 'Accept KPI' }}
+      </button>
     </div>
 
     <EvaluationEvidenceDrawer

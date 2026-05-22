@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import { computed, ref, watch, onUnmounted } from 'vue'
+import GmStrategicKpiTypeTag from '@/components/gm/GmStrategicKpiTypeTag.vue'
+import type { GmStrategicKpiKind } from '@/types/gm-workspace'
+import { kpiCreatorCardBgClass } from '@/utils/kpiCreatorRowBg'
 
 type RequestRow = {
   id: string
@@ -7,6 +10,7 @@ type RequestRow = {
   user: string
   avatar: string
   kpiName: string
+  kpiType: GmStrategicKpiKind
   type: string
   oldValue: string | null
   newValue: string
@@ -19,6 +23,7 @@ type RequestRow = {
   unitLabel: string
   calculationMethodLabel: string
   scoringRuleText: string
+  creatorRoleCode?: string
 }
 
 type MemberApprovalPayload = {
@@ -231,17 +236,18 @@ function weightDisplayShort(weightLabel: string): string {
             <div
               v-for="req in memberApproval.kpis"
               :key="req.id"
-              class="rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm"
+              class="rounded-xl border border-slate-200 p-4 text-left shadow-sm"
+              :class="kpiCreatorCardBgClass(req.creatorRoleCode)"
             >
               <div class="flex items-start justify-between gap-3">
                 <div class="min-w-0 flex-1">
-                  <span class="inline-block rounded bg-blue-50 px-2 py-0.5 text-[9px] font-bold uppercase text-blue-700">
-                    {{ req.type.replace('_', ' ') }}
-                  </span>
-                  <span class="ml-2 rounded border border-amber-200 bg-amber-50 px-2 py-0.5 text-[9px] font-bold uppercase text-amber-800">
+                  <span class="rounded border border-amber-200 bg-amber-50 px-2 py-0.5 text-[9px] font-bold uppercase text-amber-800">
                     {{ req.status }}
                   </span>
-                  <h4 class="mt-2 truncate text-sm font-bold text-slate-800">{{ req.kpiName }}</h4>
+                  <div class="mt-2 flex flex-wrap items-center gap-2">
+                    <h4 class="truncate text-sm font-bold text-slate-800">{{ req.kpiName }}</h4>
+                    <GmStrategicKpiTypeTag :type="req.kpiType" size="sm" />
+                  </div>
                   <p class="mt-1 text-[10px] font-medium text-slate-400">Sent: {{ req.date }}</p>
                 </div>
                 <button
@@ -292,13 +298,11 @@ function weightDisplayShort(weightLabel: string): string {
                     <p class="text-[11px] font-bold uppercase tracking-wide text-slate-500">
                       Pending KPI Details
                     </p>
-                    <h2 class="mt-0.5 text-lg font-bold leading-snug text-slate-900">
-                      {{ selectedKpi.kpiName }}
+                    <h2 class="mt-0.5 flex flex-wrap items-center gap-2 text-lg font-bold leading-snug text-slate-900">
+                      <span class="min-w-0 truncate">{{ selectedKpi.kpiName }}</span>
+                      <GmStrategicKpiTypeTag :type="selectedKpi.kpiType" size="sm" />
                     </h2>
                     <div class="mt-2 flex flex-wrap gap-1.5">
-                      <span class="rounded-md bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700">
-                        {{ selectedKpi.type.replace('_', ' ') }}
-                      </span>
                       <span
                         v-if="selectedKpi.status === 'PENDING'"
                         class="rounded-md border border-orange-200 bg-orange-50 px-2 py-0.5 text-[11px] font-semibold text-orange-700"

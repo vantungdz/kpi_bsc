@@ -20,9 +20,12 @@ public class GmEvaluationHubAssignmentRow {
     private BigDecimal endGmScore;
     private String evidences;
     private String targetDescription;
+    private BigDecimal targetValue;
     private BigDecimal weight;
     private String masterCode;
     private String masterName;
+    private Integer unitCode;
+    private String unitName;
     /** {@code kpi_master.calculation_rule_code}. */
     private Integer calculationRuleCode;
     /** {@code kpi_master.calculation_type_code}. */
@@ -49,4 +52,6 @@ public class GmEvaluationHubAssignmentRow {
     private String supervisorCommentPortfolio;
     /** PM tổng promotion — evaluation_supervisor_comments_promotion. */
     private String supervisorCommentPromotion;
+    /** {@code roles.code} của người tạo KPI master. */
+    private String creatorRoleCode;
 }

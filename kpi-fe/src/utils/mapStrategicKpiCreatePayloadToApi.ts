@@ -67,13 +67,15 @@ export function mapStrategicKpiCreatePayloadToApi(
     isImportant: payload.isImportant === true,
   }
 
-  if (typeCode === 102) {
-    body.assignPMs = Array.isArray(payload.assignPMs) ? [...payload.assignPMs] : []
+  // Chỉ gửi phân bổ khi drawer emit (GM sửa định nghĩa KPI non-GM không gửi → không sync/xóa assignment).
+  if (typeCode === 102 && Array.isArray(payload.assignPMs)) {
+    body.assignPMs = [...payload.assignPMs]
     const pm = payload.pmTargets
-    body.pmTargets =
-      pm && typeof pm === 'object' && !Array.isArray(pm) ? { ...(pm as Record<string, unknown>) } : {}
-  } else {
-    body.memberIds = Array.isArray(payload.memberIds) ? [...payload.memberIds] : []
+    if (pm && typeof pm === 'object' && !Array.isArray(pm)) {
+      body.pmTargets = { ...(pm as Record<string, unknown>) }
+    }
+  } else if (Array.isArray(payload.memberIds)) {
+    body.memberIds = [...payload.memberIds]
   }
 
   return body

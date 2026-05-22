@@ -20,6 +20,8 @@ import MemberEvidenceDrawer from '@/components/member/MemberEvidenceDrawer.vue'
 import { memberItemEvalStatus } from '@/utils/memberKpiHelpers'
 import { buildKpiDeadlineBanner, type KpiDeadlineBannerVm } from '@/utils/kpiDeadlineBanner'
 import { getSubmitButtonState, shouldCollapseKpiProcessTimelineToYearEndOnly } from '@/utils/common'
+import { buildMemberLeaderYearDropdownOptions } from '@/utils/kpi-member-leader-year-options'
+import type { YearDropdownOption } from '@/types/kpi-dashboard-options'
 
 // ── Evidence drawer — provide to child components ───────────────────────────
 const evidenceCtx = useMemberEvidenceDrawer()
@@ -37,7 +39,8 @@ const dashboardData = ref<MemberKpiDashboard | null>(null)
 const cycleData = ref<KpiCycleResponse | null>(null)
 const currentYear = new Date().getFullYear()
 const selectedYear = ref(new Date().getFullYear())
-const availableYears = ref<{ value: number; label: string }[]>([])
+const availableYears = ref<YearDropdownOption[]>([])
+const hasOrgMembership = ref(true)
 const memberExtraSheetItems = ref<KpiItem[]>([])
 const showCreateIndividualKpiDrawer = ref(false)
 const editingRejectedSelfCreatedItem = ref<KpiItem | null>(null)
@@ -77,21 +80,28 @@ onMounted(() => {
 
 async function loadAvailableYears() {
   try {
-    const rows = await kpiCycleService.getKpiCyclesForDropdown()
-    const years = rows
+    const [rows, options] = await Promise.all([
+      kpiCycleService.getKpiCyclesForDropdown(),
+      memberKpiService.getDashboardOptions(),
+    ])
+    hasOrgMembership.value = Boolean(options?.hasOrgMembership)
+    const cycleYears = rows
       .map(row => Number(row.year))
       .filter(year => Number.isFinite(year))
-      .sort((a, b) => b - a)
-      .map(year => ({ value: year, label: `Year: ${year}` }))
+    const years = buildMemberLeaderYearDropdownOptions(
+      cycleYears,
+      options?.yearsWithAssignments ?? [],
+      currentYear,
+      'Year:',
+    )
     availableYears.value = years
     if (years.length > 0 && !years.some(y => y.value === selectedYear.value)) {
       selectedYear.value = years[0].value
     }
   } catch {
+    hasOrgMembership.value = true
     availableYears.value = [
-      { value: 2026, label: 'Year: 2026' },
-      { value: 2025, label: 'Year: 2025' },
-      { value: 2024, label: 'Year: 2024' },
+      { value: currentYear, label: `Year: ${currentYear}` },
     ]
   }
 }
@@ -141,11 +151,11 @@ const personalAssignmentIds = computed(() => personalItemsFlat.value.map(i => i.
 const promotionAssignmentIds = computed(() => promotionItemsFlat.value.map(i => i.id))
 const hasAnyKpiItems = computed(() => (sheet.value?.items?.length ?? 0) > 0)
 
-/** Ẩn mốc đầu năm / giữa năm chỉ khi thật sự onboard sau giữa kỳ (không dùng mỗi điều kiện > mid_year_end). */
+/** Onboard từ mid_year_start → timeline 2 mốc (Accept KPI + Year-End), bỏ giữa kỳ. */
 const timelineYearEndOnly = computed(() => {
   return shouldCollapseKpiProcessTimelineToYearEndOnly(
     dashboardData.value?.accountCreatedAt,
-    cycleData.value?.midYearEnd,
+    cycleData.value?.midYearStart,
   )
 })
 
@@ -174,7 +184,7 @@ const personalButtonState = computed(() => {
   }
   const skipMid = shouldCollapseKpiProcessTimelineToYearEndOnly(
     dashboardData.value?.accountCreatedAt,
-    cycleData.value.midYearEnd,
+    cycleData.value.midYearStart,
   )
   return getSubmitButtonState(cycleData.value, minStatusCode(personalItemsFlat.value), new Date(), {
     treatMidYearAsSkipped: skipMid,
@@ -194,7 +204,7 @@ const promotionButtonState = computed(() => {
   }
   const skipMid = shouldCollapseKpiProcessTimelineToYearEndOnly(
     dashboardData.value?.accountCreatedAt,
-    cycleData.value.midYearEnd,
+    cycleData.value.midYearStart,
   )
   return getSubmitButtonState(cycleData.value, minStatusCode(promotionItemsFlat.value), new Date(), {
     treatMidYearAsSkipped: skipMid,
@@ -212,7 +222,8 @@ const hasSubmittedPersonalTargetSetup = computed(() => {
 })
 const canCreatePersonalKpi = computed(
   () =>
-    isCurrentYear.value
+    hasOrgMembership.value
+    && isCurrentYear.value
     && memberKpiMainTab.value === 'personal'
     && !hasSubmittedPersonalTargetSetup.value,
 )

@@ -16,6 +16,7 @@ import type { KpiItem, EvidenceFormCase } from '@/types/kpi'
 import type { UrlNamePair } from '@/utils/memberKpiEvidenceDetail'
 import { useMemberKpiDraftStore } from '@/stores/member-kpi-drafts.store'
 import { memberKpiService } from '@/services/modules/kpi-member.service'
+import { feedback407StatusLabel } from '@/utils/feedbackStatus'
 import { fileService } from '@/services/modules/file.service'
 import {
   resolveFormMode,
@@ -865,13 +866,11 @@ export function useMemberEvidenceDrawer() {
         item.statusCode = 407
         item.feedbackTargetRoleCode = rs?.feedbackTargetRoleCode ?? null
         item.assignmentStatusName =
-          rs?.assignmentStatusName ??
-          (String(rs?.feedbackTargetRoleCode ?? '').toUpperCase() === 'GM'
-            ? 'Waiting for GM feedback review'
-            : 'Waiting for PM feedback review')
+          rs?.assignmentStatusName ?? feedback407StatusLabel(rs?.feedbackTargetRoleCode)
         item.feedbackComment = feedbackComment
         item.memberFeedback = feedbackComment
         closeEvidencePanel({ force: true })
+        toast.success('Feedback sent successfully')
       } catch (error) {
         console.error('Failed to submit member feedback', error)
         toast.error('Failed to send feedback')

@@ -21,8 +21,21 @@ export interface GmEvidenceTable {
 export interface GmKpiItem {
   id: string
   index: number
+  /** Legacy sort key — `code · name`. */
   title: string
+  code?: string
+  name?: string
   target: string
+  /** Target số (chưa gắn đơn vị) — format tại UI. */
+  targetRaw?: string
+  /** Actual chưa gắn đơn vị — format tại UI. */
+  actualRaw?: string
+  calculationTypeCode?: number | null
+  actualResult?: string
+  unitCode?: number | null
+  unitName?: string | null
+  statusCode?: number | null
+  statusDesc?: string
   weight: number
   calcRuleCode?: number | null
   evidenceButtonLabel: string
@@ -45,9 +58,13 @@ export interface GmKpiItem {
   /** ASM assignment từ hub API: 502 = review GM (không chấm), 602 = chấm điểm GM + comment. */
   hubAssignmentStatusCode?: number | null
   assignmentStatusDisplay?: string | null
+  /** roles.code của người tạo KPI master */
+  creatorRoleCode?: string
 }
 
 export interface GmKpiGroup {
+  /** A / B / C — nhãn nhóm BSC giống drawer PM. */
+  groupKey?: string
   groupTitle: string
   items: GmKpiItem[]
 }

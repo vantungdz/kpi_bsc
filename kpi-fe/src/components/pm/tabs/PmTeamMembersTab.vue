@@ -4,6 +4,7 @@ import { pmKpiService } from '@/services/modules/kpi-pm.service'
 
 import { generateInitials } from '@/utils/common'
 import { KPI_STATUS } from '@/config/constants'
+import { pmAsmStatusChipUi } from '@/utils/pmAsmStatusUi'
 import {
   countPmEvaluationSubjectsInHierarchy,
   isPmEvaluationSubject,
@@ -17,14 +18,6 @@ const props = defineProps({
   commentsCache: {
     type: Object as PropType<Record<string, { main: string; promo: string } | string>>,
     default: () => ({}),
-  },
-  /** Đã gọi xong API pm-portfolio-evaluation-gate. */
-  portfolioGateLoaded: { type: Boolean, default: false },
-  /** true = mọi member đã nộp KPI Member (individual/team ≥501) cho PM — PM được gửi đánh giá lên GM tab KPI Member. */
-  portfolioGateOpen: { type: Boolean, default: false },
-  portfolioGatePending: {
-    type: Array as PropType<{ userId: string; fullName: string }[]>,
-    default: () => [],
   },
 })
 
@@ -55,28 +48,32 @@ function countPendingByScope(nodes: unknown[] | null | undefined, scope: 'portfo
 const portfolioPendingCount = computed(() => countPendingByScope(teamTreeRaw.value, 'portfolio'))
 const promotionPendingCount = computed(() => countPendingByScope(teamTreeRaw.value, 'promotion'))
 
-const EVALUATION_STATUS_UI: Record<number, any> = {
-  [KPI_STATUS.INACTIVE]: { dot: 'bg-slate-300 ring-2 ring-slate-100', chip: 'border-slate-200 bg-slate-50 text-slate-800', label: 'Inactive' },
-  [KPI_STATUS.WAITING_PM_APPROVAL]: { dot: 'bg-amber-400 ring-2 ring-amber-100', chip: 'border-amber-200 bg-amber-50 text-amber-950', label: 'Waiting PM approve' },
-  [KPI_STATUS.WAITING_GM_APPROVAL]: { dot: 'bg-amber-400 ring-2 ring-amber-100', chip: 'border-amber-200 bg-amber-50 text-amber-950', label: 'Waiting GM approve' },
-  [KPI_STATUS.PENDING_ACCEPTANCE]: { dot: 'bg-blue-400 ring-2 ring-blue-100', chip: 'border-blue-200 bg-blue-50 text-blue-950', label: 'Pending acceptance' },
-  [KPI_STATUS.ACCEPTED]: { dot: 'bg-emerald-500 ring-2 ring-emerald-100', chip: 'border-emerald-200 bg-emerald-50 text-emerald-950', label: 'Accepted' },
-  [KPI_STATUS.REJECTED]: { dot: 'bg-rose-500 ring-2 ring-rose-100', chip: 'border-rose-200 bg-rose-50 text-rose-950', label: 'Rejected' },
-
-  [KPI_STATUS.FIRST_WAITING_PM_APPROVAL]: { dot: 'bg-amber-400 ring-2 ring-amber-100', chip: 'border-amber-200 bg-amber-50 text-amber-950', label: 'Waiting PM approve 1st Half' },
-  [KPI_STATUS.FIRST_WAITING_GM_APPROVAL]: { dot: 'bg-amber-400 ring-2 ring-amber-100', chip: 'border-amber-200 bg-amber-50 text-amber-950', label: 'Waiting GM approve 1st Half' },
-  [KPI_STATUS.FIRST_COMPLETED]: { dot: 'bg-emerald-500 ring-2 ring-emerald-100', chip: 'border-emerald-200 bg-emerald-50 text-emerald-950', label: 'Completed 1st Half' },
-
-  [KPI_STATUS.SECOND_WAITING_PM_APPROVAL]: { dot: 'bg-amber-400 ring-2 ring-amber-100', chip: 'border-amber-200 bg-amber-50 text-amber-950', label: 'Waiting PM approve Final' },
-  [KPI_STATUS.SECOND_WAITING_GM_APPROVAL]: { dot: 'bg-amber-400 ring-2 ring-amber-100', chip: 'border-amber-200 bg-amber-50 text-amber-950', label: 'Waiting GM approve Final' },
-  [KPI_STATUS.COMPLETED]: { dot: 'bg-purple-500 ring-2 ring-purple-100', chip: 'border-purple-200 bg-purple-50 text-purple-950', label: 'Completed' },
+const EVALUATION_STATUS_LABELS: Record<number, string> = {
+  [KPI_STATUS.INACTIVE]: 'New KPI',
+  [KPI_STATUS.WAITING_PM_APPROVAL]: 'Pending PM Approval',
+  [KPI_STATUS.WAITING_GM_APPROVAL]: 'Pending GM Approval',
+  [KPI_STATUS.PENDING_ACCEPTANCE]: 'Pending Acceptance',
+  [KPI_STATUS.ACCEPTED]: 'In progress',
+  [KPI_STATUS.REJECTED]: 'Rejected',
+  [KPI_STATUS.FEEDBACK_IN_PROGRESS]: 'Processing Feedback',
+  [KPI_STATUS.FIRST_WAITING_PM_APPROVAL]: 'Pending PM Evaluation (Mid-Year)',
+  [KPI_STATUS.FIRST_WAITING_GM_APPROVAL]: 'Pending GM Evaluation (Mid-Year)',
+  [KPI_STATUS.FIRST_COMPLETED]: 'Completed (Mid-Year)',
+  [KPI_STATUS.SECOND_WAITING_PM_APPROVAL]: 'Pending PM Evaluation (Final)',
+  [KPI_STATUS.SECOND_WAITING_GM_APPROVAL]: 'Pending GM Evaluation (Final)',
+  [KPI_STATUS.COMPLETED]: 'Completed',
 }
 
 /** Chip status chỉ khi có mã đã map; không có / chưa map → null (ô Status để trống). */
 function getEvalStatusChip(statusCode: number | null | undefined) {
   if (statusCode == null || statusCode === 0) return null
   const n = Number(statusCode)
-  return EVALUATION_STATUS_UI[n] ?? null
+  const ui = pmAsmStatusChipUi(n)
+  if (!ui) return null
+  return {
+    chip: ui.chip,
+    label: EVALUATION_STATUS_LABELS[n] ?? `Status ${n}`,
+  }
 }
 
 /** Chỉ overlay draft supervisor từ cache runtime khi member đang chờ PM (501/601) — không ghi đè sau GM (502+ / 603). */
@@ -243,13 +240,6 @@ const openMemberDetail = (member: any) => {
   })
 }
 
-const portfolioGatePendingLabel = computed(() => {
-  const list = props.portfolioGatePending ?? []
-  return list
-    .map((p) => String(p?.fullName ?? '').trim())
-    .filter(Boolean)
-    .join(' · ')
-})
 </script>
 
 <template>
@@ -293,19 +283,6 @@ const portfolioGatePendingLabel = computed(() => {
           </span>
         </button>
       </div>
-    </div>
-
-    <div
-      v-if="portfolioGateLoaded && !portfolioGateOpen"
-      class="px-5 py-3 border-b border-amber-100 bg-amber-50 text-sm text-amber-950"
-    >
-      <p class="font-semibold leading-snug">
-        <i class="fas fa-user-clock mr-2 text-amber-600" aria-hidden="true" />
-        To submit each member's KPI evaluation to GM, every team member must have submitted their Member KPI results.
-      </p>
-      <p v-if="portfolioGatePendingLabel" class="mt-2 text-amber-900">
-        Missing results from: <strong>{{ portfolioGatePendingLabel }}</strong>
-      </p>
     </div>
 
     <div v-if="isLoading" class="p-10 text-center text-slate-500">
@@ -382,9 +359,8 @@ const portfolioGatePendingLabel = computed(() => {
           <td class="py-4 px-5 text-center align-middle">
             <div
               v-if="member.statusChipUi"
-              class="inline-flex items-center justify-center gap-1.5 rounded-lg border px-2 py-1 text-center shadow-sm"
+              class="inline-flex items-center justify-center rounded-lg border px-2 py-1 text-center shadow-sm"
               :class="member.statusChipUi.chip">
-              <span class="h-2 w-2 shrink-0 rounded-full" :class="member.statusChipUi.dot" />
               <span class="text-[10px] font-bold">{{ member.statusChipUi.label }}</span>
             </div>
           </td>

@@ -60,19 +60,20 @@ const selectedManagedSection = computed(() =>
   sections.value.find((s) => s.id === formManagedDepartmentId.value),
 );
 
-/** Bộ phận cấp Section (có parent) — PM/Leader không gán vào khối cấp cao. */
-const childSections = computed(() =>
-  sections.value.filter(
-    (s) => s.parentId != null && String(s.parentId).trim() !== "",
-  ),
-);
+function sectionHasParent(sec: Section): boolean {
+  return sec.parentId != null && String(sec.parentId).trim() !== "";
+}
 
-const sectionDropdownOptions = computed(() => {
-  if (isCreateMode.value && (isPmRole.value || isLeaderRole.value)) {
-    return childSections.value;
+/** Toàn bộ phòng ban từ API (kể cả cấp gốc không có parentId). */
+const departmentOptions = computed(() => [...sections.value]);
+
+function departmentOptionLabel(sec: Section): string {
+  const pmHint = sec.managerName ? ` (PM: ${sec.managerName})` : "";
+  if (!sectionHasParent(sec)) {
+    return `${sec.name}${pmHint}`;
   }
-  return sections.value;
-});
+  return `${sec.name}${pmHint}`;
+}
 
 // Dữ liệu dropdown từ DB
 const sections = ref<Section[]>([]);
@@ -178,9 +179,8 @@ const openCreateDrawer = () => {
   formCode.value = "";
   formName.value = "";
   formEmail.value = "";
-  const defaultChild = childSections.value[0]?.id ?? "";
-  formSectionId.value = defaultChild;
-  formManagedDepartmentId.value = defaultChild;
+  formSectionId.value = "";
+  formManagedDepartmentId.value = "";
   formJobTitleId.value = jobTitles.value[0]?.id ?? "";
   formStatus.value = "active";
   formRoleCode.value = "MEMBER";
@@ -211,29 +211,13 @@ async function loadLeaderMemberCandidates() {
   }
 }
 
-function ensureSectionInPool(
-  currentId: string,
-  pool: Section[],
-): string {
+function ensureSectionInPool(currentId: string, pool: Section[]): string {
   if (!pool.length) return "";
   if (pool.some((s) => s.id === currentId)) return currentId;
   return pool[0]?.id ?? "";
 }
 
 watch([formRoleCode, formSectionId], () => {
-  if (isCreateMode.value && (isPmRole.value || isLeaderRole.value)) {
-    const pool = childSections.value;
-    formSectionId.value = ensureSectionInPool(formSectionId.value, pool);
-    if (isPmRole.value) {
-      formManagedDepartmentId.value = ensureSectionInPool(
-        formManagedDepartmentId.value || formSectionId.value,
-        pool,
-      );
-    }
-  }
-  if (isPmRole.value && !formManagedDepartmentId.value) {
-    formManagedDepartmentId.value = formSectionId.value;
-  }
   if (isLeaderRole.value) {
     void loadLeaderMemberCandidates();
   } else {
@@ -249,13 +233,15 @@ function toggleLeaderMember(id: string) {
   formMemberIds.value = [...set];
 }
 
-const openEditDrawer = (emp: Employee) => {
-  drawerMode.value = "edit";
+const loadingEditDetail = ref(false);
+
+async function hydrateFormFromEmployee(emp: Employee) {
   formCode.value = emp.code;
   formName.value = emp.name;
   formEmail.value = emp.email;
-  const matchedSection = sections.value.find((s) => s.name === emp.section);
-  formSectionId.value = matchedSection?.id ?? sections.value[0]?.id ?? "";
+  formStatus.value = emp.status;
+  formRoleCode.value = emp.roleCode ?? "MEMBER";
+
   const byId = emp.jobTitleId
     ? jobTitles.value.find((j) => j.id === emp.jobTitleId)
     : undefined;
@@ -264,10 +250,55 @@ const openEditDrawer = (emp: Employee) => {
       ? jobTitles.value.find((j) => j.name === emp.jobTitle)
       : undefined;
   formJobTitleId.value = (byId ?? byName)?.id ?? jobTitles.value[0]?.id ?? "";
-  formStatus.value = emp.status;
+
+  const sectionFromId = emp.sectionId?.trim();
+  const matchedSection = sectionFromId
+    ? sections.value.find((s) => s.id === sectionFromId)
+    : sections.value.find((s) => s.name === emp.section);
+  const defaultSection = matchedSection?.id ?? "";
+
+  if (emp.roleCode === "PM") {
+    const managed = emp.managedDepartmentId?.trim() || sectionFromId || "";
+    formManagedDepartmentId.value = ensureSectionInPool(
+      managed,
+      departmentOptions.value,
+    );
+    formSectionId.value = formManagedDepartmentId.value;
+  } else {
+    formManagedDepartmentId.value = "";
+    formSectionId.value = ensureSectionInPool(
+      defaultSection,
+      departmentOptions.value,
+    );
+  }
+
+  formMemberIds.value = [...(emp.memberIds ?? [])];
+
+  if (emp.roleCode === "LEADER" && formSectionId.value) {
+    await loadLeaderMemberCandidates();
+  } else {
+    leaderMemberCandidates.value = [];
+  }
+}
+
+const openEditDrawer = async (emp: Employee) => {
+  drawerMode.value = "edit";
   formCodeDisabled.value = true;
   editingId.value = emp.id;
+  loadingEditDetail.value = true;
   showDrawer.value = true;
+  try {
+    const detail = await adminKpiService.getEmployeeById(emp.id);
+    await hydrateFormFromEmployee(detail);
+  } catch (err) {
+    console.error("[AdminEmployeePage] openEditDrawer", err);
+    await hydrateFormFromEmployee(emp);
+    triggerToast(
+      "Không tải đủ chi tiết nhân sự — hiển thị dữ liệu từ bảng. Lưu lại để đồng bộ org/role.",
+    );
+  } finally {
+    loadingEditDetail.value = false;
+  }
 };
 
 const closeDrawer = () => {
@@ -289,26 +320,15 @@ const saveEmployee = async () => {
     triggerToast("Vui lòng nhập đầy đủ thông tin bắt buộc (*).");
     return;
   }
-  if (isCreateMode.value && isPmRole.value && !managedDeptId) {
-    triggerToast("PM phải chọn bộ phận quản lý.");
-    return;
-  }
   if (
-    isCreateMode.value
-    && isPmRole.value
-    && selectedManagedSection.value?.managerId
+    isCreateMode.value &&
+    isPmRole.value &&
+    managedDeptId &&
+    selectedManagedSection.value?.managerId
   ) {
     triggerToast(
       `Bộ phận đã có PM (${selectedManagedSection.value?.managerName ?? "hiện tại"}). Vui lòng chọn bộ phận khác.`,
     );
-    return;
-  }
-  if (isCreateMode.value && isLeaderRole.value && !sectionId) {
-    triggerToast("Leader phải chọn phòng ban (Section).");
-    return;
-  }
-  if (!isPmRole.value && !sectionId) {
-    triggerToast("Vui lòng chọn phòng ban (Section).");
     return;
   }
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -320,18 +340,20 @@ const saveEmployee = async () => {
     code,
     name,
     email,
-    sectionId: isPmRole.value ? managedDeptId : sectionId,
     jobTitleId,
     status: formStatus.value,
   };
-  if (isCreateMode.value) {
-    payload.roleCode = formRoleCode.value;
-    if (isPmRole.value) {
+  payload.roleCode = formRoleCode.value;
+  if (isPmRole.value) {
+    if (managedDeptId) {
       payload.managedDepartmentId = managedDeptId;
+      payload.sectionId = managedDeptId;
     }
-    if (isLeaderRole.value && formMemberIds.value.length > 0) {
-      payload.memberIds = [...formMemberIds.value];
-    }
+  } else if (sectionId) {
+    payload.sectionId = sectionId;
+  }
+  if (isLeaderRole.value && formMemberIds.value.length > 0) {
+    payload.memberIds = [...formMemberIds.value];
   }
 
   saving.value = true;
@@ -356,7 +378,8 @@ const saveEmployee = async () => {
     const ax = err as { response?: { data?: { message?: string } } };
     const msg = ax.response?.data?.message?.trim();
     triggerToast(
-      msg || "Lưu thông tin thất bại. Vui lòng thử lại hoặc kiểm tra log backend.",
+      msg ||
+        "Lưu thông tin thất bại. Vui lòng thử lại hoặc kiểm tra log backend.",
     );
   } finally {
     saving.value = false;
@@ -864,8 +887,19 @@ const avatarIcon = (status: EmployeeStatus) =>
       </div>
 
       <div class="flex-1 overflow-y-auto p-6 space-y-6">
+        <div
+          v-if="loadingEditDetail"
+          class="rounded-lg border border-dashed border-indigo-200 bg-indigo-50/50 px-4 py-6 text-center text-sm text-indigo-800"
+        >
+          <i class="fas fa-spinner fa-spin mr-2" />
+          Đang tải thông tin nhân sự…
+        </div>
+
         <!-- Section 1: Identity -->
-        <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+        <div
+          class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm"
+          :class="loadingEditDetail ? 'pointer-events-none opacity-50' : ''"
+        >
           <h3
             class="font-bold text-slate-800 text-sm mb-4 border-b border-slate-100 pb-2"
           >
@@ -886,6 +920,9 @@ const avatarIcon = (status: EmployeeStatus) =>
                   :disabled="formCodeDisabled"
                   class="w-full border border-slate-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 font-bold uppercase disabled:bg-slate-100 disabled:cursor-not-allowed"
                 />
+                <p v-if="!isCreateMode" class="mt-1 text-[11px] text-slate-500">
+                  Mã nhân viên không thể thay đổi khi cập nhật.
+                </p>
               </div>
               <div>
                 <label
@@ -932,14 +969,17 @@ const avatarIcon = (status: EmployeeStatus) =>
         </div>
 
         <!-- Section 2: Org Structure -->
-        <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+        <div
+          class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm"
+          :class="loadingEditDetail ? 'pointer-events-none opacity-50' : ''"
+        >
           <h3
             class="font-bold text-slate-800 text-sm mb-4 border-b border-slate-100 pb-2"
           >
             2. Cấu trúc Tổ chức (Org Chart)
           </h3>
           <div class="space-y-4">
-            <div v-if="isCreateMode">
+            <div>
               <label
                 class="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1"
               >
@@ -954,64 +994,82 @@ const avatarIcon = (status: EmployeeStatus) =>
                 <option value="PM">PM — Quản lý bộ phận</option>
               </select>
               <p class="mt-1 text-[11px] text-slate-500">
-                Vai trò quyết định quyền KPI và cách gắn org chart (PM → Leader → Member).
+                Vai trò quyết định quyền KPI và cách gắn org chart (PM → Leader
+                → Member).
               </p>
             </div>
 
-            <div v-if="isCreateMode && isPmRole">
+            <div v-if="isPmRole">
               <label
                 class="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1"
               >
-                Bộ phận quản lý (PM) <span class="text-red-500">*</span>
+                Bộ phận quản lý (PM)
               </label>
               <select
                 v-model="formManagedDepartmentId"
                 class="w-full border border-slate-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 bg-white"
               >
-                <option value="">-- Chọn bộ phận quản lý --</option>
-                <option v-for="sec in childSections" :key="sec.id" :value="sec.id">
-                  {{ sec.name }}
-                  <template v-if="sec.managerName"> (PM: {{ sec.managerName }})</template>
+                <option value="">-- Không chọn / gán sau --</option>
+                <option
+                  v-for="sec in departmentOptions"
+                  :key="sec.id"
+                  :value="sec.id"
+                >
+                  {{ departmentOptionLabel(sec) }}
                 </option>
               </select>
               <p
-                v-if="isCreateMode && isPmRole && childSections.length === 0"
+                v-if="isPmRole && sections.length === 0"
                 class="mt-1 text-[11px] text-amber-700"
               >
-                Chưa có bộ phận cấp Section. Vui lòng tạo phòng ban con trong GM Organization.
+                Chưa có dữ liệu phòng ban. Vui lòng tạo org chart trong GM
+                Organization.
+              </p>
+              <p v-else-if="isPmRole" class="mt-1 text-[11px] text-slate-500">
+                Tùy chọn — có thể gán PM cho mọi bộ phận (kể cả cấp gốc).
               </p>
               <p
-                v-else-if="selectedManagedSection?.managerName"
+                v-else-if="isCreateMode && selectedManagedSection?.managerName"
                 class="mt-1 text-[11px] font-medium text-amber-700"
               >
-                Bộ phận này đang có PM: {{ selectedManagedSection.managerName }}. Chọn bộ phận khác hoặc đổi PM tại GM Organization.
+                Bộ phận này đang có PM:
+                {{ selectedManagedSection.managerName }}. Chọn bộ phận khác hoặc
+                đổi PM tại GM Organization.
               </p>
             </div>
 
-            <div v-if="!isPmRole || !isCreateMode">
+            <div v-if="!isPmRole">
               <label
                 class="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1"
               >
-                Phòng ban (Section) <span class="text-red-500">*</span>
+                Phòng ban (Section)
               </label>
               <select
                 v-model="formSectionId"
                 class="w-full border border-slate-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 bg-white"
               >
-                <option value="">-- Chọn phòng ban --</option>
-                <option v-for="sec in sectionDropdownOptions" :key="sec.id" :value="sec.id">
-                  {{ sec.name }}
+                <option value="">-- Không chọn / gán sau --</option>
+                <option
+                  v-for="sec in departmentOptions"
+                  :key="sec.id"
+                  :value="sec.id"
+                >
+                  {{ departmentOptionLabel(sec) }}
                 </option>
               </select>
               <p
-                v-if="isCreateMode && isLeaderRole && childSections.length === 0"
+                v-if="!isPmRole && sections.length === 0"
                 class="mt-1 text-[11px] text-amber-700"
               >
-                Chưa có bộ phận cấp Section. Vui lòng tạo phòng ban con trong GM Organization.
+                Chưa có dữ liệu phòng ban. Vui lòng tạo org chart trong GM
+                Organization.
+              </p>
+              <p v-else-if="!isPmRole" class="mt-1 text-[11px] text-slate-500">
+                Tùy chọn — gán phòng ban sau tại GM Organization nếu cần.
               </p>
             </div>
 
-            <div v-if="isCreateMode && isLeaderRole">
+            <div v-if="isLeaderRole">
               <label
                 class="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1"
               >
@@ -1057,14 +1115,22 @@ const avatarIcon = (status: EmployeeStatus) =>
                     :checked="formMemberIds.includes(c.id)"
                     @change="toggleLeaderMember(c.id)"
                   />
-                  <label :for="'lm-' + c.id" class="min-w-0 flex-1 cursor-pointer">
-                    <span class="block text-sm font-semibold text-slate-800">{{ c.name }}</span>
-                    <span class="block text-[11px] text-slate-500">{{ c.email }}</span>
+                  <label
+                    :for="'lm-' + c.id"
+                    class="min-w-0 flex-1 cursor-pointer"
+                  >
+                    <span class="block text-sm font-semibold text-slate-800">{{
+                      c.name
+                    }}</span>
+                    <span class="block text-[11px] text-slate-500">{{
+                      c.email
+                    }}</span>
                   </label>
                   <span
                     v-if="c.rankCode"
                     class="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-600"
-                  >{{ c.rankCode }}</span>
+                    >{{ c.rankCode }}</span
+                  >
                 </li>
               </ul>
             </div>

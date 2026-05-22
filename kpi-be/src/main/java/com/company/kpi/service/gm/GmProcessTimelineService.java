@@ -358,7 +358,7 @@ public class GmProcessTimelineService {
         d.setLeader(row.getLeaderName());
         d.setDepartmentName(row.getDepartmentName());
         d.setBottleneck("Member");
-        d.setReason("Thành viên chưa có KPI cá nhân được gán trong chu kỳ này.");
+        d.setReason("Members do not have assigned KPIs for this period.");
         return d;
     }
 
@@ -372,12 +372,12 @@ public class GmProcessTimelineService {
 
     private String reasonForSetting(int code) {
         return switch (code) {
-            case STATUS_DRAFT -> "Draft chưa được submit lên PM";
-            case STATUS_WAITING_PM -> "PM chưa duyệt đề xuất";
-            case STATUS_WAITING_GM -> "Chờ GM duyệt tạo mới";
-            case STATUS_PENDING_ACCEPT -> "Member chưa bấm Accept";
-            case STATUS_REJECTED -> "KPI bị từ chối — cần xử lý lại";
-            default -> "Đang chờ duyệt";
+            case STATUS_DRAFT -> "Draft not submitted to PM";
+            case STATUS_WAITING_PM -> "PM not approved proposal";
+            case STATUS_WAITING_GM -> "Waiting GM approval";
+            case STATUS_PENDING_ACCEPT -> "Member not accepted";
+            case STATUS_REJECTED -> "KPI rejected — needs rework";
+            default -> "Waiting approval";
         };
     }
 

@@ -24,8 +24,15 @@ public class PmDashboardResponse {
     @Builder.Default
     private KpiCycleResponse kpiCycle = null;
 
+    /** ISO-8601 — {@code users.created_at}; onboard từ {@code mid_year_start} → FE thu timeline Year-End only. */
+    private String accountCreatedAt;
+
     private String evaluationCommentsPortfolio;
     private String evaluationCommentsPromotion;
+    /** Nhận xét supervisor tab Portfolio (PM hoặc GM sau hub). */
+    private String evaluationSupervisorComments;
+    /** Nhận xét supervisor tab Promotion. */
+    private String evaluationSupervisorCommentsPromotion;
 
     @Getter
     @Builder
@@ -57,7 +64,9 @@ public class PmDashboardResponse {
         private BigDecimal selfScore;
         /** Điểm supervisor hiển thị: {@code end_gm_score} nếu GM đã chấm, không thì {@code end_pm_score}. */
         private BigDecimal pmScore;
-        /** Nhận xét GM theo KPI — {@code kpi_assignments.evidences.gmComment}. */
+        /** Nhận xét PM — {@code kpi_assignments.evidences.pmComment}. */
+        private String pmEvaluationComment;
+        /** Nhận xét GM — {@code kpi_assignments.evidences.gmComment}. */
         private String gmEvaluationComment;
         private Boolean isTree;
         private Boolean expanded;
@@ -91,6 +100,8 @@ public class PmDashboardResponse {
         private BigDecimal selfScore;   // end_self_score fallback mid_self_score
         /** Điểm supervisor: {@code end_gm_score} nếu có, không thì {@code end_pm_score}. */
         private BigDecimal pmScore;
+        /** Nhận xét PM — {@code kpi_assignments.evidences.pmComment}. */
+        private String pmEvaluationComment;
         /** Nhận xét GM — {@code kpi_assignments.evidences.gmComment}. */
         private String gmEvaluationComment;
         private Integer statusCode;

@@ -57,6 +57,9 @@ export interface Employee {
   /** UUID job_titles.id (phục vụ edit bằng dropdown) */
   jobTitleId?: string;
   status: EmployeeStatus;
+  roleCode?: EmployeeSystemRole;
+  managedDepartmentId?: string;
+  memberIds?: string[];
 }
 
 /** Phòng ban — lấy từ bảng departments trong DB */
@@ -99,23 +102,48 @@ export interface JobTitleOption {
 export const MOCK_DEPARTMENTS: Section[] = [
   {
     id: "f1000000-0000-0000-0000-000000000001",
-    name: "Section 1",
+    name: "Công ty",
     parentId: null,
   },
   {
     id: "f1000000-0000-0000-0000-000000000002",
-    name: "Section 2",
+    name: "Section 1",
     parentId: "f1000000-0000-0000-0000-000000000001",
   },
   {
     id: "f1000000-0000-0000-0000-000000000003",
-    name: "Section 3",
-    parentId: "f1000000-0000-0000-0000-000000000002",
+    name: "Section 2",
+    parentId: "f1000000-0000-0000-0000-000000000001",
   },
   {
     id: "f1000000-0000-0000-0000-000000000004",
+    name: "Section 3",
+    parentId: "f1000000-0000-0000-0000-000000000001",
+  },
+  {
+    id: "f1000000-0000-0000-0000-000000000005",
     name: "Section 4",
-    parentId: "f1000000-0000-0000-0000-000000000002",
+    parentId: "f1000000-0000-0000-0000-000000000001",
+  },
+  {
+    id: "f1000000-0000-0000-0000-000000000006",
+    name: "Section 5",
+    parentId: "f1000000-0000-0000-0000-000000000001",
+  },
+  {
+    id: "f1000000-0000-0000-0000-000000000007",
+    name: "Section 6",
+    parentId: "f1000000-0000-0000-0000-000000000001",
+  },
+  {
+    id: "f1000000-0000-0000-0000-000000000008",
+    name: "Section 7",
+    parentId: "f1000000-0000-0000-0000-000000000001",
+  },
+  {
+    id: "f1000000-0000-0000-0000-000000000009",
+    name: "Section 8",
+    parentId: "f1000000-0000-0000-0000-000000000001",
   },
 ];
 

@@ -14,6 +14,10 @@ import {
   flattenGmKpiItems,
   isGmEvalPromotionKpiGroup,
 } from "@/utils/gmEmployeeEvaluation";
+import {
+  formatGmDrawerValueWithUnit,
+  gmDrawerUnitContextFromItem,
+} from "@/utils/mapGmEvaluationHubApiToPmBranches";
 import type {
   GmEvalMember,
   GmEvalPmBranch,
@@ -21,7 +25,9 @@ import type {
   GmKpiItem,
 } from "@/types/gm-employee-evaluation";
 import { isReadonlyKpiYear } from "@/utils/kpi-year";
+import { getApiErrorMessage } from "@/utils/apiErrorMessage";
 import { gmKpiService } from "@/services/modules/kpi-gm.service";
+import { useToast } from "vue-toastification";
 import {
   activateEvidenceAttachment,
   evidenceAttachmentLabel,
@@ -30,6 +36,12 @@ import {
   isRecordStyleCalcRule,
   normalizeEvidenceHref,
 } from "@/utils/memberKpiHelpers";
+import {
+  gmAsmStatusPillClass,
+  minGmAsmStatusCode,
+} from "@/utils/gmAsmStatusUi";
+import { pmAsmStatusPillClass } from "@/utils/pmAsmStatusUi";
+import { kpiCreatorRowBgClass } from "@/utils/kpiCreatorRowBg";
 
 const props = withDefaults(
   defineProps<{
@@ -54,6 +66,7 @@ const emit = defineEmits<{
 }>();
 
 const route = useRoute();
+const toast = useToast();
 const layoutYear = inject<ComputedRef<number> | undefined>(
   "gmEvaluationYear",
   undefined,
@@ -112,7 +125,6 @@ const supervisorPortfolioComments = reactive<Record<string, string>>({});
 const supervisorPromotionComments = reactive<Record<string, string>>({});
 /** `${empId}:cascade` | `${empId}:promotion` */
 const supervisorCommentSubmitAttempted = reactive<Record<string, boolean>>({});
-const banner = ref<{ type: "ok" | "info"; text: string } | null>(null);
 const confirmBusy = ref(false);
 const unlockBusy = ref(false);
 const unlockConfirmTarget = ref<{ emp: GmEvalMember; tab: "cascade" | "promotion" } | null>(null);
@@ -305,6 +317,82 @@ function usesPmStyleEvidence(item: GmKpiItem): boolean {
     item.evidenceContent !== undefined ||
     item.evidenceAttachments !== undefined
   );
+}
+
+function drawerItemCode(item: GmKpiItem): string {
+  return String(item.code ?? "").trim();
+}
+
+function drawerItemName(item: GmKpiItem): string {
+  return String(item.name ?? item.title ?? "").trim();
+}
+
+function drawerStatusLabel(item: GmKpiItem): string {
+  const direct = String(item.statusDesc ?? item.assignmentStatusDisplay ?? "").trim();
+  return direct || "-";
+}
+
+function drawerStatusClass(item: GmKpiItem): string {
+  const code = item.statusCode ?? item.hubAssignmentStatusCode;
+  if (code == null || !Number.isFinite(Number(code))) {
+    return "border-slate-200 bg-slate-50 text-slate-600";
+  }
+  return pmAsmStatusPillClass(Number(code));
+}
+
+function hasDrawerEvidence(item: GmKpiItem): boolean {
+  return Boolean(
+    (Array.isArray(item.evidenceData) && item.evidenceData.length > 0) ||
+      String(item.evidenceContent ?? "").trim() ||
+      (Array.isArray(item.evidenceAttachments) &&
+        item.evidenceAttachments.length > 0),
+  );
+}
+
+function drawerValueWithUnit(item: GmKpiItem, value: unknown): string {
+  const text = String(value ?? "").trim();
+  if (!text || text === "-") return "-";
+  return formatGmDrawerValueWithUnit(text, gmDrawerUnitContextFromItem(item));
+}
+
+/** Bóc hậu tố đơn vị để format lại khi dữ liệu cũ chỉ lưu số. */
+function stripDrawerUnitSuffix(display: string): string {
+  return String(display ?? "")
+    .trim()
+    .replace(/\s*%$/, "")
+    .replace(/\s+(MM|Point|Product|Project|Certification|Article|Person)$/i, "")
+    .trim();
+}
+
+/** Cột TARGET — ghép đơn vị giống PM drawer. */
+function drawerTargetDisplay(item: GmKpiItem): string {
+  const raw =
+    item.targetRaw != null && String(item.targetRaw).trim() !== ""
+      ? item.targetRaw
+      : stripDrawerUnitSuffix(String(item.target ?? ""));
+  return drawerValueWithUnit(item, raw);
+}
+
+/** Cột ACTUAL — ghép đơn vị giống PM drawer. */
+function drawerActualDisplay(item: GmKpiItem): string {
+  const raw = item.actualRaw ?? item.actualResult;
+  if (raw == null) return "-";
+  const text = String(raw).trim();
+  if (!text || text === "-") return "-";
+  if (item.unitCode === 902 && /%$/.test(text)) return text;
+  return drawerValueWithUnit(item, text);
+}
+
+function drawerGroupRowClass(group: GmKpiGroup): string {
+  return isGmEvalPromotionKpiGroup(group)
+    ? "bg-violet-50/70 border-y border-violet-100"
+    : "bg-slate-50 border-y border-slate-200";
+}
+
+function drawerGroupLabelClass(group: GmKpiGroup): string {
+  return isGmEvalPromotionKpiGroup(group)
+    ? "text-violet-800"
+    : "text-slate-800";
 }
 
 function gmEvidenceColspan(item: GmKpiItem): number {
@@ -586,24 +674,28 @@ function isAwaitingGmEvaluation(emp: GmEvalMember): boolean {
   );
 }
 
-function scopedSheetStatus(emp: GmEvalMember, tab = tableEvalTab.value): GmEvalMember["status"] {
-  const codes = itemsForEvalTab(emp, tab)
-    .map((item) => Number(item.hubAssignmentStatusCode))
-    .filter((code) => Number.isFinite(code));
-  if (!codes.length) return "self_scoring";
-  if (codes.some((code) => code === 502 || code === 602)) return "pending_pm";
-  if (codes.every((code) => code >= 601)) return "approved";
-  return "self_scoring";
+const EVAL_STATUS_PILL_BASE =
+  "inline-flex max-w-full items-center justify-center rounded-md border px-2 py-1 text-[10px] font-bold leading-none sm:text-[11px]";
+
+function hubAsmStatusCodeForTab(
+  emp: GmEvalMember,
+  tab: "cascade" | "promotion" = tableEvalTab.value,
+): number | null {
+  return minGmAsmStatusCode(
+    itemsForEvalTab(emp, tab).map((item) => item.hubAssignmentStatusCode),
+  );
 }
 
-function statusBadgeClassForTab(emp: GmEvalMember, tab = tableEvalTab.value) {
-  return statusBadgeClass({ ...emp, status: scopedSheetStatus(emp, tab) });
-}
-
-function statusBadgeDotClassForTab(emp: GmEvalMember, tab = tableEvalTab.value) {
-  return scopedSheetStatus(emp, tab) === "approved"
-    ? "bg-emerald-500"
-    : "bg-blue-500";
+function statusBadgeClassForTab(
+  emp: GmEvalMember,
+  tab: "cascade" | "promotion" = tableEvalTab.value,
+): string {
+  const code = hubAsmStatusCodeForTab(emp, tab);
+  const colors =
+    code != null
+      ? gmAsmStatusPillClass(code)
+      : "border-slate-200 bg-slate-50 text-slate-500";
+  return `${EVAL_STATUS_PILL_BASE} ${colors}`;
 }
 
 function assignmentProgressLabelForTab(emp: GmEvalMember, tab = tableEvalTab.value): string {
@@ -655,6 +747,59 @@ function pmBranchHasPending(br: GmEvalPmBranch): boolean {
     isAwaitingGmEvaluationForTab(emp, tableEvalTab.value),
   );
 }
+
+/** Số PM/leader/member trong section còn KPI chờ GM trên tab đang xem. */
+function sectionPendingCountForTab(
+  br: GmEvalPmBranch,
+  tab: "cascade" | "promotion" = tableEvalTab.value,
+): number {
+  return flattenPmBranchSheetHolders(br).filter((emp) =>
+    isAwaitingGmEvaluationForTab(emp, tab),
+  ).length;
+}
+
+function sectionHasPendingEvaluation(
+  br: GmEvalPmBranch,
+  tab: "cascade" | "promotion" = tableEvalTab.value,
+): boolean {
+  return sectionPendingCountForTab(br, tab) > 0;
+}
+
+/** Nền header department (collapse) khi còn member chờ GM đánh giá. */
+function sectionHeaderRowClass(br: GmEvalPmBranch): string {
+  const base = "cursor-pointer border-y transition-colors";
+  if (sectionHasPendingEvaluation(br)) {
+    return `${base} border-amber-200/90 bg-amber-50 hover:bg-amber-100/90`;
+  }
+  return `${base} border-slate-200 bg-slate-100/95 hover:bg-slate-100`;
+}
+
+function sectionPendingTitle(br: GmEvalPmBranch): string | undefined {
+  const n = sectionPendingCountForTab(br);
+  if (n <= 0) return undefined;
+  return tableEvalTab.value === "promotion"
+    ? `${n} member(s) in this department awaiting Promotion evaluation`
+    : `${n} member(s) in this department awaiting Individual/Team evaluation`;
+}
+
+/** Mọi người có sheet KPI trên hub (PM + leader + member hoặc danh sách phẳng). */
+const allEvaluationSheetHolders = computed((): GmEvalMember[] => {
+  if (usePmTree.value && props.pmBranches?.length) {
+    return props.pmBranches.flatMap((br) => flattenPmBranchSheetHolders(br));
+  }
+  return employees.value;
+});
+
+/** Badge tab KPI Personal / KPI Promotion — số người còn KPI chờ GM (502/602). */
+const evalTabPendingCounts = computed(() => {
+  const holders = allEvaluationSheetHolders.value;
+  return {
+    cascade: holders.filter((e) => isAwaitingGmEvaluationForTab(e, "cascade"))
+      .length,
+    promotion: holders.filter((e) => isAwaitingGmEvaluationForTab(e, "promotion"))
+      .length,
+  };
+});
 
 const displayedPmBranches = computed(() => {
   if (!usePmTree.value || !props.pmBranches?.length) return [];
@@ -744,14 +889,6 @@ const pendingCount = computed(
   () => employees.value.filter((e) => e.status === "pending_pm").length,
 );
 
-const cascadePendingCount = computed(() =>
-  employees.value.filter((e) => isAwaitingGmEvaluationForTab(e, "cascade")).length,
-);
-
-const promotionPendingCount = computed(() =>
-  employees.value.filter((e) => isAwaitingGmEvaluationForTab(e, "promotion")).length,
-);
-
 /** Nhân viên/PM đang mở drawer đánh giá (phải còn trong danh sách sau lọc). */
 const drawerEmployee = computed(() => {
   const id = drawerEmpId.value;
@@ -789,13 +926,8 @@ const drawerPromotionItemCount = computed(() =>
   drawerPromotionGroups.value.reduce((s, g) => s + g.items.length, 0),
 );
 
-function statusBadgeClass(emp: GmEvalMember) {
-  const base =
-    "inline-flex max-w-full items-center justify-center gap-1.5 rounded-md border px-2 py-1 text-[10px] font-bold leading-none sm:text-[11px]";
-  if (emp.status === "approved") {
-    return `${base} border-emerald-200 bg-emerald-50 text-emerald-700`;
-  }
-  return `${base} border-blue-200 bg-blue-50 text-blue-700`;
+function statusBadgeClass(emp: GmEvalMember): string {
+  return statusBadgeClassForTab(emp, tableEvalTab.value);
 }
 
 /** Cột Tiến độ: `sys_status_codes.name` (API / mock), không map nhãn cố định. */
@@ -870,15 +1002,11 @@ async function confirmUnlockKpis() {
   const cid = String(selectedCycleId.value ?? "").trim();
   const uid = String(target.emp.evaluationUserId ?? "").trim();
   if (!cid || !uid) {
-    banner.value = {
-      type: "info",
-      text: !cid
+    toast.warning(
+      !cid
         ? "No KPI cycle selected — cannot unlock."
         : "Missing employee id (evaluationUserId) — cannot unlock.",
-    };
-    setTimeout(() => {
-      banner.value = null;
-    }, 3200);
+    );
     return;
   }
   unlockBusy.value = true;
@@ -889,23 +1017,16 @@ async function confirmUnlockKpis() {
         evaluationUserId: uid,
         promotion: target.tab === "promotion",
       });
-      banner.value = {
-        type: "ok",
-        text: `Unlocked ${res.updatedCount} KPI(s).`,
-      };
+      toast.success(`Unlocked ${res.updatedCount} KPI(s) for ${target.emp.name}.`);
     } else {
-      banner.value = {
-        type: "ok",
-        text: `Unlocked KPI(s) for ${target.emp.name}.`,
-      };
+      toast.success(`Unlocked KPI(s) for ${target.emp.name}.`);
     }
     unlockConfirmTarget.value = null;
     emit("reloadEvaluationHub");
   } catch (e: unknown) {
-    banner.value = {
-      type: "info",
-      text: e instanceof Error ? e.message : "Could not unlock KPI — please try again later.",
-    };
+    toast.error(
+      getApiErrorMessage(e, "Could not unlock KPI — please try again later."),
+    );
   } finally {
     unlockBusy.value = false;
   }
@@ -964,16 +1085,11 @@ async function confirmDone(
   if (!isAwaitingGmEvaluationForTab(emp, tab)) return;
   const items = itemsForHubConfirmScopeForTab(emp, scope, tab);
   if (!items.length) {
-    banner.value = {
-      type: "info",
-      text:
-        scope === 502
-          ? "No KPIs in (mid-year, awaiting GM) to complete review for this tab."
-          : "No KPIs in (year-end, awaiting GM) to confirm evaluation for this tab.",
-    };
-    setTimeout(() => {
-      banner.value = null;
-    }, 3200);
+    toast.warning(
+      scope === 502
+        ? "No KPIs awaiting GM mid-year review on this tab."
+        : "No KPIs awaiting GM year-end evaluation on this tab.",
+    );
     return;
   }
 
@@ -984,50 +1100,30 @@ async function confirmDone(
       : (supervisorPortfolioComments[emp.id] ?? "").trim();
   if (needFinal && !c) {
     supervisorCommentSubmitAttempted[supervisorAttemptKey(emp.id, tab)] = true;
-    banner.value = {
-      type: "info",
-      text: "Please enter a Supervisor Comment before completing year-end evaluation.",
-    };
-    setTimeout(() => {
-      banner.value = null;
-    }, 3200);
+    toast.warning(
+      "Please enter a Supervisor Comment before completing year-end evaluation.",
+    );
     return;
   }
   if (needFinal)
     supervisorCommentSubmitAttempted[supervisorAttemptKey(emp.id, tab)] = false;
 
   if (needFinal && !hubGmScoresCompleteForItems(emp, items)) {
-    banner.value = {
-      type: "info",
-      text: "Please enter GM scores (1–5) for every KPI in status 602 before completing.",
-    };
-    setTimeout(() => {
-      banner.value = null;
-    }, 3200);
+    toast.warning(
+      "Please enter GM scores (1–5) for every KPI before completing.",
+    );
     return;
   }
 
   if (!useMockHub) {
     const cid = String(selectedCycleId.value ?? "").trim();
     if (!cid) {
-      banner.value = {
-        type: "info",
-        text: "No KPI cycle selected — cannot confirm.",
-      };
-      setTimeout(() => {
-        banner.value = null;
-      }, 3200);
+      toast.warning("No KPI cycle selected — cannot confirm.");
       return;
     }
     const uid = String(emp.evaluationUserId ?? "").trim();
     if (!uid) {
-      banner.value = {
-        type: "info",
-        text: "Missing employee id (evaluationUserId) — cannot confirm.",
-      };
-      setTimeout(() => {
-        banner.value = null;
-      }, 3200);
+      toast.warning("Missing employee id (evaluationUserId) — cannot confirm.");
       return;
     }
   }
@@ -1063,46 +1159,44 @@ async function confirmDone(
         }),
       });
       if (res.updatedCount === 0) {
-        banner.value = {
-          type: "info",
-          text:
-            scope === 502
-              ? "No assignments in  were updated (already processed or cycle mismatch)."
-              : "No assignments in  were updated (already processed or cycle mismatch).",
-        };
+        toast.warning(
+          scope === 502
+            ? "No mid-year assignments were updated (already processed or cycle mismatch)."
+            : "No year-end assignments were updated (already processed or cycle mismatch).",
+        );
       } else {
-        const tail = needFinal ? `Avg. ${gmScoreDetailLabel.value}: ${pmAvgInPanel(emp)}.` : "";
-        banner.value = {
-          type: "ok",
-          text:
+        const tabLabel = tab === "promotion" ? "Promotion" : "Individual / Team";
+        if (needFinal) {
+          const tail =
             res.skippedCount > 0
-              ? `Updated ${res.updatedCount} KPI(s); ${res.skippedCount} skipped (wrong status/cycle). ${tail}`.trim()
-              : needFinal
-                ? `Confirmed year-end evaluation for ${res.updatedCount} KPI(s). ${tail}`.trim()
-                : `Completed review for ${res.updatedCount} KPI(s).`.trim(),
-        };
+              ? ` ${res.skippedCount} skipped.`
+              : "";
+          toast.success(
+            `Year-end evaluation confirmed for ${emp.name} (${tabLabel}, ${res.updatedCount} KPI${res.updatedCount === 1 ? "" : "s"}).${tail} Avg. ${gmScoreDetailLabel.value}: ${pmAvgInPanel(emp)}.`,
+          );
+        } else if (res.skippedCount > 0) {
+          toast.success(
+            `Mid-year review completed for ${emp.name} (${tabLabel}, ${res.updatedCount} updated, ${res.skippedCount} skipped).`,
+          );
+        } else {
+          toast.success(
+            `Mid-year review completed for ${emp.name} (${tabLabel}, ${res.updatedCount} KPI${res.updatedCount === 1 ? "" : "s"}).`,
+          );
+        }
       }
     } else {
-      banner.value = {
-        type: "ok",
-        text: needFinal
+      toast.success(
+        needFinal
           ? `Year-end evaluation confirmed (mock) for ${emp.name}. Avg. ${gmScoreDetailLabel.value}: ${pmAvgInPanel(emp)}.`
           : `Mid-year review completed (mock) for ${emp.name}.`,
-      };
+      );
     }
     drawerEmpId.value = null;
     emit("reloadEvaluationHub");
   } catch (e: unknown) {
-    banner.value = {
-      type: "info",
-      text:
-        e instanceof Error ? e.message : "Could not confirm — please try again later.",
-    };
+    toast.error(getApiErrorMessage(e, "Could not confirm evaluation — please try again later."));
   } finally {
     confirmBusy.value = false;
-    setTimeout(() => {
-      banner.value = null;
-    }, 4200);
   }
 }
 </script>
@@ -1118,20 +1212,6 @@ async function confirmDone(
     </div>
 
     <template v-else>
-      <Transition name="fade">
-        <div
-          v-if="banner"
-          class="fixed bottom-6 right-6 z-[340] max-w-md rounded-xl border px-4 py-3 text-sm font-semibold shadow-lg"
-          :class="
-            banner.type === 'ok'
-              ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
-              : 'bg-amber-50 border-amber-200 text-amber-900'
-          "
-        >
-          {{ banner.text }}
-        </div>
-      </Transition>
-
       <div
         v-if="isReadonly"
         class="mx-4 mb-4 mt-4 flex items-start gap-2.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs text-slate-700 sm:mx-5 sm:mt-5 sm:text-sm"
@@ -1216,10 +1296,12 @@ async function confirmDone(
           >
             KPI Personal
             <span
-              v-if="cascadePendingCount > 0"
-              class="ml-2 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-bold text-white"
-              >{{ cascadePendingCount }}</span
+              v-if="evalTabPendingCounts.cascade > 0"
+              class="ml-1 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-bold leading-none text-white shadow-sm"
+              :title="`${evalTabPendingCounts.cascade} pending Individual/Team evaluation(s)`"
             >
+              {{ evalTabPendingCounts.cascade }}
+            </span>
           </button>
           <button
             type="button"
@@ -1233,10 +1315,12 @@ async function confirmDone(
           >
             KPI Promotion
             <span
-              v-if="promotionPendingCount > 0"
-              class="ml-2 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-bold text-white"
-              >{{ promotionPendingCount }}</span
+              v-if="evalTabPendingCounts.promotion > 0"
+              class="ml-1 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-bold leading-none text-white shadow-sm"
+              :title="`${evalTabPendingCounts.promotion} pending Promotion evaluation(s)`"
             >
+              {{ evalTabPendingCounts.promotion }}
+            </span>
           </button>
         </div>
 
@@ -1328,10 +1412,6 @@ async function confirmDone(
                       >
                     </template>
                     <span v-else :class="statusBadgeClassForTab(emp)">
-                      <span
-                        class="h-1.5 w-1.5 shrink-0 rounded-full"
-                        :class="statusBadgeDotClassForTab(emp)"
-                      />
                       <span class="truncate">
                         {{ assignmentProgressLabelForTab(emp) }}
                       </span>
@@ -1437,29 +1517,48 @@ async function confirmDone(
                 :key="sec.sectionId"
               >
                 <tr
-                  class="cursor-pointer border-y border-slate-200 bg-slate-100/95 transition-colors hover:bg-slate-100"
+                  :class="sectionHeaderRowClass(sec.branch)"
+                  :title="sectionPendingTitle(sec.branch)"
                   @click="toggleSectionExpand(sec.sectionId)"
                 >
                   <td colspan="6" class="px-4 py-3 sm:px-5 sm:py-3.5">
                     <div class="flex min-h-8 flex-wrap items-center gap-2.5">
                       <i
-                        class="fas fa-chevron-right text-xs text-slate-500 transition-transform duration-300 ease-out motion-reduce:transition-none sm:text-sm"
-                        :class="
-                          expandedSectionIds[sec.sectionId] ? 'rotate-90' : ''
-                        "
+                        class="fas fa-chevron-right text-xs transition-transform duration-300 ease-out motion-reduce:transition-none sm:text-sm"
+                        :class="[
+                          expandedSectionIds[sec.sectionId] ? 'rotate-90' : '',
+                          sectionHasPendingEvaluation(sec.branch)
+                            ? 'text-amber-700'
+                            : 'text-slate-500',
+                        ]"
                         aria-hidden="true"
                       />
                       <i
-                        class="fas fa-sitemap text-xs text-slate-500 sm:text-sm"
+                        class="fas fa-sitemap text-xs sm:text-sm"
+                        :class="
+                          sectionHasPendingEvaluation(sec.branch)
+                            ? 'text-amber-700'
+                            : 'text-slate-500'
+                        "
                         aria-hidden="true"
                       />
                       <span
-                        class="text-[11px] font-extrabold uppercase tracking-wide text-slate-700 sm:text-xs"
+                        class="text-[11px] font-extrabold uppercase tracking-wide sm:text-xs"
+                        :class="
+                          sectionHasPendingEvaluation(sec.branch)
+                            ? 'text-amber-900'
+                            : 'text-slate-700'
+                        "
                       >
                         {{ sec.sectionName }}
                       </span>
                       <span
-                        class="text-[11px] font-semibold normal-case text-slate-500 sm:text-xs"
+                        class="text-[11px] font-semibold normal-case sm:text-xs"
+                        :class="
+                          sectionHasPendingEvaluation(sec.branch)
+                            ? 'text-amber-800/90'
+                            : 'text-slate-500'
+                        "
                       >
                         · {{ sectionMembers(sec.branch).length }} members
                       </span>
@@ -1539,10 +1638,6 @@ async function confirmDone(
                                   >
                                 </template>
                                 <span v-else :class="statusBadgeClassForTab(emp)">
-                                  <span
-                                    class="h-1.5 w-1.5 shrink-0 rounded-full"
-                                    :class="statusBadgeDotClassForTab(emp)"
-                                  />
                                   <span class="truncate">
                                     {{ assignmentProgressLabelForTab(emp) }}
                                   </span>
@@ -1664,21 +1759,9 @@ async function confirmDone(
                                   class="px-3 py-2.5 text-center sm:px-4 sm:py-3"
                                 >
                                   <span :class="statusBadgeClass(br.pm)">
-                                    <span
-                                      v-if="br.pm.status === 'pending_pm'"
-                                      class="h-1.5 w-1.5 shrink-0 rounded-full bg-rose-500 animate-pulse"
-                                    />
-                                    <i
-                                      v-else-if="
-                                        br.pm.status === 'self_scoring'
-                                      "
-                                      class="fas fa-pen text-[10px]"
-                                    />
-                                    <i
-                                      v-else
-                                      class="fas fa-check text-[10px]"
-                                    />
-                                    {{ assignmentProgressLabel(br.pm) }}
+                                    <span class="truncate">{{
+                                      assignmentProgressLabel(br.pm)
+                                    }}</span>
                                   </span>
                                 </td>
                                 <td
@@ -1860,29 +1943,11 @@ async function confirmDone(
                                                       statusBadgeClass(ld.sheet)
                                                     "
                                                   >
-                                                    <span
-                                                      v-if="
-                                                        ld.sheet.status ===
-                                                        'pending_pm'
-                                                      "
-                                                      class="h-1.5 w-1.5 shrink-0 rounded-full bg-rose-500 animate-pulse"
-                                                    />
-                                                    <i
-                                                      v-else-if="
-                                                        ld.sheet.status ===
-                                                        'self_scoring'
-                                                      "
-                                                      class="fas fa-pen text-[10px]"
-                                                    />
-                                                    <i
-                                                      v-else
-                                                      class="fas fa-check text-[10px]"
-                                                    />
-                                                    {{
+                                                    <span class="truncate">{{
                                                       assignmentProgressLabel(
                                                         ld.sheet,
                                                       )
-                                                    }}
+                                                    }}</span>
                                                   </span>
                                                 </td>
                                                 <td
@@ -2080,29 +2145,11 @@ async function confirmDone(
                                                                     )
                                                                   "
                                                                 >
-                                                                  <span
-                                                                    v-if="
-                                                                      emp.status ===
-                                                                      'pending_pm'
-                                                                    "
-                                                                    class="h-1.5 w-1.5 shrink-0 rounded-full bg-rose-500 animate-pulse"
-                                                                  />
-                                                                  <i
-                                                                    v-else-if="
-                                                                      emp.status ===
-                                                                      'self_scoring'
-                                                                    "
-                                                                    class="fas fa-pen text-[10px]"
-                                                                  />
-                                                                  <i
-                                                                    v-else
-                                                                    class="fas fa-check text-[10px]"
-                                                                  />
-                                                                  {{
+                                                                  <span class="truncate">{{
                                                                     assignmentProgressLabel(
                                                                       emp,
                                                                     )
-                                                                  }}
+                                                                  }}</span>
                                                                 </span>
                                                               </td>
                                                               <td
@@ -2247,27 +2294,9 @@ async function confirmDone(
                                                 <span
                                                   :class="statusBadgeClass(emp)"
                                                 >
-                                                  <span
-                                                    v-if="
-                                                      emp.status ===
-                                                      'pending_pm'
-                                                    "
-                                                    class="h-1.5 w-1.5 shrink-0 rounded-full bg-rose-500 animate-pulse"
-                                                  />
-                                                  <i
-                                                    v-else-if="
-                                                      emp.status ===
-                                                      'self_scoring'
-                                                    "
-                                                    class="fas fa-pen text-[10px]"
-                                                  />
-                                                  <i
-                                                    v-else
-                                                    class="fas fa-check text-[10px]"
-                                                  />
-                                                  {{
+                                                  <span class="truncate">{{
                                                     assignmentProgressLabel(emp)
-                                                  }}
+                                                  }}</span>
                                                 </span>
                                               </td>
                                               <td
@@ -2447,65 +2476,22 @@ async function confirmDone(
                   <div
                     class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-md"
                   >
-                    <div
-                      class="border-b border-slate-200 bg-slate-50/80 px-4 py-4 sm:px-5"
-                    >
-                      <h3
-                        class="flex items-center gap-2 text-base font-bold text-slate-800"
-                      >
-                        <i
-                          class="fas fa-list text-indigo-600"
-                          aria-hidden="true"
-                        />
-                        Detailed evaluation sheet — {{ effectiveYear }}
-                      </h3>
-                      <p
-                        class="mt-0.5 text-[11px] font-medium text-slate-500 sm:text-xs"
-                      >
-                        {{ flattenGmKpiItems(drawerEmployee).length }} line items
-                        in total
-                        <span class="text-slate-400">·</span>
-                        Viewing:
-                        {{
-                          drawerEvalTab === "cascade"
-                            ? `${drawerCascadeItemCount} KPIs by BSC perspective (Individual / Cascading)`
-                            : `${drawerPromotionItemCount} KPI Promotion`
-                        }}
-                      </p>
-                    </div>
-
                     <div class="border-b border-slate-200 bg-white">
                       <div class="overflow-x-auto bg-white">
-                        <table class="w-full text-left">
-                          <thead>
-                            <tr
-                              class="border-b border-slate-200 bg-slate-100/50 text-[11px] font-bold uppercase tracking-wider text-slate-500"
-                            >
-                              <th class="w-10 px-4 py-3 text-center">#</th>
-                              <th
-                                class="min-w-[18rem] px-4 py-3 sm:min-w-[22rem] lg:min-w-[26rem]"
-                              >
-                                Objective
-                              </th>
-                              <th
-                                class="w-28 min-w-[7rem] px-4 py-3 text-center sm:w-32"
-                              >
-                                Weight
-                              </th>
-                              <th
-                                class="w-44 min-w-[11rem] px-4 py-3 text-center sm:w-52 sm:min-w-[13rem]"
-                              >
-                                Evidence
-                              </th>
-                              <th
-                                class="w-32 min-w-[8rem] px-4 py-3 text-center sm:w-36"
-                              >
-                                Self Score
-                              </th>
-                              <th
-                                class="w-36 min-w-[9rem] border-l border-indigo-100 bg-indigo-50/50 px-4 py-3 text-center text-indigo-800 shadow-inner sm:w-40"
-                              >
-                                {{ gmScoreDetailLabel }}
+                        <table class="min-w-[1180px] w-full text-sm text-left">
+                          <thead
+                            class="text-xs text-slate-500 uppercase bg-slate-50/80 border-b border-slate-200"
+                          >
+                            <tr>
+                              <th class="px-4 py-3 font-semibold text-center w-12">STT</th>
+                              <th class="px-4 py-3 font-semibold w-1/4">OBJECTIVES</th>
+                              <th class="px-4 py-3 font-semibold text-center w-48">TARGET</th>
+                              <th class="px-4 py-3 font-semibold text-center w-40">ACTUAL</th>
+                              <th class="px-4 py-3 font-semibold text-center w-20">WEIGHT (W)</th>
+                              <th class="px-4 py-3 font-semibold text-center w-32">EVIDENCE</th>
+                              <th class="px-4 py-3 font-semibold text-center w-32">SELF SCORE</th>
+                              <th class="px-4 py-3 font-semibold text-center w-32">
+                                FINAL SCORE
                                 <span
                                   v-if="
                                     drawerRequiresGmFinalGradingForTab(
@@ -2525,7 +2511,7 @@ async function confirmDone(
                           >
                             <tr>
                               <td
-                                colspan="6"
+                                colspan="8"
                                 class="px-4 py-12 text-center text-sm font-medium text-slate-500"
                               >
                                 No KPIs in this tab.
@@ -2540,10 +2526,11 @@ async function confirmDone(
                               v-for="group in drawerActiveKpiGroups"
                               :key="group.groupTitle"
                             >
-                              <tr class="border-y border-slate-200 bg-slate-50">
+                              <tr :class="drawerGroupRowClass(group)">
                                 <td
-                                  colspan="6"
-                                  class="px-5 py-2.5 text-xs font-extrabold uppercase tracking-wider text-indigo-900"
+                                  colspan="8"
+                                  class="px-4 py-2.5 text-xs font-bold uppercase tracking-wider"
+                                  :class="drawerGroupLabelClass(group)"
                                 >
                                   {{ group.groupTitle }}
                                 </td>
@@ -2553,40 +2540,51 @@ async function confirmDone(
                                 :key="item.id"
                               >
                                 <tr
-                                  class="transition-colors hover:bg-slate-50/50"
+                                  class="transition-colors"
+                                  :class="
+                                    kpiCreatorRowBgClass(
+                                      item.creatorRoleCode,
+                                      evidenceOpen(drawerEmployee.id, item.id),
+                                    )
+                                  "
                                 >
                                   <td
-                                    class="px-4 py-4 text-center font-bold text-slate-400"
+                                    class="px-4 py-4 text-center font-medium text-slate-400"
                                   >
                                     {{ itemIdx + 1 }}
                                   </td>
                                   <td class="px-4 py-4">
-                                    <p class="font-bold text-slate-900">
-                                      {{ item.title }}
+                                    <p class="flex flex-wrap items-center gap-2 font-semibold text-slate-800 text-sm">
+                                      <span v-if="drawerItemCode(item)">{{ drawerItemCode(item) }} </span>
+                                      <span>{{ drawerItemName(item) }}</span>
+                                      <span
+                                        class="inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold"
+                                        :class="drawerStatusClass(item)"
+                                      >
+                                        {{ drawerStatusLabel(item) }}
+                                      </span>
                                     </p>
                                   </td>
-                                  <td
-                                    class="min-w-[7rem] px-4 py-4 text-center sm:min-w-[8rem]"
-                                  >
-                                    <span
-                                      class="rounded bg-slate-100 px-2 py-1 font-bold text-slate-700"
-                                      >{{ item.weight }}</span
-                                    >
+                                  <td class="px-4 py-4 text-slate-600 text-xs leading-relaxed text-center">
+                                    {{ drawerTargetDisplay(item) }}
                                   </td>
-                                  <td
-                                    class="min-w-[11rem] px-4 py-4 text-center sm:min-w-[13rem]"
-                                  >
+                                  <td class="px-4 py-4 text-center">
+                                    <p class="text-xs font-medium text-emerald-700 leading-relaxed">
+                                      {{ drawerActualDisplay(item) }}
+                                    </p>
+                                  </td>
+                                  <td class="px-4 py-4 text-center font-semibold text-slate-700">
+                                    {{ item.weight }}
+                                  </td>
+                                  <td class="px-4 py-4 text-center align-middle">
                                     <button
                                       type="button"
-                                      class="inline-flex w-full min-w-0 items-center justify-between gap-1 rounded-lg border px-3 py-1.5 text-[11px] font-bold shadow-sm transition-colors"
-                                      :class="[
-                                        item.evidenceTone === 'emerald'
-                                          ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                                          : 'border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100',
-                                        evidenceOpen(drawerEmployee.id, item.id)
-                                          ? 'ring-2 ring-blue-300'
-                                          : '',
-                                      ]"
+                                      class="inline-flex min-w-28 items-center justify-between gap-1 rounded-lg border px-2 py-1.5 text-[11px] font-bold transition-colors"
+                                      :class="
+                                        hasDrawerEvidence(item)
+                                          ? 'border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100'
+                                          : 'border-slate-200 bg-slate-50 text-slate-500 hover:bg-slate-100'
+                                      "
                                       @click.stop="
                                         toggleEvidence(
                                           drawerEmployee.id,
@@ -2594,17 +2592,12 @@ async function confirmDone(
                                         )
                                       "
                                     >
-                                      <span class="flex items-center gap-1.5">
-                                        <i
-                                          :class="[
-                                            item.evidenceButtonIcon,
-                                            'text-[11px]',
-                                          ]"
-                                        />
-                                        {{ item.evidenceButtonLabel }}
+                                      <span class="inline-flex items-center gap-1">
+                                        <i class="fas fa-file-alt text-xs" />
+                                        {{ hasDrawerEvidence(item) ? 'Evidence' : 'No Evidence' }}
                                       </span>
                                       <i
-                                        class="fas fa-chevron-down text-[10px] transition-transform duration-200"
+                                        class="fas fa-chevron-down text-[10px] text-slate-500 transition-transform"
                                         :class="
                                           evidenceOpen(
                                             drawerEmployee.id,
@@ -2616,27 +2609,14 @@ async function confirmDone(
                                       />
                                     </button>
                                   </td>
-                                  <td
-                                    class="min-w-[8rem] px-4 py-4 text-center sm:min-w-[9rem]"
-                                  >
-                                    <div
-                                      class="inline-block min-w-[2.75rem] rounded bg-slate-100 px-3 py-1.5 text-base font-bold text-slate-600"
-                                    >
-                                      {{ item.selfScore }}
-                                    </div>
+                                  <td class="px-4 py-4 text-center font-bold text-slate-600">
+                                    {{ item.selfScore ?? '-' }}
                                   </td>
-                                  <td
-                                    class="min-w-[9rem] border-l border-indigo-50 bg-indigo-50/30 px-4 py-4 text-center sm:min-w-[10rem]"
-                                  >
+                                  <td class="px-4 py-4 text-center">
                                     <select
-                                      class="w-full min-w-[7rem] cursor-pointer rounded-lg border-2 bg-white p-1.5 text-center text-base font-bold shadow-sm outline-none transition-colors focus:border-indigo-500 disabled:cursor-not-allowed disabled:opacity-70"
-                                      :class="
-                                        pmSelectClass(drawerEmployee, item)
-                                      "
-                                      :disabled="
-                                        isReadonly ||
-                                        !hubRowGmScoreEnabled(item)
-                                      "
+                                      v-if="hubRowGmScoreEnabled(item)"
+                                      class="w-14 rounded border border-slate-300 bg-white px-1 py-1 text-xs font-bold text-slate-800 outline-none focus:border-blue-500 shadow-sm cursor-pointer text-center"
+                                      :disabled="isReadonly"
                                       :value="
                                         pmScores[drawerEmployee.id]?.[
                                           item.id
@@ -2655,51 +2635,38 @@ async function confirmDone(
                                       <option
                                         v-for="n in 5"
                                         :key="n"
-                                        :value="6 - n"
+                                        :value="n"
                                       >
-                                        {{ 6 - n }}
+                                        {{ n }}
                                       </option>
                                     </select>
+                                    <span
+                                      v-else
+                                      class="inline-block min-w-[3.5rem] font-bold text-slate-600"
+                                    >{{
+                                      currentDisplayableGmScore(drawerEmployee, item) ?? '-'
+                                    }}</span>
                                   </td>
                                 </tr>
                                 <tr
                                   v-show="
                                     evidenceOpen(drawerEmployee.id, item.id)
                                   "
-                                  class="bg-slate-100/40"
+                                  class="bg-slate-50/50"
                                 >
                                   <td
-                                    colspan="6"
-                                    class="p-0"
-                                    :class="
-                                      evidencePanelBorder(item.evidence.accent)
-                                    "
+                                    colspan="8"
+                                    class="p-0 border-b border-slate-200"
                                   >
                                     <div
-                                      class="border-l-4 p-4 md:p-6"
-                                      :class="
-                                        evidenceAccentBorder(
-                                          item.evidence.accent,
-                                        )
-                                      "
+                                      class="px-8 py-4 bg-gradient-to-r from-indigo-50/30 to-transparent border-l-2 border-indigo-300"
                                     >
-                                      <h4
-                                        class="mb-3 flex items-center text-sm font-bold text-slate-800"
+                                      <p
+                                        class="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2"
                                       >
-                                        <i
-                                          :class="[
-                                            item.evidence.icon,
-                                            'mr-2 w-4 text-indigo-600',
-                                          ]"
-                                        />
-                                        {{ item.evidence.title }}
-                                      </h4>
+                                        Evidences
+                                      </p>
                                       <template v-if="usesPmStyleEvidence(item)">
-                                        <p
-                                          class="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-500"
-                                        >
-                                          Evidences
-                                        </p>
                                         <div
                                           class="overflow-x-auto rounded-lg border border-indigo-100 bg-white shadow-sm"
                                         >
@@ -2947,26 +2914,26 @@ async function confirmDone(
                                         </p>
                                       </template>
                                       <div
-                                        class="mt-4 rounded-lg border border-indigo-200 bg-indigo-50/40 p-3"
+                                        class="mt-3 rounded-lg border border-emerald-100 bg-white p-3 shadow-sm"
                                         :class="{
                                           'opacity-80': !hubRowGmCommentEnabled(item),
                                         }"
                                       >
-                                        <label
-                                          class="mb-2 block text-[11px] font-bold uppercase tracking-wider text-indigo-700"
+                                        <p
+                                          class="mb-2 text-[10px] font-bold uppercase tracking-wider text-emerald-700"
                                         >
-                                          GM comment (per KPI)
-                                        </label>
+                                          Supervisor's Comment
+                                        </p>
                                         <textarea
                                           v-model="gmKpiComments[drawerEmployee.id][item.id]"
-                                          class="w-full resize-y rounded-lg border border-indigo-200 bg-white p-2.5 text-sm text-slate-800 shadow-sm outline-none focus:ring-2 focus:ring-indigo-100 disabled:bg-slate-50 disabled:text-slate-500"
-                                          rows="3"
+                                          class="w-full resize-y rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-700 shadow-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 disabled:bg-slate-50 disabled:text-slate-500"
+                                          rows="4"
                                           :disabled="
                                             isReadonly ||
                                             confirmBusy ||
                                             !hubRowGmCommentEnabled(item)
                                           "
-                                          placeholder="Enter GM feedback for this KPI..."
+                                          placeholder="Enter comment / evaluation for this KPI..."
                                         />
                                       </div>
                                     </div>
@@ -2976,69 +2943,53 @@ async function confirmDone(
                             </template>
                           </tbody>
                           <tfoot
-                            class="border-t-2 border-slate-200 bg-slate-100/80 text-xs font-semibold text-slate-700"
+                            v-if="drawerActiveKpiGroups.length > 0"
+                            class="border-t-2 border-slate-200"
                           >
-                            <tr>
+                            <tr class="bg-slate-50">
                               <td
-                                colspan="2"
-                                class="px-4 py-2.5 text-right text-[10px] uppercase tracking-wide text-slate-500 sm:text-[11px]"
+                                colspan="4"
+                                class="px-4 py-3 text-right font-bold text-slate-600 text-xs tracking-wider"
                               >
-                                Total weight:
+                                TOTAL SCORE:
                               </td>
-                              <td
-                                class="px-4 py-2.5 text-center text-slate-800"
-                              >
+                              <td class="px-4 py-3 text-center font-bold text-slate-800">
                                 {{
                                   totalKpiWeightForGroupList(
                                     drawerActiveKpiGroups,
                                   )
                                 }}
+                                <span class="text-[10px] text-slate-400 font-normal">pts</span>
                               </td>
-                              <td colspan="3" />
+                              <td class="px-4 py-3 text-center font-bold text-slate-400">-</td>
+                              <td class="px-4 py-3 text-center font-bold text-slate-400">-</td>
+                              <td class="px-4 py-3 text-center font-bold text-slate-400">-</td>
                             </tr>
-                            <tr class="border-t border-slate-200 bg-white">
-                              <td
-                                colspan="4"
-                                class="px-4 py-2.5 text-right text-[10px] font-bold uppercase leading-snug tracking-wide text-slate-600 sm:text-[11px]"
-                              >
-                                Self-score average
-                              </td>
-                              <td
-                                class="border-x border-slate-200 px-4 py-2.5 text-center"
-                              >
-                                <span
-                                  class="text-base font-bold tabular-nums text-slate-800 sm:text-lg"
-                                  >{{
-                                    selfAvgForGroupList(
-                                      drawerEmployee,
-                                      drawerActiveKpiGroups,
-                                    )
-                                  }}</span
-                                >
-                              </td>
-                              <td />
-                            </tr>
-                            <tr
-                              class="border-t border-slate-200 bg-indigo-50/90"
-                            >
+                            <tr class="bg-purple-50 border-t border-purple-100">
                               <td
                                 colspan="5"
-                                class="px-4 py-2.5 text-right text-[10px] font-bold uppercase leading-snug tracking-wide text-indigo-900 sm:text-[11px]"
+                                class="px-4 py-4 text-right font-bold text-purple-700 text-xs tracking-wider"
                               >
-                                Average ({{ gmScoreDetailLabel }})
+                                AVERAGE SCORE:
+                              </td>
+                              <td class="px-4 py-4 text-center font-bold text-slate-300">-</td>
+                              <td class="px-4 py-4 text-center font-bold text-slate-600">
+                                {{
+                                  selfAvgForGroupList(
+                                    drawerEmployee,
+                                    drawerActiveKpiGroups,
+                                  )
+                                }}
                               </td>
                               <td
-                                class="bg-indigo-100/90 px-4 py-2.5 text-center shadow-inner"
+                                class="px-4 py-4 text-center font-bold text-lg font-black text-purple-700"
                               >
-                                <span
-                                  class="text-base font-bold tabular-nums text-indigo-800 sm:text-lg"
-                                  >{{
-                                    pmAvgForGroupList(
-                                      drawerEmployee,
-                                      drawerActiveKpiGroups,
-                                    )
-                                  }}</span
-                                >
+                                {{
+                                  pmAvgForGroupList(
+                                    drawerEmployee,
+                                    drawerActiveKpiGroups,
+                                  )
+                                }}
                               </td>
                             </tr>
                           </tfoot>
@@ -3054,7 +3005,7 @@ async function confirmDone(
                         class="mb-4 flex items-center gap-2 text-sm font-bold text-slate-800"
                       >
                         <i class="fas fa-comment-dots text-indigo-600" />
-                        Evaluation summary &amp; confirmation — BSC (Individual / Cascading)
+                        Comment of employee and supervisor
                       </h4>
                       <div
                         class="grid grid-cols-1 gap-6 md:grid-cols-2 lg:gap-8"

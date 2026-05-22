@@ -14,6 +14,8 @@ import type { KpiCycleResponse } from '@/types/shared/kpi-cycle.type'
 import { kpiCycleService } from '@/services/shared/kpi-cycle.service'
 import { buildKpiDeadlineBanner, type KpiDeadlineBannerVm } from '@/utils/kpiDeadlineBanner'
 import { shouldCollapseKpiProcessTimelineToYearEndOnly } from '@/utils/common'
+import { buildMemberLeaderYearDropdownOptions } from '@/utils/kpi-member-leader-year-options'
+import type { YearDropdownOption } from '@/types/kpi-dashboard-options'
 
 // ── Core state ────────────────────────────────────────────────────────────────
 const selectedYear = ref(new Date().getFullYear())
@@ -21,7 +23,8 @@ const activeTab = ref<'personal' | 'team' | 'promotion'>('personal')
 const isReadonly = computed(() => isReadonlyKpiYear(selectedYear.value))
 
 const currentYear = new Date().getFullYear()
-const availableYears = ref<{ value: number; label: string }[]>([])
+const availableYears = ref<YearDropdownOption[]>([])
+const hasOrgMembership = ref(true)
 
 // ── Create individual KPI ─────────────────────────────────────────────────────
 const showCreateIndividualKpiDrawer = ref(false)
@@ -79,12 +82,20 @@ async function loadSummary() {
 
 async function loadAvailableYears(): Promise<boolean> {
   try {
-    const rows = await kpiCycleService.getKpiCyclesForDropdown()
-    const years = rows
+    const [rows, options] = await Promise.all([
+      kpiCycleService.getKpiCyclesForDropdown(),
+      leaderKpiService.getDashboardOptions(),
+    ])
+    hasOrgMembership.value = Boolean(options?.hasOrgMembership)
+    const cycleYears = rows
       .map(row => Number(row.year))
       .filter(year => Number.isFinite(year))
-      .sort((a, b) => b - a)
-      .map(year => ({ value: year, label: `Year ${year}` }))
+    const years = buildMemberLeaderYearDropdownOptions(
+      cycleYears,
+      options?.yearsWithAssignments ?? [],
+      currentYear,
+      'Year',
+    )
     availableYears.value = years
 
     if (years.length > 0 && !years.some(y => y.value === selectedYear.value)) {
@@ -93,11 +104,8 @@ async function loadAvailableYears(): Promise<boolean> {
     }
     return false
   } catch {
-    const fallbackYears = Array.from({ length: 5 }, (_, i) => {
-      const year = currentYear - 3 + i
-      return { value: year, label: `Year ${year}` }
-    }).reverse()
-    availableYears.value = fallbackYears
+    hasOrgMembership.value = true
+    availableYears.value = [{ value: currentYear, label: `Year ${currentYear}` }]
     return false
   }
 }
@@ -169,12 +177,12 @@ const leaderTimelineYearEndCompleted = computed(() =>
   ),
 )
 
-/** Timeline chỉ Year-End khi đúng case onboard sau giữa kỳ (có kiểm tra goal_setting_end + ASM giữa kỳ). */
+/** Onboard từ mid_year_start → timeline 2 mốc (Accept KPI + Year-End). */
 const leaderTimelineYearEndOnly = computed(() => {
   const data = activeTab.value === 'promotion' ? promotionSummaryData.value : summaryData.value
   const cycle = data?.kpiCycle
-  if (!cycle?.midYearEnd) return false
-  return shouldCollapseKpiProcessTimelineToYearEndOnly(data?.accountCreatedAt, cycle.midYearEnd)
+  if (!cycle?.midYearStart) return false
+  return shouldCollapseKpiProcessTimelineToYearEndOnly(data?.accountCreatedAt, cycle.midYearStart)
 })
 
 function weightedManagerAvgFromResponse(data: LeaderKpiInformationResponse | null): number | null {
@@ -235,7 +243,7 @@ const leaderTimelineEvaluationFullyComplete = computed(() => {
 })
 
 const canCreatePersonalKpi = computed(() => {
-  if (isReadonly.value || activeTab.value !== 'personal') return false
+  if (!hasOrgMembership.value || isReadonly.value || activeTab.value !== 'personal') return false
   const submittedStatuses = new Set([402, 403, 405, 501, 502, 503, 601, 602, 603])
   const statusCodes = assignmentStatuses(summaryData.value)
   if (!statusCodes.length) return true
@@ -337,7 +345,11 @@ function buildLeaderDeadlineBanner(
     const hasMidYearPending = (data?.categories ?? [])
       .flatMap(c => c.assignments ?? [])
       .some(a => Number(a.statusCode) === 405)
-    if (beforeEndYearWindow && afterMidYearDeadline && hasMidYearPending) {
+    const skipMid = shouldCollapseKpiProcessTimelineToYearEndOnly(
+      data?.accountCreatedAt,
+      cycle.midYearStart,
+    )
+    if (beforeEndYearWindow && afterMidYearDeadline && hasMidYearPending && !skipMid) {
       phase = 'mid_year'
     }
   }
