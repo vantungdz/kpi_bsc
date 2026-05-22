@@ -27,6 +27,7 @@ import com.company.kpi.response.pm.PmMemberReviewMetaResponse;
 import com.company.kpi.response.pm.TeamMemberResponse;
 import com.company.kpi.service.gm.GmProcessTimelineService;
 import com.company.kpi.service.kpi.StrategicKpiService;
+import com.company.kpi.util.MemberEvaluationVisibility;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -332,13 +333,22 @@ public class PmDashboardService {
                     if (slice.getChildAssignment() == null || slice.getChildAssignment().getId() == null) {
                         continue;
                     }
-                    BigDecimal childSelfScore = slice.getChildAssignment().getEndSelfScore() != null
-                            ? slice.getChildAssignment().getEndSelfScore()
-                            : slice.getChildAssignment().getMidSelfScore();
+                    Integer childStatusCode = slice.getChildAssignment().getStatusCode();
+                    boolean pmCanViewMemberEval =
+                            MemberEvaluationVisibility.canSupervisorViewMemberSelfEvaluation(
+                                    childStatusCode, false);
+                    BigDecimal childSelfScore = pmCanViewMemberEval
+                            ? (slice.getChildAssignment().getEndSelfScore() != null
+                                    ? slice.getChildAssignment().getEndSelfScore()
+                                    : slice.getChildAssignment().getMidSelfScore())
+                            : null;
+                    String childEvidences = pmCanViewMemberEval
+                            ? slice.getChildAssignment().getEvidences()
+                            : null;
 
                     SupervisorEvalComments childEvalComments = supervisorEvalCommentsFromAssignment(
-                            slice.getChildAssignment().getEvidences(),
-                            slice.getChildAssignment().getStatusCode(),
+                            childEvidences,
+                            childStatusCode,
                             slice.getChildAssignment().getEndPmScore(),
                             slice.getChildAssignment().getEndGmScore());
 
@@ -348,7 +358,7 @@ public class PmDashboardService {
                             .name(slice.getChildUser() != null ? slice.getChildUser().getFullName() : "Unknown")
                             .role(slice.getChildJobTitle() != null ? slice.getChildJobTitle().getName() : "Member")
                             .targetValue(slice.getChildAssignment().getTargetValue())
-                            .actualResult(slice.getChildAssignment().getEvidences())
+                            .actualResult(childEvidences)
                             .feedbackNote(slice.getChildFeedbackNote())
                             .feedbackTargetRoleCode(slice.getChildFeedbackTargetRoleCode())
                             .selfScore(childSelfScore)
@@ -486,17 +496,21 @@ public class PmDashboardService {
                 res.setTarget(agg.getKpisInformation().getTargetDescription());
             }
             res.setWeight(agg.getKpisInformation().getWeight());
-            res.setSelfScore(effectiveSelfScore(agg));
+            boolean pmCanViewMemberEval =
+                    MemberEvaluationVisibility.canSupervisorViewMemberSelfEvaluation(
+                            agg.getStatusCode(), false);
+            res.setSelfScore(pmCanViewMemberEval ? effectiveSelfScore(agg) : null);
             res.setPmScore(supervisorPortfolioScore(agg));
             // Nhận xét PM/GM theo KPI lưu trong evidences.gmComment — đọc sau giải mã evidences (SQL ->> trên DB thất bại khi JSON mã hóa).
-            res.setPmComment(gmCommentFromEvidencesJson(agg.getEvidences()));
+            String evidencesForPm = pmCanViewMemberEval ? agg.getEvidences() : null;
+            res.setPmComment(gmCommentFromEvidencesJson(evidencesForPm));
             res.setStatusCode(agg.getStatusCode());
             res.setKpiTypeCode(agg.getKpiMaster().getTypeCode());
             res.setCalcRuleCode(agg.getKpiMaster().getCalculationRuleCode());
             res.setCalculationTypeCode(agg.getKpiMaster().getCalculationTypeCode());
             res.setUnitCode(agg.getKpiMaster().getUnitCode());
             res.setUnitName(agg.getUnitName());
-            res.setEvidences(agg.getEvidences());
+            res.setEvidences(evidencesForPm);
             if (agg.getKpiMaster() != null
                     && Objects.equals(agg.getKpiMaster().getTypeCode(), 102)
                     && agg.getParentAssignmentId() != null) {

@@ -3,8 +3,8 @@
 - workflow duyệt cho phép nhảy bậc ( GM có thể duyệt mà không cần PM duyệt)
 - Timeline promotion sẽ khác với 2 loại KPI còn lại
 - Khi tạo kpi, chỉnh sửa KPI. Nhập target sẽ suy ra thang điểm 
-- Member chưa bấm gửi kết quả đánh giá thì cấp trên không xem được
-- sửa lại title issues trên timeline ( KPI Not Submit)
+- Member chưa bấm gửi kết quả đánh giá thì cấp trên không xem được - Done
+- sửa lại title issues trên timeline ( KPI Not Submit) - Done
 - Trong các drawer đánh giá cần thêm button Reject
 - Khi điểm của PM đánh giá đã được GM đánh giá lại thì PM cần xem được đó là điểm ở KPI nào
 

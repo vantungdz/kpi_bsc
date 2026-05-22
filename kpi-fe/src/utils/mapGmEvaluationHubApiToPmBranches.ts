@@ -26,6 +26,7 @@ import {
   parsePmPortfolioEvidenceString,
   pmPortfolioActualDisplayMode,
 } from '@/utils/memberKpiHelpers'
+import { canSupervisorViewMemberSelfEvaluation } from '@/utils/memberEvaluationVisibility'
 
 /** Ngữ cảnh suy đơn vị cho drawer đánh giá GM. */
 export type GmDrawerUnitContext = {
@@ -576,6 +577,13 @@ export function evidenceTableFromEvidencesJson(
 }
 
 function evidenceFromRow(row: GmEvaluationHubAssignmentApiRow): GmEvidenceTable {
+  const statusCode =
+    typeof row.statusCode === 'number' && Number.isFinite(row.statusCode)
+      ? row.statusCode
+      : null
+  if (!canSupervisorViewMemberSelfEvaluation(statusCode, 'gm')) {
+    return { headers: [], rows: [] }
+  }
   return evidenceTableFromEvidencesJson(row.evidences, rowCalcRuleCode(row))
 }
 
@@ -583,9 +591,18 @@ function toKpiItem(row: GmEvaluationHubAssignmentApiRow, index: number): GmKpiIt
   const code = (row.masterCode ?? '').trim()
   const name = (row.masterName ?? '').trim()
   const title = [code, name].filter(Boolean).join(' · ') || `KPI ${index + 1}`
-  const evidenceObject = parseEvidenceObject(String(row.evidences ?? '').trim())
+  const statusCode =
+    typeof row.statusCode === 'number' && Number.isFinite(row.statusCode)
+      ? row.statusCode
+      : null
+  const gmCanViewMemberEval = canSupervisorViewMemberSelfEvaluation(statusCode, 'gm')
+  const evidenceObject = gmCanViewMemberEval
+    ? parseEvidenceObject(String(row.evidences ?? '').trim())
+    : null
   const calcRuleCode = rowCalcRuleCode(row)
-  const parsedEvidences = parsePmPortfolioEvidenceString(row.evidences)
+  const parsedEvidences = gmCanViewMemberEval
+    ? parsePmPortfolioEvidenceString(row.evidences)
+    : { rows: [], content: '', note: '', legacyPlain: '', attachments: [] }
   const unitCtx = hubRowUnitContext(row)
   const unitCode = resolveGmDrawerUnitCode(unitCtx)
   const calculationTypeCode = calculationTypeFromHubRow(row)
@@ -593,6 +610,7 @@ function toKpiItem(row: GmEvaluationHubAssignmentApiRow, index: number): GmKpiIt
     evidenceObject && typeof evidenceObject.gmComment === 'string'
       ? evidenceObject.gmComment.trim()
       : ''
+  const actualRaw = gmCanViewMemberEval ? hubItemActualRaw(row) : '-'
   return {
     id: String(row.assignmentId),
     index: index + 1,
@@ -601,8 +619,10 @@ function toKpiItem(row: GmEvaluationHubAssignmentApiRow, index: number): GmKpiIt
     name: name || title,
     target: hubItemTargetDisplay(row),
     targetRaw: hubItemTargetRaw(row),
-    actualRaw: hubItemActualRaw(row),
-    actualResult: formatGmDrawerValueWithUnit(hubItemActualRaw(row), unitCtx),
+    actualRaw,
+    actualResult: gmCanViewMemberEval
+      ? formatGmDrawerValueWithUnit(actualRaw, unitCtx)
+      : '-',
     unitCode,
     unitName: row.unitName ?? null,
     calculationTypeCode,
@@ -616,7 +636,7 @@ function toKpiItem(row: GmEvaluationHubAssignmentApiRow, index: number): GmKpiIt
     evidenceButtonLabel: 'Evidence',
     evidenceButtonIcon: 'fas fa-file-alt',
     evidenceTone: 'blue',
-    selfScore: parseSelfScore(row),
+    selfScore: gmCanViewMemberEval ? parseSelfScore(row) : 0,
     // pmScore = điểm GM đã lưu; pmSeedScore = GM ?? PM (seed dropdown + fallback cột Supervisor Score khi chưa có GM).
     pmScore: parseReviewScore(row.endGmScore),
     pmSeedScore: parseReviewScore(row.endGmScore) ?? parseReviewScore(row.endPmScore),
@@ -662,8 +682,14 @@ function isRealAssignmentRow(row: GmEvaluationHubAssignmentApiRow): boolean {
 }
 
 function avgSelfFromItems(items: GmKpiItem[]): string | null {
-  if (!items.length) return null
-  const s = items.reduce((a, i) => a + i.selfScore, 0) / items.length
+  const visible = items.filter((i) =>
+    canSupervisorViewMemberSelfEvaluation(
+      i.hubAssignmentStatusCode ?? i.statusCode,
+      'gm',
+    ),
+  )
+  if (!visible.length) return null
+  const s = visible.reduce((a, i) => a + i.selfScore, 0) / visible.length
   return s.toFixed(2)
 }
 

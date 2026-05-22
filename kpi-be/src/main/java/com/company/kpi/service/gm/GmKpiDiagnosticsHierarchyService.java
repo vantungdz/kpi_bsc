@@ -42,6 +42,9 @@ public class GmKpiDiagnosticsHierarchyService {
     /** {@code kpi_assignments.status_code >= 601} — vào phase Final (year-end), dùng tỉ lệ cuối kỳ. */
     private static final int ASSIGNMENT_STATUS_END_PHASE = 601;
 
+    /** GM đã chốt đánh giá giữa kỳ — Diagnostics mới hiển thị Actual member. */
+    private static final int ASM_MID_YEAR_GM_COMPLETED = 503;
+
     private static final BigDecimal HALF = new BigDecimal("0.5");
     private static final BigDecimal MID_THRESH_HIGH = new BigDecimal("1.10");
     private static final BigDecimal MID_THRESH_LOW = new BigDecimal("0.90");
@@ -741,7 +744,7 @@ public class GmKpiDiagnosticsHierarchyService {
         BigDecimal actual = null;
         if (isEndPhaseAssignment(r)) {
             actual = endPhaseDisplayScore(r);
-        } else {
+        } else if (canDiagnosticsShowMemberActual(r.getStatusCode())) {
             actual = r.getMidSelfScore();
         }
         return new SubmissionSnapshot(target, actual);
@@ -773,13 +776,14 @@ public class GmKpiDiagnosticsHierarchyService {
                     .leaderRoleName(trimOrNull(r.getLeaderRoleName()))
                     .submissionTarget(ss.target())
                     .submissionActual(ss.actual())
-                    .evidences(r.getEvidences())
+                    .evidences(canDiagnosticsShowMemberActual(r.getStatusCode()) ? r.getEvidences() : null)
                     .feedbackNote(trimOrNull(r.getFeedbackNote()))
                     .evaluationSupervisorComments(trimOrNull(r.getEvaluationSupervisorComments()))
                     .feedbackAwaitingGm(feedbackAwaitingGmForRow(r))
                     .build();
         }
         PerfStatus perf = computeMemberPerformance(r);
+        boolean showMemberActual = canDiagnosticsShowMemberActual(r.getStatusCode());
         return GmDiagMemberNode.builder()
                 .id(r.getMemberId().toString())
                 .assignmentId(r.getAssignmentId() != null ? r.getAssignmentId().toString() : null)
@@ -801,7 +805,7 @@ public class GmKpiDiagnosticsHierarchyService {
                 .leaderRoleName(trimOrNull(r.getLeaderRoleName()))
                 .submissionTarget(ss.target())
                 .submissionActual(ss.actual())
-                .evidences(r.getEvidences())
+                .evidences(showMemberActual ? r.getEvidences() : null)
                 .feedbackNote(trimOrNull(r.getFeedbackNote()))
                 .evaluationSupervisorComments(trimOrNull(r.getEvaluationSupervisorComments()))
                 .feedbackAwaitingGm(feedbackAwaitingGmForRow(r))
@@ -1252,6 +1256,11 @@ public class GmKpiDiagnosticsHierarchyService {
         return sc >= 501 && sc <= 503;
     }
 
+    /** Strategic KPIs Diagnostics: Actual member chỉ sau khi GM chốt giữa kỳ (ASM ≥ 503). */
+    private static boolean canDiagnosticsShowMemberActual(Integer statusCode) {
+        return statusCode != null && statusCode >= ASM_MID_YEAR_GM_COMPLETED;
+    }
+
     private static BigDecimal firstNonNull(BigDecimal... vals) {
         for (BigDecimal v : vals) {
             if (v != null) {
@@ -1282,6 +1291,9 @@ public class GmKpiDiagnosticsHierarchyService {
     }
 
     private static String formatMemberActual(GmDiagnosticsFlatRow r) {
+        if (!canDiagnosticsShowMemberActual(r.getStatusCode())) {
+            return "—";
+        }
         if (isEndPhaseAssignment(r)) {
             BigDecimal endAct = endPhaseDisplayScore(r);
             return endAct != null ? formatScaledOne(endAct) : "—";

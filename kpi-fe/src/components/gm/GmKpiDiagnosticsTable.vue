@@ -44,6 +44,7 @@ import {
   isDiagnosticsMidYearPhase,
 } from '@/utils/diagnosticsActualColor'
 import { formatScoreDisplay } from '@/utils/formatScoreDisplay'
+import { canDiagnosticsShowMemberActual } from '@/utils/memberEvaluationVisibility'
 
 const props = withDefaults(
   defineProps<{
@@ -711,6 +712,9 @@ function diagnosticsActualWithUnit(kpi: GmHierarchyKpi, rawActual?: string | nul
 }
 
 function memberActualDisplayRaw(member: GmHierarchyMember, kpi: GmHierarchyKpi): string {
+  if (!canDiagnosticsShowMemberActual(memberAsmStatusCode(member))) {
+    return '-'
+  }
   const rule = normalizeCalculationRuleCode(kpi.calculationRuleCode)
   const mode = rule === CALC_RULE_SUM
     ? 'sum'
@@ -738,6 +742,9 @@ function formatDiagnosticsMemberActualText(raw: string): string {
 }
 
 function memberActualNumericForProgress(member: GmHierarchyMember, kpi: GmHierarchyKpi): number | null {
+  if (!canDiagnosticsShowMemberActual(memberAsmStatusCode(member))) {
+    return null
+  }
   const fromDisplay = parseNumericFromField(memberActualDisplayRaw(member, kpi))
   if (fromDisplay != null && Number.isFinite(fromDisplay)) return fromDisplay
   const fallback = parseNumericFromField(String(member.actual ?? ''))

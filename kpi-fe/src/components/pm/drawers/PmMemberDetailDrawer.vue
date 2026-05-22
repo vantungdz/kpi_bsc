@@ -20,6 +20,11 @@ import { formatKpiTargetWithUnit } from '@/utils/kpiUnitCodes'
 import { pmAsmStatusPillClass } from '@/utils/pmAsmStatusUi'
 import { formatScoreDisplay, formatScoreDisplayOrDash } from '@/utils/formatScoreDisplay'
 import { kpiCreatorRowBgClass } from '@/utils/kpiCreatorRowBg'
+import {
+  canSupervisorViewMemberSelfEvaluation,
+  supervisorMemberActualDisplay,
+  supervisorMemberSelfScoreDisplay,
+} from '@/utils/memberEvaluationVisibility'
 
 const props = defineProps({
   open: { type: Boolean, default: false },
@@ -166,7 +171,7 @@ async function fetchMemberKpis() {
         target: item.target != null
           ? formatKpiTargetWithUnit(formatNumericTarget(item.target), item.unitCode)
           : '',
-        actualResult:
+        actualResult: supervisorMemberActualDisplay(
           formatActualWithUnit(
             formatPmPortfolioActualCell(
               item.evidences,
@@ -175,8 +180,16 @@ async function fetchMemberKpis() {
             ) || '-',
             item.unitCode,
           ),
+          item.statusCode,
+          'pm',
+        ),
         weight: item.weight != null ? Number(item.weight) : 0,
-        selfScore: item.selfScore != null ? Number(item.selfScore) : null,
+        selfScore: (() => {
+          if (!canSupervisorViewMemberSelfEvaluation(item.statusCode, 'pm')) {
+            return null
+          }
+          return item.selfScore != null ? Number(item.selfScore) : null
+        })(),
         pmScore: item.pmScore != null ? Number(item.pmScore) : null,
         pmComment: item.pmComment || '',
         unitCode: item.unitCode ?? null,
@@ -189,7 +202,9 @@ async function fetchMemberKpis() {
         statusDesc: item.statusDesc ?? item.statusDescription ?? '',
         calcRuleCode: item.calcRuleCode,
         calculationTypeCode: item.calculationTypeCode ?? null,
-        evidences: item.evidences || '',
+        evidences: canSupervisorViewMemberSelfEvaluation(item.statusCode, 'pm')
+          ? item.evidences || ''
+          : '',
         evidenceData: parsedEvidences.rows,
         evidenceContent: parsedEvidences.content || parsedEvidences.note || parsedEvidences.legacyPlain || '',
         evidenceAttachments: parsedEvidences.attachments ?? [],
@@ -404,6 +419,7 @@ function toggleEvidence(id: string) {
 }
 
 function hasEvidence(item: any): boolean {
+  if (!canSupervisorViewMemberSelfEvaluation(item?.statusCode, 'pm')) return false
   return Boolean(
     (Array.isArray(item.evidenceData) && item.evidenceData.length > 0)
     || String(item.evidenceContent ?? '').trim()
@@ -738,7 +754,9 @@ const sendEvaluationForActiveTab = async () => {
                             <i class="fas fa-chevron-down text-[10px] text-slate-500 transition-transform" :class="expandedEvidenceRows.has(item.id) ? 'rotate-180' : ''" />
                           </button>
                         </td>
-                        <td class="px-4 py-4 text-center font-bold text-slate-600">{{ item.selfScore ?? '-' }}</td>
+                        <td class="px-4 py-4 text-center font-bold text-slate-600">{{
+                          supervisorMemberSelfScoreDisplay(item.selfScore, item.statusCode, 'pm')
+                        }}</td>
 
                         <td class="px-4 py-4 text-center">
                           <select

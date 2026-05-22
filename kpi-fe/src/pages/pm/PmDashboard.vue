@@ -21,6 +21,7 @@ import {
 } from '@/utils/memberKpiHelpers'
 import { formatKpiTargetWithUnit, kpiUnitCodeToFormUnit } from '@/utils/kpiUnitCodes'
 import { countPmEvaluationSubjectsInHierarchy } from '@/utils/pmEvaluationSubject'
+import { canSupervisorViewMemberSelfEvaluation } from '@/utils/memberEvaluationVisibility'
 import PmPersonalKpiTab from '@/components/pm/tabs/PmPersonalKpiTab.vue'
 import PmTeamMembersTab from '@/components/pm/tabs/PmTeamMembersTab.vue'
 import PmRequestsTab from '@/components/pm/tabs/PmRequestsTab.vue'
@@ -649,19 +650,24 @@ function closeGmMemberDrawer() {
 const openKpiChildDetail = (payload: { child: any; parent: any }) => {
   const { child, parent } = payload
   const pmName = authStore.user?.fullName?.trim() || authStore.user?.name || '—'
+  const pmCanViewMemberEval = canSupervisorViewMemberSelfEvaluation(
+    child.statusCode,
+    'pm',
+  )
 
   const targetStr =
     child.target != null && String(child.target).trim() !== '' ? String(child.target).trim() : '—'
-  const actualFormatted =
-    formatPmPortfolioActualCell(
-      child.actualResult,
-      parent.calculationTypeCode,
-      pmPortfolioActualDisplayMode(parent.calculationRuleCode),
-    ) || ''
+  const actualFormatted = pmCanViewMemberEval
+    ? formatPmPortfolioActualCell(
+        child.actualResult,
+        parent.calculationTypeCode,
+        pmPortfolioActualDisplayMode(parent.calculationRuleCode),
+      ) || ''
+    : ''
   const actualStr = actualFormatted || '—'
 
-  const rawEvidences =
-    child.actualResult == null
+  const rawEvidences = pmCanViewMemberEval
+    ? child.actualResult == null
       ? ''
       : typeof child.actualResult === 'string'
         ? child.actualResult.trim()
@@ -672,6 +678,7 @@ const openKpiChildDetail = (payload: { child: any; parent: any }) => {
               return ''
             }
           })()
+    : ''
   const parsed = parsePmPortfolioEvidenceString(rawEvidences)
   const evidenceNote =
     [parsed.note.trim(), parsed.content.trim()].filter(Boolean).join(' · ') || '—'

@@ -26,8 +26,10 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
+
 /**
- * Xây dựng dữ liệu Process Timeline cho GM dashboard — gom theo vấn đề vận hành (business issue),
+ * Xây dựng dữ liệu Process Timeline cho GM dashboard — gom theo vấn đề vận hành
+ * (business issue),
  * không coi mỗi assignment là một issue độc lập trong tổng hợp.
  */
 @Service
@@ -65,21 +67,18 @@ public class GmProcessTimelineService {
             ID_KPI_NOT_SUBMITTED,
             ID_PENDING_PM,
             ID_PENDING_GM,
-            ID_PENDING_ACCEPT
-    );
+            ID_PENDING_ACCEPT);
 
     private static final List<String> MID_GROUP_ORDER = List.of(
             ID_MISSING_EVIDENCE,
             ID_KPI_NOT_SUBMITTED,
             ID_PENDING_PM,
-            ID_PENDING_GM
-    );
+            ID_PENDING_GM);
 
     private static final List<String> YEAR_END_GROUP_ORDER = List.of(
             ID_KPI_NOT_SUBMITTED,
             ID_PENDING_PM,
-            ID_PENDING_GM
-    );
+            ID_PENDING_GM);
 
     private final KpiAssignmentMapper kpiAssignmentMapper;
     private final KpiCycleMapper kpiCycleMapper;
@@ -96,8 +95,7 @@ public class GmProcessTimelineService {
         List<GmTimelineIssueRow> yearEndNotSubmitted = kpiAssignmentMapper.listInProgressWithinPhaseWindow(
                 cycleId, List.of(STATUS_ACCEPTED, STATUS_MID_COMPLETED), "yearEnd");
 
-        List<GmUnassignedMemberRow> unassignedMembers =
-                kpiAssignmentMapper.listMembersWithoutKpiAssignment(cycleId);
+        List<GmUnassignedMemberRow> unassignedMembers = kpiAssignmentMapper.listMembersWithoutKpiAssignment(cycleId);
 
         GmProcessTimelineResponse response = new GmProcessTimelineResponse();
         response.setSetting(buildSettingPhase(allRows, unassignedMembers));
@@ -107,7 +105,8 @@ public class GmProcessTimelineService {
     }
 
     /**
-     * Timeline giống {@link #getTimeline(UUID)} nhưng chỉ phòng/kpi có resolved department do {@code pmId} quản lý
+     * Timeline giống {@link #getTimeline(UUID)} nhưng chỉ phòng/kpi có resolved
+     * department do {@code pmId} quản lý
      * ({@code departments.manager_id = pmId}).
      */
     public GmProcessTimelineResponse getTimelineForPm(UUID cycleId, UUID pmId) {
@@ -122,8 +121,8 @@ public class GmProcessTimelineService {
         List<GmTimelineIssueRow> yearEndNotSubmitted = kpiAssignmentMapper.listInProgressWithinPhaseWindowForPm(
                 cycleId, List.of(STATUS_ACCEPTED, STATUS_MID_COMPLETED), "yearEnd", pmId);
 
-        List<GmUnassignedMemberRow> unassignedMembers =
-                kpiAssignmentMapper.listMembersWithoutKpiAssignmentForPm(cycleId, pmId);
+        List<GmUnassignedMemberRow> unassignedMembers = kpiAssignmentMapper
+                .listMembersWithoutKpiAssignmentForPm(cycleId, pmId);
 
         GmProcessTimelineResponse response = new GmProcessTimelineResponse();
         response.setSetting(buildSettingPhase(allRows, unassignedMembers));
@@ -189,7 +188,8 @@ public class GmProcessTimelineService {
             if (code == STATUS_MID_WAITING_GM && midCompletedSubjects.contains(timelineIssueRowSubjectKey(row))) {
                 continue;
             }
-            // 501 + thiếu evidence → chỉ nhóm missing_evidence (tránh double-count với pending PM).
+            // 501 + thiếu evidence → chỉ nhóm missing_evidence (tránh double-count với
+            // pending PM).
             if (code == STATUS_MID_WAITING_PM && row.getEvidences() == null) {
                 getOrCreateGroup(groups, ID_MISSING_EVIDENCE).putAssignmentDetail(
                         buildAssignmentDetail(row, "Member",
@@ -294,7 +294,9 @@ public class GmProcessTimelineService {
         return out;
     }
 
-    /** Nhãn nút timeline: «0 issues», «1 issue», «N issues» — không kèm số nhân sự. */
+    /**
+     * Nhãn nút timeline: «0 issues», «1 issue», «N issues» — không kèm số nhân sự.
+     */
     private static String formatIssueCountLabel(int opCount) {
         if (opCount <= 0) {
             return "0 issues";
@@ -383,7 +385,8 @@ public class GmProcessTimelineService {
 
     /**
      * Drawer aggregation: KPI (master) → department → assignees.
-     * Không gán PM/Leader ở cấp KPI: một KPI có thể trải nhiều phòng — dominant PM vs dominant supervisor
+     * Không gán PM/Leader ở cấp KPI: một KPI có thể trải nhiều phòng — dominant PM
+     * vs dominant supervisor
      * của toàn slice không còn là một cặp vận hành hợp lệ (gây hiểu nhầm).
      */
     private static List<GmTimelineKpiGroupDto> buildKpiGroups(
@@ -519,7 +522,8 @@ public class GmProcessTimelineService {
     }
 
     /**
-     * Gắn assignment con dưới parent trong cùng slice phòng (theo {@code parent_assignment_id}),
+     * Gắn assignment con dưới parent trong cùng slice phòng (theo
+     * {@code parent_assignment_id}),
      * để drawer hiện đủ chuỗi phân bổ (PM → member) thay vì chỉ hàng gốc.
      */
     private static List<GmTimelineIssueDetailDto> nestCascadeInDeptSlice(List<GmTimelineIssueDetailDto> slice) {
@@ -557,7 +561,10 @@ public class GmProcessTimelineService {
         };
     }
 
-    /** Most frequent non-blank label (stable: LinkedHashMap iteration order on ties). */
+    /**
+     * Most frequent non-blank label (stable: LinkedHashMap iteration order on
+     * ties).
+     */
     private static String dominantNonBlank(
             List<GmTimelineIssueDetailDto> items, Function<GmTimelineIssueDetailDto, String> getter) {
         Map<String, Integer> counts = new LinkedHashMap<>();
@@ -652,7 +659,7 @@ public class GmProcessTimelineService {
                         "Organization",
                         "bg-rose-100 text-rose-600");
                 case ID_KPI_NOT_SUBMITTED -> new GroupMeta(
-                        "KPI Not Submitted",
+                        "KPI Not Evaluated",
                         "warning",
                         "Member",
                         "bg-orange-100 text-orange-600");

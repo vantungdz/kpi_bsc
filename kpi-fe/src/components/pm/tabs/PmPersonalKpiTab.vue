@@ -38,6 +38,11 @@ import {
   dispatchPmCreateKpiAllowed,
   pmCanCreatePersonalKpi,
 } from "@/utils/pmCreateKpiGate";
+import {
+  canSupervisorViewMemberSelfEvaluation,
+  supervisorMemberActualDisplay,
+  supervisorMemberSelfScoreDisplay,
+} from "@/utils/memberEvaluationVisibility";
 
 const props = withDefaults(
   defineProps<{
@@ -190,6 +195,9 @@ function numericActualValueForTeamChildOrNull(
   child: any,
   parentItem: any,
 ): number | null {
+  if (!canSupervisorViewMemberSelfEvaluation(child?.statusCode, "pm")) {
+    return null;
+  }
   const calc = parentItem.calculationTypeCode;
   const mode = pmPortfolioActualDisplayMode(parentItem.calculationRuleCode);
   const formatted = formatPmPortfolioActualCell(
@@ -1532,18 +1540,33 @@ async function decideMemberFeedbackFromDrawer(approve: boolean) {
 }
 
 /** Drawer kết quả member — `viewOnly` khi PM chỉ xem submission (không sửa). Form theo CALC_RULE cha. */
+function pmChildActualCell(child: any, parent: any): string {
+  const formatted =
+    formatPmActualCellWithUnit(
+      formatPmPortfolioActualCell(
+        child?.actualResult,
+        parent?.calculationTypeCode,
+        pmPortfolioActualDisplayMode(parent?.calculationRuleCode),
+        { actualOnly: true },
+      ),
+      parent?.unitCode,
+    ) || "-";
+  return supervisorMemberActualDisplay(formatted, child?.statusCode, "pm");
+}
+
 function openChildEvidenceDrawer(
   child: any,
   parent: any,
   viewOnly = false,
 ) {
+  const pmCanView = canSupervisorViewMemberSelfEvaluation(child?.statusCode, "pm");
   openEvidenceDrawer(
     {
       id: child?.id != null ? String(child.id) : undefined,
       name: `${String(child?.name ?? "Member")} · ${String(parent?.name ?? "KPI")}`,
       target: child?.target ?? "-",
-      actualResult: child?.actualResult ?? "",
-      selfScore: child?.selfScore ?? null,
+      actualResult: pmCanView ? child?.actualResult ?? "" : "",
+      selfScore: pmCanView ? child?.selfScore ?? null : null,
       statusCode: child?.statusCode,
       pmScore: child?.pmScore ?? null,
       pmEvaluationComment: child?.pmEvaluationComment,
@@ -2517,19 +2540,7 @@ async function confirmUnlockKpi() {
                         pmDepartmentChildActualColorClass(item, child),
                       ]"
                     >
-                      {{
-                        formatPmActualCellWithUnit(
-                          formatPmPortfolioActualCell(
-                            child.actualResult,
-                            item.calculationTypeCode,
-                            pmPortfolioActualDisplayMode(
-                              item.calculationRuleCode,
-                            ),
-                            { actualOnly: true },
-                          ),
-                          item.unitCode,
-                        ) || "-"
-                      }}
+                      {{ pmChildActualCell(child, item) }}
                     </span>
                   </td>
                   <td
@@ -2537,8 +2548,23 @@ async function confirmUnlockKpi() {
                   >
                     <span
                       class="text-xs font-bold tabular-nums"
-                      :class="scoreColorClass(child.selfScore)"
-                      >{{ child.selfScore ?? "-" }}</span
+                      :class="
+                        scoreColorClass(
+                          canSupervisorViewMemberSelfEvaluation(
+                            child.statusCode,
+                            'pm',
+                          )
+                            ? child.selfScore
+                            : null,
+                        )
+                      "
+                      >{{
+                        supervisorMemberSelfScoreDisplay(
+                          child.selfScore,
+                          child.statusCode,
+                          "pm",
+                        )
+                      }}</span
                     >
                   </td>
                   <td class="py-3 px-3 text-center align-top">

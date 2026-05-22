@@ -42,6 +42,10 @@ import {
 } from "@/utils/gmAsmStatusUi";
 import { pmAsmStatusPillClass } from "@/utils/pmAsmStatusUi";
 import { kpiCreatorRowBgClass } from "@/utils/kpiCreatorRowBg";
+import {
+  canSupervisorViewMemberSelfEvaluation,
+  supervisorMemberSelfScoreDisplay,
+} from "@/utils/memberEvaluationVisibility";
 
 const props = withDefaults(
   defineProps<{
@@ -341,6 +345,14 @@ function drawerStatusClass(item: GmKpiItem): string {
 }
 
 function hasDrawerEvidence(item: GmKpiItem): boolean {
+  if (
+    !canSupervisorViewMemberSelfEvaluation(
+      item.hubAssignmentStatusCode ?? item.statusCode,
+      "gm",
+    )
+  ) {
+    return false;
+  }
   return Boolean(
     (Array.isArray(item.evidenceData) && item.evidenceData.length > 0) ||
       String(item.evidenceContent ?? "").trim() ||
@@ -375,12 +387,29 @@ function drawerTargetDisplay(item: GmKpiItem): string {
 
 /** Cột ACTUAL — ghép đơn vị giống PM drawer. */
 function drawerActualDisplay(item: GmKpiItem): string {
+  if (
+    !canSupervisorViewMemberSelfEvaluation(
+      item.hubAssignmentStatusCode ?? item.statusCode,
+      "gm",
+    )
+  ) {
+    return "-";
+  }
   const raw = item.actualRaw ?? item.actualResult;
   if (raw == null) return "-";
   const text = String(raw).trim();
   if (!text || text === "-") return "-";
   if (item.unitCode === 902 && /%$/.test(text)) return text;
   return drawerValueWithUnit(item, text);
+}
+
+function drawerSelfScoreDisplay(item: GmKpiItem): string {
+  const shown = supervisorMemberSelfScoreDisplay(
+    item.selfScore,
+    item.hubAssignmentStatusCode ?? item.statusCode,
+    "gm",
+  );
+  return String(shown);
 }
 
 function drawerGroupRowClass(group: GmKpiGroup): string {
@@ -448,7 +477,11 @@ function prefillLockedPmScores() {
   ensurePmScoreKeys();
   for (const emp of employees.value) {
     for (const item of flattenGmKpiItems(emp)) {
-      pmScores[emp.id][item.id] = item.selfScore;
+      const canViewSelf = canSupervisorViewMemberSelfEvaluation(
+        item.hubAssignmentStatusCode ?? item.statusCode,
+        "gm",
+      );
+      pmScores[emp.id][item.id] = canViewSelf ? item.selfScore : null;
       gmScoreTouched[emp.id][item.id] = false;
     }
   }
@@ -537,7 +570,14 @@ function scaledWeightedAvgItems(
   mode: "pm" | "self",
 ): { value: number; filledPmSlots: number; totalPmSlots: number } {
   const iterItems =
-    mode === "pm" ? items.filter((i) => hubRowGmScoreDisplayEnabled(i)) : items;
+    mode === "pm"
+      ? items.filter((i) => hubRowGmScoreDisplayEnabled(i))
+      : items.filter((i) =>
+          canSupervisorViewMemberSelfEvaluation(
+            i.hubAssignmentStatusCode ?? i.statusCode,
+            "gm",
+          ),
+        );
   const totalSlots = iterItems.length;
   let weighted = 0;
   let filledPm = 0;
@@ -2610,7 +2650,7 @@ async function confirmDone(
                                     </button>
                                   </td>
                                   <td class="px-4 py-4 text-center font-bold text-slate-600">
-                                    {{ item.selfScore ?? '-' }}
+                                    {{ drawerSelfScoreDisplay(item) }}
                                   </td>
                                   <td class="px-4 py-4 text-center">
                                     <select

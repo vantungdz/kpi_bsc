@@ -15,6 +15,7 @@ import com.company.kpi.aggregate.GmEvaluationHubAssignmentRow;
 import com.company.kpi.response.gm.GmEvaluationHubAssignmentResponse;
 import com.company.kpi.response.gm.GmEvaluationHubConfirmResponse;
 import com.company.kpi.response.gm.GmEvaluationHubResponse;
+import com.company.kpi.util.MemberEvaluationVisibility;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -211,11 +212,13 @@ public class GmEvaluationHubService {
         a.setStatusCode(r.getStatusCode());
         a.setAssignmentStatusName(r.getAssignmentStatusName());
         a.setAssignmentStatusDescription(r.getAssignmentStatusDescription());
-        a.setMidSelfScore(r.getMidSelfScore());
-        a.setEndSelfScore(r.getEndSelfScore());
+        boolean gmCanViewMemberEval =
+                MemberEvaluationVisibility.canSupervisorViewMemberSelfEvaluation(r.getStatusCode(), true);
+        a.setMidSelfScore(gmCanViewMemberEval ? r.getMidSelfScore() : null);
+        a.setEndSelfScore(gmCanViewMemberEval ? r.getEndSelfScore() : null);
         a.setEndPmScore(r.getEndPmScore());
         a.setEndGmScore(r.getEndGmScore());
-        a.setEvidences(r.getEvidences());
+        a.setEvidences(gmCanViewMemberEval ? r.getEvidences() : null);
         a.setTargetDescription(r.getTargetDescription());
         a.setTargetValue(r.getTargetValue());
         a.setWeight(r.getWeight());
