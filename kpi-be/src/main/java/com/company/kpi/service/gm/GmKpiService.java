@@ -14,6 +14,7 @@ import com.company.kpi.response.member.MemberKpiAssignmentDTO;
 import com.company.kpi.response.gm.GmKpiDashboardResponse;
 import com.company.kpi.response.gm.KpiSectionMemberResponse;
 import com.company.kpi.service.kpi.KpiAssignmentSnapshotService;
+import com.company.kpi.service.kpi.MemberAssignmentEligibilityService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -43,6 +44,7 @@ public class GmKpiService {
     private final UserMapper userMapper;
     private final UserDepartmentMapper userDepartmentMapper;
     private final DepartmentMapper departmentMapper;
+    private final MemberAssignmentEligibilityService memberAssignmentEligibilityService;
 
     public GmKpiDashboardResponse getDashboard(Integer year) {
         throw new UnsupportedOperationException("GmKpiService.getDashboard() not yet implemented. Use mock mode.");
@@ -79,6 +81,9 @@ public class GmKpiService {
         if (itemsToCopy.isEmpty()) {
             return;
         }
+
+        memberAssignmentEligibilityService.assertEligibleForNewMemberAssignment(
+                cycleId, List.of(targetUserId));
 
         Map<UUID, UUID> parentByKpiInfoId = new HashMap<>();
         for (GmCopyKpiItemRequest item : itemsToCopy) {

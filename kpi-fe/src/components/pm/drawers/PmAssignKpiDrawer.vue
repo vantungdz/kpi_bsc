@@ -21,6 +21,12 @@ import {
   validateWeightPctValue,
 } from '@/utils/kpiTargetValidation'
 import { useAuthStore } from '@/stores/auth.store'
+import { useToast } from 'vue-toastification'
+import { useBlockedMemberAssignmentIds } from '@/composables/useBlockedMemberAssignmentIds'
+import {
+  isMemberAssignmentBlocked,
+  MEMBER_ASSIGN_BLOCK_MESSAGE,
+} from '@/utils/memberEvaluationVisibility'
 import { kpiTypeDisplayLabel } from '@/types/kpi-type-option'
 import { strategicKpiTypeIconClass } from '@/utils/strategicKpiTypeCodes'
 
@@ -42,6 +48,7 @@ const props = defineProps({
 
 const emit = defineEmits(['close', 'save', 'refresh'])
 const authStore = useAuthStore()
+const toast = useToast()
 
 // --- COMPUTED STATES ---
 const isCreate = computed(() => props.mode === 'create')
@@ -108,7 +115,15 @@ const description = ref('')
 const targetValue = ref('')
 const weightPct = ref('')
 const unitCode = ref<number | null>(null)
-const formCycleId = ref<string>('') 
+const formCycleId = ref<string>('')
+const { blockedMemberIds } = useBlockedMemberAssignmentIds(formCycleId)
+
+function isMemberBlockedForNewAssignment(memberId: string): boolean {
+  if (normalizeMemberId(memberId) === normalizeMemberId(pmUserId.value)) {
+    return false
+  }
+  return isMemberAssignmentBlocked(memberId, blockedMemberIds.value)
+}
 const isImportantKpi = ref(false)
 const calculationRuleCode = ref<number | null>(null)
 const calculationTypeCode = ref<number | null>(null)
@@ -471,6 +486,10 @@ const toggleMember = (id: string) => {
     return
   }
   if (index === -1) {
+    if (isMemberBlockedForNewAssignment(id)) {
+      toast.warning(MEMBER_ASSIGN_BLOCK_MESSAGE)
+      return
+    }
     selectedMembers.value.push(id)
     if (
       (typeCode.value === KPI_TYPE.TEAM || typeCode.value === KPI_TYPE.PROMOTION) &&
@@ -1420,14 +1439,33 @@ const handleSave = async () => {
                               ? 'border-amber-200/80 bg-amber-50/90 ring-1 ring-amber-200'
                               : isMemberAllocationSelectionLocked(m.id)
                                 ? 'cursor-not-allowed bg-slate-50/80'
-                                : 'cursor-pointer hover:bg-slate-50'
+                                : isMemberBlockedForNewAssignment(m.id) &&
+                                    !selectedMembers.includes(m.id)
+                                  ? 'cursor-not-allowed bg-slate-50/80 opacity-70'
+                                  : 'cursor-pointer hover:bg-slate-50'
+                          "
+                          :title="
+                            isMemberBlockedForNewAssignment(m.id) &&
+                            !selectedMembers.includes(m.id)
+                              ? MEMBER_ASSIGN_BLOCK_MESSAGE
+                              : undefined
                           "
                         >
                           <input 
                             type="checkbox" 
                             class="mt-0.5 mr-3 h-4 w-4 shrink-0 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                            :class="isMemberAllocationSelectionLocked(m.id) ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'"
-                            :disabled="isMemberAllocationSelectionLocked(m.id)"
+                            :class="
+                              isMemberAllocationSelectionLocked(m.id) ||
+                              (isMemberBlockedForNewAssignment(m.id) &&
+                                !selectedMembers.includes(m.id))
+                                ? 'cursor-not-allowed opacity-60'
+                                : 'cursor-pointer'
+                            "
+                            :disabled="
+                              isMemberAllocationSelectionLocked(m.id) ||
+                              (isMemberBlockedForNewAssignment(m.id) &&
+                                !selectedMembers.includes(m.id))
+                            "
                             :checked="selectedMembers.includes(m.id)" 
                             @change="toggleMember(m.id)" 
                           />

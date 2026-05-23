@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.UUID;
 
 /**
  * Dữ liệu tham chiếu dùng chung (đã đăng nhập) — không gắn role GM/PM riêng.
@@ -77,5 +78,15 @@ public class KpiReferenceController extends BaseController {
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<BaseResponse<List<DepartmentManagerOptionResponse>>> listDepartmentManagers() {
         return success(kpiReferenceDataService.listDepartmentManagers());
+    }
+
+    /**
+     * User id bị chặn giao KPI mới trong chu kỳ (đang có assignment ASM khác 404/406/407).
+     */
+    @GetMapping("/blocked-member-ids-for-assignment")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<BaseResponse<List<UUID>>> listBlockedMemberIdsForAssignment(
+            @RequestParam(name = "cycleId") UUID cycleId) {
+        return success(kpiReferenceDataService.listMemberIdsBlockedForNewAssignment(cycleId));
     }
 }

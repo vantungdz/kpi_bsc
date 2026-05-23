@@ -3,6 +3,7 @@ package com.company.kpi.service.reference;
 import com.company.kpi.mapper.RankMapper;
 import com.company.kpi.mapper.SysStatusCodeMapper;
 import com.company.kpi.mapper.UserMapper;
+import com.company.kpi.service.kpi.MemberAssignmentEligibilityService;
 import com.company.kpi.response.reference.CalcRuleWithTypesResponse;
 import com.company.kpi.response.reference.KpiCalculationReferenceResponse;
 import com.company.kpi.response.reference.KpiTypeOptionResponse;
@@ -27,6 +28,7 @@ public class KpiReferenceDataService {
     private static final String CATEGORY_KPI_UNIT = "KPI_UNIT";
     private final SysStatusCodeMapper sysStatusCodeMapper;
     private final UserMapper userMapper;
+    private final MemberAssignmentEligibilityService memberAssignmentEligibilityService;
     private final RankMapper rankMapper;
 
     public List<KpiUnitOptionResponse> listKpiUnits() {
@@ -68,6 +70,13 @@ public class KpiReferenceDataService {
     /** User active có role PM — dropdown manager department / KPI cascading. */
     public List<DepartmentManagerOptionResponse> listDepartmentManagers() {
         return userMapper.listActiveDepartmentManagers();
+    }
+
+    /**
+     * User id (member hoặc PM) không được giao thêm KPI trong chu kỳ (ASM khác 404/406/407).
+     */
+    public List<java.util.UUID> listMemberIdsBlockedForNewAssignment(java.util.UUID cycleId) {
+        return memberAssignmentEligibilityService.listBlockedUserIdsInCycle(cycleId);
     }
 
     /** User active có chức danh thuộc {@code ranks.code} (vd. R3). */

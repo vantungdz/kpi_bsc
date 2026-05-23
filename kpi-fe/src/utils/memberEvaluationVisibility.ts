@@ -51,3 +51,25 @@ export function canDiagnosticsShowMemberActual(
   if (!Number.isFinite(code)) return false
   return code >= KPI_STATUS.FIRST_COMPLETED
 }
+
+/** ASM cho phép member nhận thêm KPI mới trong cùng chu kỳ (404, 406, 407). */
+export const MEMBER_ASSIGN_ALLOWED_STATUSES = new Set<number>([
+  KPI_STATUS.PENDING_ACCEPTANCE,
+  KPI_STATUS.REJECTED,
+  KPI_STATUS.FEEDBACK_IN_PROGRESS,
+])
+
+export const MEMBER_ASSIGN_BLOCK_MESSAGE =
+  'Không thể giao KPI cho thành viên vì nhân viên đang có KPI đang hoạt động.'
+
+export const PM_ASSIGN_BLOCK_MESSAGE =
+  'Không thể giao KPI cho PM vì PM đang có KPI đang hoạt động. Vui lòng unlock KPI của PM trước.'
+
+export function isMemberAssignmentBlocked(
+  memberId: string,
+  blockedMemberIds: ReadonlySet<string>,
+): boolean {
+  const id = String(memberId ?? '').trim().toLowerCase()
+  if (!id) return false
+  return blockedMemberIds.has(id)
+}

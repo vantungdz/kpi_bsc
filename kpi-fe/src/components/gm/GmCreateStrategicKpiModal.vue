@@ -48,6 +48,12 @@ import {
   validateScoringRulesDsl,
 } from '@/utils/kpiScoringRulesDsl'
 import { useAuthStore } from '@/stores/auth.store'
+import { useBlockedMemberAssignmentIds } from '@/composables/useBlockedMemberAssignmentIds'
+import {
+  isMemberAssignmentBlocked,
+  MEMBER_ASSIGN_BLOCK_MESSAGE,
+  PM_ASSIGN_BLOCK_MESSAGE,
+} from '@/utils/memberEvaluationVisibility'
 
 interface DirectMemberOption {
   val: string
@@ -547,6 +553,15 @@ const typesForSelectedRule = computed(
 
 /** UUID `kpi_cycles.id` — dropdown «Năm đánh giá» (đồng bộ DB). */
 const formCycleId = ref('')
+const { blockedMemberIds } = useBlockedMemberAssignmentIds(formCycleId)
+
+function isMemberBlockedForNewAssignment(memberId: string): boolean {
+  return isMemberAssignmentBlocked(memberId, blockedMemberIds.value)
+}
+
+function isPmBlockedForNewAssignment(pmId: string): boolean {
+  return isMemberAssignmentBlocked(pmId, blockedMemberIds.value)
+}
 
 const selectedPMs = ref<string[]>([])
 const pmTargets = ref<Record<string, string>>({})
@@ -1147,6 +1162,10 @@ function togglePm(val: string) {
   if (isGmFeedbackCascadingAllocationReview.value) return
   const i = selectedPMs.value.indexOf(val)
   if (i === -1) {
+    if (isPmBlockedForNewAssignment(val)) {
+      formErrors.value = { ...formErrors.value, pmAssign: PM_ASSIGN_BLOCK_MESSAGE }
+      return
+    }
     selectedPMs.value = [...selectedPMs.value, val]
     if (!(val in pmTargets.value)) pmTargets.value = { ...pmTargets.value, [val]: '' }
   } else {
@@ -1241,14 +1260,25 @@ async function toggleRank(val: string) {
 function toggleMember(val: string) {
   if (isDirectFeedbackSplitEdit.value) return
   const i = selectedMembers.value.indexOf(val)
-  if (i === -1) selectedMembers.value = [...selectedMembers.value, val]
-  else selectedMembers.value = selectedMembers.value.filter((v) => v !== val)
+  if (i === -1) {
+    if (isMemberBlockedForNewAssignment(val)) {
+      formErrors.value = { ...formErrors.value, memberAssign: MEMBER_ASSIGN_BLOCK_MESSAGE }
+      return
+    }
+    selectedMembers.value = [...selectedMembers.value, val]
+  } else {
+    selectedMembers.value = selectedMembers.value.filter((v) => v !== val)
+  }
 }
 
 function toggleRankMember(rank: string, memberId: string) {
   if (isDirectFeedbackSplitEdit.value) return
   const current = selectedRankMembers.value[rank] ?? []
   const exists = current.includes(memberId)
+  if (!exists && isMemberBlockedForNewAssignment(memberId)) {
+    formErrors.value = { ...formErrors.value, memberAssign: MEMBER_ASSIGN_BLOCK_MESSAGE }
+    return
+  }
   selectedRankMembers.value = {
     ...selectedRankMembers.value,
     [rank]: exists ? current.filter((id) => id !== memberId) : [...current, memberId],
@@ -2509,16 +2539,29 @@ async function save() {
                       <label
                         v-for="opt in pmUsers"
                         :key="opt.id"
-                        class="group flex cursor-pointer items-center border-b border-slate-100 px-4 py-2.5 transition-colors last:border-0"
+                        class="group flex items-center border-b border-slate-100 px-4 py-2.5 transition-colors last:border-0"
                         :class="
-                          isFeedbackAssignee(opt.id)
-                            ? 'bg-amber-50/90 hover:bg-amber-100/70'
-                            : 'hover:bg-slate-50'
+                          isPmBlockedForNewAssignment(opt.id) && !pmSelected(opt.id)
+                            ? 'cursor-not-allowed bg-slate-50/80 opacity-70'
+                            : isFeedbackAssignee(opt.id)
+                              ? 'cursor-pointer bg-amber-50/90 hover:bg-amber-100/70'
+                              : 'cursor-pointer hover:bg-slate-50'
+                        "
+                        :title="
+                          isPmBlockedForNewAssignment(opt.id) && !pmSelected(opt.id)
+                            ? PM_ASSIGN_BLOCK_MESSAGE
+                            : undefined
                         "
                       >
                         <input
                           type="checkbox"
-                          class="mr-3 h-4 w-4 cursor-pointer rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                          class="mr-3 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                          :class="
+                            isPmBlockedForNewAssignment(opt.id) && !pmSelected(opt.id)
+                              ? 'cursor-not-allowed opacity-60'
+                              : 'cursor-pointer'
+                          "
+                          :disabled="isPmBlockedForNewAssignment(opt.id) && !pmSelected(opt.id)"
                           :checked="pmSelected(opt.id)"
                           @change="togglePm(opt.id)"
                         />
@@ -2725,16 +2768,35 @@ async function save() {
                           <label
                             v-for="member in rankCard.members"
                             :key="member.val"
-                            class="flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-2 transition-colors"
+                            class="flex items-center gap-3 rounded-lg border px-3 py-2 transition-colors"
                             :class="
-                              isFeedbackAssignee(member.val)
-                                ? 'border-amber-300 bg-amber-50 ring-1 ring-amber-200 hover:bg-amber-100/60'
-                                : 'border-slate-200 hover:bg-slate-50'
+                              isMemberBlockedForNewAssignment(member.val) &&
+                              !isRankMemberSelected(rankCard.rank, member.val)
+                                ? 'cursor-not-allowed border-slate-200 bg-slate-50/80 opacity-70'
+                                : isFeedbackAssignee(member.val)
+                                  ? 'cursor-pointer border-amber-300 bg-amber-50 ring-1 ring-amber-200 hover:bg-amber-100/60'
+                                  : 'cursor-pointer border-slate-200 hover:bg-slate-50'
+                            "
+                            :title="
+                              isMemberBlockedForNewAssignment(member.val) &&
+                              !isRankMemberSelected(rankCard.rank, member.val)
+                                ? MEMBER_ASSIGN_BLOCK_MESSAGE
+                                : undefined
                             "
                           >
                             <input
                               type="checkbox"
-                              class="h-4 w-4 shrink-0 cursor-pointer rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                              class="h-4 w-4 shrink-0 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                              :class="
+                                isMemberBlockedForNewAssignment(member.val) &&
+                                !isRankMemberSelected(rankCard.rank, member.val)
+                                  ? 'cursor-not-allowed opacity-60'
+                                  : 'cursor-pointer'
+                              "
+                              :disabled="
+                                isMemberBlockedForNewAssignment(member.val) &&
+                                !isRankMemberSelected(rankCard.rank, member.val)
+                              "
                               :checked="isRankMemberSelected(rankCard.rank, member.val)"
                               @change="toggleRankMember(rankCard.rank, member.val)"
                             />
@@ -2880,16 +2942,31 @@ async function save() {
                       <label
                         v-for="m in filteredMemberOptions"
                         :key="m.val"
-                        class="group flex cursor-pointer items-center rounded-md border-b border-slate-50 px-3 py-2 transition-colors last:border-0"
+                        class="group flex items-center rounded-md border-b border-slate-50 px-3 py-2 transition-colors last:border-0"
                         :class="
-                          isFeedbackAssignee(m.val)
-                            ? 'bg-amber-50/90 hover:bg-amber-100/70'
-                            : 'hover:bg-slate-50'
+                          isMemberBlockedForNewAssignment(m.val) && !selectedMembers.includes(m.val)
+                            ? 'cursor-not-allowed bg-slate-50/80 opacity-70'
+                            : isFeedbackAssignee(m.val)
+                              ? 'cursor-pointer bg-amber-50/90 hover:bg-amber-100/70'
+                              : 'cursor-pointer hover:bg-slate-50'
+                        "
+                        :title="
+                          isMemberBlockedForNewAssignment(m.val) && !selectedMembers.includes(m.val)
+                            ? MEMBER_ASSIGN_BLOCK_MESSAGE
+                            : undefined
                         "
                       >
                         <input
                           type="checkbox"
-                          class="mr-3 mt-0.5 h-4 w-4 shrink-0 cursor-pointer rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                          class="mr-3 mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                          :class="
+                            isMemberBlockedForNewAssignment(m.val) && !selectedMembers.includes(m.val)
+                              ? 'cursor-not-allowed opacity-60'
+                              : 'cursor-pointer'
+                          "
+                          :disabled="
+                            isMemberBlockedForNewAssignment(m.val) && !selectedMembers.includes(m.val)
+                          "
                           :checked="selectedMembers.includes(m.val)"
                           @change="toggleMember(m.val)"
                         />

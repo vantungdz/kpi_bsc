@@ -909,6 +909,16 @@ const routes: Route[] = [
     },
   },
 
+  // ── GET /kpi/reference/blocked-member-ids-for-assignment?cycleId= ─────────
+  {
+    method: "get",
+    test: (p) => p === "/kpi/reference/blocked-member-ids-for-assignment",
+    handler: async (cfg) => {
+      await sleep(80);
+      return ok<string[]>(cfg, []);
+    },
+  },
+
   // ── GET /kpi/gm/kpi-cycles-with-kpis ──────────────────────────────────────
   {
     method: "get",

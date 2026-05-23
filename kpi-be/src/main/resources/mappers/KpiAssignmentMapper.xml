@@ -2086,6 +2086,33 @@
         ORDER BY u.id, d.id
     </select>
 
+    <select id="listUsersWithBlockingKpiStatusInCycle"
+            resultType="com.company.kpi.aggregate.UserBlockingAssignmentRow">
+        SELECT DISTINCT ON (ka.user_id)
+            ka.user_id AS user_id,
+            u.full_name AS full_name
+        FROM kpi_assignments ka
+        JOIN users u ON u.id = ka.user_id AND u.deleted_at IS NULL
+        WHERE ka.cycle_id = #{cycleId, jdbcType=OTHER}
+          AND ka.deleted_at IS NULL
+          AND ka.status_code NOT IN (404, 406, 407)
+          <if test="userIds != null and userIds.size() > 0">
+              AND ka.user_id IN
+              <foreach collection="userIds" item="uid" open="(" separator="," close=")">
+                  #{uid, jdbcType=OTHER}
+              </foreach>
+          </if>
+        ORDER BY ka.user_id, u.full_name
+    </select>
+
+    <select id="listUserIdsWithBlockingKpiStatusInCycle" resultType="java.util.UUID">
+        SELECT DISTINCT ka.user_id
+        FROM kpi_assignments ka
+        WHERE ka.cycle_id = #{cycleId, jdbcType=OTHER}
+          AND ka.deleted_at IS NULL
+          AND ka.status_code NOT IN (404, 406, 407)
+    </select>
+
     <select id="existsTeamCascadeBlockingPmAccept" resultType="boolean">
         SELECT EXISTS (
             SELECT 1

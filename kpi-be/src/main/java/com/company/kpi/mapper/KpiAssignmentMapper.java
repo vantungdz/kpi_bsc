@@ -4,6 +4,7 @@ import com.company.kpi.aggregate.KpiAssignmentInsertRow;
 import com.company.kpi.aggregate.KpiAssignmentUserTargetRow;
 import com.company.kpi.aggregate.GmTimelineIssueRow;
 import com.company.kpi.aggregate.GmUnassignedMemberRow;
+import com.company.kpi.aggregate.UserBlockingAssignmentRow;
 import com.company.kpi.aggregate.KpiAssignmentDetailAggregate;
 import com.company.kpi.aggregate.PmDashboardAggregate;
 import com.company.kpi.entity.KpiAssignment;
@@ -332,6 +333,15 @@ public interface KpiAssignmentMapper {
     /** Giống {@link #listMembersWithoutKpiAssignment} nhưng chỉ primary department có {@code d.manager_id = pmId}. */
     List<GmUnassignedMemberRow> listMembersWithoutKpiAssignmentForPm(
             @Param("cycleId") UUID cycleId, @Param("pmId") UUID pmId);
+
+    /**
+     * Users có assignment trong chu kỳ với ASM không thuộc 404/406/407 — không được giao KPI mới (GM/PM).
+     */
+    List<UserBlockingAssignmentRow> listUsersWithBlockingKpiStatusInCycle(
+            @Param("cycleId") UUID cycleId, @Param("userIds") List<UUID> userIds);
+
+    /** Mọi {@code user_id} bị chặn giao KPI mới trong chu kỳ (dropdown FE). */
+    List<UUID> listUserIdsWithBlockingKpiStatusInCycle(@Param("cycleId") UUID cycleId);
 
     int updateKpiStatuses(
         @Param("userId") UUID userId,

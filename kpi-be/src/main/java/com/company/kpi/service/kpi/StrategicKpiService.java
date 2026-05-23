@@ -54,6 +54,7 @@ public class StrategicKpiService {
     private final UserKpiSummaryMapper userKpiSummaryMapper;
     private final KpiScoringRulesService kpiScoringRulesService;
     private final KpiAssignmentSnapshotService kpiAssignmentSnapshotService;
+    private final MemberAssignmentEligibilityService memberAssignmentEligibilityService;
 
     // ── CREATE ────────────────────────────────────────────────────────────────
 
@@ -82,6 +83,7 @@ public class StrategicKpiService {
 
         List<UUID> assigneeUserIds = resolveAssigneeUserIds(req, type);
         requireExplicitPmTargetsForTeam(req);
+        assertMemberAssigneesEligibleForPmGmCreate(cycleId, type, assigneeUserIds, role);
         if ((Constant.ROLE_MEMBER.equals(role) || Constant.ROLE_LEADER.equals(role))
                 && !assigneeUserIds.contains(actorId)) {
             assigneeUserIds.add(actorId);
@@ -237,6 +239,11 @@ public class StrategicKpiService {
 
         List<UUID> desired = resolveAssigneeUserIds(req, type);
         requireExplicitPmTargetsForTeam(req);
+
+        if (!preserveAssignmentsOnGmEdit) {
+            assertMemberAssigneesEligibleForPmGmUpdate(
+                    existing.getCycleId(), kpiInformationId, type, desired, role);
+        }
 
         if (preserveAssignmentsOnGmEdit
                 && catalogTargetChanged(existing.getTargetValue(), targetNum)) {
@@ -750,6 +757,60 @@ public class StrategicKpiService {
         }
     }
 
+    /**
+     * GM/PM giao KPI mới — chặn nếu assignee còn assignment ASM khác 404/406/407 trong chu kỳ.
+     * Team (102): GM giao cho PM; Individual/Promotion: giao cho member.
+     */
+    private void assertMemberAssigneesEligibleForPmGmCreate(
+            UUID cycleId, int type, List<UUID> assigneeUserIds, String role) {
+        if (!Constant.ROLE_GM.equals(role) && !Constant.ROLE_PM.equals(role)) {
+            return;
+        }
+        if (type == TYPE_TEAM) {
+            if (Constant.ROLE_GM.equals(role)) {
+                memberAssignmentEligibilityService.assertEligibleForNewPmAssignment(cycleId, assigneeUserIds);
+            }
+            return;
+        }
+        if (type == TYPE_INDIVIDUAL || type == TYPE_PROMOTION) {
+            memberAssignmentEligibilityService.assertEligibleForNewMemberAssignment(cycleId, assigneeUserIds);
+        }
+    }
+
+    private void assertMemberAssigneesEligibleForPmGmUpdate(
+            UUID cycleId, UUID kpiInfoId, int type, List<UUID> desired, String role) {
+        if (!Constant.ROLE_GM.equals(role) && !Constant.ROLE_PM.equals(role)) {
+            return;
+        }
+        List<KpiAssignmentUserTargetRow> currentRows =
+                kpiAssignmentMapper.listAssignmentUserTargets(kpiInfoId, cycleId);
+        LinkedHashSet<UUID> currentAssigneeIds = new LinkedHashSet<>();
+        for (KpiAssignmentUserTargetRow row : currentRows) {
+            if (row.getUserId() == null) {
+                continue;
+            }
+            if (type == TYPE_TEAM) {
+                if (row.getParentAssignmentId() == null) {
+                    currentAssigneeIds.add(row.getUserId());
+                }
+            } else {
+                currentAssigneeIds.add(row.getUserId());
+            }
+        }
+        List<UUID> newAssignees = desired.stream()
+                .filter(uid -> !currentAssigneeIds.contains(uid))
+                .toList();
+        if (type == TYPE_TEAM) {
+            if (Constant.ROLE_GM.equals(role)) {
+                memberAssignmentEligibilityService.assertEligibleForNewPmAssignment(cycleId, newAssignees);
+            }
+            return;
+        }
+        if (type == TYPE_INDIVIDUAL || type == TYPE_PROMOTION) {
+            memberAssignmentEligibilityService.assertEligibleForNewMemberAssignment(cycleId, newAssignees);
+        }
+    }
+
     // private static String nullableTrim(String s) {
     // if (s == null)
     // return null;
@@ -896,6 +957,9 @@ public class StrategicKpiService {
         if (requestedTargets.isEmpty()) {
             return;
         }
+
+        memberAssignmentEligibilityService.assertEligibleForNewMemberAssignment(
+                req.getCycleId(), requestedTargets.keySet());
 
         List<UUID> assigneeUserIds = new ArrayList<>(requestedTargets.keySet());
 
