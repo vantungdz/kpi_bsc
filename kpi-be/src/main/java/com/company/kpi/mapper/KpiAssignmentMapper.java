@@ -217,6 +217,13 @@ public interface KpiAssignmentMapper {
             @Param("cycleId") UUID cycleId,
             @Param("evaluationUserId") UUID evaluationUserId);
 
+    /** Giữa năm: 501→503 (bỏ qua PM), không ghi {@code end_gm_score}. */
+    int updateGmEvaluationHubConfirmReview501(
+            @Param("assignmentId") UUID assignmentId,
+            @Param("cycleId") UUID cycleId,
+            @Param("evaluationUserId") UUID evaluationUserId,
+            @Param("updatedBy") UUID updatedBy);
+
     /** Giữa năm: 502→503, không ghi {@code end_gm_score}. */
     int updateGmEvaluationHubConfirmReview502(
             @Param("assignmentId") UUID assignmentId,
@@ -227,6 +234,14 @@ public interface KpiAssignmentMapper {
     int cascadeGmEvaluationHubTeamSliceReview502(
             @Param("sourceAssignmentId") UUID sourceAssignmentId,
             @Param("cycleId") UUID cycleId,
+            @Param("updatedBy") UUID updatedBy);
+
+    /** Cuối năm: ghi {@code end_gm_score}, 601→603 (bỏ qua PM). */
+    int updateGmEvaluationHubConfirmGrade601(
+            @Param("assignmentId") UUID assignmentId,
+            @Param("cycleId") UUID cycleId,
+            @Param("evaluationUserId") UUID evaluationUserId,
+            @Param("endGmScore") BigDecimal endGmScore,
             @Param("updatedBy") UUID updatedBy);
 
     /** Cuối năm: ghi {@code end_gm_score}, 602→603. */
@@ -270,7 +285,7 @@ public interface KpiAssignmentMapper {
     Integer findAssignmentStatusCode(
             @Param("assignmentId") UUID assignmentId, @Param("cycleId") UUID cycleId);
 
-    /** Chỉ khi {@code status_code = 403} (chờ GM duyệt tạo mới). */
+    /** Khi {@code status_code} ∈ {402, 403} — GM duyệt/từ chối (402 bỏ qua PM). */
     int updateGmAssignmentStatusFromWaitingGm(
             @Param("assignmentId") UUID assignmentId,
             @Param("cycleId") UUID cycleId,

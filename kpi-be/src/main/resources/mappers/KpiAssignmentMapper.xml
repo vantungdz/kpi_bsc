@@ -1311,6 +1311,19 @@
         LIMIT 1
     </select>
 
+    <update id="updateGmEvaluationHubConfirmReview501">
+        UPDATE kpi_assignments
+        SET
+            status_code = 503,
+            updated_at = NOW(),
+            updated_by = #{updatedBy, jdbcType=OTHER}
+        WHERE id = #{assignmentId}
+          AND cycle_id = #{cycleId}
+          AND user_id = #{evaluationUserId, jdbcType=OTHER}
+          AND deleted_at IS NULL
+          AND status_code = 501
+    </update>
+
     <update id="updateGmEvaluationHubConfirmReview502">
         UPDATE kpi_assignments
         SET
@@ -1360,6 +1373,20 @@
                   LIMIT 1
               )
           ) IS NOT DISTINCT FROM src.resolved_department_id
+    </update>
+
+    <update id="updateGmEvaluationHubConfirmGrade601">
+        UPDATE kpi_assignments
+        SET
+            end_gm_score = #{endGmScore},
+            status_code = 603,
+            updated_at = NOW(),
+            updated_by = #{updatedBy, jdbcType=OTHER}
+        WHERE id = #{assignmentId}
+          AND cycle_id = #{cycleId}
+          AND user_id = #{evaluationUserId, jdbcType=OTHER}
+          AND deleted_at IS NULL
+          AND status_code = 601
     </update>
 
     <update id="updateGmEvaluationHubConfirmGrade602">
@@ -1631,7 +1658,7 @@
                   AND d.deleted_at IS NULL
             WHERE ka.cycle_id = #{cycleId, jdbcType=OTHER}
               AND ka.deleted_at IS NULL
-              AND ka.status_code = 403
+              AND ka.status_code IN (402, 403)
               AND COALESCE(ka.user_id, d.manager_id) IS NOT NULL
             ORDER BY
                 COALESCE(ka.user_id, d.manager_id),
@@ -1644,10 +1671,11 @@
         JOIN kpi_categories kc ON km.category_id = kc.id AND kc.deleted_at IS NULL
         JOIN users u ON ka.approval_user_id = u.id AND u.deleted_at IS NULL
         LEFT JOIN sys_status_codes asm ON asm.code = ka.status_code AND asm.category = 'ASM_STATUS'
-        WHERE ka.status_code = 403
+        WHERE ka.status_code IN (402, 403)
         ORDER BY
             CASE ka.status_code
-                WHEN 403 THEN 0
+                WHEN 402 THEN 0
+                WHEN 403 THEN 1
                 ELSE 3
             END,
             kc.name,
@@ -1674,7 +1702,7 @@
         WHERE id = #{assignmentId, jdbcType=OTHER}
           AND cycle_id = #{cycleId, jdbcType=OTHER}
           AND deleted_at IS NULL
-          AND status_code = 403
+          AND status_code IN (402, 403)
     </update>
 
     <update id="cascadeActivateChildAssignments">
@@ -1686,7 +1714,7 @@
         WHERE parent_assignment_id = #{parentAssignmentId, jdbcType=OTHER}
           AND cycle_id = #{cycleId, jdbcType=OTHER}
           AND deleted_at IS NULL
-          AND status_code = 403
+          AND status_code IN (402, 403)
     </update>
 
     <update id="activateSelfAssignedPmChildAssignments">

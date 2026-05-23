@@ -47,6 +47,12 @@ import {
   supervisorMemberSelfScoreDisplay,
 } from "@/utils/memberEvaluationVisibility";
 
+/** Trạng thái assignment GM có thể xác nhận trong Evaluation Hub (bỏ qua bước PM khi 501/601). */
+type GmHubConfirmScope = 501 | 502 | 601 | 602;
+
+const GM_HUB_MID_YEAR_SCOPES: GmHubConfirmScope[] = [501, 502];
+const GM_HUB_YEAR_END_SCOPES: GmHubConfirmScope[] = [601, 602];
+
 const props = withDefaults(
   defineProps<{
     employees: GmEvalMember[];
@@ -210,7 +216,7 @@ function hasKpisForEvalTab(emp: GmEvalMember, tab: "cascade" | "promotion") {
 function hasGmEvaluationActionForTab(emp: GmEvalMember, tab: "cascade" | "promotion") {
   return itemsForEvalTab(emp, tab).some((item) => {
     const code = Number(item.hubAssignmentStatusCode);
-    return code === 502 || code === 602;
+    return code === 501 || code === 502 || code === 601 || code === 602;
   });
 }
 
@@ -227,30 +233,32 @@ function hasUnlockableKpisForTab(emp: GmEvalMember, tab: "cascade" | "promotion"
   });
 }
 
-/** ASM 602: GM chấm điểm + bắt buộc comment; 502 chỉ review. */
+/** ASM 601/602: GM chấm điểm + bắt buộc comment; 501/502 chỉ review giữa năm. */
 function hubRowGmScoreEnabled(item: GmKpiItem): boolean {
-  return item.hubAssignmentStatusCode === 602;
+  const code = Number(item.hubAssignmentStatusCode);
+  return code === 601 || code === 602;
 }
 
-/** Hiển thị điểm GM ở bảng tổng hợp cho cả dòng đang chấm (602) và đã chốt (603). */
+/** Hiển thị điểm GM ở bảng tổng hợp cho dòng đang chấm (601/602) và đã chốt (603). */
 function hubRowGmScoreDisplayEnabled(item: GmKpiItem): boolean {
   const code = Number(item.hubAssignmentStatusCode)
-  return code === 602 || code === 603
+  return code === 601 || code === 602 || code === 603
 }
 
-/** ASM 502/602: GM có thể ghi comment theo từng KPI. */
+/** GM có thể ghi comment theo từng KPI khi chờ PM hoặc GM. */
 function hubRowGmCommentEnabled(item: GmKpiItem): boolean {
-  return item.hubAssignmentStatusCode === 502 || item.hubAssignmentStatusCode === 602;
+  const code = Number(item.hubAssignmentStatusCode);
+  return code === 501 || code === 502 || code === 601 || code === 602;
 }
 
-function drawerHasAssignmentsInStatus(emp: GmEvalMember, code: 502 | 602): boolean {
+function drawerHasAssignmentsInStatus(emp: GmEvalMember, code: GmHubConfirmScope): boolean {
   return flattenGmKpiItems(emp).some((it) => Number(it.hubAssignmentStatusCode) === code)
 }
 
-/** Chỉ các dòng assignment đang chờ GM theo từng phase (gửi confirm hub). */
+/** Chỉ các dòng assignment đang chờ GM/PM theo từng phase (gửi confirm hub). */
 function itemsForHubConfirmScopeForTab(
   emp: GmEvalMember,
-  scope: 502 | 602,
+  scope: GmHubConfirmScope,
   tab: "cascade" | "promotion",
 ): GmKpiItem[] {
   const groups =
@@ -263,30 +271,36 @@ function itemsForHubConfirmScopeForTab(
 
 function drawerHasAssignmentsInStatusForTab(
   emp: GmEvalMember,
-  code: 502 | 602,
+  code: GmHubConfirmScope,
   tab: "cascade" | "promotion",
 ): boolean {
   return itemsForHubConfirmScopeForTab(emp, code, tab).length > 0;
 }
 
+function activeHubConfirmScopesForTab(
+  emp: GmEvalMember,
+  scopes: GmHubConfirmScope[],
+  tab: "cascade" | "promotion",
+): GmHubConfirmScope[] {
+  return scopes.filter((s) => drawerHasAssignmentsInStatusForTab(emp, s, tab));
+}
+
+/** Mở Supervisor Comment khi GM còn KPI chờ xử lý (501/502 giữa năm hoặc 601/602 cuối năm). */
 function supervisorCommentEditable(
   emp: GmEvalMember,
   tab: "cascade" | "promotion",
 ): boolean {
-  return (
-    drawerHasAssignmentsInStatusForTab(emp, 502, tab) ||
-    drawerHasAssignmentsInStatusForTab(emp, 602, tab)
-  );
+  return isAwaitingGmEvaluationForTab(emp, tab);
 }
 
 function supervisorCommentPlaceholder(
   emp: GmEvalMember,
   tab: "cascade" | "promotion",
 ): string {
-  if (drawerHasAssignmentsInStatusForTab(emp, 602, tab)) {
+  if (GM_HUB_YEAR_END_SCOPES.some((s) => drawerHasAssignmentsInStatusForTab(emp, s, tab))) {
     return "Enter an overall supervisor comment explaining the scores you assigned...";
   }
-  if (drawerHasAssignmentsInStatusForTab(emp, 502, tab)) {
+  if (GM_HUB_MID_YEAR_SCOPES.some((s) => drawerHasAssignmentsInStatusForTab(emp, s, tab))) {
     return "Optional during mid-year review. You can keep the PM comment or edit it before completing review.";
   }
   return "";
@@ -520,11 +534,20 @@ function initSupervisorCommentDraft(emp: GmEvalMember, reset = false) {
 }
 
 /** Hiển thị viền/đỏ + thông báo lỗi khi đã bấm xác nhận cuối năm mà Supervisor Comment trống (theo tab). */
+function drawerNeedsYearEndSupervisorComment(
+  emp: GmEvalMember,
+  tab: "cascade" | "promotion",
+): boolean {
+  return GM_HUB_YEAR_END_SCOPES.some((s) =>
+    drawerHasAssignmentsInStatusForTab(emp, s, tab),
+  );
+}
+
 function supervisorCommentInvalid(
   emp: GmEvalMember,
   tab: "cascade" | "promotion",
 ): boolean {
-  if (!drawerHasAssignmentsInStatusForTab(emp, 602, tab)) return false;
+  if (!drawerNeedsYearEndSupervisorComment(emp, tab)) return false;
   if (!supervisorCommentSubmitAttempted[supervisorAttemptKey(emp.id, tab)])
     return false;
   const c =
@@ -708,7 +731,7 @@ function flattenPmBranchSheetHolders(br: GmEvalPmBranch): GmEvalMember[] {
 
 function isAwaitingGmEvaluation(emp: GmEvalMember): boolean {
   if (!hasKpisForEvalTab(emp, tableEvalTab.value)) return false;
-  const visibleStatus = new Set([502, 503, 602, 603]);
+  const visibleStatus = new Set([501, 502, 503, 601, 602, 603]);
   return flattenGmKpiItems(emp).some((item) =>
     visibleStatus.has(Number(item.hubAssignmentStatusCode)),
   );
@@ -830,7 +853,7 @@ const allEvaluationSheetHolders = computed((): GmEvalMember[] => {
   return employees.value;
 });
 
-/** Badge tab KPI Personal / KPI Promotion — số người còn KPI chờ GM (502/602). */
+/** Badge tab KPI Personal / KPI Promotion — số người còn KPI chờ GM (501/502/601/602). */
 const evalTabPendingCounts = computed(() => {
   const holders = allEvaluationSheetHolders.value;
   return {
@@ -994,7 +1017,7 @@ function drawerHubShowYearEndConfirm(
 ): boolean {
   if (!emp || isReadonly.value) return false;
   if (!isAwaitingGmEvaluationForTab(emp, tab)) return false;
-  return drawerHasAssignmentsInStatusForTab(emp, 602, tab);
+  return activeHubConfirmScopesForTab(emp, GM_HUB_YEAR_END_SCOPES, tab).length > 0;
 }
 
 function drawerHubShowMidYearConfirm(
@@ -1003,7 +1026,7 @@ function drawerHubShowMidYearConfirm(
 ): boolean {
   if (!emp || isReadonly.value) return false;
   if (!isAwaitingGmEvaluationForTab(emp, tab)) return false;
-  return drawerHasAssignmentsInStatusForTab(emp, 502, tab);
+  return activeHubConfirmScopesForTab(emp, GM_HUB_MID_YEAR_SCOPES, tab).length > 0;
 }
 
 function toggleEvaluationDrawer(emp: GmEvalMember, tab = tableEvalTab.value) {
@@ -1013,6 +1036,7 @@ function toggleEvaluationDrawer(emp: GmEvalMember, tab = tableEvalTab.value) {
     return;
   }
   initGmCommentDraft(emp, false);
+  initSupervisorCommentDraft(emp, false);
   drawerEvalTab.value = tab;
   drawerEmpId.value = emp.id;
 }
@@ -1118,22 +1142,26 @@ function hubGmScoresCompleteForItems(emp: GmEvalMember, items: GmKpiItem[]): boo
 
 async function confirmDone(
   emp: GmEvalMember,
-  scope: 502 | 602,
+  scopes: GmHubConfirmScope[],
   tab: "cascade" | "promotion",
 ) {
   if (isReadonly.value) return;
   if (!isAwaitingGmEvaluationForTab(emp, tab)) return;
-  const items = itemsForHubConfirmScopeForTab(emp, scope, tab);
+  const activeScopes = activeHubConfirmScopesForTab(emp, scopes, tab);
+  const items = activeScopes.flatMap((scope) =>
+    itemsForHubConfirmScopeForTab(emp, scope, tab),
+  );
   if (!items.length) {
+    const midOnly = scopes.every((s) => s === 501 || s === 502);
     toast.warning(
-      scope === 502
-        ? "No KPIs awaiting GM mid-year review on this tab."
-        : "No KPIs awaiting GM year-end evaluation on this tab.",
+      midOnly
+        ? "No KPIs awaiting mid-year review on this tab."
+        : "No KPIs awaiting year-end evaluation on this tab.",
     );
     return;
   }
 
-  const needFinal = scope === 602;
+  const needFinal = activeScopes.some((s) => s === 601 || s === 602);
   const c =
     tab === "promotion"
       ? (supervisorPromotionComments[emp.id] ?? "").trim()
@@ -1199,8 +1227,9 @@ async function confirmDone(
         }),
       });
       if (res.updatedCount === 0) {
+        const midOnly = scopes.every((s) => s === 501 || s === 502);
         toast.warning(
-          scope === 502
+          midOnly
             ? "No mid-year assignments were updated (already processed or cycle mismatch)."
             : "No year-end assignments were updated (already processed or cycle mismatch).",
         );
@@ -3073,9 +3102,8 @@ async function confirmDone(
                             Supervisor Comment
                             <span
                               v-if="
-                                drawerHasAssignmentsInStatusForTab(
+                                drawerNeedsYearEndSupervisorComment(
                                   drawerEmployee,
-                                  602,
                                   'cascade',
                                 )
                               "
@@ -3134,7 +3162,7 @@ async function confirmDone(
                             type="button"
                             class="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3.5 py-2 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-indigo-700 sm:gap-2 sm:px-4 sm:text-sm disabled:cursor-not-allowed disabled:opacity-50"
                             :disabled="confirmBusy"
-                            @click="confirmDone(drawerEmployee, 602, 'cascade')"
+                            @click="confirmDone(drawerEmployee, GM_HUB_YEAR_END_SCOPES, 'cascade')"
                           >
                             <i
                               class="fas fa-check-circle text-[11px] sm:text-xs"
@@ -3152,7 +3180,7 @@ async function confirmDone(
                             type="button"
                             class="flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3.5 py-2 text-xs font-semibold text-indigo-800 shadow-sm transition-colors hover:bg-indigo-100 sm:gap-2 sm:px-4 sm:text-sm disabled:cursor-not-allowed disabled:opacity-50"
                             :disabled="confirmBusy"
-                            @click="confirmDone(drawerEmployee, 502, 'cascade')"
+                            @click="confirmDone(drawerEmployee, GM_HUB_MID_YEAR_SCOPES, 'cascade')"
                           >
                             <i
                               class="fas fa-flag-checkered text-[11px] sm:text-xs"
@@ -3196,9 +3224,8 @@ async function confirmDone(
                             Supervisor Comment (promotion)
                             <span
                               v-if="
-                                drawerHasAssignmentsInStatusForTab(
+                                drawerNeedsYearEndSupervisorComment(
                                   drawerEmployee,
-                                  602,
                                   'promotion',
                                 )
                               "
@@ -3257,7 +3284,7 @@ async function confirmDone(
                             type="button"
                             class="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3.5 py-2 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-indigo-700 sm:gap-2 sm:px-4 sm:text-sm disabled:cursor-not-allowed disabled:opacity-50"
                             :disabled="confirmBusy"
-                            @click="confirmDone(drawerEmployee, 602, 'promotion')"
+                            @click="confirmDone(drawerEmployee, GM_HUB_YEAR_END_SCOPES, 'promotion')"
                           >
                             <i
                               class="fas fa-check-circle text-[11px] sm:text-xs"
@@ -3275,7 +3302,7 @@ async function confirmDone(
                             type="button"
                             class="flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3.5 py-2 text-xs font-semibold text-indigo-800 shadow-sm transition-colors hover:bg-indigo-100 sm:gap-2 sm:px-4 sm:text-sm disabled:cursor-not-allowed disabled:opacity-50"
                             :disabled="confirmBusy"
-                            @click="confirmDone(drawerEmployee, 502, 'promotion')"
+                            @click="confirmDone(drawerEmployee, GM_HUB_MID_YEAR_SCOPES, 'promotion')"
                           >
                             <i
                               class="fas fa-flag-checkered text-[11px] sm:text-xs"

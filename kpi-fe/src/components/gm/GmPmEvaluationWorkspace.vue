@@ -103,8 +103,9 @@ const employees = computed<GmEvalMember[]>(() => {
   return all.filter((e) => e.projectIds.includes(id))
 })
 
+/** Số người (sheet) còn KPI chờ GM — đếm toàn hub, không lọc theo `?pm=` trên route. */
 const pendingEvaluationCount = computed(() => {
-  return employees.value.filter((e) => e.gmApprovalActionEnabled === true).length
+  return baseEmployees.value.filter((e) => e.gmApprovalActionEnabled === true).length
 })
 
 watch(

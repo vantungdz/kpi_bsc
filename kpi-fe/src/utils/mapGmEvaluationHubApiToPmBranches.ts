@@ -257,11 +257,11 @@ function assignmentStatusDisplayFromRows(rows: GmEvaluationHubAssignmentApiRow[]
   return [...labels].sort((a, b) => a.localeCompare(b)).join(' · ')
 }
 
-/** Nút chấm/duyệt GM (502 = 1st chờ GM, 602 = Final chờ GM). */
+/** GM có thể xác nhận đánh giá (501/601 bỏ qua PM, hoặc 502/602 sau PM). */
 function gmApprovalActionEnabledFromRows(rows: GmEvaluationHubAssignmentApiRow[]): boolean {
   return rows.some((r) => {
     const c = Number(r.statusCode)
-    return c === 502 || c === 602
+    return c === 501 || c === 502 || c === 601 || c === 602
   })
 }
 
@@ -582,7 +582,13 @@ function evidenceFromRow(row: GmEvaluationHubAssignmentApiRow): GmEvidenceTable 
       ? row.statusCode
       : null
   if (!canSupervisorViewMemberSelfEvaluation(statusCode, 'gm')) {
-    return { headers: [], rows: [] }
+    return {
+      title: 'Evidence',
+      icon: 'fas fa-paperclip',
+      accent: 'emerald',
+      headers: [],
+      rows: [],
+    }
   }
   return evidenceTableFromEvidencesJson(row.evidences, rowCalcRuleCode(row))
 }

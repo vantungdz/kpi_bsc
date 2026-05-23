@@ -108,9 +108,10 @@ const memberSummaries = computed<GmApprovedMemberSummary[]>(() => {
           year: 'numeric',
         })
       : '—'
+    const sortPri = (c: number) => (c === 402 ? 0 : c === 403 ? 1 : 2)
     const sortedKpis = [...v.items].sort((a, b) => {
-      const ap = Number(a.assignmentStatusCode) === 403 ? 0 : 1
-      const bp = Number(b.assignmentStatusCode) === 403 ? 0 : 1
+      const ap = sortPri(Number(a.assignmentStatusCode))
+      const bp = sortPri(Number(b.assignmentStatusCode))
       if (ap !== bp) return ap - bp
       const ai = a.isImportant ? 1 : 0
       const bi = b.isImportant ? 1 : 0
@@ -141,7 +142,8 @@ const selectedMember = ref<GmApprovedMemberSummary | null>(null)
 const selectedMemberKeys = ref<Set<string>>(new Set())
 
 function actionableKpisForMember(m: GmApprovedMemberSummary): GmHierarchyKpi[] {
-  return m.kpis.filter((k) => Number(k.assignmentStatusCode) === 403)
+  const sc = (k: GmHierarchyKpi) => Number(k.assignmentStatusCode)
+  return m.kpis.filter((k) => sc(k) === 402 || sc(k) === 403)
 }
 
 const selectableMemberSummaries = computed(() =>
@@ -202,9 +204,10 @@ const rejectAllMode = ref<'drawer' | 'list'>('drawer')
 
 const drawerKpisSorted = computed(() => {
   const kpis = selectedMember.value?.kpis ?? []
+  const sortPri = (c: number) => (c === 402 ? 0 : c === 403 ? 1 : 2)
   return [...kpis].sort((a, b) => {
-    const ap = Number(a.assignmentStatusCode) === 403 ? 0 : 1
-    const bp = Number(b.assignmentStatusCode) === 403 ? 0 : 1
+    const ap = sortPri(Number(a.assignmentStatusCode))
+    const bp = sortPri(Number(b.assignmentStatusCode))
     if (ap !== bp) return ap - bp
     const ai = a.isImportant ? 1 : 0
     const bi = b.isImportant ? 1 : 0
@@ -213,9 +216,12 @@ const drawerKpisSorted = computed(() => {
   })
 })
 
-/** Chỉ KPI đang chờ quyết định GM (403) — nút bulk & quick action. */
+/** KPI chờ GM duyệt (402 bỏ qua PM, hoặc 403 sau PM) — nút bulk & quick action. */
 const actionableGmKpis = computed(() =>
-  drawerKpisSorted.value.filter((k) => Number(k.assignmentStatusCode) === 403),
+  drawerKpisSorted.value.filter((k) => {
+    const sc = Number(k.assignmentStatusCode)
+    return sc === 402 || sc === 403
+  }),
 )
 
 const rejectAllDialogOpen = ref(false)
@@ -376,7 +382,10 @@ function confirmRejectAll() {
 }
 
 function gmApprovedActionsEnabled(kpi: GmHierarchyKpi): boolean {
-  if (kpi.assignmentStatusCode != null) return kpi.assignmentStatusCode === 403
+  if (kpi.assignmentStatusCode != null) {
+    const sc = Number(kpi.assignmentStatusCode)
+    return sc === 402 || sc === 403
+  }
   return true
 }
 

@@ -1,12 +1,13 @@
 - Không cần hiện thị KPI Promotion trên GM, có thể phải chuyển qua 1 tab khác
-- Chặn không cho GM tạo KPI cho member khi member đó không còn 404 ( qua giai đoạn accept KPI)
-- workflow duyệt cho phép nhảy bậc ( GM có thể duyệt mà không cần PM duyệt)
 - Timeline promotion sẽ khác với 2 loại KPI còn lại
-- Khi tạo kpi, chỉnh sửa KPI. Nhập target sẽ suy ra thang điểm 
-- Member chưa bấm gửi kết quả đánh giá thì cấp trên không xem được - Done
-- sửa lại title issues trên timeline ( KPI Not Submit) - Done
 - Trong các drawer đánh giá cần thêm button Reject
 - Khi điểm của PM đánh giá đã được GM đánh giá lại thì PM cần xem được đó là điểm ở KPI nào
+
+- workflow duyệt cho phép nhảy bậc ( GM có thể duyệt mà không cần PM duyệt) - Done
+- Chặn không cho GM tạo KPI cho member khi member đó không còn 404 ( qua giai đoạn accept KPI) - Done
+- Khi tạo kpi, chỉnh sửa KPI. Nhập target sẽ suy ra thang điểm - Done
+- Member chưa bấm gửi kết quả đánh giá thì cấp trên không xem được - Done
+- sửa lại title issues trên timeline ( KPI Not Submit) - Done
 
 Nhập target tự load ra thang điểm . Dưới đây là ví dụ mình áp dụng.
 Gọi X là số target
@@ -15,3 +16,9 @@ Gọi X là số target
 3: [X - 1.1X)
 2: [0.9X - X)
 1: < 0.9X
+
+- workflow duyệt cho phép nhảy bậc ( GM có thể duyệt mà không cần PM duyệt)
+
+Khi member submit KPI của bản thân cho PM approved (status_code 402) thì hiện tại chỉ PM duyệt được thôi, GM không thể duyệt. Bây giờ tôi muốn cho phép GM duyệt luôn mà không cần PM phải duyệt. Khi GM duyệt thì status sẽ đưuọc chuyển thẳng tới 405 luôn.
+
+tương tự với việc đánh giá giữa năm hoặc cuối năm. Nếu trạng thái đang chờ PM đánh giá thì GM có thể đánh giá được luôn và hoàn thành.

@@ -66,6 +66,12 @@ function rowStatusVisual(code: number | null | undefined): GmHierarchyStatus {
   return 'warning'
 }
 
+/** KPI chờ GM có thể duyệt trực tiếp (402) hoặc sau PM (403). */
+export function isGmApprovedKpiActionable(statusCode: number | null | undefined): boolean {
+  const c = Number(statusCode)
+  return c === 402 || c === 403
+}
+
 function splitUserRoleCodes(raw: string | null | undefined): string[] {
   if (raw == null || !String(raw).trim()) return []
   const parts = String(raw)

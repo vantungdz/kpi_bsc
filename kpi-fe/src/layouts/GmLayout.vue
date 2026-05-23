@@ -1200,7 +1200,10 @@ async function onApproveInactiveKpi(kpi: GmHierarchyKpi) {
 }
 
 async function onApproveAllGmApprovedQueue(kpis: GmHierarchyKpi[]) {
-  const targets = kpis.filter((k) => Number(k.assignmentStatusCode) === 403);
+  const targets = kpis.filter((k) => {
+    const sc = Number(k.assignmentStatusCode)
+    return sc === 402 || sc === 403
+  });
   if (!targets.length || approvedKpiPanelBusy.value) return;
   const cid = String(selectedCycleId.value ?? "").trim();
   if (!cid || useMockHub) return;
@@ -1240,9 +1243,10 @@ async function onRejectAllGmApprovedQueue(payload: {
   reason: string;
 }) {
   const reason = String(payload.reason ?? "").trim();
-  const targets = payload.kpis.filter(
-    (k) => Number(k.assignmentStatusCode) === 403,
-  );
+  const targets = payload.kpis.filter((k) => {
+    const sc = Number(k.assignmentStatusCode)
+    return sc === 402 || sc === 403
+  });
   if (!targets.length || approvedKpiPanelBusy.value) return;
   const cid = String(selectedCycleId.value ?? "").trim();
   if (!cid || useMockHub) return;

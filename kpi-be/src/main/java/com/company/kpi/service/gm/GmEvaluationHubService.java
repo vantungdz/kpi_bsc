@@ -78,8 +78,8 @@ public class GmEvaluationHubService {
     }
 
     /**
-     * GM xác nhận drawer: 502→503 (không ghi điểm), 602→603 (ghi {@code end_gm_score});
-     * nhận xét supervisor chỉ lưu khi có ít nhất một assignment 602 được cập nhật.
+     * GM xác nhận drawer: 501/502→503 (không ghi điểm), 601/602→603 (ghi {@code end_gm_score});
+     * cho phép bỏ qua bước PM (501/601). Nhận xét supervisor khi có ít nhất một assignment 601/602.
      */
     @Transactional
     public GmEvaluationHubConfirmResponse confirmGmEvaluation(GmEvaluationHubConfirmRequest req, UUID gmUserId) {
@@ -93,7 +93,7 @@ public class GmEvaluationHubService {
             byAssignment.put(line.getAssignmentId(), line);
         }
 
-        boolean wrote602 = false;
+        boolean wroteYearEndGrade = false;
         int updated = 0;
         for (GmEvaluationHubConfirmLine line : byAssignment.values()) {
             UUID aid = line.getAssignmentId();
@@ -102,7 +102,17 @@ public class GmEvaluationHubService {
                 throw AppException.badRequest(
                         "Assignment không tồn tại hoặc không thuộc nhân viên/chu kỳ: " + aid);
             }
-            if (st == 502) {
+            if (st == 501) {
+                int n = kpiAssignmentMapper.updateGmEvaluationHubConfirmReview501(
+                        aid, cycleId, evaluationUserId, gmUserId);
+                if (n != 1) {
+                    throw AppException.badRequest(
+                            "Assignment không ở trạng thái chờ PM/GM giữa năm hoặc đã xử lý: " + aid);
+                }
+                persistLineGmCommentIfPresent(line, aid, cycleId, evaluationUserId, gmUserId);
+                syncCompletedTeamParentFromChildIfReady(aid, cycleId, 501, 503, gmUserId);
+                updated++;
+            } else if (st == 502) {
                 int n = kpiAssignmentMapper.updateGmEvaluationHubConfirmReview502(
                         aid, cycleId, evaluationUserId, gmUserId);
                 if (n != 1) {
@@ -111,6 +121,21 @@ public class GmEvaluationHubService {
                 }
                 persistLineGmCommentIfPresent(line, aid, cycleId, evaluationUserId, gmUserId);
                 syncCompletedTeamParentFromChildIfReady(aid, cycleId, 502, 503, gmUserId);
+                updated++;
+            } else if (st == 601) {
+                BigDecimal score = line.getEndGmScore();
+                if (score == null) {
+                    throw AppException.badRequest("Thiếu điểm GM cho assignment cuối kỳ: " + aid);
+                }
+                int n = kpiAssignmentMapper.updateGmEvaluationHubConfirmGrade601(
+                        aid, cycleId, evaluationUserId, score, gmUserId);
+                if (n != 1) {
+                    throw AppException.badRequest(
+                            "Assignment không ở trạng thái chờ PM/GM cuối năm hoặc đã xử lý: " + aid);
+                }
+                persistLineGmCommentIfPresent(line, aid, cycleId, evaluationUserId, gmUserId);
+                syncCompletedTeamParentFromChildIfReady(aid, cycleId, 601, 603, gmUserId);
+                wroteYearEndGrade = true;
                 updated++;
             } else if (st == 602) {
                 BigDecimal score = line.getEndGmScore();
@@ -125,18 +150,18 @@ public class GmEvaluationHubService {
                 }
                 persistLineGmCommentIfPresent(line, aid, cycleId, evaluationUserId, gmUserId);
                 syncCompletedTeamParentFromChildIfReady(aid, cycleId, 602, 603, gmUserId);
-                wrote602 = true;
+                wroteYearEndGrade = true;
                 updated++;
             } else {
                 throw AppException.badRequest(
-                        "Assignment không ở trạng thái chờ GM, status=" + st + ": " + aid);
+                        "Assignment không ở trạng thái chờ GM/PM đánh giá, status=" + st + ": " + aid);
             }
         }
 
         String rawSupervisorComment = req.getSupervisorComment();
         boolean shouldPersistSupervisorComment =
                 rawSupervisorComment != null && !rawSupervisorComment.isBlank();
-        if (wrote602) {
+        if (wroteYearEndGrade) {
             if (rawSupervisorComment == null || rawSupervisorComment.isBlank()) {
                 throw AppException.badRequest(
                         "Please enter a supervisor comment when grading the end of the year.");

@@ -74,7 +74,7 @@ public class GmApprovedKpiService {
                     req.getAssignmentId(), cycleId, newStatus, gmUserId, updateReason);
             if (n != 1) {
                 throw AppException.badRequest(
-                        "Không thể cập nhật: assignment không tồn tại, sai chu kỳ, hoặc không ở trạng thái chờ GM duyệt mới.");
+                        "Không thể cập nhật: assignment không tồn tại, sai chu kỳ, hoặc không ở trạng thái chờ duyệt (402/403).");
             }
             
             if (newStatus == Constants.AssignStatus.ACCEPTED) {
