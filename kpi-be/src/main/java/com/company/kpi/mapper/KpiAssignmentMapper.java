@@ -1,5 +1,6 @@
 package com.company.kpi.mapper;
 
+import com.company.kpi.aggregate.AssigneeAssignmentEditRow;
 import com.company.kpi.aggregate.KpiAssignmentInsertRow;
 import com.company.kpi.aggregate.KpiAssignmentUserTargetRow;
 import com.company.kpi.aggregate.GmTimelineIssueRow;
@@ -109,6 +110,22 @@ public interface KpiAssignmentMapper {
     int countOverdueByCycleId(@Param("cycleId") UUID cycleId);
 
     void insertKpiAssignments(@Param("rows") List<KpiAssignmentInsertRow> rows);
+
+    String selectScoringScaleJson(
+            @Param("assignmentId") UUID assignmentId,
+            @Param("cycleId") UUID cycleId);
+
+    AssigneeAssignmentEditRow selectAssigneeEditContext(
+            @Param("assignmentId") UUID assignmentId,
+            @Param("userId") UUID userId);
+
+    int updateAssigneeTargetAndScale(
+            @Param("assignmentId") UUID assignmentId,
+            @Param("cycleId") UUID cycleId,
+            @Param("userId") UUID userId,
+            @Param("targetValue") BigDecimal targetValue,
+            @Param("scoringScale") String scoringScale,
+            @Param("updatedBy") UUID updatedBy);
 
     int softDeleteAssignmentsForKpiInformation(
             @Param("kpiInfoId") UUID kpiInfoId,

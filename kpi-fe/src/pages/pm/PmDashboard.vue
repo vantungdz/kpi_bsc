@@ -20,6 +20,7 @@ import {
   pmPortfolioActualDisplayMode,
 } from '@/utils/memberKpiHelpers'
 import { formatKpiTargetWithUnit, kpiUnitCodeToFormUnit } from '@/utils/kpiUnitCodes'
+import { extractRawInputFromApiTargetDescription } from '@/utils/kpiScoringRulesDsl'
 import { countPmEvaluationSubjectsInHierarchy } from '@/utils/pmEvaluationSubject'
 import { canSupervisorViewMemberSelfEvaluation } from '@/utils/memberEvaluationVisibility'
 import PmPersonalKpiTab from '@/components/pm/tabs/PmPersonalKpiTab.vue'
@@ -324,16 +325,10 @@ function calcMethodLabel(ruleCode: number | null | undefined, typeCode: number |
 }
 
 function scoringRulesText(targetDescription: string | null | undefined): string {
+  const fromApi = extractRawInputFromApiTargetDescription(targetDescription ?? '')
+  if (fromApi.trim()) return fromApi.trim()
   const raw = String(targetDescription ?? '').trim()
-  if (!raw) return '—'
-  try {
-    const parsed = JSON.parse(raw) as { rawInput?: string }
-    const txt = String(parsed?.rawInput ?? '').trim()
-    if (txt) return txt
-  } catch {
-    // targetDescription có thể không phải JSON
-  }
-  return raw
+  return raw || '—'
 }
 
 function mapApprovalToUi(r: PmMemberKpiApprovalItem): PmRequestUiRow {

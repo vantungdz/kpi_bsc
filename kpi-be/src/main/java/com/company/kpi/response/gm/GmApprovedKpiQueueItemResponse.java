@@ -28,6 +28,7 @@ public class GmApprovedKpiQueueItemResponse {
     private String masterName;
     /** Target value số ưu tiên từ assignment, fallback về target chu kỳ. */
     private BigDecimal targetValue;
+    /** Thang điểm: ưu tiên {@code kpi_assignments.scoring_scale}, không có thì catalog. */
     private String targetDescription;
     private BigDecimal weight;
     private Boolean important;

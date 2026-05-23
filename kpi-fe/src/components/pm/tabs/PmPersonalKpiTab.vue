@@ -27,6 +27,9 @@ import { pmAsmStatusPillClass } from "@/utils/pmAsmStatusUi";
 import KpiScoringRulesPreviewTooltip from "@/components/kpi/KpiScoringRulesPreviewTooltip.vue";
 import PmFinalScoreCommentTooltip from "@/components/pm/PmFinalScoreCommentTooltip.vue";
 import PmKpiTableAlignedCell from "@/components/pm/PmKpiTableAlignedCell.vue";
+import PmAssigneeTargetScaleModal, {
+  type PmAssigneeTargetScaleEditItem,
+} from "@/components/pm/PmAssigneeTargetScaleModal.vue";
 import {
   diagnosticsActualNumericColorClass,
   diagnosticsActualTextColorClass,
@@ -404,6 +407,43 @@ function teamAllocationEditLockReason(item: any): string | undefined {
 }
 
 /** KPI PM tự tạo — 404 (trước khi gửi GM) hoặc 406 (GM từ chối): sửa định nghĩa KPI qua drawer. */
+/** GM/PM giao KPI có bật cho phép sửa target + thang điểm trên assignment. */
+function canEditAssigneeTargetScale(item: any): boolean {
+  if (Boolean(item?.isSelfCreated)) return false;
+  if (item?.allowAssigneeTargetScaleEdit !== true) return false;
+  const sc = Number(item?.statusCode ?? 0);
+  return sc === KPI_STATUS.PENDING_ACCEPTANCE
+    || sc === KPI_STATUS.ACCEPTED
+    || sc === KPI_STATUS.FEEDBACK_IN_PROGRESS;
+}
+
+function openAssigneeTargetScaleEditor(item: any) {
+  assigneeTargetScaleItem.value = {
+    id: String(item.id),
+    target: String(item.target ?? ""),
+    targetDescription: String(item.targetDescription ?? ""),
+  };
+  showAssigneeTargetScaleModal.value = true;
+}
+
+function onAssigneeTargetScaleSaved(payload: {
+  assignmentId: string;
+  target: string;
+  targetDescription: string;
+}) {
+  const id = String(payload.assignmentId ?? "").trim();
+  personalKpisRaw.value = personalKpisRaw.value.map((row) => {
+    if (String(row.id) !== id) return row;
+    return {
+      ...row,
+      target: payload.target || row.target,
+      targetDescription: payload.targetDescription || row.targetDescription,
+    };
+  });
+  toast.success("Đã cập nhật target và thang điểm.");
+  showAssigneeTargetScaleModal.value = false;
+}
+
 function canShowSelfCreatedKpiEditButton(item: any): boolean {
   if (props.readonlyYear || !Boolean(item?.isSelfCreated)) return false;
   const sc = Number(item?.statusCode);
@@ -716,6 +756,7 @@ async function loadPmPortfolio(year?: string) {
         isTree: kpi.isTree,
         expanded: readKpiExpandedState(kpiId),
         isSelfCreated: Boolean(kpi.isSelfCreated),
+        allowAssigneeTargetScaleEdit: kpi.allowAssigneeTargetScaleEdit === true,
         creatorRoleCode:
           kpi.creatorRoleCode != null &&
           String(kpi.creatorRoleCode).trim() !== ""
@@ -1406,6 +1447,8 @@ const selectedKpiItem = ref<any>(null);
 const feedbackDrawerOpen = ref(false);
 const feedbackDrawerAssignment = ref<any | null>(null);
 const feedbackDraftText = ref("");
+const showAssigneeTargetScaleModal = ref(false);
+const assigneeTargetScaleItem = ref<PmAssigneeTargetScaleEditItem | null>(null);
 
 const openEvidenceDrawer = (
   item: any,
@@ -2343,6 +2386,16 @@ async function confirmUnlockKpi() {
                     <template v-else>
                       <!-- Team KPI: phân bổ + Feedback GM (404/407); trước đây Feedback chỉ nằm trong nhánh !isTree nên PM team không thấy nút. -->
                       <button
+                        v-if="canEditAssigneeTargetScale(item)"
+                        type="button"
+                        title="Sửa target và thang điểm"
+                        aria-label="Sửa target và thang điểm"
+                        class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-sky-200 bg-sky-50 text-[10px] font-bold text-sky-800 shadow-sm hover:bg-sky-100"
+                        @click.stop="openAssigneeTargetScaleEditor(item)"
+                      >
+                        <i class="fas fa-bullseye text-xs" aria-hidden="true" />
+                      </button>
+                      <button
                         v-if="canShowTeamAllocationButton(item)"
                         type="button"
                         @click.stop="$emit('open-assign', item)"
@@ -3247,6 +3300,12 @@ async function confirmUnlockKpi() {
         </div>
       </Transition>
     </Teleport>
+
+    <PmAssigneeTargetScaleModal
+      v-model="showAssigneeTargetScaleModal"
+      :item="assigneeTargetScaleItem"
+      @saved="onAssigneeTargetScaleSaved"
+    />
   </div>
 </template>
 

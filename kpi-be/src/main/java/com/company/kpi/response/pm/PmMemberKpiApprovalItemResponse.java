@@ -20,7 +20,7 @@ public class PmMemberKpiApprovalItemResponse {
      */
     private String userRoleCodes;
     private String kpiName;
-    /** Nội dung đầy đủ từ {@code kpis_information.target_description}. */
+    /** Thang điểm: ưu tiên {@code kpi_assignments.scoring_scale}, không có thì catalog. */
     private String targetDescription;
     /** Target được giao cho assignment của member (ưu tiên hiển thị ở PM review). */
     private BigDecimal targetValue;

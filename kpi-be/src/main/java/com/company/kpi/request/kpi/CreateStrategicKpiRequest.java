@@ -60,6 +60,12 @@ public class CreateStrategicKpiRequest {
 
     private Boolean isImportant;
 
+    /**
+     * Khi {@code true}: người nhận assignment có thể sửa {@code target_value} và {@code scoring_scale}
+     * trên dòng assignment của họ (không ảnh hưởng assignment khác).
+     */
+    private Boolean allowAssigneeTargetScaleEdit;
+
     /** TEAM / cascading: chỉ các user id này nhận {@code kpi_assignments} (GM chọn PM; không mở rộng theo org). */
     private List<UUID> assignPMs;
 

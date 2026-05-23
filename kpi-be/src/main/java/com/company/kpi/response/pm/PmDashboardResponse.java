@@ -45,8 +45,10 @@ public class PmDashboardResponse {
         private Integer kpiType;    // type_code
         private Boolean isImportant; 
         private String target;      // target_description
-        /** JSON quy tắc chấm điểm GM (`kpis_information.target_description`) — preview điểm trên FE. */
+        /** JSON quy tắc chấm điểm — ưu tiên `kpi_assignments.scoring_scale`, không có thì catalog. */
         private String targetDescriptionJson;
+        /** KPI cho phép PM/member sửa target + thang điểm trên assignment của họ. */
+        private Boolean allowAssigneeTargetScaleEdit;
         private BigDecimal weight;
         private Integer statusCode;
         /** Lý do GM từ chối KPI (406) hoặc từ chối feedback PM (404). */

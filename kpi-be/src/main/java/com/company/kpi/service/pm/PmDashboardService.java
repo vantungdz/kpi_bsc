@@ -26,6 +26,7 @@ import com.company.kpi.response.pm.PmMemberKpiApprovalItemResponse;
 import com.company.kpi.response.pm.PmMemberReviewMetaResponse;
 import com.company.kpi.response.pm.TeamMemberResponse;
 import com.company.kpi.service.gm.GmProcessTimelineService;
+import com.company.kpi.service.kpi.KpiScoringRulesService;
 import com.company.kpi.service.kpi.StrategicKpiService;
 import com.company.kpi.util.MemberEvaluationVisibility;
 
@@ -237,6 +238,7 @@ public class PmDashboardService {
     private final UserKpiSummaryMapper userKpiSummaryMapper;
     private final GmProcessTimelineService gmProcessTimelineService;
     private final StrategicKpiService strategicKpiService;
+    private final KpiScoringRulesService kpiScoringRulesService;
 
     public GmProcessTimelineResponse getProcessTimelineForPm(UUID pmId, Integer year) {
         var cycleOpt = kpiCycleMapper.findByYear(year);
@@ -304,7 +306,10 @@ public class PmDashboardService {
                         .isImportant(agg.getKpiInfo() != null ? agg.getKpiInfo().getIsImportant() : null)
                         .target(resolvePmPortfolioTargetDisplay(agg.getPmAssignment(), agg.getKpiInfo()))
                         .targetDescriptionJson(
-                                agg.getKpiInfo() != null ? agg.getKpiInfo().getTargetDescription() : null)
+                                resolveEffectiveScoringJson(agg.getPmAssignment(), agg.getKpiInfo()))
+                        .allowAssigneeTargetScaleEdit(
+                                agg.getKpiInfo() != null
+                                        && Boolean.TRUE.equals(agg.getKpiInfo().getAllowAssigneeTargetScaleEdit()))
                         .weight(agg.getKpiInfo() != null ? agg.getKpiInfo().getWeight() : null)
                         .statusCode(agg.getPmAssignment() != null ? agg.getPmAssignment().getStatusCode() : null)
                         .updateReason(agg.getPmAssignment() != null ? agg.getPmAssignment().getUpdateReason() : null)
@@ -683,6 +688,17 @@ public class PmDashboardService {
             }
         }
         return sb.toString().trim();
+    }
+
+    /** Thang điểm hiển thị: assignment {@code scoring_scale} nếu có, không thì catalog. */
+    static String resolveEffectiveScoringJson(KpiAssignment assignment, KpisInformation kpiInfo) {
+        if (assignment != null) {
+            String scale = assignment.getScoringScale();
+            if (scale != null && !scale.isBlank() && !"null".equalsIgnoreCase(scale.trim())) {
+                return scale;
+            }
+        }
+        return kpiInfo != null ? kpiInfo.getTargetDescription() : null;
     }
 
     /**

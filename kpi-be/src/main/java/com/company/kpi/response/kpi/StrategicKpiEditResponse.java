@@ -26,6 +26,7 @@ public class StrategicKpiEditResponse {
     private BigDecimal weightPct;
     private String calculationMethod;
     private Boolean isImportant;
+    private Boolean allowAssigneeTargetScaleEdit;
 
     /** Role người tạo KPI — GM chỉ sửa assignment khi giá trị là GM. */
     private String creatorRoleCode;

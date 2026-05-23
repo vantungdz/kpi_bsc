@@ -383,6 +383,7 @@
         <association property="pmAssignment" javaType="com.company.kpi.entity.KpiAssignment">
             <id property="id" column="pm_asm_id"/>
             <result property="targetValue" column="pm_asm_target"/>
+            <result property="scoringScale" column="pm_scoring_scale"/>
             <result property="midSelfScore" column="pm_mid_score"/>
             <result property="endSelfScore" column="pm_end_score"/>
             <result property="endPmScore" column="pm_end_pm_score"/>
@@ -399,6 +400,7 @@
             <result property="targetValue" column="info_target_val"/>
             <result property="weight" column="info_weight"/>
             <result property="isImportant" column="info_is_important"/>
+            <result property="allowAssigneeTargetScaleEdit" column="info_allow_assignee_edit"/>
         </association>
         <association property="kpiMaster" javaType="com.company.kpi.entity.KpiMaster">
             <id property="id" column="master_id"/>
@@ -444,6 +446,7 @@
         SELECT
             pm_ka.id AS pm_asm_id,
             pm_ka.target_value AS pm_asm_target,
+            pm_ka.scoring_scale::text AS pm_scoring_scale,
             pm_ka.mid_self_score AS pm_mid_score,
             pm_ka.end_self_score AS pm_end_score,
             pm_ka.end_pm_score AS pm_end_pm_score,
@@ -462,6 +465,7 @@
             ki.target_value AS info_target_val,
             ki.weight AS info_weight,
             ki.is_important AS info_is_important,
+            ki.allow_assignee_target_scale_edit AS info_allow_assignee_edit,
 
             km.id AS master_id,
             km.code AS master_code,
@@ -634,6 +638,7 @@
         SELECT
             pm_ka.id AS pm_asm_id,
             pm_ka.target_value AS pm_asm_target,
+            pm_ka.scoring_scale::text AS pm_scoring_scale,
             pm_ka.mid_self_score AS pm_mid_score,
             pm_ka.end_self_score AS pm_end_score,
             pm_ka.end_pm_score AS pm_end_pm_score,
@@ -652,6 +657,7 @@
             ki.target_value AS info_target_val,
             ki.weight AS info_weight,
             ki.is_important AS info_is_important,
+            ki.allow_assignee_target_scale_edit AS info_allow_assignee_edit,
 
             km.id AS master_id,
             km.code AS master_code,
@@ -988,18 +994,61 @@
         INSERT INTO kpi_assignments (
             id, cycle_id, kpi_info_id,
             user_id, job_title_id, parent_assignment_id,
-            target_value, status_code,
+            target_value, scoring_scale, status_code,
             created_by, updated_by
         ) VALUES
         <foreach collection="rows" item="r" separator=",">
             (
                 #{r.id}, #{r.cycleId}, #{r.kpiInfoId},
                 #{r.userId}, #{r.jobTitleId}, #{r.parentAssignmentId},
-                #{r.targetValue}, #{r.statusCode},
+                #{r.targetValue},
+                <choose>
+                    <when test="r.scoringScale != null">CAST(#{r.scoringScale} AS jsonb)</when>
+                    <otherwise>NULL</otherwise>
+                </choose>,
+                #{r.statusCode},
                 #{r.createdBy}, #{r.createdBy}
             )
         </foreach>
     </insert>
+
+    <select id="selectScoringScaleJson" resultType="java.lang.String">
+        SELECT COALESCE(scoring_scale, NULL)::text
+        FROM kpi_assignments
+        WHERE id = #{assignmentId}
+          AND cycle_id = #{cycleId}
+          AND deleted_at IS NULL
+        LIMIT 1
+    </select>
+
+    <select id="selectAssigneeEditContext" resultType="com.company.kpi.aggregate.AssigneeAssignmentEditRow">
+        SELECT
+            ka.id AS assignment_id,
+            ka.cycle_id AS cycle_id,
+            ka.kpi_info_id AS kpi_info_id,
+            ka.user_id AS user_id,
+            ka.status_code AS status_code,
+            ki.allow_assignee_target_scale_edit AS allow_assignee_target_scale_edit
+        FROM kpi_assignments ka
+        INNER JOIN kpis_information ki ON ki.id = ka.kpi_info_id AND ki.deleted_at IS NULL
+        WHERE ka.id = #{assignmentId}
+          AND ka.user_id = #{userId}
+          AND ka.deleted_at IS NULL
+        LIMIT 1
+    </select>
+
+    <update id="updateAssigneeTargetAndScale">
+        UPDATE kpi_assignments
+        SET
+            target_value = #{targetValue},
+            scoring_scale = CAST(#{scoringScale} AS jsonb),
+            updated_at = NOW(),
+            updated_by = #{updatedBy}
+        WHERE id = #{assignmentId}
+          AND cycle_id = #{cycleId}
+          AND user_id = #{userId}
+          AND deleted_at IS NULL
+    </update>
 
     <update id="softDeleteAssignmentsForKpiInformation">
         UPDATE kpi_assignments
@@ -1235,14 +1284,19 @@
         INSERT INTO kpi_assignments (
             id, cycle_id, kpi_info_id,
             user_id, job_title_id, parent_assignment_id,
-            target_value, status_code,
+            target_value, scoring_scale, status_code,
             created_by, updated_by
         ) VALUES
         <foreach collection="rows" item="r" separator=",">
             (
                 #{r.id}, #{r.cycleId}, #{r.kpiInfoId},
                 #{r.userId}, #{r.jobTitleId}, #{r.parentAssignmentId},
-                #{r.targetValue}, #{r.statusCode},
+                #{r.targetValue},
+                <choose>
+                    <when test="r.scoringScale != null">CAST(#{r.scoringScale} AS jsonb)</when>
+                    <otherwise>NULL</otherwise>
+                </choose>,
+                #{r.statusCode},
                 #{r.createdBy}, #{r.createdBy}
             )
         </foreach>
@@ -1522,7 +1576,11 @@
             km.code AS master_code,
             km.name AS master_name,
             COALESCE(ka.target_value, ki.target_value) AS target_value,
-            ki.target_description AS target_description,
+            COALESCE(
+                NULLIF(TRIM(ka.scoring_scale::text), ''),
+                NULLIF(TRIM(ka.scoring_scale::text), 'null'),
+                ki.target_description
+            ) AS target_description,
             ki.weight AS weight,
             ki.is_important AS important,
             kc.name AS category_name,
@@ -1564,6 +1622,7 @@
                 COALESCE(ka.user_id, d.manager_id) AS approval_user_id,
                 ka.status_code,
                 ka.target_value,
+                ka.scoring_scale,
                 ka.created_at,
                 ka.parent_assignment_id
             FROM kpi_assignments ka
@@ -2539,7 +2598,11 @@
                 WHERE ur.user_id = ka.user_id
             ) AS user_role_codes,
             km.name AS kpi_name,
-            ki.target_description AS target_description,
+            COALESCE(
+                NULLIF(TRIM(ka.scoring_scale::text), ''),
+                NULLIF(TRIM(ka.scoring_scale::text), 'null'),
+                ki.target_description
+            ) AS target_description,
             COALESCE(ka.target_value, ki.target_value) AS target_value,
             ki.weight AS weight,
             kc.name AS category_name,

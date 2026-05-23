@@ -28,7 +28,10 @@ public interface KpisInformationMapper {
             @Param("targetValue") BigDecimal targetValue,
             @Param("weight") BigDecimal weight,
             @Param("isImportant") boolean isImportant,
+            @Param("allowAssigneeTargetScaleEdit") boolean allowAssigneeTargetScaleEdit,
             @Param("createdBy") UUID createdBy);
+
+    String selectTargetDescriptionJson(@Param("kpiInfoId") UUID kpiInfoId);
 
     KpiInfoForDeleteRow selectKpiInfoForDelete(@Param("kpiInfoId") UUID kpiInfoId);
 
@@ -50,6 +53,7 @@ public interface KpisInformationMapper {
             @Param("targetValue") BigDecimal targetValue,
             @Param("weight") BigDecimal weight,
             @Param("isImportant") boolean isImportant,
+            @Param("allowAssigneeTargetScaleEdit") boolean allowAssigneeTargetScaleEdit,
             @Param("updatedBy") UUID updatedBy);
 
     List<GmDiagnosticsFlatRow> listDiagnosticsFlatByCycleId(@Param("cycleId") UUID cycleId);

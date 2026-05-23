@@ -20,6 +20,8 @@ public class KpiAssignmentInsertRow {
     UUID parentAssignmentId;
     UUID jobTitleId;
     BigDecimal targetValue;
+    /** JSON thang điểm — copy catalog hoặc assignment cha khi cascade. */
+    String scoringScale;
     int statusCode;
     UUID createdBy;
 }

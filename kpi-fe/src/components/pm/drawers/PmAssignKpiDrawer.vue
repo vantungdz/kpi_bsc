@@ -125,6 +125,7 @@ function isMemberBlockedForNewAssignment(memberId: string): boolean {
   return isMemberAssignmentBlocked(memberId, blockedMemberIds.value)
 }
 const isImportantKpi = ref(false)
+const allowAssigneeTargetScaleEdit = ref(false)
 const calculationRuleCode = ref<number | null>(null)
 const calculationTypeCode = ref<number | null>(null)
 
@@ -551,6 +552,7 @@ const resetFormFields = () => {
     targetValue.value = ''
     description.value = ''
     isImportantKpi.value = false
+    allowAssigneeTargetScaleEdit.value = false
     unitCode.value = unitOptions.value[0]?.code ?? null
     calculationRuleCode.value = calcRuleOptions.value[0]?.code ?? null
   } else if (props.kpi) {
@@ -598,6 +600,7 @@ const fetchKpiDetail = async (kpiId: string) => {
     
     unitCode.value = detailData.unitCode || null
     isImportantKpi.value = detailData.isImportant || false
+    allowAssigneeTargetScaleEdit.value = detailData.allowAssigneeTargetScaleEdit === true
 
     // Phân giải calculationMethod ra Code
     if (detailData.calculationMethod) {
@@ -810,6 +813,7 @@ function buildStrategicKpiPayload(): Record<string, unknown> {
       calculationRuleCode.value ?? CALC_RULE.AVERAGE,
     ),
     isImportant: isImportantKpi.value,
+    allowAssigneeTargetScaleEdit: allowAssigneeTargetScaleEdit.value,
   }
 
   if (typeCode.value === KPI_TYPE.TEAM) {
@@ -1222,6 +1226,26 @@ const handleSave = async () => {
                     class="h-3.5 w-3.5 shrink-0 rounded border-slate-300 text-indigo-600 focus:ring-indigo-400/40 disabled:cursor-not-allowed disabled:opacity-60"
                   />
                   <span>Important KPI</span>
+                </label>
+
+                <label
+                  for="pm-kpi-allow-assignee-edit"
+                  class="flex w-full items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-[11px] font-semibold transition"
+                  :class="
+                    canEditKpiDefinition
+                      ? 'cursor-pointer bg-slate-50/80 text-slate-700 hover:bg-slate-100'
+                      : 'cursor-not-allowed bg-slate-100 text-slate-500'
+                  "
+                  title="Cho phép người nhận KPI chỉnh target và thang điểm trên assignment của họ"
+                >
+                  <input
+                    id="pm-kpi-allow-assignee-edit"
+                    v-model="allowAssigneeTargetScaleEdit"
+                    :disabled="!canEditKpiDefinition"
+                    type="checkbox"
+                    class="h-3.5 w-3.5 shrink-0 rounded border-slate-300 text-indigo-600 focus:ring-indigo-400/40 disabled:cursor-not-allowed disabled:opacity-60"
+                  />
+                  <span>Cho phép người nhận sửa target &amp; thang điểm</span>
                 </label>
 
                 <!-- Calculation Rule -->

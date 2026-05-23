@@ -10,6 +10,7 @@
         <result property="targetValue" column="target_value" />
         <result property="weight" column="weight" />
         <result property="isImportant" column="is_important" />
+        <result property="allowAssigneeTargetScaleEdit" column="allow_assignee_target_scale_edit" />
         <result property="createdAt" column="created_at" />
         <result property="updatedAt" column="updated_at" />
         <result property="createdBy" column="created_by" />
@@ -52,13 +53,23 @@
         INSERT INTO kpis_information (
             id, cycle_id, master_kpi_id,
             target_description, target_value, weight, is_important,
+            allow_assignee_target_scale_edit,
             created_by, updated_by
         ) VALUES (
             #{id}, #{cycleId}, #{masterKpiId},
             CAST(#{targetDescription} AS jsonb), #{targetValue}, #{weight}, #{isImportant},
+            #{allowAssigneeTargetScaleEdit},
             #{createdBy}, #{createdBy}
         )
     </insert>
+
+    <select id="selectTargetDescriptionJson" resultType="java.lang.String">
+        SELECT target_description::text
+        FROM kpis_information
+        WHERE id = #{kpiInfoId}
+          AND deleted_at IS NULL
+        LIMIT 1
+    </select>
 
     <select id="selectKpiInfoForDelete" resultType="com.company.kpi.aggregate.KpiInfoForDeleteRow">
         SELECT
@@ -122,6 +133,7 @@
             ki.target_value,
             ki.weight,
             ki.is_important,
+            ki.allow_assignee_target_scale_edit AS allow_assignee_target_scale_edit,
             km.unit_code,
             km.calculation_rule_code,
             km.calculation_type_code,
@@ -156,6 +168,7 @@
             target_value = #{targetValue},
             weight = #{weight},
             is_important = #{isImportant},
+            allow_assignee_target_scale_edit = #{allowAssigneeTargetScaleEdit},
             updated_at = CURRENT_TIMESTAMP,
             updated_by = #{updatedBy}
         WHERE id = #{kpiInfoId}

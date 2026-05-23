@@ -6,6 +6,7 @@ import com.company.kpi.common.Constants;
 import com.company.kpi.common.exception.AppException;
 import com.company.kpi.mapper.DepartmentMapper;
 import com.company.kpi.mapper.KpiAssignmentMapper;
+import com.company.kpi.mapper.KpisInformationMapper;
 import com.company.kpi.mapper.UserDepartmentMapper;
 import com.company.kpi.mapper.UserMapper;
 import com.company.kpi.request.gm.GmCopyKpiItemRequest;
@@ -40,6 +41,7 @@ public class GmKpiService {
     private static final int KPI_TYPE_PROMOTION = 103;
 
     private final KpiAssignmentMapper kpiAssignmentMapper;
+    private final KpisInformationMapper kpisInformationMapper;
     private final KpiAssignmentSnapshotService kpiAssignmentSnapshotService;
     private final UserMapper userMapper;
     private final UserDepartmentMapper userDepartmentMapper;
@@ -94,14 +96,19 @@ public class GmKpiService {
 
         List<KpiAssignmentInsertRow> rows = new ArrayList<>();
         for (GmCopyKpiItemRequest item : itemsToCopy) {
+            UUID kpiInfoId = item.getKpiInfoId();
+            UUID parentId = parentByKpiInfoId.get(kpiInfoId);
+            String catalogJson = kpisInformationMapper.selectTargetDescriptionJson(kpiInfoId);
+            String scoringScale = resolveScoringScaleForCopy(parentId, cycleId, catalogJson);
             rows.add(KpiAssignmentInsertRow.builder()
                     .id(UUID.randomUUID())
                     .cycleId(cycleId)
-                    .kpiInfoId(item.getKpiInfoId())
+                    .kpiInfoId(kpiInfoId)
                     .userId(targetUserId)
                     .jobTitleId(jobByUser.get(targetUserId))
-                    .parentAssignmentId(parentByKpiInfoId.get(item.getKpiInfoId()))
+                    .parentAssignmentId(parentId)
                     .targetValue(item.getTargetValue())
+                    .scoringScale(scoringScale)
                     .statusCode(Constants.AssignStatus.PENDING_ACCEPTANCE)
                     .createdBy(gmUserId)
                     .build());
@@ -144,5 +151,15 @@ public class GmKpiService {
                             + "Assign the team KPI to the PM before copying to a member.");
         }
         return pmRootAssignmentId;
+    }
+
+    private String resolveScoringScaleForCopy(UUID parentAssignmentId, UUID cycleId, String catalogScoringJson) {
+        if (parentAssignmentId != null) {
+            String parentScale = kpiAssignmentMapper.selectScoringScaleJson(parentAssignmentId, cycleId);
+            if (parentScale != null && !parentScale.isBlank() && !"null".equalsIgnoreCase(parentScale.trim())) {
+                return parentScale;
+            }
+        }
+        return catalogScoringJson;
     }
 }

@@ -541,6 +541,8 @@ const targetValue = ref<string>('')
 const unit = ref<string>('MM')
 /** Đồng bộ `kpis_information.is_important` — không gửi mặc định true. */
 const isImportantKpi = ref(false)
+/** Cho phép người nhận assignment sửa target + thang điểm trên dòng của họ. */
+const allowAssigneeTargetScaleEdit = ref(false)
 const weightPct = ref<string>('')
 /** Dropdown «Phân loại cách tính» — mã quy tắc (RULE). */
 const calculationRuleCode = ref(DEFAULT_CALCULATION_RULE_CODE)
@@ -1462,6 +1464,7 @@ async function hydrateFormFromStrategicKpiEditData(data: GmStrategicKpiEditData,
   unit.value = kpiUnitCodeToFormUnit(data.unitCode)
   hydrateCalculationFromPersisted(String(data.calculationMethod ?? 'mean_actual_plan').trim())
   isImportantKpi.value = data.isImportant === true
+  allowAssigneeTargetScaleEdit.value = data.allowAssigneeTargetScaleEdit === true
   strategicEditCreatorRoleCode.value = normalizeKpiCreatorRoleCode(
     (data as { creatorRoleCode?: string | null }).creatorRoleCode,
   )
@@ -1616,6 +1619,7 @@ function resetForm() {
   targetValue.value = ''
   unit.value = 'MM'
   isImportantKpi.value = false
+  allowAssigneeTargetScaleEdit.value = false
   weightPct.value = ''
   calculationRuleCode.value = DEFAULT_CALCULATION_RULE_CODE
   calculationTypeCode.value = DEFAULT_CALCULATION_TYPE_CODE
@@ -1858,6 +1862,7 @@ async function save() {
     cycleId: formCycleId.value,
     calculationMethod: resolvePersistedCalculationMethod(),
     isImportant: isImportantKpi.value,
+    allowAssigneeTargetScaleEdit: allowAssigneeTargetScaleEdit.value,
   }
   if (!isGmAssignSectionReadonly.value) {
     if (kpiType.value === 'cascading') {
@@ -2344,6 +2349,18 @@ async function save() {
                     class="h-3.5 w-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-400/40"
                   />
                   <span>Important KPI</span>
+                </label>
+
+                <label
+                  class="flex cursor-pointer items-center gap-2 rounded-md border border-slate-200 bg-slate-50/80 px-3 py-2 text-[11px] font-semibold text-slate-700 transition hover:bg-slate-100"
+                  title="Cho phép người nhận KPI (PM/member) chỉnh target và thang điểm trên assignment của họ"
+                >
+                  <input
+                    v-model="allowAssigneeTargetScaleEdit"
+                    type="checkbox"
+                    class="h-3.5 w-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-400/40"
+                  />
+                  <span>Cho phép người nhận sửa target &amp; thang điểm</span>
                 </label>
 
                 <!-- Phân loại cách tính: quy tắc (dropdown) + chiều tính (radio khi có) -->

@@ -18,6 +18,7 @@ export interface GmStrategicKpiEditData {
   weightPct: number | string
   calculationMethod: string
   isImportant: boolean
+  allowAssigneeTargetScaleEdit?: boolean | null
   creatorRoleCode?: string | null
   assignPMs?: string[] | null
   pmTargets?: Record<string, unknown> | null

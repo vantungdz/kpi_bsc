@@ -144,7 +144,6 @@ const personalSupervisorComment = ref('')
 const promotionSupervisorComment = ref('')
 const showDeleteConfirmModal = ref(false)
 const pendingDeleteItem = ref<KpiItem | null>(null)
-
 const personalItemsFlat = computed(() => sheet.value?.items.filter(i => i.group !== 'P') ?? [])
 const promotionItemsFlat = computed(() => sheet.value?.items.filter(i => i.group === 'P') ?? [])
 const personalAssignmentIds = computed(() => personalItemsFlat.value.map(i => i.id))

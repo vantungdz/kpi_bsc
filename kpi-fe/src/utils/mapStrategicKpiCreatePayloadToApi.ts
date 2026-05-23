@@ -65,6 +65,7 @@ export function mapStrategicKpiCreatePayloadToApi(
     weightPct,
     calculationMethod: String(payload.calculationMethod ?? 'mean_actual_plan').trim() || 'mean_actual_plan',
     isImportant: payload.isImportant === true,
+    allowAssigneeTargetScaleEdit: payload.allowAssigneeTargetScaleEdit === true,
   }
 
   // Chỉ gửi phân bổ khi drawer emit (GM sửa định nghĩa KPI non-GM không gửi → không sync/xóa assignment).

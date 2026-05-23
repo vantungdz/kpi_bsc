@@ -17,6 +17,8 @@ public class KpiAssignment extends BaseEntity {
     private UUID jobTitleId;
     private UUID parentAssignmentId;
     private BigDecimal targetValue;
+    /** Thang điểm theo assignment (JSON); ưu tiên hơn catalog khi hiển thị / chấm. */
+    private String scoringScale;
     private String updatePayload; // Handled as JSON string for MyBatis compatibility
     private String updateReason;
     private BigDecimal midSelfScore;

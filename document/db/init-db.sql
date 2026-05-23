@@ -259,6 +259,7 @@ CREATE TABLE kpis_information (
     target_value NUMERIC(10,2),   
     weight NUMERIC(5,2),          
     is_important BOOLEAN DEFAULT FALSE,
+    allow_assignee_target_scale_edit BOOLEAN NOT NULL DEFAULT FALSE,
 
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
@@ -283,6 +284,7 @@ CREATE TABLE kpi_assignments (
     parent_assignment_id UUID,
     
     target_value NUMERIC(10,2),   
+    scoring_scale JSONB,
     
     -- Buffer lưu data đang xin đổi (Update Request)
     update_payload JSONB, 

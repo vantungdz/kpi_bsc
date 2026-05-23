@@ -28,6 +28,7 @@ public class StrategicKpiResponse {
     private BigDecimal targetValue;
     private BigDecimal weight;
     private Boolean isImportant;
+    private Boolean allowAssigneeTargetScaleEdit;
 
     /** Số bản ghi {@code kpi_assignments} đã tạo (member). */
     private int assignmentsCreated;

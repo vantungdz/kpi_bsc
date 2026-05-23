@@ -17,6 +17,7 @@ public class KpiStrategicEditMasterRow {
     private BigDecimal targetValue;
     private BigDecimal weight;
     private Boolean isImportant;
+    private Boolean allowAssigneeTargetScaleEdit;
     private Integer unitCode;
     private Integer calculationRuleCode;
     private Integer calculationTypeCode;

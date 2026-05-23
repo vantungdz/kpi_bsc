@@ -80,6 +80,7 @@ public class StrategicKpiService {
         BigDecimal targetNum = normalizeTargetValue(req.getTargetValue());
         requirePositiveCatalogTargetIfPresent(targetNum);
         boolean important = Boolean.TRUE.equals(req.getIsImportant());
+        boolean allowAssigneeEdit = Boolean.TRUE.equals(req.getAllowAssigneeTargetScaleEdit());
 
         List<UUID> assigneeUserIds = resolveAssigneeUserIds(req, type);
         requireExplicitPmTargetsForTeam(req);
@@ -112,6 +113,7 @@ public class StrategicKpiService {
                 targetNum,
                 weight,
                 important,
+                allowAssigneeEdit,
                 actorId);
 
         List<KpiAssignmentInsertRow> rows = new ArrayList<>();
@@ -126,13 +128,15 @@ public class StrategicKpiService {
                     .jobTitleId(null)
                     .parentAssignmentId(null)
                     .targetValue(targetNum)
+                    .scoringScale(resolveScoringScaleForInsert(null, cycleId, scoringJson))
                     .statusCode(Constants.AssignStatus.PENDING_ACCEPTANCE)
                     .createdBy(actorId)
                     .build());
         }
 
         rows.addAll(buildAssignmentRows(
-                assigneeUserIds, type, req, infoId, cycleId, targetNum, actorId, role, parentAssignmentId));
+                assigneeUserIds, type, req, infoId, cycleId, targetNum, actorId, role, parentAssignmentId,
+                scoringJson));
 
         if (!rows.isEmpty()) {
             kpiAssignmentMapper.insertKpiAssignments(rows);
@@ -159,6 +163,7 @@ public class StrategicKpiService {
                 .targetValue(targetNum)
                 .weight(weight)
                 .isImportant(important)
+                .allowAssigneeTargetScaleEdit(allowAssigneeEdit)
                 .assignmentsCreated(rows.size())
                 .build();
     }
@@ -214,6 +219,7 @@ public class StrategicKpiService {
         BigDecimal targetNum = normalizeTargetValue(req.getTargetValue());
         requirePositiveCatalogTargetIfPresent(targetNum);
         boolean important = Boolean.TRUE.equals(req.getIsImportant());
+        boolean allowAssigneeEdit = Boolean.TRUE.equals(req.getAllowAssigneeTargetScaleEdit());
 
         int um = kpiMasterMapper.updateKpiMasterStrategic(
                 existing.getMasterKpiId(),
@@ -235,6 +241,7 @@ public class StrategicKpiService {
                 targetNum,
                 weight,
                 important,
+                allowAssigneeEdit,
                 actorId);
 
         List<UUID> desired = resolveAssigneeUserIds(req, type);
@@ -275,6 +282,8 @@ public class StrategicKpiService {
                             .jobTitleId(null)
                             .parentAssignmentId(null)
                             .targetValue(targetNum)
+                            .scoringScale(resolveScoringScaleForInsert(
+                                    null, existing.getCycleId(), scoringJson))
                             .statusCode(Constants.AssignStatus.PENDING_ACCEPTANCE)
                             .createdBy(actorId)
                             .build());
@@ -282,7 +291,7 @@ public class StrategicKpiService {
 
                 rows.addAll(buildAssignmentRows(
                         desired, type, req, kpiInformationId, existing.getCycleId(), targetNum, actorId, role,
-                        parentAssignmentId));
+                        parentAssignmentId, scoringJson));
 
                 if (!rows.isEmpty()) {
                     kpiAssignmentMapper.insertKpiAssignments(rows);
@@ -324,6 +333,7 @@ public class StrategicKpiService {
                 .targetValue(targetNum)
                 .weight(weight)
                 .isImportant(important)
+                .allowAssigneeTargetScaleEdit(allowAssigneeEdit)
                 .assignmentsCreated(assignmentCount)
                 .build();
     }
@@ -376,6 +386,7 @@ public class StrategicKpiService {
                 .weightPct(row.getWeight())
                 .calculationMethod(calcMethod)
                 .isImportant(Boolean.TRUE.equals(row.getIsImportant()))
+                .allowAssigneeTargetScaleEdit(Boolean.TRUE.equals(row.getAllowAssigneeTargetScaleEdit()))
                 .creatorRoleCode(trimUpperOrNull(row.getCreatorRoleCode()));
 
         // TEAM: danh sách PM do GM giao — chỉ khi xem full KPI (không lọc theo parent
@@ -590,6 +601,7 @@ public class StrategicKpiService {
                 // If it doesn't exist, create it
                 parentAssignmentId = UUID.randomUUID();
                 List<KpiAssignmentInsertRow> pmRow = new ArrayList<>();
+                String catalogJson = kpisInformationMapper.selectTargetDescriptionJson(kpiInfoId);
                 pmRow.add(KpiAssignmentInsertRow.builder()
                         .id(parentAssignmentId)
                         .cycleId(cycleId)
@@ -598,6 +610,7 @@ public class StrategicKpiService {
                         .jobTitleId(null)
                         .parentAssignmentId(null)
                         .targetValue(targetNum)
+                        .scoringScale(resolveScoringScaleForInsert(null, cycleId, catalogJson))
                         .statusCode(Constants.AssignStatus.PENDING_ACCEPTANCE)
                         .createdBy(actorId)
                         .build());
@@ -607,8 +620,9 @@ public class StrategicKpiService {
         }
 
         List<UUID> newIds = desired.stream().filter(uid -> !activeAssignmentIdByUser.containsKey(uid)).toList();
+        String catalogJson = kpisInformationMapper.selectTargetDescriptionJson(kpiInfoId);
         List<KpiAssignmentInsertRow> newRows = buildAssignmentRows(newIds, type, req, kpiInfoId, cycleId, targetNum,
-                actorId, role, parentAssignmentId);
+                actorId, role, parentAssignmentId, catalogJson);
         if (!newRows.isEmpty()) {
             kpiAssignmentMapper.insertKpiAssignments(newRows);
             kpiAssignmentSnapshotService.createSnapshotsForInsertRows(newRows, actorId);
@@ -617,11 +631,13 @@ public class StrategicKpiService {
 
     private List<KpiAssignmentInsertRow> buildAssignmentRows(
             List<UUID> userIds, int type, CreateStrategicKpiRequest req,
-            UUID kpiInfoId, UUID cycleId, BigDecimal targetNum, UUID actorId, String role, UUID parentAssignmentId) {
+            UUID kpiInfoId, UUID cycleId, BigDecimal targetNum, UUID actorId, String role, UUID parentAssignmentId,
+            String catalogScoringJson) {
         if (userIds.isEmpty())
             return new ArrayList<>();
         int initialStatus = initialAssignmentStatusForStrategicCreate(type, role);
         Map<UUID, UUID> jobByUser = loadJobTitleByUserId(userIds);
+        String scoringForChildren = resolveScoringScaleForInsert(parentAssignmentId, cycleId, catalogScoringJson);
         List<KpiAssignmentInsertRow> rows = new ArrayList<>();
         for (UUID uid : userIds) {
             rows.add(KpiAssignmentInsertRow.builder()
@@ -632,11 +648,25 @@ public class StrategicKpiService {
                     .jobTitleId(jobByUser.get(uid))
                     .parentAssignmentId(parentAssignmentId)
                     .targetValue(teamTarget(type, uid, req, targetNum))
+                    .scoringScale(scoringForChildren)
                     .statusCode(initialStatus)
                     .createdBy(actorId)
                     .build());
         }
         return rows;
+    }
+
+    /**
+     * Thang điểm khi tạo assignment: ưu tiên assignment cha (PM đã sửa), không có thì catalog KPI.
+     */
+    private String resolveScoringScaleForInsert(UUID parentAssignmentId, UUID cycleId, String catalogScoringJson) {
+        if (parentAssignmentId != null) {
+            String parentScale = kpiAssignmentMapper.selectScoringScaleJson(parentAssignmentId, cycleId);
+            if (parentScale != null && !parentScale.isBlank() && !"null".equalsIgnoreCase(parentScale.trim())) {
+                return parentScale;
+            }
+        }
+        return catalogScoringJson;
     }
 
     /**
@@ -973,6 +1003,9 @@ public class StrategicKpiService {
                 .collect(Collectors.toMap(UserJobTitlePair::getUserId, UserJobTitlePair::getJobTitleId, (a, b) -> a));
 
         List<KpiAssignment> rowsToInsert = new ArrayList<>();
+        String catalogJson = kpisInformationMapper.selectTargetDescriptionJson(req.getKpiInformationId());
+        String scoringForCascade = resolveScoringScaleForInsert(
+                req.getParentAssignmentId(), req.getCycleId(), catalogJson);
 
         // 3. Build data insert cho từng member
         for (Map.Entry<UUID, BigDecimal> entry : requestedTargets.entrySet()) {
@@ -997,6 +1030,7 @@ public class StrategicKpiService {
             assignment.setJobTitleId(jobByUser.get(memberId));
             assignment.setParentAssignmentId(req.getParentAssignmentId());
             assignment.setTargetValue(targetValue);
+            assignment.setScoringScale(scoringForCascade);
             assignment.setStatusCode(statusCode);
             assignment.setCreatedBy(userId);
 
@@ -1045,6 +1079,8 @@ public class StrategicKpiService {
         kpiAssignmentMapper.softDeleteKpiAssignmentById(memberFeedbackAssignmentId, cycleId, pmId);
         Map<UUID, UUID> jobByUser = userMapper.listUserJobTitlesByIds(assigneeUserIds).stream()
                 .collect(Collectors.toMap(UserJobTitlePair::getUserId, UserJobTitlePair::getJobTitleId, (a, b) -> a));
+        String catalogJson = kpisInformationMapper.selectTargetDescriptionJson(kpiInformationId);
+        String scoringForCascade = resolveScoringScaleForInsert(parentAssignmentId, cycleId, catalogJson);
         KpiAssignment assignment = new KpiAssignment();
         assignment.setId(UUID.randomUUID());
         assignment.setCycleId(cycleId);
@@ -1053,6 +1089,7 @@ public class StrategicKpiService {
         assignment.setJobTitleId(jobByUser.get(memberUserId));
         assignment.setParentAssignmentId(parentAssignmentId);
         assignment.setTargetValue(normalizeTargetValue(targetValue));
+        assignment.setScoringScale(scoringForCascade);
         assignment.setStatusCode(Constants.AssignStatus.PENDING_ACCEPTANCE);
         assignment.setCreatedBy(pmId);
         List<KpiAssignment> rowsToInsert = List.of(assignment);
