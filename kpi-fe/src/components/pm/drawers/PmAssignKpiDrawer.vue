@@ -11,6 +11,7 @@ import {
   extractRawInputFromApiTargetDescription,
   validateScoringRulesDsl,
 } from '@/utils/kpiScoringRulesDsl'
+import { useAutoScoringRulesFromTarget } from '@/composables/useAutoScoringRulesFromTarget'
 import ScoringRulesHelpTooltip from '@/components/kpi/ScoringRulesHelpTooltip.vue'
 import { getApiErrorMessage } from '@/utils/apiErrorMessage'
 import {
@@ -289,6 +290,16 @@ const showsPmTargetField = computed(
     (!isCreate.value && typeCode.value === KPI_TYPE.PROMOTION),
 )
 
+const autoScoringFromTargetEnabled = computed(
+  () => showsPmTargetField.value && canEditKpiDefinition.value,
+)
+
+const { onScoringRulesManualInput, resetAutoScoringRulesTracking } = useAutoScoringRulesFromTarget(
+  targetValue,
+  description,
+  autoScoringFromTargetEnabled,
+)
+
 /** KPI Team & Individual: ô chỉ placeholder + dropdown; danh sách đã chọn & Xóa ở khối dưới (không chip trong ô). Promotion: chip trong ô. */
 const useMemberAssignListBelow = computed(
   () => typeCode.value === KPI_TYPE.TEAM || typeCode.value === KPI_TYPE.INDIVIDUAL,
@@ -551,6 +562,7 @@ const resetFormFields = () => {
     weightPct.value = ''
     targetValue.value = ''
     description.value = ''
+    resetAutoScoringRulesTracking()
     isImportantKpi.value = false
     allowAssigneeTargetScaleEdit.value = false
     unitCode.value = unitOptions.value[0]?.code ?? null
@@ -1323,7 +1335,8 @@ const handleSave = async () => {
                     v-model="description" 
                     :disabled="!canEditKpiDefinition" 
                     rows="5" 
-                    placeholder="1: &lt;50&#10;2: 50-70&#10;3: 71-85&#10;4: 86-99&#10;5: &gt;=100" 
+                    placeholder="Nhập target để tự sinh (5: ≥1.2X, 4: [1.1X–1.2X), …)"
+                    @input="onScoringRulesManualInput" 
                     class="custom-scrollbar min-h-[7.5rem] w-full px-3 py-2 rounded-md text-xs font-medium resize-y outline-none transition-all focus:ring-1" 
                     :class="[
                       !canEditKpiDefinition

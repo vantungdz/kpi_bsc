@@ -47,6 +47,7 @@ import {
   extractRawInputFromApiTargetDescription,
   validateScoringRulesDsl,
 } from '@/utils/kpiScoringRulesDsl'
+import { useAutoScoringRulesFromTarget } from '@/composables/useAutoScoringRulesFromTarget'
 import { useAuthStore } from '@/stores/auth.store'
 import { useBlockedMemberAssignmentIds } from '@/composables/useBlockedMemberAssignmentIds'
 import {
@@ -538,6 +539,13 @@ const prefetchIndividualRankMembersInFlight = ref(false)
 const kpiName = ref('')
 const description = ref('')
 const targetValue = ref<string>('')
+
+const { onScoringRulesManualInput, resetAutoScoringRulesTracking } = useAutoScoringRulesFromTarget(
+  targetValue,
+  description,
+  needsStrategicTargetInput,
+)
+
 const unit = ref<string>('MM')
 /** Đồng bộ `kpis_information.is_important` — không gửi mặc định true. */
 const isImportantKpi = ref(false)
@@ -1617,6 +1625,7 @@ function resetForm() {
   kpiName.value = ''
   description.value = ''
   targetValue.value = ''
+  resetAutoScoringRulesTracking()
   unit.value = 'MM'
   isImportantKpi.value = false
   allowAssigneeTargetScaleEdit.value = false
@@ -2447,7 +2456,8 @@ async function save() {
                   <textarea
                     v-model="description"
                     rows="5"
-                    placeholder="1: &lt;50&#10;2: 50-70&#10;3: 71-85&#10;4: 86-99&#10;5: &gt;=100"
+                    placeholder="Nhập target để tự sinh (5: ≥1.2X, 4: [1.1X–1.2X), …)"
+                    @input="onScoringRulesManualInput"
                     class="custom-scrollbar min-h-[7.5rem] w-full resize-y rounded-md px-2.5 py-1.5 text-xs font-medium text-slate-800 outline-none transition-all focus:ring-2"
                     :class="
                       formErrors.scoringRules

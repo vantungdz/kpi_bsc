@@ -252,6 +252,43 @@ export function emptyScoringRulesPayload(): { rawInput: string; rules: ScoringRu
   return { rawInput: '', rules: [] }
 }
 
+/**
+ * Thang điểm mặc định theo target X (áp dụng khi GM/PM/Template nhập target):
+ * 5: >= 1.2X · 4: [1.1X, 1.2X) · 3: [X, 1.1X) · 2: [0.9X, X) · 1: < 0.9X
+ */
+export const TARGET_BASED_SCORING_MULTIPLIERS = {
+  level5Min: 1.2,
+  level4Min: 1.1,
+  level4Max: 1.2,
+  level3Min: 1,
+  level3Max: 1.1,
+  level2Min: 0.9,
+  level2Max: 1,
+  level1Max: 0.9,
+} as const
+
+/** Định dạng ngưỡng trong DSL (bỏ số 0 thừa cuối). */
+export function formatScoringThreshold(value: number): string {
+  if (!Number.isFinite(value)) return ''
+  const rounded = Math.round(value * 1_000_000) / 1_000_000
+  if (Number.isInteger(rounded)) return String(rounded)
+  return rounded.toFixed(6).replace(/\.?0+$/, '')
+}
+
+/** Sinh chuỗi thang điểm DSL từ target dương; {@code null} nếu target không hợp lệ. */
+export function buildDefaultScoringRulesFromTarget(target: number): string | null {
+  if (!Number.isFinite(target) || target <= 0) return null
+  const m = TARGET_BASED_SCORING_MULTIPLIERS
+  const t = (factor: number) => formatScoringThreshold(factor * target)
+  return [
+    `5: >=${t(m.level5Min)}`,
+    `4: [${t(m.level4Min)}, ${t(m.level4Max)})`,
+    `3: [${t(m.level3Min)}, ${t(m.level3Max)})`,
+    `2: [${t(m.level2Min)}, ${t(m.level2Max)})`,
+    `1: <${t(m.level1Max)}`,
+  ].join('\n')
+}
+
 function ruleRecordFromApi(rec: Record<string, unknown>): ScoringRuleNormalized | null {
   const scoreRaw = rec.score
   const score = typeof scoreRaw === 'number' ? scoreRaw : Number(scoreRaw)
