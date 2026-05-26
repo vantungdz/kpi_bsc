@@ -29,7 +29,9 @@ import {
 } from '@/utils/memberKpiHelpers'
 import {
   canSupervisorViewMemberSelfEvaluation,
-  resolveMemberSelfScoreByAsm,
+  resolveDrawerMemberSelfScore,
+  resolveGmTableActual,
+  resolveGmTableSelfScore,
 } from '@/utils/memberEvaluationVisibility'
 
 /** Ngữ cảnh suy đơn vị cho drawer đánh giá GM. */
@@ -184,7 +186,19 @@ function hubItemActualNumericSummary(row: GmEvaluationHubAssignmentApiRow): stri
   return formatNumericTarget(avg)
 }
 
-function hubItemActualRaw(row: GmEvaluationHubAssignmentApiRow): string {
+function hubItemTableActualRaw(row: GmEvaluationHubAssignmentApiRow): string {
+  const statusCode =
+    typeof row.statusCode === 'number' && Number.isFinite(row.statusCode)
+      ? row.statusCode
+      : null
+  const fromSnapshot = resolveGmTableActual(statusCode, row.evidences)
+  if (fromSnapshot != null) {
+    return fromSnapshot
+  }
+  return hubItemDrawerActualRaw(row)
+}
+
+function hubItemDrawerActualRaw(row: GmEvaluationHubAssignmentApiRow): string {
   const unitCtx = hubRowUnitContext(row)
   const unitCode = resolveGmDrawerUnitCode(unitCtx)
   if (unitCode != null && unitCode !== KPI_UNIT_CODE.PERCENT) {
@@ -200,6 +214,11 @@ function hubItemActualRaw(row: GmEvaluationHubAssignmentApiRow): string {
       { actualOnly: true },
     ) || '-'
   )
+}
+
+/** Drawer — actual hiện tại (member đang nhập). */
+function hubItemActualRaw(row: GmEvaluationHubAssignmentApiRow): string {
+  return hubItemDrawerActualRaw(row)
 }
 
 function buildKpiGroupsFromRows(
@@ -269,22 +288,43 @@ function gmApprovalActionEnabledFromRows(rows: GmEvaluationHubAssignmentApiRow[]
   })
 }
 
-function parseSelfScore(row: GmEvaluationHubAssignmentApiRow): number {
-  const statusCode =
-    typeof row.statusCode === 'number' && Number.isFinite(row.statusCode)
-      ? row.statusCode
-      : null
-  const resolved = resolveMemberSelfScoreByAsm(
-    statusCode,
-    row.midSelfScore,
-    row.endSelfScore,
-  )
-  const raw = resolved ?? row.endSelfScore ?? row.midSelfScore
+function normalizeHubScore(raw: unknown): number {
   const n = typeof raw === 'number' ? raw : Number.parseFloat(String(raw ?? '').replace(',', '.'))
   if (!Number.isFinite(n)) return 0
   if (n >= 0 && n <= 5) return Math.min(5, Math.max(0, Math.round(n)))
   if (n <= 100) return Math.min(5, Math.max(0, Math.round(n / 20)))
   return Math.min(5, Math.max(0, Math.round(n)))
+}
+
+/** Self score trên bảng hub GM — snapshot giữa kỳ khi ASM 503/601/602. */
+function parseTableSelfScore(row: GmEvaluationHubAssignmentApiRow): number {
+  const statusCode =
+    typeof row.statusCode === 'number' && Number.isFinite(row.statusCode)
+      ? row.statusCode
+      : null
+  const resolved = resolveGmTableSelfScore(
+    statusCode,
+    row.midSelfScore,
+    row.endSelfScore,
+    row.evidences,
+  )
+  const raw = resolved ?? row.endSelfScore ?? row.midSelfScore
+  return normalizeHubScore(raw)
+}
+
+/** Self score trong drawer — luôn điểm member đang nhập/lưu. */
+function parseDrawerSelfScore(row: GmEvaluationHubAssignmentApiRow): number {
+  const statusCode =
+    typeof row.statusCode === 'number' && Number.isFinite(row.statusCode)
+      ? row.statusCode
+      : null
+  const resolved = resolveDrawerMemberSelfScore(
+    statusCode,
+    row.midSelfScore,
+    row.endSelfScore,
+  )
+  const raw = resolved ?? row.endSelfScore ?? row.midSelfScore
+  return normalizeHubScore(raw)
 }
 
 function parseReviewScore(raw: unknown): number | null {
@@ -623,7 +663,9 @@ function toKpiItem(row: GmEvaluationHubAssignmentApiRow, index: number): GmKpiIt
     evidenceButtonLabel: 'Evidence',
     evidenceButtonIcon: 'fas fa-file-alt',
     evidenceTone: 'blue',
-    selfScore: parseSelfScore(row),
+    selfScore: parseDrawerSelfScore(row),
+    tableSelfScore: parseTableSelfScore(row),
+    tableActualRaw: hubItemTableActualRaw(row),
     // pmScore = điểm GM đã lưu; pmSeedScore = GM ?? PM (seed dropdown + fallback cột Supervisor Score khi chưa có GM).
     pmScore: parseReviewScore(row.endGmScore),
     pmSeedScore: parseReviewScore(row.endGmScore) ?? parseReviewScore(row.endPmScore),
@@ -677,15 +719,12 @@ function hubStatusCodesFromRows(rows: GmEvaluationHubAssignmentApiRow[]): number
     .filter((c): c is number => c != null)
 }
 
-function avgSelfFromItems(items: GmKpiItem[]): string | null {
-  const visible = items.filter((i) =>
-    canSupervisorViewMemberSelfEvaluation(
-      i.hubAssignmentStatusCode ?? i.statusCode,
-      'gm',
-    ),
+function avgTableSelfFromRows(rows: GmEvaluationHubAssignmentApiRow[]): string | null {
+  const visible = rows.filter((r) =>
+    canSupervisorViewMemberSelfEvaluation(r.statusCode, 'gm'),
   )
   if (!visible.length) return null
-  const s = visible.reduce((a, i) => a + i.selfScore, 0) / visible.length
+  const s = visible.reduce((a, r) => a + parseTableSelfScore(r), 0) / visible.length
   return s.toFixed(2)
 }
 
@@ -711,7 +750,6 @@ function buildUserMember(
     groups.push(...buildKpiGroupsFromRows(promotionRows, true))
   }
 
-  const flatItems = groups.flatMap((g) => g.items)
   const st = sheetStatusFromRows(rows)
   return {
     id: `hub-${brokerId}-u-${userId}`,
@@ -725,7 +763,7 @@ function buildUserMember(
     assignmentStatusDisplay: assignmentStatusDisplayFromRows(rows),
     gmApprovalActionEnabled: gmApprovalActionEnabledFromRows(rows),
     evaluationUserId: userId,
-    selfScoreDisplay: avgSelfFromItems(flatItems),
+    selfScoreDisplay: avgTableSelfFromRows(assignmentRows),
     canScore: true,
     projectIds: [brokerId],
     employeeCommentPortfolio: hubSummaryFieldFromRows(rows, 'evaluationComments'),

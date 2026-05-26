@@ -25,6 +25,7 @@
     import com.company.kpi.response.pm.KpiSheetResponse;
     import com.company.kpi.service.kpi.KpiAssignmentSnapshotService;
     import com.company.kpi.service.kpi.KpiScoringRulesService;
+    import com.company.kpi.util.ApprovedMidYearSnapshotSupport;
     import com.fasterxml.jackson.databind.JsonNode;
     import com.fasterxml.jackson.databind.ObjectMapper;
     import lombok.RequiredArgsConstructor;
@@ -202,13 +203,16 @@
                     end = v;
                 }
             }
+            String evidencesToSave =
+                    ApprovedMidYearSnapshotSupport.mergePreservingSnapshot(
+                            row.getEvidences(), request.getEvidences());
             int n = kpiAssignmentMapper.patchMemberAssignment(
                     assignmentId,
                     cycleId,
                     userId,
                     mid,
                     end,
-                    request.getEvidences(),
+                    evidencesToSave,
                     null);
             if (n == 0) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Could not update assignment");
@@ -266,13 +270,16 @@
                 throw new ResponseStatusException(
                         HttpStatus.BAD_REQUEST, "Proposed KPI is pending approval — cannot submit evidence");
             }
+            String evidencesToSave =
+                    ApprovedMidYearSnapshotSupport.mergePreservingSnapshot(
+                            row.getEvidences(), request.getEvidence());
             kpiAssignmentMapper.patchMemberAssignment(
                     request.getAssignmentId(),
                     row.getCycleId(),
                     userId,
                     null,
                     null,
-                    request.getEvidence(),
+                    evidencesToSave,
                     null);
         }
 

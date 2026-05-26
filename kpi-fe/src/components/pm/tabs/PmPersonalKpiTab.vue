@@ -47,10 +47,16 @@ import {
 import {
   canSupervisorViewMemberSelfEvaluation,
   canPmOwnViewPortfolioEvaluation,
+  parseApprovedMidYearSnapshot,
   pmPortfolioMemberSelfScoreDisplay,
+  pmTableSelfScoreDisplay,
+  resolvePmTableActual,
+  resolvePmTableSelfScore,
+  pmPortfolioEvidencesJson,
   resolvePortfolioMemberSelfScore,
   supervisorMemberActualDisplay,
   supervisorMemberSelfScoreDisplay,
+  usesPmTableSnapshotStatus,
 } from "@/utils/memberEvaluationVisibility";
 import { pmDepartmentSubTabKey } from "@/utils/pmLayoutPromotionCycle";
 
@@ -222,19 +228,71 @@ function isPmOwnedPortfolioRow(row: any, parentItem?: any): boolean {
   return !row?.isTree;
 }
 
-/** Actual một dòng (cha hoặc con) — áp dụng visibility ASM (Personal / Promotion / Department). */
+/** Gắn snapshot/table score khi map API — bảng không đọc mid_self_score live ở ASM 503. */
+function enrichPmPortfolioAssignmentRow(row: Record<string, unknown>): Record<string, unknown> {
+  const statusCode =
+    row.statusCode != null && Number.isFinite(Number(row.statusCode))
+      ? Number(row.statusCode)
+      : null;
+  const evidences = pmPortfolioEvidencesJson(row);
+  const approvedMidYearSnapshot = parseApprovedMidYearSnapshot(evidences);
+  const tableSelfScore = usesPmTableSnapshotStatus(statusCode)
+    ? resolvePmTableSelfScore(
+        statusCode,
+        row.midSelfScore,
+        row.endSelfScore,
+        evidences,
+      )
+    : null;
+  const tableActual =
+    statusCode != null
+      ? resolvePmTableActual(statusCode, evidences)
+      : null;
+  if (
+    import.meta.env.DEV &&
+    (statusCode === KPI_STATUS.FIRST_COMPLETED ||
+      statusCode === KPI_STATUS.SECOND_WAITING_PM_APPROVAL)
+  ) {
+    console.debug("[PM table snapshot]", {
+      id: row.id,
+      statusCode: row.statusCode,
+      midSelfScore: row.midSelfScore,
+      endSelfScore: row.endSelfScore,
+      tableSelfScore,
+      approvedMidYearSnapshot,
+      tableActual,
+    });
+  }
+  return {
+    ...row,
+    evidencesJson: evidences,
+    approvedMidYearSnapshot,
+    tableSelfScore,
+    tableActual,
+  };
+}
+
+/** Actual một dòng (cha hoặc con) — bảng portfolio dùng snapshot giữa kỳ khi ASM 503/601. */
 function pmPortfolioActualCell(row: any, parentItem?: any): string {
   const calc = parentItem?.calculationTypeCode ?? row?.calculationTypeCode;
   const mode = pmPortfolioActualDisplayMode(
     parentItem?.calculationRuleCode ?? row?.calculationRuleCode,
   );
+  const evidences = pmPortfolioEvidencesJson(row);
+  const tableActual =
+    row?.tableActual != null
+      ? String(row.tableActual)
+      : resolvePmTableActual(row?.statusCode, evidences);
   const formatted =
-    formatPmActualCellWithUnit(
-      formatPmPortfolioActualCell(row?.actualResult, calc, mode, {
-        actualOnly: true,
-      }).trim(),
-      parentItem?.unitCode ?? row?.unitCode,
-    ) || "-";
+    tableActual != null && String(tableActual).trim() !== ""
+      ? formatPmActualCellWithUnit(tableActual, parentItem?.unitCode ?? row?.unitCode) ||
+        tableActual
+      : formatPmActualCellWithUnit(
+          formatPmPortfolioActualCell(evidences, calc, mode, {
+            actualOnly: true,
+          }).trim(),
+          parentItem?.unitCode ?? row?.unitCode,
+        ) || "-";
   return supervisorMemberActualDisplay(formatted, row?.statusCode, "pm", {
     pmOwned: isPmOwnedPortfolioRow(row, parentItem),
   });
@@ -705,7 +763,7 @@ async function loadPmPortfolio(year?: string) {
     const kpisFromApi = data.kpis ?? [];
     personalKpisRaw.value = kpisFromApi.map((kpi: any) => {
       const kpiId = String(kpi.id);
-      return {
+      const parentRow = enrichPmPortfolioAssignmentRow({
         id: kpiId,
         infoId: String(kpi.infoId),
         group: kpi.group || "Khác", // Dùng luôn tên group BE trả về (vd: "A - Hiệu quả công việc...")
@@ -770,53 +828,55 @@ async function loadPmPortfolio(year?: string) {
               .substring(0, 2)
               .toUpperCase()
           : "U",
-        children: (kpi.children || []).map((c: any) => ({
-          id: String(c.id),
-          userId: c.userId != null ? String(c.userId) : undefined,
-          name: c.name,
-          role: c.role || "Member",
-          // Tự động generate Avatar từ 2 chữ cái đầu của tên
-          avatar: c.name
-            ? c.name
-                .split(" ")
-                .map((n: string) => n[0])
-                .join("")
-                .substring(0, 2)
-                .toUpperCase()
-            : "U",
-          target: c.targetValue != null ? String(c.targetValue) : "",
-          actualResult: c.actualResult || "",
-          feedbackNote: c.feedbackNote ?? "",
-          feedbackTargetRoleCode:
-            c.feedbackTargetRoleCode != null &&
-            String(c.feedbackTargetRoleCode).trim() !== ""
-              ? String(c.feedbackTargetRoleCode).trim().toUpperCase()
-              : undefined,
-          selfScore: c.selfScore != null ? Number(c.selfScore) : null,
-          midSelfScore: c.midSelfScore != null ? Number(c.midSelfScore) : null,
-          endSelfScore: c.endSelfScore != null ? Number(c.endSelfScore) : null,
-          pmScore: c.pmScore != null ? Number(c.pmScore) : null,
-          endPmScore: c.endPmScore != null ? Number(c.endPmScore) : null,
-          endGmScore: c.endGmScore != null ? Number(c.endGmScore) : null,
-          gmEvaluationComment:
-            c.gmEvaluationComment != null &&
-            String(c.gmEvaluationComment).trim() !== ""
-              ? String(c.gmEvaluationComment).trim()
-              : undefined,
-          statusCode: c.statusCode,
-          updateReason:
-            c.updateReason != null && String(c.updateReason).trim() !== ""
-              ? String(c.updateReason).trim()
-              : undefined,
-          targetDescription:
-            c.targetDescriptionJson != null &&
-            String(c.targetDescriptionJson).trim() !== ""
-              ? String(c.targetDescriptionJson)
-              : "",
-          status: statusMap[c.statusCode] || "pending_approval",
-          weight: kpi.weight,
-        })),
-      };
+        children: (kpi.children || []).map((c: any) =>
+          enrichPmPortfolioAssignmentRow({
+            id: String(c.id),
+            userId: c.userId != null ? String(c.userId) : undefined,
+            name: c.name,
+            role: c.role || "Member",
+            avatar: c.name
+              ? c.name
+                  .split(" ")
+                  .map((n: string) => n[0])
+                  .join("")
+                  .substring(0, 2)
+                  .toUpperCase()
+              : "U",
+            target: c.targetValue != null ? String(c.targetValue) : "",
+            actualResult: c.actualResult || "",
+            feedbackNote: c.feedbackNote ?? "",
+            feedbackTargetRoleCode:
+              c.feedbackTargetRoleCode != null &&
+              String(c.feedbackTargetRoleCode).trim() !== ""
+                ? String(c.feedbackTargetRoleCode).trim().toUpperCase()
+                : undefined,
+            selfScore: c.selfScore != null ? Number(c.selfScore) : null,
+            midSelfScore: c.midSelfScore != null ? Number(c.midSelfScore) : null,
+            endSelfScore: c.endSelfScore != null ? Number(c.endSelfScore) : null,
+            pmScore: c.pmScore != null ? Number(c.pmScore) : null,
+            endPmScore: c.endPmScore != null ? Number(c.endPmScore) : null,
+            endGmScore: c.endGmScore != null ? Number(c.endGmScore) : null,
+            gmEvaluationComment:
+              c.gmEvaluationComment != null &&
+              String(c.gmEvaluationComment).trim() !== ""
+                ? String(c.gmEvaluationComment).trim()
+                : undefined,
+            statusCode: c.statusCode,
+            updateReason:
+              c.updateReason != null && String(c.updateReason).trim() !== ""
+                ? String(c.updateReason).trim()
+                : undefined,
+            targetDescription:
+              c.targetDescriptionJson != null &&
+              String(c.targetDescriptionJson).trim() !== ""
+                ? String(c.targetDescriptionJson)
+                : "",
+            status: statusMap[c.statusCode] || "pending_approval",
+            weight: kpi.weight,
+          }),
+        ),
+      });
+      return parentRow;
     });
 
     kpiCycleInfo.value = data.kpiCycle;
@@ -1317,15 +1377,23 @@ function portfolioSelfScoreOpts(child: any, parentItem?: any) {
     pmOwned: isPmOwnedPortfolioRow(child, parentItem),
     midSelfScore: child?.midSelfScore,
     endSelfScore: child?.endSelfScore,
+    evidences: pmPortfolioEvidencesJson(child),
+    tableView: true,
   };
 }
 
 function pmPortfolioSelfScoreCell(row: any, parentItem?: any): string | number {
-  return pmPortfolioMemberSelfScoreDisplay(
-    row?.selfScore,
-    row?.statusCode,
-    portfolioSelfScoreOpts(row, parentItem),
-  );
+  const statusCode =
+    row?.statusCode != null && Number.isFinite(Number(row.statusCode))
+      ? Number(row.statusCode)
+      : null;
+  if (usesPmTableSnapshotStatus(statusCode)) {
+    return pmTableSelfScoreDisplay(statusCode, portfolioSelfScoreOpts(row, parentItem));
+  }
+  return pmPortfolioMemberSelfScoreDisplay(row?.selfScore, statusCode, {
+    ...portfolioSelfScoreOpts(row, parentItem),
+    tableView: false,
+  });
 }
 
 function visibleChildSelfScoreForTable(child: any, parentItem?: any): number | null {

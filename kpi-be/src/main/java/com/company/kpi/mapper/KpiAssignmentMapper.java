@@ -232,19 +232,34 @@ public interface KpiAssignmentMapper {
             @Param("cycleId") UUID cycleId,
             @Param("evaluationUserId") UUID evaluationUserId);
 
-    /** Giữa năm: 501→503 (bỏ qua PM), không ghi {@code end_gm_score}. */
+    com.company.kpi.aggregate.HubConfirmSnapshotSource selectHubConfirmSnapshotSource(
+            @Param("assignmentId") UUID assignmentId,
+            @Param("cycleId") UUID cycleId);
+
+    /** Cập nhật evidences khi chưa có {@code approvedMidYearSnapshot} (không lọc user_id — verify ở service). */
+    int updateHubConfirmEvidencesIfSnapshotAbsent(
+            @Param("assignmentId") UUID assignmentId,
+            @Param("cycleId") UUID cycleId,
+            @Param("evidences") String evidences,
+            @Param("updatedBy") UUID updatedBy);
+
+    /** Giữa năm: 501→503 + merge {@code approvedMidYearSnapshot} (một lần UPDATE). */
     int updateGmEvaluationHubConfirmReview501(
             @Param("assignmentId") UUID assignmentId,
             @Param("cycleId") UUID cycleId,
             @Param("evaluationUserId") UUID evaluationUserId,
-            @Param("updatedBy") UUID updatedBy);
+            @Param("updatedBy") UUID updatedBy,
+            @Param("applyMidYearSnapshot") boolean applyMidYearSnapshot,
+            @Param("approvedMidYearSnapshotJson") String approvedMidYearSnapshotJson);
 
-    /** Giữa năm: 502→503, không ghi {@code end_gm_score}. */
+    /** Giữa năm: 502→503 + merge {@code approvedMidYearSnapshot} (một lần UPDATE). */
     int updateGmEvaluationHubConfirmReview502(
             @Param("assignmentId") UUID assignmentId,
             @Param("cycleId") UUID cycleId,
             @Param("evaluationUserId") UUID evaluationUserId,
-            @Param("updatedBy") UUID updatedBy);
+            @Param("updatedBy") UUID updatedBy,
+            @Param("applyMidYearSnapshot") boolean applyMidYearSnapshot,
+            @Param("approvedMidYearSnapshotJson") String approvedMidYearSnapshotJson);
 
     int cascadeGmEvaluationHubTeamSliceReview502(
             @Param("sourceAssignmentId") UUID sourceAssignmentId,

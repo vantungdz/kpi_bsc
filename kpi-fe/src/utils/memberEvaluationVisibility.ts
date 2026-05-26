@@ -31,6 +31,10 @@ export function canSupervisorViewMemberSelfEvaluation(
   ) {
     return true
   }
+  // 601: chờ PM duyệt cuối kỳ — PM xem được (bảng dùng snapshot giữa kỳ).
+  if (code === KPI_STATUS.SECOND_WAITING_PM_APPROVAL && viewer === 'pm') {
+    return true
+  }
   return (
     code >= KPI_STATUS.SECOND_WAITING_GM_APPROVAL &&
     code <= KPI_STATUS.SECOND_REJECTED
@@ -50,7 +54,8 @@ export function canPmOwnViewPortfolioEvaluation(
   return (
     canSupervisorViewMemberSelfEvaluation(code, 'pm') ||
     code <= KPI_STATUS.ACCEPTED ||
-    code === KPI_STATUS.FIRST_COMPLETED
+    code === KPI_STATUS.FIRST_COMPLETED ||
+    code === KPI_STATUS.SECOND_WAITING_PM_APPROVAL
   )
 }
 
@@ -199,6 +204,33 @@ export function resolvePmOwnPortfolioSelfScore(
   return parse(endSelfScore) ?? parse(midSelfScore) ?? parse(fallbackSelfScore)
 }
 
+/** Self score — bảng KPI Personal / Promotion (PM). */
+export function pmTableSelfScoreDisplay(
+  statusCode: number | null | undefined,
+  opts?: {
+    midSelfScore?: unknown
+    endSelfScore?: unknown
+    evidences?: string | null
+  },
+): string | number {
+  const code = normalizeAsmCode(statusCode)
+  if (code == null || !usesPmTableSnapshotStatus(code)) return '-'
+  const tableScore = resolvePmTableSelfScore(
+    code,
+    opts?.midSelfScore,
+    opts?.endSelfScore,
+    opts?.evidences,
+  )
+  if (tableScore != null) return tableScore
+  if (
+    hasApprovedMidYearSnapshot(opts?.evidences) &&
+    (code === KPI_STATUS.FIRST_COMPLETED || code === KPI_STATUS.SECOND_WAITING_PM_APPROVAL)
+  ) {
+    return '-'
+  }
+  return '-'
+}
+
 export function pmPortfolioMemberSelfScoreDisplay(
   selfScore: unknown,
   statusCode: number | null | undefined,
@@ -206,8 +238,18 @@ export function pmPortfolioMemberSelfScoreDisplay(
     pmOwned?: boolean
     midSelfScore?: unknown
     endSelfScore?: unknown
+    evidences?: string | null
+    /** Bảng portfolio — dùng snapshot giữa kỳ khi ASM 503/601/602/603. */
+    tableView?: boolean
   },
 ): string | number {
+  if (opts?.tableView && usesPmTableSnapshotStatus(statusCode)) {
+    return pmTableSelfScoreDisplay(statusCode, {
+      midSelfScore: opts.midSelfScore,
+      endSelfScore: opts.endSelfScore,
+      evidences: opts.evidences,
+    })
+  }
   if (opts?.pmOwned) {
     const resolved = resolvePmOwnPortfolioSelfScore(
       statusCode,
@@ -271,18 +313,237 @@ export function supervisorMemberActualDisplayInDrawer(actual: unknown): string {
  * - Cuối kỳ: ASM ≥ 603 (đến trước 604)
  * 501/502/601/602 → ẩn; 504/604 → ẩn.
  */
+export type ApprovedMidYearSnapshot = {
+  selfScore?: number | string | null
+  actual?: string | null
+  capturedAt?: string | null
+}
+
+const SNAPSHOT_KEY = 'approvedMidYearSnapshot'
+
+function parseScore(v: unknown): number | null {
+  if (v == null || v === '') return null
+  const n = typeof v === 'number' ? v : Number(v)
+  return Number.isFinite(n) ? n : null
+}
+
+/** Có key snapshot trong evidences (kể cả khi parse chi tiết thất bại). */
+export function hasApprovedMidYearSnapshot(
+  evidences: string | null | undefined,
+): boolean {
+  const trimmed = (evidences ?? '').trim()
+  if (!trimmed) return false
+  try {
+    const o = JSON.parse(trimmed) as Record<string, unknown>
+    const snap = o[SNAPSHOT_KEY]
+    return snap != null && typeof snap === 'object' && !Array.isArray(snap)
+  } catch {
+    return false
+  }
+}
+
+export function parseApprovedMidYearSnapshot(
+  evidences: string | null | undefined,
+): ApprovedMidYearSnapshot | null {
+  const trimmed = (evidences ?? '').trim()
+  if (!trimmed) return null
+  try {
+    const o = JSON.parse(trimmed) as Record<string, unknown>
+    const snap = o[SNAPSHOT_KEY]
+    if (!snap || typeof snap !== 'object' || Array.isArray(snap)) return null
+    const s = snap as Record<string, unknown>
+    const selfScore = parseScore(s.selfScore)
+    const actual =
+      s.actual != null && String(s.actual).trim() !== '' ? String(s.actual).trim() : null
+    const capturedAt =
+      s.capturedAt != null && String(s.capturedAt).trim() !== ''
+        ? String(s.capturedAt).trim()
+        : null
+    if (selfScore == null && actual == null && capturedAt == null) return null
+    return { selfScore, actual, capturedAt }
+  } catch {
+    return null
+  }
+}
+
+/** Actual gốc trong evidences (trường actual hoặc completed đầu tiên trong planActualRecords). */
+export function extractActualFromEvidencesJson(
+  evidences: string | null | undefined,
+): string | null {
+  const trimmed = (evidences ?? '').trim()
+  if (!trimmed) return null
+  try {
+    const o = JSON.parse(trimmed) as Record<string, unknown>
+    if (o.actual != null && String(o.actual).trim() !== '') {
+      return String(o.actual).trim()
+    }
+    const pr = o.planActualRecords
+    if (Array.isArray(pr)) {
+      for (const x of pr) {
+        const r = (x ?? {}) as Record<string, unknown>
+        if (r.completed != null && String(r.completed).trim() !== '') {
+          return String(r.completed).trim()
+        }
+        if (r.actual != null && String(r.actual).trim() !== '') {
+          return String(r.actual).trim()
+        }
+      }
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
+function snapshotSelfScoreOrFallback(
+  evidences: string | null | undefined,
+  midSelfScore: unknown,
+): number | null {
+  if (hasApprovedMidYearSnapshot(evidences)) {
+    const snap = parseApprovedMidYearSnapshot(evidences)
+    if (snap?.selfScore != null) return parseScore(snap.selfScore)
+    return null
+  }
+  return parseScore(midSelfScore)
+}
+
+function snapshotActualOrFallback(evidences: string | null | undefined): string | null {
+  if (hasApprovedMidYearSnapshot(evidences)) {
+    const snap = parseApprovedMidYearSnapshot(evidences)
+    if (snap?.actual != null) return snap.actual
+    return null
+  }
+  return extractActualFromEvidencesJson(evidences)
+}
+
+/** Evidences JSON cho bảng PM (field API `actualResult` = full evidences). */
+export function pmPortfolioEvidencesJson(row: {
+  evidencesJson?: string | null
+  actualResult?: string | null
+} | null | undefined): string | null {
+  const fromJson = row?.evidencesJson != null ? String(row.evidencesJson).trim() : ''
+  if (fromJson) return fromJson
+  const fromActual = row?.actualResult != null ? String(row.actualResult).trim() : ''
+  return fromActual || null
+}
+
+const PM_TABLE_SNAPSHOT_STATUSES = new Set<number>([
+  KPI_STATUS.FIRST_COMPLETED,
+  KPI_STATUS.SECOND_WAITING_PM_APPROVAL,
+  KPI_STATUS.SECOND_WAITING_GM_APPROVAL,
+  KPI_STATUS.COMPLETED,
+])
+
+export function usesPmTableSnapshotStatus(statusCode: number | null | undefined): boolean {
+  const code = normalizeAsmCode(statusCode)
+  return code != null && PM_TABLE_SNAPSHOT_STATUSES.has(code)
+}
+
+/** Bảng PM — self score: 503/601 snapshot; 602/603 cuối kỳ. */
+export function resolvePmTableSelfScore(
+  statusCode: number | null | undefined,
+  midSelfScore: unknown,
+  endSelfScore: unknown,
+  evidences?: string | null,
+): number | null {
+  const code = normalizeAsmCode(statusCode)
+  if (code == null) return null
+  if (code === KPI_STATUS.FIRST_COMPLETED || code === KPI_STATUS.SECOND_WAITING_PM_APPROVAL) {
+    return snapshotSelfScoreOrFallback(evidences, midSelfScore)
+  }
+  if (code === KPI_STATUS.SECOND_WAITING_GM_APPROVAL || code === KPI_STATUS.COMPLETED) {
+    return parseScore(endSelfScore) ?? parseScore(midSelfScore)
+  }
+  return resolveMemberSelfScoreForPortfolio(code, midSelfScore, endSelfScore)
+}
+
+/** Bảng GM — self score: 503/601/602 snapshot; 603 cuối kỳ. */
+export function resolveGmTableSelfScore(
+  statusCode: number | null | undefined,
+  midSelfScore: unknown,
+  endSelfScore: unknown,
+  evidences?: string | null,
+): number | null {
+  const code = normalizeAsmCode(statusCode)
+  if (code == null) return null
+  if (
+    code === KPI_STATUS.FIRST_COMPLETED ||
+    code === KPI_STATUS.SECOND_WAITING_PM_APPROVAL ||
+    code === KPI_STATUS.SECOND_WAITING_GM_APPROVAL
+  ) {
+    return snapshotSelfScoreOrFallback(evidences, midSelfScore)
+  }
+  if (code === KPI_STATUS.COMPLETED) {
+    return parseScore(endSelfScore) ?? parseScore(midSelfScore)
+  }
+  return resolveMemberSelfScoreForDiagnostics(code, midSelfScore, endSelfScore)
+}
+
+/** Bảng PM — actual: 503/601 snapshot; 602/603 evidences hiện tại. */
+export function resolvePmTableActual(
+  statusCode: number | null | undefined,
+  evidences?: string | null,
+): string | null {
+  const code = normalizeAsmCode(statusCode)
+  if (code == null) return null
+  if (code === KPI_STATUS.FIRST_COMPLETED || code === KPI_STATUS.SECOND_WAITING_PM_APPROVAL) {
+    return snapshotActualOrFallback(evidences)
+  }
+  if (code === KPI_STATUS.SECOND_WAITING_GM_APPROVAL || code === KPI_STATUS.COMPLETED) {
+    return extractActualFromEvidencesJson(evidences)
+  }
+  return null
+}
+
+/** Bảng GM — actual: 503/601/602 snapshot; 603 evidences hiện tại. */
+export function resolveGmTableActual(
+  statusCode: number | null | undefined,
+  evidences?: string | null,
+): string | null {
+  const code = normalizeAsmCode(statusCode)
+  if (code == null) return null
+  if (
+    code === KPI_STATUS.FIRST_COMPLETED ||
+    code === KPI_STATUS.SECOND_WAITING_PM_APPROVAL ||
+    code === KPI_STATUS.SECOND_WAITING_GM_APPROVAL
+  ) {
+    return snapshotActualOrFallback(evidences)
+  }
+  if (code === KPI_STATUS.COMPLETED) {
+    return extractActualFromEvidencesJson(evidences)
+  }
+  return null
+}
+
 export function canDiagnosticsShowMemberActual(
   statusCode: number | null | undefined,
 ): boolean {
   const code = normalizeAsmCode(statusCode)
   if (code == null || isEvaluationRejected(code)) return false
-  if (
-    code >= KPI_STATUS.FIRST_COMPLETED &&
-    code < KPI_STATUS.FIRST_REJECTED
-  ) {
-    return true
-  }
-  return code >= KPI_STATUS.COMPLETED && code < KPI_STATUS.SECOND_REJECTED
+  return (
+    code === KPI_STATUS.FIRST_COMPLETED ||
+    code === KPI_STATUS.SECOND_WAITING_PM_APPROVAL ||
+    code === KPI_STATUS.SECOND_WAITING_GM_APPROVAL ||
+    code === KPI_STATUS.COMPLETED
+  )
+}
+
+/** GM Strategic Diagnostics — self score (503/601/602 snapshot; 603 cuối kỳ). */
+export function resolveGmDiagnosticsSelfScore(
+  statusCode: number | null | undefined,
+  midSelfScore: unknown,
+  endSelfScore: unknown,
+  evidences?: string | null,
+): number | null {
+  return resolveGmTableSelfScore(statusCode, midSelfScore, endSelfScore, evidences)
+}
+
+/** GM Strategic Diagnostics — actual (503/601/602 snapshot; 603 cuối kỳ). */
+export function resolveGmDiagnosticsActual(
+  statusCode: number | null | undefined,
+  evidences?: string | null,
+): string | null {
+  return resolveGmTableActual(statusCode, evidences)
 }
 
 /** ASM cho phép member nhận thêm KPI mới trong cùng chu kỳ (404, 406, 407). */

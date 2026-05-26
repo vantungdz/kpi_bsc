@@ -1,6 +1,7 @@
 package com.company.kpi.service.gm;
 
 import com.company.kpi.common.exception.AppException;
+import com.company.kpi.common.security.SensitiveDataCryptoService;
 import com.company.kpi.util.MemberEvaluationVisibility;
 import com.company.kpi.mapper.KpisInformationMapper;
 import com.company.kpi.mapper.KpiCycleMapper;
@@ -88,6 +89,7 @@ public class GmKpiDiagnosticsHierarchyService {
     private final KpisInformationMapper kpisInformationMapper;
     private final KpiInformationMapper kpiInformationMapper;
     private final GmDepartmentService gmDepartmentService;
+    private final SensitiveDataCryptoService sensitiveDataCryptoService;
 
     public GmDiagnosticsHierarchyResponse getHierarchyByYear(int year) {
         var cycle = kpiCycleMapper.findByYear(year)
@@ -759,23 +761,34 @@ public class GmKpiDiagnosticsHierarchyService {
         return r.getPromotionCycleId();
     }
 
-    private static SubmissionSnapshot computeSubmissionSnapshot(GmDiagnosticsFlatRow r) {
+    private SubmissionSnapshot computeSubmissionSnapshot(GmDiagnosticsFlatRow r, String evidencesJson) {
         if (!isMidPhaseAssignment(r) && !isEndPhaseAssignment(r)) {
             return new SubmissionSnapshot(null, null);
         }
         BigDecimal target = annualTargetForRatio(r);
         BigDecimal actual = null;
-        if (isEndPhaseAssignment(r)) {
-            actual = endPhaseDisplayScore(r);
-        } else if (canDiagnosticsShowMemberActual(r.getStatusCode())) {
-            actual = r.getMidSelfScore() != null ? r.getMidSelfScore() : r.getEndSelfScore();
+        if (canDiagnosticsShowMemberActual(r.getStatusCode())) {
+            actual =
+                    MemberEvaluationVisibility.resolveGmTableSelfScore(
+                            r.getStatusCode(),
+                            r.getMidSelfScore(),
+                            r.getEndSelfScore(),
+                            evidencesJson);
         }
         return new SubmissionSnapshot(target, actual);
     }
 
-    private static GmDiagMemberNode toMemberNode(
+    private String decryptedEvidences(GmDiagnosticsFlatRow r) {
+        if (r.getEvidences() == null || r.getEvidences().isBlank()) {
+            return r.getEvidences();
+        }
+        return sensitiveDataCryptoService.decryptEvidenceSensitiveFields(r.getEvidences());
+    }
+
+    private GmDiagMemberNode toMemberNode(
             GmDiagnosticsFlatRow r, GmDiagnosticsFlatRow kpiFirst, String kpiWeightDisplay) {
-        SubmissionSnapshot ss = computeSubmissionSnapshot(r);
+        String evidencesJson = decryptedEvidences(r);
+        SubmissionSnapshot ss = computeSubmissionSnapshot(r, evidencesJson);
         if (r.getMemberId() == null) {
             String fallbackId = r.getAssignmentId() != null ? r.getAssignmentId().toString() : "unknown";
             return GmDiagMemberNode.builder()
@@ -799,14 +812,15 @@ public class GmKpiDiagnosticsHierarchyService {
                     .leaderRoleName(trimOrNull(r.getLeaderRoleName()))
                     .submissionTarget(ss.target())
                     .submissionActual(ss.actual())
-                    .evidences(canDiagnosticsShowMemberActual(r.getStatusCode()) ? r.getEvidences() : null)
+                    .evidences(
+                            canDiagnosticsShowMemberActual(r.getStatusCode()) ? evidencesJson : null)
                     .feedbackNote(trimOrNull(r.getFeedbackNote()))
                     .evaluationSupervisorComments(trimOrNull(r.getEvaluationSupervisorComments()))
                     .feedbackAwaitingGm(feedbackAwaitingGmForRow(r))
                     .promotionCycleId(promotionCycleIdForMemberRow(r, kpiFirst))
                     .build();
         }
-        PerfStatus perf = computeMemberPerformance(r);
+        PerfStatus perf = computeMemberPerformance(r, evidencesJson);
         boolean showMemberActual = canDiagnosticsShowMemberActual(r.getStatusCode());
         return GmDiagMemberNode.builder()
                 .id(r.getMemberId().toString())
@@ -816,7 +830,7 @@ public class GmKpiDiagnosticsHierarchyService {
                 .weight(kpiWeightDisplay)
                 .statusCode(r.getStatusCode())
                 .target(formatMemberTarget(r.getMemberTargetValue(), kpiFirst))
-                .actual(formatMemberActual(r))
+                .actual(formatMemberActual(r, evidencesJson))
                 .status(perf.status())
                 .performanceLabel(perf.label())
                 .blocker("—")
@@ -829,7 +843,7 @@ public class GmKpiDiagnosticsHierarchyService {
                 .leaderRoleName(trimOrNull(r.getLeaderRoleName()))
                 .submissionTarget(ss.target())
                 .submissionActual(ss.actual())
-                .evidences(showMemberActual ? r.getEvidences() : null)
+                .evidences(showMemberActual ? evidencesJson : null)
                 .feedbackNote(trimOrNull(r.getFeedbackNote()))
                 .evaluationSupervisorComments(trimOrNull(r.getEvaluationSupervisorComments()))
                 .feedbackAwaitingGm(feedbackAwaitingGmForRow(r))
@@ -1281,7 +1295,7 @@ public class GmKpiDiagnosticsHierarchyService {
         return sc >= 501 && sc <= 503;
     }
 
-    /** Strategic KPIs Diagnostics: Actual member chỉ khi GM đã chốt — ASM 503 hoặc 603. */
+    /** Strategic KPIs Diagnostics — ASM 503/601/602/603 (snapshot hoặc cuối kỳ). */
     private static boolean canDiagnosticsShowMemberActual(Integer statusCode) {
         return MemberEvaluationVisibility.canDiagnosticsShowMemberActual(statusCode);
     }
@@ -1315,20 +1329,22 @@ public class GmKpiDiagnosticsHierarchyService {
         return v.setScale(1, RoundingMode.HALF_UP).toPlainString();
     }
 
-    private static String formatMemberActual(GmDiagnosticsFlatRow r) {
+    private static String formatMemberActual(GmDiagnosticsFlatRow r, String evidencesJson) {
         if (!canDiagnosticsShowMemberActual(r.getStatusCode())) {
             return "—";
         }
-        if (isEndPhaseAssignment(r)) {
-            BigDecimal endAct = endPhaseDisplayScore(r);
-            return endAct != null ? formatScaledOne(endAct) : "—";
+        String tableActual =
+                MemberEvaluationVisibility.resolveGmTableActual(r.getStatusCode(), evidencesJson);
+        if (tableActual != null && !tableActual.isBlank()) {
+            return tableActual;
         }
-        if (isMidPhaseAssignment(r)) {
-            BigDecimal midAct =
-                    r.getMidSelfScore() != null ? r.getMidSelfScore() : r.getEndSelfScore();
-            return midAct != null ? formatScaledOne(midAct) : "—";
-        }
-        return "—";
+        BigDecimal tableScore =
+                MemberEvaluationVisibility.resolveGmTableSelfScore(
+                        r.getStatusCode(),
+                        r.getMidSelfScore(),
+                        r.getEndSelfScore(),
+                        evidencesJson);
+        return tableScore != null ? formatScaledOne(tableScore) : "—";
     }
 
     /**
@@ -1336,7 +1352,7 @@ public class GmKpiDiagnosticsHierarchyService {
      * MID (501/502/503) — actual/(0.5×annual);
      * END (601/602/603) — actual/annual.
      */
-    private static PerfStatus computeMemberPerformance(GmDiagnosticsFlatRow r) {
+    private static PerfStatus computeMemberPerformance(GmDiagnosticsFlatRow r, String evidencesJson) {
         if (!isMidPhaseAssignment(r) && !isEndPhaseAssignment(r)) {
             return new PerfStatus("warning", "Chờ kỳ đánh giá");
         }
@@ -1347,7 +1363,15 @@ public class GmKpiDiagnosticsHierarchyService {
         }
 
         if (isEndPhaseAssignment(r)) {
-            BigDecimal endAct = endPhaseDisplayScore(r);
+            BigDecimal endAct =
+                    MemberEvaluationVisibility.resolveGmTableSelfScore(
+                            r.getStatusCode(),
+                            r.getMidSelfScore(),
+                            r.getEndSelfScore(),
+                            evidencesJson);
+            if (endAct == null && r.getStatusCode() != null && r.getStatusCode() == 603) {
+                endAct = endPhaseDisplayScore(r);
+            }
             if (endAct == null) {
                 return new PerfStatus("warning", "Chưa có điểm cuối kỳ");
             }
@@ -1362,7 +1386,12 @@ public class GmKpiDiagnosticsHierarchyService {
             return new PerfStatus("warning", "Gần đạt");
         }
 
-        BigDecimal midAct = r.getMidSelfScore();
+        BigDecimal midAct =
+                MemberEvaluationVisibility.resolveGmTableSelfScore(
+                        r.getStatusCode(),
+                        r.getMidSelfScore(),
+                        r.getEndSelfScore(),
+                        evidencesJson);
         if (midAct == null) {
             return new PerfStatus("warning", "Chưa có điểm giữa kỳ");
         }

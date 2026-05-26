@@ -45,6 +45,10 @@ public final class MemberEvaluationVisibility {
         if (statusCode >= ASM_MID_WAITING_GM && statusCode <= ASM_MID_REJECTED) {
             return true;
         }
+        // 601: member đã nộp cuối kỳ, chờ PM — PM cần xem self/actual (bảng dùng snapshot giữa kỳ).
+        if (statusCode == ASM_END_WAITING_PM && !viewerIsGm) {
+            return true;
+        }
         return statusCode >= ASM_END_WAITING_GM && statusCode <= ASM_END_REJECTED;
     }
 
@@ -61,7 +65,7 @@ public final class MemberEvaluationVisibility {
         if (statusCode <= ASM_ACCEPTED) {
             return true;
         }
-        return statusCode == ASM_MID_GM_COMPLETED;
+        return statusCode == ASM_MID_GM_COMPLETED || statusCode == ASM_END_WAITING_PM;
     }
 
     /** Self score — bảng portfolio (leader/member). */
@@ -155,16 +159,112 @@ public final class MemberEvaluationVisibility {
     }
 
     /**
-     * Strategic KPIs / Promotion monitoring — giữa kỳ ≥503; cuối kỳ ≥603.
-     * 501/502/601/602 ẩn; 504/604 ẩn.
+     * Strategic KPIs / Promotion monitoring — hiển thị khi GM đã có kết quả chốt giữa kỳ hoặc đang/chốt cuối kỳ.
+     * 503/601/602: snapshot; 603: cuối kỳ. 501/502/504/604 ẩn.
      */
     public static boolean canDiagnosticsShowMemberActual(Integer statusCode) {
         if (statusCode == null || isEvaluationRejected(statusCode)) {
             return false;
         }
-        if (statusCode >= ASM_MID_GM_COMPLETED && statusCode < ASM_MID_REJECTED) {
-            return true;
+        return statusCode == ASM_MID_GM_COMPLETED
+                || statusCode == ASM_END_WAITING_PM
+                || statusCode == ASM_END_WAITING_GM
+                || statusCode == ASM_COMPLETED;
+    }
+
+    /**
+     * Bảng PM — self score: 503/601 từ snapshot; 602/603 từ cuối kỳ (end → mid).
+     */
+    public static BigDecimal resolvePmTableSelfScore(
+            Integer statusCode,
+            BigDecimal midSelfScore,
+            BigDecimal endSelfScore,
+            String evidencesJson) {
+        if (statusCode == null) {
+            return null;
         }
-        return statusCode >= ASM_COMPLETED && statusCode < ASM_END_REJECTED;
+        if (statusCode == ASM_MID_GM_COMPLETED || statusCode == ASM_END_WAITING_PM) {
+            return snapshotSelfScoreOrFallback(evidencesJson, midSelfScore);
+        }
+        if (statusCode == ASM_END_WAITING_GM || statusCode == ASM_COMPLETED) {
+            return endSelfScore != null ? endSelfScore : midSelfScore;
+        }
+        return resolveMemberSelfScoreForPortfolio(statusCode, midSelfScore, endSelfScore);
+    }
+
+    /**
+     * Bảng GM — self score: 503/601/602 từ snapshot; 603 từ cuối kỳ.
+     */
+    public static BigDecimal resolveGmTableSelfScore(
+            Integer statusCode,
+            BigDecimal midSelfScore,
+            BigDecimal endSelfScore,
+            String evidencesJson) {
+        if (statusCode == null) {
+            return null;
+        }
+        if (statusCode == ASM_MID_GM_COMPLETED
+                || statusCode == ASM_END_WAITING_PM
+                || statusCode == ASM_END_WAITING_GM) {
+            return snapshotSelfScoreOrFallback(evidencesJson, midSelfScore);
+        }
+        if (statusCode == ASM_COMPLETED) {
+            return endSelfScore != null ? endSelfScore : midSelfScore;
+        }
+        return resolveMemberSelfScoreForDiagnostics(statusCode, midSelfScore, endSelfScore);
+    }
+
+    /** Bảng PM — actual: 503/601 từ snapshot; 602/603 từ evidences hiện tại. */
+    public static String resolvePmTableActual(Integer statusCode, String evidencesJson) {
+        if (statusCode == null) {
+            return null;
+        }
+        if (statusCode == ASM_MID_GM_COMPLETED || statusCode == ASM_END_WAITING_PM) {
+            return snapshotActualOrFallback(evidencesJson);
+        }
+        if (statusCode == ASM_END_WAITING_GM || statusCode == ASM_COMPLETED) {
+            return ApprovedMidYearSnapshotSupport.extractActualFromEvidences(evidencesJson);
+        }
+        return null;
+    }
+
+    /** Bảng GM — actual: 503/601/602 từ snapshot; 603 từ evidences hiện tại. */
+    public static String resolveGmTableActual(Integer statusCode, String evidencesJson) {
+        if (statusCode == null) {
+            return null;
+        }
+        if (statusCode == ASM_MID_GM_COMPLETED
+                || statusCode == ASM_END_WAITING_PM
+                || statusCode == ASM_END_WAITING_GM) {
+            return snapshotActualOrFallback(evidencesJson);
+        }
+        if (statusCode == ASM_COMPLETED) {
+            return ApprovedMidYearSnapshotSupport.extractActualFromEvidences(evidencesJson);
+        }
+        return null;
+    }
+
+    private static BigDecimal snapshotSelfScoreOrFallback(String evidencesJson, BigDecimal midSelfScore) {
+        if (ApprovedMidYearSnapshotSupport.hasSnapshot(evidencesJson)) {
+            ApprovedMidYearSnapshotSupport.Snapshot snap =
+                    ApprovedMidYearSnapshotSupport.parseSnapshot(evidencesJson);
+            if (snap != null && snap.selfScore() != null) {
+                return snap.selfScore();
+            }
+            return null;
+        }
+        return midSelfScore;
+    }
+
+    private static String snapshotActualOrFallback(String evidencesJson) {
+        if (ApprovedMidYearSnapshotSupport.hasSnapshot(evidencesJson)) {
+            ApprovedMidYearSnapshotSupport.Snapshot snap =
+                    ApprovedMidYearSnapshotSupport.parseSnapshot(evidencesJson);
+            if (snap != null && snap.actual() != null) {
+                return snap.actual();
+            }
+            return null;
+        }
+        return ApprovedMidYearSnapshotSupport.extractActualFromEvidences(evidencesJson);
     }
 }

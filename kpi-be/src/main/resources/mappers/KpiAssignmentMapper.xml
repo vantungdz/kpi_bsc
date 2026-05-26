@@ -101,6 +101,34 @@
             kc.name, km.code
     </select>
 
+    <!-- Giữ approvedMidYearSnapshot khi client replace evidences (member save, v.v.). -->
+    <sql id="evidencesValuePreservingApprovedMidYearSnapshot">
+        CASE
+            WHEN jsonb_exists(COALESCE(evidences, '{}'::jsonb), 'approvedMidYearSnapshot')
+                 AND NOT jsonb_exists(
+                     COALESCE(
+                         CASE
+                             WHEN jsonb_typeof(#{evidences}::jsonb) = 'object' THEN #{evidences}::jsonb
+                             ELSE '{}'::jsonb
+                         END,
+                         '{}'::jsonb
+                     ),
+                     'approvedMidYearSnapshot'
+                 )
+            THEN COALESCE(
+                    CASE
+                        WHEN jsonb_typeof(#{evidences}::jsonb) = 'object' THEN #{evidences}::jsonb
+                        ELSE '{}'::jsonb
+                    END,
+                    '{}'::jsonb
+                ) || jsonb_build_object(
+                    'approvedMidYearSnapshot',
+                    evidences -> 'approvedMidYearSnapshot'
+                )
+            ELSE #{evidences}::jsonb
+        END
+    </sql>
+
     <!--
         updateEvidence: update the evidences JSON for an assignment.
         Note: use positional parameters (#{param1}, #{param2}) only when mapper method lacks @Param annotations.
@@ -109,7 +137,7 @@
         UPDATE
             kpi_assignments
         SET
-            evidences   = #{evidences}::jsonb,
+            evidences   = <include refid="evidencesValuePreservingApprovedMidYearSnapshot"/>,
             updated_at  = NOW()
         WHERE
             id          = #{id}
@@ -210,7 +238,7 @@
         <set>
             <if test="midSelfScore != null">mid_self_score = #{midSelfScore},</if>
             <if test="endSelfScore != null">end_self_score = #{endSelfScore},</if>
-            <if test="evidences != null">evidences = #{evidences}::jsonb,</if>
+            <if test="evidences != null">evidences = <include refid="evidencesValuePreservingApprovedMidYearSnapshot"/>,</if>
             <if test="statusCode != null">status_code = #{statusCode},</if>
             updated_at = NOW()
         </set>
@@ -1399,10 +1427,67 @@
         LIMIT 1
     </select>
 
+    <select id="selectHubConfirmSnapshotSource"
+            resultType="com.company.kpi.aggregate.HubConfirmSnapshotSource">
+        SELECT
+            ka.id,
+            ka.cycle_id AS cycleId,
+            ka.user_id AS userId,
+            ka.status_code AS statusCode,
+            ka.mid_self_score AS midSelfScore,
+            CASE
+                WHEN ka.evidences IS NULL THEN NULL
+                WHEN jsonb_typeof(ka.evidences) = 'null' THEN NULL
+                ELSE ka.evidences::text
+            END AS evidences
+        FROM kpi_assignments ka
+        WHERE ka.id = #{assignmentId, jdbcType=OTHER}
+          AND ka.cycle_id = #{cycleId, jdbcType=OTHER}
+          AND ka.deleted_at IS NULL
+        LIMIT 1
+    </select>
+
+    <update id="updateHubConfirmEvidencesIfSnapshotAbsent">
+        UPDATE kpi_assignments
+        SET
+            evidences = #{evidences}::jsonb,
+            updated_at = NOW(),
+            updated_by = #{updatedBy, jdbcType=OTHER}
+        WHERE id = #{assignmentId, jdbcType=OTHER}
+          AND cycle_id = #{cycleId, jdbcType=OTHER}
+          AND deleted_at IS NULL
+          AND (
+              evidences IS NULL
+              OR NOT jsonb_exists(evidences, 'approvedMidYearSnapshot')
+          )
+    </update>
+
     <update id="updateGmEvaluationHubConfirmReview501">
         UPDATE kpi_assignments
         SET
             status_code = 503,
+            evidences = CASE
+                WHEN NOT #{applyMidYearSnapshot}
+                    OR jsonb_exists(COALESCE(evidences, '{}'::jsonb), 'approvedMidYearSnapshot')
+                THEN
+                    CASE
+                        WHEN evidences IS NULL THEN '{}'::jsonb
+                        WHEN jsonb_typeof(evidences) = 'object' THEN evidences
+                        ELSE '{}'::jsonb
+                    END
+                ELSE
+                    COALESCE(
+                        CASE
+                            WHEN evidences IS NULL THEN '{}'::jsonb
+                            WHEN jsonb_typeof(evidences) = 'object' THEN evidences
+                            ELSE '{}'::jsonb
+                        END,
+                        '{}'::jsonb
+                    ) || jsonb_build_object(
+                        'approvedMidYearSnapshot',
+                        #{approvedMidYearSnapshotJson}::jsonb
+                    )
+            END,
             updated_at = NOW(),
             updated_by = #{updatedBy, jdbcType=OTHER}
         WHERE id = #{assignmentId}
@@ -1416,6 +1501,28 @@
         UPDATE kpi_assignments
         SET
             status_code = 503,
+            evidences = CASE
+                WHEN NOT #{applyMidYearSnapshot}
+                    OR jsonb_exists(COALESCE(evidences, '{}'::jsonb), 'approvedMidYearSnapshot')
+                THEN
+                    CASE
+                        WHEN evidences IS NULL THEN '{}'::jsonb
+                        WHEN jsonb_typeof(evidences) = 'object' THEN evidences
+                        ELSE '{}'::jsonb
+                    END
+                ELSE
+                    COALESCE(
+                        CASE
+                            WHEN evidences IS NULL THEN '{}'::jsonb
+                            WHEN jsonb_typeof(evidences) = 'object' THEN evidences
+                            ELSE '{}'::jsonb
+                        END,
+                        '{}'::jsonb
+                    ) || jsonb_build_object(
+                        'approvedMidYearSnapshot',
+                        #{approvedMidYearSnapshotJson}::jsonb
+                    )
+            END,
             updated_at = NOW(),
             updated_by = #{updatedBy, jdbcType=OTHER}
         WHERE id = #{assignmentId}
@@ -1588,6 +1695,11 @@
                 CASE
                     WHEN evidences IS NULL THEN '{}'::jsonb
                     WHEN jsonb_typeof(evidences) = 'object' THEN evidences
+                    WHEN jsonb_exists(COALESCE(evidences, '{}'::jsonb), 'approvedMidYearSnapshot') THEN
+                        ('{}'::jsonb || jsonb_build_object(
+                            'approvedMidYearSnapshot',
+                            evidences -> 'approvedMidYearSnapshot'
+                        ))
                     ELSE '{}'::jsonb
                 END,
                 '{gmComment}',
@@ -3303,6 +3415,11 @@
                 CASE
                     WHEN ka.evidences IS NULL THEN '{}'::jsonb
                     WHEN jsonb_typeof(ka.evidences) = 'object' THEN ka.evidences
+                    WHEN jsonb_exists(COALESCE(ka.evidences, '{}'::jsonb), 'approvedMidYearSnapshot') THEN
+                        ('{}'::jsonb || jsonb_build_object(
+                            'approvedMidYearSnapshot',
+                            ka.evidences -> 'approvedMidYearSnapshot'
+                        ))
                     ELSE '{}'::jsonb
                 END,
                 '{gmComment}',

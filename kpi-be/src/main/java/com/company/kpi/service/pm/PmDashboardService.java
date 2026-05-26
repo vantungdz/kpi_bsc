@@ -133,10 +133,55 @@ public class PmDashboardService {
         if (detail == null) {
             return null;
         }
-        return MemberEvaluationVisibility.resolveMemberSelfScoreByAsm(
+        return MemberEvaluationVisibility.resolvePmTableSelfScore(
                 detail.getStatusCode(),
                 detail.getMidSelfScore(),
-                detail.getEndSelfScore());
+                detail.getEndSelfScore(),
+                detail.getEvidences());
+    }
+
+    private static BigDecimal pmTableSelfScore(
+            Integer statusCode, BigDecimal midSelfScore, BigDecimal endSelfScore, String evidences) {
+        return MemberEvaluationVisibility.resolvePmTableSelfScore(
+                statusCode, midSelfScore, endSelfScore, evidences);
+    }
+
+    private static boolean usesPmTableSnapshotRules(Integer statusCode) {
+        return statusCode != null
+                && (statusCode == 503 || statusCode == 601 || statusCode == 602 || statusCode == 603);
+    }
+
+    private static BigDecimal pmPortfolioTableSelfScore(
+            boolean pmOwnRow,
+            Integer statusCode,
+            BigDecimal midSelfScore,
+            BigDecimal endSelfScore,
+            String evidencesJson) {
+        if (statusCode != null
+                && (statusCode == 503 || statusCode == 601)) {
+            return pmTableSelfScore(statusCode, midSelfScore, endSelfScore, evidencesJson);
+        }
+        if (usesPmTableSnapshotRules(statusCode)) {
+            BigDecimal tableScore =
+                    pmTableSelfScore(statusCode, midSelfScore, endSelfScore, evidencesJson);
+            if (tableScore != null) {
+                return tableScore;
+            }
+        }
+        if (pmOwnRow) {
+            return MemberEvaluationVisibility.resolvePmOwnPortfolioSelfScore(
+                    statusCode, midSelfScore, endSelfScore);
+        }
+        return MemberEvaluationVisibility.resolvePortfolioMemberSelfScore(
+                statusCode, midSelfScore, endSelfScore, false);
+    }
+
+    private static String decryptEvidencesForPmRow(
+            SensitiveDataCryptoService crypto, String raw) {
+        if (raw == null) {
+            return null;
+        }
+        return crypto.decryptEvidenceSensitiveFields(raw);
     }
 
     private static BigDecimal averageMemberScore(
@@ -310,18 +355,19 @@ public class PmDashboardService {
                         ? MemberEvaluationVisibility.canPmOwnViewPortfolioEvaluation(pmAsmStatus)
                         : MemberEvaluationVisibility.canSupervisorViewMemberSelfEvaluation(
                                 pmAsmStatus, false);
-                BigDecimal rowSelfScore = pmOwnParentRow
-                        ? MemberEvaluationVisibility.resolvePmOwnPortfolioSelfScore(
-                                pmAsmStatus,
-                                agg.getPmAssignment().getMidSelfScore(),
-                                agg.getPmAssignment().getEndSelfScore())
-                        : MemberEvaluationVisibility.resolvePortfolioMemberSelfScore(
+                boolean loadEvidencesForPmTable =
+                        usesPmTableSnapshotRules(pmAsmStatus) || pmCanViewMemberRow;
+                String rowEvidencesRaw =
+                        loadEvidencesForPmTable ? agg.getPmAssignment().getEvidences() : null;
+                String rowEvidences =
+                        decryptEvidencesForPmRow(sensitiveDataCryptoService, rowEvidencesRaw);
+                BigDecimal rowSelfScore =
+                        pmPortfolioTableSelfScore(
+                                pmOwnParentRow,
                                 pmAsmStatus,
                                 agg.getPmAssignment().getMidSelfScore(),
                                 agg.getPmAssignment().getEndSelfScore(),
-                                false);
-                String rowEvidences =
-                        pmCanViewMemberRow ? agg.getPmAssignment().getEvidences() : null;
+                                rowEvidences);
                 String rowSupervisorComment = resolveSupervisorKpiComment(rowEvidences);
 
                 return PmDashboardResponse.KpiGroupDto.builder()
@@ -385,19 +431,20 @@ public class PmDashboardService {
                             ? MemberEvaluationVisibility.canPmOwnViewPortfolioEvaluation(childStatusCode)
                             : MemberEvaluationVisibility.canSupervisorViewMemberSelfEvaluation(
                                     childStatusCode, false);
-                    BigDecimal childSelfScore = pmOwnChildRow
-                            ? MemberEvaluationVisibility.resolvePmOwnPortfolioSelfScore(
-                                    childStatusCode,
-                                    slice.getChildAssignment().getMidSelfScore(),
-                                    slice.getChildAssignment().getEndSelfScore())
-                            : MemberEvaluationVisibility.resolvePortfolioMemberSelfScore(
+                    boolean loadChildEvidencesForPmTable =
+                            usesPmTableSnapshotRules(childStatusCode) || pmCanViewMemberEval;
+                    String childEvidencesRaw = loadChildEvidencesForPmTable
+                            ? slice.getChildAssignment().getEvidences()
+                            : null;
+                    String childEvidences =
+                            decryptEvidencesForPmRow(sensitiveDataCryptoService, childEvidencesRaw);
+                    BigDecimal childSelfScore =
+                            pmPortfolioTableSelfScore(
+                                    pmOwnChildRow,
                                     childStatusCode,
                                     slice.getChildAssignment().getMidSelfScore(),
                                     slice.getChildAssignment().getEndSelfScore(),
-                                    false);
-                    String childEvidences = pmCanViewMemberEval
-                            ? slice.getChildAssignment().getEvidences()
-                            : null;
+                                    childEvidences);
 
                     String childSupervisorComment = resolveSupervisorKpiComment(childEvidences);
 

@@ -44,6 +44,10 @@ export interface GmKpiItem {
   evidenceButtonIcon: string
   evidenceTone: 'blue' | 'emerald'
   selfScore: number
+  /** Self score trên bảng hub — snapshot giữa kỳ khi ASM 503/601/602. */
+  tableSelfScore?: number
+  /** Actual trên bảng hub — snapshot hoặc cuối kỳ theo ASM. */
+  tableActualRaw?: string
   /** Điểm GM đã lưu (end_gm_score); khi có giá trị thì cột Supervisor Score hiển thị điểm GM. */
   pmScore?: number | null
   /** GM đã lưu ?? điểm PM (end_pm_score) — prefill dropdown và fallback cột Supervisor Score khi chưa có điểm GM. */

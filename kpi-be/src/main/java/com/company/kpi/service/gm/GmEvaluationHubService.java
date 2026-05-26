@@ -16,20 +16,29 @@ import com.company.kpi.response.gm.GmEvaluationHubAssignmentResponse;
 import com.company.kpi.response.gm.GmEvaluationHubConfirmResponse;
 import com.company.kpi.response.gm.GmEvaluationHubResponse;
 import com.company.kpi.common.security.SensitiveDataCryptoService;
+import com.company.kpi.aggregate.HubConfirmSnapshotSource;
+import com.company.kpi.util.ApprovedMidYearSnapshotSupport;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class GmEvaluationHubService {
+
+    private static final int ASM_MID_WAITING_PM = 501;
+    private static final int ASM_MID_WAITING_GM = 502;
+    private static final int ASM_MID_GM_COMPLETED = 503;
     private final KpiCycleMapper kpiCycleMapper;
     private final GmEvaluationHubMapper gmEvaluationHubMapper;
     private final KpiAssignmentMapper kpiAssignmentMapper;
@@ -103,9 +112,16 @@ public class GmEvaluationHubService {
                 throw AppException.badRequest(
                         "Assignment không tồn tại hoặc không thuộc nhân viên/chu kỳ: " + aid);
             }
-            if (st == 501) {
+            if (st == ASM_MID_WAITING_PM) {
+                String snapshotJson =
+                        prepareApprovedMidYearSnapshotJson(aid, cycleId, evaluationUserId, st);
                 int n = kpiAssignmentMapper.updateGmEvaluationHubConfirmReview501(
-                        aid, cycleId, evaluationUserId, gmUserId);
+                        aid,
+                        cycleId,
+                        evaluationUserId,
+                        gmUserId,
+                        snapshotJson != null,
+                        snapshotJson);
                 if (n != 1) {
                     throw AppException.badRequest(
                             "Assignment không ở trạng thái chờ PM/GM giữa năm hoặc đã xử lý: " + aid);
@@ -113,9 +129,16 @@ public class GmEvaluationHubService {
                 persistLineGmCommentIfPresent(line, aid, cycleId, evaluationUserId, gmUserId);
                 syncCompletedTeamParentFromChildIfReady(aid, cycleId, 501, 503, gmUserId);
                 updated++;
-            } else if (st == 502) {
+            } else if (st == ASM_MID_WAITING_GM) {
+                String snapshotJson =
+                        prepareApprovedMidYearSnapshotJson(aid, cycleId, evaluationUserId, st);
                 int n = kpiAssignmentMapper.updateGmEvaluationHubConfirmReview502(
-                        aid, cycleId, evaluationUserId, gmUserId);
+                        aid,
+                        cycleId,
+                        evaluationUserId,
+                        gmUserId,
+                        snapshotJson != null,
+                        snapshotJson);
                 if (n != 1) {
                     throw AppException.badRequest(
                             "Assignment không ở trạng thái chờ review GM hoặc đã xử lý: " + aid);
@@ -199,6 +222,78 @@ public class GmEvaluationHubService {
         out.setUpdatedCount(updated);
         out.setSkippedCount(0);
         return out;
+    }
+
+    /**
+     * Chuẩn bị JSON snapshot giữa kỳ trước khi 501/502→503; {@code null} nếu đã có snapshot.
+     */
+    private String prepareApprovedMidYearSnapshotJson(
+            UUID assignmentId,
+            UUID cycleId,
+            UUID evaluationUserId,
+            int currentStatus) {
+        if (currentStatus != ASM_MID_WAITING_PM && currentStatus != ASM_MID_WAITING_GM) {
+            return null;
+        }
+
+        HubConfirmSnapshotSource source =
+                kpiAssignmentMapper.selectHubConfirmSnapshotSource(assignmentId, cycleId);
+        if (source == null) {
+            log.warn(
+                    "approvedMidYearSnapshot skip: assignment not found assignmentId={} cycleId={} currentStatus={}",
+                    assignmentId,
+                    cycleId,
+                    currentStatus);
+            return null;
+        }
+
+        if (evaluationUserId != null
+                && source.getUserId() != null
+                && !evaluationUserId.equals(source.getUserId())) {
+            log.warn(
+                    "approvedMidYearSnapshot user mismatch assignmentId={} expectedUserId={} actualUserId={}",
+                    assignmentId,
+                    evaluationUserId,
+                    source.getUserId());
+        }
+
+        String decrypted =
+                sensitiveDataCryptoService.decryptEvidenceSensitiveFields(source.getEvidences());
+        if (ApprovedMidYearSnapshotSupport.hasSnapshot(decrypted)) {
+            log.info(
+                    "approvedMidYearSnapshot skip (already exists) assignmentId={} cycleId={} userId={} status={}",
+                    assignmentId,
+                    cycleId,
+                    source.getUserId(),
+                    source.getStatusCode());
+            return null;
+        }
+
+        String capturedAt =
+                OffsetDateTime.now().format(DateTimeFormatter.ISO_OFFSET_DATE_TIME);
+        String actual = ApprovedMidYearSnapshotSupport.extractActualFromEvidences(decrypted);
+        String snapshotJson =
+                ApprovedMidYearSnapshotSupport.buildSnapshotJson(
+                        source.getMidSelfScore(), actual, capturedAt);
+        if (snapshotJson == null) {
+            log.warn(
+                    "approvedMidYearSnapshot buildSnapshotJson returned null assignmentId={} cycleId={} status={} midSelfScore={}",
+                    assignmentId,
+                    cycleId,
+                    source.getStatusCode(),
+                    source.getMidSelfScore());
+            return null;
+        }
+
+        log.info(
+                "approvedMidYearSnapshot prepared assignmentId={} cycleId={} userId={} currentStatus={} midSelfScore={} snapshotJson={}",
+                assignmentId,
+                cycleId,
+                source.getUserId(),
+                currentStatus,
+                source.getMidSelfScore(),
+                snapshotJson);
+        return snapshotJson;
     }
 
     private void syncCompletedTeamParentFromChildIfReady(

@@ -43,7 +43,11 @@ import {
   isDiagnosticsMidYearPhase,
 } from '@/utils/diagnosticsActualColor'
 import { formatScoreDisplay } from '@/utils/formatScoreDisplay'
-import { canDiagnosticsShowMemberActual } from '@/utils/memberEvaluationVisibility'
+import {
+  canDiagnosticsShowMemberActual,
+  resolveGmDiagnosticsActual,
+  resolveGmDiagnosticsSelfScore,
+} from '@/utils/memberEvaluationVisibility'
 
 const props = withDefaults(
   defineProps<{
@@ -663,9 +667,17 @@ function diagnosticsTableCellText(raw: string | null | undefined): string {
  * Không dùng (submissionActual/submissionTarget)×100 — chỉ tiêu năm và điểm có thể khác đơn vị (vd. cert vs điểm).
  */
 function memberScoreRawNumeric(member: GmHierarchyMember): number | null {
-  if (!canDiagnosticsShowMemberActual(memberAsmStatusCode(member))) {
+  const code = memberAsmStatusCode(member)
+  if (!canDiagnosticsShowMemberActual(code)) {
     return null
   }
+  const fromSnapshot = resolveGmDiagnosticsSelfScore(
+    code,
+    null,
+    null,
+    member.evidences,
+  )
+  if (fromSnapshot != null) return fromSnapshot
   const raw = member.submissionActual
   if (raw != null && Number.isFinite(Number(raw))) return Number(raw)
   const fallback = Number(
@@ -731,8 +743,13 @@ function diagnosticsActualWithUnit(kpi: GmHierarchyKpi, rawActual?: string | nul
 }
 
 function memberActualDisplayRaw(member: GmHierarchyMember, kpi: GmHierarchyKpi): string {
-  if (!canDiagnosticsShowMemberActual(memberAsmStatusCode(member))) {
+  const code = memberAsmStatusCode(member)
+  if (!canDiagnosticsShowMemberActual(code)) {
     return '-'
+  }
+  const fromSnapshot = resolveGmDiagnosticsActual(code, member.evidences)
+  if (fromSnapshot != null && String(fromSnapshot).trim() !== '') {
+    return diagnosticsTableCellText(fromSnapshot)
   }
   const rule = normalizeCalculationRuleCode(kpi.calculationRuleCode)
   const mode = rule === CALC_RULE_SUM
