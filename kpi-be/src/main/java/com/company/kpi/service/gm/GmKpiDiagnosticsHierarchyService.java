@@ -1,6 +1,7 @@
 package com.company.kpi.service.gm;
 
 import com.company.kpi.common.exception.AppException;
+import com.company.kpi.util.MemberEvaluationVisibility;
 import com.company.kpi.mapper.KpisInformationMapper;
 import com.company.kpi.mapper.KpiCycleMapper;
 import com.company.kpi.mapper.KpiInformationMapper;
@@ -221,6 +222,7 @@ public class GmKpiDiagnosticsHierarchyService {
                 .pmOwners(pmOwners)
                 .investigateDeptId(investigateDeptId)
                 .investigateKpiName(first.getKpiName())
+                .promotionCycleId(resolvePromotionCycleIdForKpi(first, kpiRows))
                 .build();
     }
 
@@ -736,6 +738,27 @@ public class GmKpiDiagnosticsHierarchyService {
         return t.isEmpty() ? null : t;
     }
 
+    /** {@code promotion_cycle_id} chỉ khi KPI promotion (103); lấy từ assignment row đầu tiên có giá trị. */
+    private static UUID resolvePromotionCycleIdForKpi(
+            GmDiagnosticsFlatRow first, List<GmDiagnosticsFlatRow> kpiRows) {
+        if (first.getTypeCode() == null || first.getTypeCode() != 103) {
+            return null;
+        }
+        for (GmDiagnosticsFlatRow row : kpiRows) {
+            if (row.getPromotionCycleId() != null) {
+                return row.getPromotionCycleId();
+            }
+        }
+        return null;
+    }
+
+    private static UUID promotionCycleIdForMemberRow(GmDiagnosticsFlatRow r, GmDiagnosticsFlatRow kpiFirst) {
+        if (kpiFirst.getTypeCode() == null || kpiFirst.getTypeCode() != 103) {
+            return null;
+        }
+        return r.getPromotionCycleId();
+    }
+
     private static SubmissionSnapshot computeSubmissionSnapshot(GmDiagnosticsFlatRow r) {
         if (!isMidPhaseAssignment(r) && !isEndPhaseAssignment(r)) {
             return new SubmissionSnapshot(null, null);
@@ -745,7 +768,7 @@ public class GmKpiDiagnosticsHierarchyService {
         if (isEndPhaseAssignment(r)) {
             actual = endPhaseDisplayScore(r);
         } else if (canDiagnosticsShowMemberActual(r.getStatusCode())) {
-            actual = r.getMidSelfScore();
+            actual = r.getMidSelfScore() != null ? r.getMidSelfScore() : r.getEndSelfScore();
         }
         return new SubmissionSnapshot(target, actual);
     }
@@ -780,6 +803,7 @@ public class GmKpiDiagnosticsHierarchyService {
                     .feedbackNote(trimOrNull(r.getFeedbackNote()))
                     .evaluationSupervisorComments(trimOrNull(r.getEvaluationSupervisorComments()))
                     .feedbackAwaitingGm(feedbackAwaitingGmForRow(r))
+                    .promotionCycleId(promotionCycleIdForMemberRow(r, kpiFirst))
                     .build();
         }
         PerfStatus perf = computeMemberPerformance(r);
@@ -809,6 +833,7 @@ public class GmKpiDiagnosticsHierarchyService {
                 .feedbackNote(trimOrNull(r.getFeedbackNote()))
                 .evaluationSupervisorComments(trimOrNull(r.getEvaluationSupervisorComments()))
                 .feedbackAwaitingGm(feedbackAwaitingGmForRow(r))
+                .promotionCycleId(promotionCycleIdForMemberRow(r, kpiFirst))
                 .build();
     }
 
@@ -1256,9 +1281,9 @@ public class GmKpiDiagnosticsHierarchyService {
         return sc >= 501 && sc <= 503;
     }
 
-    /** Strategic KPIs Diagnostics: Actual member chỉ sau khi GM chốt giữa kỳ (ASM ≥ 503). */
+    /** Strategic KPIs Diagnostics: Actual member chỉ khi GM đã chốt — ASM 503 hoặc 603. */
     private static boolean canDiagnosticsShowMemberActual(Integer statusCode) {
-        return statusCode != null && statusCode >= ASM_MID_YEAR_GM_COMPLETED;
+        return MemberEvaluationVisibility.canDiagnosticsShowMemberActual(statusCode);
     }
 
     private static BigDecimal firstNonNull(BigDecimal... vals) {
@@ -1298,8 +1323,10 @@ public class GmKpiDiagnosticsHierarchyService {
             BigDecimal endAct = endPhaseDisplayScore(r);
             return endAct != null ? formatScaledOne(endAct) : "—";
         }
-        if (isMidPhaseAssignment(r) && r.getMidSelfScore() != null) {
-            return formatScaledOne(r.getMidSelfScore());
+        if (isMidPhaseAssignment(r)) {
+            BigDecimal midAct =
+                    r.getMidSelfScore() != null ? r.getMidSelfScore() : r.getEndSelfScore();
+            return midAct != null ? formatScaledOne(midAct) : "—";
         }
         return "—";
     }

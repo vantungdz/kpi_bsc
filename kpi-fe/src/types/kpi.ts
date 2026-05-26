@@ -87,10 +87,14 @@ export interface KpiItem {
   feedbackComment?: string
   /** Lý do từ chối/cập nhật từ PM/GM (kpi_assignments.update_reason) */
   updateReason?: string | null
+  /** Lý do từ chối đánh giá (ASM 504/604 — evaluation_reject_reason) */
+  evaluationRejectReason?: string | null
   /** KPI do chính user hiện tại tự tạo */
   createdByCurrentUser?: boolean
   /** Vai trò người tạo assignment: GM / PM / LEADER / MEMBER */
   createdByRoleCode?: string | null
+  /** Assignee được phép tự sửa target + thang điểm */
+  allowAssigneeTargetScaleEdit?: boolean | null
   /** Ghi chú từ GM cho KPI */
   gmComment?: string
   /**
@@ -108,6 +112,11 @@ export interface KpiItem {
   planActualRecords?: Array<{ plan: string; actual: string }>
   /** KPI A.2 / Work Amount (monthly): tháng 1–12 + Spent / Standard (giờ); Actual Result = (ΣSpent/ΣStd)×100% */
   waTimeRecords?: Array<{ month: string; spent: string; standard: string }>
+  /** kpi_master.type_code — 101 individual, 102 team, 103 promotion */
+  kpiType?: number | null
+  typeCode?: number | null
+  /** {@code promotion_cycles.id} — required for promotion process timeline API. */
+  promotionCycleId?: string | null
 }
 
 /** KPI Sheet for a member */
@@ -267,6 +276,22 @@ export interface PmKpiDashboard {
   asmStatuses?: SysStatusCode[]
 }
 
+/** One row in {@code GET /pm/dashboard/init} → {@code PmDashboardResponse.kpis}. */
+export interface PmDashboardInitKpiRow {
+  kpiType?: number | null
+  typeCode?: number | null
+  /** {@code promotion_cycles.id} — when BE exposes it on init rows. */
+  promotionCycleId?: string | null
+}
+
+/** GET /pm/dashboard/init?year=&scope= — flat KPI list + cycle metadata. */
+export interface PmDashboardInitResponse {
+  kpis?: PmDashboardInitKpiRow[]
+  asmStatuses?: SysStatusCode[]
+  kpiCycle?: KpiCycleResponse
+  accountCreatedAt?: string | null
+}
+
 export interface PmTeamMember {
   id: string
   name: string
@@ -374,8 +399,11 @@ export interface LeaderKpiAssignment {
   evidences: string | null;
   feedbackComment?: string | null;
   updateReason?: string | null;
+  /** Lý do PM/GM từ chối đánh giá (504 giữa kỳ / 604 cuối kỳ). */
+  evaluationRejectReason?: string | null;
   createdByCurrentUser?: boolean | null;
   createdByRoleCode?: string | null;
+  allowAssigneeTargetScaleEdit?: boolean | null;
   /** Khi ASM 407: role cần xử lý feedback — PM hoặc GM. */
   feedbackTargetRoleCode?: string | null;
   evaluationStatus?: MemberKpiEvaluationStatus | string | null;

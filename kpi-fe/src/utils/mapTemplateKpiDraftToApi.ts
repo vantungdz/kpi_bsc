@@ -67,6 +67,8 @@ export function mapDraftPayloadToCreateTemplateItemBody(
     targetDescription: payload.targetDescription ?? null,
     defaultTargetValue: resolveTargetValue(payload),
     defaultWeight,
+    isImportant: payload.isImportant === true,
+    allowAssigneeTargetScaleEdit: payload.allowAssigneeTargetScaleEdit === true,
   }
 }
 
@@ -97,5 +99,7 @@ export function mapDraftPayloadToUpdateTemplateItemBody(
     targetDescription: payload.targetDescription ?? null,
     defaultTargetValue: resolveTargetValue(payload),
     defaultWeight,
+    isImportant: payload.isImportant === true,
+    allowAssigneeTargetScaleEdit: payload.allowAssigneeTargetScaleEdit === true,
   }
 }

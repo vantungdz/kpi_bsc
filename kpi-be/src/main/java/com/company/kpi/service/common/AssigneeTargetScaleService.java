@@ -1,6 +1,7 @@
 package com.company.kpi.service.common;
 
 import com.company.kpi.aggregate.AssigneeAssignmentEditRow;
+import com.company.kpi.common.Constants;
 import com.company.kpi.common.exception.AppException;
 import com.company.kpi.mapper.KpiAssignmentMapper;
 import com.company.kpi.request.common.AssigneeTargetScaleUpdateRequest;
@@ -23,6 +24,7 @@ public class AssigneeTargetScaleService {
 
     private static final int ASM_PENDING_ACCEPTANCE = 404;
     private static final int ASM_ACCEPTED = 405;
+    private static final int ASM_REJECTED = 406;
     private static final int ASM_FEEDBACK_IN_PROGRESS = 407;
 
     private final KpiAssignmentMapper kpiAssignmentMapper;
@@ -44,6 +46,7 @@ public class AssigneeTargetScaleService {
         int status = ctx.getStatusCode() != null ? ctx.getStatusCode() : 0;
         if (status != ASM_PENDING_ACCEPTANCE
                 && status != ASM_ACCEPTED
+                && status != ASM_REJECTED
                 && status != ASM_FEEDBACK_IN_PROGRESS) {
             throw AppException.badRequest(
                     "Target and scoring scale can only be edited before evaluation submission.");
@@ -53,6 +56,17 @@ public class AssigneeTargetScaleService {
             throw AppException.badRequest("targetValue must be greater than 0");
         }
         String scoringJson = kpiScoringRulesService.serializeForPersistence(request.getTargetDescription());
+
+        if (ctx.getAssigneeEditBaselineTarget() == null) {
+            kpiAssignmentMapper.captureAssigneeEditBaselineIfAbsent(
+                    assignmentId,
+                    ctx.getCycleId(),
+                    assigneeUserId,
+                    ctx.getTargetValue(),
+                    ctx.getScoringScale(),
+                    assigneeUserId);
+        }
+
         int n = kpiAssignmentMapper.updateAssigneeTargetAndScale(
                 assignmentId,
                 ctx.getCycleId(),

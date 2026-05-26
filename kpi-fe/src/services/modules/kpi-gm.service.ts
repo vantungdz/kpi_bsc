@@ -22,6 +22,7 @@ import type {
 } from "@/types/gm-evaluation-hub-api";
 import type { GmKpiCycleOption } from "@/types/gm-kpi-cycle";
 import type { GmCreateStrategicKpiResponseData } from "@/types/gm-strategic-kpi-create";
+import type { GmPromotionCycleOption } from "@/types/gm-promotion-cycle";
 import type { GmStrategicKpiEditData } from "@/types/gm-strategic-kpi-edit";
 import type { GmTimelineIssueGroup } from "@/types/gm-workspace";
 import type {
@@ -344,7 +345,7 @@ export async function apiGetGmKpiCyclesForEvaluation(): Promise<
     .then((r) => r.data.data);
 }
 
-/** GET /kpi/gm/evaluation-hub/assignments?cycleId= — tab đánh giá GM (ASM 501–503, 601–603). */
+/** GET /kpi/gm/evaluation-hub/assignments?cycleId= — tab đánh giá GM (ASM 501–504, 601–604). */
 export async function apiGetGmEvaluationHubAssignments(
   cycleId: string,
 ): Promise<GmEvaluationHubApiResponse> {
@@ -376,6 +377,26 @@ export async function apiPostGmEvaluationHubUnlock(
     .post<
       ApiResponse<GmEvaluationHubConfirmResult>
     >("/kpi/gm/evaluation-hub/unlock", body)
+    .then((r) => r.data.data);
+}
+
+export type GmEvaluationRejectBody = {
+  cycleId: string
+  evaluationUserId: string
+  promotion?: boolean
+  assignmentId?: string
+  rejectAll?: boolean
+  rejectReason: string
+}
+
+export type GmEvaluationRejectResult = { updatedCount: number }
+
+/** POST /kpi/gm/evaluation-hub/reject */
+export async function apiPostGmEvaluationHubReject(
+  body: GmEvaluationRejectBody,
+): Promise<GmEvaluationRejectResult> {
+  return http
+    .post<ApiResponse<GmEvaluationRejectResult>>("/kpi/gm/evaluation-hub/reject", body)
     .then((r) => r.data.data);
 }
 
@@ -577,6 +598,25 @@ export interface GmProcessTimelineApiResponse {
   yearEnd: GmProcessTimelineApiPhase | null;
 }
 
+export type GmPromotionTimelineActiveSegment =
+  | 'NOT_STARTED'
+  | 'IN_PROGRESS'
+  | 'COMPLETED'
+  | 'OVERDUE'
+
+/** Response GET /kpi/gm/promotion-process-timeline */
+export interface GmPromotionProcessTimelineApiResponse {
+  promotionCycleId: string
+  name: string
+  startDate: string
+  endDate: string
+  durationMonths: number
+  statusCode: number
+  activeSegment: GmPromotionTimelineActiveSegment
+  progressPercent: number
+  operational: GmProcessTimelineApiPhase
+}
+
 /** GET /kpi/gm/process-timeline?cycleId= — 3 phases issues cho timeline card. */
 export async function apiGetGmProcessTimeline(
   cycleId: string,
@@ -587,6 +627,29 @@ export async function apiGetGmProcessTimeline(
       {
         params: { cycleId: cycleId.trim() },
       },
+    )
+    .then((r) => r.data.data);
+}
+
+/** GET /kpi/gm/promotion-cycles?year= — dropdown khi tạo KPI promotion. */
+export async function apiGetGmPromotionCycles(
+  year: number,
+): Promise<GmPromotionCycleOption[]> {
+  return http
+    .get<ApiResponse<GmPromotionCycleOption[]>>("/kpi/gm/promotion-cycles", {
+      params: { year },
+    })
+    .then((r) => r.data.data ?? []);
+}
+
+/** GET /kpi/gm/promotion-process-timeline?promotionCycleId= */
+export async function apiGetGmPromotionProcessTimeline(
+  promotionCycleId: string,
+): Promise<GmPromotionProcessTimelineApiResponse> {
+  return http
+    .get<ApiResponse<GmPromotionProcessTimelineApiResponse>>(
+      '/kpi/gm/promotion-process-timeline',
+      { params: { promotionCycleId: promotionCycleId.trim() } },
     )
     .then((r) => r.data.data);
 }
@@ -744,10 +807,15 @@ export const gmKpiService = {
     apiPostGmEvaluationHubConfirm(body),
   unlockEvaluationHub: (body: GmEvaluationHubUnlockBody) =>
     apiPostGmEvaluationHubUnlock(body),
+  rejectEvaluationHub: (body: GmEvaluationRejectBody) =>
+    apiPostGmEvaluationHubReject(body),
   getApprovedKpiQueue: (cycleId: string) => apiGetGmApprovedKpiQueue(cycleId),
   decideApprovedKpiQueue: (body: GmApprovedKpiDecisionBody) =>
     apiPostGmApprovedKpiDecision(body),
   getProcessTimeline: (cycleId: string) => apiGetGmProcessTimeline(cycleId),
+  getPromotionCycles: (year: number) => apiGetGmPromotionCycles(year),
+  getPromotionProcessTimeline: (promotionCycleId: string) =>
+    apiGetGmPromotionProcessTimeline(promotionCycleId),
   submitPersonalEvaluation: (cycleId: string, promotion = false) =>
     apiPostGmPersonalEvaluationSubmit(cycleId, promotion),
   getReportLevelDistribution: (params: {

@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed, ref, watch, onUnmounted } from 'vue'
 import GmStrategicKpiTypeTag from '@/components/gm/GmStrategicKpiTypeTag.vue'
+import AssigneeTargetScaleChangeSummary from '@/components/shared/AssigneeTargetScaleChangeSummary.vue'
 import type { GmHierarchyKpi } from '@/types/gm-workspace'
+import { assigneeHasEditsFromFields } from '@/utils/assigneeEditBaselineUi'
 import { kpiCreatorCardBgClass } from '@/utils/kpiCreatorRowBg'
 
 const props = withDefaults(
@@ -162,6 +164,16 @@ const selectedActionableKpis = computed(() => {
 
 const selectedMemberCount = computed(() => selectedMemberKeys.value.size)
 
+const selectedActionableKpiCount = computed(() => selectedActionableKpis.value.length)
+
+const canBulkApproveSelected = computed(
+  () => selectedActionableKpiCount.value > 0 && !props.actionBusy,
+)
+
+const canBulkRejectSelected = computed(
+  () => selectedActionableKpiCount.value > 0 && !props.actionBusy,
+)
+
 const isAllMembersSelected = computed(() => {
   const keys = selectableMemberSummaries.value.map((m) => m.memberKey)
   return keys.length > 0 && keys.every((k) => selectedMemberKeys.value.has(k))
@@ -244,15 +256,26 @@ watch(
 )
 
 watch(selectedMember, (v) => {
-  document.body.style.overflow = v ? 'hidden' : ''
   if (!v) {
-    rejectAllDialogOpen.value = false
-    rejectAllReason.value = ''
-    rejectAllError.value = ''
+    if (rejectAllMode.value === 'drawer') {
+      rejectAllDialogOpen.value = false
+      rejectAllReason.value = ''
+      rejectAllError.value = ''
+    }
     closeRejectReasonDialog()
     selectedKpiDetail.value = null
   }
+  syncApprovedPanelBodyScrollLock()
 })
+
+watch(rejectAllDialogOpen, () => {
+  syncApprovedPanelBodyScrollLock()
+})
+
+function syncApprovedPanelBodyScrollLock() {
+  document.body.style.overflow =
+    selectedMember.value || rejectAllDialogOpen.value ? 'hidden' : ''
+}
 
 onUnmounted(() => {
   document.body.style.overflow = ''
@@ -333,10 +356,15 @@ function onApproveAll() {
 }
 
 function onApproveSelectedMembers() {
-  if (!selectedActionableKpis.value.length || props.actionBusy) return
+  if (!canBulkApproveSelected.value) return
   emit('approve-all-kpis', [...selectedActionableKpis.value])
+}
+
+function clearListMemberSelection() {
   selectedMemberKeys.value = new Set()
 }
+
+defineExpose({ clearListMemberSelection })
 
 function openRejectAllDialog() {
   if (!actionableGmKpis.value.length || props.actionBusy) return
@@ -376,9 +404,6 @@ function confirmRejectAll() {
   emit('reject-all-kpis', { kpis: [...targets], reason: r })
   rejectAllDialogOpen.value = false
   rejectAllReason.value = ''
-  if (rejectAllMode.value === 'list') {
-    selectedMemberKeys.value = new Set()
-  }
 }
 
 function gmApprovedActionsEnabled(kpi: GmHierarchyKpi): boolean {
@@ -512,11 +537,11 @@ watch(drawerKpisSorted, (kpis) => {
         <div class="flex shrink-0 flex-wrap items-center justify-end gap-2">
           <template v-if="selectedMemberCount > 0">
             <span class="text-[11px] font-semibold text-slate-500">
-              {{ selectedMemberCount }} selected
+              {{ selectedMemberCount }} member(s) · {{ selectedActionableKpiCount }} KPI(s)
             </span>
             <button
               type="button"
-              :disabled="actionBusy"
+              :disabled="!canBulkApproveSelected"
               class="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-800 shadow-sm hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
               @click.stop="onApproveSelectedMembers"
             >
@@ -525,7 +550,7 @@ watch(drawerKpisSorted, (kpis) => {
             </button>
             <button
               type="button"
-              :disabled="actionBusy"
+              :disabled="!canBulkRejectSelected"
               class="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-800 shadow-sm hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-50"
               @click.stop="openListRejectDialog"
             >
@@ -775,6 +800,12 @@ watch(drawerKpisSorted, (kpis) => {
                       />
                       <h4 class="truncate text-sm font-bold text-slate-800">{{ kpi.name }}</h4>
                       <GmStrategicKpiTypeTag :type="kpi.kpiType" size="sm" />
+                      <span
+                        v-if="assigneeHasEditsFromFields(kpi)"
+                        class="rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[9px] font-bold uppercase text-amber-800"
+                      >
+                        Modified
+                      </span>
                     </div>
                     <p class="mt-1 text-[10px] font-medium text-slate-400">
                       Sent: {{ formatKpiSentLine(kpi) }}
@@ -800,16 +831,16 @@ watch(drawerKpisSorted, (kpis) => {
                   </button>
                 </div>
 
-                <!-- Per-KPI approve/reject actions are intentionally hidden for now.
                 <div v-if="gmApprovedActionsEnabled(kpi)" class="mt-3 flex justify-end gap-2 border-t border-slate-100 pt-3">
                   <button
                     type="button"
                     :disabled="actionBusy"
-                    class="rounded-md px-3 py-1.5 text-sm font-semibold text-rose-600 hover:bg-rose-50 disabled:opacity-50"
+                    class="rounded-md border border-rose-200 bg-white px-3 py-1.5 text-sm font-semibold text-rose-700 shadow-sm hover:bg-rose-50 disabled:opacity-50"
                     @click="openRejectReasonDialog(kpi)"
                   >
                     Reject
                   </button>
+                  <!-- Per-KPI Approve — tạm ẩn
                   <button
                     type="button"
                     :disabled="actionBusy"
@@ -818,8 +849,8 @@ watch(drawerKpisSorted, (kpis) => {
                   >
                     Approve
                   </button>
+                  -->
                 </div>
-                -->
               </div>
             </div>
 
@@ -908,11 +939,25 @@ watch(drawerKpisSorted, (kpis) => {
                       </div>
                     </div>
 
+                    <AssigneeTargetScaleChangeSummary
+                      v-if="selectedKpiDetail"
+                      :diff="{
+                        targetValue: selectedKpiDetail.assignmentTargetValue,
+                        baselineTargetValue: selectedKpiDetail.baselineTargetValue,
+                        targetDescription: selectedKpiDetail.scoringRulesText,
+                        baselineScoringDescription: selectedKpiDetail.baselineScoringDescription,
+                        unitCode: selectedKpiDetail.unitCode,
+                        targetChanged: selectedKpiDetail.targetChanged,
+                        scoringChanged: selectedKpiDetail.scoringChanged,
+                        assigneeHasEdits: selectedKpiDetail.assigneeHasEdits,
+                      }"
+                    />
+
                     <div class="overflow-hidden rounded-lg border border-slate-200 bg-white">
                       <div class="flex items-center gap-2 border-b border-slate-100 px-3 py-2">
                         <i class="fas fa-list-check text-[13px] text-slate-600" />
                         <span class="text-[11px] font-bold uppercase tracking-wide text-slate-600">
-                          Scoring rules
+                          Scoring rules (current)
                         </span>
                       </div>
                       <div class="px-3 py-3">
@@ -954,16 +999,16 @@ watch(drawerKpisSorted, (kpis) => {
                     >
                       Close
                     </button>
-                    <!-- Per-KPI detail modal approve/reject actions are intentionally hidden for now.
                     <template v-if="gmApprovedActionsEnabled(selectedKpiDetail)">
                       <button
                         type="button"
                         :disabled="actionBusy"
-                        class="rounded-lg px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50"
+                        class="rounded-lg border border-rose-200 bg-white px-3 py-2 text-xs font-semibold text-rose-700 shadow-sm hover:bg-rose-50 disabled:opacity-50"
                         @click="onKpiDetailModalReject"
                       >
                         Reject
                       </button>
+                      <!-- Per-KPI detail modal Approve — tạm ẩn
                       <button
                         type="button"
                         :disabled="actionBusy"
@@ -972,8 +1017,8 @@ watch(drawerKpisSorted, (kpis) => {
                       >
                         Approve
                       </button>
+                      -->
                     </template>
-                    -->
                   </div>
                 </div>
               </div>
@@ -1026,61 +1071,65 @@ watch(drawerKpisSorted, (kpis) => {
               </div>
             </Transition>
 
-            <Transition name="gm-fade">
-              <div
-                v-if="rejectAllDialogOpen"
-                class="absolute inset-0 z-[150] flex items-center justify-center bg-slate-900/55 p-4 backdrop-blur-sm"
-                @click.self="closeRejectAllDialog"
-              >
-                <div class="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl">
-                  <div class="mb-3 flex items-center gap-3">
-                    <div class="rounded-full bg-rose-100 p-2 text-rose-600">
-                      <i class="fas fa-circle-exclamation text-lg" />
-                    </div>
-                    <h3 class="text-lg font-bold text-slate-900">Reject all</h3>
-                  </div>
-                  <p class="mb-3 text-sm text-slate-600">
-                    You are about to reject
-                    <strong>{{ rejectAllTargets.length }}</strong>
-                    KPI(s) awaiting GM approval
-                    <template v-if="rejectAllMode === 'list'">
-                      for {{ selectedMemberCount }} selected member(s).
-                    </template>
-                    <template v-else> for this member.</template>
-                    Enter a reason that applies to all of them.
-                  </p>
-                  <label class="mb-1 block text-sm font-semibold text-slate-700">
-                    Rejection reason <span class="text-rose-500">*</span>
-                  </label>
-                  <textarea
-                    v-model="rejectAllReason"
-                    class="min-h-[110px] w-full resize-none rounded-lg border p-3 text-sm outline-none focus:ring-2"
-                    :class="
-                      rejectAllError ? 'border-rose-400 focus:ring-rose-100' : 'border-slate-300 focus:ring-rose-100'
-                    "
-                    placeholder="Enter a detailed reason..."
-                  />
-                  <p v-if="rejectAllError" class="mt-1 text-xs font-medium text-rose-600">{{ rejectAllError }}</p>
-                  <div class="mt-4 flex justify-end gap-2">
-                    <button
-                      type="button"
-                      class="rounded-lg px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100"
-                      @click="closeRejectAllDialog"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="button"
-                      :disabled="actionBusy"
-                      class="rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-50"
-                      @click="confirmRejectAll"
-                    >
-                      Confirm rejection
-                    </button>
-                  </div>
-                </div>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
+
+    <!-- Bulk reject — phải nằm ngoài drawer; list bulk reject không mở drawer member. -->
+    <Teleport to="body">
+      <Transition name="gm-fade">
+        <div
+          v-if="rejectAllDialogOpen"
+          class="fixed inset-0 z-[160] flex items-center justify-center bg-slate-900/55 p-4 backdrop-blur-sm"
+          @click.self="closeRejectAllDialog"
+        >
+          <div class="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl">
+            <div class="mb-3 flex items-center gap-3">
+              <div class="rounded-full bg-rose-100 p-2 text-rose-600">
+                <i class="fas fa-circle-exclamation text-lg" />
               </div>
-            </Transition>
+              <h3 class="text-lg font-bold text-slate-900">Reject all</h3>
+            </div>
+            <p class="mb-3 text-sm text-slate-600">
+              You are about to reject
+              <strong>{{ rejectAllTargets.length }}</strong>
+              KPI(s) awaiting GM approval
+              <template v-if="rejectAllMode === 'list'">
+                for {{ selectedMemberCount }} selected member(s).
+              </template>
+              <template v-else> for this member.</template>
+              Enter a reason that applies to all of them.
+            </p>
+            <label class="mb-1 block text-sm font-semibold text-slate-700">
+              Rejection reason <span class="text-rose-500">*</span>
+            </label>
+            <textarea
+              v-model="rejectAllReason"
+              class="min-h-[110px] w-full resize-none rounded-lg border p-3 text-sm outline-none focus:ring-2"
+              :class="
+                rejectAllError ? 'border-rose-400 focus:ring-rose-100' : 'border-slate-300 focus:ring-rose-100'
+              "
+              placeholder="Enter a detailed reason..."
+            />
+            <p v-if="rejectAllError" class="mt-1 text-xs font-medium text-rose-600">{{ rejectAllError }}</p>
+            <div class="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                class="rounded-lg px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100"
+                @click="closeRejectAllDialog"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                :disabled="actionBusy"
+                class="rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-50"
+                @click="confirmRejectAll"
+              >
+                Confirm rejection
+              </button>
+            </div>
           </div>
         </div>
       </Transition>

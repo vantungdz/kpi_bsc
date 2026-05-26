@@ -97,9 +97,11 @@
                 Map.entry(501, "Pending  PM evaluation (Mid-Year)"),
                 Map.entry(502, "Pending  GM evaluation (Mid-Year)"),
                 Map.entry(503, "Completed (Mid-Year)"),
+                Map.entry(504, "Rejected (Mid-Year)"),
                 Map.entry(601, "Pending  PM evaluation (Final)"),
                 Map.entry(602, "Pending  GM evaluation (Final)"),
-                Map.entry(603, "Completed"));
+                Map.entry(603, "Completed"),
+                Map.entry(604, "Rejected (Final)"));
 
         private final KpiCycleMapper kpiCycleMapper;
         private final UserMapper userMapper;
@@ -385,7 +387,10 @@
                                 HttpStatus.BAD_REQUEST,
                                 "Mid-year submission is not required for accounts created on or after the mid-year period start");
                     }
-                    int n = kpiAssignmentMapper.updateKpiStatuses(userId, cycle.getId(), 501, promotionSubmit, ASM_ACCEPTED, false);
+                    int n405 = kpiAssignmentMapper.updateKpiStatuses(userId, cycle.getId(), 501, promotionSubmit, ASM_ACCEPTED, false);
+                    // 504 (1ST_REJECTED): member resubmits after PM/GM mid-year rejection
+                    int n504 = kpiAssignmentMapper.updateKpiStatuses(userId, cycle.getId(), 501, promotionSubmit, Constants.AssignStatus.FIRST_REJECTED, false);
+                    int n = n405 + n504;
                     if (n == 0) {
                         throw new ResponseStatusException(
                                 HttpStatus.BAD_REQUEST, "No mid-year assignments eligible to submit");
@@ -393,7 +398,9 @@
             } else if (Constant.END_YEAR_PHASE.equals(submitPhase)) {
                     int n405 = kpiAssignmentMapper.updateKpiStatuses(userId, cycle.getId(), 601, promotionSubmit, ASM_ACCEPTED, false);
                     int n503 = kpiAssignmentMapper.updateKpiStatuses(userId, cycle.getId(), 601, promotionSubmit, 503, false);
-                    int n = n405 + n503;
+                    // 604 (2ND_REJECTED): member resubmits after PM/GM year-end rejection
+                    int n604 = kpiAssignmentMapper.updateKpiStatuses(userId, cycle.getId(), 601, promotionSubmit, Constants.AssignStatus.SECOND_REJECTED, false);
+                    int n = n405 + n503 + n604;
                     if (n == 0) {
                         throw new ResponseStatusException(
                                 HttpStatus.BAD_REQUEST, "No end-year assignments eligible to submit");
@@ -746,8 +753,11 @@
                     .leaderFeedback(ev.leaderFeedback)
                     .feedbackComment(Optional.ofNullable(row.getFeedbackComment()).orElse(""))
                     .updateReason(Optional.ofNullable(row.getUpdateReason()).orElse(""))
+                    .evaluationRejectReason(
+                            Optional.ofNullable(row.getEvaluationRejectReason()).orElse(""))
                     .createdByCurrentUser(Boolean.TRUE.equals(row.getCreatedByCurrentUser()))
                     .createdByRoleCode(Optional.ofNullable(row.getCreatedByRoleCode()).orElse(""))
+                    .allowAssigneeTargetScaleEdit(Boolean.TRUE.equals(row.getAllowAssigneeTargetScaleEdit()))
                     .gmComment(ev.gmComment)
                     .certificateOutcomeNote(ev.certificateOutcomeNote)
                     .selfScore(selfScore)
@@ -1173,7 +1183,10 @@
         if (hasFinalSubmission) {
             return false;
         }
-        return rows.stream().anyMatch(row -> Objects.equals(row.getStatusCode(), ASM_ACCEPTED));
+        // Allow late re-submission: 405 (accepted) or 504 (mid-year rejected, needs correction)
+        return rows.stream().anyMatch(row ->
+                Objects.equals(row.getStatusCode(), ASM_ACCEPTED)
+                || Objects.equals(row.getStatusCode(), Constants.AssignStatus.FIRST_REJECTED));
     }
 
         /**
@@ -1210,14 +1223,14 @@
                 boolean hasYearEndSubmission = rows.stream()
                         .map(MemberKpiAssignmentDTO::getStatusCode)
                         .filter(Objects::nonNull)
-                        .anyMatch(sc -> sc == 601 || sc == 602 || sc == 603);
+                        .anyMatch(sc -> sc == 601 || sc == 602 || sc == 603 || sc == Constants.AssignStatus.SECOND_REJECTED);
                 if (hasYearEndSubmission) {
                     return Constant.END_YEAR_PHASE;
                 }
                 boolean hasMidYearSubmission = rows.stream()
                         .map(MemberKpiAssignmentDTO::getStatusCode)
                         .filter(Objects::nonNull)
-                        .anyMatch(sc -> sc == 501 || sc == 502 || sc == 503);
+                        .anyMatch(sc -> sc == 501 || sc == 502 || sc == 503 || sc == Constants.AssignStatus.FIRST_REJECTED);
                 if (hasMidYearSubmission) {
                     return Constant.MID_YEAR_PHASE;
                 }

@@ -4,6 +4,7 @@ import lombok.Builder;
 import lombok.Data;
 
 import java.math.BigDecimal;
+import java.util.UUID;
 
 @Data
 @Builder
@@ -56,4 +57,7 @@ public class GmDiagMemberNode {
 
     /** {@code true} khi ASM 407 và feedback active cần GM xử lý (theo {@code roles.code}). */
     private boolean feedbackAwaitingGm;
+
+    /** {@code kpi_assignments.promotion_cycle_id} — promotion KPI assignment. */
+    private UUID promotionCycleId;
 }

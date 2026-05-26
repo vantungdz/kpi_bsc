@@ -4,14 +4,16 @@
  */
 import http from '@/services/api'
 import type { ApiResponse } from '@/types/api'
-import type { GmProcessTimelineApiResponse } from '@/services/modules/kpi-gm.service'
+import type { GmProcessTimelineApiResponse, GmPromotionProcessTimelineApiResponse } from '@/services/modules/kpi-gm.service'
 import type { 
-  PmKpiDashboard, 
+  PmKpiDashboard,
+  PmDashboardInitResponse,
   KpiItem,
   KpiRegistrationInitResponse, // Thêm mới cho Assign Drawer
   KpiRegistrationRequest       // Thêm mới cho Assign Drawer
 } from '@/types/kpi'
 import type { GmKpiCycleOption } from '@/types/gm-kpi-cycle'
+import type { GmPromotionCycleOption } from '@/types/gm-promotion-cycle'
 
 /** GET /api/kpi/pm/dashboard?year=2025 */
 export async function apiGetPmKpiDashboard(year?: number): Promise<ApiResponse<PmKpiDashboard>> {
@@ -19,7 +21,7 @@ export async function apiGetPmKpiDashboard(year?: number): Promise<ApiResponse<P
 }
 
 /** GET /api/pm/dashboard/init?year=...&scope=... */
-export async function apiGetPmDashboardInit(year?: string, scope?: string): Promise<ApiResponse<PmKpiDashboard>> {
+export async function apiGetPmDashboardInit(year?: string, scope?: string): Promise<ApiResponse<PmDashboardInitResponse>> {
   const params: Record<string, string> = {}
   if (year) params.year = year
   if (scope) params.scope = scope
@@ -36,6 +38,26 @@ export async function apiGetPmProcessTimeline(year: number): Promise<GmProcessTi
   return http
     .get<ApiResponse<GmProcessTimelineApiResponse>>('/pm/dashboard/process-timeline', {
       params: { year },
+    })
+    .then((r) => r.data.data)
+}
+
+/** GET /v1/pm/dashboard/promotion-cycles?year= */
+export async function apiGetPmPromotionCycles(year: number): Promise<GmPromotionCycleOption[]> {
+  return http
+    .get<ApiResponse<GmPromotionCycleOption[]>>('/pm/dashboard/promotion-cycles', {
+      params: { year },
+    })
+    .then((r) => r.data.data)
+}
+
+/** GET /v1/pm/dashboard/promotion-process-timeline?promotionCycleId= */
+export async function apiGetPmPromotionProcessTimeline(
+  promotionCycleId: string,
+): Promise<GmPromotionProcessTimelineApiResponse> {
+  return http
+    .get<ApiResponse<GmPromotionProcessTimelineApiResponse>>('/pm/dashboard/promotion-process-timeline', {
+      params: { promotionCycleId: promotionCycleId.trim() },
     })
     .then((r) => r.data.data)
 }
@@ -125,6 +147,11 @@ export interface PmMemberKpiApprovalItem {
   justification: string | null
   /** roles.code của người tạo KPI master */
   creatorRoleCode?: string | null
+  baselineTargetValue?: number | null
+  baselineScoringDescription?: string | null
+  targetChanged?: boolean | null
+  scoringChanged?: boolean | null
+  assigneeHasEdits?: boolean | null
 }
 
 export async function apiListPmMemberKpiApprovals(
@@ -140,6 +167,7 @@ export async function apiPmMemberKpiApprovalDecision(body: {
   assignmentId: string
   approve: boolean
   rejectReason?: string
+  resetDrawerSiblingsToPendingAcceptance?: boolean
 }): Promise<ApiResponse<null>> {
   return http.post('/pm/dashboard/member-kpi-approvals/decision', body).then((r) => r.data)
 }
@@ -197,6 +225,27 @@ export type PmMemberReviewMeta = {
   supervisorCommentsPromotion: string | null
 }
 
+export type EvaluationRejectBody = {
+  cycleId: string
+  evaluationUserId?: string
+  promotion?: boolean
+  assignmentId?: string
+  rejectAll?: boolean
+  rejectReason: string
+}
+
+export type EvaluationRejectResult = { updatedCount: number }
+
+/** POST /v1/pm/dashboard/team-members/{memberId}/evaluation/reject */
+export async function apiPostPmEvaluationReject(
+  memberId: string,
+  body: EvaluationRejectBody,
+): Promise<ApiResponse<EvaluationRejectResult>> {
+  return http
+    .post(`/pm/dashboard/team-members/${memberId}/evaluation/reject`, body)
+    .then((r) => r.data)
+}
+
 /** GET /v1/pm/dashboard/team-members/{memberId}/review-meta?year= */
 export async function apiGetPmMemberReviewMeta(
   memberId: string,
@@ -220,6 +269,9 @@ export const pmKpiService = {
   getInitialization: (year?: string, scope?: string) => apiGetPmDashboardInit(year, scope).then(r => r.data),
   getKpiCyclesForHeader: () => apiGetPmKpiCyclesForHeader().then(r => r.data),
   getProcessTimeline: (year: number) => apiGetPmProcessTimeline(year),
+  getPromotionCycles: (year: number) => apiGetPmPromotionCycles(year),
+  getPromotionProcessTimeline: (promotionCycleId: string) =>
+    apiGetPmPromotionProcessTimeline(promotionCycleId),
   scoreItem: (memberId: string, itemId: string, score: number) => apiPmScore(memberId, itemId, score).then(r => r.data),
   approveSheet: (memberId: string, year: number) => apiPmApproveSheet(memberId, year).then(r => r.data),
   
@@ -235,8 +287,13 @@ export const pmKpiService = {
   getMemberKpiDetails: (memberId: string, year: number) => apiGetMemberKpiDetails(memberId, year).then(r => r.data),
   listMemberKpiApprovals: (year: number) =>
     apiListPmMemberKpiApprovals(year).then((r) => r.data),
-  decideMemberKpiApproval: (body: { year: number; assignmentId: string; approve: boolean; rejectReason?: string }) =>
-    apiPmMemberKpiApprovalDecision(body).then((r) => r.data),
+  decideMemberKpiApproval: (body: {
+    year: number
+    assignmentId: string
+    approve: boolean
+    rejectReason?: string
+    resetDrawerSiblingsToPendingAcceptance?: boolean
+  }) => apiPmMemberKpiApprovalDecision(body).then((r) => r.data),
   submitFeedbackToGm: (body: { year: number; assignmentId: string; feedbackNote: string }) =>
     apiPmSubmitFeedbackToGm(body).then((r) => r.data),
   decideMemberFeedback: (body: {
@@ -253,6 +310,8 @@ export const pmKpiService = {
     apiPmSaveMemberSupervisorComment(body).then((r) => r.data),
   getMemberReviewMeta: (memberId: string, year: number) =>
     apiGetPmMemberReviewMeta(memberId, year).then((r) => r.data),
+  rejectMemberEvaluation: (memberId: string, body: EvaluationRejectBody) =>
+    apiPostPmEvaluationReject(memberId, body).then((r) => r.data),
   deleteSelfCreatedPmKpi: (assignmentId: string) => apiDeleteSelfCreatedPmKpi(assignmentId).then((r) => r.data),
 }
 

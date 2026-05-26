@@ -13,9 +13,20 @@ public class MemberKpiDetailResponse {
     private String target;
     private BigDecimal weight;
     private BigDecimal selfScore;
+    /** Điểm hiển thị: {@code end_gm_score} nếu có, ngược lại {@code end_pm_score}. */
     private BigDecimal pmScore;
+    /** Điểm PM chấm (cuối kỳ) — giữ nguyên sau khi GM chấm. */
+    private BigDecimal endPmScore;
+    /** Điểm GM chấm lại (cuối kỳ). */
+    private BigDecimal endGmScore;
+    /** true khi cả hai điểm có và khác nhau (GM đã sửa so với PM). */
+    private Boolean gmScoreChanged;
     private String pmComment;
     private Integer statusCode;
+    /** {@code sys_status_codes.name} (ASM_STATUS). */
+    private String statusName;
+    /** {@code sys_status_codes.description} (ASM_STATUS). */
+    private String statusDesc;
     private Integer kpiTypeCode;
     /** 801/802/803 — quy tắc tổng hợp (tổng / TB / comment); FE dùng cho layout evidence & mode gộp Actual. */
     private Integer calcRuleCode;

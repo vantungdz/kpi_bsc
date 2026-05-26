@@ -17,19 +17,54 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class MemberAssignmentEligibilityService {
 
+    /** Nhóm 1: Individual (101) + Team (102) — chặn gán chung. */
+    private static final List<Integer> STRATEGIC_KPI_TYPE_CODES = List.of(
+            MemberAssignmentEligibility.KPI_TYPE_INDIVIDUAL,
+            MemberAssignmentEligibility.KPI_TYPE_TEAM);
+
+    /** Nhóm 2: Promotion (103) — tách khỏi nhóm strategic. */
+    private static final List<Integer> PROMOTION_KPI_TYPE_CODES =
+            List.of(MemberAssignmentEligibility.KPI_TYPE_PROMOTION);
+
     private final KpiAssignmentMapper kpiAssignmentMapper;
 
-    public void assertEligibleForNewMemberAssignment(UUID cycleId, Collection<UUID> userIds) {
-        assertEligibleForNewAssignment(cycleId, userIds, MemberAssignmentEligibility.BLOCK_ASSIGN_MEMBER_MESSAGE);
+    /**
+     * Giao KPI strategic (101 hoặc 102) — xét mọi assignment 101/102 đang active trong chu kỳ.
+     */
+    public void assertEligibleForNewMemberAssignment(
+            UUID cycleId, Collection<UUID> userIds, int kpiTypeCode) {
+        if (kpiTypeCode == MemberAssignmentEligibility.KPI_TYPE_PROMOTION) {
+            assertEligibleForPromotionAssignment(cycleId, userIds);
+        } else {
+            assertEligibleForStrategicAssignment(
+                    cycleId, userIds, MemberAssignmentEligibility.BLOCK_ASSIGN_MEMBER_MESSAGE);
+        }
     }
 
+    /** PM nhận KPI team — cùng nhóm chặn với individual/team member (101 + 102). */
     public void assertEligibleForNewPmAssignment(UUID cycleId, Collection<UUID> userIds) {
-        assertEligibleForNewAssignment(cycleId, userIds, MemberAssignmentEligibility.BLOCK_ASSIGN_PM_MESSAGE);
+        assertEligibleForStrategicAssignment(
+                cycleId, userIds, MemberAssignmentEligibility.BLOCK_ASSIGN_PM_MESSAGE);
     }
 
-    /** Giao KPI mới cho member hoặc PM — cùng rule ASM, khác thông báo. */
-    public void assertEligibleForNewAssignment(
+    public void assertEligibleForStrategicAssignment(
             UUID cycleId, Collection<UUID> userIds, String blockMessage) {
+        assertEligibleForNewAssignment(cycleId, userIds, STRATEGIC_KPI_TYPE_CODES, blockMessage);
+    }
+
+    public void assertEligibleForPromotionAssignment(UUID cycleId, Collection<UUID> userIds) {
+        assertEligibleForNewAssignment(
+                cycleId,
+                userIds,
+                PROMOTION_KPI_TYPE_CODES,
+                MemberAssignmentEligibility.BLOCK_ASSIGN_PROMOTION_MESSAGE);
+    }
+
+    public void assertEligibleForNewAssignment(
+            UUID cycleId,
+            Collection<UUID> userIds,
+            List<Integer> kpiTypeCodes,
+            String blockMessage) {
         if (cycleId == null || userIds == null || userIds.isEmpty()) {
             return;
         }
@@ -37,8 +72,8 @@ public class MemberAssignmentEligibilityService {
         if (distinct.isEmpty()) {
             return;
         }
-        List<UserBlockingAssignmentRow> blocked =
-                kpiAssignmentMapper.listUsersWithBlockingKpiStatusInCycle(cycleId, new ArrayList<>(distinct));
+        List<UserBlockingAssignmentRow> blocked = kpiAssignmentMapper.listUsersWithBlockingKpiStatusInCycle(
+                cycleId, new ArrayList<>(distinct), kpiTypeCodes);
         if (blocked.isEmpty()) {
             return;
         }
@@ -57,11 +92,29 @@ public class MemberAssignmentEligibilityService {
         throw AppException.badRequest(prefix + " (" + names + ")");
     }
 
-    public List<UUID> listBlockedUserIdsInCycle(UUID cycleId) {
+    /**
+     * @param assignmentScope {@code strategic} (101+102) hoặc {@code promotion} (103)
+     */
+    public List<UUID> listBlockedUserIdsInCycle(UUID cycleId, String assignmentScope) {
         if (cycleId == null) {
             return List.of();
         }
-        List<UUID> ids = kpiAssignmentMapper.listUserIdsWithBlockingKpiStatusInCycle(cycleId);
+        List<Integer> typeCodes = typeCodesForAssignmentScope(assignmentScope);
+        if (typeCodes.isEmpty()) {
+            return List.of();
+        }
+        List<UUID> ids = kpiAssignmentMapper.listUserIdsWithBlockingKpiStatusInCycle(cycleId, typeCodes);
         return ids != null ? ids : List.of();
+    }
+
+    static List<Integer> typeCodesForAssignmentScope(String assignmentScope) {
+        if (assignmentScope == null) {
+            return List.of();
+        }
+        return switch (assignmentScope.trim().toLowerCase()) {
+            case "strategic" -> STRATEGIC_KPI_TYPE_CODES;
+            case "promotion" -> PROMOTION_KPI_TYPE_CODES;
+            default -> List.of();
+        };
     }
 }

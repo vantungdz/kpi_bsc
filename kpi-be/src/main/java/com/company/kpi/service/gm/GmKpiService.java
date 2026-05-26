@@ -4,11 +4,14 @@ import com.company.kpi.aggregate.KpiAssignmentInsertRow;
 import com.company.kpi.aggregate.UserJobTitlePair;
 import com.company.kpi.common.Constants;
 import com.company.kpi.common.exception.AppException;
+import com.company.kpi.entity.PromotionCycle;
 import com.company.kpi.mapper.DepartmentMapper;
 import com.company.kpi.mapper.KpiAssignmentMapper;
 import com.company.kpi.mapper.KpisInformationMapper;
+import com.company.kpi.mapper.PromotionCycleMapper;
 import com.company.kpi.mapper.UserDepartmentMapper;
 import com.company.kpi.mapper.UserMapper;
+import com.company.kpi.response.gm.GmPromotionCycleOptionResponse;
 import com.company.kpi.request.gm.GmCopyKpiItemRequest;
 import com.company.kpi.request.gm.GmCopyKpisRequest;
 import com.company.kpi.response.member.MemberKpiAssignmentDTO;
@@ -16,6 +19,8 @@ import com.company.kpi.response.gm.GmKpiDashboardResponse;
 import com.company.kpi.response.gm.KpiSectionMemberResponse;
 import com.company.kpi.service.kpi.KpiAssignmentSnapshotService;
 import com.company.kpi.service.kpi.MemberAssignmentEligibilityService;
+import com.company.kpi.service.kpi.PromotionAssignmentValidationService;
+import com.company.kpi.util.MemberAssignmentEligibility;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -47,6 +52,27 @@ public class GmKpiService {
     private final UserDepartmentMapper userDepartmentMapper;
     private final DepartmentMapper departmentMapper;
     private final MemberAssignmentEligibilityService memberAssignmentEligibilityService;
+    private final PromotionAssignmentValidationService promotionAssignmentValidationService;
+    private final PromotionCycleMapper promotionCycleMapper;
+
+    /** {@code GET /kpi/gm/promotion-cycles?year=} — dropdown khi tạo KPI promotion. */
+    public List<GmPromotionCycleOptionResponse> listPromotionCycles(int year) {
+        return promotionCycleMapper.listByYear(year).stream()
+                .map(GmKpiService::toPromotionCycleOption)
+                .toList();
+    }
+
+    private static GmPromotionCycleOptionResponse toPromotionCycleOption(PromotionCycle c) {
+        return GmPromotionCycleOptionResponse.builder()
+                .id(c.getId())
+                .userId(c.getUserId())
+                .name(c.getName())
+                .startDate(c.getStartDate())
+                .endDate(c.getEndDate())
+                .durationMonths(c.getDurationMonths())
+                .statusCode(c.getStatusCode())
+                .build();
+    }
 
     public GmKpiDashboardResponse getDashboard(Integer year) {
         throw new UnsupportedOperationException("GmKpiService.getDashboard() not yet implemented. Use mock mode.");
@@ -84,8 +110,29 @@ public class GmKpiService {
             return;
         }
 
-        memberAssignmentEligibilityService.assertEligibleForNewMemberAssignment(
-                cycleId, List.of(targetUserId));
+        boolean hasPromotion = false;
+        boolean hasStrategic = false;
+        for (GmCopyKpiItemRequest item : itemsToCopy) {
+            Integer tc = kpiAssignmentMapper.findKpiTypeCodeByKpiInfoId(item.getKpiInfoId());
+            if (tc == null) {
+                continue;
+            }
+            if (tc == KPI_TYPE_PROMOTION) {
+                hasPromotion = true;
+            } else if (tc == KPI_TYPE_INDIVIDUAL || tc == KPI_TYPE_TEAM) {
+                hasStrategic = true;
+            }
+        }
+        if (hasStrategic) {
+            memberAssignmentEligibilityService.assertEligibleForStrategicAssignment(
+                    cycleId,
+                    List.of(targetUserId),
+                    MemberAssignmentEligibility.BLOCK_ASSIGN_MEMBER_MESSAGE);
+        }
+        if (hasPromotion) {
+            memberAssignmentEligibilityService.assertEligibleForPromotionAssignment(
+                    cycleId, List.of(targetUserId));
+        }
 
         Map<UUID, UUID> parentByKpiInfoId = new HashMap<>();
         for (GmCopyKpiItemRequest item : itemsToCopy) {
@@ -97,9 +144,17 @@ public class GmKpiService {
         List<KpiAssignmentInsertRow> rows = new ArrayList<>();
         for (GmCopyKpiItemRequest item : itemsToCopy) {
             UUID kpiInfoId = item.getKpiInfoId();
+            Integer typeCode = kpiAssignmentMapper.findKpiTypeCodeByKpiInfoId(kpiInfoId);
             UUID parentId = parentByKpiInfoId.get(kpiInfoId);
             String catalogJson = kpisInformationMapper.selectTargetDescriptionJson(kpiInfoId);
             String scoringScale = resolveScoringScaleForCopy(parentId, cycleId, catalogJson);
+            UUID promotionCycleId = null;
+            if (typeCode != null && typeCode == KPI_TYPE_PROMOTION) {
+                promotionCycleId = promotionAssignmentValidationService.resolvePromotionCycleIdForCopy(
+                        kpiInfoId, targetUserId);
+                promotionAssignmentValidationService.assertValidPromotionAssignment(
+                        KPI_TYPE_PROMOTION, targetUserId, null, promotionCycleId, null);
+            }
             rows.add(KpiAssignmentInsertRow.builder()
                     .id(UUID.randomUUID())
                     .cycleId(cycleId)
@@ -111,6 +166,7 @@ public class GmKpiService {
                     .scoringScale(scoringScale)
                     .statusCode(Constants.AssignStatus.PENDING_ACCEPTANCE)
                     .createdBy(gmUserId)
+                    .promotionCycleId(promotionCycleId)
                     .build());
         }
 
@@ -154,12 +210,6 @@ public class GmKpiService {
     }
 
     private String resolveScoringScaleForCopy(UUID parentAssignmentId, UUID cycleId, String catalogScoringJson) {
-        if (parentAssignmentId != null) {
-            String parentScale = kpiAssignmentMapper.selectScoringScaleJson(parentAssignmentId, cycleId);
-            if (parentScale != null && !parentScale.isBlank() && !"null".equalsIgnoreCase(parentScale.trim())) {
-                return parentScale;
-            }
-        }
         return catalogScoringJson;
     }
 }

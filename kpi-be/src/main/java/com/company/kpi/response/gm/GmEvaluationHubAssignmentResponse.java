@@ -6,13 +6,15 @@ import java.math.BigDecimal;
 import java.util.UUID;
 
 /**
- * Một dòng {@code kpi_assignments} trong hub đánh giá GM — ASM 501/502/503/601/602/603.
+ * Một dòng {@code kpi_assignments} trong hub đánh giá GM — ASM 501–504, 601–604 (gồm rejected).
  */
 @Data
 public class GmEvaluationHubAssignmentResponse {
 
     private UUID assignmentId;
     private Integer statusCode;
+    /** Lý do từ chối đánh giá (ASM 504/604). */
+    private String evaluationRejectReason;
     private String assignmentStatusName;
     /** {@code sys_status_codes.description} — hiển thị cột Tiến độ. */
     private String assignmentStatusDescription;

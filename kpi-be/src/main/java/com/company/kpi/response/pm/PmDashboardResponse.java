@@ -64,17 +64,23 @@ public class PmDashboardResponse {
         /** Nội dung feedback active PM -> GM (kpi_assignment_feedbacks.feedback_note). */
         private String feedbackNote;
         private BigDecimal selfScore;
+        private BigDecimal midSelfScore;
+        private BigDecimal endSelfScore;
         /** Điểm supervisor hiển thị: {@code end_gm_score} nếu GM đã chấm, không thì {@code end_pm_score}. */
         private BigDecimal pmScore;
-        /** Nhận xét PM — {@code kpi_assignments.evidences.pmComment}. */
-        private String pmEvaluationComment;
-        /** Nhận xét GM — {@code kpi_assignments.evidences.gmComment}. */
+        private BigDecimal endPmScore;
+        private BigDecimal endGmScore;
+        private Boolean gmScoreChanged;
+        /** Nhận xét PM/GM theo KPI — {@code kpi_assignments.evidences.gmComment}. */
         private String gmEvaluationComment;
         private Boolean isTree;
         private Boolean expanded;
         private Boolean isSelfCreated;
         /** {@code roles.code} người tạo KPI master — màu nền dòng trên PM dashboard. */
         private String creatorRoleCode;
+
+        /** {@code kpi_assignments.promotion_cycle_id} — chỉ khi {@link #kpiType} = 103. */
+        private UUID promotionCycleId;
 
         // Thông tin người sở hữu KPI cha (Dành cho tab KPI Department)
         private UUID userId;
@@ -94,17 +100,22 @@ public class PmDashboardResponse {
         private String name;        // full_name
         private String role;        // job_title_name
         private BigDecimal targetValue; // assignment target
+        /** JSON thang điểm — ưu tiên {@code kpi_assignments.scoring_scale}, không có thì catalog. */
+        private String targetDescriptionJson;
         private String actualResult;    // evidences
         /** Nội dung feedback active member -> PM (kpi_assignment_feedbacks.feedback_note). */
         private String feedbackNote;
         /** Role cần xử lý feedback member (PM / GM) — theo feedback active. */
         private String feedbackTargetRoleCode;
-        private BigDecimal selfScore;   // end_self_score fallback mid_self_score
+        private BigDecimal selfScore;
+        private BigDecimal midSelfScore;
+        private BigDecimal endSelfScore;
         /** Điểm supervisor: {@code end_gm_score} nếu có, không thì {@code end_pm_score}. */
         private BigDecimal pmScore;
-        /** Nhận xét PM — {@code kpi_assignments.evidences.pmComment}. */
-        private String pmEvaluationComment;
-        /** Nhận xét GM — {@code kpi_assignments.evidences.gmComment}. */
+        private BigDecimal endPmScore;
+        private BigDecimal endGmScore;
+        private Boolean gmScoreChanged;
+        /** Nhận xét PM/GM theo KPI — {@code kpi_assignments.evidences.gmComment}. */
         private String gmEvaluationComment;
         private Integer statusCode;
         /** Lý do GM từ chối KPI cascade (406). */

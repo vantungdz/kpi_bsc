@@ -14,6 +14,7 @@ import { useRoute, useRouter, RouterView } from "vue-router";
 import { useAuth } from "@/composables/useAuth";
 import GmDepartmentInvestigation from "@/components/gm/GmDepartmentInvestigation.vue";
 import GmProcessTimeline from "@/components/gm/GmProcessTimeline.vue";
+import PromotionProcessTimeline from "@/components/gm/PromotionProcessTimeline.vue";
 import GmKpiDiagnosticsTable from "@/components/gm/GmKpiDiagnosticsTable.vue";
 import GmPmEvaluationWorkspace from "@/components/gm/GmPmEvaluationWorkspace.vue";
 import GmGmPersonalKpiPanel from "@/components/gm/GmGmPersonalKpiPanel.vue";
@@ -37,7 +38,19 @@ import {
   hierarchyInactiveKpiToDeptKpiMock,
 } from "@/utils/gm-strategic-create-preview";
 import { gmKpiService } from "@/services/modules/kpi-gm.service";
-import type { GmProcessTimelineApiResponse } from "@/services/modules/kpi-gm.service";
+import type { GmProcessTimelineApiResponse, GmPromotionProcessTimelineApiResponse } from "@/services/modules/kpi-gm.service";
+import {
+  collectPromotionCycleIdFromHierarchy,
+  formatPromotionCycleOptionLabel,
+  hierarchyKpiUsesPromotionCycle,
+} from "@/utils/promotion-timeline";
+import type { GmPromotionCycleOption } from "@/types/gm-promotion-cycle";
+import {
+  gmEvaluationTableEvalTabKey,
+  gmPersonalTableTabKey,
+  type GmEvaluationTableEvalTab,
+  type GmPersonalTableTab,
+} from "@/utils/gmLayoutEvaluationTab";
 import { leaderKpiService } from "@/services/modules/kpi-leader.service";
 import type {
   LeaderKpiAssignment,
@@ -60,9 +73,14 @@ import {
 import { KPI_STATUS } from "@/config/constants";
 import { kpiCycleService } from "@/services/shared/kpi-cycle.service";
 import type { KpiCycleResponse } from "@/types/shared/kpi-cycle.type";
+import { normalizeStrategicKpiKind } from "@/utils/gm-strategic-kpi-kind";
+import { isNonGmKpiCreatorRole } from "@/utils/kpiCreatorRowBg";
 
-/** Gọi `openFeedbackDrawerByAssignmentId` từ `GmKpiDiagnosticsTable` (tab Strategic KPIs). */
+/** Gọi `openFeedbackDrawerByAssignmentId` từ `GmKpiDiagnosticsTable` (tab Strategic / Promotion). */
 const gmDiagnosticsTableRef = ref<{
+  openFeedbackDrawerByAssignmentId?: (assignmentId: string) => boolean;
+} | null>(null);
+const gmPromotionDiagnosticsTableRef = ref<{
   openFeedbackDrawerByAssignmentId?: (assignmentId: string) => boolean;
 } | null>(null);
 
@@ -128,19 +146,41 @@ const isGmDashboardRoute = computed(() => route.name === "gm-dashboard");
 
 const router = useRouter();
 
-/** Tab vùng làm việc dưới timeline (chỉ dashboard). `?tab=pm` | `?tab=approved` | `?tab=personal` đồng bộ URL. */
+/** Tab vùng làm việc dưới timeline (chỉ dashboard). `?tab=pm` | `?tab=approved` | `?tab=personal` | `?tab=promotion` đồng bộ URL. */
 type GmDashboardWorkspaceTab =
   | "diagnostics"
+  | "kpi-promotion"
   | "pm-eval"
   | "approved-kpi"
   | "personal";
 const dashboardWorkspaceTab = ref<GmDashboardWorkspaceTab>("diagnostics");
+
+/** Sub-tab KPI Personal / KPI Promotion trong `GmKpiEvaluationPanel` (tab pm-eval). */
+const gmEvaluationTableEvalTab = ref<GmEvaluationTableEvalTab>("cascade");
+provide(gmEvaluationTableEvalTabKey, gmEvaluationTableEvalTab);
+
+/** Sub-tab KPI Personal / KPI Promotion trong `GmGmPersonalKpiPanel` (tab personal). */
+const gmPersonalTableTab = ref<GmPersonalTableTab>("personal");
+provide(gmPersonalTableTabKey, gmPersonalTableTab);
+/** Tab workspace dashboard — inject cho timeline promotion; hub evaluation tự fetch theo chu kỳ. */
+provide("gmDashboardWorkspaceTab", dashboardWorkspaceTab);
+
+/** Hiển thị promotion timeline + dropdown promotion cycle. */
+const showPromotionProcessTimeline = computed(
+  () =>
+    dashboardWorkspaceTab.value === "kpi-promotion" ||
+    (dashboardWorkspaceTab.value === "pm-eval" &&
+      gmEvaluationTableEvalTab.value === "promotion") ||
+    (dashboardWorkspaceTab.value === "personal" &&
+      gmPersonalTableTab.value === "promotion"),
+);
 
 function readDashboardTabFromRoute(): GmDashboardWorkspaceTab {
   const t = route.query.tab;
   if (t === "pm" || t === "pm-eval") return "pm-eval";
   if (t === "approved" || t === "approved-kpi") return "approved-kpi";
   if (t === "personal" || t === "my-kpi") return "personal";
+  if (t === "promotion" || t === "kpi-promotion") return "kpi-promotion";
   return "diagnostics";
 }
 
@@ -156,6 +196,9 @@ watch(
 
 function setDashboardWorkspaceTab(tab: GmDashboardWorkspaceTab) {
   dashboardWorkspaceTab.value = tab;
+  if (tab === "kpi-promotion") {
+    void loadGmHeaderPromotionCycles();
+  }
   if (route.name !== "gm-dashboard") return;
   const nextQuery: Record<string, string> = {};
   for (const [k, v] of Object.entries(route.query)) {
@@ -167,6 +210,7 @@ function setDashboardWorkspaceTab(tab: GmDashboardWorkspaceTab) {
   if (tab === "pm-eval") nextQuery.tab = "pm";
   else if (tab === "approved-kpi") nextQuery.tab = "approved";
   else if (tab === "personal") nextQuery.tab = "personal";
+  else if (tab === "kpi-promotion") nextQuery.tab = "promotion";
   void router.replace({ name: "gm-dashboard", query: nextQuery });
 }
 
@@ -373,15 +417,42 @@ async function loadGmPersonalKpiRows() {
   }
 }
 
-/** KPI cá nhân (INDIVIDUAL + PROMOTION): fetch khi vào tab «KPI cá nhân» hoặc đổi chu kỳ trong tab đó — không prefetch khi đang xem Diagnostics. */
+const gmPmEvaluationWorkspaceRef = ref<{
+  reloadEvaluationHub?: () => void | Promise<void>;
+} | null>(null);
+
+/** Tải lại tab Evaluation / Personal KPI khi user chuyển tab (không cần F5). */
+function refreshGmPmEvaluationTab() {
+  void nextTick(() => {
+    void gmPmEvaluationWorkspaceRef.value?.reloadEvaluationHub?.();
+  });
+}
+
+function refreshGmPersonalKpiTab() {
+  if (!getCycleContext()) return;
+  void loadGmPersonalKpiRows();
+}
+
+function refreshGmEvaluationAndPersonalTabs() {
+  refreshGmPmEvaluationTab();
+  refreshGmPersonalKpiTab();
+}
+
 watch(
-  [dashboardWorkspaceTab, selectedCycleId, gmHeaderCycleRows],
+  () => [dashboardWorkspaceTab.value, selectedCycleId.value] as const,
   ([tab]) => {
-    if (tab !== "personal") return;
-    void loadGmPersonalKpiRows();
+    if (!getCycleContext()) return;
+    if (tab === "pm-eval") refreshGmPmEvaluationTab();
+    else if (tab === "personal") refreshGmPersonalKpiTab();
   },
   { immediate: true },
 );
+
+/** Sau confirm evaluation hub — đồng bộ diagnostics + personal KPI (timeline qua emit riêng). */
+function onGmEvaluationHubReloadSideEffects() {
+  void loadStrategicDiagnosticsFromApi();
+  refreshGmPersonalKpiTab();
+}
 
 /** Fallback timeline khi API process-timeline lỗi — không dùng mock theo chu kỳ. */
 const activeSnapshot = computed(() => EMPTY_GM_WORKSPACE_CYCLE_SNAPSHOT);
@@ -431,11 +502,57 @@ const selectedDept = ref<any>(null);
 
 /** Process Timeline data từ API — null khi chưa load hoặc đang loading. */
 const processTimelineData = ref<GmProcessTimelineApiResponse | null>(null);
+const promotionProcessTimelineData = ref<GmPromotionProcessTimelineApiResponse | null>(null);
+const promotionTimelineLoading = ref(false);
+
+/** Promotion cycles for header dropdown — `GET /kpi/gm/promotion-cycles?year=`. */
+const gmPromotionCycleRows = ref<GmPromotionCycleOption[]>([]);
+const selectedPromotionCycleId = ref<string>("");
+const promotionCyclesHeaderLoading = ref(false);
+
+const gmPromotionCycleSelectOptions = computed(() =>
+  gmPromotionCycleRows.value.map((r) => ({
+    id: r.id,
+    label: formatPromotionCycleOptionLabel(r),
+  })),
+);
+
+const showGmPromotionCycleSelector = computed(
+  () =>
+    isGmDashboardRoute.value &&
+    !selectedDept.value &&
+    showPromotionProcessTimeline.value,
+);
+
+const activePromotionCycleLabel = computed(() => {
+  const row = gmPromotionCycleRows.value.find(
+    (c) => c.id === selectedPromotionCycleId.value,
+  );
+  return row ? formatPromotionCycleOptionLabel(row) : "";
+});
+
+async function loadGmHeaderPromotionCycles() {
+  const year = gmEvaluationYear.value;
+  if (!Number.isFinite(year) || year <= 0) {
+    gmPromotionCycleRows.value = [];
+    return;
+  }
+  promotionCyclesHeaderLoading.value = true;
+  try {
+    const rows = await gmKpiService.getPromotionCycles(year);
+    gmPromotionCycleRows.value = Array.isArray(rows) ? rows : [];
+  } catch {
+    gmPromotionCycleRows.value = [];
+  } finally {
+    promotionCyclesHeaderLoading.value = false;
+  }
+}
 
 function onCycleTransitionStart() {
   diagnosticsApiRows.value = [];
   diagnosticsApiError.value = null;
   processTimelineData.value = null;
+  promotionProcessTimelineData.value = null;
   approvedKpiQueueApiRows.value = [];
   departments.value = [];
   mockMembersDetails.value = [];
@@ -518,6 +635,9 @@ const approvedKpiQueueApiRows = ref<GmHierarchyKpi[]>([]);
 const approvedKpiQueueLoading = ref(false);
 /** Khóa nút drawer Approved KPI khi đang gọi API hàng loạt. */
 const approvedKpiPanelBusy = ref(false);
+const gmApprovedKpiPanelRef = ref<{
+  clearListMemberSelection?: () => void;
+} | null>(null);
 
 /** KPI inactive chờ GM duyệt (tab Approved KPI) — mock hub; API dùng `approvedKpiQueueApiRows`. */
 const inactivePendingKpisByCycle = ref<Record<string, GmHierarchyKpi[]>>({});
@@ -563,6 +683,9 @@ async function loadStrategicDiagnosticsFromApi() {
     diagnosticsApiRows.value = mapGmDiagnosticsApiKpisToHierarchyRows(
       data.kpis,
     );
+    if (dashboardWorkspaceTab.value === "kpi-promotion") {
+      void loadPromotionProcessTimeline();
+    }
   } catch (e: unknown) {
     if (!isCurrentCycleContext(expected)) return;
     diagnosticsApiError.value =
@@ -593,7 +716,7 @@ async function loadApprovedKpiQueueFromApi() {
     if (!isCurrentCycleContext(expected)) return;
     approvedKpiQueueApiRows.value = [];
     showGmToast(
-      e instanceof Error ? e.message : "Không tải danh sách Approved KPI",
+      e instanceof Error ? e.message : "Could not load Approved KPI list",
       5000,
       "error",
     );
@@ -610,6 +733,7 @@ async function refreshGmApprovedKpiWorkspaceAfterDecision() {
     loadStrategicDiagnosticsFromApi(),
   ]);
   void loadProcessTimeline();
+  refreshGmEvaluationAndPersonalTabs();
 }
 
 /** Trang Organization — sau đổi thành viên / phòng ban, gọi để bảng Strategic KPIs diagnostics đồng bộ không cần F5. */
@@ -626,6 +750,142 @@ const diagnosticsHierarchyRows = computed(() => {
   );
   return [...extra, ...fromApi];
 });
+
+function isPromotionDiagnosticsKpi(kpi: GmHierarchyKpi): boolean {
+  return normalizeStrategicKpiKind(kpi.kpiType) === "promotion";
+}
+
+/** Strategic KPIs Tracking — Team + Individual do GM tạo; không Promotion, không PM/Leader/Member. */
+const strategicDiagnosticsHierarchyRows = computed(() =>
+  diagnosticsHierarchyRows.value.filter(
+    (r) =>
+      !isPromotionDiagnosticsKpi(r) && !isNonGmKpiCreatorRole(r.creatorRoleCode),
+  ),
+);
+
+/** Tab KPI Promotion — mọi KPI promotion trong chu kỳ KPI đang chọn. */
+const promotionDiagnosticsAllRows = computed(() =>
+  diagnosticsHierarchyRows.value.filter((r) => isPromotionDiagnosticsKpi(r)),
+);
+
+watch(gmPromotionCycleRows, (rows) => {
+  if (!rows.length) {
+    selectedPromotionCycleId.value = "";
+    return;
+  }
+  const fromHierarchy = collectPromotionCycleIdFromHierarchy(
+    promotionDiagnosticsAllRows.value,
+  );
+  const cur = String(selectedPromotionCycleId.value ?? "").trim();
+  if (cur && rows.some((r) => r.id === cur)) return;
+  if (fromHierarchy && rows.some((r) => r.id === fromHierarchy)) {
+    selectedPromotionCycleId.value = fromHierarchy;
+    return;
+  }
+  selectedPromotionCycleId.value = rows[0]!.id;
+});
+
+/** Tab KPI Promotion — lọc theo promotion cycle đang chọn trên header. */
+const promotionDiagnosticsHierarchyRows = computed(() => {
+  const cycleId = String(selectedPromotionCycleId.value ?? "").trim();
+  const all = promotionDiagnosticsAllRows.value;
+  if (!cycleId) return all;
+  return all.filter((k) => hierarchyKpiUsesPromotionCycle(k, cycleId));
+});
+
+/** Promotion cycle cho timeline API — ưu tiên lựa chọn header, fallback diagnostics. */
+const resolvedPromotionCycleId = computed(() => {
+  const sel = String(selectedPromotionCycleId.value ?? "").trim();
+  if (sel) return sel;
+  return collectPromotionCycleIdFromHierarchy(promotionDiagnosticsAllRows.value);
+});
+
+async function loadPromotionProcessTimeline() {
+  const cycleId = resolvedPromotionCycleId.value;
+  if (!cycleId) {
+    promotionProcessTimelineData.value = null;
+    return;
+  }
+  const expected = cycleId;
+  promotionTimelineLoading.value = true;
+  try {
+    const data = await gmKpiService.getPromotionProcessTimeline(expected);
+    if (resolvedPromotionCycleId.value !== expected) return;
+    promotionProcessTimelineData.value = data;
+  } catch {
+    if (resolvedPromotionCycleId.value !== expected) return;
+    promotionProcessTimelineData.value = null;
+  } finally {
+    if (resolvedPromotionCycleId.value === expected) {
+      promotionTimelineLoading.value = false;
+    }
+  }
+}
+
+watch(
+  () => [showPromotionProcessTimeline.value, selectedPromotionCycleId.value] as const,
+  ([show]) => {
+    if (show) {
+      void loadPromotionProcessTimeline();
+    }
+  },
+  { immediate: true },
+);
+
+watch(
+  () =>
+    [
+      showPromotionProcessTimeline.value,
+      gmEvaluationYear.value,
+    ] as const,
+  ([show, year]) => {
+    if (!show || !year) return;
+    void loadGmHeaderPromotionCycles();
+  },
+  { immediate: true },
+);
+
+function onGmEvaluationTimelineRefresh() {
+  if (showPromotionProcessTimeline.value) {
+    void loadPromotionProcessTimeline();
+  } else {
+    void loadProcessTimeline();
+  }
+}
+
+function diagnosticsWorkspaceTabForKpi(
+  kpi: GmHierarchyKpi,
+): "diagnostics" | "kpi-promotion" {
+  return isPromotionDiagnosticsKpi(kpi) ? "kpi-promotion" : "diagnostics";
+}
+
+function kpiVisibleOnDiagnosticsWorkspaceTab(
+  kpi: GmHierarchyKpi,
+  tab: "diagnostics" | "kpi-promotion",
+): boolean {
+  if (tab === "kpi-promotion") return isPromotionDiagnosticsKpi(kpi);
+  return (
+    !isPromotionDiagnosticsKpi(kpi) &&
+    !isNonGmKpiCreatorRole(kpi.creatorRoleCode)
+  );
+}
+
+async function openGmDiagnosticsFeedbackDrawer(
+  kpi: GmHierarchyKpi,
+  assignmentId: string,
+): Promise<boolean> {
+  const tab = diagnosticsWorkspaceTabForKpi(kpi);
+  if (!kpiVisibleOnDiagnosticsWorkspaceTab(kpi, tab)) return false;
+  setDashboardWorkspaceTab(tab);
+  await nextTick();
+  const tableRef =
+    tab === "kpi-promotion"
+      ? gmPromotionDiagnosticsTableRef
+      : gmDiagnosticsTableRef;
+  return (
+    tableRef.value?.openFeedbackDrawerByAssignmentId?.(assignmentId) === true
+  );
+}
 
 function memberRowAwaitingGmFeedback(m: GmHierarchyMember): boolean {
   if (m.feedbackAwaitingGm === true) return true;
@@ -663,7 +923,13 @@ function hasPendingFeedbackInKpiRow(kpi: GmHierarchyKpi): boolean {
 }
 
 const gmDiagnosticsPendingFeedbackKpiCount = computed(() => {
-  return diagnosticsHierarchyRows.value.filter((kpi) =>
+  return strategicDiagnosticsHierarchyRows.value.filter((kpi) =>
+    hasPendingFeedbackInKpiRow(kpi),
+  ).length;
+});
+
+const gmPromotionPendingFeedbackKpiCount = computed(() => {
+  return promotionDiagnosticsHierarchyRows.value.filter((kpi) =>
     hasPendingFeedbackInKpiRow(kpi),
   ).length;
 });
@@ -771,7 +1037,7 @@ function applyOneStrategicKpiCreate(
       }
     }
     if (!opts?.skipCreateToast) {
-      showGmToast(`Đã cập nhật KPI «${title}».`, 4500);
+      showGmToast(`Updated KPI «${title}».`, 4500);
     }
     return;
   }
@@ -793,7 +1059,7 @@ function applyOneStrategicKpiCreate(
 
   if (!opts?.skipCreateToast) {
     const yLabel = cycleYearFromCycleId(cycleId);
-    showGmToast(`Đã tạo KPI «${title}» — năm ${yLabel}.`, 4500);
+    showGmToast(`Created KPI «${title}» — year ${yLabel}.`, 4500);
   }
 }
 
@@ -831,7 +1097,7 @@ async function onStrategicKpiSaved(
       .replace(/^diag-kpi-/, "")
       .trim();
     if (!tid) {
-      editErrors.push("«KPI» không có id hợp lệ để cập nhật.");
+      editErrors.push("«KPI» has no valid id to update.");
       continue;
     }
     try {
@@ -843,7 +1109,7 @@ async function onStrategicKpiSaved(
         );
       }
     } catch (e: unknown) {
-      editErrors.push(getApiErrorMessage(e, "Lỗi không xác định"));
+      editErrors.push(getApiErrorMessage(e, "Unknown error"));
     }
   }
 
@@ -858,7 +1124,7 @@ async function onStrategicKpiSaved(
         );
       }
     } catch (e: unknown) {
-      createErrors.push(getApiErrorMessage(e, "Lỗi không xác định"));
+      createErrors.push(getApiErrorMessage(e, "Unknown error"));
     }
   }
 
@@ -868,7 +1134,7 @@ async function onStrategicKpiSaved(
     const body = mapStrategicKpiCreatePayloadToApi(p);
     const cycleId = String(body.cycleId ?? selectedCycleId.value).trim();
     if (!assignmentId || !cycleId) {
-      splitErrors.push("Không có đủ thông tin feedback để tách KPI.");
+      splitErrors.push("Not enough feedback information to split KPI.");
       continue;
     }
     try {
@@ -879,7 +1145,7 @@ async function onStrategicKpiSaved(
       });
       pendingGmFeedbackEdit.value = null;
     } catch (e: unknown) {
-      splitErrors.push(getApiErrorMessage(e, "Lỗi không xác định"));
+      splitErrors.push(getApiErrorMessage(e, "Unknown error"));
     }
   }
 
@@ -887,6 +1153,9 @@ async function onStrategicKpiSaved(
     await loadStrategicDiagnosticsFromApi();
   } catch {
     /* bảng vẫn có thể lệch */
+  }
+  if (dashboardWorkspaceTab.value === "kpi-promotion") {
+    void loadPromotionProcessTimeline();
   }
   if (dashboardWorkspaceTab.value === "personal") {
     void loadGmPersonalKpiRows();
@@ -917,11 +1186,11 @@ async function onStrategicKpiSaved(
       await loadStrategicDiagnosticsFromApi();
       await loadApprovedKpiQueueFromApi();
       void loadProcessTimeline();
-      showGmToast(`Đã duyệt Feedback «${feedbackEdit.kpiName}».`, 5000);
+      showGmToast(`Approved feedback «${feedbackEdit.kpiName}».`, 5000);
       return;
     } catch (e: unknown) {
       showGmToast(
-        getApiErrorMessage(e, "Đã lưu KPI nhưng chưa đóng được feedback"),
+        getApiErrorMessage(e, "KPI saved but feedback could not be closed"),
         8000,
         "error",
       );
@@ -935,7 +1204,7 @@ async function onStrategicKpiSaved(
     creates.length === 0
   ) {
     showGmToast(
-      `Đã cập nhật ${mockEdits.length} KPI (chỉ trên bản xem trước).`,
+      `Updated ${mockEdits.length} KPIs (preview only).`,
       5000,
       "info",
     );
@@ -946,8 +1215,8 @@ async function onStrategicKpiSaved(
   if (serverEdits.length > 0) {
     okParts.push(
       serverEdits.length === 1
-        ? "Đã cập nhật KPI trên máy chủ"
-        : `Đã cập nhật ${serverEdits.length} KPI`,
+        ? "KPI updated on server"
+        : `Updated ${serverEdits.length} KPIs`,
     );
   }
   if (creates.length === 1) {
@@ -955,7 +1224,7 @@ async function onStrategicKpiSaved(
     const yLabel = cycleYearFromCycleId(
       String(creates[0]!.cycleId ?? selectedCycleId.value),
     );
-    okParts.push(`Đã tạo «${title}» — năm ${yLabel}`);
+    okParts.push(`Created «${title}» — year ${yLabel}`);
   } else if (creates.length > 1) {
     const years = [
       ...new Set(
@@ -967,14 +1236,14 @@ async function onStrategicKpiSaved(
       ),
     ];
     okParts.push(
-      `Đã tạo ${creates.length} KPI${years.length ? ` — năm ${years.join(", ")}` : ""}`,
+      `Created ${creates.length} KPIs${years.length ? ` — year ${years.join(", ")}` : ""}`,
     );
   }
   if (feedbackSplits.length === 1) {
     const title = String(feedbackSplits[0]!.kpiName ?? feedbackEdit?.kpiName ?? "KPI").trim() || "KPI";
-    okParts.push(`Đã tách feedback «${title}» thành KPI mới cho member`);
+    okParts.push(`Split feedback «${title}» into a new KPI for member`);
   } else if (feedbackSplits.length > 1) {
-    okParts.push(`Đã tách ${feedbackSplits.length} feedback thành KPI mới cho member`);
+    okParts.push(`Split ${feedbackSplits.length} feedback items into new KPIs for member`);
   }
   if (okParts.length > 0) {
     showGmToast(okParts.join(" · "), 5000);
@@ -985,7 +1254,7 @@ async function onStrategicKpiSaved(
 function onDiagnosticsEditKpi(kpi: GmHierarchyKpi) {
   if (gmCycleReadonly.value) {
     showGmToast(
-      "Chế độ chỉ xem — không thể sửa KPI cho năm chu kỳ đã khóa.",
+      "Read-only — cannot edit KPIs for a locked cycle year.",
       5000,
       "info",
     );
@@ -1015,7 +1284,7 @@ function closeDeleteKpiModal() {
 function onDiagnosticsDeleteKpi(kpi: GmHierarchyKpi) {
   if (gmCycleReadonly.value) {
     showGmToast(
-      "Chế độ chỉ xem — không thể xóa KPI cho năm chu kỳ đã khóa.",
+      "Read-only — cannot delete KPIs for a locked cycle year.",
       5000,
       "info",
     );
@@ -1035,7 +1304,7 @@ async function confirmDeleteKpi() {
   if (kid.startsWith("diag-kpi-")) {
     const infoId = kid.slice("diag-kpi-".length).trim();
     if (!infoId) {
-      showGmToast("Không xác định được KPI trên máy chủ.", 5000, "error");
+      showGmToast("Could not identify KPI on server.", 5000, "error");
       return;
     }
     deleteKpiSaving.value = true;
@@ -1043,7 +1312,7 @@ async function confirmDeleteKpi() {
       const res = await gmKpiService.deleteStrategicKpi(infoId);
       if (!res.success) {
         showGmToast(
-          String(res.message ?? "Không xóa được KPI trên máy chủ."),
+          String(res.message ?? "Could not delete KPI on server."),
           7000,
           "error",
         );
@@ -1052,10 +1321,10 @@ async function confirmDeleteKpi() {
       await loadStrategicDiagnosticsFromApi();
       void loadProcessTimeline();
       closeDeleteKpiModal();
-      showGmToast(`Đã xóa KPI «${name}».`, 4500);
+      showGmToast(`Deleted KPI «${name}».`, 4500);
     } catch (e: unknown) {
       showGmToast(
-        e instanceof Error ? e.message : "Không xóa được KPI trên máy chủ.",
+        e instanceof Error ? e.message : "Could not delete KPI on server.",
         7000,
         "error",
       );
@@ -1110,7 +1379,7 @@ async function confirmDeleteKpi() {
 
   closeDeleteKpiModal();
   void loadProcessTimeline();
-  showGmToast(`Đã xóa KPI «${name}».`, 4500);
+  showGmToast(`Deleted KPI «${name}».`, 4500);
 }
 
 watch(showCreateStrategicKpiModal, (v) => {
@@ -1146,6 +1415,9 @@ watch(
     void loadStrategicDiagnosticsFromApi();
     void loadApprovedKpiQueueFromApi();
     void loadProcessTimeline();
+    if (dashboardWorkspaceTab.value === "kpi-promotion") {
+      void loadGmHeaderPromotionCycles();
+    }
   },
   { immediate: true },
 );
@@ -1157,11 +1429,7 @@ async function onApproveInactiveKpi(kpi: GmHierarchyKpi) {
   const isFeedbackRow =
     Number(kpi.assignmentStatusCode) === KPI_STATUS.FEEDBACK_IN_PROGRESS;
   if (!useMockHub && aid && isFeedbackRow && isGmDashboardRoute.value) {
-    setDashboardWorkspaceTab("diagnostics");
-    await nextTick();
-    const opened =
-      gmDiagnosticsTableRef.value?.openFeedbackDrawerByAssignmentId?.(aid) ===
-      true;
+    const opened = await openGmDiagnosticsFeedbackDrawer(kpi, aid);
     if (opened) return;
   }
   if (!useMockHub && aid) {
@@ -1174,13 +1442,13 @@ async function onApproveInactiveKpi(kpi: GmHierarchyKpi) {
       await refreshGmApprovedKpiWorkspaceAfterDecision();
       showGmToast(
         isFeedbackRow
-          ? `Đã xử lý feedback và trả KPI về chờ chấp nhận — «${title}».`
-          : `Đã duyệt — «${title}».`,
+          ? `Feedback resolved — KPI returned to pending acceptance — «${title}».`
+          : `Approved — «${title}».`,
         4500,
       );
     } catch (e: unknown) {
       showGmToast(
-        e instanceof Error ? e.message : "Không cập nhật được trạng thái",
+        e instanceof Error ? e.message : "Could not update status",
         5000,
         "error",
       );
@@ -1196,22 +1464,53 @@ async function onApproveInactiveKpi(kpi: GmHierarchyKpi) {
   if (d0) {
     d0.kpis = [...d0.kpis, hierarchyInactiveKpiToDeptKpiMock(kpi)];
   }
-  showGmToast(`Đã duyệt và kích hoạt KPI «${title}».`, 4500);
+  showGmToast(`Approved and activated KPI «${title}».`, 4500);
+}
+
+function gmApprovedQueueAssignmentId(kpi: GmHierarchyKpi): string {
+  return String(kpi.assignmentId ?? kpi.id ?? "").trim();
+}
+
+function filterGmApprovedQueueActionable(kpis: GmHierarchyKpi[]): GmHierarchyKpi[] {
+  return kpis.filter((k) => {
+    const sc = Number(k.assignmentStatusCode);
+    return sc === KPI_STATUS.WAITING_PM_APPROVAL || sc === KPI_STATUS.WAITING_GM_APPROVAL;
+  });
 }
 
 async function onApproveAllGmApprovedQueue(kpis: GmHierarchyKpi[]) {
-  const targets = kpis.filter((k) => {
-    const sc = Number(k.assignmentStatusCode)
-    return sc === 402 || sc === 403
-  });
-  if (!targets.length || approvedKpiPanelBusy.value) return;
+  const targets = filterGmApprovedQueueActionable(kpis);
+  if (approvedKpiPanelBusy.value) return;
+  if (!targets.length) {
+    showGmToast(
+      "No KPIs awaiting GM approval in the current selection.",
+      4000,
+      "info",
+    );
+    return;
+  }
   const cid = String(selectedCycleId.value ?? "").trim();
-  if (!cid || useMockHub) return;
+  if (!cid) {
+    showGmToast("Select a KPI cycle first.", 4000, "error");
+    return;
+  }
+  if (useMockHub) {
+    const ids = new Set(targets.map((k) => k.id));
+    const cur = inactivePendingKpisByCycle.value[cid] ?? [];
+    inactivePendingKpisByCycle.value = {
+      ...inactivePendingKpisByCycle.value,
+      [cid]: cur.filter((r) => !ids.has(r.id)),
+    };
+    gmApprovedKpiPanelRef.value?.clearListMemberSelection?.();
+    showGmToast(`Approved ${targets.length} KPI(s).`, 4500);
+    return;
+  }
   approvedKpiPanelBusy.value = true;
   let ok = 0;
+  let lastError: string | null = null;
   try {
     for (const kpi of targets) {
-      const aid = String(kpi.assignmentId ?? "").trim();
+      const aid = gmApprovedQueueAssignmentId(kpi);
       if (!aid) continue;
       try {
         await gmKpiService.decideApprovedKpiQueue({
@@ -1221,16 +1520,24 @@ async function onApproveAllGmApprovedQueue(kpis: GmHierarchyKpi[]) {
         });
         ok += 1;
       } catch (e) {
+        lastError = e instanceof Error ? e.message : "Could not update status";
         console.error(e);
       }
     }
     if (ok > 0) {
       await refreshGmApprovedKpiWorkspaceAfterDecision();
+      gmApprovedKpiPanelRef.value?.clearListMemberSelection?.();
       showGmToast(
         ok === targets.length
-          ? `Đã duyệt ${ok} KPI`
-          : `Đã duyệt ${ok}/${targets.length} KPI. Một số dòng có thể đã thay đổi.`,
+          ? `Approved ${ok} KPI(s)`
+          : `Approved ${ok}/${targets.length} KPIs. Some rows may have changed.`,
         5000,
+      );
+    } else {
+      showGmToast(
+        lastError ?? "Could not approve the selected KPIs. Refresh and try again.",
+        5000,
+        "error",
       );
     }
   } finally {
@@ -1243,18 +1550,38 @@ async function onRejectAllGmApprovedQueue(payload: {
   reason: string;
 }) {
   const reason = String(payload.reason ?? "").trim();
-  const targets = payload.kpis.filter((k) => {
-    const sc = Number(k.assignmentStatusCode)
-    return sc === 402 || sc === 403
-  });
-  if (!targets.length || approvedKpiPanelBusy.value) return;
+  const targets = filterGmApprovedQueueActionable(payload.kpis);
+  if (approvedKpiPanelBusy.value) return;
+  if (!targets.length) {
+    showGmToast(
+      "No KPIs awaiting GM approval in the current selection.",
+      4000,
+      "info",
+    );
+    return;
+  }
   const cid = String(selectedCycleId.value ?? "").trim();
-  if (!cid || useMockHub) return;
+  if (!cid) {
+    showGmToast("Select a KPI cycle first.", 4000, "error");
+    return;
+  }
+  if (useMockHub) {
+    const ids = new Set(targets.map((k) => k.id));
+    const cur = inactivePendingKpisByCycle.value[cid] ?? [];
+    inactivePendingKpisByCycle.value = {
+      ...inactivePendingKpisByCycle.value,
+      [cid]: cur.filter((r) => !ids.has(r.id)),
+    };
+    gmApprovedKpiPanelRef.value?.clearListMemberSelection?.();
+    showGmToast(`Rejected ${targets.length} KPI(s).`, 4500, "info");
+    return;
+  }
   approvedKpiPanelBusy.value = true;
   let ok = 0;
+  let lastError: string | null = null;
   try {
     for (const kpi of targets) {
-      const aid = String(kpi.assignmentId ?? "").trim();
+      const aid = gmApprovedQueueAssignmentId(kpi);
       if (!aid) continue;
       try {
         await gmKpiService.decideApprovedKpiQueue({
@@ -1265,17 +1592,25 @@ async function onRejectAllGmApprovedQueue(payload: {
         });
         ok += 1;
       } catch (e) {
+        lastError = e instanceof Error ? e.message : "Could not update status";
         console.error(e);
       }
     }
     if (ok > 0) {
       await refreshGmApprovedKpiWorkspaceAfterDecision();
+      gmApprovedKpiPanelRef.value?.clearListMemberSelection?.();
       showGmToast(
         ok === targets.length
-          ? `Đã từ chối ${ok} KPI.`
-          : `Đã từ chối ${ok}/${targets.length} KPI.`,
+          ? `Rejected ${ok} KPI(s).`
+          : `Rejected ${ok}/${targets.length} KPI(s).`,
         5000,
         "info",
+      );
+    } else {
+      showGmToast(
+        lastError ?? "Could not reject the selected KPIs. Refresh and try again.",
+        5000,
+        "error",
       );
     }
   } finally {
@@ -1295,32 +1630,30 @@ async function onRejectInactiveKpi(payload: {
   const isFeedbackRow =
     Number(kpi.assignmentStatusCode) === KPI_STATUS.FEEDBACK_IN_PROGRESS;
   if (!useMockHub && aid && isFeedbackRow && isGmDashboardRoute.value) {
-    setDashboardWorkspaceTab("diagnostics");
-    await nextTick();
-    const opened =
-      gmDiagnosticsTableRef.value?.openFeedbackDrawerByAssignmentId?.(aid) ===
-      true;
+    const opened = await openGmDiagnosticsFeedbackDrawer(kpi, aid);
     if (opened) return;
   }
   if (!useMockHub && aid) {
     try {
-      await gmKpiService.decideApprovedKpiQueue({
+      const res = await gmKpiService.decideApprovedKpiQueue({
         cycleId: cid,
         assignmentId: aid,
         approve: false,
         rejectReason,
+        resetDrawerSiblingsToPendingAcceptance: !isFeedbackRow,
       });
       await refreshGmApprovedKpiWorkspaceAfterDecision();
-      showGmToast(
-        isFeedbackRow
-          ? `Đã từ chối feedback — «${title}».`
-          : `Đã từ chối — «${title}».`,
-        4500,
-        "info",
-      );
+      const siblingN = Number(res?.siblingsResetToPendingAcceptanceCount ?? 0);
+      let rejectMsg = isFeedbackRow
+        ? `Rejected feedback — «${title}».`
+        : `Rejected — «${title}».`;
+      if (!isFeedbackRow && siblingN > 0) {
+        rejectMsg += ` ${siblingN} other KPI(s) returned to pending acceptance.`;
+      }
+      showGmToast(rejectMsg, 4500, "info");
     } catch (e: unknown) {
       showGmToast(
-        e instanceof Error ? e.message : "Không cập nhật được trạng thái",
+        e instanceof Error ? e.message : "Could not update status",
         5000,
         "error",
       );
@@ -1332,7 +1665,7 @@ async function onRejectInactiveKpi(payload: {
     ...inactivePendingKpisByCycle.value,
     [cid]: cur.filter((r) => r.id !== kpi.id),
   };
-  showGmToast(`Đã từ chối đề xuất KPI «${title}».`, 4500, "info");
+  showGmToast(`Rejected KPI proposal «${title}».`, 4500, "info");
 }
 
 async function onResolveDiagnosticsFeedback(payload: {
@@ -1363,13 +1696,13 @@ async function onResolveDiagnosticsFeedback(payload: {
     await loadApprovedKpiQueueFromApi();
     void loadProcessTimeline();
     showGmToast(
-      "Đã từ chối feedback — KPI trở về chờ chấp nhận (404).",
+      "Feedback rejected",
       4500,
       "info",
     );
   } catch (e: unknown) {
     showGmToast(
-      e instanceof Error ? e.message : "Không xử lý được Feedback",
+      e instanceof Error ? e.message : "Could not process feedback",
       6000,
       "error",
     );
@@ -1533,10 +1866,19 @@ function closeModal() {
             >
               Viewing:
               <span class="text-slate-700">{{ activeCycleLabel }}</span>
+              <template
+                v-if="showGmPromotionCycleSelector && activePromotionCycleLabel"
+              >
+                · Promotion:
+                <span class="text-slate-700">{{ activePromotionCycleLabel }}</span>
+              </template>
             </p>
           </div>
           <div class="flex flex-wrap items-center gap-3 sm:gap-4">
-            <div v-if="!isGmSettingsRoute" class="flex items-center gap-2">
+            <div
+              v-if="!isGmSettingsRoute && !showGmPromotionCycleSelector"
+              class="flex flex-wrap items-center gap-2"
+            >
               <label
                 for="gm-year-select"
                 class="whitespace-nowrap text-xs font-bold text-slate-500"
@@ -1550,6 +1892,48 @@ function closeModal() {
                 >
                   <option
                     v-for="c in gmSelectableCycleOptions"
+                    :key="c.id"
+                    :value="c.id"
+                  >
+                    {{ c.label }}
+                  </option>
+                </select>
+                <i
+                  class="fas fa-chevron-down pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400"
+                />
+              </div>
+            </div>
+            <div
+              v-if="showGmPromotionCycleSelector"
+              class="flex flex-wrap items-center gap-2"
+            >
+              <label
+                for="gm-promotion-cycle-select"
+                class="whitespace-nowrap text-xs font-bold text-slate-500"
+                >Promotion cycle</label
+              >
+              <div class="relative">
+                <select
+                  id="gm-promotion-cycle-select"
+                  v-model="selectedPromotionCycleId"
+                  class="min-w-[12rem] max-w-[18rem] cursor-pointer appearance-none rounded-lg border border-violet-200 bg-white py-2 pl-3 pr-9 text-sm font-semibold text-slate-800 shadow-sm outline-none hover:border-violet-300 focus:border-violet-500 focus:ring-1 focus:ring-violet-500"
+                  :disabled="
+                    promotionCyclesHeaderLoading ||
+                    gmPromotionCycleSelectOptions.length === 0
+                  "
+                >
+                  <option
+                    v-if="gmPromotionCycleSelectOptions.length === 0"
+                    value=""
+                  >
+                    {{
+                      promotionCyclesHeaderLoading
+                        ? "Loading…"
+                        : "No promotion cycles"
+                    }}
+                  </option>
+                  <option
+                    v-for="c in gmPromotionCycleSelectOptions"
                     :key="c.id"
                     :value="c.id"
                   >
@@ -1609,7 +1993,14 @@ function closeModal() {
 
           <!-- VIEW 1: OVERVIEW — dưới timeline: tab (dashboard) hoặc chỉ diagnostics -->
           <div v-else-if="!selectedDept" class="space-y-4 p-3 sm:p-4 lg:p-6">
+            <PromotionProcessTimeline
+              v-if="showPromotionProcessTimeline"
+              :timeline-data="promotionProcessTimelineData"
+              :loading="promotionTimelineLoading"
+              :promotion-cycle-id="resolvedPromotionCycleId"
+            />
             <GmProcessTimeline
+              v-else
               :mid-year-issues="
                 processTimelineData?.midYear ?? activeSnapshot.midYearIssues
               "
@@ -1658,6 +2049,34 @@ function closeModal() {
                           class="inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold leading-none text-white"
                         >
                           {{ gmDiagnosticsPendingFeedbackKpiCount }}
+                        </span>
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      :aria-selected="dashboardWorkspaceTab === 'kpi-promotion'"
+                      class="-mb-px shrink-0 border-b-2 px-3 py-2.5 text-left text-xs font-semibold transition-colors sm:px-4 sm:text-sm"
+                      :class="
+                        dashboardWorkspaceTab === 'kpi-promotion'
+                          ? 'border-indigo-600 text-indigo-700'
+                          : 'border-transparent text-slate-500 hover:text-slate-800'
+                      "
+                      @click="setDashboardWorkspaceTab('kpi-promotion')"
+                    >
+                      <span
+                        class="flex max-w-[11rem] items-center gap-2 leading-snug sm:max-w-none sm:whitespace-nowrap"
+                      >
+                        <i
+                          class="fas fa-bullhorn shrink-0 text-[11px] opacity-70"
+                          aria-hidden="true"
+                        />
+                        Promotion KPI Tracking
+                        <span
+                          v-if="gmPromotionPendingFeedbackKpiCount > 0"
+                          class="inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold leading-none text-white"
+                        >
+                          {{ gmPromotionPendingFeedbackKpiCount }}
                         </span>
                       </span>
                     </button>
@@ -1763,7 +2182,37 @@ function closeModal() {
                     </p>
                     <GmKpiDiagnosticsTable
                       ref="gmDiagnosticsTableRef"
-                      :rows="diagnosticsHierarchyRows"
+                      :rows="strategicDiagnosticsHierarchyRows"
+                      :kpi-cycle="gmDiagnosticsCycle"
+                      :readonly="gmCycleReadonly"
+                      @edit-kpi="onDiagnosticsEditKpi"
+                      @delete-kpi="onDiagnosticsDeleteKpi"
+                      @resolve-feedback="onResolveDiagnosticsFeedback"
+                    />
+                  </div>
+                  <div
+                    v-show="dashboardWorkspaceTab === 'kpi-promotion'"
+                    class="p-3 sm:p-4 lg:p-5"
+                  >
+                    <p
+                      v-if="diagnosticsApiLoading"
+                      class="mb-3 text-xs font-medium text-slate-500"
+                      role="status"
+                    >
+                      Loading promotion KPIs…
+                    </p>
+                    <p
+                      v-else-if="diagnosticsApiError"
+                      class="mb-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-800"
+                      role="alert"
+                    >
+                      {{ diagnosticsApiError }}
+                    </p>
+                    <GmKpiDiagnosticsTable
+                      ref="gmPromotionDiagnosticsTableRef"
+                      :rows="promotionDiagnosticsHierarchyRows"
+                      panel-title="Promotion KPI Progress & Monitoring"
+                      panel-icon-class="fas fa-bullhorn text-[11px] text-purple-600 sm:text-xs"
                       :kpi-cycle="gmDiagnosticsCycle"
                       :readonly="gmCycleReadonly"
                       @edit-kpi="onDiagnosticsEditKpi"
@@ -1776,9 +2225,10 @@ function closeModal() {
                     class="p-3 sm:p-4 lg:p-5"
                   >
                     <GmPmEvaluationWorkspace
+                      ref="gmPmEvaluationWorkspaceRef"
                       @pending-count="onGmPmEvaluationPendingCount"
-                      @diagnostics-refresh="loadStrategicDiagnosticsFromApi"
-                      @timeline-refresh="loadProcessTimeline"
+                      @diagnostics-refresh="onGmEvaluationHubReloadSideEffects"
+                      @timeline-refresh="onGmEvaluationTimelineRefresh"
                     />
                   </div>
                   <div
@@ -1793,6 +2243,7 @@ function closeModal() {
                       Loading approved KPI…
                     </p>
                     <GmApprovedKpiPanel
+                      ref="gmApprovedKpiPanelRef"
                       :rows="inactivePendingRowsForSelectedCycle"
                       :action-busy="approvedKpiPanelBusy"
                       @approve-kpi="onApproveInactiveKpi"
@@ -1814,7 +2265,7 @@ function closeModal() {
                       @sheet-saved="
                         () => {
                           void loadGmPersonalKpiRows();
-                          void loadProcessTimeline();
+                          onGmEvaluationTimelineRefresh();
                         }
                       "
                     />
@@ -1839,7 +2290,7 @@ function closeModal() {
               </p>
               <GmKpiDiagnosticsTable
                 ref="gmDiagnosticsTableRef"
-                :rows="diagnosticsHierarchyRows"
+                :rows="strategicDiagnosticsHierarchyRows"
                 :kpi-cycle="gmDiagnosticsCycle"
                 :readonly="gmCycleReadonly"
                 @edit-kpi="onDiagnosticsEditKpi"

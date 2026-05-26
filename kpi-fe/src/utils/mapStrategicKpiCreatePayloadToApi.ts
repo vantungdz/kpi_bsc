@@ -79,5 +79,12 @@ export function mapStrategicKpiCreatePayloadToApi(
     body.memberIds = [...payload.memberIds]
   }
 
+  if (typeCode === 103) {
+    const pc = String(payload.promotionCycleId ?? '').trim()
+    if (pc) {
+      body.promotionCycleId = pc
+    }
+  }
+
   return body
 }

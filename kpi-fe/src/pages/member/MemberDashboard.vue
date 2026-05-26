@@ -20,6 +20,7 @@ import MemberEvidenceDrawer from '@/components/member/MemberEvidenceDrawer.vue'
 import { memberItemEvalStatus } from '@/utils/memberKpiHelpers'
 import { buildKpiDeadlineBanner, type KpiDeadlineBannerVm } from '@/utils/kpiDeadlineBanner'
 import { getSubmitButtonState, shouldCollapseKpiProcessTimelineToYearEndOnly } from '@/utils/common'
+import { KPI_STATUS } from '@/config/constants'
 import { buildMemberLeaderYearDropdownOptions } from '@/utils/kpi-member-leader-year-options'
 import type { YearDropdownOption } from '@/types/kpi-dashboard-options'
 
@@ -185,7 +186,15 @@ const personalButtonState = computed(() => {
     dashboardData.value?.accountCreatedAt,
     cycleData.value.midYearStart,
   )
-  return getSubmitButtonState(cycleData.value, minStatusCode(personalItemsFlat.value), new Date(), {
+  // When all KPIs are evaluation-rejected, minStatusCode is 504 or 604 — bypass getSubmitButtonState
+  const sc = minStatusCode(personalItemsFlat.value)
+  if (sc === KPI_STATUS.FIRST_REJECTED) {
+    return { show: true, disabled: false, text: 'Resubmit Mid-Year KPI', actionType: 'MID_YEAR' as const }
+  }
+  if (sc === KPI_STATUS.SECOND_REJECTED) {
+    return { show: true, disabled: false, text: 'Resubmit Year-End KPI', actionType: 'END_YEAR' as const }
+  }
+  return getSubmitButtonState(cycleData.value, sc, new Date(), {
     treatMidYearAsSkipped: skipMid,
   })
 })
@@ -205,7 +214,15 @@ const promotionButtonState = computed(() => {
     dashboardData.value?.accountCreatedAt,
     cycleData.value.midYearStart,
   )
-  return getSubmitButtonState(cycleData.value, minStatusCode(promotionItemsFlat.value), new Date(), {
+  // When all KPIs are evaluation-rejected, minStatusCode is 504 or 604 — bypass getSubmitButtonState
+  const sc = minStatusCode(promotionItemsFlat.value)
+  if (sc === KPI_STATUS.FIRST_REJECTED) {
+    return { show: true, disabled: false, text: 'Resubmit Mid-Year KPI', actionType: 'MID_YEAR' as const }
+  }
+  if (sc === KPI_STATUS.SECOND_REJECTED) {
+    return { show: true, disabled: false, text: 'Resubmit Year-End KPI', actionType: 'END_YEAR' as const }
+  }
+  return getSubmitButtonState(cycleData.value, sc, new Date(), {
     treatMidYearAsSkipped: skipMid,
   })
 })
@@ -216,7 +233,10 @@ const hasRejectedPromotion = computed(() =>
 const memberSheetSubmitLabel = computed(() => labelFromActionType(personalButtonState.value.actionType))
 const promotionSubmitLabel = computed(() => promotionLabelFromActionType(promotionButtonState.value.actionType))
 const hasSubmittedPersonalTargetSetup = computed(() => {
-  const submittedStatuses = new Set([402, 403, 405, 501, 502, 503, 601, 602, 603])
+  const submittedStatuses = new Set([
+    402, 403, 405, 501, 502, 503, 601, 602, 603,
+    KPI_STATUS.FIRST_REJECTED, KPI_STATUS.SECOND_REJECTED,
+  ])
   return personalItemsFlat.value.some(i => submittedStatuses.has(Number(i.statusCode ?? 0)))
 })
 const canCreatePersonalKpi = computed(
@@ -654,6 +674,10 @@ async function confirmDeleteSelfCreatedKpi() {
     cancelDeleteSelfCreatedKpi()
   }
 }
+
+async function handleAssigneeTargetScaleSaved() {
+  await loadDashboard()
+}
 </script>
 
 <template>
@@ -777,6 +801,7 @@ async function confirmDeleteSelfCreatedKpi() {
               @open-edit-self-created="openRejectedSelfCreatedEditor"
               @open-feedback="evidenceCtx.openFeedbackPanel"
               @delete-self-created="handleDeleteSelfCreatedKpi"
+              @assignee-target-scale-saved="handleAssigneeTargetScaleSaved"
               @update-employee-comment="personalEmployeeComment = $event"
               @submit="handlePersonalSubmit"
             />
@@ -802,6 +827,7 @@ async function confirmDeleteSelfCreatedKpi() {
               @open-edit-self-created="openRejectedSelfCreatedEditor"
               @open-feedback="evidenceCtx.openFeedbackPanel"
               @delete-self-created="handleDeleteSelfCreatedKpi"
+              @assignee-target-scale-saved="handleAssigneeTargetScaleSaved"
               @update-employee-comment="promotionEmployeeComment = $event"
               @submit="handlePromotionSubmit"
             />

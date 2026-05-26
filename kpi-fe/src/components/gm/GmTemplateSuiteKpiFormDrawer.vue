@@ -133,12 +133,15 @@ const kpiName = ref('')
 const description = ref('')
 const targetValue = ref<string>('')
 
-const { onScoringRulesManualInput, resetAutoScoringRulesTracking } = useAutoScoringRulesFromTarget(
-  targetValue,
-  description,
-)
+const {
+  onScoringRulesManualInput,
+  resetAutoScoringRulesTracking,
+  markCurrentScoringRulesAsAutoBaseline,
+  syncFromTarget,
+} = useAutoScoringRulesFromTarget(targetValue, description)
 const unit = ref<string>('MM')
 const isImportantKpi = ref(false)
+const allowAssigneeTargetScaleEdit = ref(false)
 const weightPct = ref<string>('')
 const calculationRuleCode = ref(DEFAULT_CALCULATION_RULE_CODE)
 const calculationTypeCode = ref<number | null>(DEFAULT_CALCULATION_TYPE_CODE)
@@ -231,6 +234,7 @@ function resetForm() {
   resetAutoScoringRulesTracking()
   unit.value = 'MM'
   isImportantKpi.value = false
+  allowAssigneeTargetScaleEdit.value = false
   weightPct.value = ''
   calculationRuleCode.value = DEFAULT_CALCULATION_RULE_CODE
   calculationTypeCode.value = DEFAULT_CALCULATION_TYPE_CODE
@@ -277,10 +281,15 @@ function hydrateFromPayload(p: Record<string, unknown>) {
   targetValue.value = String(p.targetValue ?? '')
   unit.value = kpiPayloadFormUnitKey(p)
   isImportantKpi.value = p.isImportant === true
+  allowAssigneeTargetScaleEdit.value = p.allowAssigneeTargetScaleEdit === true
   weightPct.value = String(p.weightPct ?? '')
     .replace(/%/g, '')
     .trim()
   hydrateCalculationFromPersisted(String(p.calculationMethod ?? 'mean_actual_plan'))
+  markCurrentScoringRulesAsAutoBaseline()
+  if (!description.value.trim()) {
+    syncFromTarget(targetValue.value)
+  }
 }
 
 const isEditing = computed(() => {
@@ -386,6 +395,7 @@ async function confirmAdd() {
     cycleId: effectiveCycleIdForPayload.value,
     calculationMethod: resolvePersistedCalculationMethod(),
     isImportant: isImportantKpi.value,
+    allowAssigneeTargetScaleEdit: allowAssigneeTargetScaleEdit.value,
   }
   if (kpiType.value === 'cascading') {
     payload.assignPMs = []
@@ -599,9 +609,9 @@ async function confirmAdd() {
                 </div>
 
                 <div
-                  class="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end sm:gap-x-4 sm:gap-y-0"
+                  class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:gap-3"
                 >
-                  <div class="min-w-0">
+                  <div class="min-w-0 flex-1 sm:min-w-[10rem]">
                     <label class="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500">
                       Unit <span class="text-rose-500">*</span>
                     </label>
@@ -623,7 +633,7 @@ async function confirmAdd() {
                     </div>
                   </div>
                   <label
-                    class="flex min-h-[38px] cursor-pointer items-center gap-2 self-start rounded-md border border-slate-200 bg-slate-50/80 px-3 py-2 text-[11px] font-semibold text-slate-700 transition hover:bg-slate-100 sm:self-end sm:whitespace-nowrap"
+                    class="flex min-h-[38px] shrink-0 cursor-pointer items-center gap-2 rounded-md border border-slate-200 bg-slate-50/80 px-3 py-2 text-[11px] font-semibold text-slate-700 transition hover:bg-slate-100 sm:whitespace-nowrap"
                   >
                     <input
                       v-model="isImportantKpi"
@@ -631,6 +641,17 @@ async function confirmAdd() {
                       class="h-3.5 w-3.5 shrink-0 rounded border-slate-300 text-indigo-600 focus:ring-indigo-400/40"
                     />
                     <span>Important KPI</span>
+                  </label>
+                  <label
+                    class="flex min-h-[38px] shrink-0 cursor-pointer items-center gap-2 rounded-md border border-slate-200 bg-slate-50/80 px-3 py-2 text-[11px] font-semibold text-slate-700 transition hover:bg-slate-100 sm:max-w-[14rem] sm:whitespace-normal lg:max-w-none lg:whitespace-nowrap"
+                    title="Cho phép người nhận KPI (PM/member) chỉnh target và thang điểm trên assignment của họ"
+                  >
+                    <input
+                      v-model="allowAssigneeTargetScaleEdit"
+                      type="checkbox"
+                      class="h-3.5 w-3.5 shrink-0 rounded border-slate-300 text-indigo-600 focus:ring-indigo-400/40"
+                    />
+                    <span>Cho phép người nhận sửa target &amp; thang điểm</span>
                   </label>
                 </div>
 

@@ -4,6 +4,7 @@ import lombok.Builder;
 import lombok.Data;
 
 import java.util.List;
+import java.util.UUID;
 
 /**
  * One KPI row for GM Strategic diagnostics — shape aligned with FE {@code GmHierarchyKpi}.
@@ -46,4 +47,6 @@ public class GmDiagKpiNode {
     private List<GmDiagPmNode> pmOwners;
     private String investigateDeptId;
     private String investigateKpiName;
+    /** {@code promotion_cycles.id} — promotion KPI ({@code type_code 103}) cho timeline FE. */
+    private UUID promotionCycleId;
 }

@@ -29,9 +29,14 @@ import com.company.kpi.response.gm.GmKpiTemplateItemResponse;
 import com.company.kpi.response.gm.GmKpiTemplatePackageResponse;
 import com.company.kpi.response.gm.GmMemberResponse;
 import com.company.kpi.response.gm.GmProcessTimelineResponse;
+import com.company.kpi.response.gm.GmPromotionCycleOptionResponse;
+import com.company.kpi.response.gm.GmPromotionProcessTimelineResponse;
 import com.company.kpi.response.gm.KpiSectionMemberResponse;
 import com.company.kpi.response.member.MemberKpiAssignmentDTO;
+import com.company.kpi.request.evaluation.EvaluationRejectRequest;
+import com.company.kpi.response.evaluation.EvaluationRejectResponse;
 import com.company.kpi.service.gm.GmApprovedKpiService;
+import com.company.kpi.service.kpi.EvaluationRejectService;
 import com.company.kpi.service.gm.GmDepartmentService;
 import com.company.kpi.service.gm.GmEvaluationHubService;
 import com.company.kpi.service.gm.GmKpiCategoryService;
@@ -40,6 +45,7 @@ import com.company.kpi.service.gm.GmKpiDiagnosticsHierarchyService;
 import com.company.kpi.service.gm.GmKpiService;
 import com.company.kpi.service.gm.GmKpiTemplateService;
 import com.company.kpi.service.gm.GmProcessTimelineService;
+import com.company.kpi.service.gm.PromotionProcessTimelineService;
 import com.company.kpi.service.member.MemberKpiService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -59,7 +65,7 @@ import java.util.UUID;
  *   GET /api/v1/kpi/gm/kpi-categories — danh sách {@code kpi_categories} (dropdown tạo KPI)
  *   GET /api/v1/kpi/gm/kpi-cycles-with-kpis — chu kỳ {@code kpi_cycles} có KPI (kpis_information / kpi_assignments / user_kpi_summaries)
  *   GET /api/v1/kpi/gm/kpi-cycles-for-evaluation — chu kỳ {@code kpi_cycles} year ≥ hiện tại (dropdown Evaluation year)
- *   GET /api/v1/kpi/gm/evaluation-hub/assignments?cycleId= — tab đánh giá: assignments ASM 501/502/503/601/602/603
+ *   GET /api/v1/kpi/gm/evaluation-hub/assignments?cycleId= — tab đánh giá: assignments ASM 501–504, 601–604
  *   POST /api/v1/kpi/gm/evaluation-hub/confirm — GM xác nhận drawer: 502→503, 602→603
  *   GET /api/v1/kpi/gm/approved-kpi-queue?cycleId= — KPI cá nhân ASM 402/403 (chờ duyệt)
  *   POST /api/v1/kpi/gm/approved-kpi-queue/decision — 402/403→405/406 (402 bỏ qua PM); feedback 407→404
@@ -93,8 +99,10 @@ public class GmKpiController extends BaseController {
     private final GmKpiTemplateService gmKpiTemplateService;
     private final GmDepartmentService gmDepartmentService;
     private final GmEvaluationHubService gmEvaluationHubService;
+    private final EvaluationRejectService evaluationRejectService;
     private final GmApprovedKpiService gmApprovedKpiService;
     private final GmProcessTimelineService gmProcessTimelineService;
+    private final PromotionProcessTimelineService promotionProcessTimelineService;
     private final MemberKpiService memberKpiService;
 
     /** Danh sách phòng ban — {@code departments} (chưa xóa mềm); {@code year} lọc KPI giao cho phòng theo năm chu kỳ. */
@@ -294,6 +302,15 @@ public class GmKpiController extends BaseController {
         return success(gmEvaluationHubService.unlockAcceptedKpis(body, gmUserId));
     }
 
+    /** GM từ chối đánh giá trong drawer (cùng rule trạng thái với PM). */
+    @PostMapping("/evaluation-hub/reject")
+    public ResponseEntity<BaseResponse<EvaluationRejectResponse>> rejectEvaluationHub(
+            @Valid @RequestBody EvaluationRejectRequest body,
+            Authentication authentication) {
+        UUID gmUserId = UUID.fromString((String) authentication.getPrincipal());
+        return success(evaluationRejectService.rejectForGm(body, gmUserId));
+    }
+
     /** Tab Approved KPI: assignment cá nhân 402 / 403. Feedback 407 xử lý ở Strategic diagnostics. */
     @GetMapping("/approved-kpi-queue")
     public ResponseEntity<BaseResponse<List<GmApprovedKpiQueueItemResponse>>> listApprovedKpiQueue(
@@ -331,13 +348,34 @@ public class GmKpiController extends BaseController {
     }
 
     /**
-     * Process Timeline: 3 phases (setting / midYear / yearEnd) với issue buckets.
+     * Process Timeline: 3 phases (setting / midYear / yearEnd) with issue groups.
      * {@code GET /api/v1/kpi/gm/process-timeline?cycleId=}
      */
     @GetMapping("/process-timeline")
     public ResponseEntity<BaseResponse<GmProcessTimelineResponse>> getProcessTimeline(
             @RequestParam("cycleId") UUID cycleId) {
         return success(gmProcessTimelineService.getTimeline(cycleId));
+    }
+
+    /**
+     * Promotion process timeline — Start/End window from {@code promotion_cycles}.
+     * {@code GET /api/v1/kpi/gm/promotion-process-timeline?promotionCycleId=}
+     */
+    @GetMapping("/promotion-process-timeline")
+    public ResponseEntity<BaseResponse<GmPromotionProcessTimelineResponse>> getPromotionProcessTimeline(
+            @RequestParam("promotionCycleId") UUID promotionCycleId) {
+        return success(promotionProcessTimelineService.getTimeline(promotionCycleId));
+    }
+
+    /**
+     * Promotion cycles for GM create-KPI dropdown.
+     * {@code GET /api/v1/kpi/gm/promotion-cycles?year=}
+     */
+    @GetMapping("/promotion-cycles")
+    public ResponseEntity<BaseResponse<List<GmPromotionCycleOptionResponse>>> listPromotionCycles(
+            @RequestParam(value = "year", required = false) Integer year) {
+        int y = year != null ? year : java.time.LocalDate.now().getYear();
+        return success(gmKpiService.listPromotionCycles(y));
     }
 
     /**

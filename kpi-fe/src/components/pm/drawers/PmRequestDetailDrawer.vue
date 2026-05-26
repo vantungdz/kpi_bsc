@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed, ref, watch, onUnmounted } from 'vue'
 import GmStrategicKpiTypeTag from '@/components/gm/GmStrategicKpiTypeTag.vue'
+import AssigneeTargetScaleChangeSummary from '@/components/shared/AssigneeTargetScaleChangeSummary.vue'
 import type { GmStrategicKpiKind } from '@/types/gm-workspace'
+import { assigneeHasEditsFromFields } from '@/utils/assigneeEditBaselineUi'
 import { kpiCreatorCardBgClass } from '@/utils/kpiCreatorRowBg'
 
 type RequestRow = {
@@ -24,6 +26,13 @@ type RequestRow = {
   calculationMethodLabel: string
   scoringRuleText: string
   creatorRoleCode?: string
+  assignmentTargetValue?: number | null
+  baselineTargetValue?: number | null
+  baselineScoringDescription?: string | null
+  unitCode?: number | null
+  targetChanged?: boolean
+  scoringChanged?: boolean
+  assigneeHasEdits?: boolean
 }
 
 type MemberApprovalPayload = {
@@ -247,6 +256,12 @@ function weightDisplayShort(weightLabel: string): string {
                   <div class="mt-2 flex flex-wrap items-center gap-2">
                     <h4 class="truncate text-sm font-bold text-slate-800">{{ req.kpiName }}</h4>
                     <GmStrategicKpiTypeTag :type="req.kpiType" size="sm" />
+                    <span
+                      v-if="assigneeHasEditsFromFields(req)"
+                      class="rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[9px] font-bold uppercase text-amber-800"
+                    >
+                      Modified
+                    </span>
                   </div>
                   <p class="mt-1 text-[10px] font-medium text-slate-400">Sent: {{ req.date }}</p>
                 </div>
@@ -259,16 +274,16 @@ function weightDisplayShort(weightLabel: string): string {
                 </button>
               </div>
 
-              <!-- Per-KPI approve/reject actions are intentionally hidden for now.
               <div v-if="req.status === 'PENDING'" class="mt-3 flex justify-end gap-2 border-t border-slate-100 pt-3">
                 <button
                   type="button"
                   :disabled="actionBusy"
-                  class="rounded-md px-3 py-1.5 text-sm font-semibold text-rose-600 hover:bg-rose-50 disabled:opacity-50"
+                  class="rounded-md border border-rose-200 bg-white px-3 py-1.5 text-sm font-semibold text-rose-700 shadow-sm hover:bg-rose-50 disabled:opacity-50"
                   @click="initiateReject(req.id)"
                 >
                   Reject
                 </button>
+                <!-- Per-KPI Approve — tạm ẩn
                 <button
                   type="button"
                   :disabled="actionBusy"
@@ -277,8 +292,8 @@ function weightDisplayShort(weightLabel: string): string {
                 >
                   Approve
                 </button>
+                -->
               </div>
-              -->
             </div>
           </div>
 
@@ -355,12 +370,26 @@ function weightDisplayShort(weightLabel: string): string {
                     </div>
                   </div>
 
+                  <AssigneeTargetScaleChangeSummary
+                    v-if="selectedKpi"
+                    :diff="{
+                      targetValue: selectedKpi.assignmentTargetValue,
+                      baselineTargetValue: selectedKpi.baselineTargetValue,
+                      targetDescription: selectedKpi.scoringRuleText,
+                      baselineScoringDescription: selectedKpi.baselineScoringDescription,
+                      unitCode: selectedKpi.unitCode,
+                      targetChanged: selectedKpi.targetChanged,
+                      scoringChanged: selectedKpi.scoringChanged,
+                      assigneeHasEdits: selectedKpi.assigneeHasEdits,
+                    }"
+                  />
+
                   <!-- Thẻ 2: quy tắc — hàng ô MỨC -->
                   <div class="overflow-hidden rounded-lg border border-slate-200 bg-white">
                     <div class="flex items-center gap-2 border-b border-slate-100 px-3 py-2">
                       <i class="fas fa-list-check text-[13px] text-slate-600" />
                       <span class="text-[11px] font-bold uppercase tracking-wide text-slate-600">
-                        Scoring Rules
+                        Scoring rules (current)
                       </span>
                     </div>
                     <div class="px-3 py-3">
@@ -403,7 +432,7 @@ function weightDisplayShort(weightLabel: string): string {
                   >
                     Close
                   </button>
-                  <!-- <button
+                  <button
                     v-if="selectedKpi.status === 'PENDING'"
                     type="button"
                     :disabled="actionBusy"
@@ -412,8 +441,9 @@ function weightDisplayShort(weightLabel: string): string {
                   >
                     <i class="fas fa-circle-xmark text-sm leading-none" />
                     Reject
-                  </button> -->
-                  <!-- <button
+                  </button>
+                  <!-- Per-KPI detail modal Approve — tạm ẩn
+                  <button
                     v-if="selectedKpi.status === 'PENDING'"
                     type="button"
                     :disabled="actionBusy"
@@ -422,7 +452,8 @@ function weightDisplayShort(weightLabel: string): string {
                   >
                     <i class="fas fa-circle-check text-sm leading-none" />
                     Approve
-                  </button> -->
+                  </button>
+                  -->
                 </div>
               </div>
             </div>

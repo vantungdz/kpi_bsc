@@ -17,7 +17,6 @@ import type {
   GmPmKpiRolloutPayload,
 } from '@/types/gm-workspace'
 import { GM_BSC_LABELS, GM_BSC_ORDER, normalizeGmBscPerspective } from '@/utils/gm-bsc-diagnostics'
-import KpiCreatorRowLegend from '@/components/shared/KpiCreatorRowLegend.vue'
 import { kpiCreatorRowBgClass } from '@/utils/kpiCreatorRowBg'
 import { formatKpiTargetWithUnit } from '@/utils/kpiUnitCodes'
 import {
@@ -54,8 +53,18 @@ const props = withDefaults(
     kpiCycle?: KpiCycleResponse | null
     /** Năm chu kỳ đã khóa (năm < năm hiện tại) — không cho sửa/xóa KPI chiến lược. */
     readonly?: boolean
+    /** Tiêu đề panel (tab Strategic vs Promotion). */
+    panelTitle?: string
+    /** Icon Font Awesome trước tiêu đề. */
+    panelIconClass?: string
   }>(),
-  { rows: () => [], kpiCycle: null, readonly: false },
+  {
+    rows: () => [],
+    kpiCycle: null,
+    readonly: false,
+    panelTitle: 'Strategic KPIs Tracking & Diagnostics',
+    panelIconClass: 'fas fa-layer-group text-[11px] text-blue-600 sm:text-xs',
+  },
 )
 
 const emit = defineEmits<{
@@ -472,6 +481,10 @@ function asmStatusLabel(code: number | null | undefined): string {
       return 'Pending GM Evaluation (Mid-Year)'
     case KPI_STATUS.FIRST_COMPLETED:
       return 'Completed (Mid-Year)'
+    case KPI_STATUS.FIRST_REJECTED:
+      return 'Rejected (Mid-Year)'
+    case KPI_STATUS.SECOND_REJECTED:
+      return 'Rejected (Final)'
     case KPI_STATUS.SECOND_WAITING_PM_APPROVAL:
       return 'Pending PM Evaluation (Final)'
     case KPI_STATUS.SECOND_WAITING_GM_APPROVAL:
@@ -650,6 +663,9 @@ function diagnosticsTableCellText(raw: string | null | undefined): string {
  * Không dùng (submissionActual/submissionTarget)×100 — chỉ tiêu năm và điểm có thể khác đơn vị (vd. cert vs điểm).
  */
 function memberScoreRawNumeric(member: GmHierarchyMember): number | null {
+  if (!canDiagnosticsShowMemberActual(memberAsmStatusCode(member))) {
+    return null
+  }
   const raw = member.submissionActual
   if (raw != null && Number.isFinite(Number(raw))) return Number(raw)
   const fallback = Number(
@@ -661,6 +677,9 @@ function memberScoreRawNumeric(member: GmHierarchyMember): number | null {
 }
 
 function memberTableScoreDisplay(member: GmHierarchyMember): string {
+  if (!canDiagnosticsShowMemberActual(memberAsmStatusCode(member))) {
+    return '-'
+  }
   const n = memberScoreRawNumeric(member)
   if (n != null) return formatScoreDisplay(n)
   return diagnosticsTableCellText(member.actual)
@@ -1501,9 +1520,11 @@ const STATUS_FILTER_OPTIONS: number[] = [
   KPI_STATUS.FIRST_WAITING_PM_APPROVAL,
   KPI_STATUS.FIRST_WAITING_GM_APPROVAL,
   KPI_STATUS.FIRST_COMPLETED,
+  KPI_STATUS.FIRST_REJECTED,
   KPI_STATUS.SECOND_WAITING_PM_APPROVAL,
   KPI_STATUS.SECOND_WAITING_GM_APPROVAL,
   KPI_STATUS.COMPLETED,
+  KPI_STATUS.SECOND_REJECTED,
 ]
 
 function toggleDraftSection(section: string) {
@@ -1860,8 +1881,8 @@ export default {
           <div class="min-w-0">
             <h3
               class="flex flex-wrap items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-800 sm:text-sm">
-              <i class="fas fa-layer-group text-[11px] text-blue-600 sm:text-xs" />
-              Strategic KPIs Tracking & Diagnostics
+              <i :class="panelIconClass" aria-hidden="true" />
+              {{ panelTitle }}
             </h3>
           </div>
 
@@ -2009,8 +2030,6 @@ export default {
           </div>
         </div>
       </div>
-
-      <KpiCreatorRowLegend />
 
       <div class="overflow-x-auto">
         <div class="min-w-[1080px] divide-y divide-slate-200">

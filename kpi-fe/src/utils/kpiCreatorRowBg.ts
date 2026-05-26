@@ -18,6 +18,14 @@ function normalizeCreatorRole(roleCode?: string | null): string {
 
 const KNOWN_CREATOR_ROLES = new Set<KpiCreatorRoleCode>(['GM', 'PM', 'LEADER', 'MEMBER'])
 
+const NON_GM_KPI_CREATOR_ROLES = new Set<KpiCreatorRoleCode>(['PM', 'LEADER', 'MEMBER'])
+
+/** KPI master do PM / Leader / Member tạo (không phải GM). */
+export function isNonGmKpiCreatorRole(roleCode?: string | null): boolean {
+  const code = normalizeCreatorRole(roleCode)
+  return NON_GM_KPI_CREATOR_ROLES.has(code as KpiCreatorRoleCode)
+}
+
 export type KpiCreatorSourceFields = {
   createdByCurrentUser?: boolean | null
   createdByRoleCode?: string | null

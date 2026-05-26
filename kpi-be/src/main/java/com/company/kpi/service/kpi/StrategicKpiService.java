@@ -8,6 +8,7 @@ import com.company.kpi.aggregate.UserJobTitlePair;
 import com.company.kpi.common.constant.Constant;
 import com.company.kpi.common.Constants;
 import com.company.kpi.common.exception.AppException;
+import com.company.kpi.util.MemberAssignmentEligibility;
 import com.company.kpi.dto.kpi.KpiScoringRulesPayload;
 import com.company.kpi.entity.KpiAssignment;
 import com.company.kpi.mapper.*;
@@ -55,6 +56,7 @@ public class StrategicKpiService {
     private final KpiScoringRulesService kpiScoringRulesService;
     private final KpiAssignmentSnapshotService kpiAssignmentSnapshotService;
     private final MemberAssignmentEligibilityService memberAssignmentEligibilityService;
+    private final PromotionAssignmentValidationService promotionAssignmentValidationService;
 
     // ── CREATE ────────────────────────────────────────────────────────────────
 
@@ -131,12 +133,20 @@ public class StrategicKpiService {
                     .scoringScale(resolveScoringScaleForInsert(null, cycleId, scoringJson))
                     .statusCode(Constants.AssignStatus.PENDING_ACCEPTANCE)
                     .createdBy(actorId)
+                    .promotionCycleId(type == TYPE_PROMOTION ? req.getPromotionCycleId() : null)
                     .build());
         }
 
         rows.addAll(buildAssignmentRows(
                 assigneeUserIds, type, req, infoId, cycleId, targetNum, actorId, role, parentAssignmentId,
                 scoringJson));
+
+        promotionAssignmentValidationService.assertValidPromotionAssignmentsForInsertRows(
+                type,
+                rows.stream()
+                        .map(r -> new PromotionAssignmentValidationService.PromotionAssignmentInsert(
+                                r.getUserId(), null, r.getPromotionCycleId()))
+                        .toList());
 
         if (!rows.isEmpty()) {
             kpiAssignmentMapper.insertKpiAssignments(rows);
@@ -244,6 +254,11 @@ public class StrategicKpiService {
                 allowAssigneeEdit,
                 actorId);
 
+        if (catalogScoringChanged(existing.getTargetDescription(), scoringJson)) {
+            propagateCatalogScoringToAssignments(
+                    kpiInformationId, existing.getCycleId(), scoringJson, actorId);
+        }
+
         List<UUID> desired = resolveAssigneeUserIds(req, type);
         requireExplicitPmTargetsForTeam(req);
 
@@ -286,12 +301,20 @@ public class StrategicKpiService {
                                     null, existing.getCycleId(), scoringJson))
                             .statusCode(Constants.AssignStatus.PENDING_ACCEPTANCE)
                             .createdBy(actorId)
+                            .promotionCycleId(type == TYPE_PROMOTION ? req.getPromotionCycleId() : null)
                             .build());
                 }
 
                 rows.addAll(buildAssignmentRows(
                         desired, type, req, kpiInformationId, existing.getCycleId(), targetNum, actorId, role,
                         parentAssignmentId, scoringJson));
+
+                promotionAssignmentValidationService.assertValidPromotionAssignmentsForInsertRows(
+                        type,
+                        rows.stream()
+                                .map(r -> new PromotionAssignmentValidationService.PromotionAssignmentInsert(
+                                        r.getUserId(), null, r.getPromotionCycleId()))
+                                .toList());
 
                 if (!rows.isEmpty()) {
                     kpiAssignmentMapper.insertKpiAssignments(rows);
@@ -504,6 +527,26 @@ public class StrategicKpiService {
                 kpiInfoId, cycleId, oldCatalogTarget, newCatalogTarget, actorId);
     }
 
+    /** GM sửa thang điểm catalog: đồng bộ xuống assignment chưa có baseline chỉnh tay. */
+    private int propagateCatalogScoringToAssignments(
+            UUID kpiInfoId, UUID cycleId, String catalogScoringJson, UUID actorId) {
+        if (catalogScoringJson == null || catalogScoringJson.isBlank()) {
+            return 0;
+        }
+        return kpiAssignmentMapper.updateAssignmentScoringWithoutAssigneeBaseline(
+                kpiInfoId, cycleId, catalogScoringJson, actorId);
+    }
+
+    private static boolean catalogScoringChanged(String before, String after) {
+        if (before == null && after == null) {
+            return false;
+        }
+        if (before == null || after == null) {
+            return true;
+        }
+        return !before.trim().equals(after.trim());
+    }
+
     /**
      * Team KPI: {@code desired} chỉ chứa PM (assignPMs). Member cascade có
      * {@code parent_assignment_id} trỏ tới bản ghi PM — không nằm trong {@code desired}
@@ -623,6 +666,12 @@ public class StrategicKpiService {
         String catalogJson = kpisInformationMapper.selectTargetDescriptionJson(kpiInfoId);
         List<KpiAssignmentInsertRow> newRows = buildAssignmentRows(newIds, type, req, kpiInfoId, cycleId, targetNum,
                 actorId, role, parentAssignmentId, catalogJson);
+        promotionAssignmentValidationService.assertValidPromotionAssignmentsForInsertRows(
+                type,
+                newRows.stream()
+                        .map(r -> new PromotionAssignmentValidationService.PromotionAssignmentInsert(
+                                r.getUserId(), null, r.getPromotionCycleId()))
+                        .toList());
         if (!newRows.isEmpty()) {
             kpiAssignmentMapper.insertKpiAssignments(newRows);
             kpiAssignmentSnapshotService.createSnapshotsForInsertRows(newRows, actorId);
@@ -638,8 +687,10 @@ public class StrategicKpiService {
         int initialStatus = initialAssignmentStatusForStrategicCreate(type, role);
         Map<UUID, UUID> jobByUser = loadJobTitleByUserId(userIds);
         String scoringForChildren = resolveScoringScaleForInsert(parentAssignmentId, cycleId, catalogScoringJson);
+        UUID promotionCycleId = type == TYPE_PROMOTION ? req.getPromotionCycleId() : null;
         List<KpiAssignmentInsertRow> rows = new ArrayList<>();
         for (UUID uid : userIds) {
+            BigDecimal rowTarget = teamTarget(type, uid, req, targetNum);
             rows.add(KpiAssignmentInsertRow.builder()
                     .id(UUID.randomUUID())
                     .cycleId(cycleId)
@@ -647,25 +698,22 @@ public class StrategicKpiService {
                     .userId(uid)
                     .jobTitleId(jobByUser.get(uid))
                     .parentAssignmentId(parentAssignmentId)
-                    .targetValue(teamTarget(type, uid, req, targetNum))
+                    .targetValue(rowTarget)
                     .scoringScale(scoringForChildren)
                     .statusCode(initialStatus)
                     .createdBy(actorId)
+                    .promotionCycleId(promotionCycleId)
                     .build());
         }
         return rows;
     }
 
     /**
-     * Thang điểm khi tạo assignment: ưu tiên assignment cha (PM đã sửa), không có thì catalog KPI.
+     * Thang điểm khi tạo assignment: luôn lấy từ catalog KPI ({@code kpis_information.target_description}).
+     * Target từng người nhận không được dùng để sinh thang điểm — assignee tự chỉnh qua
+     * {@link com.company.kpi.service.common.AssigneeTargetScaleService} khi GM bật cờ cho phép.
      */
     private String resolveScoringScaleForInsert(UUID parentAssignmentId, UUID cycleId, String catalogScoringJson) {
-        if (parentAssignmentId != null) {
-            String parentScale = kpiAssignmentMapper.selectScoringScaleJson(parentAssignmentId, cycleId);
-            if (parentScale != null && !parentScale.isBlank() && !"null".equalsIgnoreCase(parentScale.trim())) {
-                return parentScale;
-            }
-        }
         return catalogScoringJson;
     }
 
@@ -788,8 +836,8 @@ public class StrategicKpiService {
     }
 
     /**
-     * GM/PM giao KPI mới — chặn nếu assignee còn assignment ASM khác 404/406/407 trong chu kỳ.
-     * Team (102): GM giao cho PM; Individual/Promotion: giao cho member.
+     * GM/PM giao KPI mới — chặn theo nhóm: strategic (101+102) hoặc promotion (103).
+     * Team (102): GM → PM; PM tạo/phân bổ → member (payload assignPMs).
      */
     private void assertMemberAssigneesEligibleForPmGmCreate(
             UUID cycleId, int type, List<UUID> assigneeUserIds, String role) {
@@ -797,13 +845,22 @@ public class StrategicKpiService {
             return;
         }
         if (type == TYPE_TEAM) {
+            if (assigneeUserIds.isEmpty()) {
+                return;
+            }
             if (Constant.ROLE_GM.equals(role)) {
                 memberAssignmentEligibilityService.assertEligibleForNewPmAssignment(cycleId, assigneeUserIds);
+            } else {
+                memberAssignmentEligibilityService.assertEligibleForStrategicAssignment(
+                        cycleId,
+                        assigneeUserIds,
+                        MemberAssignmentEligibility.BLOCK_ASSIGN_MEMBER_MESSAGE);
             }
             return;
         }
         if (type == TYPE_INDIVIDUAL || type == TYPE_PROMOTION) {
-            memberAssignmentEligibilityService.assertEligibleForNewMemberAssignment(cycleId, assigneeUserIds);
+            memberAssignmentEligibilityService.assertEligibleForNewMemberAssignment(
+                    cycleId, assigneeUserIds, type);
         }
     }
 
@@ -831,13 +888,22 @@ public class StrategicKpiService {
                 .filter(uid -> !currentAssigneeIds.contains(uid))
                 .toList();
         if (type == TYPE_TEAM) {
+            if (newAssignees.isEmpty()) {
+                return;
+            }
             if (Constant.ROLE_GM.equals(role)) {
                 memberAssignmentEligibilityService.assertEligibleForNewPmAssignment(cycleId, newAssignees);
+            } else {
+                memberAssignmentEligibilityService.assertEligibleForStrategicAssignment(
+                        cycleId,
+                        newAssignees,
+                        MemberAssignmentEligibility.BLOCK_ASSIGN_MEMBER_MESSAGE);
             }
             return;
         }
         if (type == TYPE_INDIVIDUAL || type == TYPE_PROMOTION) {
-            memberAssignmentEligibilityService.assertEligibleForNewMemberAssignment(cycleId, newAssignees);
+            memberAssignmentEligibilityService.assertEligibleForNewMemberAssignment(
+                    cycleId, newAssignees, type);
         }
     }
 
@@ -988,8 +1054,10 @@ public class StrategicKpiService {
             return;
         }
 
-        memberAssignmentEligibilityService.assertEligibleForNewMemberAssignment(
-                req.getCycleId(), requestedTargets.keySet());
+        memberAssignmentEligibilityService.assertEligibleForStrategicAssignment(
+                req.getCycleId(),
+                requestedTargets.keySet(),
+                MemberAssignmentEligibility.BLOCK_ASSIGN_MEMBER_MESSAGE);
 
         List<UUID> assigneeUserIds = new ArrayList<>(requestedTargets.keySet());
 
@@ -1156,7 +1224,8 @@ public class StrategicKpiService {
                         request.getManagedMemberUserId(),
                         request.getStatusCode(),
                         request.isPromotion(),
-                        request.getOnlyFromStatusCode());
+                        request.getOnlyFromStatusCode(),
+                        null);
             } else {
                 updatedCount = kpiAssignmentMapper.updateKpiStatusesForPmManagedMembers(
                         currentUserId,

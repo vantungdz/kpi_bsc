@@ -119,6 +119,14 @@ public interface KpiAssignmentMapper {
             @Param("assignmentId") UUID assignmentId,
             @Param("userId") UUID userId);
 
+    int captureAssigneeEditBaselineIfAbsent(
+            @Param("assignmentId") UUID assignmentId,
+            @Param("cycleId") UUID cycleId,
+            @Param("userId") UUID userId,
+            @Param("baselineTarget") java.math.BigDecimal baselineTarget,
+            @Param("baselineScoring") String baselineScoring,
+            @Param("capturedBy") UUID capturedBy);
+
     int updateAssigneeTargetAndScale(
             @Param("assignmentId") UUID assignmentId,
             @Param("cycleId") UUID cycleId,
@@ -190,6 +198,13 @@ public interface KpiAssignmentMapper {
             @Param("cycleId") UUID cycleId,
             @Param("oldTargetValue") BigDecimal oldTargetValue,
             @Param("newTargetValue") BigDecimal newTargetValue,
+            @Param("updatedBy") UUID updatedBy);
+
+    /** GM sửa thang điểm catalog: đồng bộ xuống assignment chưa tự chỉnh (chưa có baseline). */
+    int updateAssignmentScoringWithoutAssigneeBaseline(
+            @Param("kpiInfoId") UUID kpiInfoId,
+            @Param("cycleId") UUID cycleId,
+            @Param("catalogScoringJson") String catalogScoringJson,
             @Param("updatedBy") UUID updatedBy);
 
     int countRootAssignmentsForKpi(
@@ -293,6 +308,14 @@ public interface KpiAssignmentMapper {
             @Param("updatedBy") UUID updatedBy,
             @Param("updateReason") String updateReason);
 
+    /**
+     * GM Approved drawer: sau khi từ chối một KPI, các assignment 402/403 khác cùng approval_user → 404.
+     */
+    int resetGmApprovedQueueSiblingsToPendingAcceptance(
+            @Param("rejectedAssignmentId") UUID rejectedAssignmentId,
+            @Param("cycleId") UUID cycleId,
+            @Param("updatedBy") UUID updatedBy);
+
     int cascadeActivateChildAssignments(
             @Param("parentAssignmentId") UUID parentAssignmentId,
             @Param("cycleId") UUID cycleId,
@@ -331,7 +354,7 @@ public interface KpiAssignmentMapper {
             @Param("updateReason") String updateReason);
 
     /**
-     * Timeline issues: tất cả {@code kpi_assignments} có status 401–603 trong chu kỳ.
+     * Timeline issues: tất cả {@code kpi_assignments} có status 401–604 trong chu kỳ (gồm 504/604 rejected).
      * Service tự phân loại phase + issue type. DISTINCT ON (ka.id) để tránh duplicate.
      */
     List<GmTimelineIssueRow> listTimelineAssignments(@Param("cycleId") UUID cycleId);
@@ -367,13 +390,42 @@ public interface KpiAssignmentMapper {
             @Param("cycleId") UUID cycleId, @Param("pmId") UUID pmId);
 
     /**
-     * Users có assignment trong chu kỳ với ASM không thuộc 404/406/407 — không được giao KPI mới (GM/PM).
+     * User has another promotion assignment (type 103) whose {@code promotion_cycles} window overlaps
+     * the new cycle — excludes completed/rejected ASM 603/604 and optional assignment id.
+     */
+    boolean existsOverlappingPromotionCycleForUser(
+            @Param("userId") UUID userId,
+            @Param("promotionCycleId") UUID promotionCycleId,
+            @Param("excludeAssignmentId") UUID excludeAssignmentId);
+
+    /** First non-null {@code promotion_cycle_id} on any assignment for KPI info (copy / diagnostics). */
+    UUID findPromotionCycleIdByKpiInfoId(@Param("kpiInfoId") UUID kpiInfoId);
+
+    /**
+     * Promotion process timeline: assignments in {@code promotion_cycle_id} with {@code kpi_master.type_code = 103}.
+     * Status 405–604 (excludes setting-phase 401–404); service maps issue groups.
+     */
+    List<GmTimelineIssueRow> listPromotionTimelineAssignments(
+            @Param("promotionCycleId") UUID promotionCycleId);
+
+    /** Giống {@link #listPromotionTimelineAssignments} — chỉ phòng có {@code departments.manager_id = pmId}. */
+    List<GmTimelineIssueRow> listPromotionTimelineAssignmentsForPm(
+            @Param("promotionCycleId") UUID promotionCycleId,
+            @Param("pmId") UUID pmId);
+
+    /**
+     * Users có assignment trong chu kỳ với ASM không thuộc 404/406/407 — theo nhóm {@code kpi_master.type_code}.
+     *
+     * @param kpiTypeCodes vd. (101,102) strategic hoặc (103) promotion
      */
     List<UserBlockingAssignmentRow> listUsersWithBlockingKpiStatusInCycle(
-            @Param("cycleId") UUID cycleId, @Param("userIds") List<UUID> userIds);
+            @Param("cycleId") UUID cycleId,
+            @Param("userIds") List<UUID> userIds,
+            @Param("kpiTypeCodes") List<Integer> kpiTypeCodes);
 
-    /** Mọi {@code user_id} bị chặn giao KPI mới trong chu kỳ (dropdown FE). */
-    List<UUID> listUserIdsWithBlockingKpiStatusInCycle(@Param("cycleId") UUID cycleId);
+    /** {@code user_id} bị chặn giao KPI mới trong chu kỳ theo nhóm loại (dropdown FE). */
+    List<UUID> listUserIdsWithBlockingKpiStatusInCycle(
+            @Param("cycleId") UUID cycleId, @Param("kpiTypeCodes") List<Integer> kpiTypeCodes);
 
     int updateKpiStatuses(
         @Param("userId") UUID userId,
@@ -424,7 +476,8 @@ public interface KpiAssignmentMapper {
             @Param("memberUserId") UUID memberUserId,
             @Param("statusCode") Integer statusCode,
             @Param("promotion") boolean promotion,
-            @Param("onlyFromStatusCode") Integer onlyFromStatusCode);
+            @Param("onlyFromStatusCode") Integer onlyFromStatusCode,
+            @Param("evaluationRejectReason") String evaluationRejectReason);
 
     /**
      * Đồng bộ KPI Team assignment cha của PM theo trạng thái mới của assignment con trong cây team.
@@ -457,6 +510,15 @@ public interface KpiAssignmentMapper {
             @Param("updatedBy") UUID updatedBy,
             @Param("updateReason") String updateReason);
 
+    /**
+     * PM Request drawer: sau khi từ chối một KPI 402→406, các assignment 402 khác cùng member → 404.
+     */
+    int resetPmMemberApprovalSiblingsToPendingAcceptance(
+            @Param("rejectedAssignmentId") UUID rejectedAssignmentId,
+            @Param("cycleId") UUID cycleId,
+            @Param("pmId") UUID pmId,
+            @Param("updatedBy") UUID updatedBy);
+
     /** PM xử lý feedback member (chấp nhận / từ chối): 407→404. */
     int updateMemberFeedbackStatusByPm(
             @Param("assignmentId") UUID assignmentId,
@@ -465,14 +527,15 @@ public interface KpiAssignmentMapper {
             @Param("updatedBy") UUID updatedBy);
 
     /**
-     * PM lưu comment theo từng KPI vào {@code kpi_assignments.evidences.pmComment}.
+     * PM lưu comment theo từng KPI vào {@code kpi_assignments.evidences.gmComment} (dùng chung với GM).
      * Chỉ cho phép assignment của member thuộc cây báo cáo dưới PM trong cùng chu kỳ.
      */
     int updatePmComment(
             @Param("assignmentId") UUID assignmentId,
             @Param("cycleId") UUID cycleId,
             @Param("pmId") UUID pmId,
-            @Param("pmComment") String pmComment);
+            /** Không đặt tên {@code pmComment} — tránh interceptor mã hóa trước khi ghi vào {@code evidences.gmComment}. */
+            @Param("gmComment") String gmComment);
 
     /**
      * PM lưu {@code end_pm_score} cho assignment của member ở giai đoạn cuối kỳ (ASM {@code 601} chờ PM) —
@@ -487,4 +550,60 @@ public interface KpiAssignmentMapper {
 
     /** Năm chu kỳ có assignment của user (dropdown Member / Leader dashboard). */
     List<Integer> listDistinctAssignmentYearsForUser(@Param("userId") UUID userId);
+
+    Integer selectPmManagedMemberAssignmentStatus(
+            @Param("assignmentId") UUID assignmentId,
+            @Param("cycleId") UUID cycleId,
+            @Param("memberUserId") UUID memberUserId,
+            @Param("pmId") UUID pmId);
+
+    Integer selectGmEvaluationAssignmentStatus(
+            @Param("assignmentId") UUID assignmentId,
+            @Param("cycleId") UUID cycleId,
+            @Param("evaluationUserId") UUID evaluationUserId);
+
+    int rejectPmEvaluationTarget(
+            @Param("assignmentId") UUID assignmentId,
+            @Param("cycleId") UUID cycleId,
+            @Param("memberUserId") UUID memberUserId,
+            @Param("pmId") UUID pmId,
+            @Param("newStatus") int newStatus,
+            @Param("fromStatus") int fromStatus,
+            @Param("evaluationRejectReason") String evaluationRejectReason,
+            @Param("updatedBy") UUID updatedBy);
+
+    int rejectGmEvaluationTarget(
+            @Param("assignmentId") UUID assignmentId,
+            @Param("cycleId") UUID cycleId,
+            @Param("evaluationUserId") UUID evaluationUserId,
+            @Param("newStatus") int newStatus,
+            @Param("fromStatus") int fromStatus,
+            @Param("evaluationRejectReason") String evaluationRejectReason,
+            @Param("updatedBy") UUID updatedBy);
+
+    int rollbackPmEvaluationSiblings(
+            @Param("excludeAssignmentId") UUID excludeAssignmentId,
+            @Param("cycleId") UUID cycleId,
+            @Param("memberUserId") UUID memberUserId,
+            @Param("pmId") UUID pmId,
+            @Param("promotion") boolean promotion,
+            @Param("rollbackStatus") int rollbackStatus,
+            @Param("updatedBy") UUID updatedBy);
+
+    int rollbackGmEvaluationSiblings(
+            @Param("excludeAssignmentId") UUID excludeAssignmentId,
+            @Param("cycleId") UUID cycleId,
+            @Param("evaluationUserId") UUID evaluationUserId,
+            @Param("promotion") boolean promotion,
+            @Param("rollbackStatus") int rollbackStatus,
+            @Param("updatedBy") UUID updatedBy);
+
+    int rejectGmEvaluationFromStatus(
+            @Param("cycleId") UUID cycleId,
+            @Param("evaluationUserId") UUID evaluationUserId,
+            @Param("promotion") boolean promotion,
+            @Param("fromStatus") int fromStatus,
+            @Param("newStatus") int newStatus,
+            @Param("evaluationRejectReason") String evaluationRejectReason,
+            @Param("updatedBy") UUID updatedBy);
 }

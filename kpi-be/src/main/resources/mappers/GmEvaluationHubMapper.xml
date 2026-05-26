@@ -3,7 +3,7 @@
 <mapper namespace="com.company.kpi.mapper.GmEvaluationHubMapper">
 
     <!--
-      GM đánh giá hub: assignments trong chu kỳ, ASM 501/502/503/601/602/603.
+      GM đánh giá hub: assignments trong chu kỳ, ASM 501–504 (mid-year) và 601–604 (year-end), gồm rejected.
       Rank: ranks.code qua users.job_title_id → job_titles.rank_id.
       Section: current cycle uses user_departments; historical cycles use kpi_assignment_snapshots.
     -->
@@ -28,6 +28,7 @@
             END AS end_self_score,
             ka.end_pm_score,
             ka.end_gm_score,
+            NULLIF(TRIM(COALESCE(ka.evaluation_reject_reason, '')), '') AS evaluation_reject_reason,
             ka.evidences::text AS evidences,
             ki.target_description,
             COALESCE(ka.target_value, ki.target_value) AS target_value,
@@ -112,20 +113,14 @@
                 ON ud.department_id = d.id
                AND d.deleted_at IS NULL
         LEFT JOIN LATERAL (
-            SELECT DISTINCT ON (ka.kpi_info_id)
-                ka.*
+            SELECT ka.*
             FROM kpi_assignments ka
             WHERE ka.cycle_id = #{cycleId, jdbcType=OTHER}
               AND ka.deleted_at IS NULL
               AND ka.user_id = u.id
-              AND ka.status_code IN (401, 402, 403, 404, 405, 406, 407, 501, 502, 503, 601, 602, 603)
+              AND ka.status_code IN (401, 402, 403, 404, 405, 406, 407, 501, 502, 503, 504, 601, 602, 603, 604)
             ORDER BY
                 ka.kpi_info_id,
-                CASE
-                    WHEN COALESCE(ka.end_self_score, ka.mid_self_score) IS NOT NULL THEN 0
-                    ELSE 1
-                END,
-                CASE WHEN ka.parent_assignment_id IS NULL THEN 0 ELSE 1 END,
                 ka.status_code DESC,
                 ka.updated_at DESC,
                 ka.created_at DESC

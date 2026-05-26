@@ -945,7 +945,7 @@ export function useMemberEvidenceDrawer() {
           pendingEvidenceFiles.value = []
         } catch (error) {
           console.error('Failed to upload evidence files', error)
-          toast.error('Lỗi khi tải file lên')
+          toast.error('Failed to upload files')
           return
         }
       }

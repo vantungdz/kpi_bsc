@@ -16,6 +16,13 @@ public final class MemberAssignmentEligibility {
     public static final String BLOCK_ASSIGN_PM_MESSAGE =
             "Không thể giao KPI cho PM vì PM đang có KPI đang hoạt động. Vui lòng unlock KPI của PM trước.";
 
+    public static final String BLOCK_ASSIGN_PROMOTION_MESSAGE =
+            "Không thể giao KPI thăng tiến vì nhân viên đang có KPI thăng tiến đang hoạt động.";
+
+    public static final int KPI_TYPE_INDIVIDUAL = 101;
+    public static final int KPI_TYPE_TEAM = 102;
+    public static final int KPI_TYPE_PROMOTION = 103;
+
     /** @deprecated dùng {@link #BLOCK_ASSIGN_MEMBER_MESSAGE} */
     public static final String BLOCK_ASSIGN_MESSAGE = BLOCK_ASSIGN_MEMBER_MESSAGE;
 

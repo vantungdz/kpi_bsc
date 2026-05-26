@@ -354,7 +354,11 @@
                   AND f.deleted_at IS NULL
                 ORDER BY f.created_at DESC
                 LIMIT 1
-            ) AS active_feedback_target_role_code
+            ) AS active_feedback_target_role_code,
+            CASE
+                WHEN km.type_code = 103 THEN ka.promotion_cycle_id
+                ELSE NULL
+            END AS promotion_cycle_id
         FROM
             kpis_information ki
             INNER JOIN kpi_cycles cyc ON cyc.id = ki.cycle_id
@@ -367,7 +371,8 @@
                 SELECT DISTINCT ON (user_id, kpi_info_id)
                     id, cycle_id, kpi_info_id, user_id,
                     status_code, mid_self_score, end_self_score,
-                    end_pm_score, end_gm_score, target_value, evidences, parent_assignment_id
+                    end_pm_score, end_gm_score, target_value, evidences, parent_assignment_id,
+                    promotion_cycle_id
                 FROM kpi_assignments
                 WHERE deleted_at IS NULL
                   AND user_id IS NOT NULL

@@ -11,6 +11,8 @@ public class GmEvaluationHubAssignmentRow {
 
     private UUID assignmentId;
     private Integer statusCode;
+    /** Lý do từ chối đánh giá (ASM 504/604). */
+    private String evaluationRejectReason;
     private String assignmentStatusName;
     /** {@code sys_status_codes.description} (ASM_STATUS). */
     private String assignmentStatusDescription;

@@ -73,10 +73,12 @@ public class KpiReferenceDataService {
     }
 
     /**
-     * User id (member hoặc PM) không được giao thêm KPI trong chu kỳ (ASM khác 404/406/407).
+     * User id không được giao thêm KPI trong chu kỳ theo nhóm:
+     * {@code strategic} = 101+102, {@code promotion} = 103.
      */
-    public List<java.util.UUID> listMemberIdsBlockedForNewAssignment(java.util.UUID cycleId) {
-        return memberAssignmentEligibilityService.listBlockedUserIdsInCycle(cycleId);
+    public List<java.util.UUID> listMemberIdsBlockedForNewAssignment(
+            java.util.UUID cycleId, String assignmentScope) {
+        return memberAssignmentEligibilityService.listBlockedUserIdsInCycle(cycleId, assignmentScope);
     }
 
     /** User active có chức danh thuộc {@code ranks.code} (vd. R3). */

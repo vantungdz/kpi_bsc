@@ -51,18 +51,30 @@ export function distinctAssigneeCount(items: GmTimelineIssueDetail[]): number {
 
 function blockerSummaryFromIssueId(issueId: string): string {
   switch (issueId) {
-    case 'pending_acceptance':
+    case 'setting_pending_acceptance':
       return 'Acceptance pending'
-    case 'pending_pm_review':
-      return 'PM review pending'
-    case 'pending_gm_approval':
-      return 'GM approval pending'
-    case 'kpi_not_submitted':
-      return 'Submission pending'
-    case 'missing_evidence':
-      return 'Evidence incomplete'
-    case 'unassigned_members':
+    case 'setting_rejected':
+      return 'Rejected'
+    case 'setting_feedback':
+      return 'Feedback in progress'
+    case 'setting_unassigned_members':
       return 'No KPI assigned'
+    case 'mid_not_evaluated':
+      return 'Mid-year not evaluated'
+    case 'mid_pending_pm_evaluation':
+      return 'PM review pending'
+    case 'mid_pending_gm_evaluation':
+      return 'GM approval pending'
+    case 'mid_rejected':
+      return 'Mid-year rejected'
+    case 'end_not_evaluated':
+      return 'Year-end not evaluated'
+    case 'end_pending_pm_evaluation':
+      return 'PM review pending'
+    case 'end_pending_gm_evaluation':
+      return 'GM approval pending'
+    case 'end_rejected':
+      return 'Year-end rejected'
     default:
       return 'Action pending'
   }

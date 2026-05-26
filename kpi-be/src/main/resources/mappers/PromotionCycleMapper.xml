@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.company.kpi.mapper.PromotionCycleMapper">
+
+    <!-- Legacy DBs store DATE; entity uses OffsetDateTime — cast at read time until V13 is applied. -->
+    <sql id="promotionCycleSelectColumns">
+        id,
+        user_id,
+        name,
+        start_date::timestamptz AS start_date,
+        end_date::timestamptz AS end_date,
+        duration_months,
+        status_code,
+        created_at,
+        updated_at,
+        created_by,
+        updated_by
+    </sql>
+
+    <resultMap id="PromotionCycleResultMap" type="com.company.kpi.entity.PromotionCycle">
+        <id property="id" column="id"/>
+        <result property="userId" column="user_id"/>
+        <result property="name" column="name"/>
+        <result property="startDate" column="start_date"/>
+        <result property="endDate" column="end_date"/>
+        <result property="durationMonths" column="duration_months"/>
+        <result property="statusCode" column="status_code"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+        <result property="createdBy" column="created_by"/>
+        <result property="updatedBy" column="updated_by"/>
+    </resultMap>
+
+    <select id="listByYear" resultMap="PromotionCycleResultMap">
+        SELECT
+            <include refid="promotionCycleSelectColumns"/>
+        FROM promotion_cycles
+        WHERE deleted_at IS NULL
+          AND (
+              EXTRACT(YEAR FROM start_date)::int = #{year}
+              OR EXTRACT(YEAR FROM end_date)::int = #{year}
+          )
+        ORDER BY start_date DESC, name
+    </select>
+
+    <select id="findLatestByUserId" resultMap="PromotionCycleResultMap">
+        SELECT
+            <include refid="promotionCycleSelectColumns"/>
+        FROM promotion_cycles
+        WHERE user_id = #{userId, jdbcType=OTHER}
+          AND deleted_at IS NULL
+        ORDER BY start_date DESC
+        LIMIT 1
+    </select>
+
+    <select id="findById" resultMap="PromotionCycleResultMap">
+        SELECT
+            <include refid="promotionCycleSelectColumns"/>
+        FROM promotion_cycles
+        WHERE id = #{id, jdbcType=OTHER}
+          AND deleted_at IS NULL
+    </select>
+
+</mapper>

@@ -38,6 +38,10 @@ public class LeaderKpiAssignmentDTO {
     private String createdByRoleCode;
     /** Khi ASM 407: role cần xử lý feedback — PM hoặc GM. */
     private String feedbackTargetRoleCode;
+    /** Lý do PM/GM từ chối đánh giá (504 giữa kỳ / 604 cuối kỳ). */
+    private String evaluationRejectReason;
+    /** Bật quyền cho assignee sửa target + thang điểm trên assignment của chính mình. */
+    private Boolean allowAssigneeTargetScaleEdit;
     /** Trạng thái đánh giá FE (not_started/pending_approval/approved/overdue/feedback). */
     private String evaluationStatus;
     /** Nhãn hiển thị trạng thái đánh giá. */

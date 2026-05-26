@@ -160,7 +160,7 @@ export function getSubmitButtonState(
 /**
  * PM tab KPI Personal — một nút theo trạng thái (tab PM gộp thêm điều kiện KPI Team: mọi member được phân bổ phải đã Accept trước khi PM Accept):
  * - **404**: "Accept KPI" — luôn bật (không khóa theo cửa sổ Goal setting); bấm → 405.
- * - **405 / 503**: "Send Review" — luôn bật; trong cửa sổ Year-end → 602, Mid-year → 502; ngoài cửa sổ → mặc định 502 (tooltip giải thích).
+ * - **405 / 503 / 504 / 604**: "Send Review" — 504 như 405 (giữa kỳ), 604 như 503 (cuối kỳ).
  * - Khác: nút hiển thị nhưng tắt (nhãn Accept KPI nếu chưa tới 404, Send Review nếu đã qua 405 hoặc 503).
  *
  * Tách biệt với {@link getSubmitButtonState} (Member/Leader): hàm đó vẫn dùng goalSetting + bypass 404 theo ngày;
@@ -174,7 +174,7 @@ export function getPmPortfolioSubmitButtonState(
   const now = new Date(currentDateInput).getTime();
   const sc = Number(statusCode);
 
-  if (!Number.isFinite(sc) || sc >= KPI_STATUS.COMPLETED) {
+  if (!Number.isFinite(sc) || sc === KPI_STATUS.COMPLETED) {
     return {
       show: false,
       disabled: true,
@@ -245,9 +245,13 @@ export function getPmPortfolioSubmitButtonState(
     };
   }
 
-  // --- Send Review (405 Đang chạy, hoặc 503 Đã chốt 1st half) ---
-  if (sc === KPI_STATUS.ACCEPTED || sc === KPI_STATUS.FIRST_COMPLETED) {
-    if (sc === KPI_STATUS.ACCEPTED) {
+  // --- Send Review (405/504 giữa kỳ, 503/604 cuối kỳ) ---
+  const sendReviewMidPhase =
+    sc === KPI_STATUS.ACCEPTED || sc === KPI_STATUS.FIRST_REJECTED
+  const sendReviewEndPhase =
+    sc === KPI_STATUS.FIRST_COMPLETED || sc === KPI_STATUS.SECOND_REJECTED
+  if (sendReviewMidPhase || sendReviewEndPhase) {
+    if (sendReviewMidPhase) {
       const passedMidYear = midEnd != null && Number.isFinite(midEnd) && now > midEnd;
       
       if (passedMidYear) {

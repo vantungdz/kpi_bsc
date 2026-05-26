@@ -35,12 +35,16 @@ public class MemberKpiAssignmentDTO {
     private String feedbackComment;
     /** Lý do cập nhật / từ chối từ luồng PM/GM (kpi_assignments.update_reason). */
     private String updateReason;
+    /** Lý do từ chối đánh giá (ASM 504/604 — kpi_assignments.evaluation_reject_reason). */
+    private String evaluationRejectReason;
     /** Assignment do chính user hiện tại tạo ra. */
     private Boolean createdByCurrentUser;
     /** Vai trò người tạo assignment (GM / PM / LEADER / MEMBER). */
     private String createdByRoleCode;
     /** Mã role đang xử lý feedback active — PM hoặc GM (roles.code). */
     private String feedbackTargetRoleCode;
+    /** Bật quyền cho assignee sửa target + thang điểm trên assignment của chính mình. */
+    private Boolean allowAssigneeTargetScaleEdit;
     /** {@code kpi_master.calculation_rule_code} — CALC_RULE 801–804 */
     private Integer calculationRuleCode;
     /** {@code kpi_master.calculation_type_code} — CALC_TYPE 701 (Actual/Plan) | 702 (Plan/Actual) */

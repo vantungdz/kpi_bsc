@@ -88,6 +88,7 @@ async function loadEvaluationHub() {
   }
 }
 
+/** Tải hub ngay khi có chu kỳ (badge tab Evaluation cần dữ liệu dù đang ở tab khác). */
 watch(
   () => [useMock, selectedCycleId.value] as const,
   () => {
@@ -95,6 +96,8 @@ watch(
   },
   { immediate: true },
 )
+
+defineExpose({ reloadEvaluationHub: loadEvaluationHub })
 
 const employees = computed<GmEvalMember[]>(() => {
   const all = baseEmployees.value

@@ -24,4 +24,6 @@ public class KpiAssignmentInsertRow {
     String scoringScale;
     int statusCode;
     UUID createdBy;
+    /** {@code promotion_cycles.id} — required when KPI type is 103. */
+    UUID promotionCycleId;
 }

@@ -39,4 +39,8 @@ public class CreateKpiTemplateItemRequest {
 
     @NotNull
     private BigDecimal defaultWeight;
+
+    private Boolean isImportant;
+
+    private Boolean allowAssigneeTargetScaleEdit;
 }

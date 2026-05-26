@@ -23,10 +23,14 @@ import {
   isRecordStyleCalcRule,
   normalizeCalculationRuleCode,
   parseNumericFromField,
+  parseKpiSupervisorEvaluationComments,
   parsePmPortfolioEvidenceString,
   pmPortfolioActualDisplayMode,
 } from '@/utils/memberKpiHelpers'
-import { canSupervisorViewMemberSelfEvaluation } from '@/utils/memberEvaluationVisibility'
+import {
+  canSupervisorViewMemberSelfEvaluation,
+  resolveMemberSelfScoreByAsm,
+} from '@/utils/memberEvaluationVisibility'
 
 /** Ngữ cảnh suy đơn vị cho drawer đánh giá GM. */
 export type GmDrawerUnitContext = {
@@ -266,7 +270,16 @@ function gmApprovalActionEnabledFromRows(rows: GmEvaluationHubAssignmentApiRow[]
 }
 
 function parseSelfScore(row: GmEvaluationHubAssignmentApiRow): number {
-  const raw = row.endSelfScore ?? row.midSelfScore
+  const statusCode =
+    typeof row.statusCode === 'number' && Number.isFinite(row.statusCode)
+      ? row.statusCode
+      : null
+  const resolved = resolveMemberSelfScoreByAsm(
+    statusCode,
+    row.midSelfScore,
+    row.endSelfScore,
+  )
+  const raw = resolved ?? row.endSelfScore ?? row.midSelfScore
   const n = typeof raw === 'number' ? raw : Number.parseFloat(String(raw ?? '').replace(',', '.'))
   if (!Number.isFinite(n)) return 0
   if (n >= 0 && n <= 5) return Math.min(5, Math.max(0, Math.round(n)))
@@ -440,19 +453,6 @@ function isImplicitCommentRuleRows(rows: string[][]): boolean {
   return !hasAnyPlan
 }
 
-function parseEvidenceObject(raw: string): Record<string, unknown> | null {
-  if (!raw || (!raw.startsWith('{') && !raw.startsWith('['))) return null
-  try {
-    const j = JSON.parse(raw) as unknown
-    if (j && typeof j === 'object' && !Array.isArray(j)) {
-      return j as Record<string, unknown>
-    }
-  } catch {
-    return null
-  }
-  return null
-}
-
 /**
  * Chuỗi hóa JSON `kpi_assignments.evidences` (JSONB) cho drawer GM —
  * hỗ trợ `evd`, `files`, `urls`, `note`, `text`, `result`, `planActualRecords` (đồng bộ kiểu member sheet).
@@ -577,19 +577,6 @@ export function evidenceTableFromEvidencesJson(
 }
 
 function evidenceFromRow(row: GmEvaluationHubAssignmentApiRow): GmEvidenceTable {
-  const statusCode =
-    typeof row.statusCode === 'number' && Number.isFinite(row.statusCode)
-      ? row.statusCode
-      : null
-  if (!canSupervisorViewMemberSelfEvaluation(statusCode, 'gm')) {
-    return {
-      title: 'Evidence',
-      icon: 'fas fa-paperclip',
-      accent: 'emerald',
-      headers: [],
-      rows: [],
-    }
-  }
   return evidenceTableFromEvidencesJson(row.evidences, rowCalcRuleCode(row))
 }
 
@@ -601,22 +588,17 @@ function toKpiItem(row: GmEvaluationHubAssignmentApiRow, index: number): GmKpiIt
     typeof row.statusCode === 'number' && Number.isFinite(row.statusCode)
       ? row.statusCode
       : null
-  const gmCanViewMemberEval = canSupervisorViewMemberSelfEvaluation(statusCode, 'gm')
-  const evidenceObject = gmCanViewMemberEval
-    ? parseEvidenceObject(String(row.evidences ?? '').trim())
-    : null
   const calcRuleCode = rowCalcRuleCode(row)
-  const parsedEvidences = gmCanViewMemberEval
-    ? parsePmPortfolioEvidenceString(row.evidences)
-    : { rows: [], content: '', note: '', legacyPlain: '', attachments: [] }
+  const parsedEvidences = parsePmPortfolioEvidenceString(row.evidences)
   const unitCtx = hubRowUnitContext(row)
   const unitCode = resolveGmDrawerUnitCode(unitCtx)
   const calculationTypeCode = calculationTypeFromHubRow(row)
-  const gmComment =
-    evidenceObject && typeof evidenceObject.gmComment === 'string'
-      ? evidenceObject.gmComment.trim()
-      : ''
-  const actualRaw = gmCanViewMemberEval ? hubItemActualRaw(row) : '-'
+  const supervisorComments = parseKpiSupervisorEvaluationComments(row.evidences, {
+    statusCode: statusCode ?? undefined,
+    pmScore: parseReviewScore(row.endPmScore) ?? undefined,
+    gmScore: parseReviewScore(row.endGmScore) ?? undefined,
+  })
+  const actualRaw = hubItemActualRaw(row)
   return {
     id: String(row.assignmentId),
     index: index + 1,
@@ -626,9 +608,7 @@ function toKpiItem(row: GmEvaluationHubAssignmentApiRow, index: number): GmKpiIt
     target: hubItemTargetDisplay(row),
     targetRaw: hubItemTargetRaw(row),
     actualRaw,
-    actualResult: gmCanViewMemberEval
-      ? formatGmDrawerValueWithUnit(actualRaw, unitCtx)
-      : '-',
+    actualResult: formatGmDrawerValueWithUnit(actualRaw, unitCtx),
     unitCode,
     unitName: row.unitName ?? null,
     calculationTypeCode,
@@ -637,12 +617,13 @@ function toKpiItem(row: GmEvaluationHubAssignmentApiRow, index: number): GmKpiIt
         ? row.statusCode
         : null,
     statusDesc: asmProgressLabel(row) || undefined,
+    evaluationRejectReason: String(row.evaluationRejectReason ?? '').trim() || null,
     weight: parseWeight(row),
     calcRuleCode,
     evidenceButtonLabel: 'Evidence',
     evidenceButtonIcon: 'fas fa-file-alt',
     evidenceTone: 'blue',
-    selfScore: gmCanViewMemberEval ? parseSelfScore(row) : 0,
+    selfScore: parseSelfScore(row),
     // pmScore = điểm GM đã lưu; pmSeedScore = GM ?? PM (seed dropdown + fallback cột Supervisor Score khi chưa có GM).
     pmScore: parseReviewScore(row.endGmScore),
     pmSeedScore: parseReviewScore(row.endGmScore) ?? parseReviewScore(row.endPmScore),
@@ -651,7 +632,7 @@ function toKpiItem(row: GmEvaluationHubAssignmentApiRow, index: number): GmKpiIt
     evidenceContent:
       parsedEvidences.content || parsedEvidences.note || parsedEvidences.legacyPlain || '',
     evidenceAttachments: parsedEvidences.attachments ?? [],
-    gmComment,
+    gmComment: supervisorComments.gmComment || undefined,
     hubAssignmentStatusCode:
       typeof row.statusCode === 'number' && Number.isFinite(row.statusCode)
         ? row.statusCode
@@ -685,6 +666,15 @@ function isPromotionAssignmentRow(row: GmEvaluationHubAssignmentApiRow): boolean
 
 function isRealAssignmentRow(row: GmEvaluationHubAssignmentApiRow): boolean {
   return Boolean(String(row.assignmentId ?? '').trim())
+}
+
+function hubStatusCodesFromRows(rows: GmEvaluationHubAssignmentApiRow[]): number[] {
+  return rows
+    .map((r) => {
+      const n = typeof r.statusCode === 'number' ? r.statusCode : Number(r.statusCode)
+      return Number.isFinite(n) ? Math.trunc(n) : null
+    })
+    .filter((c): c is number => c != null)
 }
 
 function avgSelfFromItems(items: GmKpiItem[]): string | null {
@@ -721,13 +711,6 @@ function buildUserMember(
     groups.push(...buildKpiGroupsFromRows(promotionRows, true))
   }
 
-  if (groups.length === 0) {
-    groups.push({
-      groupTitle: 'Assigned KPIs (cycle)',
-      items: [],
-    })
-  }
-
   const flatItems = groups.flatMap((g) => g.items)
   const st = sheetStatusFromRows(rows)
   return {
@@ -749,6 +732,8 @@ function buildUserMember(
     employeeCommentPromotion: hubSummaryFieldFromRows(rows, 'evaluationCommentsPromotion'),
     supervisorCommentPortfolio: hubSummaryFieldFromRows(rows, 'supervisorCommentPortfolio'),
     supervisorCommentPromotion: hubSummaryFieldFromRows(rows, 'supervisorCommentPromotion'),
+    hubEvalStatusCodesPortfolio: hubStatusCodesFromRows(nonPromotionRows),
+    hubEvalStatusCodesPromotion: hubStatusCodesFromRows(promotionRows),
     groups,
   }
 }

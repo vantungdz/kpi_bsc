@@ -25,4 +25,6 @@ public class GmKpiTemplateItemResponse {
     private String targetDescription;
     private BigDecimal defaultTargetValue;
     private BigDecimal defaultWeight;
+    private Boolean isImportant;
+    private Boolean allowAssigneeTargetScaleEdit;
 }

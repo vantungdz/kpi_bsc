@@ -10,6 +10,7 @@ import {
   buildScoringRulesPayload,
   extractRawInputFromApiTargetDescription,
 } from '@/utils/kpiScoringRulesDsl'
+import { useAutoScoringRulesFromTarget } from '@/composables/useAutoScoringRulesFromTarget'
 import ScoringRulesHelpTooltip from '@/components/kpi/ScoringRulesHelpTooltip.vue'
 import { useKpiUnitOptions } from '@/composables/useKpiUnitOptions'
 import { kpiCycleService } from '@/services/shared/kpi-cycle.service'
@@ -130,6 +131,23 @@ const isEditMode = computed(() => {
 const editingKpiInformationId = computed(() =>
   String(props.editItem?.kpiInformationId ?? '').trim(),
 )
+const autoScoringFromTargetEnabled = computed(() => true)
+
+const { onScoringRulesManualInput, resetAutoScoringRulesTracking, markCurrentScoringRulesAsAutoBaseline } = useAutoScoringRulesFromTarget(
+  targetValue,
+  description,
+  autoScoringFromTargetEnabled,
+)
+const initialEditSnapshot = ref<{
+  perspective: string
+  kpiName: string
+  target: number | null
+  weight: number | null
+  unit: string
+  calcRule: number | null
+  calcType: number | null
+  scoringRules: string
+} | null>(null)
 
 // ── Lifecycle ───────────────────────────────────────────────────────────────────
 watch(open, async (v) => {
@@ -152,10 +170,12 @@ watch(calculationRuleCode, () => {
 })
 
 function resetForm() {
+  initialEditSnapshot.value = null
   perspective.value = ''
   kpiName.value = ''
   description.value = ''
   targetValue.value = ''
+  resetAutoScoringRulesTracking()
   weightPct.value = ''
   unit.value = 'MM'
   calculationRuleCode.value = DEFAULT_CALCULATION_RULE_CODE
@@ -201,13 +221,49 @@ function hydrateFormForEdit() {
     extractRawInputFromApiTargetDescription(item.targetDescription ?? '')
     || extractRawInputFromApiTargetDescription(item.target ?? '')
   description.value = rawRules
+  markCurrentScoringRulesAsAutoBaseline()
   const mappedUnit = findUnitOptionByAnyLabel(String(item.unitName ?? ''))
   unit.value = mappedUnit ?? 'MM'
+  initialEditSnapshot.value = {
+    perspective: perspective.value.trim(),
+    kpiName: kpiName.value.trim(),
+    target: Number.isFinite(Number.parseFloat(String(targetValue.value).trim()))
+      ? Number.parseFloat(String(targetValue.value).trim())
+      : null,
+    weight: Number.isFinite(Number.parseFloat(String(weightPct.value).trim()))
+      ? Number.parseFloat(String(weightPct.value).trim())
+      : null,
+    unit: String(unit.value ?? '').trim(),
+    calcRule: calculationRuleCode.value ?? null,
+    calcType: calculationTypeCode.value ?? null,
+    scoringRules: String(description.value ?? '').trim(),
+  }
 }
 
 function close() {
   open.value = false
 }
+
+const hasMeaningfulEditChanges = computed(() => {
+  if (!isEditMode.value) return true
+  const initial = initialEditSnapshot.value
+  if (!initial) return true
+  const current = {
+    perspective: perspective.value.trim(),
+    kpiName: kpiName.value.trim(),
+    target: Number.isFinite(Number.parseFloat(String(targetValue.value).trim()))
+      ? Number.parseFloat(String(targetValue.value).trim())
+      : null,
+    weight: Number.isFinite(Number.parseFloat(String(weightPct.value).trim()))
+      ? Number.parseFloat(String(weightPct.value).trim())
+      : null,
+    unit: String(unit.value ?? '').trim(),
+    calcRule: calculationRuleCode.value ?? null,
+    calcType: calculationTypeCode.value ?? null,
+    scoringRules: String(description.value ?? '').trim(),
+  }
+  return JSON.stringify(current) !== JSON.stringify(initial)
+})
 
 // ── Validation & Save ───────────────────────────────────────────────────────────
 const saving = ref(false)
@@ -275,6 +331,12 @@ function validateForm(): boolean {
 }
 
 async function save() {
+  if (isEditMode.value && !hasMeaningfulEditChanges.value) {
+    formErrors.value = { apiError: 'Bạn chưa thay đổi nội dung KPI.' }
+    await nextTick()
+    errorBannerRef.value?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    return
+  }
   if (!validateForm()) {
     await nextTick()
     errorBannerRef.value?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
@@ -667,6 +729,7 @@ async function save() {
                     v-model="description"
                     rows="6"
                     placeholder="1: <50&#10;2: 50-70&#10;3: 71-85&#10;4: 86-99&#10;5: >=100"
+                    @input="onScoringRulesManualInput"
                     class="custom-scrollbar min-h-[7.5rem] w-full resize-y rounded-md px-2.5 py-1.5 text-xs font-medium text-slate-800 outline-none transition-all focus:ring-2"
                     :class="formErrors.scoringRules ? '!border-rose-400 !bg-rose-50/70 focus:border-rose-400 focus:ring-rose-100' : 'input-required focus:border-blue-400 focus:ring-blue-100'"
                   />
@@ -692,7 +755,7 @@ async function save() {
             <button
               type="button"
               class="flex items-center gap-1.5 rounded-lg bg-blue-600 px-6 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:bg-blue-700 disabled:opacity-60"
-              :disabled="saving || isLoadingMeta || !kpiCategories.length"
+              :disabled="saving || isLoadingMeta || !kpiCategories.length || (isEditMode && !hasMeaningfulEditChanges)"
               @click="save"
             >
               <i

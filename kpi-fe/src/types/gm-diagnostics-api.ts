@@ -60,6 +60,8 @@ export interface GmDiagKpiApi {
   pmOwners: GmDiagPmApi[]
   investigateDeptId?: string | null
   investigateKpiName?: string | null
+  /** {@code promotion_cycles.id} — promotion KPI (type 103). */
+  promotionCycleId?: string | null
 }
 
 export interface GmDiagPmApi {
@@ -139,4 +141,6 @@ export interface GmDiagMemberApi {
   rank?: string | null
   rankCode?: string | null
   leader?: string | null
+  /** {@code kpi_assignments.promotion_cycle_id} — promotion KPI assignment. */
+  promotionCycleId?: string | null
 }

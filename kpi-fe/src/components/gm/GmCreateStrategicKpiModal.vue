@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onUnmounted, nextTick } from 'vue'
+import dayjs from 'dayjs'
+import type { GmPromotionCycleOption } from '@/types/gm-promotion-cycle'
 import type { GmBscPerspective, GmHierarchyKpi, GmHierarchyPm, GmStrategicKpiKind } from '@/types/gm-workspace'
 import type { GmStrategicKpiEditData } from '@/types/gm-strategic-kpi-edit'
 import { normalizeStrategicKpiKind } from '@/utils/gm-strategic-kpi-kind'
@@ -49,11 +51,15 @@ import {
 } from '@/utils/kpiScoringRulesDsl'
 import { useAutoScoringRulesFromTarget } from '@/composables/useAutoScoringRulesFromTarget'
 import { useAuthStore } from '@/stores/auth.store'
-import { useBlockedMemberAssignmentIds } from '@/composables/useBlockedMemberAssignmentIds'
+import {
+  useBlockedMemberAssignmentIds,
+  type BlockedMemberAssignmentQuery,
+} from '@/composables/useBlockedMemberAssignmentIds'
 import {
   isMemberAssignmentBlocked,
   MEMBER_ASSIGN_BLOCK_MESSAGE,
   PM_ASSIGN_BLOCK_MESSAGE,
+  PROMOTION_ASSIGN_BLOCK_MESSAGE,
 } from '@/utils/memberEvaluationVisibility'
 
 interface DirectMemberOption {
@@ -352,6 +358,19 @@ const needsStrategicTargetInput = computed(
     kpiType.value === 'promotion',
 )
 
+/** Tránh watch(kpiType) xóa assignment khi đang áp template “Sao chép KPI”. */
+const isApplyingCopyTemplate = ref(false)
+/** Tránh watch(kpiType) xóa PM khi hydrate form sửa. */
+const isHydratingFromEdit = ref(false)
+
+/** Tự sinh thang điểm khi đổi target; tắt khi hydrate/copy để không ghi đè dữ liệu API. */
+const autoScoringFromTargetEnabled = computed(
+  () =>
+    needsStrategicTargetInput.value &&
+    !isHydratingFromEdit.value &&
+    !isApplyingCopyTemplate.value,
+)
+
 const kpiTypeRows = ref<KpiTypeOption[]>([])
 const kpiTypesLoading = ref(false)
 const kpiTypesError = ref<string | null>(null)
@@ -457,6 +476,59 @@ const promotionAssigneeRows = ref<MemberByRankOption[]>([])
 const promotionAssigneesLoading = ref(false)
 const promotionAssigneesError = ref<string | null>(null)
 
+const promotionCycleRows = ref<GmPromotionCycleOption[]>([])
+const promotionCyclesLoading = ref(false)
+const promotionCyclesError = ref<string | null>(null)
+const selectedPromotionCycleId = ref('')
+
+const formEvaluationYear = computed(() => {
+  const cid = String(formCycleId.value ?? '').trim()
+  const row = evaluationCycleRows.value.find((r) => r.id === cid)
+  if (row?.year != null && Number.isFinite(row.year)) return row.year
+  const n = Number.parseInt(cid, 10)
+  return Number.isFinite(n) ? n : new Date().getFullYear()
+})
+
+function formatPromotionCycleOptionLabel(c: GmPromotionCycleOption): string {
+  const start = c.startDate ? dayjs(c.startDate).format('MMM D, YYYY') : '—'
+  const end = c.endDate ? dayjs(c.endDate).format('MMM D, YYYY') : '—'
+  return `${c.name} (${start} → ${end})`
+}
+
+function clearPromotionCycleState() {
+  promotionCycleRows.value = []
+  promotionCyclesLoading.value = false
+  promotionCyclesError.value = null
+  selectedPromotionCycleId.value = ''
+}
+
+async function loadPromotionCycles() {
+  promotionCyclesLoading.value = true
+  promotionCyclesError.value = null
+  try {
+    promotionCycleRows.value = await gmKpiService.getPromotionCycles(formEvaluationYear.value)
+  } catch (e: unknown) {
+    promotionCycleRows.value = []
+    promotionCyclesError.value =
+      e instanceof Error ? e.message : 'Could not load promotion cycles'
+  } finally {
+    promotionCyclesLoading.value = false
+  }
+}
+
+/** Cycles compatible with selected member(s): cycle.userId null (shared) or matches assignee. */
+const filteredPromotionCycleOptions = computed(() => {
+  const rows = promotionCycleRows.value
+  const members = selectedMembers.value.map((id) => String(id).trim()).filter(Boolean)
+  if (!members.length) return rows
+  const unique = new Set(members)
+  if (unique.size > 1) {
+    return rows.filter((c) => !c.userId)
+  }
+  const only = members[0]!
+  return rows.filter((c) => !c.userId || String(c.userId) === only)
+})
+
 function clearPromotionAssigneeState() {
   promotionAssigneeRows.value = []
   promotionAssigneesLoading.value = false
@@ -520,12 +592,18 @@ function rankAssignCheckboxTitle(rankCode: string, rankLabel: string): string {
     return 'Loading members for this rank…'
   }
   if (!rankHasMembers(code)) return 'No members in this rank'
+  if (rankIsAllMembersBlocked(code)) return memberAssignBlockMessage.value
   const lab = String(rankLabel ?? '').trim()
   return lab || code
 }
 
 function pruneIndividualRanksWithoutMembers() {
-  selectedRanks.value = selectedRanks.value.filter((r) => rankHasMembers(r))
+  selectedRanks.value = selectedRanks.value.filter((r) => {
+    if (!rankHasMembers(r)) return false
+    const selected = selectedRankMembers.value[r] ?? []
+    if (selected.length > 0) return true
+    return rankCanBeSelected(r)
+  })
   const next: Record<string, string[]> = { ...selectedRankMembers.value }
   for (const k of Object.keys(next)) {
     if (!rankHasMembers(k)) delete next[k]
@@ -539,12 +617,27 @@ const prefetchIndividualRankMembersInFlight = ref(false)
 const kpiName = ref('')
 const description = ref('')
 const targetValue = ref<string>('')
+const scoringRulesTextareaRef = ref<HTMLTextAreaElement | null>(null)
 
-const { onScoringRulesManualInput, resetAutoScoringRulesTracking } = useAutoScoringRulesFromTarget(
-  targetValue,
-  description,
-  needsStrategicTargetInput,
-)
+const {
+  onScoringRulesManualInput,
+  resetAutoScoringRulesTracking,
+  markCurrentScoringRulesAsAutoBaseline,
+  syncFromTarget,
+  pauseAutoSyncFromTarget,
+} = useAutoScoringRulesFromTarget(targetValue, description, autoScoringFromTargetEnabled)
+
+/** Lấy thang điểm từ DOM textarea (tránh lệch v-model khi bấm Lưu ngay sau sửa tay). */
+function scoringRulesRawForSave(): string {
+  const fromDom = scoringRulesTextareaRef.value?.value
+  if (typeof fromDom === 'string') {
+    if (fromDom !== description.value) {
+      description.value = fromDom
+    }
+    return fromDom
+  }
+  return description.value
+}
 
 const unit = ref<string>('MM')
 /** Đồng bộ `kpis_information.is_important` — không gửi mặc định true. */
@@ -563,7 +656,23 @@ const typesForSelectedRule = computed(
 
 /** UUID `kpi_cycles.id` — dropdown «Năm đánh giá» (đồng bộ DB). */
 const formCycleId = ref('')
-const { blockedMemberIds } = useBlockedMemberAssignmentIds(formCycleId)
+
+/** Nhóm strategic (101+102) vs promotion (103). */
+const blockedMemberAssignmentQuery = computed<BlockedMemberAssignmentQuery | null>(() => {
+  const cid = String(formCycleId.value ?? '').trim()
+  if (!cid) return null
+  if (kpiType.value === 'promotion') return { assignmentScope: 'promotion' }
+  if (kpiType.value === 'individual' || kpiType.value === 'cascading') {
+    return { assignmentScope: 'strategic' }
+  }
+  return null
+})
+
+const { blockedMemberIds } = useBlockedMemberAssignmentIds(formCycleId, blockedMemberAssignmentQuery)
+
+const memberAssignBlockMessage = computed(() =>
+  kpiType.value === 'promotion' ? PROMOTION_ASSIGN_BLOCK_MESSAGE : MEMBER_ASSIGN_BLOCK_MESSAGE,
+)
 
 function isMemberBlockedForNewAssignment(memberId: string): boolean {
   return isMemberAssignmentBlocked(memberId, blockedMemberIds.value)
@@ -619,11 +728,6 @@ const remainingTargetForGm = computed(() => {
 const canShowAssignToMe = computed(
   () => isEditingFromDiagnostics.value && kpiType.value === 'cascading' && gmUserId.value !== '',
 )
-
-/** Tránh watch(kpiType) xóa assignment khi đang áp template “Sao chép KPI”. */
-const isApplyingCopyTemplate = ref(false)
-/** Tránh watch(kpiType) xóa PM khi hydrate form sửa. */
-const isHydratingFromEdit = ref(false)
 
 /** Tab tạo KPI (chỉ khi tạo mới): tùy chỉnh · từ bộ mẫu. */
 const createTab = ref<'custom' | 'template'>('custom')
@@ -824,7 +928,8 @@ function buildPayloadFromTemplateApiItem(it: GmKpiTemplateItemRow): Record<strin
     unitCode,
     weightPct: it.defaultWeight != null ? String(it.defaultWeight) : '0',
     calculationMethod,
-    isImportant: false,
+    isImportant: it.isImportant === true,
+    allowAssigneeTargetScaleEdit: it.allowAssigneeTargetScaleEdit === true,
   }
   if (kind === 'cascading') {
     base.assignPMs = [] as string[]
@@ -970,31 +1075,73 @@ function selectCopyKpiFromPicker(id: string) {
   closeCopyKpiPicker()
 }
 
+/** Sau khi tải chi tiết KPI (sao chép / sửa): đồng bộ target, thang điểm và đánh dấu baseline auto. */
+function applyStrategicKpiDetailToCreateForm(data: GmStrategicKpiEditData) {
+  const cm = String(data.calculationMethod ?? '').trim()
+  if (cm) hydrateCalculationFromPersisted(cm)
+  description.value = extractRawInputFromApiTargetDescription(data.targetDescription)
+  allowAssigneeTargetScaleEdit.value = data.allowAssigneeTargetScaleEdit === true
+  if (needsStrategicTargetInput.value) {
+    const tv = data.targetValue
+    if (tv != null && tv !== '' && Number.isFinite(Number(tv))) {
+      targetValue.value = String(tv)
+    }
+  }
+  if (kpiTypeCode.value === 102 && data.pmTargets) {
+    const selectedPmSet = new Set(selectedPMs.value)
+    const nextPm: Record<string, string> = { ...pmTargets.value }
+    for (const [k, v] of Object.entries(data.pmTargets)) {
+      const key = String(k ?? '').trim()
+      if (!key || !selectedPmSet.has(key) || v == null || v === '') continue
+      nextPm[key] =
+        typeof v === 'number' && Number.isFinite(v) ? String(v) : String(v).trim()
+    }
+    pmTargets.value = nextPm
+  }
+  markCurrentScoringRulesAsAutoBaseline()
+  if (!description.value.trim()) {
+    syncFromTarget(targetValue.value)
+  }
+}
+
+function finalizeCopyFormScoringBaseline() {
+  markCurrentScoringRulesAsAutoBaseline()
+  if (!description.value.trim()) {
+    syncFromTarget(targetValue.value)
+  }
+}
+
 function applyCopyFromKpi(id: string) {
   assignDropdown.value = null
   if (!id) return
   const kpi = copyKpiHierarchyRows.value.find((r) => r.id === id)
   if (!kpi) return
   isApplyingCopyTemplate.value = true
+  resetAutoScoringRulesTracking()
   formCycleId.value = String(props.cycleId)
   fillCreateFormFieldsFromHierarchyKpi(kpi)
-  isApplyingCopyTemplate.value = false
   if (normalizeStrategicKpiKind(kpi.kpiType) === 'individual') {
     void loadRanks()
   } else if (normalizeStrategicKpiKind(kpi.kpiType) === 'promotion') {
     void loadPromotionAssignees()
   }
   const apiIdForCopy = parseDiagnosticsKpiInformationId(kpi)
-  if (!apiIdForCopy) return
+  if (!apiIdForCopy) {
+    finalizeCopyFormScoringBaseline()
+    isApplyingCopyTemplate.value = false
+    return
+  }
   void gmKpiService
     .getStrategicKpiForEdit(apiIdForCopy)
     .then((data) => {
-      const cm = String(data.calculationMethod ?? '').trim()
-      if (cm) hydrateCalculationFromPersisted(cm)
-      description.value = extractRawInputFromApiTargetDescription(data.targetDescription)
+      applyStrategicKpiDetailToCreateForm(data)
     })
     .catch(() => {
-      // Giữ giá trị công thức / quy tắc chấm điểm hiện tại nếu không tải được dữ liệu chi tiết KPI nguồn.
+      // Giữ target / thang điểm từ diagnostics; vẫn cho phép auto-fill khi đổi target sau copy.
+      finalizeCopyFormScoringBaseline()
+    })
+    .finally(() => {
+      isApplyingCopyTemplate.value = false
     })
 }
 
@@ -1074,6 +1221,32 @@ function membersByRank(rank: string): DirectMemberOption[] {
   return raw.map(mapMemberByRankToDirect)
 }
 
+/** Member trong rank được phép gán KPI mới (không nằm trong blocked set). */
+function assignableMemberIdsForRank(rankCode: string): string[] {
+  return membersByRank(rankCode)
+    .map((m) => m.val)
+    .filter((id) => !isMemberBlockedForNewAssignment(id))
+}
+
+function rankHasAssignableMembers(rankCode: string): boolean {
+  const code = String(rankCode ?? '').trim()
+  if (!code || !isRankMemberListLoaded(code)) return false
+  return assignableMemberIdsForRank(code).length > 0
+}
+
+/** Rank đã tải member và tất cả đều bị chặn gán mới. */
+function rankIsAllMembersBlocked(rankCode: string): boolean {
+  const code = String(rankCode ?? '').trim()
+  if (!code || !isRankMemberListLoaded(code)) return false
+  const total = (membersByRankCache.value[code] ?? []).length
+  return total > 0 && !rankHasAssignableMembers(code)
+}
+
+/** Rank có thể tick chọn: có member và ít nhất một member chưa bị block. */
+function rankCanBeSelected(rankCode: string): boolean {
+  return rankHasMembers(rankCode) && rankHasAssignableMembers(rankCode)
+}
+
 const individualRankCards = computed(() => {
   const query = individualRankMemberSearch.value.trim().toLowerCase()
 
@@ -1088,8 +1261,7 @@ const individualRankCards = computed(() => {
           const haystack = `${member.short} ${member.dept} ${member.rank} ${member.label}`.toLowerCase()
           return haystack.includes(query)
         })
-    const defaultIds = allMembers.map((member) => member.val)
-    const selectedIds = selectedRankMembers.value[rank] ?? defaultIds
+    const selectedIds = selectedRankMembers.value[rank] ?? []
     return {
       rank,
       label: rankMeta?.name ?? rank,
@@ -1105,23 +1277,18 @@ const individualRankCards = computed(() => {
   })
 })
 
-function selectedRankMemberCount(rank: string) {
-  return (selectedRankMembers.value[rank] ?? []).length
-}
-
-function totalRankMemberCount(rank: string) {
-  return membersByRank(rank).length
-}
-
 function isRankFullySelected(rank: string) {
-  const total = totalRankMemberCount(rank)
-  return total > 0 && selectedRankMemberCount(rank) === total
+  const assignable = assignableMemberIdsForRank(rank)
+  if (assignable.length === 0) return false
+  const selected = selectedRankMembers.value[rank] ?? []
+  return assignable.every((id) => selected.includes(id))
 }
 
 function isRankPartiallySelected(rank: string) {
-  const selected = selectedRankMemberCount(rank)
-  const total = totalRankMemberCount(rank)
-  return selected > 0 && selected < total
+  const assignable = assignableMemberIdsForRank(rank)
+  if (assignable.length === 0) return false
+  const selected = (selectedRankMembers.value[rank] ?? []).filter((id) => assignable.includes(id))
+  return selected.length > 0 && selected.length < assignable.length
 }
 
 function typeCardClassForCode(code: number) {
@@ -1246,13 +1413,14 @@ async function toggleRank(val: string) {
   if (isDirectFeedbackSplitEdit.value) return
   const i = selectedRanks.value.indexOf(val)
   if (i === -1) {
-    if (!rankHasMembers(val)) return
-    selectedRanks.value = [...selectedRanks.value, val]
     await ensureMembersLoadedForRank(val)
-    const members = membersByRank(val)
+    if (!rankCanBeSelected(val)) return
+    const assignableIds = assignableMemberIdsForRank(val)
+    if (assignableIds.length === 0) return
+    selectedRanks.value = [...selectedRanks.value, val]
     selectedRankMembers.value = {
       ...selectedRankMembers.value,
-      [val]: members.map((member) => member.val),
+      [val]: assignableIds,
     }
     if (!expandedRankSections.value.includes(val)) {
       expandedRankSections.value = [...expandedRankSections.value, val]
@@ -1272,7 +1440,7 @@ function toggleMember(val: string) {
   const i = selectedMembers.value.indexOf(val)
   if (i === -1) {
     if (isMemberBlockedForNewAssignment(val)) {
-      formErrors.value = { ...formErrors.value, memberAssign: MEMBER_ASSIGN_BLOCK_MESSAGE }
+      formErrors.value = { ...formErrors.value, memberAssign: memberAssignBlockMessage.value }
       return
     }
     selectedMembers.value = [...selectedMembers.value, val]
@@ -1286,7 +1454,7 @@ function toggleRankMember(rank: string, memberId: string) {
   const current = selectedRankMembers.value[rank] ?? []
   const exists = current.includes(memberId)
   if (!exists && isMemberBlockedForNewAssignment(memberId)) {
-    formErrors.value = { ...formErrors.value, memberAssign: MEMBER_ASSIGN_BLOCK_MESSAGE }
+    formErrors.value = { ...formErrors.value, memberAssign: memberAssignBlockMessage.value }
     return
   }
   selectedRankMembers.value = {
@@ -1396,9 +1564,11 @@ function hydrateFormFromHierarchyKpi(kpi: GmHierarchyKpi) {
   copyKpiFilterQuery.value = ''
   formCycleId.value = String(props.cycleId)
   fillCreateFormFieldsFromHierarchyKpi(kpi)
-  void nextTick(() => {
-    isHydratingFromEdit.value = false
-  })
+  markCurrentScoringRulesAsAutoBaseline()
+  if (!description.value.trim()) {
+    syncFromTarget(targetValue.value)
+  }
+  void nextTick()
 }
 
 function weightPctStringFromApi(w: unknown): string {
@@ -1529,8 +1699,13 @@ async function hydrateFormFromStrategicKpiEditData(data: GmStrategicKpiEditData,
       : (data.memberIds ?? []).map((u) => String(u).trim()).filter(Boolean)
   }
 
+  markCurrentScoringRulesAsAutoBaseline()
+  if (!description.value.trim()) {
+    syncFromTarget(targetValue.value)
+  }
+
+  await nextTick()
   await nextTick(() => {
-    isHydratingFromEdit.value = false
     if (isGmFeedbackCascadingAllocationReview.value) {
       applyFeedbackPmOnlyToAssignSelection()
     }
@@ -1552,6 +1727,7 @@ watch(kpiType, () => {
   expandedRankSections.value = []
   individualRankMemberSearch.value = ''
   memberAssignSearch.value = ''
+  selectedPromotionCycleId.value = ''
   const allowedRules = new Set(calcRulesWithTypes.value.map((row) => row.code))
   if (!allowedRules.has(calculationRuleCode.value)) {
     calculationRuleCode.value = calcRulesWithTypes.value[0]?.code ?? DEFAULT_CALCULATION_RULE_CODE
@@ -1562,8 +1738,53 @@ watch(kpiType, () => {
     void loadRanks()
   } else if (kpiType.value === 'promotion' && open.value) {
     void loadPromotionAssignees()
+    void loadPromotionCycles()
   }
 })
+
+watch(formCycleId, () => {
+  if (!open.value || kpiType.value !== 'promotion') return
+  if (isHydratingFromEdit.value) return
+  selectedPromotionCycleId.value = ''
+  void loadPromotionCycles()
+})
+
+watch(selectedMembers, () => {
+  if (kpiType.value !== 'promotion') return
+  const allowed = new Set(filteredPromotionCycleOptions.value.map((c) => c.id))
+  if (selectedPromotionCycleId.value && !allowed.has(selectedPromotionCycleId.value)) {
+    selectedPromotionCycleId.value = ''
+  }
+})
+
+/** Gỡ member bị block khỏi lựa chọn mới (giữ selection khi đang hydrate sửa / feedback split). */
+watch(
+  () => blockedMemberIds.value,
+  () => {
+    if (!open.value || kpiType.value !== 'individual') return
+    if (isHydratingFromEdit.value || isDirectFeedbackSplitEdit.value) return
+    const nextMap: Record<string, string[]> = {}
+    let changed = false
+    for (const [rank, ids] of Object.entries(selectedRankMembers.value)) {
+      const filtered = ids.filter((id) => !isMemberBlockedForNewAssignment(id))
+      if (filtered.length !== ids.length) changed = true
+      if (filtered.length) nextMap[rank] = filtered
+      else if (ids.length) changed = true
+    }
+    const nextRanks = selectedRanks.value.filter((r) => {
+      if ((nextMap[r]?.length ?? 0) > 0) return true
+      return rankCanBeSelected(r)
+    })
+    if (
+      changed ||
+      nextRanks.length !== selectedRanks.value.length ||
+      Object.keys(nextMap).length !== Object.keys(selectedRankMembers.value).length
+    ) {
+      selectedRankMembers.value = nextMap
+      selectedRanks.value = nextRanks
+    }
+  },
+)
 
 /** Tải member từng rank để biết rank nào rỗng → disable checkbox (chỉ KPI individual). */
 watch(
@@ -1607,6 +1828,7 @@ watch(assignDropdown, (v) => {
 function resetForm() {
   clearMembersByRankState()
   clearPromotionAssigneeState()
+  clearPromotionCycleState()
   copyFromId.value = ''
   formCycleId.value = resolveDefaultFormCycleUuid()
 
@@ -1666,27 +1888,36 @@ watch(open, async (v) => {
     if (props.editInitial) {
       createTab.value = 'custom'
       strategicEditDetailError.value = null
-      const apiIdForEdit = parseDiagnosticsKpiInformationId(props.editInitial)
-      if (apiIdForEdit) {
-        strategicEditDetailLoading.value = true
-        try {
-          const data = await gmKpiService.getStrategicKpiForEdit(apiIdForEdit)
-          await hydrateFormFromStrategicKpiEditData(data, props.editInitial)
-        } catch (e: unknown) {
-          strategicEditDetailError.value =
-            e instanceof Error ? e.message : 'Could not load KPI data for editing'
+      const resumeAutoSync = pauseAutoSyncFromTarget()
+      isHydratingFromEdit.value = true
+      try {
+        const apiIdForEdit = parseDiagnosticsKpiInformationId(props.editInitial)
+        if (apiIdForEdit) {
+          strategicEditDetailLoading.value = true
+          try {
+            const data = await gmKpiService.getStrategicKpiForEdit(apiIdForEdit)
+            await hydrateFormFromStrategicKpiEditData(data, props.editInitial)
+          } catch (e: unknown) {
+            strategicEditDetailError.value =
+              e instanceof Error ? e.message : 'Could not load KPI data for editing'
+            hydrateFormFromHierarchyKpi(props.editInitial)
+          } finally {
+            strategicEditDetailLoading.value = false
+          }
+        } else {
           hydrateFormFromHierarchyKpi(props.editInitial)
-        } finally {
-          strategicEditDetailLoading.value = false
         }
-      } else {
-        hydrateFormFromHierarchyKpi(props.editInitial)
-      }
-      const kind = normalizeStrategicKpiKind(props.editInitial.kpiType)
-      if (kind === 'individual' && !apiIdForEdit) {
-        await loadRanks()
-      } else if (kind === 'promotion') {
-        await loadPromotionAssignees()
+        const kind = normalizeStrategicKpiKind(props.editInitial.kpiType)
+        if (kind === 'individual' && !parseDiagnosticsKpiInformationId(props.editInitial)) {
+          await loadRanks()
+        } else if (kind === 'promotion') {
+          await Promise.all([loadPromotionAssignees(), loadPromotionCycles()])
+        }
+      } finally {
+        await nextTick()
+        await nextTick()
+        isHydratingFromEdit.value = false
+        resumeAutoSync()
       }
     } else {
       resetForm()
@@ -1703,6 +1934,7 @@ watch(open, async (v) => {
     copyKpiPickerOpen.value = false
     copyKpiFilterQuery.value = ''
     clearPromotionAssigneeState()
+    clearPromotionCycleState()
   }
 })
 
@@ -1800,11 +2032,12 @@ function validateForm(): boolean {
     }
   }
 
-  const descTrim = description.value.trim()
+  const scoringRaw = scoringRulesRawForSave()
+  const descTrim = scoringRaw.trim()
   if (!descTrim) {
     err.scoringRules = 'Enter scoring rules (levels 1–5 per syntax).'
   } else {
-    const vr = validateScoringRulesDsl(description.value)
+    const vr = validateScoringRulesDsl(scoringRaw)
     if (!vr.ok) {
       err.scoringRules = vr.errors.join(' ')
     }
@@ -1837,6 +2070,21 @@ function validateForm(): boolean {
     err.assign = 'Cannot identify the member who sent feedback.'
   }
 
+  if (!isGmAssignSectionReadonly.value && kpiType.value === 'promotion') {
+    if (!String(selectedPromotionCycleId.value).trim()) {
+      err.promotionCycleId = 'Select a promotion cycle.'
+    }
+    if (selectedMembers.value.length === 0) {
+      err.assign = 'Select at least one member for this promotion KPI.'
+    } else if (selectedMembers.value.length > 1) {
+      const unique = new Set(selectedMembers.value)
+      if (unique.size > 1 && filteredPromotionCycleOptions.value.every((c) => c.userId)) {
+        err.promotionCycleId =
+          'When assigning multiple members, choose a promotion cycle without a fixed user, or assign one member at a time.'
+      }
+    }
+  }
+
   formErrors.value = err
   return Object.keys(err).length === 0
 }
@@ -1854,14 +2102,16 @@ async function save() {
   }
 
   saving.value = true
+  const scoringRawForPayload = scoringRulesRawForSave()
+  const builtPayload = scoringRawForPayload.trim()
+    ? buildScoringRulesPayload(scoringRawForPayload)
+    : null
   const payload: Record<string, unknown> = {
     typeCode: kpiTypeCode.value,
     /** UUID `kpi_categories.id` — nhóm KPI trên DB (tên field legacy `perspective`). */
     perspective: perspective.value,
     kpiName: kpiName.value,
-    targetDescription: description.value.trim()
-      ? buildScoringRulesPayload(description.value)
-      : null,
+    targetDescription: builtPayload,
     targetValue: needsStrategicTargetInput.value
       ? Number.parseFloat(String(targetValue.value).trim())
       : null,
@@ -1883,6 +2133,9 @@ async function save() {
       payload.memberIds = Object.values(selectedRankMembers.value).flat()
     } else {
       payload.memberIds = [...selectedMembers.value]
+      if (kpiType.value === 'promotion') {
+        payload.promotionCycleId = String(selectedPromotionCycleId.value).trim()
+      }
     }
   }
 
@@ -2454,10 +2707,12 @@ async function save() {
                     <ScoringRulesHelpTooltip aria-label="Scoring rules syntax example" />
                   </div>
                   <textarea
+                    ref="scoringRulesTextareaRef"
                     v-model="description"
                     rows="5"
                     placeholder="Nhập target để tự sinh (5: ≥1.2X, 4: [1.1X–1.2X), …)"
-                    @input="onScoringRulesManualInput"
+                    @input="onScoringRulesManualInput($event)"
+                    @change="onScoringRulesManualInput($event)"
                     class="custom-scrollbar min-h-[7.5rem] w-full resize-y rounded-md px-2.5 py-1.5 text-xs font-medium text-slate-800 outline-none transition-all focus:ring-2"
                     :class="
                       formErrors.scoringRules
@@ -2489,12 +2744,63 @@ async function save() {
               </label>
             </div>
 
+            <div v-if="kpiType === 'promotion'" class="mb-4">
+              <label class="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                Promotion Cycle <span class="text-rose-500">*</span>
+              </label>
+              <p v-if="promotionCyclesError" class="mb-1 text-[10px] font-semibold text-amber-700">
+                {{ promotionCyclesError }}
+              </p>
+              <div class="relative">
+                <select
+                  v-model="selectedPromotionCycleId"
+                  class="input-required min-h-[38px] w-full cursor-pointer appearance-none rounded-md py-2 pl-2.5 pr-7 text-xs font-bold text-slate-800 outline-none transition-all"
+                  :class="formErrors.promotionCycleId ? '!border-rose-400 !bg-rose-50/50' : ''"
+                  :disabled="promotionCyclesLoading || filteredPromotionCycleOptions.length === 0"
+                >
+                  <option value="" disabled>
+                    {{
+                      promotionCyclesLoading
+                        ? 'Loading promotion cycles…'
+                        : filteredPromotionCycleOptions.length === 0
+                          ? 'No promotion cycles for this year / assignee'
+                          : 'Select a promotion cycle…'
+                    }}
+                  </option>
+                  <option
+                    v-for="c in filteredPromotionCycleOptions"
+                    :key="c.id"
+                    :value="c.id"
+                  >
+                    {{ formatPromotionCycleOptionLabel(c) }}
+                  </option>
+                </select>
+                <i class="fas fa-chevron-down pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-slate-400" />
+              </div>
+              <p v-if="formErrors.promotionCycleId" class="mt-1 text-[10px] font-semibold text-rose-600">
+                {{ formErrors.promotionCycleId }}
+              </p>
+              <p
+                v-else-if="selectedMembers.length === 0"
+                class="mt-1 text-[10px] font-medium text-slate-500"
+              >
+                Select member(s) below — cycles may filter to the assignee when the cycle is tied to a user.
+              </p>
+            </div>
+
             <div>
               <template v-if="!isGmFeedbackCascadingAllocationReview && !isDirectFeedbackSplitEdit">
                 <div class="mb-1 flex flex-wrap items-center justify-between gap-2">
                   <label class="block min-w-0 flex-1 text-[11px] font-bold uppercase tracking-wider text-slate-500">
                     {{ assignLabel }}
-                    <span class="text-[9px] font-semibold text-slate-400"> (Optional)</span>
+                    <span
+                      v-if="kpiType === 'promotion'"
+                      class="text-rose-500"
+                    > *</span>
+                    <span
+                      v-else
+                      class="text-[9px] font-semibold text-slate-400"
+                    > (Optional)</span>
                   </label>
                   <button
                     v-if="canShowAssignToMe"
@@ -2698,10 +3004,10 @@ async function save() {
                     :title="rankAssignCheckboxTitle(rk.val, rk.label)"
                     class="flex items-center gap-2 rounded-lg border bg-white p-2 shadow-sm transition-colors"
                     :class="[
-                      rankHasMembers(rk.val) ? 'cursor-pointer hover:bg-blue-50/50' : 'cursor-not-allowed bg-slate-50/80',
+                      rankCanBeSelected(rk.val) ? 'cursor-pointer hover:bg-blue-50/50' : 'cursor-not-allowed bg-slate-50/80',
                       selectedRanks.includes(rk.val)
                         ? 'border-blue-500 bg-blue-50'
-                        : rankHasMembers(rk.val)
+                        : rankCanBeSelected(rk.val)
                           ? 'border-slate-200'
                           : 'border-slate-200/60',
                     ]"
@@ -2709,22 +3015,22 @@ async function save() {
                     <input
                       type="checkbox"
                       class="h-3.5 w-3.5 shrink-0 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                      :class="rankHasMembers(rk.val) ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'"
+                      :class="rankCanBeSelected(rk.val) ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'"
                       :checked="isRankFullySelected(rk.val)"
                       :indeterminate="isRankPartiallySelected(rk.val)"
-                      :disabled="!rankHasMembers(rk.val)"
-                      @change="rankHasMembers(rk.val) && toggleRank(rk.val)"
+                      :disabled="!rankCanBeSelected(rk.val)"
+                      @change="rankCanBeSelected(rk.val) && toggleRank(rk.val)"
                     />
                     <div class="flex min-w-0 flex-col leading-none">
                       <span
                         class="text-xs font-bold"
                         :class="[
-                          selectedRanks.includes(rk.val) ? 'text-blue-700' : rankHasMembers(rk.val) ? 'text-slate-700' : 'text-slate-400',
+                          selectedRanks.includes(rk.val) ? 'text-blue-700' : rankCanBeSelected(rk.val) ? 'text-slate-700' : 'text-slate-400',
                         ]"
                       >{{ rk.val }}</span>
                       <span
                         class="mt-1 block truncate text-[9px]"
-                        :class="rankHasMembers(rk.val) ? 'text-slate-500' : 'text-slate-400'"
+                        :class="rankCanBeSelected(rk.val) ? 'text-slate-500' : 'text-slate-400'"
                         :title="rk.label"
                       >{{ rk.label }}</span>
                     </div>
@@ -2807,7 +3113,7 @@ async function save() {
                             :title="
                               isMemberBlockedForNewAssignment(member.val) &&
                               !isRankMemberSelected(rankCard.rank, member.val)
-                                ? MEMBER_ASSIGN_BLOCK_MESSAGE
+                                ? memberAssignBlockMessage
                                 : undefined
                             "
                           >
@@ -2979,7 +3285,7 @@ async function save() {
                         "
                         :title="
                           isMemberBlockedForNewAssignment(m.val) && !selectedMembers.includes(m.val)
-                            ? MEMBER_ASSIGN_BLOCK_MESSAGE
+                            ? memberAssignBlockMessage
                             : undefined
                         "
                       >

@@ -106,8 +106,11 @@ public class MemberKpiDashboardResponse {
         private String feedbackComment;
         /** Lý do cập nhật / từ chối từ luồng PM/GM (kpi_assignments.update_reason). */
         private String updateReason;
+        /** Lý do từ chối đánh giá (ASM 504/604). */
+        private String evaluationRejectReason;
         private Boolean createdByCurrentUser;
         private String createdByRoleCode;
+        private Boolean allowAssigneeTargetScaleEdit;
         private String gmComment;
         private String certificateOutcomeNote;
         private Double selfScore;

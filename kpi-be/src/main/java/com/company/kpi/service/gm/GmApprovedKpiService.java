@@ -9,6 +9,7 @@ import com.company.kpi.request.gm.GmApprovedKpiDecisionRequest;
 import com.company.kpi.request.gm.GmFeedbackSplitKpiRequest;
 import com.company.kpi.response.gm.GmApprovedKpiDecisionResponse;
 import com.company.kpi.response.gm.GmApprovedKpiQueueItemResponse;
+import com.company.kpi.service.common.AssigneeEditBaselineSupport;
 import com.company.kpi.service.kpi.StrategicKpiService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -25,11 +26,17 @@ public class GmApprovedKpiService {
     private final KpiCycleMapper kpiCycleMapper;
     private final KpiAssignmentMapper kpiAssignmentMapper;
     private final StrategicKpiService strategicKpiService;
+    private final AssigneeEditBaselineSupport assigneeEditBaselineSupport;
 
     public List<GmApprovedKpiQueueItemResponse> listQueue(UUID cycleId) {
         kpiCycleMapper.findById(cycleId)
                 .orElseThrow(() -> AppException.notFound("KPI cycle not found: " + cycleId));
-        return kpiAssignmentMapper.listGmApprovedKpiQueue(cycleId);
+        List<GmApprovedKpiQueueItemResponse> rows =
+                kpiAssignmentMapper.listGmApprovedKpiQueue(cycleId);
+        for (GmApprovedKpiQueueItemResponse row : rows) {
+            assigneeEditBaselineSupport.enrichApprovedQueueItem(row);
+        }
+        return rows;
     }
 
     @Transactional
@@ -82,11 +89,23 @@ public class GmApprovedKpiService {
             } else if (newStatus == Constants.AssignStatus.REJECTED) {
                 kpiAssignmentMapper.cascadeActivateChildAssignments(req.getAssignmentId(), cycleId, Constants.AssignStatus.REJECTED, gmUserId);
             }
-            
+
             updatedCount = n;
+            int siblingsReset = 0;
+            if (!Boolean.TRUE.equals(req.getApprove())
+                    && newStatus == Constants.AssignStatus.REJECTED
+                    && Boolean.TRUE.equals(req.getResetDrawerSiblingsToPendingAcceptance())) {
+                siblingsReset = kpiAssignmentMapper.resetGmApprovedQueueSiblingsToPendingAcceptance(
+                        req.getAssignmentId(), cycleId, gmUserId);
+            }
+            GmApprovedKpiDecisionResponse out = new GmApprovedKpiDecisionResponse();
+            out.setUpdatedCount(updatedCount);
+            out.setSiblingsResetToPendingAcceptanceCount(siblingsReset);
+            return out;
         }
         GmApprovedKpiDecisionResponse out = new GmApprovedKpiDecisionResponse();
         out.setUpdatedCount(updatedCount);
+        out.setSiblingsResetToPendingAcceptanceCount(0);
         return out;
     }
 

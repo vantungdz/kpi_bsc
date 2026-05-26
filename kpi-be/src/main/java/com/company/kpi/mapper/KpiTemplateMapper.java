@@ -49,7 +49,9 @@ public interface KpiTemplateMapper {
             @Param("masterKpiId") UUID masterKpiId,
             @Param("defaultTargetDescription") String defaultTargetDescription,
             @Param("defaultTargetValue") BigDecimal defaultTargetValue,
-            @Param("defaultWeight") BigDecimal defaultWeight);
+            @Param("defaultWeight") BigDecimal defaultWeight,
+            @Param("isImportant") boolean isImportant,
+            @Param("allowAssigneeTargetScaleEdit") boolean allowAssigneeTargetScaleEdit);
 
     KpiTemplateItemEditRow selectTemplateItemEditRow(
             @Param("templateId") UUID templateId, @Param("itemId") UUID itemId);
@@ -62,7 +64,9 @@ public interface KpiTemplateMapper {
             @Param("itemId") UUID itemId,
             @Param("defaultTargetDescription") String defaultTargetDescription,
             @Param("defaultTargetValue") BigDecimal defaultTargetValue,
-            @Param("defaultWeight") BigDecimal defaultWeight);
+            @Param("defaultWeight") BigDecimal defaultWeight,
+            @Param("isImportant") boolean isImportant,
+            @Param("allowAssigneeTargetScaleEdit") boolean allowAssigneeTargetScaleEdit);
 
     int deleteTemplateItemByTemplateAndId(@Param("templateId") UUID templateId, @Param("itemId") UUID itemId);
 

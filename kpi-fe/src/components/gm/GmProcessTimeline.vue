@@ -110,6 +110,18 @@ const phaseLabels = computed(() => ({
   yearEnd: formatPhaseDuration(cycleData.value.endYearStart, cycleData.value.endYearEnd, 'Q4'),
 }))
 
+/** "Starts in {month}" từ ngày bắt đầu phase trong DB. */
+function formatPhaseStartsIn(start: string | null, fallbackMonth: string): string {
+  if (!start) return `Starts in ${fallbackMonth}`
+  return `Starts in ${dayjs(start).format('MMMM')}`
+}
+
+const phaseStartLabels = computed(() => ({
+  setting: formatPhaseStartsIn(cycleData.value.goalSettingStart, 'January'),
+  mid: formatPhaseStartsIn(cycleData.value.midYearStart, 'June'),
+  yearEnd: formatPhaseStartsIn(cycleData.value.endYearStart, 'November'),
+}))
+
 type TimelineIssuesPhase = 'setting' | 'mid' | 'yearEnd'
 
 const issuesPopoverPhase = ref<TimelineIssuesPhase | null>(null)
@@ -134,7 +146,7 @@ function issueGroupsForPhase(phase: GmMidYearIssuesData | null | undefined): GmT
     return phase.issueDetails.map((b) => ({
       id: b.id,
       title: b.title,
-      severity: b.id === 'missing_evidence' || b.id === 'unassigned_members' ? 'warning' : 'warning',
+      severity: b.id === 'setting_unassigned_members' ? 'critical' : 'warning',
       blockedRole: 'Member',
       affectedEmployees: distinctAssigneeCount(b.items),
       affectedKpis: new Set(b.items.map((i) => i.kpi).filter(Boolean)).size,
@@ -285,11 +297,11 @@ const issuePopoverRows = computed((): IssuePopoverRow[] => {
 
 /**
  * Subline cho mỗi issue group trong popover.
- * `unassigned_members`: chỉ hiện số employees (không có KPI nên không hiện "· 0 KPIs").
+ * `setting_unassigned_members`: chỉ hiện số employees (không có KPI nên không hiện "· 0 KPIs").
  */
 function buildIssueSubline(g: GmTimelineIssueGroup): string {
   if (g.affectedEmployees <= 0) return ''
-  if (g.id === 'unassigned_members') {
+  if (g.id === 'setting_unassigned_members') {
     return `${g.affectedEmployees} employee${g.affectedEmployees === 1 ? '' : 's'} · 0 KPIs`
   }
   return `${g.affectedEmployees} employee${g.affectedEmployees === 1 ? '' : 's'} · ${g.affectedKpis} KPI${g.affectedKpis === 1 ? '' : 's'}`
@@ -492,14 +504,14 @@ const activeKpiGroups = computed((): GmTimelineKpiGroup[] => {
   return resolveTimelineKpiGroups(g)
 })
 
-/** Department-first drawer layout for `unassigned_members` only. */
+/** Department-first drawer layout for `setting_unassigned_members` only. */
 const isUnassignedMembersIssue = computed(
-  () => activeIssueGroup.value?.id === 'unassigned_members',
+  () => activeIssueGroup.value?.id === 'setting_unassigned_members',
 )
 
 const unassignedDeptGroups = computed((): GmTimelineBreakdownGroup[] => {
   const g = activeIssueGroup.value
-  if (!g || g.id !== 'unassigned_members') return []
+  if (!g || g.id !== 'setting_unassigned_members') return []
   return buildTimelineBreakdownGroupsFromEmployees(g.employees)
 })
 
@@ -508,16 +520,30 @@ const drawerDisplayTitle = computed(() => activeIssueGroup.value?.title ?? '')
 /** KPI cluster subline under title (by issue group id). */
 function timelineClusterStatusEn(issueId: string): string {
   switch (issueId) {
-    case 'pending_acceptance':
+    case 'setting_pending_acceptance':
       return 'Awaiting member acceptance'
-    case 'pending_pm_review':
-      return 'Pending PM review'
-    case 'pending_gm_approval':
-      return 'Pending GM approval'
-    case 'kpi_not_submitted':
-      return 'Submission pending'
-    case 'missing_evidence':
-      return 'Evidence incomplete'
+    case 'setting_rejected':
+      return 'Rejected'
+    case 'setting_feedback':
+      return 'Feedback in progress'
+    case 'mid_not_evaluated':
+      return 'Not evaluated (Mid-Year)'
+    case 'mid_pending_pm_evaluation':
+      return 'Pending PM evaluation (Mid-Year)'
+    case 'mid_pending_gm_evaluation':
+      return 'Pending GM evaluation (Mid-Year)'
+    case 'mid_rejected':
+      return 'Rejected (Mid-Year)'
+    case 'end_not_evaluated':
+      return 'Not evaluated (Final)'
+    case 'end_pending_pm_evaluation':
+      return 'Pending PM evaluation (Final)'
+    case 'end_pending_gm_evaluation':
+      return 'Pending GM evaluation (Final)'
+    case 'end_rejected':
+      return 'Rejected (Final)'
+    case 'setting_unassigned_members':
+      return 'No KPI assigned'
     default:
       return 'In progress'
   }
@@ -639,18 +665,30 @@ function closeIssueDrawer() {
 /** One-line operational summary for clusters (same issue = same headline). */
 function issueBlockerShortLabel(g: GmTimelineIssueGroup): string {
   switch (g.id) {
-    case 'pending_acceptance':
+    case 'setting_pending_acceptance':
       return 'Acceptance pending'
-    case 'pending_pm_review':
-      return 'PM review pending'
-    case 'pending_gm_approval':
-      return 'GM approval pending'
-    case 'kpi_not_submitted':
-      return 'Submission pending'
-    case 'missing_evidence':
-      return 'Evidence incomplete'
-    case 'unassigned_members':
+    case 'setting_rejected':
+      return 'Rejected'
+    case 'setting_feedback':
+      return 'Feedback in progress'
+    case 'setting_unassigned_members':
       return 'No KPI assigned'
+    case 'mid_not_evaluated':
+      return 'Mid-year not evaluated'
+    case 'mid_pending_pm_evaluation':
+      return 'Pending PM evaluation'
+    case 'mid_pending_gm_evaluation':
+      return 'Pending GM evaluation'
+    case 'mid_rejected':
+      return 'Mid-year rejected'
+    case 'end_not_evaluated':
+      return 'Year-end not evaluated'
+    case 'end_pending_pm_evaluation':
+      return 'Pending PM evaluation'
+    case 'end_pending_gm_evaluation':
+      return 'Pending GM evaluation'
+    case 'end_rejected':
+      return 'Year-end rejected'
     default:
       return `${g.blockedRole} action pending`
   }
@@ -826,7 +864,8 @@ onUnmounted(() => {
                       <i class="fas fa-calendar-xmark text-[13px] opacity-80" aria-hidden="true" />
                       <span class="text-[13px] font-semibold leading-snug">KPI Setting not started</span>
                     </div>
-                    <span class="text-[11px] font-medium leading-tight">Starts in January</span>
+                    <span v-if="cycleLoading" class="inline-block h-3 w-24 animate-pulse rounded bg-slate-200" />
+                    <span v-else class="text-[11px] font-medium leading-tight">{{ phaseStartLabels.setting }}</span>
                   </div>
                 </template>
                 <template v-else>
@@ -943,7 +982,8 @@ onUnmounted(() => {
                       <i class="fas fa-calendar-xmark text-[13px] opacity-80" aria-hidden="true" />
                       <span class="text-[13px] font-semibold leading-snug">Year-End not started</span>
                     </div>
-                    <span class="text-[11px] font-medium leading-tight">Starts in November</span>
+                    <span v-if="cycleLoading" class="inline-block h-3 w-24 animate-pulse rounded bg-slate-200" />
+                    <span v-else class="text-[11px] font-medium leading-tight">{{ phaseStartLabels.yearEnd }}</span>
                   </div>
                 </template>
                 <template v-else>
@@ -1091,7 +1131,8 @@ onUnmounted(() => {
                   <i class="fas fa-calendar-xmark text-[13px] opacity-80" aria-hidden="true" />
                   <span class="text-[13px] font-semibold leading-snug">KPI Setting not started</span>
                 </div>
-                <span class="text-[11px] font-medium leading-tight">Starts in January</span>
+                <span v-if="cycleLoading" class="inline-block h-3 w-24 animate-pulse rounded bg-slate-200" />
+                <span v-else class="text-[11px] font-medium leading-tight">{{ phaseStartLabels.setting }}</span>
               </div>
             </template>
             <template v-else>
@@ -1178,7 +1219,8 @@ onUnmounted(() => {
                   <i class="fas fa-calendar-xmark text-[13px] opacity-80" aria-hidden="true" />
                   <span class="text-[13px] font-semibold leading-snug">Mid-Year not started</span>
                 </div>
-                <span class="text-[11px] font-medium leading-tight">Starts in June</span>
+                <span v-if="cycleLoading" class="inline-block h-3 w-24 animate-pulse rounded bg-slate-200" />
+                <span v-else class="text-[11px] font-medium leading-tight">{{ phaseStartLabels.mid }}</span>
               </div>
             </template>
             <template v-else>
@@ -1255,7 +1297,8 @@ onUnmounted(() => {
                   <i class="fas fa-calendar-xmark text-[13px] opacity-80" aria-hidden="true" />
                   <span class="text-[13px] font-semibold leading-snug">Year-End not started</span>
                 </div>
-                <span class="text-[11px] font-medium leading-tight">Starts in November</span>
+                <span v-if="cycleLoading" class="inline-block h-3 w-24 animate-pulse rounded bg-slate-200" />
+                <span v-else class="text-[11px] font-medium leading-tight">{{ phaseStartLabels.yearEnd }}</span>
               </div>
             </template>
             <template v-else>

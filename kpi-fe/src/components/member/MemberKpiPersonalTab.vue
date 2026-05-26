@@ -1,14 +1,19 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import type { KpiItem } from '@/types/kpi'
+import { useToast } from 'vue-toastification'
 import {
   memberItemEvalStatus,
 } from '@/utils/memberKpiHelpers'
 import { useMemberKpiFormatters } from '@/composables/useMemberKpiFormatters'
 import { extractRawInputFromApiTargetDescription } from '@/utils/kpiScoringRulesDsl'
 import { formatTargetDisplayForMemeber } from '@/utils/strategicKpiTypeCodes'
+import { KPI_STATUS } from '@/config/constants'
 import KpiCreatorRowLegend from '@/components/shared/KpiCreatorRowLegend.vue'
 import { kpiCreatorRowBgFromSource } from '@/utils/kpiCreatorRowBg'
+import MemberLeaderAssigneeTargetScaleDrawer, {
+  type MemberLeaderAssigneeTargetScaleEditItem,
+} from '@/components/shared/MemberLeaderAssigneeTargetScaleDrawer.vue'
 
 type KpiCategorySection = { key: string; headerLabel: string; items: KpiItem[] }
 
@@ -30,11 +35,15 @@ const emit = defineEmits<{
   (e: 'open-edit-self-created', item: KpiItem): void
   (e: 'open-feedback', item: KpiItem): void
   (e: 'delete-self-created', item: KpiItem): void
+  (e: 'assignee-target-scale-saved'): void
   (e: 'update-employee-comment', value: string): void
   (e: 'submit'): void
 }>()
 
 const { formatKpiActualResult } = useMemberKpiFormatters()
+const toast = useToast()
+const showAssigneeTargetScaleModal = ref(false)
+const assigneeTargetScaleItem = ref<MemberLeaderAssigneeTargetScaleEditItem | null>(null)
 
 function parseCodeSortValue(code: unknown): number | null {
   const text = String(code ?? '').trim()
@@ -62,8 +71,9 @@ function sortItemsForDisplay<T extends { code?: unknown; name?: unknown }>(rows:
 }
 
 function rowAlertClass(item: KpiItem): string {
-  if (Number(item.statusCode ?? 0) === 407) return 'bg-violet-100/70 ring-1 ring-inset ring-violet-200'
-  if (Number(item.statusCode ?? 0) === 406) return 'bg-rose-50/60'
+  const sc = Number(item.statusCode ?? 0)
+  if (sc === 407) return 'bg-violet-100/70 ring-1 ring-inset ring-violet-200'
+  if (sc === 406 || sc === KPI_STATUS.FIRST_REJECTED || sc === KPI_STATUS.SECOND_REJECTED) return 'bg-rose-50/60'
   const s = memberItemEvalStatus(item)
   if (s === 'overdue') return 'bg-rose-50/55'
   if (s === 'revision') return 'bg-orange-50/50'
@@ -74,20 +84,24 @@ function rowAlertClass(item: KpiItem): string {
 }
 
 function statusPhaseClass(code: number | null | undefined): string {
-  if ([501, 502, 601, 602].includes(Number(code))) return 'text-sky-700'
-  if (Number(code) === 407) return 'text-violet-700'
-  if (Number(code) === 406) return 'text-orange-700'
-  if ([503, 603].includes(Number(code))) return 'text-emerald-700'
-  if ([402, 403, 404, 405].includes(Number(code))) return 'text-slate-700'
+  const c = Number(code)
+  if (c === KPI_STATUS.FIRST_REJECTED || c === KPI_STATUS.SECOND_REJECTED) return 'text-rose-700'
+  if ([501, 502, 601, 602].includes(c)) return 'text-sky-700'
+  if (c === 407) return 'text-violet-700'
+  if (c === 406) return 'text-rose-700'
+  if ([503, 603].includes(c)) return 'text-emerald-700'
+  if ([402, 403, 404, 405].includes(c)) return 'text-slate-700'
   return 'text-slate-600'
 }
 
 function statusBadgeClass(code: number | null | undefined): string {
-  if ([501, 502, 601, 602].includes(Number(code))) return 'border-sky-200 bg-sky-50'
-  if (Number(code) === 407) return 'border-violet-200 bg-violet-50'
-  if (Number(code) === 406) return 'border-orange-200 bg-orange-50'
-  if ([503, 603].includes(Number(code))) return 'border-emerald-200 bg-emerald-50'
-  if ([402, 403, 404, 405].includes(Number(code))) return 'border-slate-200 bg-slate-50'
+  const c = Number(code)
+  if (c === KPI_STATUS.FIRST_REJECTED || c === KPI_STATUS.SECOND_REJECTED) return 'border-rose-200 bg-rose-50'
+  if ([501, 502, 601, 602].includes(c)) return 'border-sky-200 bg-sky-50'
+  if (c === 407) return 'border-violet-200 bg-violet-50'
+  if (c === 406) return 'border-orange-200 bg-orange-50'
+  if ([503, 603].includes(c)) return 'border-emerald-200 bg-emerald-50'
+  if ([402, 403, 404, 405].includes(c)) return 'border-slate-200 bg-slate-50'
   return 'border-slate-200 bg-slate-50'
 }
 
@@ -100,6 +114,52 @@ function canSendFeedback(item: KpiItem): boolean {
   if (item.createdByCurrentUser === true) return false
   const status = Number(item.statusCode ?? 0)
   return status === 404 || status === 407
+}
+
+function isCreatorPmOrGm(item: KpiItem): boolean {
+  const role = String(item.createdByRoleCode ?? '').trim().toUpperCase()
+  return role === 'PM' || role === 'GM'
+}
+
+function canEditAssigneeTargetScale(item: KpiItem): boolean {
+  if (!props.isCurrentYear) return false
+  if (item.createdByCurrentUser === true) return false
+  if (!isCreatorPmOrGm(item)) return false
+  if (item.allowAssigneeTargetScaleEdit !== true) return false
+  const status = Number(item.statusCode ?? 0)
+  return status === KPI_STATUS.PENDING_ACCEPTANCE || status === KPI_STATUS.REJECTED
+}
+
+function openAssigneeTargetScaleEditor(item: KpiItem): void {
+  assigneeTargetScaleItem.value = {
+    id: String(item.id ?? ''),
+    kpiInformationId: String(item.kpiInformationId ?? ''),
+    target:
+      item.assignmentTargetValue != null
+        ? String(item.assignmentTargetValue)
+        : item.kpiTemplateTargetValue != null
+          ? String(item.kpiTemplateTargetValue)
+          : '',
+    targetDescription: String(item.targetDescription ?? item.target ?? ''),
+    kpiName: String(item.name ?? ''),
+    categoryName: String(item.categoryName ?? ''),
+    weight: item.weight ?? null,
+    unitName: String(item.unitName ?? ''),
+    calculationRuleCode: item.calculationRuleCode ?? null,
+    calculationTypeCode: item.calculationTypeCode ?? null,
+  }
+  showAssigneeTargetScaleModal.value = true
+}
+
+function onAssigneeTargetScaleSaved(payload: {
+  assignmentId: string
+  target: string
+  targetDescription: string
+}): void {
+  if (!String(payload.assignmentId ?? '').trim()) return
+  showAssigneeTargetScaleModal.value = false
+  toast.success('Đã cập nhật target và thang điểm.')
+  emit('assignee-target-scale-saved')
 }
 
 function canDeleteSelfCreatedVisible(item: KpiItem): boolean {
@@ -153,6 +213,13 @@ function finalScoreTooltip(item: KpiItem): string | undefined {
 
 function statusTooltip(item: KpiItem): string {
   const status = Number(item.statusCode ?? 0)
+  const evalReason = String(item.evaluationRejectReason ?? '').trim()
+  if (
+    (status === KPI_STATUS.FIRST_REJECTED || status === KPI_STATUS.SECOND_REJECTED)
+    && evalReason
+  ) {
+    return `Evaluation rejection reason:\n${evalReason}`
+  }
   const reason = String(item.updateReason ?? item.feedbackComment ?? '').trim()
   if (status === 406 && reason) return `Rejection reason:\n${reason}`
   return item.assignmentStatusName ?? ''
@@ -160,6 +227,13 @@ function statusTooltip(item: KpiItem): string {
 
 function hasRejectedReason(item: KpiItem): boolean {
   const status = Number(item.statusCode ?? 0)
+  const evalReason = String(item.evaluationRejectReason ?? '').trim()
+  if (
+    (status === KPI_STATUS.FIRST_REJECTED || status === KPI_STATUS.SECOND_REJECTED)
+    && evalReason.length > 0
+  ) {
+    return true
+  }
   const reason = String(item.updateReason ?? item.feedbackComment ?? '').trim()
   return status === 406 && reason.length > 0
 }
@@ -294,9 +368,9 @@ const pmWeightedAvg = computed((): number | null => {
               <span
                   v-if="hasRejectedReason(item)"
                   :title="statusTooltip(item)"
-                  class="ml-1 mt-1 inline-flex max-w-full items-start gap-1 text-left text-[10px] font-medium text-orange-700 cursor-pointer hover:bg-orange-100 rounded"
+                  class="ml-1 mt-1 inline-flex max-w-full items-start gap-1 text-left text-[10px] font-medium text-rose-700 cursor-pointer hover:bg-rose-100 rounded"
                 >
-                  <span class="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-orange-300 text-[10px] font-bold leading-none text-orange-700 cursor-pointer">
+                  <span class="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-rose-300 text-[10px] font-bold leading-none text-rose-700 cursor-pointer">
                     ?
                   </span>
                </span>
@@ -339,15 +413,16 @@ const pmWeightedAvg = computed((): number | null => {
             </td>
 
             <td class="py-4 px-5 text-center align-middle">
-              <div class="inline-flex items-center gap-1 justify-center">
-                <p 
-                  class="font-medium text-sm display-inline-flex items-center gap-1"
-                  :class="scoreColorClass(item.pmScore)">
+              <div class="grid min-w-0 grid-cols-[1fr_auto_1fr] items-center text-center">
+                <span
+                  class="col-start-2 text-sm font-medium leading-none"
+                  :class="scoreColorClass(item.pmScore)"
+                >
                   {{ item.pmScore ?? '-' }}
-                </p>
+                </span>
                 <span
                   v-if="finalScoreTooltip(item)"
-                  class="inline-flex h-4 w-4 items-center justify-center rounded-full border border-slate-300 text-[10px] font-bold text-slate-500 cursor-help cursor-pointer hover:bg-sky-200 cursor-pointer"
+                  class="col-start-3 ml-1.5 inline-flex h-4 w-4 items-center justify-center justify-self-start rounded-full border border-slate-300 text-[10px] font-bold text-slate-500 cursor-help hover:bg-sky-200"
                   :title="finalScoreTooltip(item)"
                 >
                   ?
@@ -357,6 +432,26 @@ const pmWeightedAvg = computed((): number | null => {
 
             <td class="py-4 px-5 text-right align-middle">
               <div class="flex items-center justify-end gap-2">
+                <button
+                  v-if="canEditAssigneeTargetScale(item)"
+                  type="button"
+                  class="flex h-8 items-center gap-1.5 rounded-lg border border-sky-200 bg-sky-50 px-3 text-[10px] font-bold text-sky-800 shadow-sm transition-colors hover:bg-sky-100 cursor-pointer"
+                  title="Edit target & scoring rules"
+                  @click="openAssigneeTargetScaleEditor(item)"
+                >
+                  <i class="fas fa-chart-line text-xs" />
+                </button>
+                <button
+                  v-if="item.createdByCurrentUser === true"
+                  type="button"
+                  class="flex h-8 items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-3 text-[10px] font-bold text-rose-700 shadow-sm transition-colors hover:bg-rose-100 cursor-pointer"
+                  :class="!canDeleteSelfCreatedEnabled(item) ? 'cursor-not-allowed opacity-45 hover:bg-rose-50' : ''"
+                  :disabled="!canDeleteSelfCreatedEnabled(item)"
+                  :title="canDeleteSelfCreatedEnabled(item) ? 'Delete self-created KPI' : 'KPI already submitted, cannot be deleted'"
+                  @click="emit('delete-self-created', item)"
+                >
+                  <i class="fas fa-trash text-[10px]" />
+                </button>
                 <button
                   type="button"
                   class="flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-[10px] font-bold text-slate-600 shadow-sm transition-colors hover:bg-slate-50 hover:text-indigo-600 cursor-pointer"
@@ -377,17 +472,7 @@ const pmWeightedAvg = computed((): number | null => {
                 >
                   <i class="fas fa-message text-[10px]" />
                 </button>
-                <button
-                  v-if="item.createdByCurrentUser === true"
-                  type="button"
-                  class="flex h-8 items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-3 text-[10px] font-bold text-rose-700 shadow-sm transition-colors hover:bg-rose-100 cursor-pointer"
-                  :class="!canDeleteSelfCreatedEnabled(item) ? 'cursor-not-allowed opacity-45 hover:bg-rose-50' : ''"
-                  :disabled="!canDeleteSelfCreatedEnabled(item)"
-                  :title="canDeleteSelfCreatedEnabled(item) ? 'Delete self-created KPI' : 'KPI already submitted, cannot be deleted'"
-                  @click="emit('delete-self-created', item)"
-                >
-                  <i class="fas fa-trash text-[10px]" />
-                </button>
+                
               </div>
             </td>
           </tr>
@@ -496,4 +581,10 @@ const pmWeightedAvg = computed((): number | null => {
       This year's data is read-only
     </div>
   </div>
+
+  <MemberLeaderAssigneeTargetScaleDrawer
+    v-model="showAssigneeTargetScaleModal"
+    :item="assigneeTargetScaleItem"
+    @saved="onAssigneeTargetScaleSaved"
+  />
 </template>

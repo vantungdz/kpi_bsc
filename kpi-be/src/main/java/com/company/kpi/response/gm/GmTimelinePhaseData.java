@@ -6,20 +6,20 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Dữ liệu issues của 1 phase (setting / midYear / yearEnd) trong Process Timeline.
- * Được build bởi {@code GmProcessTimelineService} và truyền về FE.
+ * Issue data for one Process Timeline phase (setting / midYear / yearEnd).
+ * Built by {@code GmProcessTimelineService} and returned to the FE.
  */
 @Data
 public class GmTimelinePhaseData {
-    /** True nếu có ít nhất một nhóm vấn đề vận hành ({@code issueGroups} không rỗng). */
+    /** True when at least one operational issue group exists ({@code issueGroups} non-empty). */
     private boolean hasOpenIssues;
-    /** Số nhóm vấn đề vận hành (mỗi phần tử {@code issueGroups} = 1 issue). */
+    /** Count of operational issue groups (each {@code issueGroups} element = 1 issue). */
     private int operationalIssueCount;
-    /** Số nhân sự distinct (theo {@code subjectUserId} / fallback tên) across all groups. */
+    /** Distinct people count ({@code subjectUserId} / name fallback) across all groups. */
     private int totalDistinctEmployeesAffected;
-    /** Vd: «3 issues» — nhãn nút; không kèm số nhân sự. */
+    /** e.g. «3 issues» — button label; employee count is not included. */
     private String pendingKpisLine;
-    /** Vd: «3 issues — KPI Setting». */
+    /** e.g. «3 issues — KPI Setting». */
     private String popoverTitle;
     private List<GmTimelineIssueGroupDto> issueGroups = new ArrayList<>();
 }

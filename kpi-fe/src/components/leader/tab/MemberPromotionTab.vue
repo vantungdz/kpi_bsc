@@ -134,7 +134,7 @@ function statusClass(code: number | null | undefined): string {
   const c = Number(code ?? 0)
   if ([501, 502, 601, 602].includes(c)) return 'border-sky-200 bg-sky-50 text-sky-700'
   if (c === 407) return 'border-violet-200 bg-violet-50 text-violet-700'
-  if (c === 406) return 'border-orange-200 bg-orange-50 text-orange-700'
+  if (c === 406) return 'border-rose-200 bg-rose-50 text-rose-700'
   if ([503, 603].includes(c)) return 'border-emerald-200 bg-emerald-50 text-emerald-700'
   return 'border-slate-200 bg-slate-50 text-slate-700'
 }

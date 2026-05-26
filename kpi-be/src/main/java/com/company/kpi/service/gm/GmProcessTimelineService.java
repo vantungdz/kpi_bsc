@@ -28,57 +28,62 @@ import java.util.UUID;
 import java.util.function.Function;
 
 /**
- * Xây dựng dữ liệu Process Timeline cho GM dashboard — gom theo vấn đề vận hành
- * (business issue),
- * không coi mỗi assignment là một issue độc lập trong tổng hợp.
+ * Builds Process Timeline data for the GM dashboard — aggregated by operational
+ * (business) issues, not one issue per assignment.
  */
 @Service
 @RequiredArgsConstructor
 public class GmProcessTimelineService {
 
     // ── Setting phase ──────────────────────────────────────────────────────────
-    private static final int STATUS_DRAFT = 401;
-    private static final int STATUS_WAITING_PM = 402;
-    private static final int STATUS_WAITING_GM = 403;
     private static final int STATUS_PENDING_ACCEPT = 404;
     private static final int STATUS_ACCEPTED = 405;
     private static final int STATUS_REJECTED = 406;
+    private static final int STATUS_FEEDBACK = 407;
 
     // ── Mid-year phase ─────────────────────────────────────────────────────────
     private static final int STATUS_MID_WAITING_PM = 501;
     private static final int STATUS_MID_WAITING_GM = 502;
     private static final int STATUS_MID_COMPLETED = 503;
+    private static final int STATUS_MID_REJECTED = 504;
 
     // ── Year-end phase ─────────────────────────────────────────────────────────
     private static final int STATUS_END_WAITING_PM = 601;
     private static final int STATUS_END_WAITING_GM = 602;
+    private static final int STATUS_END_REJECTED = 604;
     private static final int TYPE_TEAM = 102;
 
-    // ── Stable group ids (khớp naming FE / tài liệu nghiệp vụ) ─────────────────
-    private static final String ID_UNASSIGNED = "unassigned_members";
-    private static final String ID_KPI_NOT_SUBMITTED = "kpi_not_submitted";
-    private static final String ID_PENDING_PM = "pending_pm_review";
-    private static final String ID_PENDING_GM = "pending_gm_approval";
-    private static final String ID_PENDING_ACCEPT = "pending_acceptance";
-    private static final String ID_MISSING_EVIDENCE = "missing_evidence";
+    // ── Stable group ids (aligned with FE / business docs) ───────────────────────
+    private static final String ID_SETTING_UNASSIGNED = "setting_unassigned_members";
+    private static final String ID_SETTING_PENDING_ACCEPTANCE = "setting_pending_acceptance";
+    private static final String ID_SETTING_REJECTED = "setting_rejected";
+    private static final String ID_SETTING_FEEDBACK = "setting_feedback";
+    private static final String ID_MID_NOT_EVALUATED = "mid_not_evaluated";
+    private static final String ID_MID_PENDING_PM_EVALUATION = "mid_pending_pm_evaluation";
+    private static final String ID_MID_PENDING_GM_EVALUATION = "mid_pending_gm_evaluation";
+    private static final String ID_MID_REJECTED = "mid_rejected";
+    private static final String ID_END_NOT_EVALUATED = "end_not_evaluated";
+    private static final String ID_END_PENDING_PM_EVALUATION = "end_pending_pm_evaluation";
+    private static final String ID_END_PENDING_GM_EVALUATION = "end_pending_gm_evaluation";
+    private static final String ID_END_REJECTED = "end_rejected";
 
     private static final List<String> SETTING_GROUP_ORDER = List.of(
-            ID_UNASSIGNED,
-            ID_KPI_NOT_SUBMITTED,
-            ID_PENDING_PM,
-            ID_PENDING_GM,
-            ID_PENDING_ACCEPT);
+            ID_SETTING_UNASSIGNED,
+            ID_SETTING_PENDING_ACCEPTANCE,
+            ID_SETTING_REJECTED,
+            ID_SETTING_FEEDBACK);
 
     private static final List<String> MID_GROUP_ORDER = List.of(
-            ID_MISSING_EVIDENCE,
-            ID_KPI_NOT_SUBMITTED,
-            ID_PENDING_PM,
-            ID_PENDING_GM);
+            ID_MID_NOT_EVALUATED,
+            ID_MID_PENDING_PM_EVALUATION,
+            ID_MID_PENDING_GM_EVALUATION,
+            ID_MID_REJECTED);
 
     private static final List<String> YEAR_END_GROUP_ORDER = List.of(
-            ID_KPI_NOT_SUBMITTED,
-            ID_PENDING_PM,
-            ID_PENDING_GM);
+            ID_END_NOT_EVALUATED,
+            ID_END_PENDING_PM_EVALUATION,
+            ID_END_PENDING_GM_EVALUATION,
+            ID_END_REJECTED);
 
     private final KpiAssignmentMapper kpiAssignmentMapper;
     private final KpiCycleMapper kpiCycleMapper;
@@ -93,7 +98,7 @@ public class GmProcessTimelineService {
                 cycleId, List.of(STATUS_ACCEPTED), "mid");
 
         List<GmTimelineIssueRow> yearEndNotSubmitted = kpiAssignmentMapper.listInProgressWithinPhaseWindow(
-                cycleId, List.of(STATUS_ACCEPTED, STATUS_MID_COMPLETED), "yearEnd");
+                cycleId, List.of(STATUS_MID_COMPLETED), "yearEnd");
 
         List<GmUnassignedMemberRow> unassignedMembers = kpiAssignmentMapper.listMembersWithoutKpiAssignment(cycleId);
 
@@ -105,9 +110,8 @@ public class GmProcessTimelineService {
     }
 
     /**
-     * Timeline giống {@link #getTimeline(UUID)} nhưng chỉ phòng/kpi có resolved
-     * department do {@code pmId} quản lý
-     * ({@code departments.manager_id = pmId}).
+     * Same as {@link #getTimeline(UUID)} but scoped to departments where
+     * {@code departments.manager_id = pmId}.
      */
     public GmProcessTimelineResponse getTimelineForPm(UUID cycleId, UUID pmId) {
         kpiCycleMapper.findById(cycleId)
@@ -119,7 +123,7 @@ public class GmProcessTimelineService {
                 cycleId, List.of(STATUS_ACCEPTED), "mid", pmId);
 
         List<GmTimelineIssueRow> yearEndNotSubmitted = kpiAssignmentMapper.listInProgressWithinPhaseWindowForPm(
-                cycleId, List.of(STATUS_ACCEPTED, STATUS_MID_COMPLETED), "yearEnd", pmId);
+                cycleId, List.of(STATUS_MID_COMPLETED), "yearEnd", pmId);
 
         List<GmUnassignedMemberRow> unassignedMembers = kpiAssignmentMapper
                 .listMembersWithoutKpiAssignmentForPm(cycleId, pmId);
@@ -140,22 +144,19 @@ public class GmProcessTimelineService {
         Map<String, MutableGroup> groups = new LinkedHashMap<>();
 
         for (GmUnassignedMemberRow row : unassignedMembers) {
-            getOrCreateGroup(groups, ID_UNASSIGNED).putBySubjectKey(
+            getOrCreateGroup(groups, ID_SETTING_UNASSIGNED).putBySubjectKey(
                     row.getUserId(),
                     buildUnassignedMemberDetail(row));
         }
 
         for (GmTimelineIssueRow row : allRows) {
             int code = row.getStatusCode();
-            if (code < 401 || code > 406 || code == STATUS_ACCEPTED) {
-                continue;
-            }
             String gid = detectIssueCategorySetting(code);
             if (gid == null) {
                 continue;
             }
             getOrCreateGroup(groups, gid).putAssignmentDetail(
-                    buildAssignmentDetail(row, bottleneckForSetting(code), reasonForSetting(code)));
+                    buildAssignmentDetail(row, "Member", reasonForSetting(code)));
         }
 
         return finalizePhase(orderedGroups(groups, SETTING_GROUP_ORDER), "KPI Setting");
@@ -171,9 +172,9 @@ public class GmProcessTimelineService {
             if (isTeamParentAssignment(row)) {
                 continue;
             }
-            getOrCreateGroup(groups, ID_KPI_NOT_SUBMITTED).putAssignmentDetail(
+            getOrCreateGroup(groups, ID_MID_NOT_EVALUATED).putAssignmentDetail(
                     buildAssignmentDetail(row, "Member",
-                            "Đang trong kỳ Mid-Year nhưng chưa nộp evidence"));
+                            "Within Mid-Year window but evidence not yet submitted"));
         }
 
         Set<String> midCompletedSubjects = completedSubjectKeys(allRows, STATUS_MID_COMPLETED);
@@ -182,26 +183,21 @@ public class GmProcessTimelineService {
                 continue;
             }
             int code = row.getStatusCode();
-            if (code != STATUS_MID_WAITING_PM && code != STATUS_MID_WAITING_GM) {
+            if (code != STATUS_MID_WAITING_PM && code != STATUS_MID_WAITING_GM && code != STATUS_MID_REJECTED) {
                 continue;
             }
             if (code == STATUS_MID_WAITING_GM && midCompletedSubjects.contains(timelineIssueRowSubjectKey(row))) {
                 continue;
             }
-            // 501 + thiếu evidence → chỉ nhóm missing_evidence (tránh double-count với
-            // pending PM).
-            if (code == STATUS_MID_WAITING_PM && row.getEvidences() == null) {
-                getOrCreateGroup(groups, ID_MISSING_EVIDENCE).putAssignmentDetail(
-                        buildAssignmentDetail(row, "Member",
-                                "Đã nộp nhưng thiếu file đính kèm / evidence"));
-                continue;
-            }
             if (code == STATUS_MID_WAITING_PM) {
-                getOrCreateGroup(groups, ID_PENDING_PM).putAssignmentDetail(
-                        buildAssignmentDetail(row, "PM", "PM chưa review evidence giữa kỳ"));
+                getOrCreateGroup(groups, ID_MID_PENDING_PM_EVALUATION).putAssignmentDetail(
+                        buildAssignmentDetail(row, "PM", "PM has not reviewed mid-year evidence"));
+            } else if (code == STATUS_MID_WAITING_GM) {
+                getOrCreateGroup(groups, ID_MID_PENDING_GM_EVALUATION).putAssignmentDetail(
+                        buildAssignmentDetail(row, "GM", "GM has not finalized mid-year score"));
             } else {
-                getOrCreateGroup(groups, ID_PENDING_GM).putAssignmentDetail(
-                        buildAssignmentDetail(row, "GM", "GM chưa chốt điểm giữa kỳ"));
+                getOrCreateGroup(groups, ID_MID_REJECTED).putAssignmentDetail(
+                        buildAssignmentDetail(row, "Member", "Mid-year evaluation rejected"));
             }
         }
 
@@ -238,9 +234,9 @@ public class GmProcessTimelineService {
             if (isTeamParentAssignment(row)) {
                 continue;
             }
-            getOrCreateGroup(groups, ID_KPI_NOT_SUBMITTED).putAssignmentDetail(
+            getOrCreateGroup(groups, ID_END_NOT_EVALUATED).putAssignmentDetail(
                     buildAssignmentDetail(row, "Member",
-                            "Đang trong kỳ Year-End nhưng chưa nộp evidence"));
+                            "Within Year-End window but evidence not yet submitted"));
         }
 
         for (GmTimelineIssueRow row : allRows) {
@@ -248,15 +244,18 @@ public class GmProcessTimelineService {
                 continue;
             }
             int code = row.getStatusCode();
-            if (code != STATUS_END_WAITING_PM && code != STATUS_END_WAITING_GM) {
+            if (code != STATUS_END_WAITING_PM && code != STATUS_END_WAITING_GM && code != STATUS_END_REJECTED) {
                 continue;
             }
             if (code == STATUS_END_WAITING_PM) {
-                getOrCreateGroup(groups, ID_PENDING_PM).putAssignmentDetail(
-                        buildAssignmentDetail(row, "PM", "PM chưa chấm điểm Final"));
+                getOrCreateGroup(groups, ID_END_PENDING_PM_EVALUATION).putAssignmentDetail(
+                        buildAssignmentDetail(row, "PM", "PM has not completed final evaluation"));
+            } else if (code == STATUS_END_WAITING_GM) {
+                getOrCreateGroup(groups, ID_END_PENDING_GM_EVALUATION).putAssignmentDetail(
+                        buildAssignmentDetail(row, "GM", "GM has not finalized final score"));
             } else {
-                getOrCreateGroup(groups, ID_PENDING_GM).putAssignmentDetail(
-                        buildAssignmentDetail(row, "GM", "GM chưa chốt điểm Final"));
+                getOrCreateGroup(groups, ID_END_REJECTED).putAssignmentDetail(
+                        buildAssignmentDetail(row, "Member", "Year-end evaluation rejected"));
             }
         }
 
@@ -271,10 +270,9 @@ public class GmProcessTimelineService {
 
     private String detectIssueCategorySetting(int code) {
         return switch (code) {
-            case STATUS_DRAFT, STATUS_REJECTED -> ID_KPI_NOT_SUBMITTED;
-            case STATUS_WAITING_PM -> ID_PENDING_PM;
-            case STATUS_WAITING_GM -> ID_PENDING_GM;
-            case STATUS_PENDING_ACCEPT -> ID_PENDING_ACCEPT;
+            case STATUS_PENDING_ACCEPT -> ID_SETTING_PENDING_ACCEPTANCE;
+            case STATUS_REJECTED -> ID_SETTING_REJECTED;
+            case STATUS_FEEDBACK -> ID_SETTING_FEEDBACK;
             default -> null;
         };
     }
@@ -294,9 +292,7 @@ public class GmProcessTimelineService {
         return out;
     }
 
-    /**
-     * Nhãn nút timeline: «0 issues», «1 issue», «N issues» — không kèm số nhân sự.
-     */
+    /** Timeline button label: «0 issues», «1 issue», «N issues» (issue count only). */
     private static String formatIssueCountLabel(int opCount) {
         if (opCount <= 0) {
             return "0 issues";
@@ -364,30 +360,19 @@ public class GmProcessTimelineService {
         return d;
     }
 
-    private String bottleneckForSetting(int code) {
-        return switch (code) {
-            case STATUS_DRAFT, STATUS_PENDING_ACCEPT -> "Member";
-            case STATUS_WAITING_GM -> "GM";
-            default -> "PM"; // 402, 406
-        };
-    }
-
     private String reasonForSetting(int code) {
         return switch (code) {
-            case STATUS_DRAFT -> "Draft not submitted to PM";
-            case STATUS_WAITING_PM -> "PM not approved proposal";
-            case STATUS_WAITING_GM -> "Waiting GM approval";
             case STATUS_PENDING_ACCEPT -> "Member not accepted";
             case STATUS_REJECTED -> "KPI rejected — needs rework";
+            case STATUS_FEEDBACK -> "Feedback is being processed";
             default -> "Waiting approval";
         };
     }
 
     /**
      * Drawer aggregation: KPI (master) → department → assignees.
-     * Không gán PM/Leader ở cấp KPI: một KPI có thể trải nhiều phòng — dominant PM
-     * vs dominant supervisor
-     * của toàn slice không còn là một cặp vận hành hợp lệ (gây hiểu nhầm).
+     * PM/Leader are not set at KPI level — one KPI may span departments; a single
+     * dominant PM/supervisor pair for the whole slice would be misleading.
      */
     private static List<GmTimelineKpiGroupDto> buildKpiGroups(
             List<GmTimelineIssueDetailDto> employees, String issueGroupId) {
@@ -522,9 +507,8 @@ public class GmProcessTimelineService {
     }
 
     /**
-     * Gắn assignment con dưới parent trong cùng slice phòng (theo
-     * {@code parent_assignment_id}),
-     * để drawer hiện đủ chuỗi phân bổ (PM → member) thay vì chỉ hàng gốc.
+     * Nest child assignments under parent within the same department slice
+     * ({@code parent_assignment_id}) so the drawer shows the full cascade (PM → member).
      */
     private static List<GmTimelineIssueDetailDto> nestCascadeInDeptSlice(List<GmTimelineIssueDetailDto> slice) {
         if (slice == null || slice.isEmpty()) {
@@ -551,12 +535,18 @@ public class GmProcessTimelineService {
 
     private static String blockerSummaryForIssue(String issueGroupId) {
         return switch (issueGroupId) {
-            case ID_PENDING_ACCEPT -> "Acceptance pending";
-            case ID_PENDING_PM -> "PM review pending";
-            case ID_PENDING_GM -> "GM approval pending";
-            case ID_KPI_NOT_SUBMITTED -> "Submission pending";
-            case ID_MISSING_EVIDENCE -> "Evidence incomplete";
-            case ID_UNASSIGNED -> "No KPI assigned";
+            case ID_SETTING_PENDING_ACCEPTANCE -> "Acceptance pending";
+            case ID_SETTING_REJECTED -> "Rejected";
+            case ID_SETTING_FEEDBACK -> "Feedback in progress";
+            case ID_SETTING_UNASSIGNED -> "No KPI assigned";
+            case ID_MID_NOT_EVALUATED -> "Mid-year not evaluated";
+            case ID_MID_PENDING_PM_EVALUATION -> "Pending PM evaluation";
+            case ID_MID_PENDING_GM_EVALUATION -> "Pending GM evaluation";
+            case ID_MID_REJECTED -> "Mid-year rejected";
+            case ID_END_NOT_EVALUATED -> "Year-end not evaluated";
+            case ID_END_PENDING_PM_EVALUATION -> "Pending PM evaluation";
+            case ID_END_PENDING_GM_EVALUATION -> "Pending GM evaluation";
+            case ID_END_REJECTED -> "Year-end rejected";
             default -> "Action pending";
         };
     }
@@ -653,33 +643,63 @@ public class GmProcessTimelineService {
     private record GroupMeta(String title, String severity, String blockedRole, String iconClass) {
         static GroupMeta forId(String id) {
             return switch (id) {
-                case ID_UNASSIGNED -> new GroupMeta(
+                case ID_SETTING_UNASSIGNED -> new GroupMeta(
                         "Members have not been assigned KPIs",
                         "critical",
                         "Organization",
                         "bg-rose-100 text-rose-600");
-                case ID_KPI_NOT_SUBMITTED -> new GroupMeta(
-                        "KPI Not Evaluated",
-                        "warning",
-                        "Member",
-                        "bg-orange-100 text-orange-600");
-                case ID_PENDING_PM -> new GroupMeta(
-                        "Pending PM Review",
-                        "warning",
-                        "PM",
-                        "bg-orange-100 text-orange-600");
-                case ID_PENDING_GM -> new GroupMeta(
-                        "Pending GM Approval",
-                        "warning",
-                        "GM",
-                        "bg-amber-100 text-amber-700");
-                case ID_PENDING_ACCEPT -> new GroupMeta(
-                        "Awaiting Member Acceptance",
+                case ID_SETTING_PENDING_ACCEPTANCE -> new GroupMeta(
+                        "Pending Acceptance",
                         "info",
                         "Member",
                         "bg-slate-100 text-slate-700");
-                case ID_MISSING_EVIDENCE -> new GroupMeta(
-                        "Missing Evidence",
+                case ID_SETTING_REJECTED -> new GroupMeta(
+                        "Rejected",
+                        "warning",
+                        "Member",
+                        "bg-orange-100 text-orange-600");
+                case ID_SETTING_FEEDBACK -> new GroupMeta(
+                        "Feedback In Progress",
+                        "warning",
+                        "Member",
+                        "bg-amber-100 text-amber-700");
+                case ID_MID_NOT_EVALUATED -> new GroupMeta(
+                        "KPI Not Evaluated (Mid-Year)",
+                        "warning",
+                        "Member",
+                        "bg-orange-100 text-orange-600");
+                case ID_MID_PENDING_PM_EVALUATION -> new GroupMeta(
+                        "Pending PM Evaluation (Mid-Year)",
+                        "warning",
+                        "PM",
+                        "bg-orange-100 text-orange-600");
+                case ID_MID_PENDING_GM_EVALUATION -> new GroupMeta(
+                        "Pending GM Evaluation (Mid-Year)",
+                        "warning",
+                        "GM",
+                        "bg-amber-100 text-amber-700");
+                case ID_MID_REJECTED -> new GroupMeta(
+                        "Rejected (Mid-Year)",
+                        "warning",
+                        "Member",
+                        "bg-rose-100 text-rose-600");
+                case ID_END_NOT_EVALUATED -> new GroupMeta(
+                        "KPI Not Evaluated (Final)",
+                        "warning",
+                        "Member",
+                        "bg-orange-100 text-orange-600");
+                case ID_END_PENDING_PM_EVALUATION -> new GroupMeta(
+                        "Pending PM Evaluation (Final)",
+                        "warning",
+                        "PM",
+                        "bg-orange-100 text-orange-600");
+                case ID_END_PENDING_GM_EVALUATION -> new GroupMeta(
+                        "Pending GM Evaluation (Final)",
+                        "warning",
+                        "GM",
+                        "bg-amber-100 text-amber-700");
+                case ID_END_REJECTED -> new GroupMeta(
+                        "Rejected (Final)",
                         "warning",
                         "Member",
                         "bg-rose-100 text-rose-600");

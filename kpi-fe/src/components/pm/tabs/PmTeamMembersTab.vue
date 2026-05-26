@@ -1,14 +1,19 @@
 <script setup lang="ts">
-import { ref, computed, watch, type PropType } from 'vue'
+import { ref, computed, watch, inject, type PropType } from 'vue'
 import { pmKpiService } from '@/services/modules/kpi-pm.service'
 
 import { generateInitials } from '@/utils/common'
 import { KPI_STATUS } from '@/config/constants'
 import { pmAsmStatusChipUi } from '@/utils/pmAsmStatusUi'
 import {
+  buildAsmStatusDescriptionMap,
+  resolveAsmStatusLabel,
+} from '@/utils/asmStatusLabels'
+import {
   countPmEvaluationSubjectsInHierarchy,
   isPmEvaluationSubject,
 } from '@/utils/pmEvaluationSubject'
+import { pmTeamReviewScopeKey } from '@/utils/pmLayoutPromotionCycle'
 
 const props = defineProps({
   year: { type: [Number, String], required: true },
@@ -26,6 +31,17 @@ const emit = defineEmits(['open-member', 'pending-pm-evaluation-count'])
 const teamTreeRaw = ref<any[]>([])
 const isLoading = ref(false)
 const activeReviewScope = ref<'portfolio' | 'promotion'>('portfolio')
+
+const pmTeamReviewScope = inject(pmTeamReviewScopeKey, null)
+watch(
+  activeReviewScope,
+  (scope) => {
+    if (pmTeamReviewScope) {
+      pmTeamReviewScope.value = scope
+    }
+  },
+  { immediate: true },
+)
 
 function countPendingByScope(nodes: unknown[] | null | undefined, scope: 'portfolio' | 'promotion'): number {
   if (!Array.isArray(nodes) || nodes.length === 0) return 0
@@ -48,31 +64,20 @@ function countPendingByScope(nodes: unknown[] | null | undefined, scope: 'portfo
 const portfolioPendingCount = computed(() => countPendingByScope(teamTreeRaw.value, 'portfolio'))
 const promotionPendingCount = computed(() => countPendingByScope(teamTreeRaw.value, 'promotion'))
 
-const EVALUATION_STATUS_LABELS: Record<number, string> = {
-  [KPI_STATUS.INACTIVE]: 'New KPI',
-  [KPI_STATUS.WAITING_PM_APPROVAL]: 'Pending PM Approval',
-  [KPI_STATUS.WAITING_GM_APPROVAL]: 'Pending GM Approval',
-  [KPI_STATUS.PENDING_ACCEPTANCE]: 'Pending Acceptance',
-  [KPI_STATUS.ACCEPTED]: 'In progress',
-  [KPI_STATUS.REJECTED]: 'Rejected',
-  [KPI_STATUS.FEEDBACK_IN_PROGRESS]: 'Processing Feedback',
-  [KPI_STATUS.FIRST_WAITING_PM_APPROVAL]: 'Pending PM Evaluation (Mid-Year)',
-  [KPI_STATUS.FIRST_WAITING_GM_APPROVAL]: 'Pending GM Evaluation (Mid-Year)',
-  [KPI_STATUS.FIRST_COMPLETED]: 'Completed (Mid-Year)',
-  [KPI_STATUS.SECOND_WAITING_PM_APPROVAL]: 'Pending PM Evaluation (Final)',
-  [KPI_STATUS.SECOND_WAITING_GM_APPROVAL]: 'Pending GM Evaluation (Final)',
-  [KPI_STATUS.COMPLETED]: 'Completed',
-}
+/** Nhãn ASM từ `sys_status_codes` (API init dashboard). */
+const asmStatusDescriptionByCode = ref<Record<number, string>>({})
 
-/** Chip status chỉ khi có mã đã map; không có / chưa map → null (ô Status để trống). */
+/** Chip status khi có mã hợp lệ; nhãn lấy từ DB (504 → Rejected Mid-Year, …). */
 function getEvalStatusChip(statusCode: number | null | undefined) {
   if (statusCode == null || statusCode === 0) return null
   const n = Number(statusCode)
   const ui = pmAsmStatusChipUi(n)
   if (!ui) return null
+  const label = resolveAsmStatusLabel(n, asmStatusDescriptionByCode.value)
+  if (!label) return null
   return {
     chip: ui.chip,
-    label: EVALUATION_STATUS_LABELS[n] ?? `Status ${n}`,
+    label,
   }
 }
 
@@ -97,7 +102,12 @@ function pmSupervisorDraftFromCache(nodeId: string, scope: 'portfolio' | 'promot
 const fetchTeamHierarchy = async () => {
   isLoading.value = true
   try {
-    const response = await pmKpiService.getTeamHierarchy(String(props.year || new Date().getFullYear()))
+    const yearStr = String(props.year || new Date().getFullYear())
+    const [response, initData] = await Promise.all([
+      pmKpiService.getTeamHierarchy(yearStr),
+      pmKpiService.getInitialization(yearStr).catch(() => null),
+    ])
+    asmStatusDescriptionByCode.value = buildAsmStatusDescriptionMap(initData?.asmStatuses)
 
     teamTreeRaw.value = Array.isArray(response) ? response : []
     emit(

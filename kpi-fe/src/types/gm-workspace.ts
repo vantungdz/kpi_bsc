@@ -153,14 +153,18 @@ export interface GmPmKpiRolloutPayload {
 
 /** Legacy bucket id + operational group ids from API (process-timeline). */
 export type GmIssueTypeId =
-  | "pending_approval"
-  | "pending_acceptance"
-  | "not_submitted"
-  | "missing_evidence"
-  | "unassigned_members"
-  | "kpi_not_submitted"
-  | "pending_pm_review"
-  | "pending_gm_approval";
+  | "setting_pending_acceptance"
+  | "setting_rejected"
+  | "setting_feedback"
+  | "setting_unassigned_members"
+  | "mid_not_evaluated"
+  | "mid_pending_pm_evaluation"
+  | "mid_pending_gm_evaluation"
+  | "mid_rejected"
+  | "end_not_evaluated"
+  | "end_pending_pm_evaluation"
+  | "end_pending_gm_evaluation"
+  | "end_rejected";
 
 export type GmTimelineIssueSeverity = "critical" | "warning" | "info";
 
@@ -307,6 +311,8 @@ export interface GmHierarchyMember {
   /** BE: true khi 407 và feedback cần GM xử lý (không dựa vào có/không có nội dung note). */
   feedbackAwaitingGm?: boolean;
   evidenceAttachmentUrl?: string;
+  /** {@code promotion_cycles.id} — promotion assignment scope. */
+  promotionCycleId?: string | null;
 }
 
 export interface GmHierarchyPm {
@@ -341,6 +347,8 @@ export interface GmHierarchyKpi {
   name: string;
   weight: string;
   target: string;
+  /** Raw assignment target (số) — diff assignee edit. */
+  assignmentTargetValue?: number | string | null;
   targetBalance?: GmHierarchyTargetBalance | null;
   actual: string;
   status: GmHierarchyStatus;
@@ -379,6 +387,13 @@ export interface GmHierarchyKpi {
   assignmentStatusName?: string | null;
   /** Quy tắc chấm điểm (DSL / rawInput) — khi API trả `target_description`. */
   scoringRulesText?: string | null;
+  baselineTargetValue?: number | string | null;
+  baselineScoringDescription?: string | null;
+  targetChanged?: boolean | null;
+  scoringChanged?: boolean | null;
+  assigneeHasEdits?: boolean | null;
+  /** {@code promotion_cycles.id} when assignment is linked to a promotion cycle (diagnostics API). */
+  promotionCycleId?: string | null;
 }
 
 export interface GmMidYearIssuesData {

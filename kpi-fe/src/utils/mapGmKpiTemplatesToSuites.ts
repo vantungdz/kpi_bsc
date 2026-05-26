@@ -48,6 +48,8 @@ export function mapTemplateApiDataToSuites(
           unitCode: it.unitCode,
           weightPct: String(it.defaultWeight ?? ''),
           calculationMethod,
+          isImportant: it.isImportant === true,
+          allowAssigneeTargetScaleEdit: it.allowAssigneeTargetScaleEdit === true,
           kpiType: kpiTypeStringFromTypeCode(it.typeCode),
           assignPMs: [] as string[],
           pmTargets: {} as Record<string, string>,

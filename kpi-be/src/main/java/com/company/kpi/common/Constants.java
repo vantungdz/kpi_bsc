@@ -22,6 +22,11 @@ public final class Constants {
         public static final int REJECTED = 406;
         /** Đang chờ xử lý feedback giữa các cấp (PM↔GM / Member↔PM). */
         public static final int FEEDBACK_IN_PROGRESS = 407;
+
+        /** PM/GM từ chối đánh giá giữa kỳ (501/502). */
+        public static final int FIRST_REJECTED = 504;
+        /** PM/GM từ chối đánh giá cuối kỳ (601/602). */
+        public static final int SECOND_REJECTED = 604;
     }
 
     public static final class Category {

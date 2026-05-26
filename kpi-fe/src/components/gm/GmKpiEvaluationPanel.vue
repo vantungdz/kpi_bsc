@@ -42,10 +42,17 @@ import {
 } from "@/utils/gmAsmStatusUi";
 import { pmAsmStatusPillClass } from "@/utils/pmAsmStatusUi";
 import { kpiCreatorRowBgClass } from "@/utils/kpiCreatorRowBg";
+import KpiCreatorRowLegend from "@/components/shared/KpiCreatorRowLegend.vue";
 import {
   canSupervisorViewMemberSelfEvaluation,
-  supervisorMemberSelfScoreDisplay,
+  supervisorMemberActualDisplayInDrawer,
+  supervisorMemberSelfScoreDisplayInDrawer,
 } from "@/utils/memberEvaluationVisibility";
+import {
+  EVALUATION_REJECTABLE_STATUSES,
+  KPI_STATUS,
+} from "@/config/constants";
+import { gmEvaluationTableEvalTabKey } from "@/utils/gmLayoutEvaluationTab";
 
 /** Trạng thái assignment GM có thể xác nhận trong Evaluation Hub (bỏ qua bước PM khi 501/601). */
 type GmHubConfirmScope = 501 | 502 | 601 | 602;
@@ -122,6 +129,17 @@ const drawerEmpId = ref<string | null>(null);
 const tableEvalTab = ref<"cascade" | "promotion">("cascade");
 /** Tab nội dung drawer: KPI individual/cascading vs Promotion. */
 const drawerEvalTab = ref<"cascade" | "promotion">("cascade");
+
+const gmEvaluationTableEvalTab = inject(gmEvaluationTableEvalTabKey, null);
+watch(
+  tableEvalTab,
+  (tab) => {
+    if (gmEvaluationTableEvalTab) {
+      gmEvaluationTableEvalTab.value = tab;
+    }
+  },
+  { immediate: true },
+);
 /** Expand PM / Leader trong chế độ cây hub. */
 const expandedPmIds = reactive<Record<string, boolean>>({});
 const expandedLeaderKeys = reactive<Record<string, boolean>>({});
@@ -136,6 +154,14 @@ const supervisorPromotionComments = reactive<Record<string, string>>({});
 /** `${empId}:cascade` | `${empId}:promotion` */
 const supervisorCommentSubmitAttempted = reactive<Record<string, boolean>>({});
 const confirmBusy = ref(false);
+const rejectEvaluationBusy = ref(false);
+const evaluationRejectDialog = ref<{
+  open: boolean;
+  item: GmKpiItem | null;
+  rejectAll: boolean;
+}>({ open: false, item: null, rejectAll: false });
+const evaluationRejectReason = ref("");
+const evaluationRejectError = ref("");
 const unlockBusy = ref(false);
 const unlockConfirmTarget = ref<{ emp: GmEvalMember; tab: "cascade" | "promotion" } | null>(null);
 const pageLoading = ref(true);
@@ -196,7 +222,11 @@ watch(
 );
 
 function hasKpis(emp: GmEvalMember) {
-  return flattenGmKpiItems(emp).length > 0;
+  if (flattenGmKpiItems(emp).length > 0) return true;
+  return (
+    memberHubEvalStatusCodesForTab(emp, "cascade").length > 0 ||
+    memberHubEvalStatusCodesForTab(emp, "promotion").length > 0
+  );
 }
 
 function groupsForEvalTab(emp: GmEvalMember, tab: "cascade" | "promotion") {
@@ -209,8 +239,58 @@ function itemsForEvalTab(emp: GmEvalMember, tab: "cascade" | "promotion") {
   return groupsForEvalTab(emp, tab).flatMap((g) => g.items);
 }
 
+/** ASM assignment trên hub theo tab — gồm 504/604 sau reject đánh giá. */
+const HUB_TAB_KPI_ASM = new Set<number>([
+  KPI_STATUS.ACCEPTED,
+  KPI_STATUS.FIRST_WAITING_PM_APPROVAL,
+  KPI_STATUS.FIRST_WAITING_GM_APPROVAL,
+  KPI_STATUS.FIRST_COMPLETED,
+  KPI_STATUS.FIRST_REJECTED,
+  KPI_STATUS.SECOND_WAITING_PM_APPROVAL,
+  KPI_STATUS.SECOND_WAITING_GM_APPROVAL,
+  KPI_STATUS.COMPLETED,
+  KPI_STATUS.SECOND_REJECTED,
+]);
+
+function memberHubEvalStatusCodesForTab(
+  emp: GmEvalMember,
+  tab: "cascade" | "promotion",
+): number[] {
+  const raw =
+    tab === "promotion"
+      ? emp.hubEvalStatusCodesPromotion
+      : emp.hubEvalStatusCodesPortfolio;
+  return (raw ?? []).filter((c) => HUB_TAB_KPI_ASM.has(c));
+}
+
+function hubEvalAsmFallbackLabel(code: number): string {
+  switch (code) {
+    case KPI_STATUS.FIRST_REJECTED:
+      return "Rejected (Mid-Year)";
+    case KPI_STATUS.SECOND_REJECTED:
+      return "Rejected (Final)";
+    case KPI_STATUS.FIRST_WAITING_PM_APPROVAL:
+      return "Pending PM Evaluation (Mid-Year)";
+    case KPI_STATUS.FIRST_WAITING_GM_APPROVAL:
+      return "Pending GM Evaluation (Mid-Year)";
+    case KPI_STATUS.FIRST_COMPLETED:
+      return "Completed (Mid-Year)";
+    case KPI_STATUS.SECOND_WAITING_PM_APPROVAL:
+      return "Pending PM Evaluation (Final)";
+    case KPI_STATUS.SECOND_WAITING_GM_APPROVAL:
+      return "Pending GM Evaluation (Final)";
+    case KPI_STATUS.COMPLETED:
+      return "Completed";
+    case KPI_STATUS.ACCEPTED:
+      return "In progress";
+    default:
+      return "";
+  }
+}
+
 function hasKpisForEvalTab(emp: GmEvalMember, tab: "cascade" | "promotion") {
-  return itemsForEvalTab(emp, tab).length > 0;
+  if (itemsForEvalTab(emp, tab).length > 0) return true;
+  return memberHubEvalStatusCodesForTab(emp, tab).length > 0;
 }
 
 function hasGmEvaluationActionForTab(emp: GmEvalMember, tab: "cascade" | "promotion") {
@@ -220,7 +300,9 @@ function hasGmEvaluationActionForTab(emp: GmEvalMember, tab: "cascade" | "promot
   });
 }
 
-const GM_UNLOCK_DISABLED_STATUS_CODES = new Set([401, 402, 403, 404, 407, 603]);
+const GM_UNLOCK_DISABLED_STATUS_CODES = new Set([
+  401, 402, 403, 404, 407, 503, 603, 504, 604,
+]);
 
 function hasUnlockButtonForTab(emp: GmEvalMember, tab: "cascade" | "promotion") {
   return hasKpisForEvalTab(emp, tab);
@@ -306,15 +388,6 @@ function supervisorCommentPlaceholder(
   return "";
 }
 
-function drawerRequiresGmFinalGradingForTab(
-  emp: GmEvalMember,
-  tab: "cascade" | "promotion",
-): boolean {
-  const groups =
-    groupsForEvalTab(emp, tab);
-  return groups.flatMap((g) => g.items).some((it) => hubRowGmScoreEnabled(it));
-}
-
 function supervisorAttemptKey(empId: string, tab: "cascade" | "promotion") {
   return `${empId}:${tab}`;
 }
@@ -350,6 +423,24 @@ function drawerStatusLabel(item: GmKpiItem): string {
   return direct || "-";
 }
 
+function isEvaluationRejectedHubItem(item: GmKpiItem): boolean {
+  const code = Number(item.hubAssignmentStatusCode ?? item.statusCode);
+  return (
+    code === KPI_STATUS.FIRST_REJECTED || code === KPI_STATUS.SECOND_REJECTED
+  );
+}
+
+function drawerEvaluationRejectTooltip(item: GmKpiItem): string | undefined {
+  if (!isEvaluationRejectedHubItem(item)) return undefined;
+  const reason = String(item.evaluationRejectReason ?? "").trim();
+  if (!reason) return undefined;
+  return reason;
+}
+
+function hasDrawerEvaluationRejectReason(item: GmKpiItem): boolean {
+  return drawerEvaluationRejectTooltip(item) != null;
+}
+
 function drawerStatusClass(item: GmKpiItem): string {
   const code = item.statusCode ?? item.hubAssignmentStatusCode;
   if (code == null || !Number.isFinite(Number(code))) {
@@ -359,14 +450,6 @@ function drawerStatusClass(item: GmKpiItem): string {
 }
 
 function hasDrawerEvidence(item: GmKpiItem): boolean {
-  if (
-    !canSupervisorViewMemberSelfEvaluation(
-      item.hubAssignmentStatusCode ?? item.statusCode,
-      "gm",
-    )
-  ) {
-    return false;
-  }
   return Boolean(
     (Array.isArray(item.evidenceData) && item.evidenceData.length > 0) ||
       String(item.evidenceContent ?? "").trim() ||
@@ -401,29 +484,16 @@ function drawerTargetDisplay(item: GmKpiItem): string {
 
 /** Cột ACTUAL — ghép đơn vị giống PM drawer. */
 function drawerActualDisplay(item: GmKpiItem): string {
-  if (
-    !canSupervisorViewMemberSelfEvaluation(
-      item.hubAssignmentStatusCode ?? item.statusCode,
-      "gm",
-    )
-  ) {
-    return "-";
-  }
   const raw = item.actualRaw ?? item.actualResult;
   if (raw == null) return "-";
-  const text = String(raw).trim();
+  const text = supervisorMemberActualDisplayInDrawer(raw);
   if (!text || text === "-") return "-";
   if (item.unitCode === 902 && /%$/.test(text)) return text;
   return drawerValueWithUnit(item, text);
 }
 
 function drawerSelfScoreDisplay(item: GmKpiItem): string {
-  const shown = supervisorMemberSelfScoreDisplay(
-    item.selfScore,
-    item.hubAssignmentStatusCode ?? item.statusCode,
-    "gm",
-  );
-  return String(shown);
+  return String(supervisorMemberSelfScoreDisplayInDrawer(item.selfScore));
 }
 
 function drawerGroupRowClass(group: GmKpiGroup): string {
@@ -463,7 +533,7 @@ function ensurePmScoreKeys() {
 function initGmCommentDraft(emp: GmEvalMember, reset = false) {
   if (!gmKpiComments[emp.id]) gmKpiComments[emp.id] = {};
   for (const item of flattenGmKpiItems(emp)) {
-    const fromEvidence = String(item.gmComment ?? "");
+    const fromEvidence = String(item.gmComment ?? "").trim();
     if (reset || gmKpiComments[emp.id][item.id] === undefined) {
       gmKpiComments[emp.id][item.id] = fromEvidence;
     }
@@ -491,11 +561,7 @@ function prefillLockedPmScores() {
   ensurePmScoreKeys();
   for (const emp of employees.value) {
     for (const item of flattenGmKpiItems(emp)) {
-      const canViewSelf = canSupervisorViewMemberSelfEvaluation(
-        item.hubAssignmentStatusCode ?? item.statusCode,
-        "gm",
-      );
-      pmScores[emp.id][item.id] = canViewSelf ? item.selfScore : null;
+      pmScores[emp.id][item.id] = item.selfScore ?? null;
       gmScoreTouched[emp.id][item.id] = false;
     }
   }
@@ -591,15 +657,18 @@ function scaledWeightedAvgItems(
   emp: GmEvalMember,
   items: GmKpiItem[],
   mode: "pm" | "self",
+  options?: { inEvaluationDrawer?: boolean },
 ): { value: number; filledPmSlots: number; totalPmSlots: number } {
   const iterItems =
     mode === "pm"
       ? items.filter((i) => hubRowGmScoreDisplayEnabled(i))
       : items.filter((i) =>
-          canSupervisorViewMemberSelfEvaluation(
-            i.hubAssignmentStatusCode ?? i.statusCode,
-            "gm",
-          ),
+          options?.inEvaluationDrawer
+            ? true
+            : canSupervisorViewMemberSelfEvaluation(
+                i.hubAssignmentStatusCode ?? i.statusCode,
+                "gm",
+              ),
         );
   const totalSlots = iterItems.length;
   let weighted = 0;
@@ -650,7 +719,9 @@ function totalKpiWeightForGroupList(groups: GmKpiGroup[]) {
 function selfAvgForGroupList(emp: GmEvalMember, groups: GmKpiGroup[]) {
   const items = flattenGmKpiItemsFromGroups(groups);
   if (!items.length) return "—";
-  return formatAvg(scaledWeightedAvgItems(emp, items, "self").value);
+  return formatAvg(
+    scaledWeightedAvgItems(emp, items, "self", { inEvaluationDrawer: true }).value,
+  );
 }
 
 function pmAvgForGroupList(emp: GmEvalMember, groups: GmKpiGroup[]) {
@@ -744,9 +815,11 @@ function hubAsmStatusCodeForTab(
   emp: GmEvalMember,
   tab: "cascade" | "promotion" = tableEvalTab.value,
 ): number | null {
-  return minGmAsmStatusCode(
-    itemsForEvalTab(emp, tab).map((item) => item.hubAssignmentStatusCode),
+  const fromItems = itemsForEvalTab(emp, tab).map(
+    (item) => item.hubAssignmentStatusCode,
   );
+  if (fromItems.length > 0) return minGmAsmStatusCode(fromItems);
+  return minGmAsmStatusCode(memberHubEvalStatusCodesForTab(emp, tab));
 }
 
 function statusBadgeClassForTab(
@@ -770,9 +843,18 @@ function assignmentProgressLabelForTab(emp: GmEvalMember, tab = tableEvalTab.val
         .filter(Boolean),
     ),
   ];
-  if (!labels.length) return "—";
   if (labels.length === 1) return labels[0]!;
-  return labels.sort((a, b) => a.localeCompare(b)).join(" · ");
+  if (labels.length > 1) {
+    return labels.sort((a, b) => a.localeCompare(b)).join(" · ");
+  }
+  const summary = String(emp.assignmentStatusDisplay ?? "").trim();
+  if (summary) return summary;
+  const code = hubAsmStatusCodeForTab(emp, tab);
+  if (code != null) {
+    const fallback = hubEvalAsmFallbackLabel(code);
+    if (fallback) return fallback;
+  }
+  return "—";
 }
 
 function isAwaitingGmEvaluationForTab(emp: GmEvalMember, tab = tableEvalTab.value): boolean {
@@ -966,13 +1048,17 @@ watch(drawerEmpId, () => {
 const drawerCascadeGroups = computed((): GmKpiGroup[] => {
   const e = drawerEmployee.value;
   if (!e) return [];
-  return sortKpiGroupItemsByNameEn(e.groups.filter((g) => !isGmEvalPromotionKpiGroup(g)));
+  return sortKpiGroupItemsByNameEn(
+    e.groups.filter((g) => !isGmEvalPromotionKpiGroup(g) && g.items.length > 0),
+  );
 });
 
 const drawerPromotionGroups = computed((): GmKpiGroup[] => {
   const e = drawerEmployee.value;
   if (!e) return [];
-  return sortKpiGroupItemsByNameEn(e.groups.filter((g) => isGmEvalPromotionKpiGroup(g)));
+  return sortKpiGroupItemsByNameEn(
+    e.groups.filter((g) => isGmEvalPromotionKpiGroup(g) && g.items.length > 0),
+  );
 });
 
 const drawerActiveKpiGroups = computed((): GmKpiGroup[] =>
@@ -1138,6 +1224,110 @@ function hubGmScoresCompleteForItems(emp: GmEvalMember, items: GmKpiItem[]): boo
     const v = pmScores[emp.id]?.[it.id];
     return v != null && v >= 1 && v <= 5;
   });
+}
+
+function canRejectEvaluationRow(item: GmKpiItem): boolean {
+  if (isReadonly.value) return false;
+  const code = Number(item.hubAssignmentStatusCode ?? item.statusCode);
+  return (EVALUATION_REJECTABLE_STATUSES as readonly number[]).includes(code);
+}
+
+function canRejectAnyInDrawerTab(
+  emp: GmEvalMember,
+  tab: "cascade" | "promotion",
+): boolean {
+  return itemsForEvalTab(emp, tab).some((it) => canRejectEvaluationRow(it));
+}
+
+function openEvaluationRejectDialog(
+  item: GmKpiItem | null,
+  rejectAll: boolean,
+) {
+  const emp = drawerEmployee.value;
+  if (!emp || isReadonly.value) return;
+  if (!rejectAll && item && !canRejectEvaluationRow(item)) return;
+  if (rejectAll && !canRejectAnyInDrawerTab(emp, drawerEvalTab.value)) return;
+  evaluationRejectDialog.value = { open: true, item, rejectAll };
+  evaluationRejectReason.value = "";
+  evaluationRejectError.value = "";
+}
+
+function closeEvaluationRejectDialog() {
+  evaluationRejectDialog.value = { open: false, item: null, rejectAll: false };
+  evaluationRejectReason.value = "";
+  evaluationRejectError.value = "";
+}
+
+async function confirmEvaluationReject() {
+  const reason = evaluationRejectReason.value.trim();
+  if (!reason) {
+    evaluationRejectError.value = "Enter a rejection reason.";
+    return;
+  }
+  const { item, rejectAll } = evaluationRejectDialog.value;
+  closeEvaluationRejectDialog();
+  await rejectEvaluationKpi(item, rejectAll, reason);
+}
+
+async function rejectEvaluationKpi(
+  item: GmKpiItem | null,
+  rejectAll: boolean,
+  rejectReason: string,
+) {
+  const emp = drawerEmployee.value;
+  if (!emp || isReadonly.value) return;
+  if (!rejectAll && item && !canRejectEvaluationRow(item)) return;
+  const cid = String(selectedCycleId.value ?? "").trim();
+  const uid = String(emp.evaluationUserId ?? "").trim();
+  if (!cid || !uid) {
+    toast.warning("Missing cycle or employee — cannot reject.");
+    return;
+  }
+  rejectEvaluationBusy.value = true;
+  try {
+    await gmKpiService.rejectEvaluationHub({
+      cycleId: cid,
+      evaluationUserId: uid,
+      promotion: drawerEvalTab.value === "promotion",
+      assignmentId: rejectAll ? undefined : item?.id,
+      rejectAll,
+      rejectReason,
+    });
+    toast.success(
+      rejectAll ? "All rejectable KPIs were rejected." : "KPI evaluation rejected.",
+    );
+    emit("reloadEvaluationHub");
+    if (rejectAll) {
+      closeEvaluationDrawer();
+    }
+  } catch (e: unknown) {
+    toast.error(getApiErrorMessage(e, "Could not reject evaluation."));
+  } finally {
+    rejectEvaluationBusy.value = false;
+  }
+}
+
+function drawerCanSubmitEvaluation(
+  emp: GmEvalMember,
+  tab: "cascade" | "promotion",
+): boolean {
+  return (
+    drawerHubShowYearEndConfirm(emp, tab) ||
+    drawerHubShowMidYearConfirm(emp, tab)
+  );
+}
+
+async function submitDrawerEvaluation() {
+  const emp = drawerEmployee.value;
+  if (!emp) return;
+  const tab = drawerEvalTab.value;
+  if (drawerHubShowYearEndConfirm(emp, tab)) {
+    await confirmDone(emp, GM_HUB_YEAR_END_SCOPES, tab);
+  } else if (drawerHubShowMidYearConfirm(emp, tab)) {
+    await confirmDone(emp, GM_HUB_MID_YEAR_SCOPES, tab);
+  } else {
+    toast.info("No KPIs are pending confirmation on this tab.");
+  }
 }
 
 async function confirmDone(
@@ -2541,10 +2731,11 @@ async function confirmDone(
               </div>
 
               <div class="min-h-0 flex-1 overflow-y-auto">
-                <div class="p-4 sm:p-5">
+                <div class="flex flex-col gap-6 p-4 sm:gap-8 sm:p-5">
                   <div
                     class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-md"
                   >
+                    <KpiCreatorRowLegend />
                     <div class="border-b border-slate-200 bg-white">
                       <div class="overflow-x-auto bg-white">
                         <table class="min-w-[1180px] w-full text-sm text-left">
@@ -2561,16 +2752,9 @@ async function confirmDone(
                               <th class="px-4 py-3 font-semibold text-center w-32">SELF SCORE</th>
                               <th class="px-4 py-3 font-semibold text-center w-32">
                                 FINAL SCORE
-                                <span
-                                  v-if="
-                                    drawerRequiresGmFinalGradingForTab(
-                                      drawerEmployee,
-                                      drawerEvalTab,
-                                    )
-                                  "
-                                  class="text-rose-500"
-                                  >*</span
-                                >
+                              </th>
+                              <th class="px-4 py-3 font-semibold text-center w-28">
+                                ACTION
                               </th>
                             </tr>
                           </thead>
@@ -2580,7 +2764,7 @@ async function confirmDone(
                           >
                             <tr>
                               <td
-                                colspan="8"
+                                colspan="9"
                                 class="px-4 py-12 text-center text-sm font-medium text-slate-500"
                               >
                                 No KPIs in this tab.
@@ -2597,7 +2781,7 @@ async function confirmDone(
                             >
                               <tr :class="drawerGroupRowClass(group)">
                                 <td
-                                  colspan="8"
+                                  colspan="9"
                                   class="px-4 py-2.5 text-xs font-bold uppercase tracking-wider"
                                   :class="drawerGroupLabelClass(group)"
                                 >
@@ -2626,11 +2810,21 @@ async function confirmDone(
                                     <p class="flex flex-wrap items-center gap-2 font-semibold text-slate-800 text-sm">
                                       <span v-if="drawerItemCode(item)">{{ drawerItemCode(item) }} </span>
                                       <span>{{ drawerItemName(item) }}</span>
-                                      <span
-                                        class="inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold"
-                                        :class="drawerStatusClass(item)"
-                                      >
-                                        {{ drawerStatusLabel(item) }}
+                                      <span class="inline-flex items-center gap-1">
+                                        <span
+                                          class="inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold"
+                                          :class="drawerStatusClass(item)"
+                                        >
+                                          {{ drawerStatusLabel(item) }}
+                                        </span>
+                                        <span
+                                          v-if="hasDrawerEvaluationRejectReason(item)"
+                                          :title="drawerEvaluationRejectTooltip(item)"
+                                          class="inline-flex h-4 w-4 shrink-0 cursor-help items-center justify-center rounded-full border border-rose-300 bg-rose-50 text-[10px] font-bold leading-none text-rose-700"
+                                          aria-label="Evaluation rejection reason"
+                                        >
+                                          ?
+                                        </span>
                                       </span>
                                     </p>
                                   </td>
@@ -2716,6 +2910,19 @@ async function confirmDone(
                                       currentDisplayableGmScore(drawerEmployee, item) ?? '-'
                                     }}</span>
                                   </td>
+                                  <td class="px-4 py-4 text-center align-middle">
+                                    <button
+                                      v-if="canRejectEvaluationRow(item)"
+                                      type="button"
+                                      :disabled="rejectEvaluationBusy || confirmBusy"
+                                      class="inline-flex items-center gap-1 rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-[11px] font-bold text-rose-700 shadow-sm transition-colors hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
+                                      @click.stop="openEvaluationRejectDialog(item, false)"
+                                    >
+                                      <i class="fas fa-times text-[10px]" aria-hidden="true" />
+                                      Reject
+                                    </button>
+                                    <span v-else class="text-xs text-slate-300">—</span>
+                                  </td>
                                 </tr>
                                 <tr
                                   v-show="
@@ -2724,7 +2931,7 @@ async function confirmDone(
                                   class="bg-slate-50/50"
                                 >
                                   <td
-                                    colspan="8"
+                                    colspan="9"
                                     class="p-0 border-b border-slate-200"
                                   >
                                     <div
@@ -3033,6 +3240,7 @@ async function confirmDone(
                               <td class="px-4 py-3 text-center font-bold text-slate-400">-</td>
                               <td class="px-4 py-3 text-center font-bold text-slate-400">-</td>
                               <td class="px-4 py-3 text-center font-bold text-slate-400">-</td>
+                              <td class="px-4 py-3" />
                             </tr>
                             <tr class="bg-purple-50 border-t border-purple-100">
                               <td
@@ -3060,15 +3268,17 @@ async function confirmDone(
                                   )
                                 }}
                               </td>
+                              <td class="px-4 py-4" />
                             </tr>
                           </tfoot>
                         </table>
                       </div>
                     </div>
+                  </div>
 
                     <div
                       v-if="drawerEvalTab === 'cascade'"
-                      class="border-t border-slate-200 bg-white p-6"
+                      class="overflow-hidden rounded-2xl border border-slate-200 bg-white p-6 shadow-md"
                     >
                       <h4
                         class="mb-4 flex items-center gap-2 text-sm font-bold text-slate-800"
@@ -3194,7 +3404,7 @@ async function confirmDone(
 
                     <div
                       v-else
-                      class="border-t border-slate-200 bg-white p-6"
+                      class="overflow-hidden rounded-2xl border border-slate-200 bg-white p-6 shadow-md"
                     >
                       <h4
                         class="mb-4 flex items-center gap-2 text-sm font-bold text-slate-800"
@@ -3313,8 +3523,120 @@ async function confirmDone(
                         </div>
                       </div>
                     </div>
-                  </div>
                 </div>
+              </div>
+            </div>
+            <div
+              class="shrink-0 border-t border-slate-200 bg-white px-4 py-3 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] sm:px-5"
+            >
+              <div class="flex w-full flex-wrap items-center justify-between gap-3">
+                <button
+                  type="button"
+                  class="rounded-xl border border-slate-300 bg-white px-5 py-2.5 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900"
+                  @click="closeEvaluationDrawer"
+                >
+                  Cancel
+                </button>
+                <div
+                  v-if="
+                    drawerEmployee &&
+                    !isReadonly &&
+                    (canRejectAnyInDrawerTab(drawerEmployee, drawerEvalTab) ||
+                      drawerCanSubmitEvaluation(drawerEmployee, drawerEvalTab))
+                  "
+                  class="flex flex-wrap items-center gap-3"
+                >
+                  <button
+                    v-if="canRejectAnyInDrawerTab(drawerEmployee, drawerEvalTab)"
+                    type="button"
+                    :disabled="rejectEvaluationBusy || confirmBusy"
+                    class="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-5 py-2.5 text-sm font-semibold text-rose-700 transition-colors hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
+                    @click="openEvaluationRejectDialog(null, true)"
+                  >
+                    <i
+                      v-if="rejectEvaluationBusy"
+                      class="fas fa-spinner fa-spin text-xs"
+                      aria-hidden="true"
+                    />
+                    <i v-else class="fas fa-times text-xs" aria-hidden="true" />
+                    Reject all
+                  </button>
+                  <button
+                    v-if="drawerCanSubmitEvaluation(drawerEmployee, drawerEvalTab)"
+                    type="button"
+                    :disabled="confirmBusy || rejectEvaluationBusy"
+                    class="flex items-center gap-2 rounded-xl bg-slate-900 px-6 py-2.5 text-sm font-semibold text-white transition-all hover:bg-indigo-600 hover:shadow-lg focus:ring-4 focus:ring-indigo-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+                    @click="submitDrawerEvaluation"
+                  >
+                    <i
+                      v-if="confirmBusy"
+                      class="fas fa-spinner fa-spin text-xs"
+                      aria-hidden="true"
+                    />
+                    <i v-else class="fas fa-paper-plane text-xs" aria-hidden="true" />
+                    Submit evaluation
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </Transition>
+      </Teleport>
+
+      <Teleport to="body">
+        <Transition name="fade">
+          <div
+            v-if="evaluationRejectDialog.open"
+            class="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/55 p-4 backdrop-blur-sm"
+            @click.self="closeEvaluationRejectDialog"
+          >
+            <div class="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl">
+              <div class="mb-3 flex items-center gap-3">
+                <div class="rounded-full bg-rose-100 p-2 text-rose-600">
+                  <i class="fas fa-circle-exclamation text-lg" />
+                </div>
+                <h3 class="text-lg font-bold text-slate-900">Reject evaluation</h3>
+              </div>
+              <p class="mb-3 text-sm text-slate-600">
+                {{
+                  evaluationRejectDialog.rejectAll
+                    ? "You are rejecting all rejectable KPIs in this tab. Enter a reason."
+                    : "Enter the reason for rejecting this KPI evaluation."
+                }}
+              </p>
+              <label class="mb-1 block text-sm font-semibold text-slate-700">
+                Rejection reason <span class="text-rose-500">*</span>
+              </label>
+              <textarea
+                v-model="evaluationRejectReason"
+                class="min-h-[110px] w-full resize-none rounded-lg border p-3 text-sm outline-none focus:ring-2"
+                :class="
+                  evaluationRejectError
+                    ? 'border-rose-400 focus:ring-rose-100'
+                    : 'border-slate-300 focus:ring-rose-100'
+                "
+                placeholder="Enter detailed reason..."
+              />
+              <p v-if="evaluationRejectError" class="mt-1 text-xs font-medium text-rose-600">
+                {{ evaluationRejectError }}
+              </p>
+              <div class="mt-4 flex justify-end gap-2">
+                <button
+                  type="button"
+                  class="rounded-lg px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100"
+                  :disabled="rejectEvaluationBusy"
+                  @click="closeEvaluationRejectDialog"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  :disabled="rejectEvaluationBusy"
+                  class="rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-50"
+                  @click="confirmEvaluationReject"
+                >
+                  Confirm rejection
+                </button>
               </div>
             </div>
           </div>

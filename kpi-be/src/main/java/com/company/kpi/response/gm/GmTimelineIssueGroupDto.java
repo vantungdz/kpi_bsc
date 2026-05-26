@@ -11,7 +11,7 @@ import java.util.List;
  */
 @Data
 public class GmTimelineIssueGroupDto {
-    /** Stable key, e.g. {@code pending_pm_review}, {@code unassigned_members}. */
+    /** Stable key, e.g. {@code mid_pending_pm_evaluation}, {@code setting_unassigned_members}. */
     private String id;
     private String title;
     /** {@code critical} | {@code warning} | {@code info} */

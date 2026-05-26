@@ -14,6 +14,9 @@ import { displayTargetValue, formatTargetDisplay } from "@/utils/strategicKpiTyp
 import KpiCreatorRowLegend from '@/components/shared/KpiCreatorRowLegend.vue'
 import { kpiCreatorRowBgFromSource } from '@/utils/kpiCreatorRowBg'
 import { feedback407StatusLabel } from '@/utils/feedbackStatus';
+import MemberLeaderAssigneeTargetScaleDrawer, {
+  type MemberLeaderAssigneeTargetScaleEditItem,
+} from '@/components/shared/MemberLeaderAssigneeTargetScaleDrawer.vue'
 
 const toast = useToast();
 
@@ -85,6 +88,8 @@ const selectedKpi = ref<any>(null);
 const drawerMode = ref<'detail' | 'feedback'>('detail')
 const showDeleteConfirmModal = ref(false)
 const pendingDeleteAssignment = ref<any | null>(null)
+const showAssigneeTargetScaleModal = ref(false)
+const assigneeTargetScaleItem = ref<MemberLeaderAssigneeTargetScaleEditItem | null>(null)
 
 function openEvidence(assign: any, mode: 'detail' | 'feedback' = 'detail') {
   drawerMode.value = mode
@@ -238,11 +243,19 @@ const buttonState = computed(() => {
   if (hasRejectedAssignments.value) {
     return { show: true, disabled: false, text: 'Resubmit KPI', actionType: 'GOAL_SETTING' as const }
   }
+  // When all KPIs are evaluation-rejected, minStatusCode is 504 or 604 — bypass getSubmitButtonState
+  const sc = currentStatusCode.value
+  if (sc === KPI_STATUS.FIRST_REJECTED) {
+    return { show: true, disabled: false, text: 'Resubmit Mid-Year KPI', actionType: 'MID_YEAR' as const }
+  }
+  if (sc === KPI_STATUS.SECOND_REJECTED) {
+    return { show: true, disabled: false, text: 'Resubmit Year-End KPI', actionType: 'END_YEAR' as const }
+  }
   const skipMid = shouldCollapseKpiProcessTimelineToYearEndOnly(
     apiData.value.accountCreatedAt,
     apiData.value.kpiCycle.midYearStart,
   )
-  return getSubmitButtonState(apiData.value.kpiCycle, currentStatusCode.value, new Date(), {
+  return getSubmitButtonState(apiData.value.kpiCycle, sc, new Date(), {
     treatMidYearAsSkipped: skipMid,
   })
 });
@@ -304,9 +317,10 @@ onMounted(fetchData);
 defineExpose({ submitEvaluation, buttonState, submitting })
 
 function statusPhaseClass(code: number): string {
+  if (code === KPI_STATUS.FIRST_REJECTED || code === KPI_STATUS.SECOND_REJECTED) return 'text-rose-700';
   if ([501, 502, 601, 602].includes(code)) return 'text-sky-700';
   if (code === 407) return 'text-violet-700';
-  if (code === 406) return 'text-orange-700';
+  if (code === 406) return 'text-rose-700';
   if ([503, 603].includes(code)) return 'text-emerald-700';
   if ([402, 403, 404, 405].includes(code)) return 'text-slate-700';
   return 'text-slate-600';
@@ -336,6 +350,7 @@ function statusDescForUi(assign: any): string {
 }
 
 function statusBadgeClass(code: number): string {
+  if (code === KPI_STATUS.FIRST_REJECTED || code === KPI_STATUS.SECOND_REJECTED) return 'border-rose-200 bg-rose-50'
   if ([501, 502, 601, 602].includes(code)) return 'border-sky-200 bg-sky-50'
   if (code === 407) return 'border-violet-200 bg-violet-50'
   if (code === 406) return 'border-rose-200 bg-rose-50'
@@ -345,7 +360,7 @@ function statusBadgeClass(code: number): string {
 }
 
 function rowAlertClass(code: number): string {
-  if (code === 406) return 'bg-rose-50/60'
+  if (code === 406 || code === KPI_STATUS.FIRST_REJECTED || code === KPI_STATUS.SECOND_REJECTED) return 'bg-rose-50/60'
   if (code === 407) return 'bg-violet-100/70 ring-1 ring-inset ring-violet-200'
   if ([501, 502, 601, 602].includes(code)) return 'bg-sky-50/45'
   if ([503, 603].includes(code)) return 'bg-emerald-50/35'
@@ -357,6 +372,58 @@ function canSendFeedback(assign: any): boolean {
   if (assign?.createdByCurrentUser === true) return false
   const status = Number(assign?.statusCode ?? 0)
   return status === 404 || status === 407
+}
+
+function isCreatorPmOrGm(assign: any): boolean {
+  const role = String(assign?.createdByRoleCode ?? '').trim().toUpperCase()
+  return role === 'PM' || role === 'GM'
+}
+
+function canEditAssigneeTargetScale(assign: any): boolean {
+  if (props.isReadonly) return false
+  if (assign?.createdByCurrentUser === true) return false
+  if (!isCreatorPmOrGm(assign)) return false
+  if (assign?.allowAssigneeTargetScaleEdit !== true) return false
+  const status = Number(assign?.statusCode ?? 0)
+  return status === 404  || status === 406 || status === 407
+}
+
+function openAssigneeTargetScaleEditor(assign: any) {
+  assigneeTargetScaleItem.value = {
+    id: String(assign?.assignmentId ?? ''),
+    kpiInformationId: String(assign?.kpiInformationId ?? ''),
+    target: assign?.targetValue != null ? String(assign.targetValue) : '',
+    targetDescription: String(assign?.targetDescription ?? ''),
+    kpiName: String(assign?.kpiName ?? ''),
+    categoryName: String(assign?.categoryName ?? ''),
+    weight: assign?.weight ?? null,
+    unitName: String(assign?.unitName ?? ''),
+    calculationRuleCode: assign?.calculationRuleCode ?? null,
+    calculationTypeCode: assign?.calculationTypeCode ?? null,
+  }
+  showAssigneeTargetScaleModal.value = true
+}
+
+function onAssigneeTargetScaleSaved(payload: {
+  assignmentId: string
+  target: string
+  targetDescription: string
+}) {
+  const assignmentId = String(payload.assignmentId ?? '').trim()
+  if (!assignmentId) return
+  const parsedTarget = Number.parseFloat(String(payload.target ?? '').trim())
+  for (const category of apiData.value?.categories ?? []) {
+    for (const assign of category.assignments ?? []) {
+      if (String(assign.assignmentId ?? '') !== assignmentId) continue
+      if (Number.isFinite(parsedTarget)) {
+        assign.targetValue = parsedTarget
+      }
+      assign.targetDescription = String(payload.targetDescription ?? assign.targetDescription ?? '')
+      break
+    }
+  }
+  showAssigneeTargetScaleModal.value = false
+  toast.success('Target and scoring scale updated.')
 }
 
 function canDeleteSelfCreatedVisible(assign: any): boolean {
@@ -420,6 +487,10 @@ function finalScoreTooltip(assign: any): string | undefined {
 
 function statusTooltip(assign: any): string {
   const status = Number(assign?.statusCode ?? 0)
+  const evalReason = String(assign?.evaluationRejectReason ?? '').trim()
+  if ((status === KPI_STATUS.FIRST_REJECTED || status === KPI_STATUS.SECOND_REJECTED) && evalReason) {
+    return `Evaluation rejection reason:\n${evalReason}`
+  }
   const reason = String(assign?.updateReason ?? assign?.feedbackComment ?? '').trim()
   if (status === 406 && reason) return `Rejection reason:\n${reason}`
   return statusDescForUi(assign)
@@ -427,6 +498,10 @@ function statusTooltip(assign: any): string {
 
 function hasRejectedReason(assign: any): boolean {
   const status = Number(assign?.statusCode ?? 0)
+  const evalReason = String(assign?.evaluationRejectReason ?? '').trim()
+  if ((status === KPI_STATUS.FIRST_REJECTED || status === KPI_STATUS.SECOND_REJECTED) && evalReason.length > 0) {
+    return true
+  }
   const reason = String(assign?.updateReason ?? assign?.feedbackComment ?? '').trim()
   return status === 406 && reason.length > 0
 }
@@ -576,9 +651,9 @@ function parseActualResultFromEvidences(
                 <span
                     v-if="hasRejectedReason(assign)"
                     :title="statusTooltip(assign)"
-                    class="ml-1 mt-1 inline-flex max-w-full items-start gap-1 text-left text-[10px] font-medium text-orange-700 cursor-pointer hover:bg-orange-100 rounded"
+                    class="ml-1 mt-1 inline-flex max-w-full items-start gap-1 text-left text-[10px] font-medium text-rose-700 cursor-pointer hover:bg-rose-100 rounded"
                   >
-                    <span class="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-orange-300 text-[10px] font-bold leading-none text-orange-700 cursor-pointer">
+                    <span class="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-rose-300 text-[10px] font-bold leading-none text-rose-700 cursor-pointer">
                       ?
                     </span>
                   </span>
@@ -623,24 +698,34 @@ function parseActualResultFromEvidences(
               </td>
 
               <td class="py-4 px-5 text-center align-middle">
-                <div class="inline-flex items-center gap-1 justify-center">
-                <p 
-                  class="font-medium text-sm display-inline-flex items-center gap-1"
-                  :class="scoreColorClass(assign.endGmScore ?? assign.endPmScore)">
-                   {{ assign.endGmScore ?? assign.endPmScore ?? '' }}
-                </p>
-                <span
-                  v-if="finalScoreTooltip(assign)"
-                  class="inline-flex h-4 w-4 items-center justify-center rounded-full border border-slate-300 text-[10px] font-bold text-slate-500 cursor-help cursor-pointer hover:bg-sky-200 cursor-pointer cursor-pointer"
-                  :title="finalScoreTooltip(assign)"
-                >
-                  ?
-                </span>
+                <div class="grid min-w-0 grid-cols-[1fr_auto_1fr] items-center text-center">
+                  <span
+                    class="col-start-2 text-sm font-medium leading-none"
+                    :class="scoreColorClass(assign.endGmScore ?? assign.endPmScore)"
+                  >
+                    {{ assign.endGmScore ?? assign.endPmScore ?? '' }}
+                  </span>
+                  <span
+                    v-if="finalScoreTooltip(assign)"
+                    class="col-start-3 ml-1.5 inline-flex h-4 w-4 items-center justify-center justify-self-start rounded-full border border-slate-300 text-[10px] font-bold text-slate-500 cursor-help hover:bg-sky-200"
+                    :title="finalScoreTooltip(assign)"
+                  >
+                    ?
+                  </span>
                 </div>
               </td>
 
               <td class="py-4 px-5 text-right align-middle">
                 <div class="flex items-center justify-end gap-2">
+                  <button
+                    v-if="canEditAssigneeTargetScale(assign)"
+                    type="button"
+                    class="flex h-8 items-center gap-1.5 rounded-lg border border-sky-200 bg-sky-50 px-3 text-[10px] font-bold text-sky-800 shadow-sm transition-colors hover:bg-sky-100 cursor-pointer"
+                    title="Edit target & scoring rules"
+                    @click.stop="openAssigneeTargetScaleEditor(assign)"
+                  >
+                    <i class="fas fa-chart-line text-xs"></i>
+                  </button>
                   <button
                     type="button"
                     class="flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-[10px] font-bold text-slate-600 shadow-sm transition-colors hover:bg-slate-50 hover:text-indigo-600 cursor-pointer"
@@ -656,7 +741,7 @@ function parseActualResultFromEvidences(
                     title="Open this KPI to enter and send feedback"
                     @click.stop="openEvidence(assign, 'feedback')"
                   >
-                    <i class="fas fa-message text-[10px]"></i> Feedback
+                    <i class="fas fa-message text-[10px]"></i>
                   </button>
                 <button
                   v-if="canDeleteSelfCreatedVisible(assign)"
@@ -817,5 +902,11 @@ function parseActualResultFromEvidences(
         </div>
       </div>
     </Teleport>
+
+    <MemberLeaderAssigneeTargetScaleDrawer
+      v-model="showAssigneeTargetScaleModal"
+      :item="assigneeTargetScaleItem"
+      @saved="onAssigneeTargetScaleSaved"
+    />
   </div>
 </template>

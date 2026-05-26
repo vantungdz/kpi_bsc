@@ -28,4 +28,6 @@ public class KpiAssignment extends BaseEntity {
     private String evidences; // Handled as JSON string
     private String pmComment; // PM's evaluation comment for this KPI
     private Integer statusCode;
+    /** {@code promotion_cycles.id} — chỉ dùng khi KPI {@code type_code = 103}. */
+    private UUID promotionCycleId;
 }

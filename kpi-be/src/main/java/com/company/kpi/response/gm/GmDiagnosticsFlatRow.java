@@ -82,4 +82,7 @@ public class GmDiagnosticsFlatRow {
      * dùng để biết 407 có cần GM xử lý hay không.
      */
     private String activeFeedbackTargetRoleCode;
+
+    /** {@code kpi_assignments.promotion_cycle_id} — chỉ khi {@link #typeCode} = 103. */
+    private UUID promotionCycleId;
 }

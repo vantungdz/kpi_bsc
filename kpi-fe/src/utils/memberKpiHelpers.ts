@@ -260,65 +260,35 @@ export type KpiSupervisorEvaluationCommentsOpts = {
   gmEvaluationComment?: string | null
 }
 
-/** Nhận xét PM/GM theo KPI — `evidences.pmComment` / `evidences.gmComment` (legacy: chỉ `gmComment`). */
-export function parseKpiSupervisorEvaluationComments(
+/** Nhận xét PM/GM theo KPI — chỉ `evidences.gmComment` (legacy: `pmComment` trong DB cũ). */
+export function kpiSupervisorCommentFromEvidences(
   raw: string | null | undefined,
-  opts?: KpiSupervisorEvaluationCommentsOpts,
-): { pmComment: string; gmComment: string } {
-  let pm = String(opts?.pmEvaluationComment ?? '').trim()
-  let gm = String(opts?.gmEvaluationComment ?? '').trim()
-
+  opts?: Pick<KpiSupervisorEvaluationCommentsOpts, 'gmEvaluationComment' | 'pmEvaluationComment'>,
+): string {
   const trimmed = (raw ?? '').trim()
   if (trimmed) {
     try {
       const o = JSON.parse(trimmed) as Record<string, unknown>
-      const jsonPm = typeof o.pmComment === 'string' ? o.pmComment.trim() : ''
       const jsonGm = typeof o.gmComment === 'string' ? o.gmComment.trim() : ''
-      if (jsonPm) pm = jsonPm
-      if (jsonGm) gm = jsonGm
-
-      if (!jsonPm && jsonGm && !pm && !gm) {
-        const legacy = jsonGm
-        const sc = Number(opts?.statusCode)
-        const hasGmScore =
-          opts?.gmScore != null && Number.isFinite(Number(opts.gmScore))
-        const hasPmScore =
-          opts?.pmScore != null && Number.isFinite(Number(opts.pmScore))
-        const waitingGm =
-          sc === KPI_STATUS.FIRST_WAITING_GM_APPROVAL ||
-          sc === KPI_STATUS.SECOND_WAITING_GM_APPROVAL
-        const gmDone = (Number.isFinite(sc) && sc >= KPI_STATUS.COMPLETED) || hasGmScore
-
-        if (gmDone) gm = legacy
-        else if (waitingGm || (hasPmScore && !hasGmScore)) pm = legacy
-        else gm = legacy
-      }
+      if (jsonGm) return jsonGm
+      const legacyPm = typeof o.pmComment === 'string' ? o.pmComment.trim() : ''
+      if (legacyPm) return legacyPm
     } catch {
       /* ignore */
     }
   }
+  const apiGm = String(opts?.gmEvaluationComment ?? '').trim()
+  if (apiGm) return apiGm
+  return String(opts?.pmEvaluationComment ?? '').trim()
+}
 
-  if (!pm && !gm) {
-    const apiGm = String(opts?.gmEvaluationComment ?? '').trim()
-    const apiPm = String(opts?.pmEvaluationComment ?? '').trim()
-    if (apiPm) pm = apiPm
-    else if (apiGm) {
-      const sc = Number(opts?.statusCode)
-      const hasGmScore =
-        opts?.gmScore != null && Number.isFinite(Number(opts.gmScore))
-      const hasPmScore =
-        opts?.pmScore != null && Number.isFinite(Number(opts.pmScore))
-      const waitingGm =
-        sc === KPI_STATUS.FIRST_WAITING_GM_APPROVAL ||
-        sc === KPI_STATUS.SECOND_WAITING_GM_APPROVAL
-      const gmDone = (Number.isFinite(sc) && sc >= KPI_STATUS.COMPLETED) || hasGmScore
-      if (gmDone) gm = apiGm
-      else if (waitingGm || (hasPmScore && !hasGmScore)) pm = apiGm
-      else gm = apiGm
-    }
-  }
-
-  return { pmComment: pm, gmComment: gm }
+/** @deprecated Dùng {@link kpiSupervisorCommentFromEvidences} — một trường `gmComment` cho PM & GM. */
+export function parseKpiSupervisorEvaluationComments(
+  raw: string | null | undefined,
+  opts?: KpiSupervisorEvaluationCommentsOpts,
+): { pmComment: string; gmComment: string } {
+  const comment = kpiSupervisorCommentFromEvidences(raw, opts)
+  return { pmComment: '', gmComment: comment }
 }
 
 export function parsePmPortfolioEvidenceString(raw: string | null | undefined): {

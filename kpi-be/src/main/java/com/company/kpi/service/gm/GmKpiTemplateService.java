@@ -147,7 +147,10 @@ public class GmKpiTemplateService {
                 req.getUnitCode(),
                 false,
                 gmUserId);
-        kpiTemplateMapper.insertTemplateItem(itemId, templateId, masterId, targetDescription, targetNum, weight);
+        boolean important = Boolean.TRUE.equals(req.getIsImportant());
+        boolean allowAssigneeEdit = Boolean.TRUE.equals(req.getAllowAssigneeTargetScaleEdit());
+        kpiTemplateMapper.insertTemplateItem(
+                itemId, templateId, masterId, targetDescription, targetNum, weight, important, allowAssigneeEdit);
         GmKpiTemplateItemResponse row =
                 kpiTemplateMapper.selectTemplateItemResponse(templateId, itemId, resolveCycleYear(req.getCycleYear()));
         if (row == null) {
@@ -202,7 +205,16 @@ public class GmKpiTemplateService {
         if (um < 1) {
             throw AppException.notFound("kpi_master not found: " + row.getMasterKpiId());
         }
-        kpiTemplateMapper.updateTemplateItemDefaults(templateId, itemId, targetDescription, target, weight);
+        boolean important =
+                req.getIsImportant() != null
+                        ? Boolean.TRUE.equals(req.getIsImportant())
+                        : Boolean.TRUE.equals(row.getIsImportant());
+        boolean allowAssigneeEdit =
+                req.getAllowAssigneeTargetScaleEdit() != null
+                        ? Boolean.TRUE.equals(req.getAllowAssigneeTargetScaleEdit())
+                        : Boolean.TRUE.equals(row.getAllowAssigneeTargetScaleEdit());
+        kpiTemplateMapper.updateTemplateItemDefaults(
+                templateId, itemId, targetDescription, target, weight, important, allowAssigneeEdit);
         GmKpiTemplateItemResponse out =
                 kpiTemplateMapper.selectTemplateItemResponse(templateId, itemId, resolveCycleYear(req.getCycleYear()));
         if (out == null) {

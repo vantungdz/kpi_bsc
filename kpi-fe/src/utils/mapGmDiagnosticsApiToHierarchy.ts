@@ -78,6 +78,7 @@ function mapMember(m: GmDiagMemberApi): GmHierarchyMember {
     rank: m.rank ?? undefined,
     rankCode: m.rankCode ?? undefined,
     leader: m.leader ?? undefined,
+    promotionCycleId: m.promotionCycleId?.trim() || undefined,
   }
 }
 
@@ -169,6 +170,7 @@ export function mapGmDiagnosticsApiKpisToHierarchyRows(kpis: GmDiagKpiApi[] | nu
       pmOwners: (k.pmOwners ?? []).map(mapPm),
       investigateDeptId: k.investigateDeptId ?? undefined,
       investigateKpiName: k.investigateKpiName ?? undefined,
+      promotionCycleId: k.promotionCycleId?.trim() || undefined,
     }
   })
 }

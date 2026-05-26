@@ -27,4 +27,10 @@ public class GmApprovedKpiDecisionRequest {
      * Khi duyệt hoặc xử lý nhánh feedback (407) có thể bỏ qua.
      */
     private String rejectReason;
+
+    /**
+     * Khi từ chối một KPI trong drawer member (không reject all): các assignment 402/403 khác
+     * cùng {@code approval_user_id} trong chu kỳ → 404 (chờ chấp nhận lại).
+     */
+    private Boolean resetDrawerSiblingsToPendingAcceptance;
 }

@@ -22,4 +22,9 @@ public class PmMemberKpiApprovalDecisionRequest {
     /** Khi từ chối (406), PM phải nhập lý do để lưu vào {@code kpi_assignments.update_reason}. */
     @Size(max = 1000)
     private String rejectReason;
+
+    /**
+     * Khi từ chối một KPI trong drawer (không reject all): các assignment 402 khác cùng member → 404.
+     */
+    private Boolean resetDrawerSiblingsToPendingAcceptance;
 }

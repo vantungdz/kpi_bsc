@@ -78,6 +78,11 @@ public class CreateStrategicKpiRequest {
     /** INDIVIDUAL / PROMOTION: danh sách member nhận KPI. */
     private List<UUID> memberIds;
 
+    /**
+     * PROMOTION (103): {@code promotion_cycles.id} — bắt buộc khi giao KPI promotion cho member.
+     */
+    private UUID promotionCycleId;
+
     /** Tùy chọn — cập nhật KPI đã có (khi FE gửi id thật từ DB). */
     private UUID editingKpiInformationId;
 }

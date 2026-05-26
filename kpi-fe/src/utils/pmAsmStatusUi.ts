@@ -16,6 +16,8 @@ function gmAlignedDotClass(code: number): string {
     case KPI_STATUS.INACTIVE:
       return 'bg-slate-400 ring-2 ring-slate-100'
     case KPI_STATUS.REJECTED:
+    case KPI_STATUS.FIRST_REJECTED:
+    case KPI_STATUS.SECOND_REJECTED:
       return 'bg-rose-500 ring-2 ring-rose-100'
     case KPI_STATUS.FEEDBACK_IN_PROGRESS:
       return 'bg-violet-500 ring-2 ring-violet-100'
@@ -51,6 +53,8 @@ const PM_ASM_STATUS_CODES = [
   KPI_STATUS.SECOND_WAITING_PM_APPROVAL,
   KPI_STATUS.SECOND_WAITING_GM_APPROVAL,
   KPI_STATUS.COMPLETED,
+  KPI_STATUS.FIRST_REJECTED,
+  KPI_STATUS.SECOND_REJECTED,
 ] as const
 
 export const PM_ASM_STATUS_CHIP_UI: Record<number, PmAsmStatusChipUi> =

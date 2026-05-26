@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, nextTick } from "vue";
+import { ref, computed, watch, onMounted, nextTick, inject } from "vue";
 import { pmKpiService } from "@/services/modules/kpi-pm.service";
 import { memberKpiService } from "@/services/modules/kpi-member.service";
 import type { UpdateMemberSheetItemBody } from "@/services/modules/kpi-member.service";
@@ -27,9 +27,12 @@ import { pmAsmStatusPillClass } from "@/utils/pmAsmStatusUi";
 import KpiScoringRulesPreviewTooltip from "@/components/kpi/KpiScoringRulesPreviewTooltip.vue";
 import PmFinalScoreCommentTooltip from "@/components/pm/PmFinalScoreCommentTooltip.vue";
 import PmKpiTableAlignedCell from "@/components/pm/PmKpiTableAlignedCell.vue";
-import PmAssigneeTargetScaleModal, {
-  type PmAssigneeTargetScaleEditItem,
-} from "@/components/pm/PmAssigneeTargetScaleModal.vue";
+import PmGmScoreDisplay from "@/components/shared/PmGmScoreDisplay.vue";
+import {
+  gmScoreChangedFromFields,
+  PM_GM_SCORE_CHANGED_TD_CLASS,
+} from "@/utils/pmGmScoreDiff";
+import PmAssignKpiDrawer from "@/components/pm/drawers/PmAssignKpiDrawer.vue";
 import {
   diagnosticsActualNumericColorClass,
   diagnosticsActualTextColorClass,
@@ -43,9 +46,13 @@ import {
 } from "@/utils/pmCreateKpiGate";
 import {
   canSupervisorViewMemberSelfEvaluation,
+  canPmOwnViewPortfolioEvaluation,
+  pmPortfolioMemberSelfScoreDisplay,
+  resolvePortfolioMemberSelfScore,
   supervisorMemberActualDisplay,
   supervisorMemberSelfScoreDisplay,
 } from "@/utils/memberEvaluationVisibility";
+import { pmDepartmentSubTabKey } from "@/utils/pmLayoutPromotionCycle";
 
 const props = withDefaults(
   defineProps<{
@@ -67,6 +74,20 @@ const removingChildAssignmentIds = ref<Set<string>>(new Set());
 const sendingPmFeedbackIds = ref<Set<string>>(new Set());
 const decidingMemberFeedbackIds = ref<Set<string>>(new Set());
 const currentPmUserId = computed(() => String(authStore.user?.id ?? "").trim());
+
+/** Tab KPI Department: Individual (101/102) vs Promotion (103). */
+const departmentSubTab = ref<"individual" | "promotion">("individual");
+
+const pmDepartmentSubTab = inject(pmDepartmentSubTabKey, null);
+watch(
+  departmentSubTab,
+  (tab) => {
+    if (pmDepartmentSubTab) {
+      pmDepartmentSubTab.value = tab;
+    }
+  },
+  { immediate: true },
+);
 
 function formatTargetCell(v: unknown): string {
   if (v == null) return "-";
@@ -194,21 +215,38 @@ function pmTeamParentRollupActualIsSum(item: any): boolean {
 }
 
 /** Giá trị số từ Actual con; null khi chưa có / không đọc được (dùng khi roll-up = trung bình — bỏ qua khỏi mẫu số). */
+function isPmOwnedPortfolioRow(row: any, parentItem?: any): boolean {
+  if (isChildOwnedByCurrentPm(row)) return true;
+  if (props.portfolioScope === "department") return false;
+  if (parentItem) return false;
+  return !row?.isTree;
+}
+
+/** Actual một dòng (cha hoặc con) — áp dụng visibility ASM (Personal / Promotion / Department). */
+function pmPortfolioActualCell(row: any, parentItem?: any): string {
+  const calc = parentItem?.calculationTypeCode ?? row?.calculationTypeCode;
+  const mode = pmPortfolioActualDisplayMode(
+    parentItem?.calculationRuleCode ?? row?.calculationRuleCode,
+  );
+  const formatted =
+    formatPmActualCellWithUnit(
+      formatPmPortfolioActualCell(row?.actualResult, calc, mode, {
+        actualOnly: true,
+      }).trim(),
+      parentItem?.unitCode ?? row?.unitCode,
+    ) || "-";
+  return supervisorMemberActualDisplay(formatted, row?.statusCode, "pm", {
+    pmOwned: isPmOwnedPortfolioRow(row, parentItem),
+  });
+}
+
 function numericActualValueForTeamChildOrNull(
   child: any,
   parentItem: any,
 ): number | null {
-  if (!canSupervisorViewMemberSelfEvaluation(child?.statusCode, "pm")) {
-    return null;
-  }
-  const calc = parentItem.calculationTypeCode;
-  const mode = pmPortfolioActualDisplayMode(parentItem.calculationRuleCode);
-  const formatted = formatPmPortfolioActualCell(
-    child.actualResult,
-    calc,
-    mode,
-    { actualOnly: true },
-  ).trim();
+  const visible = pmPortfolioActualCell(child, parentItem);
+  if (visible === "-") return null;
+  const formatted = visible.trim();
   if (!formatted) return null;
 
   const percents = extractPercentsFromFormattedActual(formatted);
@@ -228,18 +266,12 @@ function numericActualValueForTeamChildOrNull(
  * 801 → tổng (con thiếu Actual tính 0); 802/803 → trung bình các con có Actual hợp lệ.
  */
 function formatPmTeamParentActualCell(item: any): string {
-  const calc = item.calculationTypeCode;
-  const mode = pmPortfolioActualDisplayMode(item.calculationRuleCode);
-
   if (
     !item?.isTree ||
     !Array.isArray(item.children) ||
     item.children.length === 0
   ) {
-    return formatPmActualCellWithUnit(
-      formatPmPortfolioActualCell(item.actualResult, calc, mode).trim(),
-      item.unitCode,
-    );
+    return pmPortfolioActualCell(item);
   }
 
   const children = item.children as any[];
@@ -412,18 +444,16 @@ function canEditAssigneeTargetScale(item: any): boolean {
   if (Boolean(item?.isSelfCreated)) return false;
   if (item?.allowAssigneeTargetScaleEdit !== true) return false;
   const sc = Number(item?.statusCode ?? 0);
-  return sc === KPI_STATUS.PENDING_ACCEPTANCE
-    || sc === KPI_STATUS.ACCEPTED
-    || sc === KPI_STATUS.FEEDBACK_IN_PROGRESS;
+  return (
+    isPmPendingAcceptanceLikeStatus(sc) ||
+    sc === KPI_STATUS.ACCEPTED ||
+    sc === KPI_STATUS.FEEDBACK_IN_PROGRESS
+  );
 }
 
 function openAssigneeTargetScaleEditor(item: any) {
-  assigneeTargetScaleItem.value = {
-    id: String(item.id),
-    target: String(item.target ?? ""),
-    targetDescription: String(item.targetDescription ?? ""),
-  };
-  showAssigneeTargetScaleModal.value = true;
+  assigneeTargetScaleKpi.value = item;
+  showAssigneeTargetScaleDrawer.value = true;
 }
 
 function onAssigneeTargetScaleSaved(payload: {
@@ -440,8 +470,9 @@ function onAssigneeTargetScaleSaved(payload: {
       targetDescription: payload.targetDescription || row.targetDescription,
     };
   });
-  toast.success("Đã cập nhật target và thang điểm.");
-  showAssigneeTargetScaleModal.value = false;
+  toast.success("Target and scoring scale updated.");
+  showAssigneeTargetScaleDrawer.value = false;
+  assigneeTargetScaleKpi.value = null;
 }
 
 function canShowSelfCreatedKpiEditButton(item: any): boolean {
@@ -488,33 +519,7 @@ function normalizePmAsmStatusCode(code: unknown): number | null {
   return Number.isFinite(n) && n > 0 ? Math.round(n) : null;
 }
 
-/** Rollup ASM trên KPI Team — ưu tiên 407 (Processing Feedback) giống GM diagnostics. */
-function minPmAsmStatusCodeWithFeedbackPriority(
-  codes: Array<number | null | undefined>,
-): number | null {
-  const valid = codes
-    .map(normalizePmAsmStatusCode)
-    .filter((n): n is number => n != null);
-  if (valid.includes(KPI_STATUS.FEEDBACK_IN_PROGRESS)) {
-    return KPI_STATUS.FEEDBACK_IN_PROGRESS;
-  }
-  return valid.length > 0 ? Math.min(...valid) : null;
-}
-
-/** Status hiển thị dòng KPI cha (PM assignment + member cascade). */
-function pmTeamParentRollupStatusCode(item: any): number | null {
-  const codes: number[] = [];
-  const parentSc = normalizePmAsmStatusCode(item?.statusCode);
-  if (parentSc != null) codes.push(parentSc);
-  for (const child of assignedNonPmChildren(item)) {
-    const childSc = normalizePmAsmStatusCode(child?.statusCode);
-    if (childSc != null) codes.push(childSc);
-  }
-  const rolled = minPmAsmStatusCodeWithFeedbackPriority(codes);
-  return rolled ?? parentSc;
-}
-
-/** Tab KPI Department: dòng KPI gom theo infoId — rollup min(status) con; ưu tiên 407. */
+/** Tab KPI Department: dòng KPI gom theo infoId (id `info-…`). */
 function isDepartmentGroupedKpi(item: any): boolean {
   return (
     props.portfolioScope === "department" &&
@@ -522,23 +527,11 @@ function isDepartmentGroupedKpi(item: any): boolean {
   );
 }
 
-function pmDepartmentParentRollupStatusCode(item: any): number | null {
-  const children = Array.isArray(item?.children) ? item.children : [];
-  const codes = children.map((c: any) => c?.statusCode);
-  return minPmAsmStatusCodeWithFeedbackPriority(codes);
-}
-
-/** Mã hiển thị cột Status — node cha Team rollup từ con; node con = assignment của member. */
+/** Mã hiển thị cột Status — luôn theo assignment của dòng (không rollup từ con). */
 function pmStatusCodeForDisplayRow(
   item: any,
-  mode: "parent" | "child",
+  _mode: "parent" | "child",
 ): number | null {
-  if (mode === "parent" && isTeamTreeKpi(item)) {
-    return pmTeamParentRollupStatusCode(item);
-  }
-  if (mode === "parent" && isDepartmentGroupedKpi(item)) {
-    return pmDepartmentParentRollupStatusCode(item);
-  }
   return normalizePmAsmStatusCode(item?.statusCode);
 }
 
@@ -566,11 +559,21 @@ function pmStatusRejectTooltip(item: any): string {
   return `Rejection reason:\n${reason}`;
 }
 
-/** GM/PM từ chối — ASM 406 + update_reason. */
+/** GM/PM từ chối — ASM 406 + update_reason (theo assignment gốc). */
 function hasPmRejectedReason(item: any): boolean {
   const reason = pmRejectedReasonText(item);
   if (!reason) return false;
   return Number(item?.statusCode ?? 0) === KPI_STATUS.REJECTED;
+}
+
+/** Reject trên cột Status — theo assignment của dòng. */
+function pmDisplayRowIsRejected(item: any, mode: "parent" | "child"): boolean {
+  return pmStatusCodeForDisplayRow(item, mode) === KPI_STATUS.REJECTED;
+}
+
+function pmRejectTooltipForDisplayRow(item: any, mode: "parent" | "child"): string {
+  if (!pmDisplayRowIsRejected(item, mode)) return "";
+  return pmStatusRejectTooltip(item);
 }
 
 function pmFeedbackPendingRowClass(item: any): string {
@@ -614,13 +617,7 @@ function pmDepartmentParentActualColorClass(item: any): string {
 }
 
 function pmDepartmentChildActualColorClass(parentItem: any, child: any): string {
-  const mode = pmPortfolioActualDisplayMode(parentItem.calculationRuleCode);
-  const actualRaw = formatPmPortfolioActualCell(
-    child.actualResult,
-    parentItem.calculationTypeCode,
-    mode,
-    { actualOnly: true },
-  ).trim();
+  const actualRaw = pmPortfolioActualCell(child, parentItem);
   return diagnosticsMemberActualColorClass({
     actualRaw,
     targetRaw: String(child.target ?? ""),
@@ -705,7 +702,8 @@ async function loadPmPortfolio(year?: string) {
     const pmUid = currentPmUserId.value.trim();
 
     // Map KpiGroupDto -> UI shape
-    personalKpisRaw.value = (data.kpis ?? []).map((kpi: any) => {
+    const kpisFromApi = data.kpis ?? [];
+    personalKpisRaw.value = kpisFromApi.map((kpi: any) => {
       const kpiId = String(kpi.id);
       return {
         id: kpiId,
@@ -728,12 +726,11 @@ async function loadPmPortfolio(year?: string) {
             : undefined,
         feedbackNote: kpi.feedbackNote ?? "",
         selfScore: kpi.selfScore != null ? Number(kpi.selfScore) : null,
+        midSelfScore: kpi.midSelfScore != null ? Number(kpi.midSelfScore) : null,
+        endSelfScore: kpi.endSelfScore != null ? Number(kpi.endSelfScore) : null,
         pmScore: kpi.pmScore != null ? Number(kpi.pmScore) : null,
-        pmEvaluationComment:
-          kpi.pmEvaluationComment != null &&
-          String(kpi.pmEvaluationComment).trim() !== ""
-            ? String(kpi.pmEvaluationComment).trim()
-            : undefined,
+        endPmScore: kpi.endPmScore != null ? Number(kpi.endPmScore) : null,
+        endGmScore: kpi.endGmScore != null ? Number(kpi.endGmScore) : null,
         gmEvaluationComment:
           kpi.gmEvaluationComment != null &&
           String(kpi.gmEvaluationComment).trim() !== ""
@@ -796,12 +793,11 @@ async function loadPmPortfolio(year?: string) {
               ? String(c.feedbackTargetRoleCode).trim().toUpperCase()
               : undefined,
           selfScore: c.selfScore != null ? Number(c.selfScore) : null,
+          midSelfScore: c.midSelfScore != null ? Number(c.midSelfScore) : null,
+          endSelfScore: c.endSelfScore != null ? Number(c.endSelfScore) : null,
           pmScore: c.pmScore != null ? Number(c.pmScore) : null,
-          pmEvaluationComment:
-            c.pmEvaluationComment != null &&
-            String(c.pmEvaluationComment).trim() !== ""
-              ? String(c.pmEvaluationComment).trim()
-              : undefined,
+          endPmScore: c.endPmScore != null ? Number(c.endPmScore) : null,
+          endGmScore: c.endGmScore != null ? Number(c.endGmScore) : null,
           gmEvaluationComment:
             c.gmEvaluationComment != null &&
             String(c.gmEvaluationComment).trim() !== ""
@@ -812,6 +808,11 @@ async function loadPmPortfolio(year?: string) {
             c.updateReason != null && String(c.updateReason).trim() !== ""
               ? String(c.updateReason).trim()
               : undefined,
+          targetDescription:
+            c.targetDescriptionJson != null &&
+            String(c.targetDescriptionJson).trim() !== ""
+              ? String(c.targetDescriptionJson)
+              : "",
           status: statusMap[c.statusCode] || "pending_approval",
           weight: kpi.weight,
         })),
@@ -863,6 +864,10 @@ function pmPortfolioStatusForButton(rows: any[]): number {
     statuses.includes(KPI_STATUS.REJECTED)
   )
     return KPI_STATUS.PENDING_ACCEPTANCE;
+  if (statuses.includes(KPI_STATUS.FIRST_REJECTED))
+    return KPI_STATUS.FIRST_REJECTED;
+  if (statuses.includes(KPI_STATUS.SECOND_REJECTED))
+    return KPI_STATUS.SECOND_REJECTED;
   if (statuses.includes(KPI_STATUS.ACCEPTED)) return KPI_STATUS.ACCEPTED;
   if (statuses.includes(KPI_STATUS.SECOND_WAITING_GM_APPROVAL))
     return KPI_STATUS.SECOND_WAITING_GM_APPROVAL;
@@ -975,13 +980,42 @@ watch(
   },
 );
 
+function filterDepartmentRowsBySubTab(rows: any[]): any[] {
+  if (departmentSubTab.value === "promotion") {
+    return rows.filter((kpi) => kpi.kpiType === "promotion");
+  }
+  return rows.filter((kpi) => kpi.kpiType !== "promotion");
+}
+
+function countDepartmentFeedbackPending(promotion: boolean): number {
+  const rows = personalKpisRaw.value.filter((kpi) =>
+    promotion ? kpi.kpiType === "promotion" : kpi.kpiType !== "promotion",
+  );
+  const grouped = groupDepartmentPortfolioByKpi(rows);
+  return grouped.filter(
+    (kpi) =>
+      Array.isArray(kpi.children) &&
+      kpi.children.some((child: any) => isMemberFeedbackPendingForPm(child)),
+  ).length;
+}
+
+const departmentIndividualFeedbackCount = computed(() => {
+  if (props.portfolioScope !== "department") return 0;
+  return countDepartmentFeedbackPending(false);
+});
+
+const departmentPromotionFeedbackCount = computed(() => {
+  if (props.portfolioScope !== "department") return 0;
+  return countDepartmentFeedbackPending(true);
+});
+
 const scopedPersonalKpisRaw = computed(() => {
   const rows = personalKpisRaw.value;
   if (props.portfolioScope === "promotion") {
     return rows.filter((kpi) => kpi.kpiType === "promotion");
   }
   if (props.portfolioScope === "department") {
-    return groupDepartmentPortfolioByKpi(rows);
+    return groupDepartmentPortfolioByKpi(filterDepartmentRowsBySubTab(rows));
   }
   return rows.filter((kpi) => kpi.kpiType !== "promotion");
 });
@@ -1064,7 +1098,11 @@ function departmentMemberRowToChild(row: any): any {
     feedbackNote: row.feedbackNote ?? "",
     feedbackTargetRoleCode: row.feedbackTargetRoleCode,
     selfScore: row.selfScore != null ? Number(row.selfScore) : null,
+    midSelfScore: row.midSelfScore != null ? Number(row.midSelfScore) : null,
+    endSelfScore: row.endSelfScore != null ? Number(row.endSelfScore) : null,
     pmScore: row.pmScore != null ? Number(row.pmScore) : null,
+    endPmScore: row.endPmScore != null ? Number(row.endPmScore) : null,
+    endGmScore: row.endGmScore != null ? Number(row.endGmScore) : null,
     gmEvaluationComment: row.gmEvaluationComment,
     statusCode: row.statusCode,
     updateReason: row.updateReason,
@@ -1104,6 +1142,9 @@ function groupDepartmentPortfolioByKpi(rows: any[]): any[] {
           id: String(c.id),
           userId: c.userId != null ? String(c.userId) : undefined,
           weight: c.weight ?? row.weight ?? base.weight,
+          selfScore: c.selfScore != null ? Number(c.selfScore) : null,
+          midSelfScore: c.midSelfScore != null ? Number(c.midSelfScore) : null,
+          endSelfScore: c.endSelfScore != null ? Number(c.endSelfScore) : null,
         };
         const cascadeKey =
           String(cascadeChild.userId ?? "").trim() || String(cascadeChild.id);
@@ -1119,10 +1160,6 @@ function groupDepartmentPortfolioByKpi(rows: any[]): any[] {
       }),
     );
 
-    const rolledStatusCode = pmDepartmentParentRollupStatusCode({
-      children,
-    });
-
     grouped.push({
       ...base,
       id: infoParentId,
@@ -1135,7 +1172,7 @@ function groupDepartmentPortfolioByKpi(rows: any[]): any[] {
       actualResult: "",
       selfScore: null,
       pmScore: null,
-      statusCode: rolledStatusCode ?? undefined,
+      statusCode: base.statusCode,
       children,
     });
   }
@@ -1206,13 +1243,13 @@ function formatPmScoreCellValue(score: unknown): string {
 }
 
 /**
- * Accept KPI (404→403): mọi KPI cha trong danh sách phải đúng 404;
+ * Accept KPI (404|406→403): mọi KPI cha phải 404 hoặc 406 (GM từ chối);
  * sau đó mới kiểm tra rule phân bổ Team (member ≥405, …).
  */
 function pmPortfolioAcceptKpiBlockedReason(rows: any[]): string | null {
   if (rows.length === 0) return null;
   const notPendingAcceptance = rows.filter(
-    (item) => Number(item?.statusCode) !== KPI_STATUS.PENDING_ACCEPTANCE,
+    (item) => !isPmPendingAcceptanceLikeStatus(item?.statusCode),
   );
   if (notPendingAcceptance.length > 0) {
     if (
@@ -1223,7 +1260,7 @@ function pmPortfolioAcceptKpiBlockedReason(rows: any[]): string | null {
     ) {
       return "Complete or resolve KPI feedback before accepting.";
     }
-    return "All KPIs must be Pending Acceptance (404) before you can Accept KPI.";
+    return "All KPIs must be Pending Acceptance (404) or Rejected (406) before you can Accept KPI.";
   }
   return pmTeamAcceptKpiBlockedReason(rows);
 }
@@ -1274,21 +1311,65 @@ function averageOfNumericList(values: unknown[]): number | null {
   return s / nums.length;
 }
 
+/** Self score con trên bảng — member chỉ khi đã gửi; KPI của PM luôn hiển thị sau khi lưu. */
+function portfolioSelfScoreOpts(child: any, parentItem?: any) {
+  return {
+    pmOwned: isPmOwnedPortfolioRow(child, parentItem),
+    midSelfScore: child?.midSelfScore,
+    endSelfScore: child?.endSelfScore,
+  };
+}
+
+function pmPortfolioSelfScoreCell(row: any, parentItem?: any): string | number {
+  return pmPortfolioMemberSelfScoreDisplay(
+    row?.selfScore,
+    row?.statusCode,
+    portfolioSelfScoreOpts(row, parentItem),
+  );
+}
+
+function visibleChildSelfScoreForTable(child: any, parentItem?: any): number | null {
+  const resolved = pmPortfolioSelfScoreCell(child, parentItem);
+  if (resolved === "-") return null;
+  const n = typeof resolved === "number" ? resolved : Number(resolved);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** KPI Department — rollup self score node KPI cha: chỉ từ member hiển thị khác "-". */
+function departmentGroupedParentSelfScore(item: any): number | null {
+  const children = Array.isArray(item?.children) ? item.children : [];
+  if (children.length === 0) return null;
+  const scores: number[] = [];
+  for (const child of children) {
+    const label = pmPortfolioSelfScoreCell(child, item);
+    if (label === "-") continue;
+    const n = typeof label === "number" ? label : Number(label);
+    if (Number.isFinite(n)) scores.push(n);
+  }
+  if (scores.length === 0) return null;
+  return averageOfNumericList(scores);
+}
+
 /**
  * Self score dùng cho dòng KPI cha và tổng có trọng số: KPI Team = trung bình self
  * do từng thành viên gửi; KPI khác dùng self trên assignment cha.
  */
 function effectiveSelfScoreForParent(item: any): number | null {
+  if (isDepartmentGroupedKpi(item)) {
+    return departmentGroupedParentSelfScore(item);
+  }
   if (
-    (isTeamTreeKpi(item) || props.portfolioScope === "department") &&
+    isTeamTreeKpi(item) &&
     Array.isArray(item.children) &&
     item.children.length > 0
   ) {
-    return averageOfNumericList(item.children.map((c: any) => c.selfScore));
+    return averageOfNumericList(
+      item.children.map((c: any) => visibleChildSelfScoreForTable(c, item)),
+    );
   }
-  const raw = item.selfScore;
-  if (raw == null || raw === "") return null;
-  const n = typeof raw === "number" ? raw : Number(raw);
+  const resolved = pmPortfolioSelfScoreCell(item);
+  if (resolved === "-") return null;
+  const n = typeof resolved === "number" ? resolved : Number(resolved);
   return Number.isFinite(n) ? n : null;
 }
 
@@ -1300,8 +1381,13 @@ function formatSelfScoreCell(item: any): string {
 
 /** Final score (Supervisor) dòng KPI cha: trung bình điểm các node con (Team / Department). */
 function effectivePmScoreForParent(item: any): number | null {
+  if (isDepartmentGroupedKpi(item)) {
+    const children = Array.isArray(item?.children) ? item.children : [];
+    if (children.length === 0) return null;
+    return averageOfNumericList(children.map((c: any) => c.pmScore));
+  }
   if (
-    (isTeamTreeKpi(item) || props.portfolioScope === "department") &&
+    isTeamTreeKpi(item) &&
     Array.isArray(item.children) &&
     item.children.length > 0
   ) {
@@ -1316,6 +1402,24 @@ function effectivePmScoreForParent(item: any): number | null {
 /** Final Score — dùng chung tab KPI Personal (`portfolio`) và KPI Promotion (`promotion`). */
 function formatPmScoreCell(item: any): string {
   return formatPmScoreCellValue(effectivePmScoreForParent(item));
+}
+
+/** Dòng cha Team có con: diff hiển thị trên từng member (không trên ô trung bình). */
+function showParentRowGmScoreDiff(item: any): boolean {
+  return !(item.isTree && (item.children?.length ?? 0) > 0);
+}
+
+function pmScoreUnchangedClass(score: unknown): string {
+  return `text-xs font-bold tabular-nums ${scoreColorClass(score)}`;
+}
+
+function pmFinalScoreTdBg(row: {
+  endPmScore?: number | string | null;
+  endGmScore?: number | string | null;
+}): string {
+  return gmScoreChangedFromFields(row.endPmScore, row.endGmScore)
+    ? PM_GM_SCORE_CHANGED_TD_CLASS
+    : "";
 }
 
 function scoreColorClass(score: unknown): string {
@@ -1447,8 +1551,8 @@ const selectedKpiItem = ref<any>(null);
 const feedbackDrawerOpen = ref(false);
 const feedbackDrawerAssignment = ref<any | null>(null);
 const feedbackDraftText = ref("");
-const showAssigneeTargetScaleModal = ref(false);
-const assigneeTargetScaleItem = ref<PmAssigneeTargetScaleEditItem | null>(null);
+const showAssigneeTargetScaleDrawer = ref(false);
+const assigneeTargetScaleKpi = ref<any | null>(null);
 
 const openEvidenceDrawer = (
   item: any,
@@ -1584,17 +1688,7 @@ async function decideMemberFeedbackFromDrawer(approve: boolean) {
 
 /** Drawer kết quả member — `viewOnly` khi PM chỉ xem submission (không sửa). Form theo CALC_RULE cha. */
 function pmChildActualCell(child: any, parent: any): string {
-  const formatted =
-    formatPmActualCellWithUnit(
-      formatPmPortfolioActualCell(
-        child?.actualResult,
-        parent?.calculationTypeCode,
-        pmPortfolioActualDisplayMode(parent?.calculationRuleCode),
-        { actualOnly: true },
-      ),
-      parent?.unitCode,
-    ) || "-";
-  return supervisorMemberActualDisplay(formatted, child?.statusCode, "pm");
+  return pmPortfolioActualCell(child, parent);
 }
 
 function openChildEvidenceDrawer(
@@ -1602,21 +1696,34 @@ function openChildEvidenceDrawer(
   parent: any,
   viewOnly = false,
 ) {
-  const pmCanView = canSupervisorViewMemberSelfEvaluation(child?.statusCode, "pm");
+  const pmOwned = isPmOwnedPortfolioRow(child, parent);
+  const pmCanView = pmOwned
+    ? canPmOwnViewPortfolioEvaluation(child?.statusCode)
+    : canSupervisorViewMemberSelfEvaluation(child?.statusCode, "pm");
+  const scoreOpts = portfolioSelfScoreOpts(child, parent);
+  const visibleScore = pmCanView
+    ? resolvePortfolioMemberSelfScore(
+        child?.statusCode,
+        scoreOpts.midSelfScore,
+        scoreOpts.endSelfScore,
+        "pm",
+      ) ?? (child?.selfScore != null ? Number(child.selfScore) : null)
+    : null;
   openEvidenceDrawer(
     {
       id: child?.id != null ? String(child.id) : undefined,
       name: `${String(child?.name ?? "Member")} · ${String(parent?.name ?? "KPI")}`,
       target: child?.target ?? "-",
       actualResult: pmCanView ? child?.actualResult ?? "" : "",
-      selfScore: pmCanView ? child?.selfScore ?? null : null,
+      selfScore: visibleScore,
+      midSelfScore: child?.midSelfScore,
+      endSelfScore: child?.endSelfScore,
       statusCode: child?.statusCode,
       pmScore: child?.pmScore ?? null,
-      pmEvaluationComment: child?.pmEvaluationComment,
       gmEvaluationComment: child?.gmEvaluationComment,
       calculationRuleCode: parent?.calculationRuleCode,
       calculationTypeCode: parent?.calculationTypeCode,
-      targetDescription: parent?.targetDescription ?? "",
+      targetDescription: child?.targetDescription ?? "",
       unitCode: parent?.unitCode,
       weight: parent?.weight,
     },
@@ -1969,13 +2076,37 @@ watch(
 );
 
 function onlyFromStatusForSendReview(): number {
-  return Number(currentStatusCode.value) === KPI_STATUS.FIRST_COMPLETED
-    ? KPI_STATUS.FIRST_COMPLETED
-    : KPI_STATUS.ACCEPTED;
+  const sc = Number(currentStatusCode.value);
+  if (sc === KPI_STATUS.SECOND_REJECTED) return KPI_STATUS.SECOND_REJECTED;
+  if (sc === KPI_STATUS.FIRST_COMPLETED) return KPI_STATUS.FIRST_COMPLETED;
+  if (sc === KPI_STATUS.FIRST_REJECTED) return KPI_STATUS.FIRST_REJECTED;
+  return KPI_STATUS.ACCEPTED;
+}
+
+/** Các ASM được gửi Send Review trong cùng một lần (405 kèm 504; 503 kèm 604). */
+function pmPortfolioStatusesForSendReview(onlyFrom: number): Set<number> {
+  if (
+    onlyFrom === KPI_STATUS.ACCEPTED ||
+    onlyFrom === KPI_STATUS.FIRST_REJECTED
+  ) {
+    return new Set([KPI_STATUS.ACCEPTED, KPI_STATUS.FIRST_REJECTED]);
+  }
+  if (
+    onlyFrom === KPI_STATUS.FIRST_COMPLETED ||
+    onlyFrom === KPI_STATUS.SECOND_REJECTED
+  ) {
+    return new Set([KPI_STATUS.FIRST_COMPLETED, KPI_STATUS.SECOND_REJECTED]);
+  }
+  return new Set([onlyFrom]);
+}
+
+function rowMatchesSendReviewPhase(item: any, onlyFrom: number): boolean {
+  const sc = Number(item?.statusCode);
+  return pmPortfolioStatusesForSendReview(onlyFrom).has(sc);
 }
 
 /**
- * Send Review (405/503): validate My Comment and PM-owned KPI rows only.
+ * Send Review (405/503/504/604): validate My Comment and PM-owned KPI rows only.
  */
 function runSendReviewFieldValidation(): boolean {
   sendReviewErrorComment.value = !pmComments.value.selfComment?.trim();
@@ -1984,7 +2115,7 @@ function runSendReviewFieldValidation(): boolean {
   const onlyFrom = onlyFromStatusForSendReview();
 
   for (const item of scopedPersonalKpisRaw.value) {
-    if (Number(item?.statusCode) !== onlyFrom) continue;
+    if (!rowMatchesSendReviewPhase(item, onlyFrom)) continue;
     const pid = String(item.id);
     if (isTeamTreeKpi(item)) {
       const children = Array.isArray(item.children) ? item.children : [];
@@ -2162,14 +2293,53 @@ async function confirmUnlockKpi() {
 
 <template>
   <div class="animate-fade-in flex flex-col relative">
-    <div
-      v-if="showSectionHeading"
-      class="border-b border-slate-200 px-5 py-4 shrink-0"
-    >
-      <h3 class="flex items-center gap-2 text-lg font-bold text-slate-800">
-        <i class="fas fa-users text-indigo-500" />
-        KPI Department
-      </h3>
+    <div v-if="showSectionHeading" class="shrink-0 border-b border-slate-200">
+      <div class="px-5 py-4">
+        <h3 class="flex items-center gap-2 text-lg font-bold text-slate-800">
+          <i class="fas fa-users text-indigo-500" />
+          KPI Department
+        </h3>
+      </div>
+      <div class="border-t border-slate-100 bg-white px-5 pt-0">
+        <div class="flex gap-2">
+          <button
+            type="button"
+            class="rounded-t-lg border px-4 py-2 text-xs font-bold transition-colors cursor-pointer"
+            :class="
+              departmentSubTab === 'individual'
+                ? 'border-slate-200 border-b-white bg-white text-blue-700'
+                : 'border-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-800'
+            "
+            @click="departmentSubTab = 'individual'"
+          >
+            KPI Individual
+            <span
+              v-if="departmentIndividualFeedbackCount > 0"
+              class="ml-1 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-bold leading-none text-white shadow-sm"
+            >
+              {{ departmentIndividualFeedbackCount }}
+            </span>
+          </button>
+          <button
+            type="button"
+            class="rounded-t-lg border px-4 py-2 text-xs font-bold transition-colors cursor-pointer"
+            :class="
+              departmentSubTab === 'promotion'
+                ? 'border-slate-200 border-b-white bg-white text-purple-700'
+                : 'border-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-800'
+            "
+            @click="departmentSubTab = 'promotion'"
+          >
+            KPI Promotion
+            <span
+              v-if="departmentPromotionFeedbackCount > 0"
+              class="ml-1 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-bold leading-none text-white shadow-sm"
+            >
+              {{ departmentPromotionFeedbackCount }}
+            </span>
+          </button>
+        </div>
+      </div>
     </div>
 
     <KpiCreatorRowLegend v-if="hasPortfolioKpiRows" />
@@ -2202,7 +2372,7 @@ async function confirmUnlockKpi() {
               Self Score
             </th>
             <th class="py-4 px-3 text-center">Final Score</th>
-            <th class="py-4 px-5 text-center">Actions</th>
+            <th class="py-4 px-5 text-right">Actions</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-slate-100">
@@ -2286,8 +2456,8 @@ async function confirmUnlockKpi() {
                       class="pm-kpi-status-pill"
                       :class="pmRowStatusBadge(item, 'parent')?.cls"
                       :title="
-                        hasPmRejectedReason(item)
-                          ? pmStatusRejectTooltip(item)
+                        pmDisplayRowIsRejected(item, 'parent')
+                          ? pmRejectTooltipForDisplayRow(item, 'parent')
                           : pmRowStatusBadge(item, 'parent')?.label
                       "
                     >
@@ -2299,8 +2469,8 @@ async function confirmUnlockKpi() {
                       >-</span
                     >
                     <span
-                      v-if="hasPmRejectedReason(item)"
-                      :title="pmStatusRejectTooltip(item)"
+                      v-if="pmDisplayRowIsRejected(item, 'parent')"
+                      :title="pmRejectTooltipForDisplayRow(item, 'parent')"
                       class="inline-flex shrink-0 items-center text-[10px] font-medium text-orange-700 cursor-pointer hover:bg-orange-100 rounded"
                     >
                       <span
@@ -2355,9 +2525,22 @@ async function confirmUnlockKpi() {
                     >{{ formatSelfScoreCell(item) }}</span
                   >
                 </td>
-                <td class="py-4 px-3 text-center align-middle">
+                <td
+                  class="py-4 px-3 text-center align-middle"
+                  :class="
+                    showParentRowGmScoreDiff(item) ? pmFinalScoreTdBg(item) : ''
+                  "
+                >
                   <PmKpiTableAlignedCell>
+                    <PmGmScoreDisplay
+                      v-if="showParentRowGmScoreDiff(item)"
+                      :display-score="effectivePmScoreForParent(item)"
+                      :end-pm-score="item.endPmScore"
+                      :end-gm-score="item.endGmScore"
+                      :unchanged-class="pmScoreUnchangedClass(effectivePmScoreForParent(item))"
+                    />
                     <span
+                      v-else
                       class="text-xs font-bold tabular-nums"
                       :class="scoreColorClass(effectivePmScoreForParent(item))"
                       >{{ formatPmScoreCell(item) }}</span
@@ -2369,8 +2552,8 @@ async function confirmUnlockKpi() {
                     </template>
                   </PmKpiTableAlignedCell>
                 </td>
-                <td class="py-4 px-5 text-center align-middle">
-                  <div class="flex items-center justify-center gap-2">
+                <td class="py-4 px-5 text-right align-middle">
+                  <div class="flex items-center justify-end gap-2">
                     <template v-if="props.portfolioScope === 'department'">
                       <button
                         v-if="item.userId"
@@ -2393,7 +2576,7 @@ async function confirmUnlockKpi() {
                         class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-sky-200 bg-sky-50 text-[10px] font-bold text-sky-800 shadow-sm hover:bg-sky-100"
                         @click.stop="openAssigneeTargetScaleEditor(item)"
                       >
-                        <i class="fas fa-bullseye text-xs" aria-hidden="true" />
+                        <i class="fas fa-chart-line text-xs" aria-hidden="true" />
                       </button>
                       <button
                         v-if="canShowTeamAllocationButton(item)"
@@ -2441,7 +2624,6 @@ async function confirmUnlockKpi() {
                       >
                         <i class="fas fa-message text-xs" aria-hidden="true" />
                       </button>
-                      <!-- Individual (Portfolio) / Promotion (tab Promotion): chỉ Edit sau khi Accept KPI -->
                       <button
                         v-else-if="
                           !item.isTree && !canShowSelfCreatedKpiEditButton(item)
@@ -2603,30 +2785,25 @@ async function confirmUnlockKpi() {
                       class="text-xs font-bold tabular-nums"
                       :class="
                         scoreColorClass(
-                          canSupervisorViewMemberSelfEvaluation(
-                            child.statusCode,
-                            'pm',
-                          )
-                            ? child.selfScore
-                            : null,
+                          visibleChildSelfScoreForTable(child, item),
                         )
                       "
                       >{{
-                        supervisorMemberSelfScoreDisplay(
-                          child.selfScore,
-                          child.statusCode,
-                          "pm",
-                        )
+                        pmPortfolioSelfScoreCell(child, item)
                       }}</span
                     >
                   </td>
-                  <td class="py-3 px-3 text-center align-top">
+                  <td
+                    class="py-3 px-3 text-center align-top"
+                    :class="pmFinalScoreTdBg(child)"
+                  >
                     <PmKpiTableAlignedCell>
-                      <span
-                        class="text-xs font-bold tabular-nums"
-                        :class="scoreColorClass(child.pmScore)"
-                        >{{ formatPmScoreCellValue(child.pmScore) }}</span
-                      >
+                      <PmGmScoreDisplay
+                        :display-score="child.pmScore"
+                        :end-pm-score="child.endPmScore"
+                        :end-gm-score="child.endGmScore"
+                        :unchanged-class="pmScoreUnchangedClass(child.pmScore)"
+                      />
                       <template #hint>
                         <PmFinalScoreCommentTooltip
                           :comment="child.gmEvaluationComment"
@@ -2634,8 +2811,8 @@ async function confirmUnlockKpi() {
                       </template>
                     </PmKpiTableAlignedCell>
                   </td>
-                  <td class="py-3 px-5 text-center align-top">
-                    <div class="flex items-center justify-center gap-1.5">
+                  <td class="py-3 px-5 text-right align-middle">
+                    <div class="flex items-center justify-end gap-2">
                       <template v-if="props.portfolioScope === 'department'">
                         <button
                           v-if="child.userId"
@@ -2643,9 +2820,9 @@ async function confirmUnlockKpi() {
                           title="View evidence"
                           aria-label="View evidence"
                           @click.stop="openChildEvidenceDrawer(child, item, true)"
-                          class="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-white text-[10px] font-bold text-slate-600 shadow-sm hover:bg-slate-50 hover:text-blue-600"
+                          class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-[10px] font-bold text-slate-600 shadow-sm hover:bg-slate-50 hover:text-blue-600"
                         >
-                          <i class="far fa-eye text-[10px]" aria-hidden="true" />
+                          <i class="far fa-eye text-xs" aria-hidden="true" />
                         </button>
                       </template>
                       <template v-else>
@@ -2660,9 +2837,52 @@ async function confirmUnlockKpi() {
                           "
                           title="Process feedback"
                           aria-label="Process feedback"
-                          class="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-violet-200 bg-violet-50 text-[10px] font-bold text-violet-700 shadow-sm hover:bg-violet-100"
+                          class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-violet-200 bg-violet-50 text-[10px] font-bold text-violet-700 shadow-sm hover:bg-violet-100"
                         >
-                          <i class="far fa-comment-dots text-[10px]" aria-hidden="true" />
+                          <i class="far fa-comment-dots text-xs" aria-hidden="true" />
+                        </button>
+                        <button
+                          v-if="isChildOwnedByCurrentPm(child)"
+                          type="button"
+                          :disabled="
+                            isPmTeamSelfRowActualEditLockedBeforeAccept(item)
+                          "
+                          :title="pmTeamSelfRowLockReason(item)"
+                          @click.stop="
+                            openChildEvidenceDrawer(
+                              child,
+                              item,
+                              props.readonlyYear,
+                            )
+                          "
+                          class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border text-[10px] font-bold shadow-sm"
+                          :class="
+                            isPmTeamSelfRowActualEditLockedBeforeAccept(item)
+                              ? 'cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400 opacity-70'
+                              : 'border-emerald-100 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                          "
+                          :aria-label="
+                            props.readonlyYear ? 'View evidence' : 'Edit actual'
+                          "
+                        >
+                          <i
+                            :class="
+                              props.readonlyYear
+                                ? 'far fa-eye text-xs'
+                                : 'fas fa-pen text-xs'
+                            "
+                            aria-hidden="true"
+                          />
+                        </button>
+                        <button
+                          v-else-if="!isChildOwnedByCurrentPm(child)"
+                          type="button"
+                          title="View member submission"
+                          aria-label="View member submission"
+                          @click.stop="openChildEvidenceDrawer(child, item, true)"
+                          class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-[10px] font-bold text-slate-600 shadow-sm hover:bg-slate-50 hover:text-blue-600"
+                        >
+                          <i class="far fa-eye text-xs" aria-hidden="true" />
                         </button>
                         <button
                           v-if="!isChildOwnedByCurrentPm(child)"
@@ -2683,66 +2903,23 @@ async function confirmUnlockKpi() {
                           @click.stop="
                             promptRemoveTeamMemberFromKpi(item, child)
                           "
-                          class="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border text-[10px] font-bold shadow-sm"
+                          class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border text-[10px] font-bold shadow-sm"
                           :class="
                             props.readonlyYear ||
                             isRemovingChildAssignment(child.id) ||
                             hasMemberSubmittedActualForPmReview(child)
                               ? 'border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed opacity-70'
-                              : 'border-rose-100 bg-rose-50 text-rose-700 hover:bg-rose-100'
+                              : 'border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100'
                           "
                         >
                           <i
-                            class="text-[10px]"
+                            class="text-xs"
                             :class="
                               isRemovingChildAssignment(child.id)
                                 ? 'fas fa-spinner fa-spin'
                                 : 'fas fa-trash'
                             "
                           />
-                        </button>
-                        <button
-                          v-if="isChildOwnedByCurrentPm(child)"
-                          type="button"
-                          :disabled="
-                            isPmTeamSelfRowActualEditLockedBeforeAccept(item)
-                          "
-                          :title="pmTeamSelfRowLockReason(item)"
-                          @click.stop="
-                            openChildEvidenceDrawer(
-                              child,
-                              item,
-                              props.readonlyYear,
-                            )
-                          "
-                          class="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border text-[10px] font-bold shadow-sm"
-                          :class="
-                            isPmTeamSelfRowActualEditLockedBeforeAccept(item)
-                              ? 'cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400 opacity-70'
-                              : 'border-emerald-100 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                          "
-                          :aria-label="
-                            props.readonlyYear ? 'View evidence' : 'Edit actual'
-                          "
-                        >
-                          <i
-                            :class="
-                              props.readonlyYear
-                                ? 'far fa-eye text-[10px]'
-                                : 'fas fa-pen text-[10px]'
-                            "
-                            aria-hidden="true"
-                          />
-                        </button>
-                        <button
-                          v-else
-                          type="button"
-                          title="View member submission"
-                          aria-label="View member submission"
-                          @click.stop="openChildEvidenceDrawer(child, item, true)"
-                          class="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-white text-[10px] font-bold text-slate-600 shadow-sm hover:bg-slate-50 hover:text-blue-600"
-                        >
-                          <i class="far fa-eye text-[10px]" aria-hidden="true" />
                         </button>
                       </template>
                     </div>
@@ -2838,7 +3015,15 @@ async function confirmUnlockKpi() {
       class="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50/80 px-6 py-16 text-center"
     >
       <i class="fas fa-inbox mb-3 text-3xl text-slate-300" aria-hidden="true" />
-      <p class="text-sm font-semibold text-slate-600">No KPIs available.</p>
+      <p class="text-sm font-semibold text-slate-600">
+        {{
+          portfolioScope === 'department' && departmentSubTab === 'promotion'
+            ? 'No promotion KPIs in your department.'
+            : portfolioScope === 'department'
+              ? 'No individual KPIs in your department.'
+              : 'No KPIs available.'
+        }}
+      </p>
     </div>
 
     <EvaluationCommentBlock
@@ -3301,10 +3486,16 @@ async function confirmUnlockKpi() {
       </Transition>
     </Teleport>
 
-    <PmAssigneeTargetScaleModal
-      v-model="showAssigneeTargetScaleModal"
-      :item="assigneeTargetScaleItem"
-      @saved="onAssigneeTargetScaleSaved"
+    <PmAssignKpiDrawer
+      :open="showAssigneeTargetScaleDrawer"
+      :kpi="assigneeTargetScaleKpi"
+      mode="targetScaleOnly"
+      :readonly="props.readonlyYear"
+      @close="
+        showAssigneeTargetScaleDrawer = false;
+        assigneeTargetScaleKpi = null;
+      "
+      @target-scale-saved="onAssigneeTargetScaleSaved"
     />
   </div>
 </template>

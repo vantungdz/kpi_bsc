@@ -81,12 +81,14 @@ public class KpiReferenceController extends BaseController {
     }
 
     /**
-     * User id bị chặn giao KPI mới trong chu kỳ (đang có assignment ASM khác 404/406/407).
+     * User id bị chặn giao KPI mới trong chu kỳ — {@code strategic} (101+102) hoặc {@code promotion} (103).
      */
     @GetMapping("/blocked-member-ids-for-assignment")
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<BaseResponse<List<UUID>>> listBlockedMemberIdsForAssignment(
-            @RequestParam(name = "cycleId") UUID cycleId) {
-        return success(kpiReferenceDataService.listMemberIdsBlockedForNewAssignment(cycleId));
+            @RequestParam(name = "cycleId") UUID cycleId,
+            @RequestParam(name = "assignmentScope") String assignmentScope) {
+        return success(
+                kpiReferenceDataService.listMemberIdsBlockedForNewAssignment(cycleId, assignmentScope));
     }
 }

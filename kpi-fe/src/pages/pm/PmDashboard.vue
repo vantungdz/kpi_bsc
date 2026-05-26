@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, inject, provide } from 'vue'
+import type { Ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { useToast } from 'vue-toastification'
 import { useAuthStore } from '@/stores/auth.store'
@@ -13,7 +14,17 @@ import type {
   GmModalKpiItemMock,
   GmStrategicKpiKind,
 } from '@/types/gm-workspace'
-import type { GmProcessTimelineApiResponse } from '@/services/modules/kpi-gm.service'
+import type { PmDashboardInitResponse } from '@/types/kpi'
+import type { GmProcessTimelineApiResponse, GmPromotionProcessTimelineApiResponse } from '@/services/modules/kpi-gm.service'
+import { collectPromotionCycleIdFromKpiRows } from '@/utils/promotion-timeline'
+import {
+  pmHeaderShowsPromotionCycleKey,
+  pmSelectedPromotionCycleIdKey,
+  pmTeamReviewScopeKey,
+  pmDepartmentSubTabKey,
+  type PmTeamReviewScope,
+  type PmDepartmentSubTab,
+} from '@/utils/pmLayoutPromotionCycle'
 import {
   formatPmPortfolioActualCell,
   parsePmPortfolioEvidenceString,
@@ -30,6 +41,7 @@ import PmAssignKpiDrawer from '@/components/pm/drawers/PmAssignKpiDrawer.vue'
 import PmMemberDetailDrawer from '@/components/pm/drawers/PmMemberDetailDrawer.vue'
 import PmRequestDetailDrawer from '@/components/pm/drawers/PmRequestDetailDrawer.vue'
 import GmProcessTimeline from '@/components/gm/GmProcessTimeline.vue'
+import PromotionProcessTimeline from '@/components/gm/PromotionProcessTimeline.vue'
 import GmMemberKpiDrawer from '@/components/gm/GmMemberKpiDrawer.vue'
 import { shouldCollapseKpiProcessTimelineToYearEndOnly } from '@/utils/common'
 
@@ -138,6 +150,37 @@ const EMPTY_PM_PROCESS_TIMELINE_MID: GmMidYearIssuesData = {
 }
 
 const processTimelineData = ref<GmProcessTimelineApiResponse | null>(null)
+const promotionProcessTimelineData = ref<GmPromotionProcessTimelineApiResponse | null>(null)
+const promotionTimelineLoading = ref(false)
+
+const pmHeaderShowsPromotionCycle = inject<Ref<boolean>>(
+  pmHeaderShowsPromotionCycleKey,
+  ref(false),
+)
+const selectedPromotionCycleId = inject<Ref<string>>(
+  pmSelectedPromotionCycleIdKey,
+  ref(''),
+)
+const pmPromotionCycleId = computed(() => {
+  const id = String(selectedPromotionCycleId.value ?? '').trim()
+  return id || null
+})
+
+/** Sub-tab KPI Personal / KPI Promotion trong Team Hierarchy & Performance. */
+const pmTeamReviewScope = ref<PmTeamReviewScope>('portfolio')
+provide(pmTeamReviewScopeKey, pmTeamReviewScope)
+
+/** Sub-tab Individual / Promotion trong KPI Department (`PmPersonalKpiTab`). */
+const pmDepartmentSubTab = ref<PmDepartmentSubTab>('individual')
+provide(pmDepartmentSubTabKey, pmDepartmentSubTab)
+
+const showPmPromotionTimeline = computed(
+  () =>
+    (activeTab.value === 'personal_promotion' &&
+      activePersonalPromoSubTab.value === 'promotion') ||
+    (activeTab.value === 'team' && pmTeamReviewScope.value === 'promotion') ||
+    (activeTab.value === 'department' && pmDepartmentSubTab.value === 'promotion'),
+)
 
 /** Portfolio + Promotion KPI của PM (khớp Leader: ẩn timeline khi chưa có KPI). */
 const pmPortfolioInit = ref<{
@@ -148,8 +191,7 @@ const pmPortfolioInit = ref<{
 
 async function loadPmPortfolioTimelineContext() {
   try {
-    const data: { kpis?: { kpiType?: number }[]; accountCreatedAt?: string | null; kpiCycle?: { midYearStart?: string | null } } =
-      await pmKpiService.getInitialization(String(approvalYear.value))
+    const data: PmDashboardInitResponse = await pmKpiService.getInitialization(String(approvalYear.value))
     const rows = Array.isArray(data?.kpis) ? data.kpis : []
     pmPortfolioInit.value = {
       accountCreatedAt: data?.accountCreatedAt ?? null,
@@ -172,6 +214,44 @@ const pmTimelineYearEndOnly = computed(() =>
   ),
 )
 
+/** Gợi ý cycle mặc định từ KPI promotion đã gán (khi header chưa chọn). */
+async function syncDefaultPromotionCycleFromPortfolio() {
+  if (String(selectedPromotionCycleId.value ?? '').trim()) return
+  try {
+    const data: PmDashboardInitResponse = await pmKpiService.getInitialization(
+      String(approvalYear.value),
+      'promotion',
+    )
+    const fromRows = collectPromotionCycleIdFromKpiRows(data.kpis)
+    if (fromRows) selectedPromotionCycleId.value = fromRows
+  } catch (e) {
+    console.error(e)
+  }
+}
+
+async function loadPromotionProcessTimeline() {
+  const id = pmPromotionCycleId.value
+  if (!id) {
+    promotionProcessTimelineData.value = null
+    return
+  }
+  const expected = id
+  promotionTimelineLoading.value = true
+  try {
+    const data = await pmKpiService.getPromotionProcessTimeline(expected)
+    if (pmPromotionCycleId.value !== expected) return
+    promotionProcessTimelineData.value = data
+  } catch (e) {
+    console.error(e)
+    if (pmPromotionCycleId.value !== expected) return
+    promotionProcessTimelineData.value = null
+  } finally {
+    if (pmPromotionCycleId.value === expected) {
+      promotionTimelineLoading.value = false
+    }
+  }
+}
+
 async function loadProcessTimeline() {
   try {
     processTimelineData.value = await pmKpiService.getProcessTimeline(approvalYear.value)
@@ -184,6 +264,9 @@ async function loadProcessTimeline() {
 function refreshPmProcessTimeline() {
   void loadPmPortfolioTimelineContext()
   void loadProcessTimeline()
+  if (showPmPromotionTimeline.value) {
+    void syncDefaultPromotionCycleFromPortfolio().then(() => loadPromotionProcessTimeline())
+  }
 }
 
 type PmRequestUiRow = {
@@ -206,6 +289,13 @@ type PmRequestUiRow = {
   calculationMethodLabel: string
   scoringRuleText: string
   creatorRoleCode?: string
+  assignmentTargetValue?: number | null
+  baselineTargetValue?: number | null
+  baselineScoringDescription?: string | null
+  unitCode?: number | null
+  targetChanged?: boolean
+  scoringChanged?: boolean
+  assigneeHasEdits?: boolean
 }
 
 /** Dữ liệu gốc từ API — nhóm theo member ở tab Request Approval. */
@@ -367,6 +457,13 @@ function mapApprovalToUi(r: PmMemberKpiApprovalItem): PmRequestUiRow {
       r.creatorRoleCode != null && String(r.creatorRoleCode).trim() !== ''
         ? String(r.creatorRoleCode).trim().toUpperCase()
         : undefined,
+    assignmentTargetValue: r.targetValue ?? undefined,
+    baselineTargetValue: r.baselineTargetValue ?? undefined,
+    baselineScoringDescription: r.baselineScoringDescription ?? undefined,
+    targetChanged: r.targetChanged === true,
+    scoringChanged: r.scoringChanged === true,
+    assigneeHasEdits: r.assigneeHasEdits === true,
+    unitCode: r.unitCode ?? undefined,
   }
 }
 
@@ -419,7 +516,12 @@ function apiErrorMessage(err: unknown): string {
   return 'Action failed'
 }
 
-async function submitApprovalDecision(req: PmRequestUiRow, approve: boolean, rejectReason?: string) {
+async function submitApprovalDecision(
+  req: PmRequestUiRow,
+  approve: boolean,
+  rejectReason?: string,
+  options?: { resetDrawerSiblingsToPendingAcceptance?: boolean },
+) {
   if (selectedYearReadonly.value) return
   if (approvalSubmitting.value) return
   approvalSubmitting.value = true
@@ -429,9 +531,15 @@ async function submitApprovalDecision(req: PmRequestUiRow, approve: boolean, rej
       assignmentId: req.id,
       approve,
       rejectReason: approve ? undefined : (rejectReason ?? ''),
+      resetDrawerSiblingsToPendingAcceptance:
+        !approve && options?.resetDrawerSiblingsToPendingAcceptance === true,
     })
     toast.success(
-      approve ? 'Approved - KPI moved to pending GM.' : 'KPI proposal rejected.',
+      approve
+        ? 'Approved - KPI moved to pending GM.'
+        : options?.resetDrawerSiblingsToPendingAcceptance
+          ? 'KPI rejected. Other pending KPIs for this member returned to pending acceptance.'
+          : 'KPI proposal rejected.',
     )
     await loadApprovalRequests()
     refreshPmProcessTimeline()
@@ -490,6 +598,30 @@ watch(activeTab, (t) => {
 })
 
 watch(
+  [activeTab, activePersonalPromoSubTab, pmTeamReviewScope, pmDepartmentSubTab],
+  ([tab, subTab, teamScope, deptSubTab]) => {
+    const showPromo =
+      (tab === 'personal_promotion' && subTab === 'promotion') ||
+      (tab === 'team' && teamScope === 'promotion') ||
+      (tab === 'department' && deptSubTab === 'promotion')
+    pmHeaderShowsPromotionCycle.value = showPromo
+    if (showPromo) {
+      void syncDefaultPromotionCycleFromPortfolio().then(() =>
+        loadPromotionProcessTimeline(),
+      )
+    }
+  },
+  { immediate: true },
+)
+
+watch(pmPromotionCycleId, (id, prev) => {
+  if (id === prev) return
+  if (showPmPromotionTimeline.value) {
+    void loadPromotionProcessTimeline()
+  }
+})
+
+watch(
   () => route.query.year,
   async () => {
     syncYearFromRoute()
@@ -526,7 +658,11 @@ function onDrawerApproveRequest(req: PmRequestUiRow) {
 }
 
 function onDrawerRejectRequest(payload: any) {
-  if (payload?.req) submitApprovalDecision(payload.req as PmRequestUiRow, false, String(payload.reason ?? ''))
+  if (payload?.req) {
+    submitApprovalDecision(payload.req as PmRequestUiRow, false, String(payload.reason ?? ''), {
+      resetDrawerSiblingsToPendingAcceptance: true,
+    })
+  }
 }
 
 function onDrawerApproveAll(rows: PmRequestUiRow[]) {
@@ -736,8 +872,14 @@ const handleRefresh = () => {
   <div class="flex flex-col w-full text-slate-800 font-sans relative pb-10">
     
     <div class="space-y-4 p-3 sm:p-4 lg:p-6">
+      <PromotionProcessTimeline
+        v-if="showPmPromotionTimeline && hasAnyPmKpi && pmPortfolioInit !== null"
+        :timeline-data="promotionProcessTimelineData"
+        :loading="promotionTimelineLoading"
+        :promotion-cycle-id="pmPromotionCycleId"
+      />
       <GmProcessTimeline
-        v-if="hasAnyPmKpi && pmPortfolioInit !== null"
+        v-else-if="hasAnyPmKpi && pmPortfolioInit !== null"
         :mid-year-issues="processTimelineData?.midYear ?? EMPTY_PM_PROCESS_TIMELINE_MID"
         :setting-issues="processTimelineData?.setting ?? undefined"
         :year-end-issues="processTimelineData?.yearEnd ?? undefined"

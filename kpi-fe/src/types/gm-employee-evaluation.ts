@@ -36,6 +36,8 @@ export interface GmKpiItem {
   unitName?: string | null
   statusCode?: number | null
   statusDesc?: string
+  /** Lý do từ chối đánh giá (ASM 504/604). */
+  evaluationRejectReason?: string | null
   weight: number
   calcRuleCode?: number | null
   evidenceButtonLabel: string
@@ -53,7 +55,7 @@ export interface GmKpiItem {
   evidenceContent?: string
   /** File/URL/image evidence kept outside the actual-result table. */
   evidenceAttachments?: Array<{ url: string; name: string }>
-  /** Ghi chú theo từng KPI từ `kpi_assignments.evidences.gmComment` (GM có thể chỉnh sửa/ghi đè). */
+  /** Nhận xét PM/GM theo KPI — `kpi_assignments.evidences.gmComment`. */
   gmComment?: string
   /** ASM assignment từ hub API: 502 = review GM (không chấm), 602 = chấm điểm GM + comment. */
   hubAssignmentStatusCode?: number | null
@@ -99,6 +101,10 @@ export interface GmEvalMember {
   supervisorCommentPortfolio?: string
   /** PM nhận xét tổng promotion. */
   supervisorCommentPromotion?: string
+  /** ASM trên assignments portfolio (BSC) — gồm 504/604 sau reject. */
+  hubEvalStatusCodesPortfolio?: number[]
+  /** ASM trên assignments promotion — gồm 504/604 sau reject. */
+  hubEvalStatusCodesPromotion?: number[]
   groups: GmKpiGroup[]
 }
 

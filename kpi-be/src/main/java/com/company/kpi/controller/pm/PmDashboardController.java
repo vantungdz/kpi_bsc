@@ -7,11 +7,17 @@ import com.company.kpi.request.pm.PmGmFeedbackRequest;
 import com.company.kpi.request.pm.PmKpiCommentRequest;
 import com.company.kpi.request.pm.PmSupervisorCommentRequest;
 import com.company.kpi.response.gm.GmProcessTimelineResponse;
+import com.company.kpi.response.gm.GmPromotionCycleOptionResponse;
+import com.company.kpi.response.gm.GmPromotionProcessTimelineResponse;
+import com.company.kpi.service.gm.GmKpiService;
 import com.company.kpi.response.pm.MemberKpiDetailResponse;
 import com.company.kpi.response.pm.PmDashboardResponse;
 import com.company.kpi.response.pm.PmMemberKpiApprovalItemResponse;
 import com.company.kpi.response.pm.PmMemberReviewMetaResponse;
 import com.company.kpi.response.pm.TeamMemberResponse;
+import com.company.kpi.request.evaluation.EvaluationRejectRequest;
+import com.company.kpi.response.evaluation.EvaluationRejectResponse;
+import com.company.kpi.service.kpi.EvaluationRejectService;
 import com.company.kpi.service.pm.PmDashboardService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -38,6 +44,8 @@ import java.util.UUID;
 public class PmDashboardController extends BaseController {
 
     private final PmDashboardService pmDashboardService;
+    private final GmKpiService gmKpiService;
+    private final EvaluationRejectService evaluationRejectService;
     private final JwtUtil jwtUtil;
 
     @GetMapping("/init")
@@ -58,6 +66,23 @@ public class PmDashboardController extends BaseController {
             Authentication authentication) {
         UUID pmId = jwtUtil.resolveUserId(authentication);
         return success(pmDashboardService.getProcessTimelineForPm(pmId, year));
+    }
+
+    /** Promotion process timeline — chỉ phòng do PM đăng nhập quản lý. */
+    @GetMapping("/promotion-process-timeline")
+    public ResponseEntity<BaseResponse<GmPromotionProcessTimelineResponse>> getPromotionProcessTimeline(
+            @RequestParam("promotionCycleId") UUID promotionCycleId,
+            Authentication authentication) {
+        UUID pmId = jwtUtil.resolveUserId(authentication);
+        return success(pmDashboardService.getPromotionProcessTimelineForPm(pmId, promotionCycleId));
+    }
+
+    /** Promotion cycles for PM header dropdown — cùng nguồn {@code promotion_cycles} như GM. */
+    @GetMapping("/promotion-cycles")
+    public ResponseEntity<BaseResponse<List<GmPromotionCycleOptionResponse>>> listPromotionCycles(
+            @RequestParam(value = "year", required = false) Integer year) {
+        int y = year != null ? year : java.time.LocalDate.now().getYear();
+        return success(gmKpiService.listPromotionCycles(y));
     }
 
     @GetMapping("/team-members")
@@ -152,5 +177,16 @@ public class PmDashboardController extends BaseController {
         UUID pmId = jwtUtil.resolveUserId(authentication);
         pmDashboardService.savePmSupervisorComment(pmId, body.getYear(), body.getMemberId(), body.getPmComment(), body.getPromotion());
         return success();
+    }
+
+    /** PM từ chối đánh giá trong drawer Team Review (501/502→504 + siblings→405; 601/602→604 + siblings→503). */
+    @PostMapping("/team-members/{memberId}/evaluation/reject")
+    public ResponseEntity<BaseResponse<EvaluationRejectResponse>> rejectMemberEvaluation(
+            @PathVariable UUID memberId,
+            @Valid @RequestBody EvaluationRejectRequest body,
+            Authentication authentication) {
+        UUID pmId = jwtUtil.resolveUserId(authentication);
+        body.setEvaluationUserId(memberId);
+        return success(evaluationRejectService.rejectForPm(body, pmId));
     }
 }

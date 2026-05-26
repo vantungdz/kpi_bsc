@@ -44,9 +44,11 @@
             ka.evidences::text AS evidences,
             kaf.feedback_note AS feedback_comment,
             ka.update_reason AS update_reason,
+            ka.evaluation_reject_reason AS evaluation_reject_reason,
             (km.created_by = #{userId}) AS created_by_current_user,
             creator_role.created_by_role_code AS created_by_role_code,
             kaf.feedback_target_role_code AS feedback_target_role_code,
+            ki.allow_assignee_target_scale_edit AS allow_assignee_target_scale_edit,
             km.calculation_rule_code AS calculation_rule_code,
             km.calculation_type_code AS calculation_type_code,
             kc.id              AS category_id,
@@ -148,9 +150,11 @@
             ka.evidences::text AS evidences,
             kaf.feedback_note AS feedback_comment,
             ka.update_reason AS update_reason,
+            ka.evaluation_reject_reason AS evaluation_reject_reason,
             (km.created_by = #{userId}) AS created_by_current_user,
             creator_role.created_by_role_code AS created_by_role_code,
             kaf.feedback_target_role_code AS feedback_target_role_code,
+            ki.allow_assignee_target_scale_edit AS allow_assignee_target_scale_edit,
             km.calculation_rule_code AS calculation_rule_code,
             km.calculation_type_code AS calculation_type_code,
             kc.id              AS category_id,
@@ -392,6 +396,7 @@
             <result property="updateReason" column="pm_update_reason"/>
             <result property="evidences" column="pm_evidences"/>
             <result property="createdBy" column="pm_created_by"/>
+            <result property="promotionCycleId" column="pm_promotion_cycle_id"/>
         </association>
 
         <association property="kpiInfo" javaType="com.company.kpi.entity.KpisInformation">
@@ -423,6 +428,7 @@
             <association property="childAssignment" javaType="com.company.kpi.entity.KpiAssignment">
                 <id property="id" column="child_asm_id"/>
                 <result property="targetValue" column="child_asm_target"/>
+                <result property="scoringScale" column="child_scoring_scale"/>
                 <result property="midSelfScore" column="child_mid_score"/>
                 <result property="endSelfScore" column="child_end_score"/>
                 <result property="endPmScore" column="child_pm_score"/>
@@ -455,6 +461,10 @@
             pm_ka.update_reason AS pm_update_reason,
             pm_ka.evidences AS pm_evidences,
             pm_ka.created_by AS pm_created_by,
+            CASE
+                WHEN km.type_code = 103 THEN pm_ka.promotion_cycle_id
+                ELSE NULL
+            END AS pm_promotion_cycle_id,
             pm_kf.feedback_note AS pm_feedback_note,
             parent_u.id AS parent_user_id,
             parent_u.full_name AS parent_user_name,
@@ -495,6 +505,7 @@
 
             child_ka.id AS child_asm_id,
             child_ka.target_value AS child_asm_target,
+            child_ka.scoring_scale::text AS child_scoring_scale,
             child_ka.mid_self_score AS child_mid_score,
             child_ka.end_self_score AS child_end_score,
             child_ka.end_pm_score AS child_pm_score,
@@ -647,6 +658,10 @@
             pm_ka.update_reason AS pm_update_reason,
             pm_ka.evidences AS pm_evidences,
             pm_ka.created_by AS pm_created_by,
+            CASE
+                WHEN km.type_code = 103 THEN pm_ka.promotion_cycle_id
+                ELSE NULL
+            END AS pm_promotion_cycle_id,
             pm_kf.feedback_note AS pm_feedback_note,
             parent_u.id AS parent_user_id,
             parent_u.full_name AS parent_user_name,
@@ -687,6 +702,7 @@
 
             child_ka.id AS child_asm_id,
             child_ka.target_value AS child_asm_target,
+            child_ka.scoring_scale::text AS child_scoring_scale,
             child_ka.mid_self_score AS child_mid_score,
             child_ka.end_self_score AS child_end_score,
             child_ka.end_pm_score AS child_pm_score,
@@ -852,9 +868,11 @@
             ka.evidences,
             kaf.feedback_note AS feedback_comment,
             ka.update_reason AS update_reason,
+            ka.evaluation_reject_reason AS evaluation_reject_reason,
             ka.created_at AS assignment_created_at,
             (km.created_by = #{userId}) AS created_by_current_user,
             creator_role.created_by_role_code AS created_by_role_code,
+            ki.allow_assignee_target_scale_edit AS allow_assignee_target_scale_edit,
             CASE
                 WHEN ka.status_code = 407 THEN 'feedback'
                 WHEN ka.end_pm_score IS NOT NULL THEN 'approved'
@@ -995,6 +1013,7 @@
             id, cycle_id, kpi_info_id,
             user_id, job_title_id, parent_assignment_id,
             target_value, scoring_scale, status_code,
+            promotion_cycle_id,
             created_by, updated_by
         ) VALUES
         <foreach collection="rows" item="r" separator=",">
@@ -1007,10 +1026,46 @@
                     <otherwise>NULL</otherwise>
                 </choose>,
                 #{r.statusCode},
+                #{r.promotionCycleId, jdbcType=OTHER},
                 #{r.createdBy}, #{r.createdBy}
             )
         </foreach>
     </insert>
+
+    <select id="existsOverlappingPromotionCycleForUser" resultType="boolean">
+        SELECT EXISTS (
+            SELECT 1
+            FROM kpi_assignments ka
+            INNER JOIN kpis_information ki ON ki.id = ka.kpi_info_id AND ki.deleted_at IS NULL
+            INNER JOIN kpi_master km ON km.id = ki.master_kpi_id AND km.deleted_at IS NULL AND km.type_code = 103
+            INNER JOIN promotion_cycles pc_existing
+                ON pc_existing.id = ka.promotion_cycle_id AND pc_existing.deleted_at IS NULL
+            INNER JOIN promotion_cycles pc_new
+                ON pc_new.id = #{promotionCycleId, jdbcType=OTHER} AND pc_new.deleted_at IS NULL
+            WHERE ka.user_id = #{userId, jdbcType=OTHER}
+              AND ka.deleted_at IS NULL
+              AND ka.promotion_cycle_id IS NOT NULL
+              AND ka.status_code NOT IN (603, 604)
+              AND pc_existing.id &lt;&gt; pc_new.id
+              AND pc_existing.start_date &lt;= pc_new.end_date
+              AND pc_existing.end_date &gt;= pc_new.start_date
+            <if test="excludeAssignmentId != null">
+              AND ka.id &lt;&gt; #{excludeAssignmentId, jdbcType=OTHER}
+            </if>
+        )
+    </select>
+
+    <select id="findPromotionCycleIdByKpiInfoId" resultType="java.util.UUID">
+        SELECT ka.promotion_cycle_id
+        FROM kpi_assignments ka
+        INNER JOIN kpis_information ki ON ki.id = ka.kpi_info_id AND ki.deleted_at IS NULL
+        INNER JOIN kpi_master km ON km.id = ki.master_kpi_id AND km.deleted_at IS NULL AND km.type_code = 103
+        WHERE ka.kpi_info_id = #{kpiInfoId, jdbcType=OTHER}
+          AND ka.deleted_at IS NULL
+          AND ka.promotion_cycle_id IS NOT NULL
+        ORDER BY ka.created_at DESC
+        LIMIT 1
+    </select>
 
     <select id="selectScoringScaleJson" resultType="java.lang.String">
         SELECT COALESCE(scoring_scale, NULL)::text
@@ -1028,7 +1083,10 @@
             ka.kpi_info_id AS kpi_info_id,
             ka.user_id AS user_id,
             ka.status_code AS status_code,
-            ki.allow_assignee_target_scale_edit AS allow_assignee_target_scale_edit
+            ki.allow_assignee_target_scale_edit AS allow_assignee_target_scale_edit,
+            ka.target_value AS target_value,
+            ka.scoring_scale::text AS scoring_scale,
+            ka.assignee_edit_baseline_target AS assignee_edit_baseline_target
         FROM kpi_assignments ka
         INNER JOIN kpis_information ki ON ki.id = ka.kpi_info_id AND ki.deleted_at IS NULL
         WHERE ka.id = #{assignmentId}
@@ -1036,6 +1094,22 @@
           AND ka.deleted_at IS NULL
         LIMIT 1
     </select>
+
+    <update id="captureAssigneeEditBaselineIfAbsent">
+        UPDATE kpi_assignments
+        SET
+            assignee_edit_baseline_target = #{baselineTarget, jdbcType=DECIMAL},
+            assignee_edit_baseline_scoring = CAST(#{baselineScoring} AS jsonb),
+            assignee_edit_baseline_at = NOW(),
+            assignee_edit_baseline_by = #{capturedBy, jdbcType=OTHER},
+            updated_at = NOW()
+        WHERE id = #{assignmentId, jdbcType=OTHER}
+          AND cycle_id = #{cycleId, jdbcType=OTHER}
+          AND user_id = #{userId, jdbcType=OTHER}
+          AND deleted_at IS NULL
+          AND assignee_edit_baseline_target IS NULL
+          AND assignee_edit_baseline_scoring IS NULL
+    </update>
 
     <update id="updateAssigneeTargetAndScale">
         UPDATE kpi_assignments
@@ -1242,6 +1316,18 @@
           </choose>
     </update>
 
+    <update id="updateAssignmentScoringWithoutAssigneeBaseline">
+        UPDATE kpi_assignments
+        SET
+            scoring_scale = CAST(#{catalogScoringJson} AS jsonb),
+            updated_at = CURRENT_TIMESTAMP,
+            updated_by = #{updatedBy, jdbcType=OTHER}
+        WHERE kpi_info_id = #{kpiInfoId, jdbcType=OTHER}
+          AND cycle_id = #{cycleId, jdbcType=OTHER}
+          AND deleted_at IS NULL
+          AND assignee_edit_baseline_scoring IS NULL
+    </update>
+
     <select id="countRootAssignmentsForKpi" resultType="int">
         SELECT COUNT(*)
         FROM kpi_assignments
@@ -1285,6 +1371,7 @@
             id, cycle_id, kpi_info_id,
             user_id, job_title_id, parent_assignment_id,
             target_value, scoring_scale, status_code,
+            promotion_cycle_id,
             created_by, updated_by
         ) VALUES
         <foreach collection="rows" item="r" separator=",">
@@ -1297,6 +1384,7 @@
                     <otherwise>NULL</otherwise>
                 </choose>,
                 #{r.statusCode},
+                #{r.promotionCycleId, jdbcType=OTHER},
                 #{r.createdBy}, #{r.createdBy}
             )
         </foreach>
@@ -1604,8 +1692,11 @@
             km.name AS master_name,
             COALESCE(ka.target_value, ki.target_value) AS target_value,
             COALESCE(
-                NULLIF(TRIM(ka.scoring_scale::text), ''),
-                NULLIF(TRIM(ka.scoring_scale::text), 'null'),
+                CASE
+                    WHEN ka.scoring_scale IS NULL THEN NULL
+                    WHEN btrim(ka.scoring_scale::text) IN ('', 'null') THEN NULL
+                    ELSE ka.scoring_scale
+                END,
                 ki.target_description
             ) AS target_description,
             ki.weight AS weight,
@@ -1639,7 +1730,12 @@
                   AND UPPER(TRIM(BOTH FROM r.code)) = 'GM'
                 ORDER BY f.created_at DESC
                 LIMIT 1
-            ) AS feedback_note
+            ) AS feedback_note,
+            ka.assignee_edit_baseline_target AS baseline_target_value,
+            CASE
+                WHEN ka.assignee_edit_baseline_scoring IS NULL THEN NULL
+                ELSE ka.assignee_edit_baseline_scoring::text
+            END AS baseline_scoring_description
         FROM (
             SELECT DISTINCT ON (COALESCE(ka.user_id, d.manager_id), ka.kpi_info_id)
                 ka.id,
@@ -1650,6 +1746,8 @@
                 ka.status_code,
                 ka.target_value,
                 ka.scoring_scale,
+                ka.assignee_edit_baseline_target,
+                ka.assignee_edit_baseline_scoring,
                 ka.created_at,
                 ka.parent_assignment_id
             FROM kpi_assignments ka
@@ -1703,6 +1801,174 @@
           AND cycle_id = #{cycleId, jdbcType=OTHER}
           AND deleted_at IS NULL
           AND status_code IN (402, 403)
+    </update>
+
+    <!-- GM Approved drawer: KPI bị từ chối → 406; các KPI 402/403 khác cùng member (approval_user) → 404. -->
+    <!-- Evaluation drawer: PM/GM reject mid-year (→504) / year-end (→604); siblings rollback 405 / 503. -->
+    <sql id="evaluationRejectKpiTypeFilter">
+        <if test="promotion">
+            AND km.type_code = 103
+        </if>
+        <if test="!promotion">
+            AND km.type_code IN (101, 102)
+        </if>
+    </sql>
+
+    <select id="selectPmManagedMemberAssignmentStatus" resultType="java.lang.Integer">
+        WITH RECURSIVE team_tree AS (
+            SELECT ud.user_id
+            FROM user_departments ud
+            WHERE ud.supervisor_id = #{pmId, jdbcType=OTHER}
+            UNION ALL
+            SELECT ud.user_id
+            FROM user_departments ud
+            INNER JOIN team_tree tt ON ud.supervisor_id = tt.user_id
+        )
+        SELECT ka.status_code
+        FROM kpi_assignments ka
+        WHERE ka.id = #{assignmentId, jdbcType=OTHER}
+          AND ka.cycle_id = #{cycleId, jdbcType=OTHER}
+          AND ka.user_id = #{memberUserId, jdbcType=OTHER}
+          AND ka.deleted_at IS NULL
+          AND ka.user_id IN (SELECT user_id FROM team_tree)
+        LIMIT 1
+    </select>
+
+    <select id="selectGmEvaluationAssignmentStatus" resultType="java.lang.Integer">
+        SELECT ka.status_code
+        FROM kpi_assignments ka
+        WHERE ka.id = #{assignmentId, jdbcType=OTHER}
+          AND ka.cycle_id = #{cycleId, jdbcType=OTHER}
+          AND ka.user_id = #{evaluationUserId, jdbcType=OTHER}
+          AND ka.deleted_at IS NULL
+        LIMIT 1
+    </select>
+
+    <update id="rejectPmEvaluationTarget">
+        WITH RECURSIVE team_tree AS (
+            SELECT ud.user_id
+            FROM user_departments ud
+            WHERE ud.supervisor_id = #{pmId, jdbcType=OTHER}
+            UNION ALL
+            SELECT ud.user_id
+            FROM user_departments ud
+            INNER JOIN team_tree tt ON ud.supervisor_id = tt.user_id
+        )
+        UPDATE kpi_assignments ka
+        SET
+            status_code = #{newStatus},
+            evaluation_reject_reason = #{evaluationRejectReason, jdbcType=VARCHAR},
+            updated_at = NOW(),
+            updated_by = #{updatedBy, jdbcType=OTHER}
+        WHERE ka.id = #{assignmentId, jdbcType=OTHER}
+          AND ka.cycle_id = #{cycleId, jdbcType=OTHER}
+          AND ka.user_id = #{memberUserId, jdbcType=OTHER}
+          AND ka.deleted_at IS NULL
+          AND ka.status_code = #{fromStatus}
+          AND ka.user_id IN (SELECT user_id FROM team_tree)
+    </update>
+
+    <update id="rejectGmEvaluationTarget">
+        UPDATE kpi_assignments ka
+        SET
+            status_code = #{newStatus},
+            evaluation_reject_reason = #{evaluationRejectReason, jdbcType=VARCHAR},
+            updated_at = NOW(),
+            updated_by = #{updatedBy, jdbcType=OTHER}
+        WHERE ka.id = #{assignmentId, jdbcType=OTHER}
+          AND ka.cycle_id = #{cycleId, jdbcType=OTHER}
+          AND ka.user_id = #{evaluationUserId, jdbcType=OTHER}
+          AND ka.deleted_at IS NULL
+          AND ka.status_code = #{fromStatus}
+    </update>
+
+    <update id="rollbackPmEvaluationSiblings">
+        WITH RECURSIVE team_tree AS (
+            SELECT ud.user_id
+            FROM user_departments ud
+            WHERE ud.supervisor_id = #{pmId, jdbcType=OTHER}
+            UNION ALL
+            SELECT ud.user_id
+            FROM user_departments ud
+            INNER JOIN team_tree tt ON ud.supervisor_id = tt.user_id
+        )
+        UPDATE kpi_assignments ka
+        SET
+            status_code = #{rollbackStatus},
+            updated_at = NOW(),
+            updated_by = #{updatedBy, jdbcType=OTHER}
+        FROM public.kpis_information ki
+            JOIN public.kpi_master km ON ki.master_kpi_id = km.id
+        WHERE ka.kpi_info_id = ki.id
+          AND ka.user_id = #{memberUserId, jdbcType=OTHER}
+          AND ka.user_id IN (SELECT user_id FROM team_tree)
+          AND ka.cycle_id = #{cycleId, jdbcType=OTHER}
+          AND ka.deleted_at IS NULL
+          AND ka.id &lt;&gt; #{excludeAssignmentId, jdbcType=OTHER}
+          <include refid="evaluationRejectKpiTypeFilter"/>
+    </update>
+
+    <update id="rollbackGmEvaluationSiblings">
+        UPDATE kpi_assignments ka
+        SET
+            status_code = #{rollbackStatus},
+            updated_at = NOW(),
+            updated_by = #{updatedBy, jdbcType=OTHER}
+        FROM kpis_information ki
+            JOIN kpi_master km ON ki.master_kpi_id = km.id AND km.deleted_at IS NULL
+        WHERE ka.kpi_info_id = ki.id
+          AND ka.user_id = #{evaluationUserId, jdbcType=OTHER}
+          AND ka.cycle_id = #{cycleId, jdbcType=OTHER}
+          AND ka.deleted_at IS NULL
+          AND ka.id &lt;&gt; #{excludeAssignmentId, jdbcType=OTHER}
+          <include refid="evaluationRejectKpiTypeFilter"/>
+    </update>
+
+    <update id="rejectGmEvaluationFromStatus">
+        UPDATE kpi_assignments ka
+        SET
+            status_code = #{newStatus},
+            evaluation_reject_reason = #{evaluationRejectReason, jdbcType=VARCHAR},
+            updated_at = NOW(),
+            updated_by = #{updatedBy, jdbcType=OTHER}
+        FROM kpis_information ki
+            JOIN kpi_master km ON ki.master_kpi_id = km.id AND km.deleted_at IS NULL
+        WHERE ka.kpi_info_id = ki.id
+          AND ka.user_id = #{evaluationUserId, jdbcType=OTHER}
+          AND ka.cycle_id = #{cycleId, jdbcType=OTHER}
+          AND ka.deleted_at IS NULL
+          AND ka.status_code = #{fromStatus}
+          <include refid="evaluationRejectKpiTypeFilter"/>
+    </update>
+
+    <update id="resetGmApprovedQueueSiblingsToPendingAcceptance">
+        UPDATE kpi_assignments
+        SET
+            status_code = 404,
+            update_reason = '',
+            updated_at = NOW(),
+            updated_by = #{updatedBy, jdbcType=OTHER}
+        WHERE cycle_id = #{cycleId, jdbcType=OTHER}
+          AND deleted_at IS NULL
+          AND status_code IN (402, 403)
+          AND id &lt;&gt; #{rejectedAssignmentId, jdbcType=OTHER}
+          AND id IN (
+              SELECT ka.id
+              FROM kpi_assignments rej
+              INNER JOIN kpi_assignments ka
+                      ON ka.cycle_id = rej.cycle_id
+                     AND ka.deleted_at IS NULL
+                     AND ka.id &lt;&gt; rej.id
+                     AND ka.status_code IN (402, 403)
+              LEFT JOIN departments d_ka
+                     ON d_ka.id = ka.department_id AND d_ka.deleted_at IS NULL
+              LEFT JOIN departments d_rej
+                     ON d_rej.id = rej.department_id AND d_rej.deleted_at IS NULL
+              WHERE rej.id = #{rejectedAssignmentId, jdbcType=OTHER}
+                AND rej.cycle_id = #{cycleId, jdbcType=OTHER}
+                AND rej.deleted_at IS NULL
+                AND COALESCE(ka.user_id, d_ka.manager_id) = COALESCE(rej.user_id, d_rej.manager_id)
+          )
     </update>
 
     <update id="cascadeActivateChildAssignments">
@@ -1809,9 +2075,10 @@
     </update>
 
     <!--
-        listTimelineAssignments: lấy tất cả ASM có status 401-603 trong chu kỳ.
-        Service phân loại phase + issue type. DISTINCT ON (ka.id) tránh duplicate.
-        evidences=NULL nếu JSONB rỗng.
+        listTimelineAssignments: strategic ASM only (kpi_master.type_code 101/102), status 401-604 in the cycle.
+        Excludes PROMOTION (103) — promotion has its own timeline API.
+        Service maps phase + issue type. DISTINCT ON (ka.id) avoids duplicates.
+        evidences=NULL when JSONB is empty.
     -->
     <select id="listTimelineAssignments"
             resultType="com.company.kpi.aggregate.GmTimelineIssueRow">
@@ -1872,7 +2139,8 @@
         WHERE ka.cycle_id   = #{cycleId, jdbcType=OTHER}
           AND ka.deleted_at IS NULL
           AND ka.user_id    IS NOT NULL
-          AND ka.status_code BETWEEN 401 AND 603
+          AND ka.status_code BETWEEN 401 AND 604
+          AND km.type_code IN (101, 102)
         ORDER BY ka.id
     </select>
 
@@ -1935,15 +2203,16 @@
         WHERE ka.cycle_id   = #{cycleId, jdbcType=OTHER}
           AND ka.deleted_at IS NULL
           AND ka.user_id    IS NOT NULL
-          AND ka.status_code BETWEEN 401 AND 603
+          AND ka.status_code BETWEEN 401 AND 604
+          AND km.type_code IN (101, 102)
         ORDER BY ka.id
     </select>
 
     <!--
-        listInProgressWithinPhaseWindow: ASM đang ở status "đang chạy" (405, 503)
-        trong review window của phase — member chưa nộp (not_submitted).
-        phase="mid"     → kiểm tra mid_year_start / mid_year_end
-        phase="yearEnd" → kiểm tra end_year_start / end_year_end
+        listInProgressWithinPhaseWindow: in-progress ASM (405, 503) within the phase
+        review window — member has not submitted (not_submitted).
+        phase="mid"     → mid_year_start / mid_year_end
+        phase="yearEnd" → end_year_start / end_year_end
     -->
     <select id="listInProgressWithinPhaseWindow"
             resultType="com.company.kpi.aggregate.GmTimelineIssueRow">
@@ -2004,6 +2273,7 @@
           <foreach collection="statuses" item="s" open="(" separator="," close=")">
               #{s}
           </foreach>
+          AND km.type_code IN (101, 102)
           AND (
               CASE #{phase}
                   WHEN 'mid'     THEN NOW() BETWEEN kc.mid_year_start AND kc.mid_year_end
@@ -2073,6 +2343,7 @@
           <foreach collection="statuses" item="s" open="(" separator="," close=")">
               #{s}
           </foreach>
+          AND km.type_code IN (101, 102)
           AND (
               CASE #{phase}
                   WHEN 'mid'     THEN NOW() BETWEEN kc.mid_year_start AND kc.mid_year_end
@@ -2084,8 +2355,8 @@
     </select>
 
     <!--
-        MEMBER / LEADER / PM (primary dept, active) — không có bất kỳ kpi_assignments hợp lệ trong chu kỳ
-        (gốc hoặc cascade; PM / leader / member tự tạo đều tính là đã có KPI). Loại trừ status 406 (rejected).
+        MEMBER / LEADER / PM (primary dept, active) with no valid strategic kpi_assignments (101/102) in the cycle.
+        Promotion-only assignees (103) are treated as unassigned for this timeline. Excludes status 406 (rejected).
     -->
     <select id="listMembersWithoutKpiAssignment"
             resultType="com.company.kpi.aggregate.GmUnassignedMemberRow">
@@ -2122,6 +2393,11 @@
           AND u.is_active = TRUE
           AND NOT EXISTS (
               SELECT 1 FROM kpi_assignments ka
+              JOIN kpis_information ki ON ka.kpi_info_id = ki.id
+                  AND ki.deleted_at IS NULL
+              JOIN kpi_master km ON ki.master_kpi_id = km.id
+                  AND km.deleted_at IS NULL
+                  AND km.type_code IN (101, 102)
               WHERE ka.user_id = u.id
                 AND ka.cycle_id = #{cycleId, jdbcType=OTHER}
                 AND ka.deleted_at IS NULL
@@ -2165,12 +2441,154 @@
           AND u.is_active = TRUE
           AND NOT EXISTS (
               SELECT 1 FROM kpi_assignments ka
+              JOIN kpis_information ki ON ka.kpi_info_id = ki.id
+                  AND ki.deleted_at IS NULL
+              JOIN kpi_master km ON ki.master_kpi_id = km.id
+                  AND km.deleted_at IS NULL
+                  AND km.type_code IN (101, 102)
               WHERE ka.user_id = u.id
                 AND ka.cycle_id = #{cycleId, jdbcType=OTHER}
                 AND ka.deleted_at IS NULL
                 AND ka.status_code != 406
           )
         ORDER BY u.id, d.id
+    </select>
+
+    <!--
+        listPromotionTimelineAssignments: promotion ASM in promotion_cycles window (type 103).
+        Service classifies issue groups; completed 503/603 included for segment/progress only.
+    -->
+    <select id="listPromotionTimelineAssignments"
+            resultType="com.company.kpi.aggregate.GmTimelineIssueRow">
+        SELECT DISTINCT ON (ka.id)
+            ka.id              AS assignment_id,
+            ka.parent_assignment_id AS parent_assignment_id,
+            ka.user_id         AS user_id,
+            km.id              AS master_kpi_id,
+            km.type_code       AS type_code,
+            km.name            AS kpi_name,
+            COALESCE(kas.user_full_name, member_u.full_name) AS member_name,
+            COALESCE((
+                SELECT r.code
+                FROM user_roles ur
+                JOIN roles r ON r.id = ur.role_id AND r.deleted_at IS NULL
+                WHERE ur.user_id = member_u.id
+                ORDER BY
+                    CASE upper(trim(both FROM r.code))
+                        WHEN 'GM' THEN 1
+                        WHEN 'PM' THEN 2
+                        WHEN 'LEADER' THEN 3
+                        WHEN 'MEMBER' THEN 4
+                        ELSE 5
+                    END,
+                    r.code
+                LIMIT 1
+            ), '') AS role_code,
+            dept_mgr_u.full_name AS pm_name,
+            COALESCE(kas.supervisor_full_name, leader_u.full_name) AS leader_name,
+            COALESCE(kas.department_name, assign_dept.name) AS department_name,
+            ka.status_code,
+            CASE
+                WHEN ka.evidences IS NULL        THEN NULL
+                WHEN ka.evidences = '[]'::jsonb  THEN NULL
+                WHEN ka.evidences = '{}'::jsonb  THEN NULL
+                ELSE ka.evidences::text
+            END                AS evidences
+        FROM kpi_assignments ka
+        INNER JOIN promotion_cycles pc ON pc.id = ka.promotion_cycle_id
+            AND pc.deleted_at IS NULL
+        JOIN kpis_information ki ON ka.kpi_info_id = ki.id
+            AND ki.deleted_at IS NULL
+        JOIN kpi_master km ON ki.master_kpi_id = km.id
+            AND km.deleted_at IS NULL
+            AND km.type_code = 103
+        JOIN users member_u ON ka.user_id = member_u.id
+            AND member_u.deleted_at IS NULL
+        LEFT JOIN kpi_assignment_snapshots kas ON kas.assignment_id = ka.id
+            AND kas.cycle_id = ka.cycle_id
+        LEFT JOIN user_departments ud ON ud.user_id = ka.user_id
+            AND ud.is_primary = TRUE
+        LEFT JOIN users leader_u ON leader_u.id = ud.supervisor_id
+            AND leader_u.deleted_at IS NULL
+        LEFT JOIN user_departments prim_ud ON prim_ud.user_id = ka.user_id
+            AND prim_ud.is_primary = TRUE
+        LEFT JOIN departments assign_dept ON assign_dept.id = COALESCE(kas.department_id, ka.department_id, prim_ud.department_id)
+            AND assign_dept.deleted_at IS NULL
+        LEFT JOIN users dept_mgr_u ON dept_mgr_u.id = assign_dept.manager_id
+            AND dept_mgr_u.deleted_at IS NULL
+        WHERE ka.promotion_cycle_id = #{promotionCycleId, jdbcType=OTHER}
+          AND pc.id = #{promotionCycleId, jdbcType=OTHER}
+          AND ka.deleted_at IS NULL
+          AND ka.user_id IS NOT NULL
+          AND ka.status_code BETWEEN 405 AND 604
+        ORDER BY ka.id
+    </select>
+
+    <select id="listPromotionTimelineAssignmentsForPm"
+            resultType="com.company.kpi.aggregate.GmTimelineIssueRow">
+        SELECT DISTINCT ON (ka.id)
+            ka.id              AS assignment_id,
+            ka.parent_assignment_id AS parent_assignment_id,
+            ka.user_id         AS user_id,
+            km.id              AS master_kpi_id,
+            km.type_code       AS type_code,
+            km.name            AS kpi_name,
+            COALESCE(kas.user_full_name, member_u.full_name) AS member_name,
+            COALESCE((
+                SELECT r.code
+                FROM user_roles ur
+                JOIN roles r ON r.id = ur.role_id AND r.deleted_at IS NULL
+                WHERE ur.user_id = member_u.id
+                ORDER BY
+                    CASE upper(trim(both FROM r.code))
+                        WHEN 'GM' THEN 1
+                        WHEN 'PM' THEN 2
+                        WHEN 'LEADER' THEN 3
+                        WHEN 'MEMBER' THEN 4
+                        ELSE 5
+                    END,
+                    r.code
+                LIMIT 1
+            ), '') AS role_code,
+            dept_mgr_u.full_name AS pm_name,
+            COALESCE(kas.supervisor_full_name, leader_u.full_name) AS leader_name,
+            COALESCE(kas.department_name, assign_dept.name) AS department_name,
+            ka.status_code,
+            CASE
+                WHEN ka.evidences IS NULL        THEN NULL
+                WHEN ka.evidences = '[]'::jsonb  THEN NULL
+                WHEN ka.evidences = '{}'::jsonb  THEN NULL
+                ELSE ka.evidences::text
+            END                AS evidences
+        FROM kpi_assignments ka
+        INNER JOIN promotion_cycles pc ON pc.id = ka.promotion_cycle_id
+            AND pc.deleted_at IS NULL
+        JOIN kpis_information ki ON ka.kpi_info_id = ki.id
+            AND ki.deleted_at IS NULL
+        JOIN kpi_master km ON ki.master_kpi_id = km.id
+            AND km.deleted_at IS NULL
+            AND km.type_code = 103
+        JOIN users member_u ON ka.user_id = member_u.id
+            AND member_u.deleted_at IS NULL
+        LEFT JOIN kpi_assignment_snapshots kas ON kas.assignment_id = ka.id
+            AND kas.cycle_id = ka.cycle_id
+        LEFT JOIN user_departments ud ON ud.user_id = ka.user_id
+            AND ud.is_primary = TRUE
+        LEFT JOIN users leader_u ON leader_u.id = ud.supervisor_id
+            AND leader_u.deleted_at IS NULL
+        LEFT JOIN user_departments prim_ud ON prim_ud.user_id = ka.user_id
+            AND prim_ud.is_primary = TRUE
+        INNER JOIN departments assign_dept ON assign_dept.id = COALESCE(kas.department_id, ka.department_id, prim_ud.department_id)
+            AND assign_dept.deleted_at IS NULL
+            AND assign_dept.manager_id = #{pmId, jdbcType=OTHER}
+        LEFT JOIN users dept_mgr_u ON dept_mgr_u.id = assign_dept.manager_id
+            AND dept_mgr_u.deleted_at IS NULL
+        WHERE ka.promotion_cycle_id = #{promotionCycleId, jdbcType=OTHER}
+          AND pc.id = #{promotionCycleId, jdbcType=OTHER}
+          AND ka.deleted_at IS NULL
+          AND ka.user_id IS NOT NULL
+          AND ka.status_code BETWEEN 405 AND 604
+        ORDER BY ka.id
     </select>
 
     <select id="listUsersWithBlockingKpiStatusInCycle"
@@ -2180,9 +2598,17 @@
             u.full_name AS full_name
         FROM kpi_assignments ka
         JOIN users u ON u.id = ka.user_id AND u.deleted_at IS NULL
+        JOIN kpis_information ki ON ki.id = ka.kpi_info_id AND ki.deleted_at IS NULL
+        JOIN kpi_master km ON km.id = ki.master_kpi_id AND km.deleted_at IS NULL
         WHERE ka.cycle_id = #{cycleId, jdbcType=OTHER}
           AND ka.deleted_at IS NULL
           AND ka.status_code NOT IN (404, 406, 407)
+          <if test="kpiTypeCodes != null and kpiTypeCodes.size() > 0">
+              AND km.type_code IN
+              <foreach collection="kpiTypeCodes" item="tc" open="(" separator="," close=")">
+                  #{tc}
+              </foreach>
+          </if>
           <if test="userIds != null and userIds.size() > 0">
               AND ka.user_id IN
               <foreach collection="userIds" item="uid" open="(" separator="," close=")">
@@ -2195,9 +2621,17 @@
     <select id="listUserIdsWithBlockingKpiStatusInCycle" resultType="java.util.UUID">
         SELECT DISTINCT ka.user_id
         FROM kpi_assignments ka
+        JOIN kpis_information ki ON ki.id = ka.kpi_info_id AND ki.deleted_at IS NULL
+        JOIN kpi_master km ON km.id = ki.master_kpi_id AND km.deleted_at IS NULL
         WHERE ka.cycle_id = #{cycleId, jdbcType=OTHER}
           AND ka.deleted_at IS NULL
           AND ka.status_code NOT IN (404, 406, 407)
+          <if test="kpiTypeCodes != null and kpiTypeCodes.size() > 0">
+              AND km.type_code IN
+              <foreach collection="kpiTypeCodes" item="tc" open="(" separator="," close=")">
+                  #{tc}
+              </foreach>
+          </if>
     </select>
 
     <select id="existsTeamCascadeBlockingPmAccept" resultType="boolean">
@@ -2300,6 +2734,12 @@
                     <when test="onlyFromStatusCode == 404">
                         AND ka.status_code IN (404, 406)
                     </when>
+                    <when test="onlyFromStatusCode == 405 or onlyFromStatusCode == 504">
+                        AND ka.status_code IN (405, 504)
+                    </when>
+                    <when test="onlyFromStatusCode == 503 or onlyFromStatusCode == 604">
+                        AND ka.status_code IN (503, 604)
+                    </when>
                     <otherwise>
                         AND ka.status_code = #{onlyFromStatusCode}
                     </otherwise>
@@ -2349,6 +2789,12 @@
                     <when test="onlyFromStatusCode == 404">
                         AND ka.status_code IN (404, 406)
                     </when>
+                    <when test="onlyFromStatusCode == 405 or onlyFromStatusCode == 504">
+                        AND ka.status_code IN (405, 504)
+                    </when>
+                    <when test="onlyFromStatusCode == 503 or onlyFromStatusCode == 604">
+                        AND ka.status_code IN (503, 604)
+                    </when>
                     <otherwise>
                         AND ka.status_code = #{onlyFromStatusCode}
                     </otherwise>
@@ -2384,6 +2830,9 @@
         UPDATE kpi_assignments ka
         SET
             status_code = #{statusCode},
+            <if test="evaluationRejectReason != null">
+            evaluation_reject_reason = #{evaluationRejectReason, jdbcType=VARCHAR},
+            </if>
             updated_at = CURRENT_TIMESTAMP,
             updated_by = #{pmId}
         FROM public.kpis_information ki
@@ -2398,6 +2847,12 @@
                 <choose>
                     <when test="onlyFromStatusCode == 404">
                         AND ka.status_code IN (404, 406)
+                    </when>
+                    <when test="onlyFromStatusCode == 405 or onlyFromStatusCode == 504">
+                        AND ka.status_code IN (405, 504)
+                    </when>
+                    <when test="onlyFromStatusCode == 503 or onlyFromStatusCode == 604">
+                        AND ka.status_code IN (503, 604)
                     </when>
                     <otherwise>
                         AND ka.status_code = #{onlyFromStatusCode}
@@ -2468,6 +2923,8 @@
         <result property="endGmScore" column="end_gm_score"/>
         <result property="pmComment" column="pm_comment"/>
         <result property="statusCode" column="status_code"/>
+        <result property="statusName" column="status_name"/>
+        <result property="statusDesc" column="status_desc"/>
         <result property="parentAssignmentId" column="parent_assignment_id"/>
         <result property="teamPmParentStatusCode" column="team_pm_parent_status_code"/>
         <result property="unitName" column="unit_name"/>
@@ -2506,6 +2963,8 @@
             ka.end_gm_score,
             NULL AS pm_comment,
             ka.status_code,
+            asm_sc.name AS status_name,
+            asm_sc.description AS status_desc,
             ka.parent_assignment_id,
             ka.evidences,
             parent_ka.status_code AS team_pm_parent_status_code,
@@ -2539,6 +2998,9 @@
               AND parent_ka.cycle_id = ka.cycle_id
               AND parent_ka.deleted_at IS NULL
               AND km.type_code = 102
+        LEFT JOIN sys_status_codes asm_sc
+               ON asm_sc.code = ka.status_code
+              AND asm_sc.category = 'ASM_STATUS'
         WHERE ka.user_id = #{userId} 
         AND ka.cycle_id = #{cycleId} 
         AND ka.deleted_at IS NULL
@@ -2627,8 +3089,11 @@
             ) AS user_role_codes,
             km.name AS kpi_name,
             COALESCE(
-                NULLIF(TRIM(ka.scoring_scale::text), ''),
-                NULLIF(TRIM(ka.scoring_scale::text), 'null'),
+                CASE
+                    WHEN ka.scoring_scale IS NULL THEN NULL
+                    WHEN btrim(ka.scoring_scale::text) IN ('', 'null') THEN NULL
+                    ELSE ka.scoring_scale
+                END,
                 ki.target_description
             ) AS target_description,
             COALESCE(ka.target_value, ki.target_value) AS target_value,
@@ -2653,7 +3118,12 @@
                         ELSE 99
                     END
                 LIMIT 1
-            ) AS creator_role_code
+            ) AS creator_role_code,
+            ka.assignee_edit_baseline_target AS baseline_target_value,
+            CASE
+                WHEN ka.assignee_edit_baseline_scoring IS NULL THEN NULL
+                ELSE ka.assignee_edit_baseline_scoring::text
+            END AS baseline_scoring_description
         FROM kpi_assignments ka
         JOIN kpis_information ki ON ka.kpi_info_id = ki.id AND ki.deleted_at IS NULL
         JOIN kpi_master km ON ki.master_kpi_id = km.id AND km.deleted_at IS NULL
@@ -2704,6 +3174,56 @@
                      AND d.manager_id = #{pmId, jdbcType=OTHER}
               WHERE ud.is_primary = TRUE
           )
+              SELECT 1
+              FROM (
+                  SELECT user_id FROM pm_team
+                  UNION
+                  SELECT user_id FROM pm_department_members
+              ) scope
+              WHERE scope.user_id = ka.user_id
+                AND scope.user_id &lt;&gt; #{pmId, jdbcType=OTHER}
+          )
+    </update>
+
+    <!-- PM Request drawer: KPI bị từ chối → 406; các KPI 402 khác cùng member → 404. -->
+    <update id="resetPmMemberApprovalSiblingsToPendingAcceptance">
+        UPDATE kpi_assignments ka
+        SET
+            status_code = 404,
+            update_reason = '',
+            updated_at = NOW(),
+            updated_by = #{updatedBy, jdbcType=OTHER}
+        WHERE ka.cycle_id = #{cycleId, jdbcType=OTHER}
+          AND ka.deleted_at IS NULL
+          AND ka.status_code = 402
+          AND ka.id &lt;&gt; #{rejectedAssignmentId, jdbcType=OTHER}
+          AND ka.user_id IS NOT NULL
+          AND ka.user_id = (
+              SELECT r.user_id
+              FROM kpi_assignments r
+              WHERE r.id = #{rejectedAssignmentId, jdbcType=OTHER}
+                AND r.cycle_id = #{cycleId, jdbcType=OTHER}
+                AND r.deleted_at IS NULL
+          )
+          AND EXISTS (
+              WITH RECURSIVE pm_team AS (
+                  SELECT ud.user_id
+                  FROM user_departments ud
+                  WHERE ud.supervisor_id = #{pmId, jdbcType=OTHER}
+                  UNION ALL
+                  SELECT ud.user_id
+                  FROM user_departments ud
+                  INNER JOIN pm_team pt ON ud.supervisor_id = pt.user_id
+              ),
+              pm_department_members AS (
+                  SELECT ud.user_id
+                  FROM user_departments ud
+                  INNER JOIN departments d
+                          ON d.id = ud.department_id
+                         AND d.deleted_at IS NULL
+                         AND d.manager_id = #{pmId, jdbcType=OTHER}
+                  WHERE ud.is_primary = TRUE
+              )
               SELECT 1
               FROM (
                   SELECT user_id FROM pm_team
@@ -2785,8 +3305,8 @@
                     WHEN jsonb_typeof(ka.evidences) = 'object' THEN ka.evidences
                     ELSE '{}'::jsonb
                 END,
-                '{pmComment}',
-                to_jsonb(COALESCE(#{pmComment, jdbcType=VARCHAR}, '')::text),
+                '{gmComment}',
+                to_jsonb(COALESCE(#{gmComment, jdbcType=VARCHAR}, '')::text),
                 TRUE
             ),
             updated_at = NOW()

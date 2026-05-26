@@ -5,15 +5,22 @@ export function normalizeGmAsmStatusCode(code: unknown): number | null {
   return Number.isFinite(n) && n > 0 ? Math.round(n) : null
 }
 
-/** Rollup ASM — ưu tiên 407 (Processing Feedback), giống Strategic Diagnostics. */
+/** Rollup ASM — ưu tiên trạng thái cần GM chú ý trước khi lấy min (Strategic Diagnostics). */
+const GM_ASM_ROLLUP_PRIORITY: readonly number[] = [
+  KPI_STATUS.FEEDBACK_IN_PROGRESS,
+  KPI_STATUS.SECOND_REJECTED,
+  KPI_STATUS.FIRST_REJECTED,
+]
+
+/** Rollup ASM — ưu tiên 407 / 604 / 504, sau đó min các ASM còn lại. */
 export function minGmAsmStatusCode(
   codes: Array<number | null | undefined>,
 ): number | null {
   const valid = codes
     .map(normalizeGmAsmStatusCode)
     .filter((n): n is number => n != null)
-  if (valid.includes(KPI_STATUS.FEEDBACK_IN_PROGRESS)) {
-    return KPI_STATUS.FEEDBACK_IN_PROGRESS
+  for (const priority of GM_ASM_ROLLUP_PRIORITY) {
+    if (valid.includes(priority)) return priority
   }
   return valid.length > 0 ? Math.min(...valid) : null
 }
@@ -24,6 +31,8 @@ export function gmAsmStatusPillClass(code: number | null | undefined): string {
     case KPI_STATUS.INACTIVE:
       return 'border-slate-200 bg-slate-50 text-slate-700'
     case KPI_STATUS.REJECTED:
+    case KPI_STATUS.FIRST_REJECTED:
+    case KPI_STATUS.SECOND_REJECTED:
       return 'border-rose-200 bg-rose-50 text-rose-700'
     case KPI_STATUS.FEEDBACK_IN_PROGRESS:
       return 'border-violet-200 bg-violet-50 text-violet-700'

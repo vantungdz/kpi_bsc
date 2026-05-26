@@ -3,7 +3,7 @@ import { computed, ref, watch, onUnmounted } from 'vue'
 import EvaluationCommentBlock from '@/components/evaluation/EvaluationCommentBlock.vue'
 import { pmKpiService, type PmMemberReviewMeta } from '@/services/modules/kpi-pm.service'
 import { useToast } from 'vue-toastification'
-import { KPI_TYPE, KPI_STATUS } from '@/config/constants'
+import { KPI_TYPE, KPI_STATUS, EVALUATION_REJECTABLE_STATUSES } from '@/config/constants'
 import {
   formatPmPortfolioActualCell,
   formatNumericTarget,
@@ -18,12 +18,17 @@ import {
 } from '@/utils/memberKpiHelpers'
 import { formatKpiTargetWithUnit } from '@/utils/kpiUnitCodes'
 import { pmAsmStatusPillClass } from '@/utils/pmAsmStatusUi'
+import {
+  buildAsmStatusDescriptionMap,
+  resolveAsmStatusLabel,
+} from '@/utils/asmStatusLabels'
+import PmGmScoreDisplay from '@/components/shared/PmGmScoreDisplay.vue'
+import { gmScoreChangedFromFields, PM_GM_SCORE_CHANGED_TD_CLASS } from '@/utils/pmGmScoreDiff'
 import { formatScoreDisplay, formatScoreDisplayOrDash } from '@/utils/formatScoreDisplay'
 import { kpiCreatorRowBgClass } from '@/utils/kpiCreatorRowBg'
 import {
-  canSupervisorViewMemberSelfEvaluation,
-  supervisorMemberActualDisplay,
-  supervisorMemberSelfScoreDisplay,
+  supervisorMemberActualDisplayInDrawer,
+  supervisorMemberSelfScoreDisplayInDrawer,
 } from '@/utils/memberEvaluationVisibility'
 
 const props = defineProps({
@@ -47,6 +52,8 @@ const activeTab = ref<'main' | 'promotion'>('main')
 const memberKpis = ref<any[]>([])
 const isLoadingKpis = ref(false)
 const reviewMeta = ref<PmMemberReviewMeta | null>(null)
+/** Nhãn ASM từ `sys_status_codes` (API init) — fallback khi dòng KPI thiếu statusDesc. */
+const asmStatusDescriptionByCode = ref<Record<number, string>>({})
 
 function selectedYearValue(): number {
   const propYear = Number(props.year)
@@ -79,7 +86,7 @@ watch(
     reviewCommentsMain.value = { memberComment: '', pmComment: '' }
     reviewCommentsPromo.value = { memberComment: '', pmComment: '' }
 
-    await Promise.all([fetchMemberKpis(), fetchReviewMeta()])
+    await Promise.all([fetchMemberKpis(), fetchReviewMeta(), loadAsmStatusDescriptions()])
 
     const cached = props.cachedKpis as any[] | null | undefined
     const apiIds = assignmentFingerprint(memberKpis.value)
@@ -151,6 +158,16 @@ watch(
 )
 onUnmounted(() => { document.body.style.overflow = '' })
 
+async function loadAsmStatusDescriptions() {
+  try {
+    const data = await pmKpiService.getInitialization(String(selectedYearValue()))
+    asmStatusDescriptionByCode.value = buildAsmStatusDescriptionMap(data?.asmStatuses)
+  } catch (err) {
+    console.error('Failed to load ASM status labels:', err)
+    asmStatusDescriptionByCode.value = {}
+  }
+}
+
 async function fetchMemberKpis() {
   if (!props.member?.id) return
   isLoadingKpis.value = true
@@ -171,7 +188,7 @@ async function fetchMemberKpis() {
         target: item.target != null
           ? formatKpiTargetWithUnit(formatNumericTarget(item.target), item.unitCode)
           : '',
-        actualResult: supervisorMemberActualDisplay(
+        actualResult: supervisorMemberActualDisplayInDrawer(
           formatActualWithUnit(
             formatPmPortfolioActualCell(
               item.evidences,
@@ -180,17 +197,13 @@ async function fetchMemberKpis() {
             ) || '-',
             item.unitCode,
           ),
-          item.statusCode,
-          'pm',
         ),
         weight: item.weight != null ? Number(item.weight) : 0,
-        selfScore: (() => {
-          if (!canSupervisorViewMemberSelfEvaluation(item.statusCode, 'pm')) {
-            return null
-          }
-          return item.selfScore != null ? Number(item.selfScore) : null
-        })(),
+        selfScore: item.selfScore != null ? Number(item.selfScore) : null,
         pmScore: item.pmScore != null ? Number(item.pmScore) : null,
+        endPmScore: item.endPmScore != null ? Number(item.endPmScore) : null,
+        endGmScore: item.endGmScore != null ? Number(item.endGmScore) : null,
+        gmScoreChanged: item.gmScoreChanged === true,
         pmComment: item.pmComment || '',
         unitCode: item.unitCode ?? null,
         unitName: item.unitName ?? '',
@@ -202,9 +215,7 @@ async function fetchMemberKpis() {
         statusDesc: item.statusDesc ?? item.statusDescription ?? '',
         calcRuleCode: item.calcRuleCode,
         calculationTypeCode: item.calculationTypeCode ?? null,
-        evidences: canSupervisorViewMemberSelfEvaluation(item.statusCode, 'pm')
-          ? item.evidences || ''
-          : '',
+        evidences: item.evidences || '',
         evidenceData: parsedEvidences.rows,
         evidenceContent: parsedEvidences.content || parsedEvidences.note || parsedEvidences.legacyPlain || '',
         evidenceAttachments: parsedEvidences.attachments ?? [],
@@ -407,6 +418,115 @@ const canSubmitPmEvaluationToGm = computed(
   () => canEvaluateActiveTab.value && !teamReviewBlockedOnActiveTab.value,
 )
 
+type EvaluationRejectKpiRow = {
+  id: string
+  statusCode?: unknown
+}
+
+function canRejectEvaluationRow(item: EvaluationRejectKpiRow): boolean {
+  if (props.readonlyYear) return false
+  const sc = Number(item?.statusCode)
+  return (EVALUATION_REJECTABLE_STATUSES as readonly number[]).includes(sc)
+}
+
+const canRejectAnyInActiveTab = computed(() =>
+  (activeTab.value === 'promotion' ? promoKpis.value : mainKpis.value).some((k) =>
+    canRejectEvaluationRow(k),
+  ),
+)
+
+const rejectEvaluationBusy = ref(false)
+const evaluationRejectDialog = ref<{
+  open: boolean
+  item: EvaluationRejectKpiRow | null
+  rejectAll: boolean
+}>({ open: false, item: null, rejectAll: false })
+const evaluationRejectReason = ref('')
+const evaluationRejectError = ref('')
+
+function openEvaluationRejectDialog(
+  item: EvaluationRejectKpiRow | null,
+  rejectAll: boolean,
+) {
+  if (props.readonlyYear || !props.member?.id) return
+  if (!rejectAll && item && !canRejectEvaluationRow(item)) return
+  if (rejectAll && !canRejectAnyInActiveTab.value) return
+  evaluationRejectDialog.value = { open: true, item, rejectAll }
+  evaluationRejectReason.value = ''
+  evaluationRejectError.value = ''
+}
+
+function closeEvaluationRejectDialog() {
+  evaluationRejectDialog.value = { open: false, item: null, rejectAll: false }
+  evaluationRejectReason.value = ''
+  evaluationRejectError.value = ''
+}
+
+async function confirmEvaluationReject() {
+  const reason = evaluationRejectReason.value.trim()
+  if (!reason) {
+    evaluationRejectError.value = 'Enter a rejection reason.'
+    return
+  }
+  const { item, rejectAll } = evaluationRejectDialog.value
+  closeEvaluationRejectDialog()
+  await rejectEvaluationKpi(item, rejectAll, reason)
+}
+
+async function resolveEvaluationCycleId(): Promise<string> {
+  const initData = await pmKpiService.getInitialization(String(selectedYearValue()))
+  const cycleId = String(initData?.kpiCycle?.id ?? '').trim()
+  if (!cycleId) {
+    throw new Error('Could not determine KPI cycle.')
+  }
+  return cycleId
+}
+
+async function rejectEvaluationKpi(
+  item: EvaluationRejectKpiRow | null,
+  rejectAll: boolean,
+  rejectReason: string,
+) {
+  if (props.readonlyYear || !props.member?.id) return
+  if (!rejectAll && item && !canRejectEvaluationRow(item)) return
+  rejectEvaluationBusy.value = true
+  try {
+    const cycleId = await resolveEvaluationCycleId()
+    await pmKpiService.rejectMemberEvaluation(String(props.member.id), {
+      cycleId,
+      evaluationUserId: String(props.member.id),
+      promotion: activeTab.value === 'promotion',
+      assignmentId: rejectAll ? undefined : String(item?.id ?? ''),
+      rejectAll,
+      rejectReason,
+    })
+    toast.success(
+      rejectAll ? 'All rejectable KPIs were rejected.' : 'KPI evaluation rejected.',
+    )
+    await fetchMemberKpis()
+    emit('save', {
+      memberId: props.member.id,
+      kpis: memberKpis.value,
+      comments: {
+        main: reviewCommentsMain.value.pmComment,
+        promo: reviewCommentsPromo.value.pmComment,
+      },
+    })
+    if (rejectAll) {
+      emit('close')
+    }
+  } catch (err: unknown) {
+    console.error('Failed to reject PM evaluation:', err)
+    const msg =
+      err instanceof Error && err.message.trim()
+        ? err.message.trim()
+        : 'Could not reject evaluation.'
+    toast.error(msg)
+  } finally {
+    rejectEvaluationBusy.value = false
+  }
+}
+
 const teamReviewBlockedMessage =
   'Accept the Team KPI on your portfolio before reviewing member evaluation results.'
 
@@ -419,7 +539,6 @@ function toggleEvidence(id: string) {
 }
 
 function hasEvidence(item: any): boolean {
-  if (!canSupervisorViewMemberSelfEvaluation(item?.statusCode, 'pm')) return false
   return Boolean(
     (Array.isArray(item.evidenceData) && item.evidenceData.length > 0)
     || String(item.evidenceContent ?? '').trim()
@@ -434,24 +553,8 @@ function onEvidenceAttachmentClick(att: { url: string; name?: string }) {
 const expandedCommentRows = ref(new Set<string>())
 
 function statusLabel(item: any): string {
-  const direct = String(item?.statusDesc ?? item?.statusName ?? '').trim()
-  if (direct) return direct
-  const code = Number(item?.statusCode ?? 0)
-  const labels: Record<number, string> = {
-    [KPI_STATUS.WAITING_PM_APPROVAL]: 'Pending PM Approval',
-    [KPI_STATUS.WAITING_GM_APPROVAL]: 'Pending GM Approval',
-    [KPI_STATUS.PENDING_ACCEPTANCE]: 'Pending Acceptance',
-    [KPI_STATUS.ACCEPTED]: 'In progress',
-    [KPI_STATUS.REJECTED]: 'Rejected',
-    [KPI_STATUS.FEEDBACK_IN_PROGRESS]: 'Processing Feedback',
-    [KPI_STATUS.FIRST_WAITING_PM_APPROVAL]: 'Pending PM Evaluation (Mid-Year)',
-    [KPI_STATUS.FIRST_WAITING_GM_APPROVAL]: 'Pending GM Evaluation (Mid-Year)',
-    [KPI_STATUS.FIRST_COMPLETED]: 'Completed (Mid-Year)',
-    [KPI_STATUS.SECOND_WAITING_PM_APPROVAL]: 'Pending PM Evaluation (Final)',
-    [KPI_STATUS.SECOND_WAITING_GM_APPROVAL]: 'Pending GM Evaluation (Final)',
-    [KPI_STATUS.COMPLETED]: 'Completed',
-  }
-  return labels[code] ?? (code ? `Status ${code}` : '-')
+  const label = resolveAsmStatusLabel(item?.statusCode, asmStatusDescriptionByCode.value, item)
+  return label || '-'
 }
 
 function statusClass(statusCode: unknown): string {
@@ -689,7 +792,9 @@ const sendEvaluationForActiveTab = async () => {
               <span class="text-sm font-medium">Loading KPI data...</span>
             </div>
 
-            <div v-else class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-x-auto">
+            <div v-else class="flex flex-col gap-6 sm:gap-8">
+            <div class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-md">
+              <div class="overflow-x-auto">
               <table class="min-w-[1180px] w-full text-sm text-left">
                 <thead
                   class="text-xs text-slate-500 uppercase bg-slate-50/80 border-b border-slate-200">
@@ -702,13 +807,14 @@ const sendEvaluationForActiveTab = async () => {
                     <th class="px-4 py-3 font-semibold text-center w-32">EVIDENCE</th>
                     <th class="px-4 py-3 font-semibold text-center w-32">SELF SCORE</th>
                     <th class="px-4 py-3 font-semibold text-center w-32">FINAL SCORE</th>
+                    <th class="px-4 py-3 font-semibold text-center w-28">ACTION</th>
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100">
                   <template v-for="groupData in currentGroupedKpis" :key="groupData.key">
 
                     <tr :class="activeTab === 'promotion' ? 'bg-violet-50/70 border-y border-violet-100' : 'bg-slate-50 border-y border-slate-200'">
-                      <td colspan="8" class="px-4 py-2.5 text-xs font-bold uppercase tracking-wider" :class="activeTab === 'promotion' ? 'text-violet-800' : 'text-slate-800'">{{
+                      <td colspan="9" class="px-4 py-2.5 text-xs font-bold uppercase tracking-wider" :class="activeTab === 'promotion' ? 'text-violet-800' : 'text-slate-800'">{{
                         groupData.label }}</td>
                     </tr>
 
@@ -755,10 +861,17 @@ const sendEvaluationForActiveTab = async () => {
                           </button>
                         </td>
                         <td class="px-4 py-4 text-center font-bold text-slate-600">{{
-                          supervisorMemberSelfScoreDisplay(item.selfScore, item.statusCode, 'pm')
+                          supervisorMemberSelfScoreDisplayInDrawer(item.selfScore)
                         }}</td>
 
-                        <td class="px-4 py-4 text-center">
+                        <td
+                          class="px-4 py-4 text-center"
+                          :class="
+                            gmScoreChangedFromFields(item.endPmScore, item.endGmScore)
+                              ? PM_GM_SCORE_CHANGED_TD_CLASS
+                              : ''
+                          "
+                        >
                           <select
                             v-if="isPmFinalScoreRowEditable(item)"
                             v-model="item.pmScore"
@@ -768,16 +881,30 @@ const sendEvaluationForActiveTab = async () => {
                             <option :value="null">-</option>
                             <option v-for="n in 5" :key="n" :value="n">{{ n }}</option>
                           </select>
-                          <span
+                          <PmGmScoreDisplay
                             v-else
-                            class="inline-block min-w-[3.5rem] font-bold text-slate-600 cursor-not-allowed"
-                            :title="String(item.pmScore ?? '-')"
-                          >{{ formatScoreDisplayOrDash(item.pmScore) }}</span>
+                            :display-score="item.pmScore"
+                            :end-pm-score="item.endPmScore"
+                            :end-gm-score="item.endGmScore"
+                          />
+                        </td>
+                        <td class="px-4 py-4 text-center align-middle">
+                          <button
+                            v-if="canRejectEvaluationRow(item)"
+                            type="button"
+                            :disabled="rejectEvaluationBusy"
+                            class="inline-flex items-center gap-1 rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-[11px] font-bold text-rose-700 shadow-sm transition-colors hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
+                            @click.stop="openEvaluationRejectDialog(item, false)"
+                          >
+                            <i class="fas fa-times text-[10px]" aria-hidden="true" />
+                            Reject
+                          </button>
+                          <span v-else class="text-xs text-slate-300">—</span>
                         </td>
                       </tr>
 
                       <tr v-if="expandedEvidenceRows.has(item.id)" class="bg-slate-50/50">
-                        <td colspan="8" class="p-0 border-b border-slate-200">
+                        <td colspan="9" class="p-0 border-b border-slate-200">
                           <div
                             class="px-8 py-4 bg-gradient-to-r from-indigo-50/30 to-transparent border-l-2 border-indigo-300">
                             <p class="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">Evidences</p>
@@ -886,7 +1013,7 @@ const sendEvaluationForActiveTab = async () => {
                   </template>
 
                   <tr v-if="currentGroupedKpis.length === 0">
-                    <td colspan="8" class="py-8 text-center text-sm font-medium text-slate-500">No KPI Evaluation</td>
+                    <td colspan="9" class="py-8 text-center text-sm font-medium text-slate-500">No KPI Evaluation</td>
                   </tr>
                 </tbody>
 
@@ -902,6 +1029,7 @@ const sendEvaluationForActiveTab = async () => {
                       class="px-4 py-3 text-center font-bold"
                       :class="canEvaluateActiveTab ? 'text-slate-800' : 'text-slate-600'"
                     >{{ totalWeightedPmDisplay }}</td>
+                    <td class="px-4 py-3" />
                   </tr>
                   <tr class="bg-purple-50 border-t border-purple-100">
                     <td colspan="5" class="px-4 py-4 text-right font-bold text-purple-700 text-xs tracking-wider">
@@ -913,12 +1041,17 @@ const sendEvaluationForActiveTab = async () => {
                       class="px-4 py-4 text-center font-bold"
                       :class="canEvaluateActiveTab ? 'text-lg font-black text-purple-700' : 'text-slate-600'"
                     >{{ averageWeightedPmDisplay }}</td>
+                    <td class="px-4 py-4" />
                   </tr>
                 </tbody>
               </table>
+              </div>
             </div>
 
-            <div v-if="hasCurrentTabKpis && activeTab === 'main'" class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+            <div
+              v-if="hasCurrentTabKpis && activeTab === 'main'"
+              class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-md"
+            >
               <EvaluationCommentBlock
                 v-model:employeeComment="reviewCommentsMain.memberComment"
                 v-model:managerComment="reviewCommentsMain.pmComment"
@@ -928,7 +1061,10 @@ const sendEvaluationForActiveTab = async () => {
                 :managerReadonly="props.readonlyYear || !canEvaluateMainTab || teamReviewBlockedOnMainTab"
               />
             </div>
-            <div v-if="hasCurrentTabKpis && activeTab === 'promotion'" class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+            <div
+              v-if="hasCurrentTabKpis && activeTab === 'promotion'"
+              class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-md"
+            >
               <EvaluationCommentBlock
                 v-model:employeeComment="reviewCommentsPromo.memberComment"
                 v-model:managerComment="reviewCommentsPromo.pmComment"
@@ -939,7 +1075,7 @@ const sendEvaluationForActiveTab = async () => {
               />
             </div>
 
-            <div class="h-4"></div>
+            </div>
           </div>
 
           <div
@@ -950,27 +1086,106 @@ const sendEvaluationForActiveTab = async () => {
             {{ teamReviewBlockedMessage }}
           </div>
 
-          <div class="bg-white border-t border-slate-200 p-4 px-6 flex justify-end gap-3 sticky bottom-0 z-10 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
-            <button @click="$emit('close')"
-              class="px-5 py-2.5 text-sm font-semibold text-slate-600 bg-white border border-slate-300 rounded-xl hover:bg-slate-50 hover:text-slate-900 transition-colors">
-              Cancel
-            </button>
-            <button
-              v-if="canUnlockActiveTab"
-              @click="openUnlockConfirm"
-              :disabled="props.readonlyYear || saving || unlocking"
-              class="px-5 py-2.5 text-sm font-semibold text-amber-800 bg-amber-50 border border-amber-200 rounded-xl hover:bg-amber-100 transition-colors flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed">
-              <i v-if="unlocking" class="fas fa-spinner fa-spin" />
-              <i v-else class="fas fa-lock-open" />
-              {{ unlocking ? 'Unlocking...' : 'Unlock' }}
-            </button>
-            <button @click="sendEvaluationForActiveTab" :disabled="props.readonlyYear || saving || !canSubmitPmEvaluationToGm"
-              class="px-6 py-2.5 text-sm font-semibold text-white bg-slate-900 rounded-xl hover:bg-indigo-600 hover:shadow-lg transition-all flex items-center gap-2 focus:ring-4 focus:ring-indigo-500/20 disabled:opacity-60 disabled:cursor-not-allowed">
-              <i v-if="saving" class="fas fa-spinner fa-spin" />
-              <i v-else class="fas fa-paper-plane" />
-              {{ saving ? 'Sending...' : 'Submit evaluation' }}
-            </button>
+          <div class="bg-white border-t border-slate-200 p-4 px-6 sticky bottom-0 z-10 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+            <div
+              v-if="
+                canUnlockActiveTab ||
+                (!props.readonlyYear &&
+                  (canRejectAnyInActiveTab || canSubmitPmEvaluationToGm))
+              "
+              class="flex w-full flex-wrap items-center justify-end gap-3"
+            >
+              <button
+                v-if="canUnlockActiveTab"
+                type="button"
+                @click="openUnlockConfirm"
+                :disabled="props.readonlyYear || saving || unlocking || rejectEvaluationBusy"
+                class="px-5 py-2.5 text-sm font-semibold text-amber-800 bg-amber-50 border border-amber-200 rounded-xl hover:bg-amber-100 transition-colors flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                <i v-if="unlocking" class="fas fa-spinner fa-spin" />
+                <i v-else class="fas fa-lock-open" />
+                {{ unlocking ? 'Unlocking...' : 'Unlock' }}
+              </button>
+              <button
+                v-if="!props.readonlyYear && canRejectAnyInActiveTab"
+                type="button"
+                :disabled="rejectEvaluationBusy"
+                class="px-5 py-2.5 text-sm font-semibold text-rose-700 bg-rose-50 border border-rose-200 rounded-xl hover:bg-rose-100 transition-colors flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+                @click="openEvaluationRejectDialog(null, true)"
+              >
+                <i v-if="rejectEvaluationBusy" class="fas fa-spinner fa-spin" />
+                <i v-else class="fas fa-times" />
+                Reject all
+              </button>
+              <button
+                v-if="!props.readonlyYear && canSubmitPmEvaluationToGm"
+                type="button"
+                @click="sendEvaluationForActiveTab"
+                :disabled="saving || rejectEvaluationBusy"
+                class="px-6 py-2.5 text-sm font-semibold text-white bg-slate-900 rounded-xl hover:bg-indigo-600 hover:shadow-lg transition-all flex items-center gap-2 focus:ring-4 focus:ring-indigo-500/20 disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                <i v-if="saving" class="fas fa-spinner fa-spin" />
+                <i v-else class="fas fa-paper-plane" />
+                {{ saving ? 'Sending...' : 'Submit evaluation' }}
+              </button>
+            </div>
           </div>
+
+          <Teleport to="body">
+            <Transition name="fade">
+              <div
+                v-if="evaluationRejectDialog.open"
+                class="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/55 p-4 backdrop-blur-sm"
+                @click.self="closeEvaluationRejectDialog"
+              >
+                <div class="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl">
+                  <div class="mb-3 flex items-center gap-3">
+                    <div class="rounded-full bg-rose-100 p-2 text-rose-600">
+                      <i class="fas fa-circle-exclamation text-lg" />
+                    </div>
+                    <h3 class="text-lg font-bold text-slate-900">Reject evaluation</h3>
+                  </div>
+                  <p class="mb-3 text-sm text-slate-600">
+                    {{
+                      evaluationRejectDialog.rejectAll
+                        ? 'You are rejecting all rejectable KPIs in this tab. Enter a reason.'
+                        : 'Enter the reason for rejecting this KPI evaluation.'
+                    }}
+                  </p>
+                  <label class="mb-1 block text-sm font-semibold text-slate-700">
+                    Rejection reason <span class="text-rose-500">*</span>
+                  </label>
+                  <textarea
+                    v-model="evaluationRejectReason"
+                    class="min-h-[110px] w-full resize-none rounded-lg border p-3 text-sm outline-none focus:ring-2"
+                    :class="evaluationRejectError ? 'border-rose-400 focus:ring-rose-100' : 'border-slate-300 focus:ring-rose-100'"
+                    placeholder="Enter detailed reason..."
+                  />
+                  <p v-if="evaluationRejectError" class="mt-1 text-xs font-medium text-rose-600">
+                    {{ evaluationRejectError }}
+                  </p>
+                  <div class="mt-4 flex justify-end gap-2">
+                    <button
+                      type="button"
+                      class="rounded-lg px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100"
+                      :disabled="rejectEvaluationBusy"
+                      @click="closeEvaluationRejectDialog"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      :disabled="rejectEvaluationBusy"
+                      class="rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-50"
+                      @click="confirmEvaluationReject"
+                    >
+                      Confirm rejection
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </Transition>
+          </Teleport>
 
           <Teleport to="body">
             <Transition name="pm-drawer" :duration="220">

@@ -35,4 +35,10 @@ public class PmMemberKpiApprovalItemResponse {
     private String justification;
     /** {@code roles.code} của người tạo KPI master ({@code kpi_master.created_by}). */
     private String creatorRoleCode;
+
+    private BigDecimal baselineTargetValue;
+    private String baselineScoringDescription;
+    private Boolean targetChanged;
+    private Boolean scoringChanged;
+    private Boolean assigneeHasEdits;
 }

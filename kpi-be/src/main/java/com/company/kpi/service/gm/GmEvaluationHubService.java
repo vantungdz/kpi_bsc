@@ -15,7 +15,7 @@ import com.company.kpi.aggregate.GmEvaluationHubAssignmentRow;
 import com.company.kpi.response.gm.GmEvaluationHubAssignmentResponse;
 import com.company.kpi.response.gm.GmEvaluationHubConfirmResponse;
 import com.company.kpi.response.gm.GmEvaluationHubResponse;
-import com.company.kpi.util.MemberEvaluationVisibility;
+import com.company.kpi.common.security.SensitiveDataCryptoService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,10 +34,11 @@ public class GmEvaluationHubService {
     private final GmEvaluationHubMapper gmEvaluationHubMapper;
     private final KpiAssignmentMapper kpiAssignmentMapper;
     private final UserKpiSummaryMapper userKpiSummaryMapper;
+    private final SensitiveDataCryptoService sensitiveDataCryptoService;
 
     /**
-     * Tab đánh giá GM: toàn bộ assignment trong chu kỳ có {@code status_code} ∈
-     * (501, 502, 503, 601, 602, 603) — đồng bộ {@link GmEvaluationHubMapper#listAssignmentsForEvaluationHub}.
+     * Tab đánh giá GM: assignments trong chu kỳ (goal-setting 401–407 và đánh giá 501–504, 601–604) —
+     * đồng bộ {@link GmEvaluationHubMapper#listAssignmentsForEvaluationHub}.
      */
     public GmEvaluationHubResponse getEvaluationHub(UUID cycleId) {
         KpiCycle cycle = kpiCycleMapper.findById(cycleId)
@@ -235,15 +236,15 @@ public class GmEvaluationHubService {
         GmEvaluationHubAssignmentResponse a = new GmEvaluationHubAssignmentResponse();
         a.setAssignmentId(r.getAssignmentId());
         a.setStatusCode(r.getStatusCode());
+        a.setEvaluationRejectReason(r.getEvaluationRejectReason());
         a.setAssignmentStatusName(r.getAssignmentStatusName());
         a.setAssignmentStatusDescription(r.getAssignmentStatusDescription());
-        boolean gmCanViewMemberEval =
-                MemberEvaluationVisibility.canSupervisorViewMemberSelfEvaluation(r.getStatusCode(), true);
-        a.setMidSelfScore(gmCanViewMemberEval ? r.getMidSelfScore() : null);
-        a.setEndSelfScore(gmCanViewMemberEval ? r.getEndSelfScore() : null);
+        // Drawer đánh giá GM: luôn trả self score & evidences; bảng Strategic/Diagnostics vẫn lọc ở API riêng.
+        a.setMidSelfScore(r.getMidSelfScore());
+        a.setEndSelfScore(r.getEndSelfScore());
         a.setEndPmScore(r.getEndPmScore());
         a.setEndGmScore(r.getEndGmScore());
-        a.setEvidences(gmCanViewMemberEval ? r.getEvidences() : null);
+        a.setEvidences(sensitiveDataCryptoService.decryptEvidenceSensitiveFields(r.getEvidences()));
         a.setTargetDescription(r.getTargetDescription());
         a.setTargetValue(r.getTargetValue());
         a.setWeight(r.getWeight());

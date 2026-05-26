@@ -633,6 +633,8 @@ const routes: Route[] = [
         defaultTargetValue:
           b.defaultTargetValue == null ? null : Number(b.defaultTargetValue),
         defaultWeight: Number(b.defaultWeight),
+        isImportant: b.isImportant === true,
+        allowAssigneeTargetScaleEdit: b.allowAssigneeTargetScaleEdit === true,
       };
       const list =
         mockGmKpiTemplateLibrary.itemsByTemplateId.get(templateId) ?? [];
@@ -673,6 +675,10 @@ const routes: Route[] = [
           b.defaultTargetValue == null ? null : Number(b.defaultTargetValue);
       }
       if (b.defaultWeight != null) next.defaultWeight = Number(b.defaultWeight);
+      if (b.isImportant != null) next.isImportant = b.isImportant === true;
+      if (b.allowAssigneeTargetScaleEdit != null) {
+        next.allowAssigneeTargetScaleEdit = b.allowAssigneeTargetScaleEdit === true;
+      }
       list[idx] = next;
       mockGmKpiTemplateLibrary.itemsByTemplateId.set(templateId, list);
       return ok(cfg, next);
@@ -957,6 +963,26 @@ const routes: Route[] = [
         assignments: [],
       };
       return ok(cfg, payload);
+    },
+  },
+
+  // ── POST /kpi/gm/evaluation-hub/reject — GM từ chối đánh giá drawer (mock) ─
+  {
+    method: "post",
+    test: (p) => p === "/kpi/gm/evaluation-hub/reject",
+    handler: async () => {
+      await sleep(300);
+      return { data: { updatedCount: 1 } };
+    },
+  },
+
+  // ── POST /pm/dashboard/team-members/*/evaluation/reject (mock) ─────────────
+  {
+    method: "post",
+    test: (p) => /\/pm\/dashboard\/team-members\/[^/]+\/evaluation\/reject$/.test(p),
+    handler: async () => {
+      await sleep(300);
+      return { data: { updatedCount: 1 } };
     },
   },
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, shallowRef } from 'vue'
+import { computed, inject, ref, shallowRef, watch } from 'vue'
 import { useToast } from 'vue-toastification'
 import { GM_BSC_LABELS, GM_BSC_ORDER, normalizeGmBscPerspective } from '@/utils/gm-bsc-diagnostics'
 import type { GmBscPerspective, GmPersonalKpiRowMock } from '@/types/gm-workspace'
@@ -22,6 +22,7 @@ import { kpiCycleService } from '@/services/shared/kpi-cycle.service'
 import type { KpiCycleResponse } from '@/types/shared/kpi-cycle.type'
 import { getPmPortfolioSubmitButtonState } from '@/utils/common'
 import { formatKpiTargetWithUnit } from '@/utils/kpiUnitCodes'
+import { gmPersonalTableTabKey } from '@/utils/gmLayoutEvaluationTab'
 
 const props = withDefaults(
   defineProps<{
@@ -52,9 +53,19 @@ const submitGmPersonalEvalLoading = ref(false)
 const invalidRowIds = ref<Set<string>>(new Set())
 const personalTableTab = ref<'personal' | 'promotion'>('personal')
 
+const gmPersonalTableTab = inject(gmPersonalTableTabKey, null)
+watch(
+  personalTableTab,
+  (tab) => {
+    if (gmPersonalTableTab) {
+      gmPersonalTableTab.value = tab
+    }
+  },
+  { immediate: true },
+)
+
 const currentCycleInfo = ref<KpiCycleResponse | null>(null)
 
-import { watch } from 'vue'
 watch(
   () => props.yearId,
   async (year) => {

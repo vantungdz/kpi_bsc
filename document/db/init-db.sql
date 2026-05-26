@@ -40,23 +40,25 @@ INSERT INTO sys_status_codes (code, category, name, description) VALUES
 -- ASM_STATUS (Luồng vận hành All-in-One)
 -- ==========================================
 -- 4xx: Phase 1 (Giao việc & Xin đổi)
-(401, 'ASM_STATUS', 'INACTIVE', 'KPI mới tạo (Chưa kích hoạt)'),
-(402, 'ASM_STATUS', 'WAITING_PM_APPROVAL', 'Chờ PM duyệt KPI'),
-(403, 'ASM_STATUS', 'WAITING_GM_APPROVAL', 'Chờ GM duyệt KPI'),
-(404, 'ASM_STATUS', 'PENDING_ACCEPTANCE', 'Chờ Member bấm Accept'),
-(405, 'ASM_STATUS', 'ACCEPTED', 'Đã chốt mục tiêu (Đang chạy)'),
-(406, 'ASM_STATUS', 'REJECTED', 'Bị từ chối'),
-(407, 'ASM_STATUS', 'FEEDBACK_IN_PROGRESS', 'Kiểm tra feedback'),
+(401, 'ASM_STATUS', 'INACTIVE', 'New KPI'),
+(402, 'ASM_STATUS', 'WAITING_PM_APPROVAL', 'Pending PM Approval'),
+(403, 'ASM_STATUS', 'WAITING_GM_APPROVAL', 'Pending GM Approval'),
+(404, 'ASM_STATUS', 'PENDING_ACCEPTANCE', 'Pending Acceptance'),
+(405, 'ASM_STATUS', 'ACCEPTED', 'In progress'),
+(406, 'ASM_STATUS', 'REJECTED', 'Rejected'),
+(407, 'ASM_STATUS', 'FEEDBACK_IN_PROGRESS', 'Processing Feedback'),
 
 -- 5xx: Phase 2 (Đánh giá 1st Half)
-(501, 'ASM_STATUS', '1ST_WAITING_PM_APPROVAL', 'Member đã nộp bằng chứng 1st Half, chờ PM duyệt'),
-(502, 'ASM_STATUS', '1ST_WAITING_GM_APPROVAL', 'PM đã duyệt 1st Half, chờ GM chốt điểm'),
-(503, 'ASM_STATUS', '1ST_COMPLETED', 'GM đã chốt điểm 1st Half'),
+(501, 'ASM_STATUS', '1ST_WAITING_PM_APPROVAL', 'Pending  PM evaluation (Mid-Year)'),
+(502, 'ASM_STATUS', '1ST_WAITING_GM_APPROVAL', 'Pending GM evaluation (Mid-Year)'),
+(503, 'ASM_STATUS', '1ST_COMPLETED', 'Completed (Mid-Year)'),
+(504, 'ASM_STATUS', '1ST_REJECTED', 'Rejected (Mid-Year)'),
 
 -- 6xx: Phase 3 (Đánh giá 2nd Half & Final)
-(601, 'ASM_STATUS', '2ND_WAITING_PM_APPROVAL', 'Chờ PM chấm điểm Final'),
-(602, 'ASM_STATUS', '2ND_WAITING_GM_APPROVAL', 'Chờ GM chốt điểm Final'),
-(603, 'ASM_STATUS', 'COMPLETED', 'Đã chốt sổ hoàn toàn (Kết thúc vòng đời)'),
+(601, 'ASM_STATUS', '2ND_WAITING_PM_APPROVAL', 'Pending PM evaluation (Final)'),
+(602, 'ASM_STATUS', '2ND_WAITING_GM_APPROVAL', 'Pending GM evaluation (Final)'),
+(603, 'ASM_STATUS', 'COMPLETED', 'Completed'),
+(604, 'ASM_STATUS', '2ND_REJECTED', 'Rejected (Final)'),
 
 -- 7xx: CALC_TYPE (Chiều hướng tính toán & So sánh)
 (701, 'CALC_TYPE', 'ACTUAL_OVER_PLAN', 'Actual / Plan'),
@@ -246,6 +248,8 @@ CREATE TABLE kpi_template_items (
     default_target_value NUMERIC(10,2),
     default_weight NUMERIC(5,2),
     default_target_description JSONB,
+    is_important BOOLEAN NOT NULL DEFAULT FALSE,
+    allow_assignee_target_scale_edit BOOLEAN NOT NULL DEFAULT FALSE,
     UNIQUE(template_id, master_kpi_id)
 );
 
@@ -285,10 +289,15 @@ CREATE TABLE kpi_assignments (
     
     target_value NUMERIC(10,2),   
     scoring_scale JSONB,
+    assignee_edit_baseline_target NUMERIC(10,2),
+    assignee_edit_baseline_scoring JSONB,
+    assignee_edit_baseline_at TIMESTAMPTZ,
+    assignee_edit_baseline_by UUID REFERENCES users(id) ON DELETE SET NULL,
     
     -- Buffer lưu data đang xin đổi (Update Request)
     update_payload JSONB, 
-    update_reason TEXT,   
+    update_reason TEXT,
+    evaluation_reject_reason TEXT,
     
     -- Điểm số 1st Half (Chỉ có tự đánh giá theo yêu cầu)
     mid_self_score NUMERIC(5,2),

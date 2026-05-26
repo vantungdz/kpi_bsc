@@ -23,13 +23,18 @@ import {
 } from '@/utils/kpiTargetValidation'
 import { useAuthStore } from '@/stores/auth.store'
 import { useToast } from 'vue-toastification'
-import { useBlockedMemberAssignmentIds } from '@/composables/useBlockedMemberAssignmentIds'
+import {
+  useBlockedMemberAssignmentIds,
+  type BlockedMemberAssignmentQuery,
+} from '@/composables/useBlockedMemberAssignmentIds'
 import {
   isMemberAssignmentBlocked,
   MEMBER_ASSIGN_BLOCK_MESSAGE,
 } from '@/utils/memberEvaluationVisibility'
 import { kpiTypeDisplayLabel } from '@/types/kpi-type-option'
 import { strategicKpiTypeIconClass } from '@/utils/strategicKpiTypeCodes'
+import { assigneeTargetScaleService } from '@/services/shared/assignee-target-scale.service'
+import type { KpiScoringRulesPayload } from '@/types/gm-strategic-kpi-edit'
 
 // --- INTERFACES ---
 interface KpiCategory {
@@ -41,18 +46,24 @@ interface KpiCategory {
 const props = defineProps({
   open: { type: Boolean, default: false },
   kpi: { type: Object, default: null }, // Mapped từ kpiLibrary
-  mode: { type: String, default: 'assign' }, // 'assign' | 'create'
+  mode: { type: String, default: 'assign' }, // 'assign' | 'create' | 'targetScaleOnly'
   readonly: { type: Boolean, default: false },
   /** Assignment member đang 407 — khi lưu phân bổ gọi API accept-with-cascade (một transaction). */
   pendingMemberFeedbackAssignmentId: { type: String, default: undefined },
 })
 
-const emit = defineEmits(['close', 'save', 'refresh'])
+const emit = defineEmits<{
+  close: []
+  save: []
+  refresh: []
+  'target-scale-saved': [payload: { assignmentId: string; target: string; targetDescription: string }]
+}>()
 const authStore = useAuthStore()
 const toast = useToast()
 
 // --- COMPUTED STATES ---
 const isCreate = computed(() => props.mode === 'create')
+const isTargetScaleOnlyEdit = computed(() => props.mode === 'targetScaleOnly')
 /** PM tự tạo KPI — 404 (chờ gửi GM) hoặc 406 (GM từ chối): cho sửa định nghĩa trước khi phân bổ-only. */
 const isSelfCreatedDefinitionEdit = computed(() => {
   if (isCreate.value || !Boolean(props.kpi?.isSelfCreated)) return false
@@ -65,7 +76,12 @@ const isRejectedSelfCreatedEdit = computed(
     Number(props.kpi?.statusCode) === KPI_STATUS.REJECTED,
 )
 const canEditKpiDefinition = computed(
-  () => isCreate.value || isSelfCreatedDefinitionEdit.value,
+  () =>
+    !isTargetScaleOnlyEdit.value &&
+    (isCreate.value || isSelfCreatedDefinitionEdit.value),
+)
+const canEditTargetScaleFields = computed(
+  () => canEditKpiDefinition.value || isTargetScaleOnlyEdit.value,
 )
 
 const completingMemberFeedbackAllocation = computed(() => {
@@ -117,7 +133,19 @@ const targetValue = ref('')
 const weightPct = ref('')
 const unitCode = ref<number | null>(null)
 const formCycleId = ref<string>('')
-const { blockedMemberIds } = useBlockedMemberAssignmentIds(formCycleId)
+
+/**
+ * Chặn gán theo nhóm: strategic (101+102) — không tính KPI promotion (103) đang active.
+ * Member chỉ có promotion 405 vẫn được chọn khi PM tạo/phân bổ Team hoặc Individual.
+ */
+const blockedMemberAssignmentQuery = computed<BlockedMemberAssignmentQuery | null>(() => {
+  const cid = String(formCycleId.value ?? '').trim()
+  if (!cid) return null
+  if (typeCode.value === KPI_TYPE.PROMOTION) return { assignmentScope: 'promotion' }
+  return { assignmentScope: 'strategic' }
+})
+
+const { blockedMemberIds } = useBlockedMemberAssignmentIds(formCycleId, blockedMemberAssignmentQuery)
 
 function isMemberBlockedForNewAssignment(memberId: string): boolean {
   if (normalizeMemberId(memberId) === normalizeMemberId(pmUserId.value)) {
@@ -166,6 +194,7 @@ function canPersistCascadeChildAllocation(
 }
 
 const allocationSaveBlockedReason = computed(() => {
+  if (isTargetScaleOnlyEdit.value) return null
   if (isCreate.value) return null
   if (completingMemberFeedbackAllocation.value) return null
   /** PM sửa KPI tự tạo (404/406): cho lưu định nghĩa mà không bắt buộc phân bổ member. */
@@ -291,14 +320,16 @@ const showsPmTargetField = computed(
 )
 
 const autoScoringFromTargetEnabled = computed(
-  () => showsPmTargetField.value && canEditKpiDefinition.value,
+  () => showsPmTargetField.value && canEditTargetScaleFields.value,
 )
 
-const { onScoringRulesManualInput, resetAutoScoringRulesTracking } = useAutoScoringRulesFromTarget(
-  targetValue,
-  description,
-  autoScoringFromTargetEnabled,
-)
+const {
+  onScoringRulesManualInput,
+  resetAutoScoringRulesTracking,
+  markCurrentScoringRulesAsAutoBaseline,
+  syncFromTarget,
+  pauseAutoSyncFromTarget,
+} = useAutoScoringRulesFromTarget(targetValue, description, autoScoringFromTargetEnabled)
 
 /** KPI Team & Individual: ô chỉ placeholder + dropdown; danh sách đã chọn & Xóa ở khối dưới (không chip trong ô). Promotion: chip trong ô. */
 const useMemberAssignListBelow = computed(
@@ -330,6 +361,12 @@ const inputStateClasses = computed(() =>
   canEditKpiDefinition.value 
     ? 'input-required text-slate-800' 
     : 'bg-slate-100 border border-slate-200 text-slate-600 cursor-not-allowed'
+)
+
+const targetScaleInputStateClasses = computed(() =>
+  canEditTargetScaleFields.value
+    ? 'input-required text-slate-800'
+    : 'bg-slate-100 border border-slate-200 text-slate-600 cursor-not-allowed',
 )
 
 const typeCardClass = (code: number) => {
@@ -594,6 +631,7 @@ const onDocClick = (e: MouseEvent) => {
 }
 
 const fetchKpiDetail = async (kpiId: string) => {
+  const resumeAutoSync = pauseAutoSyncFromTarget()
   try {
     isLoadingInit.value = true
     /** Portfolio row `kpi.id` = assignment của PM — BE lọc memberIds chỉ còn cascade con, không lẫn PM do GM giao. */
@@ -639,6 +677,17 @@ const fetchKpiDetail = async (kpiId: string) => {
     if (completingMemberFeedbackAllocation.value) {
       applyFeedbackMemberOnlyToAssignSelection()
     }
+    if (canEditKpiDefinition.value) {
+      markCurrentScoringRulesAsAutoBaseline()
+      if (!description.value.trim()) {
+        syncFromTarget(targetValue.value)
+      }
+    } else if (isTargetScaleOnlyEdit.value) {
+      markCurrentScoringRulesAsAutoBaseline()
+      if (!description.value.trim()) {
+        syncFromTarget(targetValue.value)
+      }
+    }
     formErrors.value = {}
   } catch (error) {
     console.error('Error when getting KPI detail:', error)
@@ -653,6 +702,9 @@ const fetchKpiDetail = async (kpiId: string) => {
     }
   } finally {
     isLoadingInit.value = false
+    await nextTick()
+    await nextTick()
+    resumeAutoSync()
   }
 }
 
@@ -665,13 +717,17 @@ watch(() => props.open, async (isOpen) => {
   if (isOpen) {
     await fetchInitData()
 
-    if (!isCreate.value && props.kpi?.id) {
+    if (!isCreate.value && props.kpi?.infoId) {
       await fetchKpiDetail(props.kpi.infoId)
     } else {
       resetFormFields()
     }
 
-    if (!isCreate.value && isPortfolioTeamKpi(props.kpi as Record<string, unknown>)) {
+    if (
+      !isCreate.value &&
+      !isTargetScaleOnlyEdit.value &&
+      isPortfolioTeamKpi(props.kpi as Record<string, unknown>)
+    ) {
       applyTeamTargetFromPortfolioRow()
       if (completingMemberFeedbackAllocation.value) {
         applyFeedbackMemberOnlyToAssignSelection()
@@ -680,9 +736,23 @@ watch(() => props.open, async (isOpen) => {
       }
     }
 
+    if (isTargetScaleOnlyEdit.value && props.kpi) {
+      targetValue.value = isPortfolioTeamKpi(props.kpi as Record<string, unknown>)
+        ? portfolioPmTargetForDisplay(props.kpi as Record<string, unknown>)
+        : String(props.kpi.target ?? '').trim()
+      description.value = extractRawInputFromApiTargetDescription(
+        props.kpi.targetDescription ?? '',
+      )
+      markCurrentScoringRulesAsAutoBaseline()
+      if (!description.value.trim()) {
+        syncFromTarget(targetValue.value)
+      }
+    }
+
     window.addEventListener('click', onDocClick)
   } else {
     window.removeEventListener('click', onDocClick)
+    resetAutoScoringRulesTracking()
   }
   document.body.style.overflow = isOpen ? 'hidden' : ''
 }, { immediate: true })
@@ -738,6 +808,21 @@ function memberTargetRowHasValidationIssue(memberId: string): boolean {
 
 const validateForm = (): boolean => {
   formErrors.value = {}
+
+  if (isTargetScaleOnlyEdit.value) {
+    const targetErr = validateNonNegativeTargetValue(targetValue.value, {
+      required: true,
+    })
+    if (targetErr) formErrors.value.targetValue = targetErr
+    const descTrim = description.value.trim()
+    if (!descTrim) {
+      formErrors.value.scoringRules = 'Enter scoring rules (scoring scale).'
+    } else {
+      const vr = validateScoringRulesDsl(description.value)
+      if (!vr.ok) formErrors.value.scoringRules = vr.errors.join(' ')
+    }
+    return Object.keys(formErrors.value).length === 0
+  }
 
   const needsMemberAllocationTargets =
     typeCode.value === KPI_TYPE.TEAM || typeCode.value === KPI_TYPE.PROMOTION
@@ -907,8 +992,63 @@ const handleAssignMember = async () => {
   await KpiPmService.cascadeKpi(buildCascadePayloadFromForm())
 }
 
+const handleSaveTargetScaleOnly = async () => {
+  const assignmentId = String(props.kpi?.id ?? '').trim()
+  if (!assignmentId) {
+    formErrors.value = { api: 'Missing assignment id.' }
+    return
+  }
+  const tv = Number.parseFloat(String(targetValue.value).trim())
+  if (!Number.isFinite(tv) || tv <= 0) {
+    formErrors.value = { targetValue: 'Target must be a number greater than 0.' }
+    return
+  }
+  const descTrim = description.value.trim()
+  if (!descTrim) {
+    formErrors.value = { scoringRules: 'Enter scoring rules (scoring scale).' }
+    return
+  }
+  const vr = validateScoringRulesDsl(description.value)
+  if (!vr.ok) {
+    formErrors.value = { scoringRules: vr.errors.join(' ') }
+    return
+  }
+  saving.value = true
+  formErrors.value = {}
+  try {
+    const updated = await assigneeTargetScaleService.update(assignmentId, {
+      targetValue: tv,
+      targetDescription: buildScoringRulesPayload(
+        description.value,
+      ) as KpiScoringRulesPayload,
+    })
+    emit('target-scale-saved', {
+      assignmentId,
+      target: String(updated?.assignmentTargetValue ?? tv),
+      targetDescription: String(updated?.targetDescription ?? ''),
+    })
+    emit('close')
+  } catch (error) {
+    formErrors.value.api = getApiErrorMessage(
+      error,
+      'Could not save target and scoring scale.',
+    )
+  } finally {
+    saving.value = false
+  }
+}
+
 const handleSave = async () => {
   if (props.readonly) {
+    return
+  }
+  if (isTargetScaleOnlyEdit.value) {
+    if (!validateForm()) {
+      await nextTick()
+      errorBannerRef.value?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+      return
+    }
+    await handleSaveTargetScaleOnly()
     return
   }
   if (allocationSaveBlockedReason.value) {
@@ -989,33 +1129,39 @@ const handleSave = async () => {
                   <i
                     class="fas"
                     :class="
-                      isCreate
-                        ? 'fa-plus'
-                        : isSelfCreatedDefinitionEdit
-                          ? 'fa-pen'
-                          : 'fa-sliders-h'
+                      isTargetScaleOnlyEdit
+                        ? 'fa-chart-line'
+                        : isCreate
+                          ? 'fa-plus'
+                          : isSelfCreatedDefinitionEdit
+                            ? 'fa-pen'
+                            : 'fa-sliders-h'
                     "
                   />
                 </span>
                 {{
-                  isCreate
-                    ? 'Create KPI'
-                    : isRejectedSelfCreatedEdit
-                      ? 'Edit rejected KPI'
-                      : isSelfCreatedDefinitionEdit
-                        ? 'Edit KPI'
-                        : 'Allocate KPI'
+                  isTargetScaleOnlyEdit
+                    ? 'Edit target & scoring scale'
+                    : isCreate
+                      ? 'Create KPI'
+                      : isRejectedSelfCreatedEdit
+                        ? 'Edit rejected KPI'
+                        : isSelfCreatedDefinitionEdit
+                          ? 'Edit KPI'
+                          : 'Allocate KPI'
                 }}
               </h2>
               <p class="mt-1 text-[10px] font-bold tracking-wider text-slate-500 uppercase">
                 {{
-                  isCreate
-                    ? 'Define a new KPI for your team'
-                    : isRejectedSelfCreatedEdit
-                      ? 'Edit KPI information and resubmit to GM'
-                      : isSelfCreatedDefinitionEdit
-                        ? 'Edit KPI details before sending to GM for approval'
-                        : 'Edit or add assignees and targets'
+                  isTargetScaleOnlyEdit
+                    ? 'Only target and scoring scale are editable'
+                    : isCreate
+                      ? 'Define a new KPI for your team'
+                      : isRejectedSelfCreatedEdit
+                        ? 'Edit KPI information and resubmit to GM'
+                        : isSelfCreatedDefinitionEdit
+                          ? 'Edit KPI details before sending to GM for approval'
+                          : 'Edit or add assignees and targets'
                 }}
               </p>
             </div>
@@ -1054,7 +1200,11 @@ const handleSave = async () => {
             <!-- Basic Info Section -->
             <div 
               class="gm-kpi-section-card p-5 rounded-xl border border-slate-200 shadow-sm transition-all" 
-              :class="canEditKpiDefinition ? 'bg-white' : 'bg-slate-50/70 pointer-events-none opacity-90'"
+              :class="
+                canEditKpiDefinition || isTargetScaleOnlyEdit
+                  ? 'bg-white'
+                  : 'bg-slate-50/70 pointer-events-none opacity-90'
+              "
             >
               <label class="mb-4 flex items-center gap-2 text-xs font-bold tracking-wide text-slate-800 uppercase">
                 <span class="p-1.5 rounded-lg" :class="canEditKpiDefinition ? 'bg-slate-100 text-indigo-600' : 'bg-slate-200 text-slate-500'">
@@ -1141,16 +1291,16 @@ const handleSave = async () => {
                 <div class="grid grid-cols-1 gap-4" :class="showsPmTargetField ? 'sm:grid-cols-2 sm:gap-x-6' : ''">
                   <div v-if="showsPmTargetField" class="min-w-0">
                     <label class="mb-1.5 block text-[10px] font-bold tracking-wider text-slate-500 uppercase">
-                      Target <span v-if="canEditKpiDefinition" class="text-rose-500">*</span>
+                      Target <span v-if="canEditTargetScaleFields" class="text-rose-500">*</span>
                     </label>
                     <input 
                       v-model="targetValue" 
-                      :disabled="!canEditKpiDefinition" 
+                      :disabled="!canEditTargetScaleFields" 
                       type="number" 
                       step="any"
                       placeholder="e.g. 100" 
                       class="px-3 py-2 min-h-[38px]"
-                      :class="[inputBaseClasses, inputStateClasses, formErrors.targetValue ? '!bg-rose-50/50 !border-rose-400' : '']" 
+                      :class="[inputBaseClasses, targetScaleInputStateClasses, formErrors.targetValue ? '!bg-rose-50/50 !border-rose-400' : '']" 
                     />
                     <p
                       v-if="formErrors.targetValue"
@@ -1324,22 +1474,22 @@ const handleSave = async () => {
                 <div>
                   <div class="mb-1.5 flex items-center gap-1.5">
                     <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                      Scoring Rules <span v-if="canEditKpiDefinition" class="text-rose-500">*</span>
+                      Scoring Rules <span v-if="canEditTargetScaleFields" class="text-rose-500">*</span>
                     </label>
                     <ScoringRulesHelpTooltip
-                      v-if="canEditKpiDefinition"
+                      v-if="canEditTargetScaleFields"
                       aria-label="Scoring rule syntax examples"
                     />
                   </div>
                   <textarea 
                     v-model="description" 
-                    :disabled="!canEditKpiDefinition" 
+                    :disabled="!canEditTargetScaleFields" 
                     rows="5" 
                     placeholder="Nhập target để tự sinh (5: ≥1.2X, 4: [1.1X–1.2X), …)"
                     @input="onScoringRulesManualInput" 
                     class="custom-scrollbar min-h-[7.5rem] w-full px-3 py-2 rounded-md text-xs font-medium resize-y outline-none transition-all focus:ring-1" 
                     :class="[
-                      !canEditKpiDefinition
+                      !canEditTargetScaleFields
                         ? 'border border-slate-200 bg-slate-100 text-slate-600 cursor-not-allowed'
                         : formErrors.scoringRules
                           ? 'border !border-rose-400 !bg-rose-50/70 text-slate-800 focus:border-rose-400 focus:ring-rose-100'
@@ -1354,7 +1504,10 @@ const handleSave = async () => {
             </div>
 
             <!-- Assignment Section -->
-            <div v-if="!(isCreate && typeCode === KPI_TYPE.INDIVIDUAL)" class="gm-kpi-section-card p-5 rounded-xl bg-white border border-slate-200 shadow-sm">
+            <div
+              v-if="!isTargetScaleOnlyEdit && !(isCreate && typeCode === KPI_TYPE.INDIVIDUAL)"
+              class="gm-kpi-section-card p-5 rounded-xl bg-white border border-slate-200 shadow-sm"
+            >
               <label class="mb-4 flex items-center gap-2 text-xs font-bold tracking-wide text-slate-800 uppercase">
                 <span class="p-1.5 rounded-lg bg-indigo-100 text-indigo-600">
                   <i class="fas fa-diagram-project text-sm" />
@@ -1654,21 +1807,27 @@ const handleSave = async () => {
                 v-else
                 class="fas"
                 :class="
-                  isCreate || isSelfCreatedDefinitionEdit ? 'fa-paper-plane' : 'fa-save'
+                  isTargetScaleOnlyEdit
+                    ? 'fa-save'
+                    : isCreate || isSelfCreatedDefinitionEdit
+                      ? 'fa-paper-plane'
+                      : 'fa-save'
                 "
               />
               {{
                 saving
                   ? 'Saving…'
-                  : isCreate
-                    ? 'Create & Assign'
-                    : isRejectedSelfCreatedEdit
-                      ? 'Resubmit KPI'
-                      : isSelfCreatedDefinitionEdit
-                        ? 'Save changes'
-                        : completingMemberFeedbackAllocation
-                          ? 'Confirm allocation and close feedback'
-                          : 'Save allocation'
+                  : isTargetScaleOnlyEdit
+                    ? 'Save target & scale'
+                    : isCreate
+                      ? 'Create & Assign'
+                      : isRejectedSelfCreatedEdit
+                        ? 'Resubmit KPI'
+                        : isSelfCreatedDefinitionEdit
+                          ? 'Save changes'
+                          : completingMemberFeedbackAllocation
+                            ? 'Confirm allocation and close feedback'
+                            : 'Save allocation'
               }}
             </button>
           </div>

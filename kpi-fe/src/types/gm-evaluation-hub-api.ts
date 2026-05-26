@@ -3,6 +3,8 @@
 export interface GmEvaluationHubAssignmentApiRow {
   assignmentId: string | null
   statusCode: number | null
+  /** Lý do từ chối đánh giá (ASM 504/604). */
+  evaluationRejectReason?: string | null
   assignmentStatusName: string | null
   /** `sys_status_codes.description` (ASM); ưu tiên cho cột Tiến độ. */
   assignmentStatusDescription: string | null

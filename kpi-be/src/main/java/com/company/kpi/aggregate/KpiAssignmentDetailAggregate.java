@@ -18,4 +18,8 @@ public class KpiAssignmentDetailAggregate extends KpiAssignment {
     private Integer teamPmParentStatusCode;
     /** {@code roles.code} của người tạo KPI master. */
     private String kpiCreatorRoleCode;
+    /** {@code sys_status_codes.name} (ASM_STATUS). */
+    private String statusName;
+    /** {@code sys_status_codes.description} (ASM_STATUS). */
+    private String statusDesc;
 }

@@ -25,6 +25,8 @@ export interface GmKpiTemplateItemRow {
   targetDescription: string | null
   defaultTargetValue: number | null
   defaultWeight: number | null
+  isImportant?: boolean | null
+  allowAssigneeTargetScaleEdit?: boolean | null
 }
 
 /** POST /kpi/gm/kpi-templates */
@@ -56,6 +58,8 @@ export interface GmCreateKpiTemplateItemBody {
   targetDescription?: unknown
   defaultTargetValue?: number | null
   defaultWeight: number
+  isImportant?: boolean
+  allowAssigneeTargetScaleEdit?: boolean
 }
 
 /** PUT /kpi/gm/kpi-templates/:templateId/items/:itemId */
@@ -69,4 +73,6 @@ export interface GmUpdateKpiTemplateItemBody {
   targetDescription?: unknown
   defaultTargetValue?: number | null
   defaultWeight?: number | null
+  isImportant?: boolean
+  allowAssigneeTargetScaleEdit?: boolean
 }

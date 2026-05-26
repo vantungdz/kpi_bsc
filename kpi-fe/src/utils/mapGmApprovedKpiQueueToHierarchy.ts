@@ -118,6 +118,7 @@ export function mapGmApprovedKpiQueueItemsToHierarchyRows(items: GmApprovedKpiQu
       assignmentStatusName: asmName,
       name: title,
       weight: formatWeight(row.weight),
+      assignmentTargetValue: row.targetValue ?? undefined,
       target: formatKpiTargetWithUnit(
         formatTargetValue(row.targetValue),
         row.unitCode != null ? Number(row.unitCode) : undefined,
@@ -138,6 +139,11 @@ export function mapGmApprovedKpiQueueItemsToHierarchyRows(items: GmApprovedKpiQu
         row.creatorRoleCode != null && String(row.creatorRoleCode).trim() !== ''
           ? String(row.creatorRoleCode).trim().toUpperCase()
           : undefined,
+      baselineTargetValue: row.baselineTargetValue ?? undefined,
+      baselineScoringDescription: row.baselineScoringDescription ?? undefined,
+      targetChanged: row.targetChanged === true,
+      scoringChanged: row.scoringChanged === true,
+      assigneeHasEdits: row.assigneeHasEdits === true,
     }
   })
 }

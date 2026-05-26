@@ -52,13 +52,21 @@ export async function apiGetPromotionAssignees(): Promise<MemberByRankOption[]> 
     .then((r) => r.data.data)
 }
 
-/** GET /kpi/reference/blocked-member-ids-for-assignment — member có KPI ASM khác 404/406/407. */
-export async function apiGetBlockedMemberIdsForAssignment(cycleId: string): Promise<string[]> {
+/**
+ * GET /kpi/reference/blocked-member-ids-for-assignment
+ * - strategic: 101 + 102 chung một nhóm chặn
+ * - promotion: 103 riêng
+ */
+export async function apiGetBlockedMemberIdsForAssignment(
+  cycleId: string,
+  assignmentScope: 'strategic' | 'promotion',
+): Promise<string[]> {
   const id = String(cycleId ?? '').trim()
-  if (!id) return []
+  const scope = String(assignmentScope ?? '').trim()
+  if (!id || (scope !== 'strategic' && scope !== 'promotion')) return []
   return http
     .get<ApiResponse<string[]>>('/kpi/reference/blocked-member-ids-for-assignment', {
-      params: { cycleId: id },
+      params: { cycleId: id, assignmentScope: scope },
     })
     .then((r) => (r.data.data ?? []).map((x) => String(x).trim()).filter(Boolean))
 }

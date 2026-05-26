@@ -41,4 +41,13 @@ public class GmApprovedKpiQueueItemResponse {
     private String feedbackNote;
     /** {@code roles.code} của người tạo KPI master ({@code kpi_master.created_by}). */
     private String creatorRoleCode;
+
+    /** Target tại mốc trước lần Save đầu của assignee ({@code assignee_edit_baseline_target}). */
+    private BigDecimal baselineTargetValue;
+    /** Thang điểm tại mốc (JSON/text từ {@code assignee_edit_baseline_scoring}). */
+    private String baselineScoringDescription;
+    private Boolean targetChanged;
+    private Boolean scoringChanged;
+    /** Có thay đổi target hoặc scoring so baseline. */
+    private Boolean assigneeHasEdits;
 }

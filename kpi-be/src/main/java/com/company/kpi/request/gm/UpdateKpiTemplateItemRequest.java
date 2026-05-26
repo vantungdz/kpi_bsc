@@ -20,4 +20,8 @@ public class UpdateKpiTemplateItemRequest {
     private Object targetDescription;
     private BigDecimal defaultTargetValue;
     private BigDecimal defaultWeight;
+
+    private Boolean isImportant;
+
+    private Boolean allowAssigneeTargetScaleEdit;
 }
